@@ -65,6 +65,86 @@ function getProjectSlugFromPath(pathname: string): string | null {
   return match ? (match[1] as string) : null;
 }
 
+function getInitialProjectSlug(mockData?: AppSidebarMockData): string {
+  if (mockData?.selectedProjectSlug) {
+    return mockData.selectedProjectSlug;
+  }
+  const slugFromPath = getProjectSlugFromPath(window.location.pathname);
+  if (slugFromPath && slugFromPath !== 'new') {
+    return slugFromPath;
+  }
+  return localStorage.getItem(SELECTED_PROJECT_KEY) || '';
+}
+
+/**
+ * Syncs PR statuses when project changes
+ */
+function usePRStatusSync(
+  selectedProjectId: string | undefined,
+  isMocked: boolean,
+  utils: ReturnType<typeof trpc.useUtils>
+) {
+  const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation({
+    onSuccess: () => {
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+    },
+  });
+  const lastSyncedProjectRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isMocked) {
+      return;
+    }
+    if (selectedProjectId && selectedProjectId !== lastSyncedProjectRef.current) {
+      lastSyncedProjectRef.current = selectedProjectId;
+      syncAllPRStatuses.mutate({ projectId: selectedProjectId });
+    }
+  }, [isMocked, selectedProjectId, syncAllPRStatuses]);
+}
+
+/**
+ * Manages project slug selection from URL and default fallback
+ */
+function useProjectSlugSync(
+  pathname: string,
+  isMocked: boolean,
+  projects: Array<{ id: string; slug: string; name: string }> | undefined,
+  selectedProjectSlug: string,
+  setSelectedProjectSlug: (slug: string) => void
+) {
+  useEffect(() => {
+    if (isMocked) {
+      return;
+    }
+
+    const slugFromPath = getProjectSlugFromPath(pathname);
+    const hasValidSlugInPath = slugFromPath && slugFromPath !== 'new';
+
+    if (hasValidSlugInPath) {
+      setSelectedProjectSlug(slugFromPath);
+      localStorage.setItem(SELECTED_PROJECT_KEY, slugFromPath);
+    } else {
+      const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
+      if (stored) {
+        setSelectedProjectSlug(stored);
+      }
+    }
+  }, [isMocked, pathname, setSelectedProjectSlug]);
+
+  // Select first project if none selected
+  useEffect(() => {
+    if (isMocked || !projects || projects.length === 0 || selectedProjectSlug) {
+      return;
+    }
+
+    const firstSlug = projects[0]?.slug;
+    if (firstSlug) {
+      setSelectedProjectSlug(firstSlug);
+      localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
+    }
+  }, [isMocked, projects, selectedProjectSlug, setSelectedProjectSlug]);
+}
+
 type AppSidebarMockData = {
   projects: { id: string; slug: string; name: string }[];
   selectedProjectSlug?: string;
@@ -79,16 +159,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const pathname = location.pathname;
   const navigate = useNavigate();
   const isMocked = Boolean(mockData);
-  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(() => {
-    if (mockData?.selectedProjectSlug) {
-      return mockData.selectedProjectSlug;
-    }
-    const slugFromPath = getProjectSlugFromPath(window.location.pathname);
-    if (slugFromPath && slugFromPath !== 'new') {
-      return slugFromPath;
-    }
-    return localStorage.getItem(SELECTED_PROJECT_KEY) || '';
-  });
+  const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(() =>
+    getInitialProjectSlug(mockData)
+  );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
   const { setProjectContext } = useProjectContext();
@@ -120,21 +193,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const utils = trpc.useUtils();
 
   // Sync PR statuses from GitHub once when project changes
-  const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation({
-    onSuccess: () => {
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-    },
-  });
-  const lastSyncedProjectRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (isMocked) {
-      return;
-    }
-    if (selectedProjectId && selectedProjectId !== lastSyncedProjectRef.current) {
-      lastSyncedProjectRef.current = selectedProjectId;
-      syncAllPRStatuses.mutate({ projectId: selectedProjectId });
-    }
-  }, [isMocked, selectedProjectId, syncAllPRStatuses]);
+  usePRStatusSync(selectedProjectId, isMocked, utils);
 
   // Track workspaces that need user attention (for red glow)
   const { needsAttention, clearAttention } = useWorkspaceAttention();
@@ -155,24 +214,16 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   // Mutation to update workspace order with optimistic updates
   const updateWorkspaceOrder = trpc.userSettings.updateWorkspaceOrder.useMutation({
     onMutate: async ({ projectId, workspaceIds }) => {
-      // Cancel any outgoing refetches to avoid overwriting optimistic update
       await utils.userSettings.getWorkspaceOrder.cancel({ projectId });
-
-      // Snapshot the previous value
       const previousOrder = utils.userSettings.getWorkspaceOrder.getData({ projectId });
-
-      // Optimistically update to the new value
       utils.userSettings.getWorkspaceOrder.setData({ projectId }, workspaceIds);
-
-      // Return context with the previous value for rollback
       return { previousOrder };
     },
     onError: (_error, { projectId }, context) => {
-      // Roll back to the previous value on error
-      if (context?.previousOrder !== undefined) {
+      const hasPreviousOrder = context?.previousOrder !== undefined;
+      if (hasPreviousOrder) {
         utils.userSettings.getWorkspaceOrder.setData({ projectId }, context.previousOrder);
       }
-      // Refetch to ensure we're in sync with server after error
       utils.userSettings.getWorkspaceOrder.invalidate({ projectId });
     },
   });
@@ -193,14 +244,13 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
-
-      if (!over || active.id === over.id || !selectedProjectId) {
+      const canReorder = over && active.id !== over.id && selectedProjectId;
+      if (!canReorder) {
         return;
       }
 
       // Get current workspace IDs (excluding creating placeholder)
       const currentIds = workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id);
-
       const oldIndex = currentIds.indexOf(active.id as string);
       const newIndex = currentIds.indexOf(over.id as string);
 
@@ -229,8 +279,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     existingNames
   );
 
-  const handleCreateWorkspace = () => {
-    if (!selectedProjectId || isCreating) {
+  const handleCreateWorkspace = useCallback(() => {
+    const canCreate = selectedProjectId && !isCreating;
+    if (!canCreate) {
       return;
     }
     // Generate unique name once and use it for both optimistic UI and actual creation
@@ -245,15 +296,23 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       // Error toast already shown by the hook; just remove the optimistic placeholder
       cancelCreating();
     });
-  };
+  }, [
+    selectedProjectId,
+    isCreating,
+    existingNames,
+    startCreating,
+    createWorkspace,
+    cancelCreating,
+  ]);
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+      // Archiving visual state is cleared automatically by useWorkspaceListState
+      // when the workspace disappears from serverWorkspaces after invalidation.
       // If we archived the currently viewed workspace, navigate to the workspaces list
-      const archivedId = variables.id;
       const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
-      if (archivedId === currentId) {
+      if (variables.id === currentId) {
         navigate(`/projects/${selectedProjectSlug}/workspaces`);
       }
     },
@@ -263,10 +322,27 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     },
   });
 
-  const handleArchiveRequest = (workspace: WorkspaceListItem) => {
-    setWorkspaceToArchive(workspace.id);
-    setArchiveDialogOpen(true);
-  };
+  const executeArchive = useCallback(
+    (workspaceId: string, commitUncommitted: boolean) => {
+      startArchiving(workspaceId);
+      archiveWorkspace.mutate({ id: workspaceId, commitUncommitted });
+    },
+    [startArchiving, archiveWorkspace]
+  );
+
+  const handleArchiveRequest = useCallback(
+    (workspace: WorkspaceListItem) => {
+      if (workspace.prState === 'MERGED') {
+        // Always commit uncommitted changes when auto-archiving merged PRs
+        // so we never lose work (gitStats may be null if not yet loaded).
+        executeArchive(workspace.id, true);
+      } else {
+        setWorkspaceToArchive(workspace.id);
+        setArchiveDialogOpen(true);
+      }
+    },
+    [executeArchive]
+  );
 
   const workspacePendingArchive = workspaceToArchive
     ? serverWorkspaces?.find((workspace) => workspace.id === workspaceToArchive)
@@ -280,7 +356,8 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
   // Clear attention glow when viewing a workspace
   useEffect(() => {
-    if (currentWorkspaceId && needsAttention(currentWorkspaceId)) {
+    const shouldClearAttention = currentWorkspaceId && needsAttention(currentWorkspaceId);
+    if (shouldClearAttention) {
       clearAttention(currentWorkspaceId);
     }
   }, [currentWorkspaceId, needsAttention, clearAttention]);
@@ -291,50 +368,24 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     }
   }, [selectedProjectId, setProjectContext]);
 
-  useEffect(() => {
-    if (isMocked) {
-      return;
-    }
-    const slugFromPath = getProjectSlugFromPath(pathname);
-    if (slugFromPath && slugFromPath !== 'new') {
-      setSelectedProjectSlug(slugFromPath);
-      localStorage.setItem(SELECTED_PROJECT_KEY, slugFromPath);
-    } else {
-      const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
-      if (stored) {
-        setSelectedProjectSlug(stored);
-      }
-    }
-  }, [isMocked, pathname]);
+  useProjectSlugSync(pathname, isMocked, projects, selectedProjectSlug, setSelectedProjectSlug);
 
-  // Select first project if none selected
-  useEffect(() => {
-    if (isMocked) {
-      return;
-    }
-    if (projects && projects.length > 0 && !selectedProjectSlug) {
-      const firstSlug = projects[0]?.slug;
-      if (!firstSlug) {
+  const handleProjectChange = useCallback(
+    (value: string) => {
+      if (value === '__manage__') {
+        navigate('/projects');
         return;
       }
-      setSelectedProjectSlug(firstSlug);
-      localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
-    }
-  }, [isMocked, projects, selectedProjectSlug]);
-
-  const handleProjectChange = (value: string) => {
-    if (value === '__manage__') {
-      navigate('/projects');
-      return;
-    }
-    if (value === '__create__') {
-      navigate('/projects/new');
-      return;
-    }
-    setSelectedProjectSlug(value);
-    localStorage.setItem(SELECTED_PROJECT_KEY, value);
-    navigate(`/projects/${value}/workspaces`);
-  };
+      if (value === '__create__') {
+        navigate('/projects/new');
+        return;
+      }
+      setSelectedProjectSlug(value);
+      localStorage.setItem(SELECTED_PROJECT_KEY, value);
+      navigate(`/projects/${value}/workspaces`);
+    },
+    [navigate]
+  );
 
   const globalNavItems = [
     { href: '/reviews', label: 'Reviews', icon: GitPullRequest },
@@ -409,46 +460,18 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
               </button>
             </div>
             <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
-              <DndContext
+              <WorkspaceList
+                workspaceList={workspaceList}
+                currentWorkspaceId={currentWorkspaceId}
+                selectedProjectId={selectedProjectId}
+                selectedProjectSlug={selectedProjectSlug}
+                isKanbanView={isKanbanView}
+                needsAttention={needsAttention}
+                clearAttention={clearAttention}
+                onArchiveRequest={handleArchiveRequest}
                 sensors={sensors}
-                collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <SidebarMenu className="gap-2 p-1">
-                    {workspaceList.map((workspace) => {
-                      const isCreatingItem = workspace.uiState === 'creating';
-
-                      // Creating placeholder - non-clickable, not sortable
-                      if (isCreatingItem) {
-                        return <CreatingWorkspaceItem key={workspace.id} />;
-                      }
-
-                      return (
-                        <SortableWorkspaceItem
-                          key={workspace.id}
-                          workspace={workspace}
-                          isActive={currentWorkspaceId === workspace.id}
-                          selectedProjectId={selectedProjectId}
-                          selectedProjectSlug={selectedProjectSlug}
-                          onArchiveRequest={handleArchiveRequest}
-                          disableRatchetAnimation={isKanbanView}
-                          needsAttention={needsAttention}
-                          clearAttention={clearAttention}
-                        />
-                      );
-                    })}
-                    {workspaceList.length === 0 && (
-                      <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                        No active workspaces
-                      </div>
-                    )}
-                  </SidebarMenu>
-                </SortableContext>
-              </DndContext>
+              />
             </SidebarGroupContent>
           </SidebarGroup>
         )}
@@ -505,19 +528,83 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}
         hasUncommitted={archiveHasUncommitted}
-        isPending={archiveWorkspace.isPending}
+        isPending={
+          workspaceToArchive
+            ? workspaceList.find((w) => w.id === workspaceToArchive)?.uiState === 'archiving'
+            : false
+        }
         onConfirm={(commitUncommitted) => {
           if (workspaceToArchive) {
-            // Start archiving state management (optimistic UI)
-            startArchiving(workspaceToArchive);
-            archiveWorkspace.mutate({
-              id: workspaceToArchive,
-              commitUncommitted,
-            });
+            executeArchive(workspaceToArchive, commitUncommitted);
           }
         }}
       />
     </Sidebar>
+  );
+}
+
+/**
+ * Workspace list with sorting capability
+ */
+function WorkspaceList({
+  workspaceList,
+  currentWorkspaceId,
+  selectedProjectId,
+  selectedProjectSlug,
+  isKanbanView,
+  needsAttention,
+  clearAttention,
+  onArchiveRequest,
+  sensors,
+  onDragEnd,
+}: {
+  workspaceList: WorkspaceListItem[];
+  currentWorkspaceId: string | undefined;
+  selectedProjectId: string | undefined;
+  selectedProjectSlug: string;
+  isKanbanView: boolean;
+  needsAttention: (workspaceId: string) => boolean;
+  clearAttention: (workspaceId: string) => void;
+  onArchiveRequest: (workspace: WorkspaceListItem) => void;
+  sensors: ReturnType<typeof useSensors>;
+  onDragEnd: (event: DragEndEvent) => void;
+}) {
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext
+        items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <SidebarMenu className="gap-2 p-1">
+          {workspaceList.map((workspace) => {
+            const isCreatingItem = workspace.uiState === 'creating';
+
+            if (isCreatingItem) {
+              return <CreatingWorkspaceItem key={workspace.id} />;
+            }
+
+            return (
+              <SortableWorkspaceItem
+                key={workspace.id}
+                workspace={workspace}
+                isActive={currentWorkspaceId === workspace.id}
+                selectedProjectId={selectedProjectId}
+                selectedProjectSlug={selectedProjectSlug}
+                onArchiveRequest={onArchiveRequest}
+                disableRatchetAnimation={isKanbanView}
+                needsAttention={needsAttention}
+                clearAttention={clearAttention}
+              />
+            );
+          })}
+          {workspaceList.length === 0 && (
+            <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+              No active workspaces
+            </div>
+          )}
+        </SidebarMenu>
+      </SortableContext>
+    </DndContext>
   );
 }
 

@@ -10,7 +10,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -216,7 +216,7 @@ export function SessionTabBar({
     return () => window.removeEventListener('resize', updateScrollArrows);
   }, [updateScrollArrows]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (sortedSessions.length === 0) {
       setShowLeftArrow(false);
       setShowRightArrow(false);

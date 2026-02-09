@@ -1,9 +1,22 @@
 // @vitest-environment jsdom
 
+// Mock Prisma client to avoid node: module imports in jsdom - must be before imports
+import { vi } from 'vitest';
+
+vi.mock('@prisma-gen/client', () => ({
+  SessionStatus: {
+    IDLE: 'IDLE',
+    RUNNING: 'RUNNING',
+    ERROR: 'ERROR',
+    STOPPED: 'STOPPED',
+  },
+}));
+
 import { SessionStatus } from '@prisma-gen/client';
-import { act, createElement, createRef } from 'react';
+import { createElement, createRef } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { CommandInfo } from '@/lib/claude-types';
 import { type SessionData, SessionTabBar } from './session-tab-bar';
 import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
@@ -42,7 +55,7 @@ function renderInDom(render: (root: Root, container: HTMLDivElement) => void): (
   const root = createRoot(container);
   render(root, container);
   return () => {
-    act(() => root.unmount());
+    root.unmount();
     container.remove();
   };
 }
@@ -91,7 +104,7 @@ describe('session-tab-bar regression coverage', () => {
       const onCreateSession = vi.fn();
       const onCloseSession = vi.fn();
 
-      act(() => {
+      flushSync(() => {
         root.render(
           createElement(SessionTabBar, {
             sessions: [makeSession('s1', '2026-01-01T00:00:00Z')],
@@ -111,7 +124,7 @@ describe('session-tab-bar regression coverage', () => {
         scrollWidth: 100,
       });
 
-      act(() => {
+      flushSync(() => {
         window.dispatchEvent(new Event('resize'));
       });
       expect(container.querySelector('.lucide-chevron-right')).toBeNull();
@@ -121,13 +134,13 @@ describe('session-tab-bar regression coverage', () => {
         clientWidth: 100,
         scrollWidth: 300,
       });
-      act(() => {
+      flushSync(() => {
         root.render(
           createElement(SessionTabBar, {
             sessions: [
               makeSession('s1', '2026-01-01T00:00:00Z'),
-              makeSession('s2', '2026-01-01T00:01:00Z'),
-              makeSession('s3', '2026-01-01T00:02:00Z'),
+              makeSession('s2', '2026-01-01T00:02:00Z'),
+              makeSession('s3', '2026-01-01T00:03:00Z'),
             ],
             currentSessionId: 's1',
             onSelectSession,
@@ -160,7 +173,7 @@ describe('slash-command-palette regression coverage', () => {
     const paletteRef = createRef<SlashCommandPaletteHandle>();
 
     const cleanup = renderInDom((root) => {
-      act(() => {
+      flushSync(() => {
         root.render(
           createElement(SlashCommandPalette, {
             commands,
@@ -175,13 +188,13 @@ describe('slash-command-palette regression coverage', () => {
       });
 
       // Move selection from index 0 -> 2
-      act(() => {
+      flushSync(() => {
         expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
         expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
       });
 
       // Filter changes but still returns all 3 commands.
-      act(() => {
+      flushSync(() => {
         root.render(
           createElement(SlashCommandPalette, {
             commands,
@@ -195,7 +208,7 @@ describe('slash-command-palette regression coverage', () => {
         );
       });
 
-      act(() => {
+      flushSync(() => {
         expect(paletteRef.current?.handleKeyDown('Enter')).toBe('handled');
       });
 
