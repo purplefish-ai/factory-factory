@@ -86,7 +86,9 @@ function createReplayBaseState(state: ChatState): ChatState {
     ...createBaseResetState(),
     // Preserve optimistic pending sends that are not yet reflected in replayed events.
     pendingMessages: state.pendingMessages,
-    queuedMessages: new Map(),
+    // Preserve queued messages - they will be reconstructed from replay events,
+    // but preserving them ensures they remain visible during replay processing.
+    queuedMessages: state.queuedMessages,
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
     sessionRuntime: {
