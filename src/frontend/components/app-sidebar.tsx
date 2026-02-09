@@ -74,7 +74,7 @@ type AppSidebarMockData = {
   };
 };
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Complexity slightly increased (15→16) due to parallel archive support
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: pre-existing (16); splitting this component further would hurt readability
 export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const location = useLocation();
   const pathname = location.pathname;
@@ -92,7 +92,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   });
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [workspaceToArchive, setWorkspaceToArchive] = useState<string | null>(null);
-  const [archivingWorkspaces, setArchivingWorkspaces] = useState<Set<string>>(new Set());
   const { setProjectContext } = useProjectContext();
 
   const { data: projectsData } = trpc.project.list.useQuery(
@@ -252,12 +251,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-      // Remove from archiving set
-      setArchivingWorkspaces((prev) => {
-        const next = new Set(prev);
-        next.delete(variables.id);
-        return next;
-      });
+      cancelArchiving(variables.id);
       // If we archived the currently viewed workspace, navigate to the workspaces list
       const archivedId = variables.id;
       const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
@@ -267,12 +261,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     },
     onError: (error, variables) => {
       cancelArchiving(variables.id);
-      // Remove from archiving set
-      setArchivingWorkspaces((prev) => {
-        const next = new Set(prev);
-        next.delete(variables.id);
-        return next;
-      });
       toast.error(error.message);
     },
   });
@@ -280,7 +268,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const executeArchive = useCallback(
     (workspaceId: string, commitUncommitted: boolean) => {
       startArchiving(workspaceId);
-      setArchivingWorkspaces((prev) => new Set(prev).add(workspaceId));
       archiveWorkspace.mutate({ id: workspaceId, commitUncommitted });
     },
     [startArchiving, archiveWorkspace]
@@ -290,12 +277,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     (workspace: WorkspaceListItem) => {
       // If PR is merged, skip confirmation and archive immediately
       if (workspace.prState === 'MERGED') {
-        const hasUncommitted = workspace.gitStats?.hasUncommitted === true;
-        executeArchive(workspace.id, hasUncommitted);
+        executeArchive(workspace.id, workspace.gitStats?.hasUncommitted === true);
         return;
       }
-
-      // Otherwise show confirmation dialog
       setWorkspaceToArchive(workspace.id);
       setArchiveDialogOpen(true);
     },
@@ -537,7 +521,11 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}
         hasUncommitted={archiveHasUncommitted}
-        isPending={workspaceToArchive ? archivingWorkspaces.has(workspaceToArchive) : false}
+        isPending={
+          workspaceToArchive
+            ? workspaceList.find((w) => w.id === workspaceToArchive)?.uiState === 'archiving'
+            : false
+        }
         onConfirm={(commitUncommitted) => {
           if (workspaceToArchive) {
             executeArchive(workspaceToArchive, commitUncommitted);

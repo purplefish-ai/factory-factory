@@ -153,10 +153,11 @@ export function WorkspaceDetailContainer() {
   );
 
   const handleArchiveRequest = useCallback(() => {
-    // If PR is merged, skip confirmation and archive immediately
+    // If PR is merged, skip confirmation and archive immediately.
+    // Default commitUncommitted to true so we never lose work if git status hasn't loaded yet.
     if (workspace?.prState === 'MERGED') {
       archiveWorkspace.mutate(
-        { id: workspaceId, commitUncommitted: hasUncommitted },
+        { id: workspaceId, commitUncommitted: true },
         {
           onError: handleArchiveError,
         }
@@ -166,7 +167,7 @@ export function WorkspaceDetailContainer() {
 
     // Otherwise show confirmation dialog
     setArchiveDialogOpen(true);
-  }, [workspace?.prState, workspaceId, hasUncommitted, archiveWorkspace, handleArchiveError]);
+  }, [workspace?.prState, workspaceId, archiveWorkspace, handleArchiveError]);
 
   const handleBackToWorkspaces = useCallback(
     () => navigate(`/projects/${slug}/workspaces`),
