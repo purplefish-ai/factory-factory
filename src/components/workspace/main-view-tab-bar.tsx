@@ -4,13 +4,21 @@ import {
   CircleSlash,
   FileCode,
   FileDiff,
+  FileText,
   Loader2,
   type LucideIcon,
+  MessageSquare,
   Plus,
   XCircle,
 } from 'lucide-react';
 
 import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -305,6 +313,7 @@ interface MainViewTabBarProps {
   processStatus?: ProcessStatus;
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: () => void;
+  onCreatePlanSession?: () => void;
   onCloseSession?: (sessionId: string) => void;
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
@@ -320,6 +329,7 @@ export function MainViewTabBar({
   processStatus,
   onSelectSession,
   onCreateSession,
+  onCreatePlanSession,
   onCloseSession,
   disabled,
   maxSessions,
@@ -361,28 +371,36 @@ export function MainViewTabBar({
         );
       })}
 
-      {/* Add session button */}
+      {/* Add session dropdown */}
       {onCreateSession && (
-        <Tooltip>
-          <TooltipTrigger asChild>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <button
               type="button"
-              onClick={onCreateSession}
               disabled={isButtonDisabled}
               className={cn(
                 'flex items-center justify-center h-6 w-6 rounded-md',
                 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
                 'transition-colors disabled:opacity-50 disabled:pointer-events-none'
               )}
-              aria-label="New chat session"
+              aria-label="New session"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {isAtLimit ? `Maximum ${maxSessions} sessions per workspace` : 'New chat session'}
-          </TooltipContent>
-        </Tooltip>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={onCreateSession}>
+              <MessageSquare className="h-4 w-4 mr-2" />
+              New Chat
+            </DropdownMenuItem>
+            {onCreatePlanSession && (
+              <DropdownMenuItem onSelect={onCreatePlanSession}>
+                <FileText className="h-4 w-4 mr-2" />
+                New Plan
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       {/* Separator between sessions and file tabs */}

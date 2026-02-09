@@ -127,6 +127,7 @@ export interface UseSessionManagementReturn {
   handleSelectSession: (dbSessionId: string) => void;
   handleCloseSession: (dbSessionId: string) => void;
   handleNewChat: () => void;
+  handleNewPlan: () => void;
   handleQuickAction: (name: string, prompt: string) => void;
 }
 
@@ -285,6 +286,39 @@ export function useSessionManagement({
     selectedModel,
   ]);
 
+  // Generate next available "Plan N" name based on existing sessions
+  const getNextPlanName = useCallback(() => {
+    const existingNumbers = (claudeSessions ?? [])
+      .map((s) => {
+        const match = s.name?.match(/^Plan (\d+)$/);
+        return match ? Number.parseInt(match[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
+    return `Plan ${nextNumber}`;
+  }, [claudeSessions]);
+
+  const handleNewPlan = useCallback(() => {
+    const name = getNextPlanName();
+
+    createSession.mutate(
+      { workspaceId, workflow: 'plan', model: selectedModel || undefined, name },
+      {
+        onSuccess: (session) => {
+          setSelectedDbSessionId(session.id);
+          setTimeout(() => inputRef.current?.focus(), 0);
+        },
+      }
+    );
+  }, [
+    createSession,
+    workspaceId,
+    getNextPlanName,
+    setSelectedDbSessionId,
+    inputRef,
+    selectedModel,
+  ]);
+
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
       createSession.mutate(
@@ -312,6 +346,7 @@ export function useSessionManagement({
     handleSelectSession,
     handleCloseSession,
     handleNewChat,
+    handleNewPlan,
     handleQuickAction,
   };
 }

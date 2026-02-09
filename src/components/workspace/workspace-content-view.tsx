@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Play } from 'lucide-react';
+import { FileText, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ interface WorkspaceContentViewProps {
   isDeletingSession: boolean;
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
+  onCreatePlanSession: () => void;
   onCloseSession: (sessionId: string) => void;
   children: ReactNode;
   /** Maximum sessions allowed per workspace */
@@ -58,6 +59,7 @@ export function WorkspaceContentView({
   isDeletingSession,
   onSelectSession,
   onCreateSession,
+  onCreatePlanSession,
   onCloseSession,
   children,
   maxSessions,
@@ -80,7 +82,7 @@ export function WorkspaceContentView({
               </div>
             )}
 
-            <div className="flex justify-center">
+            <div className="flex justify-center gap-3">
               <Button
                 size="lg"
                 onClick={onCreateSession}
@@ -88,7 +90,17 @@ export function WorkspaceContentView({
                 className="gap-2"
               >
                 <Play className="h-4 w-4" />
-                Start Session
+                Start Chat
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={onCreatePlanSession}
+                disabled={isCreatingSession || !hasWorktreePath}
+                className="gap-2"
+              >
+                <FileText className="h-4 w-4" />
+                Start Plan
               </Button>
             </div>
           </div>
@@ -112,6 +124,7 @@ export function WorkspaceContentView({
           processStatus={processStatus}
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
+          onCreatePlanSession={onCreatePlanSession}
           onCloseSession={onCloseSession}
           disabled={isCreatingSession || isDeletingSession}
           maxSessions={maxSessions}

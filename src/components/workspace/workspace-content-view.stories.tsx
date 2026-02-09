@@ -27,6 +27,7 @@ const meta = {
     isDeletingSession: false,
     onSelectSession: fn(),
     onCreateSession: fn(),
+    onCreatePlanSession: fn(),
     onCloseSession: fn(),
     maxSessions: 5,
     hasWorktreePath: true,

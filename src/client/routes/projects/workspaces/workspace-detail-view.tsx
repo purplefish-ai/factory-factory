@@ -39,6 +39,7 @@ export interface WorkspaceDetailViewProps {
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
+  handleNewPlan: ReturnType<typeof useSessionManagement>['handleNewPlan'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
@@ -107,6 +108,7 @@ export function WorkspaceDetailView({
   isDeletingSession,
   handleSelectSession,
   handleNewChat,
+  handleNewPlan,
   handleCloseChatSession,
   maxSessions,
   hasWorktreePath,
@@ -226,6 +228,7 @@ export function WorkspaceDetailView({
               isDeletingSession={isDeletingSession}
               onSelectSession={handleSelectSession}
               onCreateSession={handleNewChat}
+              onCreatePlanSession={handleNewPlan}
               onCloseSession={handleCloseChatSession}
               maxSessions={maxSessions}
               hasWorktreePath={hasWorktreePath}
