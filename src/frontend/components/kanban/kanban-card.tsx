@@ -1,5 +1,12 @@
 import type { KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
-import { Archive, FileCheck, GitBranch, GitPullRequest, MessageCircleQuestion, Play } from 'lucide-react';
+import {
+  Archive,
+  FileCheck,
+  GitBranch,
+  GitPullRequest,
+  MessageCircleQuestion,
+  Play,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Badge } from '@/components/ui/badge';
