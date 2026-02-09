@@ -559,7 +559,7 @@ describe('removeQueuedMessage pattern', () => {
 // =============================================================================
 
 describe('session switching queue behavior', () => {
-  it('should clear queue on SESSION_SWITCH_START', () => {
+  it('should preserve queue on SESSION_SWITCH_START until replay batch arrives', () => {
     const state = createInitialChatState({
       queuedMessages: toQueuedMessagesMap([
         createQueuedMessage('Queued 1'),
@@ -569,7 +569,9 @@ describe('session switching queue behavior', () => {
 
     const newState = chatReducer(state, { type: 'SESSION_SWITCH_START' });
 
-    expect(newState.queuedMessages.size).toBe(0);
+    // Queued messages are preserved during switch to avoid visual disappearance
+    // They will be replaced when the replay batch arrives from the backend
+    expect(newState.queuedMessages.size).toBe(2);
   });
 
   it('should clear queue on RESET_FOR_SESSION_SWITCH', () => {

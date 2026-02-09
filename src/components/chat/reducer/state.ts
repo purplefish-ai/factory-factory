@@ -52,8 +52,10 @@ function createBaseResetState(): Pick<
 }
 
 /**
- * Creates extended reset state for session switches, which also clears
- * queue, session status, and slashCommands (since different sessions may have different commands).
+ * Creates extended reset state for session switches.
+ * Note: queuedMessages is included in the type but cleared in this function.
+ * The SESSION_SWITCH_START reducer preserves queuedMessages from the previous state
+ * to avoid visual disappearance until the replay batch replaces them.
  */
 function createSessionSwitchResetState(): Pick<
   ChatState,

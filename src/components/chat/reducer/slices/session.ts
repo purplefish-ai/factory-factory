@@ -79,6 +79,9 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
       return {
         ...state,
         ...createSessionSwitchResetState(),
+        // Preserve queued messages - they will be reconstructed from replay events,
+        // but preserving them ensures they remain visible during session switch.
+        queuedMessages: state.queuedMessages,
       };
     case 'SESSION_LOADING_START':
       return withRuntime(state, {
