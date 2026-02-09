@@ -308,11 +308,11 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-      cancelArchiving(variables.id);
+      // Archiving visual state is cleared automatically by useWorkspaceListState
+      // when the workspace disappears from serverWorkspaces after invalidation.
       // If we archived the currently viewed workspace, navigate to the workspaces list
       const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
-      const wasViewingArchived = variables.id === currentId;
-      if (wasViewingArchived) {
+      if (variables.id === currentId) {
         navigate(`/projects/${selectedProjectSlug}/workspaces`);
       }
     },
@@ -332,9 +332,10 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
   const handleArchiveRequest = useCallback(
     (workspace: WorkspaceListItem) => {
-      const shouldSkipConfirmation = workspace.prState === 'MERGED';
-      if (shouldSkipConfirmation) {
-        executeArchive(workspace.id, workspace.gitStats?.hasUncommitted === true);
+      if (workspace.prState === 'MERGED') {
+        // Always commit uncommitted changes when auto-archiving merged PRs
+        // so we never lose work (gitStats may be null if not yet loaded).
+        executeArchive(workspace.id, true);
       } else {
         setWorkspaceToArchive(workspace.id);
         setArchiveDialogOpen(true);
