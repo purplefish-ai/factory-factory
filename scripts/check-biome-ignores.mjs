@@ -5,6 +5,16 @@ import process from 'node:process';
 const ROOT = process.cwd();
 const SCAN_ROOTS = ['src', 'electron', 'prompts', 'scripts'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'dist-bundle', '.next', 'release']);
+const ALLOWED_SUPPRESSION_PREFIXES = ['prisma/generated/'];
+
+function toPosixPath(filePath) {
+  return filePath.split(path.sep).join('/');
+}
+
+function isSuppressionAllowed(relativePath) {
+  const normalized = toPosixPath(relativePath);
+  return ALLOWED_SUPPRESSION_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
 
 function walkFiles(dirPath, out) {
   if (!fs.existsSync(dirPath)) {
@@ -34,7 +44,10 @@ function countSuppressions() {
   const filesWithSuppressions = [];
 
   for (const filePath of files) {
-    const relativePath = path.relative(ROOT, filePath).split(path.sep).join('/');
+    const relativePath = toPosixPath(path.relative(ROOT, filePath));
+    if (isSuppressionAllowed(relativePath)) {
+      continue;
+    }
     let content;
     try {
       content = fs.readFileSync(filePath, 'utf8');

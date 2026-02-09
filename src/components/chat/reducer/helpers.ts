@@ -98,7 +98,10 @@ export function insertMessageByOrder(
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
     const midMessage = messages[mid];
-    if (midMessage && midMessage.order <= newOrder) {
+    if (!midMessage) {
+      throw new Error(`Missing message at index ${mid}`);
+    }
+    if (midMessage.order <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;

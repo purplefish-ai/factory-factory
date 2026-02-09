@@ -345,7 +345,7 @@ async function mapWithConcurrencyLimit<T, R>(
       const index = nextIndex++;
       const item = items[index];
       if (item === undefined) {
-        continue;
+        throw new Error(`Unexpected undefined item at index ${index}`);
       }
       results[index] = await fn(item);
     }
