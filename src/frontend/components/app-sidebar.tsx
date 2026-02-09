@@ -71,6 +71,7 @@ function useDragClickSuppression() {
   const isDraggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const timersRef = useRef<{ immediate?: number; delayed?: number }>({});
 
   useEffect(() => {
     const container = containerRef.current;
@@ -85,7 +86,16 @@ function useDragClickSuppression() {
       }
     };
     container.addEventListener('click', suppress, true);
-    return () => container.removeEventListener('click', suppress, true);
+    return () => {
+      container.removeEventListener('click', suppress, true);
+      // Clear any pending timers on unmount
+      if (timersRef.current.immediate !== undefined) {
+        clearTimeout(timersRef.current.immediate);
+      }
+      if (timersRef.current.delayed !== undefined) {
+        clearTimeout(timersRef.current.delayed);
+      }
+    };
   }, []);
 
   const onDragStart = useCallback(() => {
@@ -94,12 +104,23 @@ function useDragClickSuppression() {
   }, []);
 
   const onDragEnd = useCallback(() => {
-    setTimeout(() => {
+    // Clear any existing timers before setting new ones
+    if (timersRef.current.immediate !== undefined) {
+      clearTimeout(timersRef.current.immediate);
+    }
+    if (timersRef.current.delayed !== undefined) {
+      clearTimeout(timersRef.current.delayed);
+    }
+
+    timersRef.current.immediate = setTimeout(() => {
       isDraggingRef.current = false;
-    }, 0);
-    setTimeout(() => {
+      timersRef.current.immediate = undefined;
+    }, 0) as unknown as number;
+
+    timersRef.current.delayed = setTimeout(() => {
       setIsDragActive(false);
-    }, 500);
+      timersRef.current.delayed = undefined;
+    }, 500) as unknown as number;
   }, []);
 
   return { containerRef, isDragActive, onDragStart, onDragEnd };
