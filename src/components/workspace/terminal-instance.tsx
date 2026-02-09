@@ -27,7 +27,7 @@ export function TerminalInstance({
   className,
   isActive,
 }: TerminalInstanceProps) {
-  const containerRef = useRef<HTMLButtonElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -159,23 +159,5 @@ export function TerminalInstance({
     }
   }, [isActive]);
 
-  return (
-    <button
-      type="button"
-      ref={containerRef}
-      className={className}
-      style={{ width: '100%', height: '100%' }}
-      aria-label="Terminal"
-      onClick={() => {
-        terminalRef.current?.focus();
-      }}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') {
-          return;
-        }
-        event.preventDefault();
-        terminalRef.current?.focus();
-      }}
-    />
-  );
+  return <div ref={containerRef} className={className} style={{ width: '100%', height: '100%' }} />;
 }
