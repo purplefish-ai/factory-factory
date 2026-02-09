@@ -4,164 +4,133 @@
 
 ## APIs & External Services
 
-**GitHub:**
-- GitHub CLI (`gh`) integration via local authentication
-- Service: `src/backend/services/github-cli.service.ts`
-- Purpose: Fetch PR details, review state, CI status, issue information
-- Auth: Uses local `gh` command-line authentication (not API key)
-- Features:
-  - PR metadata: state (OPEN/CLOSED/MERGED), review decision, CI status
-  - Issue fetching for workspace creation
-  - Review comment tracking and monitoring
-  - Merge state and conflict detection
-
-**Claude API:**
-- SDK/Client: Claude CLI process communication (not SDK)
-- Service: `src/backend/claude/` (protocol, process management, permissions)
-- Auth: Uses local `claude` CLI authentication via OAuth
-- Communication: NDJSON bidirectional protocol over stdin/stdout
-- Purpose: Execute code generation and analysis tasks
-
-**Git (local):**
-- Git command execution
-- Service: `src/backend/clients/git.client.ts`, `src/backend/lib/git-helpers.ts`, `src/backend/services/git-ops.service.ts`
-- Purpose: Worktree management, branch operations, push/pull, commit history
-- Command execution: Via Node.js `child_process.execFile`
+**Claude AI:**
+- Claude Code CLI - Invoked as subprocess for AI code generation and assistance
+  - SDK/Client: Custom ClaudeClient in `src/backend/claude/index.ts`
+  - Protocol: Streaming JSON protocol over stdout/stdin
+  - Auth: OAuth via local `claude login` (no API key needed)
+  - Configuration: Model selection via `DEFAULT_MODEL` env var (sonnet, opus, haiku)
+  - Permission modes: Auto-approve, mode-based (strict/relaxed/yolo), or interactive
 
 ## Data Storage
 
 **Databases:**
-- SQLite (local file-based)
-  - Connection: `src/backend/db.ts`
-  - Client: `@prisma/client` via `PrismaBetterSqlite3` adapter
-  - Path: `$DATABASE_PATH` or `~/factory-factory/data.db` (configurable)
-  - Schema: `prisma/schema.prisma`
-  - Migrations: `prisma/migrations/`
-  - Tables: Project, Workspace, ClaudeSession, TerminalSession, UserSettings, DecisionLog, Ratchet state tracking
+- SQLite 3
+  - Connection: `sqlite://DATABASE_PATH` (default: `~/factory-factory/data.db`)
+  - Client: Prisma ORM v7.3.0
+  - Adapter: better-sqlite3 v12.6.2 (synchronous driver)
+  - Schema: `src/backend/prisma/schema.prisma`
+  - Migrations: `prisma/migrations/` (managed by Prisma)
 
 **File Storage:**
 - Local filesystem only
-  - Worktree directories: `$WORKTREE_BASE_DIR` or `$BASE_DIR/worktrees`
-  - Debug logs: `$BASE_DIR` (project-specific paths)
-  - Prompt templates: `prompts/` directory (copied to `dist/` on build)
-  - Database file: `~/factory-factory/data.db` (or configured via `DATABASE_PATH`)
+  - Database: SQLite file at `DATABASE_PATH`
+  - Worktrees: Managed at `WORKTREE_BASE_DIR` (default: `~/factory-factory/worktrees`)
+  - Logs: Written to `BASE_DIR/logs` (default: `~/factory-factory/logs`)
+  - Prompts: Embedded in dist at `prompts/` (copied during build)
 
 **Caching:**
-- In-memory: tRPC and React Query manage request caching
-- WebSocket subscriptions: Real-time event forwarding via `ws` library
-- Session store: `src/backend/services/session-store.service.ts`
+- React Query (@tanstack/react-query) - Client-side cache for tRPC queries
+- No external cache service
 
 ## Authentication & Identity
 
 **Auth Provider:**
-- Custom (via CLI authentication)
-  - Claude: OAuth via `claude login` command
-  - GitHub: OAuth via `gh auth login` command
-  - Implementation: Local CLI tool authentication, not API-based
-  - No application-level authentication on the server (single-user local app)
+- Custom (OAuth via Claude CLI)
+  - Implementation: `src/backend/claude/index.ts` manages Claude session authentication
+  - Local auth check: `gh cli` installed and authenticated for GitHub integration
+  - No user authentication system (single-user desktop app)
+  - Permission system: Mode-based (strict/relaxed/yolo) for tool execution
 
-**Session Management:**
-- Claude sessions tracked in database: `ClaudeSession` table
-- Session resume capability via `claudeSessionId` and `claudeProjectPath`
-- Process management: `src/backend/claude/process.ts`
-- WebSocket session tracking: `src/backend/services/session-store.service.ts`
+**GitHub Integration:**
+- gh CLI (GitHub Command Line)
+  - Health check: `src/backend/services/github-cli.service.ts` verifies installation and auth
+  - Functions: Issue listing, PR status checks, review comment fetching, CI status
+  - Environment: Relies on `gh auth login` (user must authenticate once)
+  - Timeout: 30s default, 10s for user/review lookups, 60s for diff retrieval
+  - Required env vars: None hardcoded; project configs `githubOwner` and `githubRepo` in database
 
 ## Monitoring & Observability
 
 **Error Tracking:**
-- Not integrated
 - Feature flag: `FEATURE_ERROR_TRACKING` (default: false)
-- Local logging only: `src/backend/services/logger.service.ts`
+- Not implemented by default
 
 **Logs:**
-- Console logging with levels: error, warn, info, debug
-- Configurable via `LOG_LEVEL` env var (default: info)
-- Service name: `SERVICE_NAME` env var (default: factoryfactory)
-- WebSocket session logs: Optional via `WS_LOGS_ENABLED` and `WS_LOGS_PATH`
-- Debug utilities: `src/lib/debug.ts` for development
+- Approach: Custom logger service via pino library
+  - Location: `src/backend/services/logger.service.ts`
+  - Output: Console (dev) and file (prod)
+  - File logs: `BASE_DIR/logs/` directory
+  - WebSocket session logs: Optional via `WS_LOGS_ENABLED` env var
+  - Log levels: error, warn, info, debug (configurable via `LOG_LEVEL`)
+- Claude session events: Stored in session store and appended to database
 
-**Performance Monitoring:**
+**Metrics:**
 - Feature flag: `FEATURE_METRICS` (default: false)
-- Health checks: `src/backend/routers/api/health.router.ts`
-- System resource usage: `pidusage` package for process metrics
+- Not implemented by default
 
 ## CI/CD & Deployment
 
 **Hosting:**
-- Standalone CLI: `ff` or `factory-factory` commands
-- Electron desktop app: macOS, Windows, Linux via electron-builder
-- Server mode: Listens on `BACKEND_PORT` with tRPC + REST API
-- Frontend: Vite SPA served alongside backend
+- Desktop: Electron app (cross-platform: macOS, Linux, Windows)
+- CLI: Node.js standalone (requires system git and optional gh CLI)
+- Web: Optional static frontend serving via Express (default none)
 
 **CI Pipeline:**
-- No explicit CI configured
-- Health checks and monitoring: `src/backend/services/cli-health.service.ts`
-- PR ratchet system: Auto-checks PR state and CI status (`src/backend/services/ratchet.service.ts`)
-- Scheduler: `src/backend/services/scheduler.service.ts` for background tasks
-
-**Build & Packaging:**
-- Backend: TypeScript compiled to `dist/`
-- Frontend: Vite build to `dist/client/`
-- Electron: electron-builder packages for distribution
-- Rebuild: `electron-rebuild` for native modules in Electron context
+- Not configured at repo level
+- Monitors external CI systems:
+  - GitHub PR status checks via `gh pr checks` (async monitoring)
+  - PR state transitions (draft, open, merged, closed)
+  - Ratchet state machine tracks CI failures and initiates auto-fix sessions
 
 ## Environment Configuration
 
 **Required env vars:**
-- `DATABASE_PATH` (optional, defaults to `~/factory-factory/data.db`)
-- `NODE_ENV` (default: development)
+- `DATABASE_PATH` - SQLite database file location (default: `~/factory-factory/data.db`)
+- `BACKEND_PORT` - Server port (default: 3001)
+- `NODE_ENV` - Environment mode (development/production)
 
-**Optional env vars:**
-- `BACKEND_PORT` (default: 3001 dev / 4001 config)
-- `FRONTEND_PORT` (default: 4000)
-- `BACKEND_URL` (default: http://localhost:3000)
-- `BASE_DIR` (default: ~/factory-factory)
-- `WORKTREE_BASE_DIR` (defaults to $BASE_DIR/worktrees)
-- `LOG_LEVEL` (default: info)
-- `SERVICE_NAME` (default: factoryfactory)
-- `CORS_ALLOWED_ORIGINS` (default: dev ports 3000/3001/4000/4001)
-- Agent configuration:
-  - `ORCHESTRATOR_MODEL`, `SUPERVISOR_MODEL`, `WORKER_MODEL`
-  - `ORCHESTRATOR_PERMISSIONS`, `SUPERVISOR_PERMISSIONS`, `WORKER_PERMISSIONS`
-  - `CLAUDE_RATE_LIMIT_PER_MINUTE`, `CLAUDE_RATE_LIMIT_PER_HOUR`
-  - `MAX_SESSIONS_PER_WORKSPACE`
-  - `MAX_WORKER_ATTEMPTS`, `CRASH_LOOP_THRESHOLD_MS`, `MAX_RAPID_CRASHES`
+**Optional but important:**
+- `DEFAULT_MODEL` - Claude model to use (sonnet/opus/haiku, default: sonnet)
+- `DEFAULT_PERMISSIONS` - Permission mode (strict/relaxed/yolo, default: yolo)
+- `CLAUDE_RATE_LIMIT_PER_MINUTE` - API rate limit (default: 60)
+- `CLAUDE_RATE_LIMIT_PER_HOUR` - API rate limit (default: 1000)
+- `LOG_LEVEL` - Logging verbosity (error/warn/info/debug)
+- `CORS_ALLOWED_ORIGINS` - Comma-separated allowed origins
 
 **Secrets location:**
-- `.env` file (not committed, see `.env.example` for template)
-- Electron: DATABASE_PATH set by app process
-- GitHub auth: Local `~/.config/gh/config.yml` (managed by `gh` CLI)
-- Claude auth: Local `~/.claude/` (managed by `claude` CLI)
+- No secrets file (.env not committed)
+- GitHub token: Uses local `gh` CLI auth (stored in user's home directory by GitHub CLI)
+- Claude auth: OAuth via `claude login` (stored locally by Claude CLI)
 
 ## Webhooks & Callbacks
 
 **Incoming:**
-- None explicit - single-user desktop app
-- Health check endpoint: `GET /api/health`
+- None - Server does not expose webhook endpoints
 
 **Outgoing:**
-- PR/CI monitoring callbacks: Periodic polling via scheduler service
-  - Check PR state every minute (configurable)
-  - Poll CI status via GitHub CLI
-  - Ratchet state machine triggers fixer sessions
-- WebSocket event broadcasts:
-  - Chat events: `/chat` endpoint
-  - Terminal events: `/terminal` endpoint
-  - Dev logs: `/dev-logs` endpoint (run script output streaming)
+- Git push events: Workspace worktrees are committed and pushed to GitHub (triggered by Claude or user)
+- PR creation/updates: Initiated by Claude sessions, tracked via `gh` CLI
+- Branch operations: Auto-generated or user-specified via workspace creation
 
-## Model Container Protocol (MCP)
+## Project & GitHub Integration
 
-**Purpose:** Tool/resource access for Claude agents
+**Repository Linking:**
+- Projects can be linked to GitHub repos via `githubOwner` and `githubRepo` fields
+- Workspaces created from GitHub issues track `githubIssueNumber`, `githubIssueUrl`, `prUrl`
+- Creation source tracking: MANUAL, RESUME_BRANCH, or GITHUB_ISSUE
 
-**Tools available:**
-- `src/backend/routers/mcp/terminal.mcp.ts` - Terminal command execution
-- `src/backend/routers/mcp/system.mcp.ts` - System information
-- `src/backend/routers/mcp/lock.mcp.ts` - Session-level mutual exclusion
+**PR Tracking (Ratchet Feature):**
+- Workspace can track associated pull requests
+- Fields: `prNumber`, `prState`, `prCiStatus`, `prUrl`
+- PR state enum: NONE, DRAFT, OPEN, CHANGES_REQUESTED, APPROVED, MERGED, CLOSED
+- CI status enum: UNKNOWN, PENDING, SUCCESS, FAILURE
+- Auto-fix workflow: Monitors PR state and auto-dispatches fixer sessions on CI failure or review comments
 
-**Implementation:** MCP server wrapper in `src/backend/routers/mcp/server.ts`
-- Tool execution with retry logic
-- Request/response validation via Zod schemas
-- Error handling specific to tool failures
+**Async Polling:**
+- Ratchet service checks workspace PR state every ~1 minute
+- PR monitor service fetches latest CI status and review comments
+- Fixer sessions created automatically when ratchet detects actionable failures
 
 ---
 

@@ -1,7 +1,9 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+
+import { cn } from '@/lib/utils';
 
 // =============================================================================
 // Types
@@ -27,11 +29,12 @@ export function TerminalInstance({
   className,
   isActive,
 }: TerminalInstanceProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLButtonElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const lastOutputLengthRef = useRef(0);
+  const initialOutputRef = useRef(output);
 
   // Store callbacks in refs to avoid reinitializing terminal when they change
   // This is critical because onData/onResize depend on parent state (tabs)
@@ -45,7 +48,6 @@ export function TerminalInstance({
   }, [onData, onResize]);
 
   // Initialize terminal synchronously
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Intentionally capture initial output at mount time only - subsequent output changes are handled by the output effect below
   useEffect(() => {
     if (!containerRef.current) {
       return;
@@ -94,11 +96,10 @@ export function TerminalInstance({
     // Report initial size via ref to get latest callback
     onResizeRef.current(terminal.cols, terminal.rows);
 
-    // Write initial output immediately during init to prevent blank terminal on tab switch
-    // The output prop is captured via closure at mount time
-    if (output) {
-      terminal.write(output);
-      lastOutputLengthRef.current = output.length;
+    // Write initial output captured at mount time to avoid re-initializing on every update.
+    if (initialOutputRef.current) {
+      terminal.write(initialOutputRef.current);
+      lastOutputLengthRef.current = initialOutputRef.current.length;
     }
 
     // Handle user input via ref to always use latest callback
@@ -125,7 +126,7 @@ export function TerminalInstance({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, []); // Empty deps - only run once on mount
+  }, []);
 
   // Write output to terminal
   useEffect(() => {
@@ -160,22 +161,23 @@ export function TerminalInstance({
     }
   }, [isActive]);
 
-  // Focus terminal on click
-  const handleClick = useCallback(() => {
-    terminalRef.current?.focus();
-  }, []);
-
   return (
-    // biome-ignore lint/a11y/useSemanticElements: terminal requires custom element for xterm.js
-    <div
+    <button
+      type="button"
       ref={containerRef}
-      className={`${className} text-left`}
-      onClick={handleClick}
-      onKeyDown={handleClick}
-      role="textbox"
-      tabIndex={0}
-      aria-label="Terminal"
+      className={cn(className, 'text-left')}
       style={{ width: '100%', height: '100%' }}
+      aria-label="Terminal"
+      onClick={() => {
+        terminalRef.current?.focus();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return;
+        }
+        event.preventDefault();
+        terminalRef.current?.focus();
+      }}
     />
   );
 }

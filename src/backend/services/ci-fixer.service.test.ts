@@ -1,5 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClaudeClient } from '@/backend/claude';
 
 vi.mock('./fixer-session.service', () => ({
   fixerSessionService: {
@@ -114,8 +115,7 @@ describe('CIFixerService', () => {
       isRunning: vi.fn().mockReturnValue(true),
       sendMessage: vi.fn().mockResolvedValue(undefined),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: mock client
-    vi.mocked(sessionService.getClient).mockReturnValue(client as any);
+    vi.mocked(sessionService.getClient).mockReturnValue(client as unknown as ClaudeClient);
 
     await expect(ciFixerService.notifyCIPassed('w1')).resolves.toBe(true);
     expect(client.sendMessage).toHaveBeenCalled();

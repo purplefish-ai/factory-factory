@@ -32,8 +32,10 @@ function appendThinkingDelta(state: ChatState, index: number, deltaText: string)
   }
 
   for (let i = state.messages.length - 1; i >= 0; i -= 1) {
-    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
-    const msg = state.messages[i]!;
+    const msg = state.messages[i];
+    if (!msg) {
+      continue;
+    }
     if (msg.source !== 'claude' || !msg.message || !isStreamEventMessage(msg.message)) {
       continue;
     }
@@ -95,8 +97,11 @@ export function insertMessageByOrder(
 
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
-    // biome-ignore lint/style/noNonNullAssertion: mid bounded by low/high within array bounds
-    if (messages[mid]!.order <= newOrder) {
+    const midMessage = messages[mid];
+    if (!midMessage) {
+      throw new Error(`Missing message at index ${mid}`);
+    }
+    if (midMessage.order <= newOrder) {
       low = mid + 1;
     } else {
       high = mid;
@@ -154,8 +159,10 @@ function upsertClaudeMessageAtOrder(
     return null;
   }
 
-  // biome-ignore lint/style/noNonNullAssertion: existingIndex verified by findIndex check above
-  const existingMsg = state.messages[existingIndex]!;
+  const existingMsg = state.messages[existingIndex];
+  if (!existingMsg) {
+    return null;
+  }
   const existingToolUseId = existingMsg.message
     ? getToolUseIdFromMessage(existingMsg.message)
     : null;
@@ -278,9 +285,11 @@ export function handleToolInputUpdate(
   // If cached index exists, verify it points to the correct message
   // (index may be stale if messages were inserted in the middle of the array)
   if (messageIndex !== undefined) {
-    // biome-ignore lint/style/noNonNullAssertion: messageIndex from Map lookup, verified below
-    const cachedMsg = state.messages[messageIndex]!;
-    if (!isToolUseMessageWithId(cachedMsg, toolUseId)) {
+    const cachedMsg = state.messages[messageIndex];
+    if (!cachedMsg) {
+      messageIndex = undefined;
+      needsIndexUpdate = true;
+    } else if (!isToolUseMessageWithId(cachedMsg, toolUseId)) {
       // Cached index is stale, need to do linear scan
       messageIndex = undefined;
       needsIndexUpdate = true;
@@ -303,8 +312,10 @@ export function handleToolInputUpdate(
     currentState = { ...state, toolUseIdToIndex: newToolUseIdToIndex };
   }
 
-  // biome-ignore lint/style/noNonNullAssertion: messageIndex verified by findIndex check above
-  const msg = currentState.messages[messageIndex]!;
+  const msg = currentState.messages[messageIndex];
+  if (!msg) {
+    return currentState;
+  }
 
   // Update the message with new input
   const claudeMsg = msg.message;

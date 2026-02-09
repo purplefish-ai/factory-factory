@@ -5,415 +5,392 @@
 ## Test Framework
 
 **Runner:**
-- Vitest 4.0.18
+- Vitest v4.0.18
 - Config: `vitest.config.ts`
-- Environment: Node.js (server-side tests only, no DOM)
-- Globals: Enabled (no need to import describe/it/expect)
+- Node environment only (no browser testing in main suite)
+- Globals enabled: `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi` are available without imports
 
 **Assertion Library:**
-- Vitest built-in expect (similar to Jest)
+- Vitest built-in expect/assertions (Vitest includes `chai` matchers)
 
 **Run Commands:**
 ```bash
 pnpm test              # Run all tests once
-pnpm test:watch       # Run tests in watch mode (re-run on file changes)
-pnpm test:coverage    # Generate coverage report
+pnpm test:watch       # Watch mode for development
+pnpm test:coverage    # Generate coverage report (HTML + JSON)
 ```
+
+**Coverage:**
+- Provider: v8
+- Reporters: text, json, json-summary, html
+- Scope: `src/backend/**/*.ts` only (frontend tests excluded from coverage)
+- Excludes: `*.test.ts`, `index.ts`, `src/backend/testing/**`
+- Thresholds: disabled (can be enabled as integration test coverage grows)
+- View coverage: run `pnpm test:coverage`, view HTML report in `coverage/`
 
 ## Test File Organization
 
 **Location:**
-- Co-located with implementation: same directory as source file
-- Pattern: `feature.ts` → `feature.test.ts`
+- Co-located with source files (same directory)
+- Example: `src/backend/clients/git.client.ts` → `src/backend/clients/git.client.test.ts`
 
 **Naming:**
-- Suffix: `.test.ts` for all test files
-- Examples: `session.test.ts`, `git.client.test.ts`, `workspace.trpc.test.ts`
+- `{module}.test.ts` for unit tests
+- `{module}.test.tsx` for React component tests
 
 **Structure:**
 ```
 src/backend/
-├── services/
-│   ├── git-ops.service.ts
-│   └── git-ops.service.test.ts
 ├── clients/
 │   ├── git.client.ts
 │   └── git.client.test.ts
-└── routers/
-    ├── workspace.trpc.ts
-    └── workspace.trpc.test.ts
+├── services/
+│   ├── logger.service.ts
+│   └── (no test - system service)
+└── resource_accessors/
+    ├── project.accessor.ts
+    └── project.accessor.test.ts
 ```
 
 ## Test Structure
 
 **Suite Organization:**
 ```typescript
-import { describe, expect, it } from 'vitest';
-import { functionToTest } from './module';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('module-or-function-name', () => {
-  describe('specific-feature', () => {
-    it('should do something specific', () => {
-      // Test implementation
+describe('GitClient', () => {
+  const testConfig = {
+    baseRepoPath: '/test/repo',
+    worktreeBase: '/test/worktrees',
+  };
+
+  let client: GitClient;
+
+  beforeEach(() => {
+    client = new GitClient(testConfig);
+  });
+
+  describe('constructor', () => {
+    it('should create a client with valid config', () => {
+      expect(client).toBeInstanceOf(GitClient);
     });
 
-    it('should handle edge case', () => {
-      // Test implementation
+    it('should throw if baseRepoPath is missing', () => {
+      expect(() => new GitClient({ baseRepoPath: '', worktreeBase: '/test' })).toThrow(
+        'baseRepoPath is required'
+      );
     });
   });
 
-  describe('another-feature', () => {
-    it('should ...', () => {
-      // Test implementation
+  describe('getWorktreePath', () => {
+    it('should return correct path', () => {
+      const path = client.getWorktreePath('my-workspace');
+      expect(path).toBe('/test/worktrees/my-workspace');
     });
   });
 });
 ```
 
 **Patterns:**
-- Outer `describe` groups by module/class name
-- Nested `describe` groups by method/function name or feature area
-- Each `it` tests one specific behavior with assertion messages
+- Use nested `describe()` blocks to organize related tests
+- Use `beforeEach()` to set up test fixtures (shared state)
+- Use `afterEach()` to clean up mocks and state
+- Use simple, descriptive test names starting with `it('should ...')`
+- Arrange-Act-Assert pattern within each test
+- Add section comments for logical test groups:
+  ```typescript
+  // ===========================================================================
+  // Constructor Tests
+  // ===========================================================================
+  ```
 
-**Setup and Teardown:**
-- `beforeEach()`: Runs before each test
-- `afterEach()`: Runs after each test
-- Global setup: `src/backend/testing/setup.ts`
-
-**Setup File (executed before all tests):**
-```typescript
-import { afterEach, beforeEach, vi } from 'vitest';
-
-// Reset all mocks between tests
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-```
-
-**Test Pattern Example from `conversation-analyzer.test.ts`:**
-```typescript
-describe('conversation-analyzer', () => {
-  describe('countUserMessages', () => {
-    it('should count only user messages', () => {
-      const history: HistoryMessage[] = [
-        { type: 'user', content: 'Hello', timestamp: '2024-01-01T00:00:00Z' },
-        { type: 'assistant', content: 'Hi', timestamp: '2024-01-01T00:00:01Z' },
-        { type: 'user', content: 'How are you?', timestamp: '2024-01-01T00:00:02Z' },
-      ];
-
-      expect(countUserMessages(history)).toBe(2);
-    });
-
-    it('should return 0 for empty history', () => {
-      expect(countUserMessages([])).toBe(0);
-    });
+**Setup:**
+- Global setup file: `src/backend/testing/setup.ts`
+- Runs before all tests
+- Clears and restores all mocks:
+  ```typescript
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
-});
-```
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+  ```
+
+**Teardown:**
+- `afterEach()` for test-specific cleanup
+- Global `afterEach()` in setup file restores all mocks
 
 ## Mocking
 
-**Framework:** Vitest's `vi` module (built-in, no additional import needed)
+**Framework:** Vitest's built-in `vi` module
 
-**Patterns:**
-
-**1. Mock entire modules before imports:**
+**Module Mocking Pattern:**
 ```typescript
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+// Mock BEFORE importing the module under test
+const mockQueryRaw = vi.fn();
+const mockGetEnvironment = vi.fn();
 
-// Mock dependencies BEFORE importing the module under test
-const mockFindById = vi.fn();
-const mockGetTerminal = vi.fn();
-
-vi.mock('../../resource_accessors/claude-session.accessor', () => ({
-  claudeSessionAccessor: {
-    findById: (...args: unknown[]) => mockFindById(...args),
+vi.mock('../../resource_accessors/health.accessor', () => ({
+  healthAccessor: {
+    checkDatabaseConnection: () => mockQueryRaw(),
   },
 }));
 
-vi.mock('../../services/terminal.service', () => ({
-  terminalService: {
-    getTerminal: (...args: unknown[]) => mockGetTerminal(...args),
-    getTerminalsForWorkspace: (...args: unknown[]) => mockGetTerminalsForWorkspace(...args),
-  },
-}));
+// Import AFTER mocks are defined
+import { createHealthRouter } from './health.router';
 
-// Import AFTER mocks are set up
-import { registerTerminalTools } from './terminal.mcp';
-```
+describe('healthRouter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Set default mock returns
+    mockGetEnvironment.mockReturnValue('development');
+    mockQueryRaw.mockResolvedValue([{ '1': 1 }]);
+  });
 
-**2. Configure mock return values in beforeEach:**
-```typescript
-beforeEach(() => {
-  vi.clearAllMocks();
-
-  // Default mock for session lookup
-  mockFindById.mockResolvedValue({
-    workspaceId: mockWorkspaceId,
-    workspace: { id: mockWorkspaceId, name: 'test' },
+  it('tests the mocked module', async () => {
+    const response = await request(app).get('/health');
+    expect(response.status).toBe(200);
   });
 });
 ```
 
-**3. Spy on functions without mocking:**
+**Spy Pattern:**
 ```typescript
-const spy = vi.spyOn(service, 'method');
-expect(spy).toHaveBeenCalledWith(arg);
+const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+try {
+  // Code that might call console.error
+} finally {
+  // Spy is automatically restored in afterEach from setup.ts
+}
 ```
 
-**4. Mock return values for specific test:**
-```typescript
-it('should handle terminal not found', async () => {
-  mockGetTerminal.mockResolvedValueOnce(null);
-
-  const result = await executeGetOutput(agentId, { terminalId: 'missing' });
-
-  expect(result.success).toBe(false);
-});
-```
+**Mock Return Values:**
+- Use `.mockReturnValue()` for sync functions: `fn.mockReturnValue(value)`
+- Use `.mockResolvedValue()` for async functions: `fn.mockResolvedValue(value)`
+- Use `.mockImplementation()` for custom behavior: `fn.mockImplementation((arg) => ...)`
+- Use `.mockRejectedValue()` for Promise rejections: `fn.mockRejectedValue(error)`
 
 **What to Mock:**
-- External service calls (GitHub CLI, git commands)
-- Database accessors
-- File system operations (in some cases)
-- Logger calls
-- Dependencies that have side effects
+- External dependencies (databases, APIs, file system)
+- Imported modules (services, accessors, utilities)
+- Browser APIs (`localStorage`, `fetch`, etc.)
+- Time functions when testing timing-dependent code
 
 **What NOT to Mock:**
-- Pure functions (keep real implementations)
-- Zod schemas (validate against real schema)
-- Utility helpers that don't have side effects
-- Time-dependent functions in integration tests (use real time)
+- Functions under test (the system being tested)
+- Pure utility functions without side effects
+- Zod schemas and type validators (test real validation)
+- Error constructors and error types
+- Constants and configuration
 
 ## Fixtures and Factories
 
 **Test Data:**
 ```typescript
-// Helper factory from terminal.mcp.test.ts
-function createMockTerminal(
-  overrides: Partial<{
-    id: string;
-    workspaceId: string;
-    outputBuffer: string;
-    createdAt: Date;
-    cols: number;
-    rows: number;
-    pid: number;
-  }> = {}
-) {
+// Inline fixtures
+const testConfig = {
+  baseRepoPath: '/test/repo',
+  worktreeBase: '/test/worktrees',
+};
+
+// Factory functions
+function createMockReq(overrides: Record<string, unknown> = {}): Request {
   return {
-    id: overrides.id ?? 'term-123',
-    workspaceId: overrides.workspaceId ?? 'workspace-1',
-    outputBuffer: overrides.outputBuffer ?? 'line1\nline2\nline3',
-    createdAt: overrides.createdAt ?? new Date('2024-01-01T00:00:00Z'),
-    cols: overrides.cols ?? 80,
-    rows: overrides.rows ?? 24,
-    pty: {
-      pid: overrides.pid ?? 12_345,
-    },
-    disposables: [],
-  };
+    method: 'GET',
+    path: '/api/test',
+    headers: {},
+    ...overrides,
+  } as Request;
 }
 
-// Usage
-const mockTerminal = createMockTerminal({ id: 'custom-id' });
-```
-
-**Sample Constant Test Data from `permissions.test.ts`:**
-```typescript
-const canUseToolRequest: CanUseToolRequest = {
-  subtype: 'can_use_tool',
-  tool_name: 'Read',
-  input: { file_path: '/test.txt' },
-  tool_use_id: 'tool-123',
-};
-
-const hookCallbackRequest: HookCallbackRequest = {
-  subtype: 'hook_callback',
-  callback_id: 'callback-123',
-  tool_use_id: 'tool-456',
-  input: {
-    session_id: 'session-123',
-    transcript_path: '/path/to/transcript',
-    cwd: '/project',
-    permission_mode: 'default',
-    hook_event_name: 'PreToolUse',
-    tool_name: 'Write',
-    tool_input: { file_path: '/test.txt' },
+// Using unsafe coercion for complex mocks
+const appContext = unsafeCoerce<AppContext>({
+  services: {
+    configService: { getEnvironment: () => 'development' },
+    createLogger: () => ({ info: vi.fn(), error: vi.fn() }),
   },
-};
+});
 ```
 
 **Location:**
-- Inline in test file as constants for simple fixtures
-- Exported from test utility modules for complex fixtures
-- No separate fixtures directory; keep data close to tests
+- Simple fixtures: inline in test file (describe block or beforeEach)
+- Complex fixtures: `src/backend/testing/` directory (shared across tests)
+- Helper utilities: `src/test-utils/` directory (e.g., `unsafe-coerce.ts`)
+
+**Unsafe Coerce Utility:**
+- File: `src/test-utils/unsafe-coerce.ts`
+- Purpose: Type-cast partial mocks to their full types
+- Usage: `unsafeCoerce<FullType>(partialMock)` when mocking complex objects
+- Use sparingly; only when partial mocking is necessary
 
 ## Coverage
 
-**Requirements:** Not enforced (thresholds disabled)
+**Requirements:** None enforced (thresholds disabled)
 
 **View Coverage:**
 ```bash
 pnpm test:coverage
+# Open coverage/index.html in browser
 ```
 
-**Coverage Configuration from `vitest.config.ts`:**
-```typescript
-coverage: {
-  provider: 'v8',
-  reporter: ['text', 'json', 'json-summary', 'html'],
-  include: ['src/backend/**/*.ts'],
-  exclude: ['src/backend/**/*.test.ts', 'src/backend/index.ts', 'src/backend/testing/**'],
-  // Thresholds disabled for now since unit tests use mocks
-  // Enable as integration tests are added and coverage grows
-}
-```
+**Scope:**
+- Includes: `src/backend/**/*.ts`
+- Excludes: test files, index.ts, testing utilities
 
-**Note:** Tests use mocks extensively for unit testing. Coverage thresholds are intentionally disabled pending shift to more integration tests. Frontend tests not included in coverage metrics.
+**Strategy:**
+- Focus on critical business logic and error paths
+- Unit tests use mocks (high coverage, fast)
+- Integration tests planned for higher confidence as coverage grows
+- End-to-end tests use Playwright (run separately, not in vitest)
 
 ## Test Types
 
 **Unit Tests:**
-- Scope: Single function/method in isolation
-- Approach: Mock all external dependencies
-- Examples: `git-helpers.test.ts`, `conversation-analyzer.test.ts`
-- Assertion style: Direct, specific assertions on return values and mock calls
+- Scope: Single function or class method
+- Approach: Mock external dependencies, test logic in isolation
+- Example: `GitClient.getWorktreePath()` tests path construction
+- Should run in < 10ms each
+- File location: co-located with source
 
 **Integration Tests:**
-- Scope: Multiple components working together
-- Approach: Mock only external services (GitHub, git commands), keep business logic real
-- Examples: `workspace.trpc.test.ts`, `terminal.mcp.test.ts`
-- Status: Growing coverage; thresholds disabled until integration tests mature
+- Not yet extensive (vitest configured for basics)
+- Approach: Test interactions between multiple modules
+- Example: Full workflow from request to database
+- Would use test database (not yet set up)
 
 **E2E Tests:**
-- Framework: Not used in this codebase
-- Status: No end-to-end tests present
+- Framework: Playwright (not part of vitest suite)
+- Run separately from vitest
+- Test full user workflows through the app
+- Manual setup required; not in automated test suite yet
 
 ## Common Patterns
 
 **Async Testing:**
 ```typescript
 it('should handle async operations', async () => {
-  mockFindById.mockResolvedValue({ id: '123' });
-
-  const result = await asyncFunction();
-
+  const result = await client.createWorktree('test-workspace');
   expect(result).toBeDefined();
-  expect(mockFindById).toHaveBeenCalled();
-});
-
-// Alternative: returning Promise from test function
-it('should handle promise', () => {
-  return asyncFunction().then(result => {
-    expect(result).toBeDefined();
-  });
+  expect(result.path).toContain('test-workspace');
 });
 ```
 
 **Error Testing:**
 ```typescript
-it('should throw error on invalid input', () => {
-  expect(() => {
-    new GitClient({ baseRepoPath: '', worktreeBase: '/test' });
-  }).toThrow('baseRepoPath is required');
+it('should throw on invalid config', () => {
+  expect(() => new GitClient({ baseRepoPath: '', worktreeBase: '/test' })).toThrow(
+    'baseRepoPath is required'
+  );
 });
 
-// For async errors
-it('should reject on git failure', async () => {
-  const statusResult = { code: 1, stderr: 'fatal error', stdout: '' };
-  mockGitCommand.mockResolvedValueOnce(statusResult);
-
-  await expect(gitOpsService.commitIfNeeded(path, name, true))
-    .rejects
-    .toThrow('Git status failed');
+it('should reject on failed operation', async () => {
+  mockCommand.mockRejectedValue(new Error('Command failed'));
+  await expect(client.doSomething()).rejects.toThrow('Command failed');
 });
 ```
 
-**Array and Object Assertions from `workspace.trpc.test.ts`:**
+**Multiple Files Testing:**
 ```typescript
-it('should parse multiple files with different statuses', () => {
-  const output = [
-    'M  src/staged-modified.ts',
-    ' M src/unstaged-modified.ts',
-    'A  src/added.ts',
-  ].join('\n');
+describe('multiple files', () => {
+  it('should parse multiple files correctly', () => {
+    const output = ' M README.md\nM  package.json\n?? newfile.txt\n';
+    const result = parseGitStatusOutput(output);
 
-  const result = parseGitStatusOutput(output);
-
-  expect(result).toEqual([
-    { path: 'src/staged-modified.ts', status: 'M', staged: true },
-    { path: 'src/unstaged-modified.ts', status: 'M', staged: false },
-    { path: 'src/added.ts', status: 'A', staged: true },
-  ]);
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({
+      path: 'README.md',
+      status: 'M',
+      staged: false,
+    });
+    expect(result[1]).toEqual({
+      path: 'package.json',
+      status: 'M',
+      staged: true,
+    });
+  });
 });
 ```
 
-**Type Checking in Tests:**
+**Schema Validation Testing:**
 ```typescript
-it('should parse user message with tool_result content', () => {
-  const entry = { ... };
-  const result = parseHistoryEntry(entry);
+describe('ExitPlanModeInputSchema', () => {
+  it('accepts inline plan content (SDK format)', () => {
+    const input = {
+      plan: '# My Plan\n\n## Steps\n1. Do this\n2. Do that',
+      allowedPrompts: [{ tool: 'Bash', prompt: 'run tests' }],
+    };
+    const result = ExitPlanModeInputSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.plan).toBe('# My Plan\n\n## Steps\n1. Do this\n2. Do that');
+    }
+  });
 
-  expect(result).toHaveLength(1);
-  const first = result[0];
-  expect(first?.type).toBe('tool_result');
-
-  // Type guard for subsequent assertions
-  if (first?.type !== 'tool_result') {
-    throw new Error('Expected tool_result message');
-  }
-  expect(first.toolId).toBe('tool-123');
-  expect(first.isError).toBe(false);
+  it('rejects invalid structure', () => {
+    const input = { invalidKey: 'value' };
+    const result = ExitPlanModeInputSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
 });
 ```
 
-**Non-null Assertion in Tests:**
+**HTTP Testing with supertest:**
 ```typescript
-// From biome.json, noNonNullAssertion is "off" for test files
-it('should handle data', () => {
-  const result = getData();
-  expect(result[0]!.property).toBe(value); // ! is allowed in tests
+import express from 'express';
+import request from 'supertest';
+
+describe('healthRouter', () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    app = express();
+    app.use('/health', createHealthRouter(appContext));
+  });
+
+  it('returns status ok', async () => {
+    const response = await request(app).get('/health');
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('ok');
+  });
 });
 ```
 
-## Test Coverage Considerations
+**Mock Express Middleware:**
+```typescript
+function createMockReq(overrides: Record<string, unknown> = {}): Request {
+  return {
+    method: 'GET',
+    path: '/api/test',
+    headers: {},
+    ...overrides,
+  } as Request;
+}
 
-**Excluded from Coverage:**
-- `src/backend/index.ts` - Entry point setup
-- `src/backend/**/*.test.ts` - Test files themselves
-- `src/backend/testing/**` - Test utilities and setup
+function createMockRes() {
+  const headers: Record<string, string> = {};
+  return {
+    headers,
+    statusCode: 200,
+    header: vi.fn((name: string, value: string) => {
+      headers[name] = value;
+    }),
+    sendStatus: vi.fn(),
+  };
+}
 
-**High Coverage Areas:**
-- Service layer (git-ops, terminal, github-cli)
-- Utility/helper functions
-- Error handling and validation
-- Message parsing and transformation
+describe('middleware', () => {
+  it('sets security headers', () => {
+    const req = createMockReq();
+    const res = createMockRes() as Response;
+    const next = vi.fn() as NextFunction;
 
-**Lower Coverage Areas:**
-- Frontend React components (no unit tests present)
-- WebSocket handlers (integration-heavy)
-- MCP tool registration (integration-heavy)
-
-## Running Tests During Development
-
-**Watch mode for rapid iteration:**
-```bash
-pnpm test:watch
-```
-
-**Run specific test file:**
-```bash
-pnpm test src/backend/services/git-ops.service.test.ts
-```
-
-**Run tests matching pattern:**
-```bash
-pnpm test -- --grep "parseHistoryEntry"
+    securityMiddleware(req, res, next);
+    expect(res.header).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
+  });
+});
 ```
 
 ---

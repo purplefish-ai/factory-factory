@@ -41,8 +41,8 @@ vi.mock('./session.service', () => ({
   },
 }));
 
-vi.mock('./session-store.service', () => ({
-  sessionStoreService: {
+vi.mock('../domains/session/session-domain.service', () => ({
+  sessionDomainService: {
     injectCommittedUserMessage: vi.fn(),
   },
 }));
@@ -115,18 +115,10 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       prReviewLastCheckedAt: null,
     };
 
-    vi.spyOn(
+    const fetchPRStateSpy = vi.spyOn(
       unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
       'fetchPRState'
-    ).mockResolvedValue({
-      ciStatus: CIStatus.FAILURE,
-      snapshotKey: '2026-01-02T00:00:00Z',
-      hasChangesRequested: false,
-      latestReviewActivityAtMs: null,
-      statusCheckRollup: null,
-      prState: 'OPEN',
-      prNumber: 2,
-    });
+    );
 
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
@@ -139,6 +131,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
     }>(ratchetService).processWorkspace(workspace);
 
+    expect(fetchPRStateSpy).not.toHaveBeenCalled();
     expect(triggerSpy).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       action: { type: 'DISABLED', reason: 'Workspace ratcheting disabled' },
