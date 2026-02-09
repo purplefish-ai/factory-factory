@@ -43,6 +43,9 @@ type ProjectWithWorkspaces = Prisma.ProjectGetPayload<{
 // Simplified input - only repoPath is required
 interface CreateProjectInput {
   repoPath: string;
+  startupScriptCommand?: string;
+  startupScriptPath?: string;
+  startupScriptTimeout?: number;
 }
 
 interface UpdateProjectInput {
@@ -182,6 +185,9 @@ class ProjectAccessor {
             defaultBranch: 'main',
             githubOwner: githubInfo?.owner ?? null,
             githubRepo: githubInfo?.repo ?? null,
+            startupScriptCommand: data.startupScriptCommand ?? null,
+            startupScriptPath: data.startupScriptPath ?? null,
+            startupScriptTimeout: data.startupScriptTimeout ?? 300,
           },
         });
       } catch (error) {
