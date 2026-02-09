@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
@@ -80,11 +81,17 @@ async function writeResumeModes(
   modes: Record<string, boolean>
 ): Promise<void> {
   await fs.mkdir(worktreeBasePath, { recursive: true });
-  await fs.writeFile(
-    path.join(worktreeBasePath, RESUME_MODE_FILENAME),
-    JSON.stringify(modes),
-    'utf-8'
-  );
+  const targetPath = path.join(worktreeBasePath, RESUME_MODE_FILENAME);
+  const tmpPath = `${targetPath}.${crypto.randomUUID()}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(modes), 'utf-8');
+  try {
+    await fs.rename(tmpPath, targetPath);
+  } catch (err) {
+    await fs.unlink(tmpPath).catch(() => {
+      // Best-effort cleanup; nothing to do if the temp file is already gone
+    });
+    throw err;
+  }
 }
 
 async function updateResumeModes(
