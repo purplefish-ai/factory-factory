@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 // =============================================================================
 // Types
@@ -45,7 +45,6 @@ export function TerminalInstance({
   }, [onData, onResize]);
 
   // Initialize terminal synchronously
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Intentionally capture initial output at mount time only - subsequent output changes are handled by the output effect below
   useEffect(() => {
     if (!containerRef.current) {
       return;
@@ -125,7 +124,7 @@ export function TerminalInstance({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, []); // Empty deps - only run once on mount
+  }, [output]); // Empty deps - only run once on mount
 
   // Write output to terminal
   useEffect(() => {
@@ -160,22 +159,5 @@ export function TerminalInstance({
     }
   }, [isActive]);
 
-  // Focus terminal on click
-  const handleClick = useCallback(() => {
-    terminalRef.current?.focus();
-  }, []);
-
-  return (
-    // biome-ignore lint/a11y/useSemanticElements: terminal requires custom element for xterm.js
-    <div
-      ref={containerRef}
-      className={className}
-      onClick={handleClick}
-      onKeyDown={handleClick}
-      role="textbox"
-      tabIndex={0}
-      aria-label="Terminal"
-      style={{ width: '100%', height: '100%' }}
-    />
-  );
+  return <div ref={containerRef} className={className} style={{ width: '100%', height: '100%' }} />;
 }

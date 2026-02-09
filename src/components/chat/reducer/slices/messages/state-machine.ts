@@ -107,9 +107,11 @@ function handleAcceptedState(
   let newPendingUuids = state.pendingUserMessageUuids;
   if (state.pendingUserMessageUuids.length > 0) {
     const [uuid, ...remainingUuids] = state.pendingUserMessageUuids;
+    if (!uuid) {
+      return state;
+    }
     newMessageIdToUuid = new Map(state.messageIdToUuid);
-    // biome-ignore lint/style/noNonNullAssertion: destructured from non-empty array (length > 0 checked)
-    newMessageIdToUuid.set(id, uuid!);
+    newMessageIdToUuid.set(id, uuid);
     newPendingUuids = remainingUuids;
   }
 

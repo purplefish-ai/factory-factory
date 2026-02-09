@@ -116,17 +116,14 @@ const Carousel = React.forwardRef<
         canScrollNext,
       }}
     >
-      {/* biome-ignore lint/a11y/useSemanticElements: Using div with role="region" for carousel accessibility pattern */}
-      <div
+      <section
         ref={ref}
         onKeyDownCapture={handleKeyDown}
         className={cn('relative', className)}
-        role="region"
-        aria-roledescription="carousel"
         {...props}
       >
         {children}
-      </div>
+      </section>
     </CarouselContext.Provider>
   );
 });
@@ -153,26 +150,24 @@ const CarouselContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HT
 );
 CarouselContent.displayName = 'CarouselContent';
 
-const CarouselItem = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => {
-    const { orientation } = useCarousel();
+const CarouselItem = React.forwardRef<
+  HTMLFieldSetElement,
+  React.ComponentPropsWithoutRef<'fieldset'>
+>(({ className, ...props }, ref) => {
+  const { orientation } = useCarousel();
 
-    return (
-      // biome-ignore lint/a11y/useSemanticElements: Using div with role="group" for carousel slide pattern
-      <div
-        ref={ref}
-        role="group"
-        aria-roledescription="slide"
-        className={cn(
-          'min-w-0 shrink-0 grow-0 basis-full',
-          orientation === 'horizontal' ? 'pl-4' : 'pt-4',
-          className
-        )}
-        {...props}
-      />
-    );
-  }
-);
+  return (
+    <fieldset
+      ref={ref}
+      className={cn(
+        'min-w-0 shrink-0 grow-0 basis-full',
+        orientation === 'horizontal' ? 'pl-4' : 'pt-4',
+        className
+      )}
+      {...props}
+    />
+  );
+});
 CarouselItem.displayName = 'CarouselItem';
 
 const CarouselPrevious = React.forwardRef<HTMLButtonElement, React.ComponentProps<typeof Button>>(

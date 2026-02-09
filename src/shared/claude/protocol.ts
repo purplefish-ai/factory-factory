@@ -531,8 +531,10 @@ export function shouldSuppressDuplicateResultMessage(
   }
 
   for (let i = transcript.length - 1; i >= 0; i -= 1) {
-    // biome-ignore lint/style/noNonNullAssertion: index bounded by loop condition
-    const candidate = transcript[i]!;
+    const candidate = transcript[i];
+    if (!candidate) {
+      continue;
+    }
     // Only dedupe against assistant content in the current turn.
     // Crossing a user message boundary can suppress legitimate repeated answers.
     if (candidate.source === 'user') {

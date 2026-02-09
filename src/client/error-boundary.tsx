@@ -20,9 +20,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true, error };
   }
 
-  override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // biome-ignore lint/suspicious/noConsole: Error logging is intentional for debugging
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  override componentDidCatch(_error: Error, _errorInfo: React.ErrorInfo) {
+    // Error state is handled by getDerivedStateFromError.
   }
 
   handleReset = () => {

@@ -81,13 +81,12 @@ export function SlashCommandPalette({
   );
 
   // Reset selection when filter changes or palette opens
-  // biome-ignore lint/correctness/useExhaustiveDependencies: filter and isOpen are intentionally used to trigger reset
   useEffect(() => {
     // Only reset to 0 if there are commands to select
     if (filteredCommands.length > 0) {
       setSelectedIndex(0);
     }
-  }, [filter, isOpen, filteredCommands.length]);
+  }, [filteredCommands.length]);
 
   // Keep refs array in sync with filtered list length
   useEffect(() => {

@@ -343,8 +343,11 @@ async function mapWithConcurrencyLimit<T, R>(
   async function worker(): Promise<void> {
     while (nextIndex < items.length) {
       const index = nextIndex++;
-      // biome-ignore lint/style/noNonNullAssertion: index bounded by while loop condition
-      results[index] = await fn(items[index]!);
+      const item = items[index];
+      if (item === undefined) {
+        continue;
+      }
+      results[index] = await fn(item);
     }
   }
 

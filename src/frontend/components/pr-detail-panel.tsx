@@ -66,7 +66,6 @@ function DiffViewer({ diff }: { diff: string }) {
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex UI component with multiple states
 export function PRDetailPanel({
   pr,
   diff,
@@ -77,13 +76,14 @@ export function PRDetailPanel({
   approving = false,
 }: PRDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('info');
-
-  // Create a stable key for the current PR to detect changes
   const prKey = pr ? `${pr.repository.nameWithOwner}#${pr.number}` : null;
 
   // Reset tab when PR changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset when prKey changes
   useEffect(() => {
+    if (prKey) {
+      setActiveTab('info');
+      return;
+    }
     setActiveTab('info');
   }, [prKey]);
 

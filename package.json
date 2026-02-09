@@ -47,6 +47,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check": "biome check .",
+    "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
     "check:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",

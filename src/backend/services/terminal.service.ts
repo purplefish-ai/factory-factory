@@ -12,6 +12,7 @@
  */
 
 import type { IPty } from 'node-pty';
+import * as nodePty from 'node-pty';
 import pidusage from 'pidusage';
 import { createLogger } from './logger.service';
 
@@ -201,26 +202,10 @@ class TerminalService {
   }
 
   /**
-   * Lazy load node-pty to handle cases where it's not installed
-   */
-  private async getNodePty(): Promise<typeof import('node-pty')> {
-    try {
-      // Dynamic import required for native module that may not be available at build time
-      // biome-ignore lint/plugin: dynamic import is intentional for native module
-      return await import('node-pty');
-    } catch (error) {
-      logger.error('node-pty not available', error as Error);
-      throw new Error('node-pty is not installed. Please run: pnpm add node-pty');
-    }
-  }
-
-  /**
    * Create a new terminal instance for a workspace
    */
-  async createTerminal(options: CreateTerminalOptions): Promise<CreateTerminalResult> {
+  createTerminal(options: CreateTerminalOptions): Promise<CreateTerminalResult> {
     const { workspaceId, workingDir, cols = 80, rows = 24, shell } = options;
-
-    const nodePty = await this.getNodePty();
 
     // Generate unique terminal ID
     const terminalId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -316,7 +301,7 @@ class TerminalService {
 
     logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
 
-    return { terminalId, pid: pty.pid };
+    return Promise.resolve({ terminalId, pid: pty.pid });
   }
 
   /**

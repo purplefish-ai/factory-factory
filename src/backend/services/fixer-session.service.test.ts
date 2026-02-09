@@ -1,5 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClaudeClient } from '@/backend/claude';
 
 vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -96,8 +97,7 @@ describe('FixerSessionService', () => {
 
     vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
     const client = { sendMessage: vi.fn() };
-    // biome-ignore lint/suspicious/noExplicitAny: test mock
-    vi.mocked(sessionService.getClient).mockReturnValue(client as any);
+    vi.mocked(sessionService.getClient).mockReturnValue(client as unknown as ClaudeClient);
 
     const result = await fixerSessionService.acquireAndDispatch({
       workspaceId: 'w1',
