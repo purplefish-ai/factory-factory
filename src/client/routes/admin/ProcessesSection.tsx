@@ -81,8 +81,12 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
     async (sessionId: string) => {
       setStoppingSessionIds((prev) => new Set(prev).add(sessionId));
       try {
-        await stopSession.mutateAsync({ sessionId });
-        toast.success('Session stopped successfully');
+        const result = await stopSession.mutateAsync({ sessionId });
+        if (result.wasRunning) {
+          toast.success('Session stopped');
+        } else {
+          toast.info('Session was already stopped');
+        }
         utils.admin.getActiveProcesses.invalidate();
       } catch (error) {
         toast.error(

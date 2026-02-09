@@ -456,13 +456,17 @@ export const adminRouter = router({
       const { sessionService } = ctx.appContext.services;
       const logger = getLogger(ctx);
 
-      logger.info('Admin stopping Claude session', { sessionId: input.sessionId });
+      const wasRunning = sessionService.isSessionRunning(input.sessionId);
+
+      logger.info('Admin stopping Claude session', {
+        sessionId: input.sessionId,
+        wasRunning,
+      });
 
       await sessionService.stopClaudeSession(input.sessionId);
 
       return {
-        success: true,
-        message: `Session ${input.sessionId} stopped`,
+        wasRunning,
       };
     }),
 });
