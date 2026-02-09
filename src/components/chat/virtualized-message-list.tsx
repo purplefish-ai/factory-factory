@@ -141,7 +141,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => 80, // Estimated average height
     overscan: running ? 3 : 5, // Fewer items when streaming for better performance
-    getItemKey: (index) => messages[index]?.id ?? `message-${index}`,
+    getItemKey: (index) => {
+      const message = messages[index];
+      return message ? message.id : `missing-message-${index}`;
+    },
   });
 
   const virtualItems = virtualizer.getVirtualItems();

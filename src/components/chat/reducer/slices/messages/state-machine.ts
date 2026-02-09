@@ -107,12 +107,11 @@ function handleAcceptedState(
   let newPendingUuids = state.pendingUserMessageUuids;
   if (state.pendingUserMessageUuids.length > 0) {
     const [uuid, ...remainingUuids] = state.pendingUserMessageUuids;
-    if (!uuid) {
-      return state;
-    }
-    newMessageIdToUuid = new Map(state.messageIdToUuid);
-    newMessageIdToUuid.set(id, uuid);
     newPendingUuids = remainingUuids;
+    if (uuid) {
+      newMessageIdToUuid = new Map(state.messageIdToUuid);
+      newMessageIdToUuid.set(id, uuid);
+    }
   }
 
   return {

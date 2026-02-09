@@ -219,104 +219,108 @@ class TerminalService {
    * Create a new terminal instance for a workspace
    */
   createTerminal(options: CreateTerminalOptions): Promise<CreateTerminalResult> {
-    const { workspaceId, workingDir, cols = 80, rows = 24, shell } = options;
-    const nodePty = this.getNodePty();
+    try {
+      const { workspaceId, workingDir, cols = 80, rows = 24, shell } = options;
+      const nodePty = this.getNodePty();
 
-    // Generate unique terminal ID
-    const terminalId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      // Generate unique terminal ID
+      const terminalId = `term-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-    // Determine shell to use
-    const shellPath = shell || process.env.SHELL || '/bin/bash';
-    const shellArgs: string[] = [];
+      // Determine shell to use
+      const shellPath = shell || process.env.SHELL || '/bin/bash';
+      const shellArgs: string[] = [];
 
-    logger.info('Creating terminal', {
-      terminalId,
-      workspaceId,
-      workingDir,
-      shell: shellPath,
-      cols,
-      rows,
-    });
+      logger.info('Creating terminal', {
+        terminalId,
+        workspaceId,
+        workingDir,
+        shell: shellPath,
+        cols,
+        rows,
+      });
 
-    // Spawn PTY process
-    const pty = nodePty.spawn(shellPath, shellArgs, {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      cwd: workingDir,
-      env: {
-        ...process.env,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-      },
-    });
+      // Spawn PTY process
+      const pty = nodePty.spawn(shellPath, shellArgs, {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: workingDir,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color',
+          COLORTERM: 'truecolor',
+        },
+      });
 
-    // Track disposables for cleanup
-    const disposables: (() => void)[] = [];
+      // Track disposables for cleanup
+      const disposables: (() => void)[] = [];
 
-    // Set up output listener - also accumulates output in buffer for restoration
-    const dataDisposable = pty.onData((data: string) => {
-      // Accumulate output in buffer for restoration after reconnect
-      const instance = this.terminals.get(workspaceId)?.get(terminalId);
-      if (instance) {
-        instance.outputBuffer += data;
-        // Limit buffer size by trimming from the beginning
-        if (instance.outputBuffer.length > TerminalService.MAX_OUTPUT_BUFFER_SIZE) {
-          instance.outputBuffer = instance.outputBuffer.slice(
-            -TerminalService.MAX_OUTPUT_BUFFER_SIZE
-          );
+      // Set up output listener - also accumulates output in buffer for restoration
+      const dataDisposable = pty.onData((data: string) => {
+        // Accumulate output in buffer for restoration after reconnect
+        const instance = this.terminals.get(workspaceId)?.get(terminalId);
+        if (instance) {
+          instance.outputBuffer += data;
+          // Limit buffer size by trimming from the beginning
+          if (instance.outputBuffer.length > TerminalService.MAX_OUTPUT_BUFFER_SIZE) {
+            instance.outputBuffer = instance.outputBuffer.slice(
+              -TerminalService.MAX_OUTPUT_BUFFER_SIZE
+            );
+          }
         }
-      }
 
-      const listeners = this.outputListeners.get(terminalId);
-      if (listeners) {
-        for (const listener of listeners) {
-          listener(data);
+        const listeners = this.outputListeners.get(terminalId);
+        if (listeners) {
+          for (const listener of listeners) {
+            listener(data);
+          }
         }
-      }
-    });
-    disposables.push(() => dataDisposable.dispose());
+      });
+      disposables.push(() => dataDisposable.dispose());
 
-    // Set up exit listener
-    const exitDisposable = pty.onExit(({ exitCode }: { exitCode: number }) => {
-      logger.info('Terminal exited', { terminalId, exitCode });
-      const listeners = this.exitListeners.get(terminalId);
-      if (listeners) {
-        for (const listener of listeners) {
-          listener(exitCode);
+      // Set up exit listener
+      const exitDisposable = pty.onExit(({ exitCode }: { exitCode: number }) => {
+        logger.info('Terminal exited', { terminalId, exitCode });
+        const listeners = this.exitListeners.get(terminalId);
+        if (listeners) {
+          for (const listener of listeners) {
+            listener(exitCode);
+          }
         }
-      }
-      // Clean up (but not during forced cleanup - check if still tracked)
-      if (this.terminals.get(workspaceId)?.has(terminalId)) {
-        this.destroyTerminal(workspaceId, terminalId);
-      }
-    });
-    disposables.push(() => exitDisposable.dispose());
+        // Clean up (but not during forced cleanup - check if still tracked)
+        if (this.terminals.get(workspaceId)?.has(terminalId)) {
+          this.destroyTerminal(workspaceId, terminalId);
+        }
+      });
+      disposables.push(() => exitDisposable.dispose());
 
-    // Create terminal instance
-    const instance: TerminalInstance = {
-      id: terminalId,
-      workspaceId,
-      pty,
-      cols,
-      rows,
-      createdAt: new Date(),
-      disposables,
-      outputBuffer: '',
-    };
+      // Create terminal instance
+      const instance: TerminalInstance = {
+        id: terminalId,
+        workspaceId,
+        pty,
+        cols,
+        rows,
+        createdAt: new Date(),
+        disposables,
+        outputBuffer: '',
+      };
 
-    // Store in workspace terminals map
-    if (!this.terminals.has(workspaceId)) {
-      this.terminals.set(workspaceId, new Map());
+      // Store in workspace terminals map
+      if (!this.terminals.has(workspaceId)) {
+        this.terminals.set(workspaceId, new Map());
+      }
+      this.terminals.get(workspaceId)?.set(terminalId, instance);
+
+      // Start resource monitoring if this is the first terminal
+      this.ensureResourceMonitoring();
+
+      logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
+
+      return Promise.resolve({ terminalId, pid: pty.pid });
+    } catch (error) {
+      return Promise.reject(error);
     }
-    this.terminals.get(workspaceId)?.set(terminalId, instance);
-
-    // Start resource monitoring if this is the first terminal
-    this.ensureResourceMonitoring();
-
-    logger.info('Terminal created', { terminalId, workspaceId, pid: pty.pid });
-
-    return Promise.resolve({ terminalId, pid: pty.pid });
   }
 
   /**
