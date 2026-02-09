@@ -69,6 +69,7 @@ describe('SessionRuntimeMachine', () => {
     });
 
     expect(store.runtime.lastExit).toBeUndefined();
+    expect(Object.hasOwn(store.runtime, 'lastExit')).toBe(false);
     expect(store.runtime.updatedAt).toBe('2026-02-09T00:00:00.000Z');
     expect(emitRuntimeDelta).toHaveBeenCalledTimes(1);
   });

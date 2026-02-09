@@ -31,12 +31,13 @@ export class SessionRuntimeMachine {
     }
 
     const hasExplicitLastExit = Object.hasOwn(updates, 'lastExit');
+    const { lastExit: _lastExit, ...runtimeWithoutLastExit } = store.runtime;
     store.runtime = {
-      ...store.runtime,
+      ...runtimeWithoutLastExit,
       phase: updates.phase,
       processState: updates.processState,
       activity: updates.activity,
-      ...(hasExplicitLastExit ? { lastExit: updates.lastExit } : { lastExit: undefined }),
+      ...(hasExplicitLastExit ? { lastExit: updates.lastExit } : {}),
       updatedAt: updates.updatedAt ?? this.nowIso(),
     };
 
