@@ -640,6 +640,10 @@ class GitHubCLIService {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       this.logGitHubCLIError(errorType, errorMessage, { prUrl });
+      // Re-throw rate limit errors so callers can apply backoff
+      if (errorType === 'rate_limit') {
+        throw error;
+      }
       return null;
     }
   }

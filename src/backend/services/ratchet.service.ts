@@ -91,8 +91,9 @@ class RatchetService {
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
-  private backoffMultiplier = 1; // Start at 1x, increases on rate limit errors
-  private readonly maxBackoffMultiplier = 4; // Max 4x delay (8 minutes at base 2min interval)
+  private backoffMultiplier = 1;
+  private rateLimitHitThisCycle = false;
+  private readonly maxBackoffMultiplier = 4;
 
   start(): void {
     if (this.monitorLoop) {
@@ -120,10 +121,9 @@ class RatchetService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
-        const backoffBefore = this.backoffMultiplier;
+        this.rateLimitHitThisCycle = false;
         await this.checkAllWorkspaces();
-        // Reset backoff only if no rate limit errors increased it during this cycle
-        if (backoffBefore > 1 && this.backoffMultiplier === backoffBefore) {
+        if (this.backoffMultiplier > 1 && !this.rateLimitHitThisCycle) {
           logger.info('Ratchet check succeeded, resetting backoff', {
             previousMultiplier: this.backoffMultiplier,
           });
@@ -163,10 +163,11 @@ class RatchetService {
       lowerMessage.includes('throttl');
 
     if (isRateLimit) {
+      this.rateLimitHitThisCycle = true;
       if (this.backoffMultiplier < this.maxBackoffMultiplier) {
         this.backoffMultiplier = Math.min(this.backoffMultiplier * 2, this.maxBackoffMultiplier);
       }
-      logger.warn('GitHub rate limit hit, increasing backoff', {
+      logger.warn('GitHub rate limit hit, backing off', {
         workspaceId,
         prUrl,
         backoffMultiplier: this.backoffMultiplier,

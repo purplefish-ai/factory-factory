@@ -24,8 +24,9 @@ class PRReviewMonitorService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.prReviewMonitorWorkspaceChecks);
-  private backoffMultiplier = 1; // Start at 1x, increases on rate limit errors
-  private readonly maxBackoffMultiplier = 4; // Max 4x delay
+  private backoffMultiplier = 1;
+  private rateLimitHitThisCycle = false;
+  private readonly maxBackoffMultiplier = 4;
 
   /**
    * Start the PR review monitor
@@ -67,10 +68,9 @@ class PRReviewMonitorService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
-        const backoffBefore = this.backoffMultiplier;
+        this.rateLimitHitThisCycle = false;
         await this.checkAllWorkspaces();
-        // Reset backoff only if no rate limit errors increased it during this cycle
-        if (backoffBefore > 1 && this.backoffMultiplier === backoffBefore) {
+        if (this.backoffMultiplier > 1 && !this.rateLimitHitThisCycle) {
           logger.info('PR review monitor check succeeded, resetting backoff', {
             previousMultiplier: this.backoffMultiplier,
           });
@@ -114,10 +114,11 @@ class PRReviewMonitorService {
       lowerMessage.includes('throttl');
 
     if (isRateLimit) {
+      this.rateLimitHitThisCycle = true;
       if (this.backoffMultiplier < this.maxBackoffMultiplier) {
         this.backoffMultiplier = Math.min(this.backoffMultiplier * 2, this.maxBackoffMultiplier);
       }
-      logger.warn('GitHub rate limit hit in PR review monitor, increasing backoff', {
+      logger.warn('GitHub rate limit hit in PR review monitor, backing off', {
         workspaceId,
         prUrl,
         backoffMultiplier: this.backoffMultiplier,
