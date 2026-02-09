@@ -565,13 +565,17 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
     if (currentToolSequence.length === 0) {
       return;
     }
+    const firstToolMessage = currentToolSequence[0];
+    if (!firstToolMessage) {
+      return;
+    }
 
     const pairedCalls = extractPairedToolCalls(currentToolSequence);
 
     // Always create a sequence, even for single tools (so they're paired with results)
     const sequence: ToolSequence = {
       type: 'tool_sequence',
-      id: `tool-seq-${currentToolSequence[0]?.id}`,
+      id: `tool-seq-${firstToolMessage.id}`,
       pairedCalls,
     };
     result.push(sequence);

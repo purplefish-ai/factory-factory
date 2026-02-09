@@ -32,6 +32,7 @@ export function TerminalInstance({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const lastOutputLengthRef = useRef(0);
+  const initialOutputRef = useRef(output);
 
   // Store callbacks in refs to avoid reinitializing terminal when they change
   // This is critical because onData/onResize depend on parent state (tabs)
@@ -93,11 +94,10 @@ export function TerminalInstance({
     // Report initial size via ref to get latest callback
     onResizeRef.current(terminal.cols, terminal.rows);
 
-    // Write initial output immediately during init to prevent blank terminal on tab switch
-    // The output prop is captured via closure at mount time
-    if (output) {
-      terminal.write(output);
-      lastOutputLengthRef.current = output.length;
+    // Write initial output captured at mount time to avoid re-initializing on every update.
+    if (initialOutputRef.current) {
+      terminal.write(initialOutputRef.current);
+      lastOutputLengthRef.current = initialOutputRef.current.length;
     }
 
     // Handle user input via ref to always use latest callback
@@ -124,7 +124,7 @@ export function TerminalInstance({
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [output]); // Empty deps - only run once on mount
+  }, []);
 
   // Write output to terminal
   useEffect(() => {

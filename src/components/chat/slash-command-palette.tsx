@@ -80,13 +80,12 @@ export function SlashCommandPalette({
     [commands, filter]
   );
 
-  // Reset selection when filter changes or palette opens
+  // Reset selection when filtered results change or palette opens.
   useEffect(() => {
-    // Only reset to 0 if there are commands to select
-    if (filteredCommands.length > 0) {
+    if (isOpen && filteredCommands.length > 0) {
       setSelectedIndex(0);
     }
-  }, [filteredCommands.length]);
+  }, [isOpen, filteredCommands]);
 
   // Keep refs array in sync with filtered list length
   useEffect(() => {

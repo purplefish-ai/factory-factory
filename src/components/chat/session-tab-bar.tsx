@@ -216,6 +216,15 @@ export function SessionTabBar({
     return () => window.removeEventListener('resize', updateScrollArrows);
   }, [updateScrollArrows]);
 
+  useEffect(() => {
+    if (sortedSessions.length === 0) {
+      setShowLeftArrow(false);
+      setShowRightArrow(false);
+      return;
+    }
+    updateScrollArrows();
+  }, [sortedSessions.length, updateScrollArrows]);
+
   // Scroll handlers
   const scrollLeft = useCallback(() => {
     const container = scrollContainerRef.current;

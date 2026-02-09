@@ -120,6 +120,7 @@ const Carousel = React.forwardRef<
         ref={ref}
         onKeyDownCapture={handleKeyDown}
         className={cn('relative', className)}
+        aria-label="Carousel"
         {...props}
       >
         {children}
@@ -159,6 +160,7 @@ const CarouselItem = React.forwardRef<
   return (
     <fieldset
       ref={ref}
+      aria-label="Slide"
       className={cn(
         'min-w-0 shrink-0 grow-0 basis-full',
         orientation === 'horizontal' ? 'pl-4' : 'pt-4',
