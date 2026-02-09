@@ -547,6 +547,8 @@ class WorkspaceAccessor {
       where: {
         status: 'READY',
         prUrl: { not: null },
+        // Skip terminal and settled-disabled workspaces to avoid unnecessary GitHub API calls
+        NOT: [{ ratchetState: 'MERGED' }, { ratchetEnabled: false, ratchetState: 'IDLE' }],
       },
       select: {
         id: true,
