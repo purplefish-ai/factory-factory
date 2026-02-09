@@ -75,33 +75,28 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
   const utils = trpc.useUtils();
 
-  const stopSession = trpc.admin.stopClaudeSession.useMutation({
-    onSuccess: () => {
-      toast.success('Session stopped successfully');
-      utils.admin.getActiveProcesses.invalidate();
-    },
-    onError: (error) => {
-      toast.error(`Failed to stop session: ${error.message}`);
-    },
-  });
+  const stopSession = trpc.admin.stopClaudeSession.useMutation();
 
   const handleStopSession = useCallback(
-    (sessionId: string) => {
+    async (sessionId: string) => {
       setStoppingSessionIds((prev) => new Set(prev).add(sessionId));
-      stopSession.mutate(
-        { sessionId },
-        {
-          onSettled: () => {
-            setStoppingSessionIds((prev) => {
-              const next = new Set(prev);
-              next.delete(sessionId);
-              return next;
-            });
-          },
-        }
-      );
+      try {
+        await stopSession.mutateAsync({ sessionId });
+        toast.success('Session stopped successfully');
+        utils.admin.getActiveProcesses.invalidate();
+      } catch (error) {
+        toast.error(
+          `Failed to stop session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      } finally {
+        setStoppingSessionIds((prev) => {
+          const next = new Set(prev);
+          next.delete(sessionId);
+          return next;
+        });
+      }
     },
-    [stopSession]
+    [stopSession, utils]
   );
 
   // Calculate the highest session count per workspace
