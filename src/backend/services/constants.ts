@@ -16,11 +16,11 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
 
 export const SERVICE_INTERVAL_MS = Object.freeze({
   fileLockCleanup: 5 * 60 * 1000,
-  ratchetPoll: 60_000,
-  ciMonitorPoll: 1 * 60 * 1000,
+  ratchetPoll: 2 * 60_000, // Increased from 1min to 2min to reduce GitHub API pressure
+  ciMonitorPoll: 3 * 60 * 1000, // Increased from 1min to 3min to reduce GitHub API pressure
   ciMonitorMinNotification: 10 * 60 * 1000,
-  prReviewMonitorPoll: 2 * 60 * 1000,
-  schedulerPrSync: 2 * 60 * 1000,
+  prReviewMonitorPoll: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure
+  schedulerPrSync: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure
   reconciliationCleanup: 5 * 60 * 1000,
 } as const);
 

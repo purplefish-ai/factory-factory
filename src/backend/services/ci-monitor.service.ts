@@ -21,6 +21,8 @@ class CIMonitorService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ciMonitorWorkspaceChecks);
+  private backoffMultiplier = 1; // Start at 1x, increases on rate limit errors
+  private readonly maxBackoffMultiplier = 4; // Max 4x delay
 
   /**
    * Start the CI monitor
@@ -60,14 +62,29 @@ class CIMonitorService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
-        await this.checkAllWorkspaces();
+        const result = await this.checkAllWorkspaces();
+        // Reset backoff on successful check
+        if (result.checked > 0 && this.backoffMultiplier > 1) {
+          logger.info('CI monitor check succeeded, resetting backoff', {
+            previousMultiplier: this.backoffMultiplier,
+          });
+          this.backoffMultiplier = 1;
+        }
       } catch (err) {
         logger.error('CI monitor check failed', err as Error);
       }
 
       // Wait for the interval before next check (unless shutting down)
       if (!this.isShuttingDown) {
-        await this.sleep(SERVICE_INTERVAL_MS.ciMonitorPoll);
+        const delayMs = SERVICE_INTERVAL_MS.ciMonitorPoll * this.backoffMultiplier;
+        if (this.backoffMultiplier > 1) {
+          logger.debug('Using backoff delay for next CI monitor check', {
+            baseIntervalMs: SERVICE_INTERVAL_MS.ciMonitorPoll,
+            backoffMultiplier: this.backoffMultiplier,
+            delayMs,
+          });
+        }
+        await this.sleep(delayMs);
       }
     }
   }
@@ -77,6 +94,32 @@ class CIMonitorService {
    */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Handle GitHub API rate limit error and apply backoff
+   */
+  private handleRateLimitError(error: unknown, workspaceId: string, prUrl: string): void {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isRateLimitError =
+      errorMessage.toLowerCase().includes('429') ||
+      errorMessage.toLowerCase().includes('rate limit') ||
+      errorMessage.toLowerCase().includes('throttl');
+
+    if (isRateLimitError && this.backoffMultiplier < this.maxBackoffMultiplier) {
+      this.backoffMultiplier = Math.min(this.backoffMultiplier * 2, this.maxBackoffMultiplier);
+      logger.warn('GitHub rate limit hit in CI monitor, increasing backoff', {
+        workspaceId,
+        prUrl,
+        newBackoffMultiplier: this.backoffMultiplier,
+        nextDelayMs: SERVICE_INTERVAL_MS.ciMonitorPoll * this.backoffMultiplier,
+      });
+    } else {
+      logger.error('CI check failed for workspace', error as Error, {
+        workspaceId,
+        prUrl,
+      });
+    }
   }
 
   /**
@@ -190,10 +233,7 @@ class CIMonitorService {
 
       return { hasFailed: currentStatus === CIStatus.FAILURE, notified };
     } catch (error) {
-      logger.error('CI check failed for workspace', error as Error, {
-        workspaceId: workspace.id,
-        prUrl: workspace.prUrl,
-      });
+      this.handleRateLimitError(error, workspace.id, workspace.prUrl);
       return { hasFailed: false, notified: false };
     }
   }

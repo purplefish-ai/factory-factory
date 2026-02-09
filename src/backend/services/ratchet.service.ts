@@ -91,6 +91,8 @@ class RatchetService {
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
+  private backoffMultiplier = 1; // Start at 1x, increases on rate limit errors
+  private readonly maxBackoffMultiplier = 4; // Max 4x delay (8 minutes at base 2min interval)
 
   start(): void {
     if (this.monitorLoop) {
@@ -118,19 +120,60 @@ class RatchetService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
-        await this.checkAllWorkspaces();
+        const result = await this.checkAllWorkspaces();
+        // Reset backoff on successful check
+        if (result.checked > 0 && this.backoffMultiplier > 1) {
+          logger.info('Ratchet check succeeded, resetting backoff', {
+            previousMultiplier: this.backoffMultiplier,
+          });
+          this.backoffMultiplier = 1;
+        }
       } catch (err) {
         logger.error('Ratchet check failed', err as Error);
       }
 
       if (!this.isShuttingDown) {
-        await this.sleep(SERVICE_INTERVAL_MS.ratchetPoll);
+        const delayMs = SERVICE_INTERVAL_MS.ratchetPoll * this.backoffMultiplier;
+        if (this.backoffMultiplier > 1) {
+          logger.debug('Using backoff delay for next ratchet check', {
+            baseIntervalMs: SERVICE_INTERVAL_MS.ratchetPoll,
+            backoffMultiplier: this.backoffMultiplier,
+            delayMs,
+          });
+        }
+        await this.sleep(delayMs);
       }
     }
   }
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Handle GitHub API rate limit error and apply backoff
+   */
+  private handleRateLimitError(error: unknown, workspaceId: string, prUrl: string): void {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isRateLimitError =
+      errorMessage.toLowerCase().includes('429') ||
+      errorMessage.toLowerCase().includes('rate limit') ||
+      errorMessage.toLowerCase().includes('throttl');
+
+    if (isRateLimitError && this.backoffMultiplier < this.maxBackoffMultiplier) {
+      this.backoffMultiplier = Math.min(this.backoffMultiplier * 2, this.maxBackoffMultiplier);
+      logger.warn('GitHub rate limit hit, increasing backoff', {
+        workspaceId,
+        prUrl,
+        newBackoffMultiplier: this.backoffMultiplier,
+        nextDelayMs: SERVICE_INTERVAL_MS.ratchetPoll * this.backoffMultiplier,
+      });
+    } else {
+      logger.error('Failed to fetch PR state', error as Error, {
+        workspaceId,
+        prUrl,
+      });
+    }
   }
 
   async checkAllWorkspaces(): Promise<RatchetCheckResult> {
@@ -768,10 +811,7 @@ class RatchetService {
         prNumber: prDetails.number,
       };
     } catch (error) {
-      logger.error('Failed to fetch PR state', error as Error, {
-        workspaceId: workspace.id,
-        prUrl: workspace.prUrl,
-      });
+      this.handleRateLimitError(error, workspace.id, workspace.prUrl);
       return null;
     }
   }
