@@ -55,8 +55,12 @@ module.exports = {
     {
       name: "no-frontend-importing-backend",
       severity: "error",
-      comment: "Frontend (src/app) should not import backend directly - use API calls instead",
-      from: { path: "^src/app" },
+      comment:
+        "Frontend UI layers should not import backend directly - use API contracts/shared schemas instead",
+      from: {
+        path: "^src/(client|components|frontend)",
+        pathNot: "^src/frontend/lib/trpc\\.ts$",
+      },
       to: { path: "^src/backend" },
     },
     {
@@ -65,6 +69,32 @@ module.exports = {
       comment: "tRPC routers should use services, not access data directly via resource accessors",
       from: { path: "^src/backend/trpc" },
       to: { path: "^src/backend/resource_accessors" },
+    },
+    {
+      name: "no-shared-importing-app-layers",
+      severity: "error",
+      comment:
+        "Shared contracts must stay framework/domain neutral and not depend on backend or UI layers",
+      from: { path: "^src/shared" },
+      to: { path: "^src/(backend|client|frontend|components)" },
+    },
+    {
+      name: "no-backend-importing-ui-layers",
+      severity: "error",
+      comment: "Backend domain/application layers should not depend on UI modules",
+      from: { path: "^src/backend" },
+      to: { path: "^src/(client|frontend|components)" },
+    },
+    {
+      name: "only-accessors-import-db",
+      severity: "error",
+      comment:
+        "Database client should be imported only by resource accessors",
+      from: {
+        path: "^src/backend",
+        pathNot: "^src/backend/(db\\.ts|server\\.ts|resource_accessors/)|^src/backend/.*\\.test\\.ts$",
+      },
+      to: { path: "^src/backend/db\\.ts$" },
     },
     {
       name: "no-routers-importing-accessors",

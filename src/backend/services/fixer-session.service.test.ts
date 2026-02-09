@@ -1,12 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../db', () => ({
-  prisma: {
-    $transaction: vi.fn(),
-  },
-}));
-
 vi.mock('../resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: vi.fn(),
@@ -16,6 +10,7 @@ vi.mock('../resource_accessors/workspace.accessor', () => ({
 vi.mock('../resource_accessors/claude-session.accessor', () => ({
   claudeSessionAccessor: {
     findByWorkspaceId: vi.fn(),
+    acquireFixerSession: vi.fn(),
   },
 }));
 
@@ -42,43 +37,11 @@ vi.mock('./logger.service', () => ({
   }),
 }));
 
-import { prisma } from '../db';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from './config.service';
 import { fixerSessionService } from './fixer-session.service';
 import { sessionService } from './session.service';
-
-type MockTransactionContext = {
-  workspace: {
-    findUnique: ReturnType<typeof vi.fn>;
-  };
-  claudeSession: {
-    findFirst: ReturnType<typeof vi.fn>;
-    findMany: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-  };
-};
-
-function createTxContext(): MockTransactionContext {
-  return {
-    workspace: {
-      findUnique: vi.fn().mockResolvedValue({ worktreePath: '/tmp/w' }),
-    },
-    claudeSession: {
-      findFirst: vi.fn(),
-      findMany: vi.fn(),
-      create: vi.fn(),
-    },
-  };
-}
-
-function mockTransaction(txContext: MockTransactionContext) {
-  // biome-ignore lint/suspicious/noExplicitAny: test mock
-  vi.mocked(prisma.$transaction).mockImplementation((callback: (tx: any) => Promise<unknown>) =>
-    Promise.resolve(callback(txContext))
-  );
-}
 
 describe('FixerSessionService', () => {
   beforeEach(() => {
@@ -104,13 +67,11 @@ describe('FixerSessionService', () => {
 
   it('returns already_active when existing session is actively working', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-
-    const tx = createTxContext();
-    tx.claudeSession.findFirst.mockResolvedValue({
-      id: 's1',
+    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+      outcome: 'existing',
+      sessionId: 's1',
       status: SessionStatus.RUNNING,
     });
-    mockTransaction(tx);
 
     vi.mocked(sessionService.isSessionWorking).mockReturnValue(true);
 
@@ -127,13 +88,11 @@ describe('FixerSessionService', () => {
 
   it('sends message to running idle session when configured', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-
-    const tx = createTxContext();
-    tx.claudeSession.findFirst.mockResolvedValue({
-      id: 's1',
+    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+      outcome: 'existing',
+      sessionId: 's1',
       status: SessionStatus.RUNNING,
     });
-    mockTransaction(tx);
 
     vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
     const client = { sendMessage: vi.fn() };
@@ -158,12 +117,10 @@ describe('FixerSessionService', () => {
 
   it('creates and starts a new session', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-
-    const tx = createTxContext();
-    tx.claudeSession.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ model: 'opus' });
-    tx.claudeSession.findMany.mockResolvedValue([]);
-    tx.claudeSession.create.mockResolvedValue({ id: 's-new' });
-    mockTransaction(tx);
+    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+      outcome: 'created',
+      sessionId: 's-new',
+    });
 
     vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
     vi.mocked(sessionService.startClaudeSession).mockResolvedValue(undefined);
@@ -184,19 +141,10 @@ describe('FixerSessionService', () => {
 
   it('deduplicates concurrent acquisition by workspace/workflow', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-
-    const tx = createTxContext();
-    tx.claudeSession.findFirst.mockResolvedValue(null);
-    tx.claudeSession.findMany.mockResolvedValue([]);
-    tx.claudeSession.create.mockResolvedValue({ id: 's-new' });
-
-    vi.mocked(prisma.$transaction).mockImplementation(
-      // biome-ignore lint/suspicious/noExplicitAny: test mock
-      async (callback: (tx: any) => Promise<unknown>) => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        return callback(tx);
-      }
-    );
+    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return { outcome: 'created', sessionId: 's-new' };
+    });
 
     vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
     vi.mocked(sessionService.startClaudeSession).mockResolvedValue(undefined);
@@ -219,7 +167,7 @@ describe('FixerSessionService', () => {
     ]);
 
     expect(first).toEqual(second);
-    expect(tx.claudeSession.create).toHaveBeenCalledTimes(1);
+    expect(claudeSessionAccessor.acquireFixerSession).toHaveBeenCalledTimes(1);
   });
 
   it('returns latest active session for workflow', async () => {

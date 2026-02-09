@@ -119,6 +119,26 @@ class WorkspaceAccessor {
     });
   }
 
+  /**
+   * Find a workspace without relation includes.
+   * Used by state machines that only need the raw row.
+   */
+  findRawById(id: string): Promise<Workspace | null> {
+    return prisma.workspace.findUnique({
+      where: { id },
+    });
+  }
+
+  /**
+   * Find a workspace without relation includes and throw if missing.
+   * Used by state machines after compare-and-swap updates.
+   */
+  findRawByIdOrThrow(id: string): Promise<Workspace> {
+    return prisma.workspace.findUniqueOrThrow({
+      where: { id },
+    });
+  }
+
   findByProjectId(projectId: string, filters?: FindByProjectIdFilters): Promise<Workspace[]> {
     const where: Prisma.WorkspaceWhereInput = { projectId };
 
@@ -182,6 +202,73 @@ class WorkspaceAccessor {
     return prisma.workspace.update({
       where: { id },
       data,
+    });
+  }
+
+  /**
+   * Update a workspace with arbitrary Prisma update input.
+   * Used by state-machine transitions that compute update payloads dynamically.
+   */
+  updateRaw(id: string, data: Prisma.WorkspaceUpdateInput): Promise<Workspace> {
+    return prisma.workspace.update({
+      where: { id },
+      data,
+    });
+  }
+
+  /**
+   * Compare-and-swap update for run script status transitions.
+   * Returns count=1 only when current status matches.
+   */
+  casRunScriptStatusUpdate(
+    id: string,
+    currentStatus: RunScriptStatus,
+    data: Prisma.WorkspaceUpdateManyMutationInput
+  ): Promise<{ count: number }> {
+    return prisma.workspace.updateMany({
+      where: { id, runScriptStatus: currentStatus },
+      data,
+    });
+  }
+
+  /**
+   * Conditional provisioning retry transition (FAILED -> PROVISIONING).
+   * Returns count=1 when retry is allowed and transition was applied.
+   */
+  startProvisioningRetryIfAllowed(id: string, maxRetries: number): Promise<{ count: number }> {
+    return prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'FAILED',
+        initRetryCount: { lt: maxRetries },
+      },
+      data: {
+        status: 'PROVISIONING',
+        initRetryCount: { increment: 1 },
+        initStartedAt: new Date(),
+        initErrorMessage: null,
+      },
+    });
+  }
+
+  /**
+   * Conditional reset transition (FAILED -> NEW).
+   * Returns count=1 when retry is allowed and transition was applied.
+   */
+  resetToNewIfAllowed(id: string, maxRetries: number): Promise<{ count: number }> {
+    return prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'FAILED',
+        initRetryCount: { lt: maxRetries },
+      },
+      data: {
+        status: 'NEW',
+        initRetryCount: { increment: 1 },
+        initStartedAt: null,
+        initCompletedAt: null,
+        initErrorMessage: null,
+      },
     });
   }
 

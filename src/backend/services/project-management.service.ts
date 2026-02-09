@@ -21,7 +21,15 @@ class ProjectManagementService {
     return projectAccessor.validateRepoPath(repoPath);
   }
 
-  create(data: { repoPath: string }, context: ProjectAccessorContext): Promise<Project> {
+  create(
+    data: {
+      repoPath: string;
+      startupScriptCommand?: string;
+      startupScriptPath?: string;
+      startupScriptTimeout?: number;
+    },
+    context: ProjectAccessorContext
+  ): Promise<Project> {
     return projectAccessor.create(data, context);
   }
 

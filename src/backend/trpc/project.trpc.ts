@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { prisma } from '../db';
 import { gitCommandC } from '../lib/shell';
 import { FactoryConfigService } from '../services/factory-config.service';
 import { projectManagementService } from '../services/project-management.service';
@@ -131,8 +130,7 @@ export const projectRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { configService } = ctx.appContext.services;
-      const { startupScriptCommand, startupScriptPath, startupScriptTimeout, ...createInput } =
-        input;
+      const { startupScriptCommand, startupScriptPath, startupScriptTimeout } = input;
 
       // Validate only one of command or path is set
       if (startupScriptCommand && startupScriptPath) {
@@ -145,27 +143,17 @@ export const projectRouter = router({
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
 
-      // Use transaction to ensure atomic creation with startup script config
-      return prisma.$transaction(async (tx) => {
-        // Create the project
-        const project = await projectManagementService.create(createInput, {
+      return projectManagementService.create(
+        {
+          repoPath: input.repoPath,
+          startupScriptCommand,
+          startupScriptPath,
+          startupScriptTimeout,
+        },
+        {
           worktreeBaseDir: configService.getWorktreeBaseDir(),
-        });
-
-        // If startup script config was provided, update the project within the transaction
-        if (startupScriptCommand || startupScriptPath || startupScriptTimeout) {
-          return tx.project.update({
-            where: { id: project.id },
-            data: {
-              startupScriptCommand: startupScriptCommand ?? null,
-              startupScriptPath: startupScriptPath ?? null,
-              startupScriptTimeout: startupScriptTimeout ?? 300,
-            },
-          });
         }
-
-        return project;
-      });
+      );
     }),
 
   // Update a project
@@ -197,10 +185,7 @@ export const projectRouter = router({
 
       // Validate only one of command or path is set (check final state, not just request)
       if (updates.startupScriptCommand !== undefined || updates.startupScriptPath !== undefined) {
-        const currentProject = await prisma.project.findUnique({
-          where: { id },
-          select: { startupScriptCommand: true, startupScriptPath: true },
-        });
+        const currentProject = await projectManagementService.findById(id);
 
         if (!currentProject) {
           throw new Error(`Project not found: ${id}`);
