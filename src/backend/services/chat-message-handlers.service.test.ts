@@ -5,6 +5,7 @@ const { mockSessionDomainService, mockSessionService } = vi.hoisted(() => ({
   mockSessionDomainService: {
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
+    markError: vi.fn(),
     markIdle: vi.fn(),
     markRunning: vi.fn(),
     allocateOrder: vi.fn(),
@@ -84,6 +85,15 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
     expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+  });
+
+  it('marks runtime as error when auto-start cannot run because client creator is missing', async () => {
+    mockSessionService.getClient.mockReturnValue(undefined);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1');
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
   });
 });

@@ -1,3 +1,4 @@
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { StartMessageInput } from '@/shared/websocket';
 import { createLogger } from '../../logger.service';
 import { sessionService } from '../../session.service';
@@ -18,6 +19,7 @@ export function createStartHandler(
     const sessionOpts = await sessionService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
+      sessionDomainService.markError(sessionId);
       ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
       return;
     }

@@ -180,6 +180,7 @@ class ChatMessageHandlerService {
   ): Promise<ClaudeClient | null> {
     if (!this.clientCreator) {
       logger.error('[Chat WS] Client creator not set');
+      sessionDomainService.markError(dbSessionId);
       return null;
     }
 
