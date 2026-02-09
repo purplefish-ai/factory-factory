@@ -80,11 +80,10 @@ async function writeResumeModes(
   modes: Record<string, boolean>
 ): Promise<void> {
   await fs.mkdir(worktreeBasePath, { recursive: true });
-  await fs.writeFile(
-    path.join(worktreeBasePath, RESUME_MODE_FILENAME),
-    JSON.stringify(modes),
-    'utf-8'
-  );
+  const targetPath = path.join(worktreeBasePath, RESUME_MODE_FILENAME);
+  const tmpPath = `${targetPath}.${process.pid}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(modes), 'utf-8');
+  await fs.rename(tmpPath, targetPath);
 }
 
 async function updateResumeModes(
