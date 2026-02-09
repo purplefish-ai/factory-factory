@@ -112,7 +112,11 @@ class ChatMessageHandlerService {
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
         });
-        sessionDomainService.markIdle(dbSessionId, client.isRunning() ? 'alive' : 'stopped');
+        // Avoid clobbering markProcessExit() runtime/lastExit when the process
+        // has already stopped and exit handling is in flight.
+        if (client.isRunning()) {
+          sessionDomainService.markIdle(dbSessionId, 'alive');
+        }
         sessionDomainService.requeueFront(dbSessionId, msg);
       }
     } finally {

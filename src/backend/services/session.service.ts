@@ -180,42 +180,47 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    // Use processManager.getOrCreateClient() for race protection
-    // Build options first, then delegate to processManager
-    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-      thinkingEnabled: options?.thinkingEnabled,
-      permissionMode: options?.permissionMode,
-      model: options?.model,
-    });
-
-    const client = await this.processManager
-      .getOrCreateClient(sessionId, clientOptions, handlers, context)
-      .catch((error) => {
-        sessionDomainService.setRuntimeSnapshot(sessionId, {
-          phase: 'error',
-          processState: 'stopped',
-          activity: 'IDLE',
-          updatedAt: new Date().toISOString(),
-        });
-        throw error;
+    try {
+      // Use processManager.getOrCreateClient() for race protection
+      // Build options first, then delegate to processManager
+      const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
+        thinkingEnabled: options?.thinkingEnabled,
+        permissionMode: options?.permissionMode,
+        model: options?.model,
       });
 
-    // Update DB with running status and PID
-    // This is idempotent and safe even if called by concurrent callers
-    await this.repository.updateSession(sessionId, {
-      status: SessionStatus.RUNNING,
-      claudeProcessPid: client.getPid() ?? null,
-    });
+      const client = await this.processManager.getOrCreateClient(
+        sessionId,
+        clientOptions,
+        handlers,
+        context
+      );
 
-    const isWorking = this.getClientWorkingState(client);
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
-      phase: isWorking ? 'running' : 'idle',
-      processState: 'alive',
-      activity: isWorking ? 'WORKING' : 'IDLE',
-      updatedAt: new Date().toISOString(),
-    });
+      // Update DB with running status and PID
+      // This is idempotent and safe even if called by concurrent callers
+      await this.repository.updateSession(sessionId, {
+        status: SessionStatus.RUNNING,
+        claudeProcessPid: client.getPid() ?? null,
+      });
 
-    return client;
+      const isWorking = this.getClientWorkingState(client);
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: isWorking ? 'running' : 'idle',
+        processState: 'alive',
+        activity: isWorking ? 'WORKING' : 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+
+      return client;
+    } catch (error) {
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'error',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      throw error;
+    }
   }
 
   /**

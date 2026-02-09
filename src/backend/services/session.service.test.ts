@@ -278,6 +278,25 @@ describe('SessionService', () => {
     );
   });
 
+  it('marks process as stopped when building client options fails', async () => {
+    vi.mocked(sessionProcessManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(null);
+    const setRuntimeSnapshotSpy = vi.spyOn(sessionDomainService, 'setRuntimeSnapshot');
+
+    await expect(sessionService.getOrCreateClient('session-1')).rejects.toThrow(
+      'Session not found: session-1'
+    );
+
+    expect(setRuntimeSnapshotSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        phase: 'error',
+        processState: 'stopped',
+        activity: 'IDLE',
+      })
+    );
+  });
+
   it('returns null session options when workspace is missing', async () => {
     const session = {
       id: 'session-1',

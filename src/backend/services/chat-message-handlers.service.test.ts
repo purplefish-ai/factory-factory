@@ -67,4 +67,23 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.markIdle).toHaveBeenCalledWith('s1', 'alive');
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
   });
+
+  it('does not call markIdle when process has already stopped during dispatch failure', async () => {
+    const client = {
+      isWorking: vi.fn().mockReturnValue(false),
+      isRunning: vi.fn().mockReturnValueOnce(true).mockReturnValue(false),
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      sendMessage: vi.fn().mockRejectedValue(new Error('send failed')),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+    };
+    mockSessionService.getClient.mockReturnValue(client);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
+    expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+  });
 });
