@@ -1,5 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
 import { SessionHydrator } from '@/backend/services/session-store/session-hydrator';
+import { handleProcessExit } from '@/backend/services/session-store/session-process-exit';
 import { SessionPublisher } from '@/backend/services/session-store/session-publisher';
 import {
   clearPendingInteractiveRequest,
@@ -39,6 +40,14 @@ class SessionDomainService {
   }, this.nowIso);
 
   private readonly hydrator = new SessionHydrator(this.nowIso, this.parityLogger);
+
+  private transitionRuntime(
+    sessionId: string,
+    updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'>
+  ): void {
+    const store = this.registry.getOrCreate(sessionId);
+    this.runtimeMachine.markRuntime(store, updates);
+  }
 
   async subscribe(options: {
     sessionId: string;
@@ -219,53 +228,24 @@ class SessionDomainService {
 
   markProcessExit(sessionId: string, code: number | null): void {
     const store = this.registry.getOrCreate(sessionId);
-    const unexpected = code === null || code !== 0;
-
-    store.queue = [];
-    store.pendingInteractiveRequest = null;
-    store.transcript = [];
-    store.nextOrder = 0;
-    store.initialized = false;
-    store.hydratedKey = null;
-    store.hydrateGeneration += 1;
-    store.hydratePromise = null;
-
-    this.runtimeMachine.markRuntime(store, {
-      phase: unexpected ? 'error' : 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      lastExit: {
-        code,
-        timestamp: this.nowIso(),
-        unexpected,
+    handleProcessExit({
+      store,
+      code,
+      nowIso: this.nowIso,
+      markRuntime: (targetStore, updates) => {
+        this.runtimeMachine.markRuntime(targetStore, updates);
+      },
+      forwardSnapshot: (targetStore, options) => {
+        this.publisher.forwardSnapshot(targetStore, options);
+      },
+      ensureHydrated: (targetStore, options) => this.hydrator.ensureHydrated(targetStore, options),
+      onRehydrateError: (error) => {
+        logger.warn('Failed to rehydrate transcript after process exit', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       },
     });
-
-    this.publisher.forwardSnapshot(store, {
-      reason: 'process_exit_reset',
-      includeParitySnapshot: true,
-    });
-
-    const { lastKnownClaudeSessionId, lastKnownProjectPath } = store;
-    if (lastKnownClaudeSessionId && lastKnownProjectPath) {
-      void this.hydrator
-        .ensureHydrated(store, {
-          claudeSessionId: lastKnownClaudeSessionId,
-          claudeProjectPath: lastKnownProjectPath,
-        })
-        .then(() => {
-          this.publisher.forwardSnapshot(store, {
-            reason: 'process_exit_rehydrate',
-            includeParitySnapshot: true,
-          });
-        })
-        .catch((error) => {
-          logger.warn('Failed to rehydrate transcript after process exit', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-    }
   }
 
   clearQueuedWork(sessionId: string, options?: { emitSnapshot?: boolean }): void {
@@ -278,8 +258,7 @@ class SessionDomainService {
   }
 
   markStarting(sessionId: string): void {
-    const store = this.registry.getOrCreate(sessionId);
-    this.runtimeMachine.markRuntime(store, {
+    this.transitionRuntime(sessionId, {
       phase: 'starting',
       processState: 'alive',
       activity: 'IDLE',
@@ -288,7 +267,7 @@ class SessionDomainService {
 
   markStopping(sessionId: string): void {
     const store = this.registry.getOrCreate(sessionId);
-    this.runtimeMachine.markRuntime(store, {
+    this.transitionRuntime(sessionId, {
       phase: 'stopping',
       processState: store.runtime.processState,
       activity: store.runtime.activity,
@@ -296,8 +275,7 @@ class SessionDomainService {
   }
 
   markRunning(sessionId: string): void {
-    const store = this.registry.getOrCreate(sessionId);
-    this.runtimeMachine.markRuntime(store, {
+    this.transitionRuntime(sessionId, {
       phase: 'running',
       processState: 'alive',
       activity: 'WORKING',
@@ -305,8 +283,7 @@ class SessionDomainService {
   }
 
   markIdle(sessionId: string, processState: 'alive' | 'stopped'): void {
-    const store = this.registry.getOrCreate(sessionId);
-    this.runtimeMachine.markRuntime(store, {
+    this.transitionRuntime(sessionId, {
       phase: 'idle',
       processState,
       activity: 'IDLE',
@@ -315,7 +292,7 @@ class SessionDomainService {
 
   markError(sessionId: string): void {
     const store = this.registry.getOrCreate(sessionId);
-    this.runtimeMachine.markRuntime(store, {
+    this.transitionRuntime(sessionId, {
       phase: 'error',
       processState: store.runtime.processState,
       activity: store.runtime.activity,
