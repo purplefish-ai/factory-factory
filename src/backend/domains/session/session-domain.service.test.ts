@@ -85,9 +85,13 @@ describe('SessionDomainService', () => {
       loadRequestId: 'load-1',
     });
 
-    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
+    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(2);
     expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
       type: 'session_replay_batch',
+    });
+    expect(mockedConnectionService.forwardToSession.mock.calls[1]?.[1]).toMatchObject({
+      type: 'session_delta',
+      data: { type: 'session_runtime_updated' },
     });
 
     expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
@@ -273,7 +277,17 @@ describe('SessionDomainService', () => {
       },
     });
 
-    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(1);
+    // Two calls: first the replay batch, then the runtime delta
+    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledTimes(2);
+    // Verify replay batch is sent first
+    expect(mockedConnectionService.forwardToSession.mock.calls[0]?.[1]).toMatchObject({
+      type: 'session_replay_batch',
+    });
+    // Verify runtime delta is sent after
+    expect(mockedConnectionService.forwardToSession.mock.calls[1]?.[1]).toMatchObject({
+      type: 'session_delta',
+      data: { type: 'session_runtime_updated' },
+    });
     const replayEvents = getLatestReplayBatch().replayEvents ?? [];
     expect(replayEvents[0]).toMatchObject({
       type: 'session_runtime_snapshot',
