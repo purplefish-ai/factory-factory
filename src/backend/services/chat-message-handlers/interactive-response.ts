@@ -1,8 +1,8 @@
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { isInteractiveResponseTool } from '@/shared/pending-request-types';
 import { AskUserQuestionInputSchema, safeParseToolInput } from '../../schemas/tool-inputs.schema';
 import { createLogger } from '../logger.service';
 import { sessionService } from '../session.service';
-import { sessionStoreService } from '../session-store.service';
 import { DEBUG_CHAT_WS } from './constants';
 
 const logger = createLogger('chat-message-handlers');
@@ -12,7 +12,7 @@ export function tryHandleAsInteractiveResponse(
   messageId: string,
   text: string
 ): boolean {
-  const pendingRequest = sessionStoreService.getPendingInteractiveRequest(sessionId);
+  const pendingRequest = sessionDomainService.getPendingInteractiveRequest(sessionId);
   if (!pendingRequest) {
     return false;
   }
@@ -54,17 +54,17 @@ function handleMessageAsInteractiveResponse(
     }
 
     // Clear the pending request only after successful delivery to Claude.
-    sessionStoreService.clearPendingInteractiveRequestIfMatches(
+    sessionDomainService.clearPendingInteractiveRequestIfMatches(
       sessionId,
       pendingRequest.requestId
     );
 
     // Allocate an order for this message so it sorts correctly on the frontend.
-    const order = sessionStoreService.allocateOrder(sessionId);
+    const order = sessionDomainService.allocateOrder(sessionId);
     const timestamp = new Date().toISOString();
 
     // Persist interactive response in transcript so live/reload views stay consistent.
-    sessionStoreService.commitSentUserMessageAtOrder(
+    sessionDomainService.commitSentUserMessageAtOrder(
       sessionId,
       {
         id: messageId,
@@ -80,7 +80,7 @@ function handleMessageAsInteractiveResponse(
       { emitSnapshot: false }
     );
 
-    sessionStoreService.emitDelta(sessionId, {
+    sessionDomainService.emitDelta(sessionId, {
       type: 'message_used_as_response',
       id: messageId,
       text,
@@ -96,7 +96,7 @@ function handleMessageAsInteractiveResponse(
       toolName: pendingRequest.toolName,
       error: errorMessage,
     });
-    sessionStoreService.emitDelta(sessionId, {
+    sessionDomainService.emitDelta(sessionId, {
       type: 'error',
       message: 'Failed to deliver interactive response. Please try again.',
     });

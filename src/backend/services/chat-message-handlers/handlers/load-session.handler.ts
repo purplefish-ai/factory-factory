@@ -1,8 +1,8 @@
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { LoadSessionMessage } from '@/shared/websocket';
 import { SessionManager } from '../../../claude/session';
 import { claudeSessionAccessor } from '../../../resource_accessors/claude-session.accessor';
 import { sessionService } from '../../session.service';
-import { sessionStoreService } from '../../session-store.service';
 import { slashCommandCacheService } from '../../slash-command-cache.service';
 import type { ChatMessageHandler } from '../types';
 
@@ -35,7 +35,7 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
     }
 
     const existingClient = sessionService.getClient(sessionId);
-    await sessionStoreService.subscribe({
+    await sessionDomainService.subscribe({
       sessionId,
       claudeProjectPath,
       claudeSessionId: dbSession.claudeSessionId,
@@ -58,5 +58,5 @@ async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void>
     type: 'slash_commands',
     slashCommands: cached,
   } as const;
-  sessionStoreService.emitDelta(sessionId, slashCommandsMsg);
+  sessionDomainService.emitDelta(sessionId, slashCommandsMsg);
 }

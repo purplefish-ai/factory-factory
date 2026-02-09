@@ -1,6 +1,6 @@
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { MessageState, resolveSelectedModel } from '@/shared/claude';
 import type { QueueMessageInput } from '@/shared/websocket';
-import { sessionStoreService } from '../../session-store.service';
 import { resolveAttachmentContentType } from '../attachment-utils';
 import { tryHandleAsInteractiveResponse } from '../interactive-response';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
@@ -57,10 +57,10 @@ export function createQueueMessageHandler(
     }
 
     const queuedMsg = buildQueuedMessage(messageId, message, text ?? '');
-    const result = sessionStoreService.enqueue(sessionId, queuedMsg);
+    const result = sessionDomainService.enqueue(sessionId, queuedMsg);
 
     if ('error' in result) {
-      sessionStoreService.emitDelta(sessionId, {
+      sessionDomainService.emitDelta(sessionId, {
         type: 'message_state_changed',
         id: messageId,
         newState: MessageState.REJECTED,
@@ -69,7 +69,7 @@ export function createQueueMessageHandler(
       return;
     }
 
-    sessionStoreService.emitDelta(sessionId, {
+    sessionDomainService.emitDelta(sessionId, {
       type: 'message_state_changed',
       id: messageId,
       newState: MessageState.ACCEPTED,

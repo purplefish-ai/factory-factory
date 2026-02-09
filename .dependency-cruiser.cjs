@@ -86,6 +86,18 @@ module.exports = {
       to: { path: "^src/(client|frontend|components)" },
     },
     {
+      name: "only-session-domain-imports-session-store",
+      severity: "error",
+      comment:
+        "Session transcript/store internals are single-writer infrastructure and may only be imported by the session domain layer",
+      from: {
+        path: "^src/backend",
+        pathNot:
+          "^src/backend/domains/session/|^src/backend/services/session-store\\.service\\.ts$|^src/backend/.*\\.test\\.ts$",
+      },
+      to: { path: "^src/backend/services/session-store\\.service\\.ts$" },
+    },
+    {
       name: "only-accessors-import-db",
       severity: "error",
       comment:

@@ -1,7 +1,7 @@
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { QuestionResponseMessage } from '@/shared/websocket';
 import { createLogger } from '../../logger.service';
 import { sessionService } from '../../session.service';
-import { sessionStoreService } from '../../session-store.service';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
 
@@ -13,19 +13,19 @@ export function createQuestionResponseHandler(): ChatMessageHandler<QuestionResp
 
     const client = sessionService.getClient(sessionId);
     if (!client) {
-      sessionStoreService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+      sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
       ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
       return;
     }
 
     try {
       client.answerQuestion(requestId, answers);
-      sessionStoreService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+      sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Answered question', { sessionId, requestId });
       }
     } catch (error) {
-      sessionStoreService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
+      sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to answer question', {
         sessionId,

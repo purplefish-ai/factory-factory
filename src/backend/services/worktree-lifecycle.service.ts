@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { resumeModesSchema } from '@/shared/schemas/persisted-stores.schema';
 import { pathExists } from '../lib/file-helpers';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
@@ -12,7 +13,6 @@ import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { RunScriptService } from './run-script.service';
 import { sessionService } from './session.service';
-import { sessionStoreService } from './session-store.service';
 import { startupScriptService } from './startup-script.service';
 import { terminalService } from './terminal.service';
 import { workspaceStateMachine } from './workspace-state-machine.service';
@@ -537,7 +537,7 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
     // If we have a GitHub issue prompt, inject it into the message state
     // so it appears in the chat UI as a user message
     if (issuePrompt) {
-      sessionStoreService.injectCommittedUserMessage(session.id, issuePrompt);
+      sessionDomainService.injectCommittedUserMessage(session.id, issuePrompt);
     }
 
     // Start the session - pass empty string to start without any initial prompt
