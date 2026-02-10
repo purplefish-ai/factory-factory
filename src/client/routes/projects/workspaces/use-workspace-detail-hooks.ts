@@ -37,11 +37,7 @@ export function useWorkspaceInitStatus(
     prevInitStatusRef.current = currentStatus;
   }, [workspaceInitStatus?.status, workspaceId, utils, workspace?.worktreePath]);
 
-  const status = workspaceInitStatus?.status;
-  const isInitializing =
-    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
-
-  return { workspaceInitStatus, isInitStatusPending, isInitializing };
+  return { workspaceInitStatus, isInitStatusPending };
 }
 
 export function useSelectedSessionId(initialDbSessionId: string | null) {

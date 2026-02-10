@@ -25,8 +25,6 @@ const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 // =============================================================================
 
 export interface UseChatWebSocketOptions {
-  /** Working directory for Claude CLI (workspace worktree path) */
-  workingDir?: string;
   /**
    * Database session ID (required).
    * This is the primary key for the ClaudeSession record.
@@ -83,6 +81,7 @@ export interface UseChatWebSocketReturn {
   setInputDraft: (draft: string) => void;
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
+  resumeQueuedMessages: () => void;
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
@@ -110,7 +109,7 @@ export interface UseChatWebSocketReturn {
  * 3. Wires them together with the appropriate callbacks
  */
 export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSocketReturn {
-  const { workingDir, dbSessionId } = options;
+  const { dbSessionId } = options;
 
   // Unique connection ID for this browser window (stable across reconnects)
   const connectionIdRef = useRef<string>(
@@ -118,14 +117,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   );
 
   // Build WebSocket URL - null if no dbSessionId (transport won't connect)
-  const url =
-    dbSessionId && workingDir
-      ? buildWebSocketUrl('/chat', {
-          sessionId: dbSessionId,
-          connectionId: connectionIdRef.current,
-          workingDir,
-        })
-      : null;
+  const url = dbSessionId
+    ? buildWebSocketUrl('/chat', {
+        sessionId: dbSessionId,
+        connectionId: connectionIdRef.current,
+      })
+    : null;
 
   // Ref-wiring pattern to break circular dependency:
   // - useChatState needs a `send` function to send WebSocket messages
@@ -273,6 +270,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setInputDraft: chat.setInputDraft,
     setInputAttachments: chat.setInputAttachments,
     removeQueuedMessage: chat.removeQueuedMessage,
+    resumeQueuedMessages: chat.resumeQueuedMessages,
     dismissTaskNotification: chat.dismissTaskNotification,
     clearTaskNotifications: chat.clearTaskNotifications,
     // Rewind files actions

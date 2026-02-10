@@ -25,7 +25,7 @@ let chatWsMsgCounter = 0;
 export interface ConnectionInfo {
   ws: WebSocket;
   dbSessionId: string | null;
-  workingDir: string;
+  workingDir: string | null;
 }
 
 // ============================================================================

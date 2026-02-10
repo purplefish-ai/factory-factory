@@ -608,9 +608,12 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
             },
           },
         });
-        await chatMessageHandlerService.tryDispatchNextMessage(session.id);
       }
     }
+
+    // Trigger queue dispatch after init/session start so messages queued during
+    // workspace provisioning are picked up immediately when dispatch is allowed.
+    await chatMessageHandlerService.tryDispatchNextMessage(session.id);
 
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
