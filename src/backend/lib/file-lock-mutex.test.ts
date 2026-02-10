@@ -37,7 +37,6 @@ describe('FileLockMutex', () => {
 
     const mutex = new FileLockMutex({
       acquireTimeoutMs: 40,
-      postTimeoutWaitMs: 0,
       initialRetryDelayMs: 5,
       maxRetryDelayMs: 10,
       maxStaleRetries: 0,

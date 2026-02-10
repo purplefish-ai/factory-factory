@@ -34,6 +34,7 @@ const LOCK_MAX_STALE_RETRIES = 3;
 const LOCK_STALE_THRESHOLD_MS = LOCK_ACQUIRE_TIMEOUT_MS * 5;
 const resumeModeFileLock = new FileLockMutex({
   acquireTimeoutMs: LOCK_ACQUIRE_TIMEOUT_MS,
+  postTimeoutWaitMs: 0,
   initialRetryDelayMs: LOCK_RETRY_DELAY_MS,
   maxRetryDelayMs: LOCK_MAX_RETRY_DELAY_MS,
   maxStaleRetries: LOCK_MAX_STALE_RETRIES,

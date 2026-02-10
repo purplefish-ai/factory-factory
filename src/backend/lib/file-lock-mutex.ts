@@ -32,8 +32,7 @@ export class FileLockMutex {
 
     this.options = {
       acquireTimeoutMs,
-      postTimeoutWaitMs:
-        options.postTimeoutWaitMs ?? options.staleThresholdMs ?? acquireTimeoutMs * 5,
+      postTimeoutWaitMs: options.postTimeoutWaitMs ?? 0,
       initialRetryDelayMs: options.initialRetryDelayMs ?? DEFAULT_LOCK_RETRY_DELAY_MS,
       maxRetryDelayMs: options.maxRetryDelayMs ?? DEFAULT_LOCK_MAX_RETRY_DELAY_MS,
       maxStaleRetries: options.maxStaleRetries ?? DEFAULT_LOCK_MAX_STALE_RETRIES,
