@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 02-session-domain-consolidation (Plan 03 of 06 complete)
+**Current Phase:** 02-session-domain-consolidation (Plan 04 of 06 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -10,7 +10,7 @@
 | Phase | Name | Status | Notes |
 |-------|------|--------|-------|
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
-| 2 | Session Domain Consolidation | In Progress | Plan 03/06 done |
+| 2 | Session Domain Consolidation | In Progress | Plan 04/06 done |
 | 3 | Workspace Domain Consolidation | Pending | Largest service sprawl |
 | 4 | GitHub Domain Consolidation | Pending | — |
 | 5 | Ratchet Domain Consolidation | Pending | — |
@@ -36,6 +36,9 @@
 | HistoryMessage from @/shared/claude | 2026-02-10 | Direct import vs routing through claude barrel (02-03) |
 | Intra-domain relative imports | 2026-02-10 | session-domain.service.ts uses ./store/ paths (02-03) |
 | Knip ignore for shim directories | 2026-02-10 | Re-export shims need knip exclusion (02-03) |
+| processRegistry singleton sharing | 2026-02-10 | Old shim and new code share same Map instance (02-02) |
+| Selective barrel exports | 2026-02-10 | Named exports per module, not blanket export * (02-02) |
+| Individual module paths in index shim | 2026-02-10 | Prevents double-barrel re-export chains (02-02) |
 
 ## Blockers
 
@@ -43,9 +46,10 @@ None.
 
 ## Context for Next Session
 
-Phase 2 Plan 03 complete: all 13 session-store files moved to domains/session/store/ with re-export shims.
-session-domain.service.ts now uses intra-domain relative imports to ./store/.
-Orphaned files from incomplete Plan 02-02 cleaned up. Plans 02, 04-06 remain.
+Phase 2 Plan 02 complete: all claude/ files (process, monitoring, permissions, permission-coordinator, session, client) moved to domains/session/claude/.
+Claude subdirectory barrel file at index.ts with selective exports.
+src/backend/claude/ now contains only re-export shims (no business logic).
+Plans 04-06 remain (session-domain.service.ts integration, SessionProcessManager, clean-up).
 Phases 3-7 are independent and can be planned/executed in parallel with Phase 2.
 
 ## Performance Metrics
@@ -55,7 +59,8 @@ Phases 3-7 are independent and can be planned/executed in parallel with Phase 2.
 | 01 | 01 | 2min | 2 | 8 |
 | 02 | 01 | 8min | 2 | 14 |
 | 02 | 03 | 8min | 2 | 24 |
+| 02 | 02 | 9min | 2 | 20 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T12:29:54Z -- Completed 02-03-PLAN.md*
+*Last session: 2026-02-10T12:45:35Z -- Completed 02-02-PLAN.md*
