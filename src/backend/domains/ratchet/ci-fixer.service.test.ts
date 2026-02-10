@@ -9,14 +9,14 @@ vi.mock('./fixer-session.service', () => ({
   },
 }));
 
-vi.mock('./session.service', () => ({
+vi.mock('@/backend/services/session.service', () => ({
   sessionService: {
     isSessionWorking: vi.fn(),
     getClient: vi.fn(),
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -25,9 +25,9 @@ vi.mock('./logger.service', () => ({
   }),
 }));
 
+import { sessionService } from '@/backend/services/session.service';
 import { ciFixerService } from './ci-fixer.service';
 import { fixerSessionService } from './fixer-session.service';
-import { sessionService } from './session.service';
 
 describe('CIFixerService', () => {
   beforeEach(() => {
