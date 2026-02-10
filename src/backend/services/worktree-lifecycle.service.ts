@@ -30,6 +30,7 @@ const resumeModeLocks = new Map<string, Promise<void>>();
 const LOCK_ACQUIRE_TIMEOUT_MS = 5000; // Maximum time to wait for lock
 const LOCK_RETRY_DELAY_MS = 50; // Initial retry delay
 const LOCK_MAX_RETRY_DELAY_MS = 500; // Maximum retry delay
+const LOCK_MAX_STALE_RETRIES = 3; // Maximum retries after removing stale locks
 
 /**
  * Create cleanup function for file lock.
@@ -85,12 +86,35 @@ async function tryRemoveStaleLock(lockPath: string): Promise<boolean> {
 }
 
 /**
+ * Handle lock acquisition after timeout by attempting to remove stale locks.
+ * Returns true if should retry, false if should throw error.
+ */
+async function handleLockTimeout(
+  lockPath: string,
+  staleRetryCount: number
+): Promise<{ shouldRetry: boolean; newCount: number }> {
+  if (staleRetryCount >= LOCK_MAX_STALE_RETRIES) {
+    return { shouldRetry: false, newCount: staleRetryCount };
+  }
+
+  const removed = await tryRemoveStaleLock(lockPath);
+  if (!removed) {
+    return { shouldRetry: false, newCount: staleRetryCount };
+  }
+
+  // Wait a short time before retrying to avoid tight spin loop
+  await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_DELAY_MS));
+  return { shouldRetry: true, newCount: staleRetryCount + 1 };
+}
+
+/**
  * Acquire a cross-process file lock using atomic file creation.
  * Returns a cleanup function to release the lock.
  */
 async function acquireFileLock(lockPath: string): Promise<() => Promise<void>> {
   const startTime = Date.now();
   let retryDelay = LOCK_RETRY_DELAY_MS;
+  let staleRetryCount = 0;
 
   while (true) {
     try {
@@ -108,12 +132,14 @@ async function acquireFileLock(lockPath: string): Promise<() => Promise<void>> {
 
       const elapsed = Date.now() - startTime;
       if (elapsed >= LOCK_ACQUIRE_TIMEOUT_MS) {
-        const removed = await tryRemoveStaleLock(lockPath);
-        if (removed) {
-          // Retry immediately after removing stale lock
+        const { shouldRetry, newCount } = await handleLockTimeout(lockPath, staleRetryCount);
+        staleRetryCount = newCount;
+        if (shouldRetry) {
           continue;
         }
-        throw new Error(`Failed to acquire lock after ${LOCK_ACQUIRE_TIMEOUT_MS}ms: ${lockPath}`);
+        throw new Error(
+          `Failed to acquire lock after ${LOCK_ACQUIRE_TIMEOUT_MS}ms and ${staleRetryCount} stale removal attempts: ${lockPath}`
+        );
       }
 
       // Wait before retrying (exponential backoff)
