@@ -229,10 +229,10 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Extract worktree-lifecycle cross-domain flows into workspace-init and workspace-archive orchestrators
-- [ ] 08-02-PLAN.md — Add bridge interfaces to ratchet domain, remove session/github cross-domain imports
-- [ ] 08-03-PLAN.md — Wire ratchet bridges and remove cross-domain imports from workspace-query, kanban-state, pr-review-fixer, pr-snapshot
-- [ ] 08-04-PLAN.md — Remove final cross-domain imports from session/run-script domains and wire all bridges at startup
+- [x] 08-01-PLAN.md — Extract worktree-lifecycle cross-domain flows into workspace-init and workspace-archive orchestrators
+- [x] 08-02-PLAN.md — Add bridge interfaces to ratchet domain, remove session/github cross-domain imports
+- [x] 08-03-PLAN.md — Wire ratchet bridges and remove cross-domain imports from workspace-query, kanban-state, pr-review-fixer, pr-snapshot
+- [x] 08-04-PLAN.md — Remove final cross-domain imports from session/run-script domains and wire all bridges at startup
 
 **Delivers:**
 - `src/backend/orchestration/` directory with flow orchestrators
@@ -312,4 +312,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 8 planned (4 plans, ORCH-01 + ORCH-02 + ORCH-03)*
+*Last updated: 2026-02-10 — Phase 8 complete (4 plans, ORCH-01 + ORCH-02 + ORCH-03 verified)*
