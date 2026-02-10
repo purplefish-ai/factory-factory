@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 08-orchestration-layer (Plan 01 of 04 complete)
+**Current Phase:** 08-orchestration-layer (Plan 02 of 04 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -16,7 +16,7 @@
 | 5 | Ratchet Domain Consolidation | Complete | All 3 plans done |
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
-| 8 | Orchestration Layer | In Progress | Plan 01 done (12min) |
+| 8 | Orchestration Layer | In Progress | Plans 01-02 done |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
 
@@ -82,18 +82,20 @@
 | Module-level cached GitHub username in orchestrator | 2026-02-10 | Cross-domain caching moved from WorktreeLifecycleService instance field to orchestrator module scope (08-01) |
 | Knip ignore for orchestration directory | 2026-02-10 | Added src/backend/orchestration/*.ts to knip ignore for new orchestration files (08-01) |
 
+| Bridge interfaces with lightweight types | 2026-02-10 | Ratchet bridges.ts defines own types, no dependency on github/session domain types (08-02) |
+| configure() + fail-fast getter pattern | 2026-02-10 | Each ratchet service has configure(bridges) and private get session()/github() that throw if unconfigured (08-02) |
+| Bridge injection in tests over vi.mock | 2026-02-10 | ci-fixer test uses configure({session: mockBridge}) instead of vi.mock module path (08-02) |
+
 ## Blockers
 
 None.
 
 ## Context for Next Session
 
-Phase 8 plan 01 complete: Orchestration layer initialized.
-Extracted initializeWorkspaceWorktree and archiveWorkspace from worktree-lifecycle.service.ts into src/backend/orchestration/.
-worktree-lifecycle.service.ts now has zero cross-domain imports (pure worktree manager).
-Orchestrators use direct module paths for workspace domain imports (avoids barrel circular dep).
-reconciliation.service.ts tRPC layer violation fixed (imports from orchestration now).
-Ready for Phase 8 plans 02-04 (ratchet orchestration, etc.).
+Phase 8 plans 01-02 complete.
+Plan 01: Orchestration layer initialized with workspace-init and workspace-archive orchestrators.
+Plan 02: All ratchet domain services (ratchet, fixer-session, ci-fixer, ci-monitor) have zero cross-domain imports. Bridge interfaces (RatchetSessionBridge, RatchetGitHubBridge) defined in bridges.ts and exported from barrel.
+Ready for Phase 8 plan 03 (orchestration layer wiring) and plan 04.
 
 ## Performance Metrics
 
@@ -120,7 +122,8 @@ Ready for Phase 8 plans 02-04 (ratchet orchestration, etc.).
 | 07 | 01 | 7min | 2 | 7 |
 | 07 | 02 | 3min | 2 | 4 |
 | 08 | 01 | 12min | 2 | 14 |
+| 08 | 02 | 2min | 2 | 7 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T19:06:50Z -- Completed 08-01-PLAN.md*
+*Last session: 2026-02-10T19:12:32Z -- Completed 08-02-PLAN.md*
