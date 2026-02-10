@@ -71,7 +71,7 @@ Each task was committed atomically:
 1. **Task 1: Move fixer-session and ci-fixer to ratchet domain** - `85f94564` (feat)
 2. **Task 2: Move ci-monitor to ratchet domain** - `81d44fe9` (feat)
 
-**Plan metadata:** (pending) (docs: complete plan)
+**Plan metadata:** `50657748` (docs: complete plan)
 
 ## Files Created/Modified
 - `src/backend/domains/ratchet/fixer-session.service.ts` - Fixer session acquisition and dispatch logic (moved from services/)
