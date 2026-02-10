@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 /**
  * Derive the Claude project path for a given working directory.
- * Mirrors SessionManager.getProjectPath but lives outside any domain.
+ * Canonical source of truth — SessionManager.getProjectPath delegates here.
  */
 export function getClaudeProjectPath(workingDir: string): string {
   const escapedPath = workingDir.replace(/\//g, '-');

@@ -6,12 +6,6 @@ const mockGetTerminal = vi.fn();
 const mockGetTerminalsForWorkspace = vi.fn();
 const mockGetActiveTerminal = vi.fn();
 
-vi.mock('../../resource_accessors/claude-session.accessor', () => ({
-  claudeSessionAccessor: {
-    findById: (...args: unknown[]) => mockFindById(...args),
-  },
-}));
-
 vi.mock('@/backend/domains/session', () => ({
   sessionDataService: {
     findClaudeSessionById: (...args: unknown[]) => mockFindById(...args),
