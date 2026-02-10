@@ -37,6 +37,8 @@ vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   mkdir: vi.fn(),
+  rename: vi.fn(),
+  unlink: vi.fn(),
 }));
 
 // Import after mocks are set up
@@ -68,6 +70,8 @@ describe('FileLockService', () => {
     vi.mocked(fs.readFile).mockRejectedValue({ code: 'ENOENT' });
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fs.rename).mockResolvedValue(undefined);
+    vi.mocked(fs.unlink).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -242,9 +246,16 @@ describe('FileLockService', () => {
         recursive: true,
       });
       expect(fs.writeFile).toHaveBeenCalled();
+      expect(fs.rename).toHaveBeenCalled();
 
       const writeCall = vi.mocked(fs.writeFile).mock.calls[0]!;
-      expect(writeCall[0]).toBe(path.join(mockWorktreePath, '.context', 'advisory-locks.json'));
+      expect(String(writeCall[0])).toContain(
+        path.join(mockWorktreePath, '.context', 'advisory-locks.json')
+      );
+      expect(String(writeCall[0])).toContain('.tmp');
+      expect(vi.mocked(fs.rename).mock.calls[0]?.[1]).toBe(
+        path.join(mockWorktreePath, '.context', 'advisory-locks.json')
+      );
 
       const persisted = JSON.parse(writeCall[1] as string);
       expect(persisted.version).toBe(1);
