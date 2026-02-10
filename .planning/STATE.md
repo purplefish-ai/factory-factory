@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 03-workspace-domain-consolidation (Plan 05 of 05 complete)
+**Current Phase:** 04-github-domain-consolidation (Plan 02 of 03 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -12,7 +12,7 @@
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
 | 3 | Workspace Domain Consolidation | Complete | All 5 plans done |
-| 4 | GitHub Domain Consolidation | Pending | — |
+| 4 | GitHub Domain Consolidation | In Progress | Plans 01-02 done |
 | 5 | Ratchet Domain Consolidation | Pending | — |
 | 6 | Terminal Domain Consolidation | Pending | — |
 | 7 | Run Script Domain Consolidation | Pending | — |
@@ -61,6 +61,10 @@
 | Instance-method wrappers in shim | 2026-02-10 | Shim exports wrapper functions that delegate to singleton instance methods (03-03) |
 | Selective barrel exports for workspace domain | 2026-02-10 | Named re-exports (no export *) following Phase 2 session domain pattern (03-05) |
 | Biome auto-sorts barrel exports | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (03-05) |
+| Knip ignore glob for domain services | 2026-02-10 | src/backend/domains/**/*.service.ts added to knip ignore (04-01) |
+| Biome auto-sorts domain file imports | 2026-02-10 | Imports reordered alphabetically by path in domain files (04-01) |
+| Intra-domain relative for review subsystem | 2026-02-10 | pr-review-monitor uses ./github-cli.service and ./pr-review-fixer.service (04-02) |
+| Cross-domain absolute for review services | 2026-02-10 | pr-review-fixer uses @/backend/services/ for fixer-session, logger, session (04-02) |
 
 ## Blockers
 
@@ -68,12 +72,11 @@ None.
 
 ## Context for Next Session
 
-Phase 3 COMPLETE: Workspace domain consolidation finished.
-All 9 workspace services moved to src/backend/domains/workspace/ with subdirectories: state/ (3), lifecycle/ (4), worktree/ (1), query/ (1).
-Barrel at src/backend/domains/workspace/index.ts exports 14 runtime values + 11 types.
-Smoke test verifies all exports defined. 4 DOM-04 globals eliminated.
+Phase 4 Plans 01-02 complete: GitHub domain file migration done.
+5 files in src/backend/domains/github/: github-cli, pr-review-fixer, pr-review-monitor, pr-snapshot, index.
+pr-review-monitor uses intra-domain relative imports for github-cli and pr-review-fixer.
 Re-export shims at all old services/ paths. 1737 tests passing.
-Ready for Phase 4 (GitHub Domain Consolidation).
+Ready for Plan 03 (barrel exports and smoke test).
 
 ## Performance Metrics
 
@@ -90,7 +93,8 @@ Ready for Phase 4 (GitHub Domain Consolidation).
 | 03 | 04 | 5min | 2 | 5 |
 | 03 | 03 | 13min | 1 | 5 |
 | 03 | 05 | 3min | 2 | 2 |
+| 04 | 02 | 11min | 2 | 5 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T15:27:00Z -- Completed 03-05-PLAN.md*
+*Last session: 2026-02-10T16:25:45Z -- Completed 04-02-PLAN.md*
