@@ -49,25 +49,15 @@ export function useWorkspaceInitStatus(
 
   const status = workspaceInitStatus?.status;
 
-  // Full-screen blocking overlay: only when we truly can't show anything useful
-  const isBlocked =
-    isInitStatusPending || status === 'NEW' || (status === 'PROVISIONING' && !hasWorktreePath);
-
   // Non-blocking: worktree exists but script still running
   const isScriptRunning = status === 'PROVISIONING' && hasWorktreePath;
 
   // Script failed after worktree was created — non-blocking banner with retry
   const isScriptFailed = status === 'FAILED' && hasWorktreePath;
 
-  // Worktree never created (early failure) — still blocking
-  const isInitFailed = status === 'FAILED' && !hasWorktreePath;
-
-  const isInitializing = isBlocked || isInitFailed;
-
   return {
     workspaceInitStatus,
     isInitStatusPending,
-    isInitializing,
     isScriptRunning,
     isScriptFailed,
   };

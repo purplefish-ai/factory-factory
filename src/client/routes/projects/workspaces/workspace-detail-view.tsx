@@ -9,18 +9,13 @@ import type { useSessionManagement, useWorkspaceData } from './use-workspace-det
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
-import {
-  ArchivingOverlay,
-  ScriptFailedBanner,
-  ScriptRunningBanner,
-} from './workspace-overlays';
+import { ArchivingOverlay, ScriptFailedBanner, ScriptRunningBanner } from './workspace-overlays';
 
 export interface WorkspaceDetailViewProps {
   workspaceLoading: boolean;
   workspace: ReturnType<typeof useWorkspaceData>['workspace'];
   workspaceId: string;
   handleBackToWorkspaces: () => void;
-  isInitializing: boolean;
   isScriptRunning: boolean;
   isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
@@ -123,7 +118,6 @@ export function WorkspaceDetailView({
   workspace,
   workspaceId,
   handleBackToWorkspaces,
-  isInitializing,
   isScriptRunning,
   isScriptFailed,
   workspaceInitStatus,
