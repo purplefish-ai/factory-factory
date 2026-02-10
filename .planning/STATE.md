@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 05-ratchet-domain-consolidation (Plan 01 of 03 complete)
+**Current Phase:** 05-ratchet-domain-consolidation (Plan 02 of 03 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -13,7 +13,7 @@
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
 | 3 | Workspace Domain Consolidation | Complete | All 5 plans done |
 | 4 | GitHub Domain Consolidation | Pending | — |
-| 5 | Ratchet Domain Consolidation | In Progress | Plan 01 done (5min) |
+| 5 | Ratchet Domain Consolidation | In Progress | Plan 02 done (7min) |
 | 6 | Terminal Domain Consolidation | Pending | — |
 | 7 | Run Script Domain Consolidation | Pending | — |
 | 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
@@ -62,6 +62,7 @@
 | Selective barrel exports for workspace domain | 2026-02-10 | Named re-exports (no export *) following Phase 2 session domain pattern (03-05) |
 | Biome auto-sorts barrel exports | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (03-05) |
 | Knip ignore for domain service files | 2026-02-10 | ci-monitor has no external consumers; added domains/**/*.service.ts to knip ignore (05-01) |
+| Cross-domain import via services/ shim | 2026-02-10 | ratchet.service imports sessionDomainService through services/ shim, not direct domain path (05-02) |
 
 ## Blockers
 
@@ -69,11 +70,12 @@ None.
 
 ## Context for Next Session
 
-Phase 5 Plan 01 COMPLETE: Leaf ratchet services moved.
-Three internal ratchet services (fixer-session, ci-fixer, ci-monitor) moved to src/backend/domains/ratchet/.
-Intra-domain chain: ci-monitor -> ci-fixer -> fixer-session via relative imports.
-Re-export shims at all old services/ paths. 12 tests pass at new locations.
-Ready for Plan 02 (move ratchet.service.ts orchestrator).
+Phase 5 Plan 02 COMPLETE: Core ratchet services moved.
+All 5 ratchet domain source files now in place: fixer-session, ci-fixer, ci-monitor, ratchet, reconciliation.
+ratchet.service.ts (1010 LOC) uses intra-domain relative import for fixer-session.
+Cross-domain sessionDomainService import routed through services/ shim (dep-cruiser compliance).
+41 tests pass across 4 test files. Re-export shims at all old paths.
+Ready for Plan 03 (barrel exports and smoke test).
 
 ## Performance Metrics
 
@@ -91,7 +93,8 @@ Ready for Plan 02 (move ratchet.service.ts orchestrator).
 | 03 | 03 | 13min | 1 | 5 |
 | 03 | 05 | 3min | 2 | 2 |
 | 05 | 01 | 5min | 2 | 9 |
+| 05 | 02 | 7min | 2 | 6 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T16:56:49Z -- Completed 05-01-PLAN.md*
+*Last session: 2026-02-10T17:06:14Z -- Completed 05-02-PLAN.md*
