@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 03-workspace-domain-consolidation (Plan 05 of 05 complete)
+**Current Phase:** 05-ratchet-domain-consolidation (Plan 01 of 03 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -13,7 +13,7 @@
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
 | 3 | Workspace Domain Consolidation | Complete | All 5 plans done |
 | 4 | GitHub Domain Consolidation | Pending | — |
-| 5 | Ratchet Domain Consolidation | Pending | — |
+| 5 | Ratchet Domain Consolidation | In Progress | Plan 01 done (5min) |
 | 6 | Terminal Domain Consolidation | Pending | — |
 | 7 | Run Script Domain Consolidation | Pending | — |
 | 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
@@ -61,6 +61,7 @@
 | Instance-method wrappers in shim | 2026-02-10 | Shim exports wrapper functions that delegate to singleton instance methods (03-03) |
 | Selective barrel exports for workspace domain | 2026-02-10 | Named re-exports (no export *) following Phase 2 session domain pattern (03-05) |
 | Biome auto-sorts barrel exports | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (03-05) |
+| Knip ignore for domain service files | 2026-02-10 | ci-monitor has no external consumers; added domains/**/*.service.ts to knip ignore (05-01) |
 
 ## Blockers
 
@@ -68,12 +69,11 @@ None.
 
 ## Context for Next Session
 
-Phase 3 COMPLETE: Workspace domain consolidation finished.
-All 9 workspace services moved to src/backend/domains/workspace/ with subdirectories: state/ (3), lifecycle/ (4), worktree/ (1), query/ (1).
-Barrel at src/backend/domains/workspace/index.ts exports 14 runtime values + 11 types.
-Smoke test verifies all exports defined. 4 DOM-04 globals eliminated.
-Re-export shims at all old services/ paths. 1737 tests passing.
-Ready for Phase 4 (GitHub Domain Consolidation).
+Phase 5 Plan 01 COMPLETE: Leaf ratchet services moved.
+Three internal ratchet services (fixer-session, ci-fixer, ci-monitor) moved to src/backend/domains/ratchet/.
+Intra-domain chain: ci-monitor -> ci-fixer -> fixer-session via relative imports.
+Re-export shims at all old services/ paths. 12 tests pass at new locations.
+Ready for Plan 02 (move ratchet.service.ts orchestrator).
 
 ## Performance Metrics
 
@@ -90,7 +90,8 @@ Ready for Phase 4 (GitHub Domain Consolidation).
 | 03 | 04 | 5min | 2 | 5 |
 | 03 | 03 | 13min | 1 | 5 |
 | 03 | 05 | 3min | 2 | 2 |
+| 05 | 01 | 5min | 2 | 9 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T15:27:00Z -- Completed 03-05-PLAN.md*
+*Last session: 2026-02-10T16:56:49Z -- Completed 05-01-PLAN.md*
