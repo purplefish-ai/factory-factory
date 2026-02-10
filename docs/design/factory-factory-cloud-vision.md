@@ -734,6 +734,132 @@ class CloudWorkspaceService {
 }
 ```
 
+### Responsibility Split: Library vs Server
+
+**FF Core Library (Open Source) - Workspace Execution Primitives**
+
+The library handles **single-workspace execution** - everything needed to run one workspace:
+
+| Responsibility | What it does |
+|----------------|-------------|
+| **Claude CLI Management** | Spawn, communicate with, monitor Claude CLI subprocesses |
+| **Workspace Lifecycle** | Create workspace from issue, load state, save state |
+| **Session Management** | Start/stop sessions, send messages, handle responses |
+| **Message State** | Track message history, handle streaming, store conversation |
+| **File Operations** | Read/write files in workspace directory |
+| **Git Integration** | Clone repos, commit changes, push to GitHub |
+| **Ratchet Logic** | Poll GitHub for CI/review status, trigger fix sessions |
+| **Local Storage** | SQLite for workspace metadata, session history |
+
+**What FF Core does NOT do:**
+- ❌ Multi-user management (single workspace context)
+- ❌ Authentication/authorization
+- ❌ Billing or quotas
+- ❌ VM orchestration
+- ❌ Cross-workspace queries (e.g., "list all workspaces for user X")
+- ❌ Team features (manager view, sharing)
+
+**FF Desktop Server (Open Source) - Single-User Desktop App**
+
+Uses FF Core library + adds desktop-specific features:
+
+| Responsibility | What it does |
+|----------------|-------------|
+| **Local Server** | Express server on localhost (single user) |
+| **UI Backend** | tRPC API for Electron frontend |
+| **Workspace Management** | List workspaces, switch between them (uses FF Core) |
+| **Local Database** | Single SQLite database for all user's workspaces |
+| **WebSocket** | Stream Claude messages to frontend (uses FF Core events) |
+| **Electron Integration** | Window management, system tray, auto-launch |
+
+**What Desktop does NOT do:**
+- ❌ Multi-user support
+- ❌ VM orchestration (runs directly on user's machine)
+- ❌ Cloud storage (everything local)
+
+**FF Cloud Server (Closed Source) - Multi-Tenant Cloud Orchestration**
+
+Uses FF Core library (in VMs) + adds cloud-specific features:
+
+| Responsibility | What it does |
+|----------------|-------------|
+| **User Management** | Authentication, authorization, user accounts |
+| **Billing** | Subscriptions, quotas, usage tracking, payments |
+| **VM Orchestration** | Provision/terminate VMs, warm pools, lifecycle management |
+| **Multi-Tenant DB** | PostgreSQL with userId foreign keys everywhere |
+| **WebSocket Relay** | Route messages between desktop/mobile clients and VMs |
+| **Team Features** | Manager view, workspace sharing, team stats |
+| **Workspace Routing** | Map workspace requests to correct VM |
+| **API Gateway** | REST/WebSocket endpoints for clients |
+
+**What Cloud does NOT do directly:**
+- ❌ Execute workspaces directly (delegates to FF Core in VMs)
+- ❌ Manage Claude CLI (FF Core handles this in VMs)
+- ❌ Store workspace state (VMs store in SQLite via FF Core)
+
+### API Comparison: Library vs Servers
+
+**FF Core Library (Open Source):**
+
+```typescript
+// Single workspace context
+const workspace = new WorkspaceManager({ dataDir: '/workspace' });
+await workspace.createFromIssue('https://github.com/org/repo/issues/123');
+
+const session = new Session(workspace.id);
+await session.start('Fix the bug in auth.ts');
+session.on('message', (msg) => console.log(msg));
+
+const ratchet = new RatchetService();
+await ratchet.start(workspace.id, 'https://github.com/org/repo/pull/456');
+```
+
+**FF Desktop Server (Open Source):**
+
+```typescript
+// Multi-workspace, single-user
+app.get('/workspaces', async (req, res) => {
+  const workspaces = await workspaceService.listAll();  // Uses FF Core
+  res.json(workspaces);
+});
+
+app.post('/workspaces', async (req, res) => {
+  const workspace = await workspaceService.create(req.body.issueUrl);  // Uses FF Core
+  res.json(workspace);
+});
+
+// WebSocket
+wss.on('connection', (ws) => {
+  session.on('message', (msg) => ws.send(msg));  // FF Core event → WebSocket
+});
+```
+
+**FF Cloud Server (Closed Source):**
+
+```typescript
+// Multi-workspace, multi-user, VM orchestration
+app.post('/workspaces', authenticate, async (req, res) => {
+  const userId = req.user.id;
+
+  // Check quota (closed source)
+  await billingService.checkQuota(userId);
+
+  // Provision VM (closed source)
+  const vm = await vmOrchestrator.provisionVM(userId);
+
+  // Create workspace in VM using FF Core (open source)
+  const workspace = await vmService.executeInVM(vm.id, async () => {
+    const manager = new WorkspaceManager({ dataDir: '/workspace' });
+    return await manager.createFromIssue(req.body.issueUrl);
+  });
+
+  // Store in multi-tenant DB (closed source)
+  await db.workspace.create({ userId, workspaceId: workspace.id, vmId: vm.id });
+
+  res.json(workspace);
+});
+```
+
 ### What's Open Source (FF Core)
 
 **Desktop FF and FF Core in VMs both use this:**
@@ -802,55 +928,177 @@ export class CloudWebSocketRelay {
 }
 ```
 
-### Refactoring FF Desktop for Library Extraction
+### What Happens to the Current FF Repo?
 
-**Current FF Desktop architecture:**
+**Short answer: This repo stays the same, just gets reorganized into a monorepo with `packages/core` and `packages/desktop`, and publishes FF Core to npm.**
+
+**Current structure (this repo):**
 ```
-src/
-  backend/
-    domains/
-      session/          ← Core session logic (open source)
-        claude/         ← Claude CLI management (open source)
-      workspace/        ← Workspace management (open source)
-      ratchet/          ← Auto-fix logic (open source)
-    server.ts           ← Desktop server (open source)
-  client/               ← Desktop UI (open source)
-  electron/             ← Electron wrapper (open source)
+factory-factory/  (public repo)
+  src/
+    backend/
+      domains/
+        session/          ← Session logic
+          claude/         ← Claude CLI management
+        workspace/        ← Workspace management
+        ratchet/          ← Auto-fix logic
+      server.ts           ← Desktop server
+    client/               ← Desktop UI
+  electron/               ← Electron wrapper
+  package.json
 ```
 
-**Refactored for library extraction:**
+**After refactoring (same repo, reorganized):**
 ```
-packages/
-  core/                          ← @factory-factory/core (open source)
-    src/
-      workspace/                 ← Workspace primitives
-      session/                   ← Session management
-      claude/                    ← Claude CLI protocol
-      ratchet/                   ← Auto-fix logic
-      storage/
-        sqlite-adapter.ts        ← SQLite storage (desktop, VM)
-    package.json                 ← Published to npm
+factory-factory/  (public repo - stays public, stays open source)
+  packages/
+    core/                          ← NEW: @factory-factory/core
+      src/
+        workspace/                 ← Extracted from src/backend/domains/workspace
+        session/                   ← Extracted from src/backend/domains/session
+        claude/                    ← Extracted from src/backend/domains/session/claude
+        ratchet/                   ← Extracted from src/backend/domains/ratchet
+        storage/
+          sqlite-adapter.ts        ← SQLite storage interface
+      package.json                 ← NEW: Published to npm
+      tsconfig.json
 
-  desktop/                       ← @factory-factory/desktop (open source)
-    src/
-      backend/
-        server.ts                ← Desktop server (uses @factory-factory/core)
-      client/                    ← Desktop UI
-      electron/                  ← Electron wrapper
-    package.json
+    desktop/                       ← RENAMED: Everything from current src/
+      src/
+        backend/
+          server.ts                ← Desktop server (now uses @factory-factory/core)
+          domains/
+            # Remaining desktop-specific logic
+        client/                    ← Desktop UI (unchanged)
+      electron/                    ← Electron wrapper (unchanged)
+      package.json                 ← Updated to depend on @factory-factory/core
+      tsconfig.json
 
-  cloud/                         ← @factory-factory/cloud (closed source, private repo)
-    src/
-      services/
-        user.service.ts          ← Multi-tenant user management
-        vm.service.ts            ← VM orchestration
-        team.service.ts          ← Team features
-        billing.service.ts       ← Billing & quotas
-      storage/
-        postgres-adapter.ts      ← PostgreSQL storage (multi-tenant)
-      server.ts                  ← Cloud server (uses @factory-factory/core)
-    package.json
+  # Root level (unchanged)
+  .github/
+  docs/
+  prisma/
+  README.md
+  LICENSE
+  package.json                     ← Workspace root (pnpm workspace config)
+  pnpm-workspace.yaml              ← NEW: Defines packages/*/
 ```
+
+**Key changes to this repo:**
+
+1. **Convert to pnpm workspace** (or npm workspaces):
+   ```yaml
+   # pnpm-workspace.yaml
+   packages:
+     - 'packages/*'
+   ```
+
+2. **Extract `packages/core/`** from existing code:
+   - Move `src/backend/domains/session/claude/` → `packages/core/src/claude/`
+   - Move `src/backend/domains/session/` → `packages/core/src/session/`
+   - Move `src/backend/domains/workspace/` → `packages/core/src/workspace/`
+   - Move `src/backend/domains/ratchet/` → `packages/core/src/ratchet/`
+
+3. **Move everything else to `packages/desktop/`**:
+   - `src/` → `packages/desktop/src/`
+   - `electron/` → `packages/desktop/electron/`
+   - Update imports to use `@factory-factory/core`
+
+4. **Publish FF Core to npm**:
+   ```bash
+   cd packages/core
+   pnpm publish  # Publishes to npmjs.com
+   ```
+
+5. **Desktop depends on FF Core**:
+   ```json
+   // packages/desktop/package.json
+   {
+     "dependencies": {
+       "@factory-factory/core": "workspace:*"  // During dev (local)
+       // OR
+       "@factory-factory/core": "^1.0.0"      // After publishing
+     }
+   }
+   ```
+
+**Does the desktop app still work the same way?**
+
+✅ **Yes, exactly the same from the user's perspective:**
+- Same Electron app
+- Same UI
+- Same features
+- Same commands (`pnpm dev`, `pnpm build`, `pnpm dev:electron`)
+- Same release process
+
+**What changes for developers?**
+
+- **Import paths change**: Instead of `import { ClaudeClient } from '@/backend/domains/session/claude'`, now `import { ClaudeClient } from '@factory-factory/core'`
+- **Two packages to work on**: `packages/core/` and `packages/desktop/`
+- **Build order**: Build core first, then desktop (handled automatically by pnpm workspace)
+
+**Benefits of keeping it in the same repo:**
+
+✅ **Single source of truth**: Core and desktop stay in sync
+✅ **Easier development**: Change core and desktop together in one PR
+✅ **Shared tooling**: ESLint, Prettier, TypeScript config, CI/CD
+✅ **Atomic commits**: Core + desktop changes in one commit
+✅ **Monorepo superpowers**: `pnpm --filter` to run commands per package
+
+**Workflow after refactoring:**
+
+```bash
+# Work on FF Core
+cd packages/core
+pnpm build
+
+# Work on FF Desktop (automatically uses local core)
+cd packages/desktop
+pnpm dev
+
+# Build both
+pnpm --filter @factory-factory/core build
+pnpm --filter @factory-factory/desktop build
+
+# Or build all from root
+pnpm -r build  # -r = recursive (all packages)
+
+# Publish FF Core to npm
+cd packages/core
+pnpm publish
+
+# Desktop can use published version or local workspace version
+```
+
+**FF Cloud repo (separate, closed source):**
+
+```
+factory-factory-cloud/  (private repo)
+  src/
+    services/
+      user.service.ts
+      vm.service.ts
+      workspace.service.ts      ← Uses @factory-factory/core from npm
+    server.ts
+  package.json
+    dependencies:
+      "@factory-factory/core": "^1.0.0"  ← Installed from npm
+```
+
+### Summary: Same Repo, Just Reorganized
+
+| What | Before | After |
+|------|--------|-------|
+| **Repo visibility** | Public | Public (same) |
+| **License** | Open source | Open source (same) |
+| **Structure** | Single package (`src/`) | Monorepo (`packages/core`, `packages/desktop`) |
+| **Desktop app** | Works as-is | Works exactly the same (uses core as dependency) |
+| **FF Core** | N/A (embedded in desktop) | Published to npm, usable by anyone |
+| **Contributors** | Contribute to FF Desktop | Contribute to FF Core and/or FF Desktop |
+| **Commands** | `pnpm dev`, `pnpm build` | Same commands work (monorepo handles it) |
+| **Cloud repo** | N/A | Separate private repo, installs core from npm |
+
+**No need for users to change anything** - they still install FF Desktop the same way, it just internally uses FF Core as a library now.
 
 ### Desktop vs Cloud: Same Core, Different Wrappers
 
