@@ -5,7 +5,7 @@ const mockFindUnique = vi.fn();
 const mockUpdateMany = vi.fn();
 const mockFindUniqueOrThrow = vi.fn();
 
-vi.mock('../db', () => ({
+vi.mock('@/backend/db', () => ({
   prisma: {
     workspace: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
@@ -15,7 +15,7 @@ vi.mock('../db', () => ({
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -36,71 +36,71 @@ describe('RunScriptStateMachineService', () => {
   });
 
   describe('isValidTransition', () => {
-    it('should allow IDLE → STARTING', () => {
+    it('should allow IDLE -> STARTING', () => {
       expect(runScriptStateMachine.isValidTransition('IDLE', 'STARTING')).toBe(true);
     });
 
-    it('should allow STARTING → RUNNING', () => {
+    it('should allow STARTING -> RUNNING', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'RUNNING')).toBe(true);
     });
 
-    it('should allow STARTING → FAILED', () => {
+    it('should allow STARTING -> FAILED', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'FAILED')).toBe(true);
     });
 
-    it('should allow STARTING → COMPLETED (fast process exit with code 0)', () => {
+    it('should allow STARTING -> COMPLETED (fast process exit with code 0)', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'COMPLETED')).toBe(true);
     });
 
-    it('should allow STARTING → STOPPING', () => {
+    it('should allow STARTING -> STOPPING', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'STOPPING')).toBe(true);
     });
 
-    it('should allow RUNNING → STOPPING', () => {
+    it('should allow RUNNING -> STOPPING', () => {
       expect(runScriptStateMachine.isValidTransition('RUNNING', 'STOPPING')).toBe(true);
     });
 
-    it('should allow RUNNING → COMPLETED', () => {
+    it('should allow RUNNING -> COMPLETED', () => {
       expect(runScriptStateMachine.isValidTransition('RUNNING', 'COMPLETED')).toBe(true);
     });
 
-    it('should allow RUNNING → FAILED', () => {
+    it('should allow RUNNING -> FAILED', () => {
       expect(runScriptStateMachine.isValidTransition('RUNNING', 'FAILED')).toBe(true);
     });
 
-    it('should allow STOPPING → IDLE', () => {
+    it('should allow STOPPING -> IDLE', () => {
       expect(runScriptStateMachine.isValidTransition('STOPPING', 'IDLE')).toBe(true);
     });
 
-    it('should allow COMPLETED → IDLE', () => {
+    it('should allow COMPLETED -> IDLE', () => {
       expect(runScriptStateMachine.isValidTransition('COMPLETED', 'IDLE')).toBe(true);
     });
 
-    it('should allow COMPLETED → STARTING (restart)', () => {
+    it('should allow COMPLETED -> STARTING (restart)', () => {
       expect(runScriptStateMachine.isValidTransition('COMPLETED', 'STARTING')).toBe(true);
     });
 
-    it('should allow FAILED → IDLE', () => {
+    it('should allow FAILED -> IDLE', () => {
       expect(runScriptStateMachine.isValidTransition('FAILED', 'IDLE')).toBe(true);
     });
 
-    it('should allow FAILED → STARTING (restart)', () => {
+    it('should allow FAILED -> STARTING (restart)', () => {
       expect(runScriptStateMachine.isValidTransition('FAILED', 'STARTING')).toBe(true);
     });
 
-    it('should not allow IDLE → RUNNING (skipping STARTING)', () => {
+    it('should not allow IDLE -> RUNNING (skipping STARTING)', () => {
       expect(runScriptStateMachine.isValidTransition('IDLE', 'RUNNING')).toBe(false);
     });
 
-    it('should allow STARTING → STOPPING (for stop during startup)', () => {
+    it('should allow STARTING -> STOPPING (for stop during startup)', () => {
       expect(runScriptStateMachine.isValidTransition('STARTING', 'STOPPING')).toBe(true);
     });
 
-    it('should not allow STOPPING → RUNNING', () => {
+    it('should not allow STOPPING -> RUNNING', () => {
       expect(runScriptStateMachine.isValidTransition('STOPPING', 'RUNNING')).toBe(false);
     });
 
-    it('should not allow COMPLETED → RUNNING', () => {
+    it('should not allow COMPLETED -> RUNNING', () => {
       expect(runScriptStateMachine.isValidTransition('COMPLETED', 'RUNNING')).toBe(false);
     });
   });
@@ -267,7 +267,7 @@ describe('RunScriptStateMachineService', () => {
       );
 
       await expect(runScriptStateMachine.transition('ws-1', 'RUNNING')).rejects.toThrow(
-        /Invalid run script state transition: IDLE → RUNNING/
+        /Invalid run script state transition: IDLE \u2192 RUNNING/
       );
     });
 
@@ -586,7 +586,7 @@ describe('RunScriptStateMachineService', () => {
       const error = new RunScriptStateMachineError('ws-1', 'IDLE', 'RUNNING');
 
       expect(error.message).toBe(
-        'Invalid run script state transition: IDLE → RUNNING (workspace: ws-1)'
+        'Invalid run script state transition: IDLE \u2192 RUNNING (workspace: ws-1)'
       );
     });
 

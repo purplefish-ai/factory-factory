@@ -10,7 +10,7 @@ import { createLogger } from './services/logger.service';
 import { findAvailablePort } from './services/port.service';
 import { ratchetService } from './services/ratchet.service';
 import { rateLimiter } from './services/rate-limiter.service';
-import { RunScriptService } from './services/run-script.service';
+import { type RunScriptService, runScriptService } from './services/run-script.service';
 import { runScriptStateMachine } from './services/run-script-state-machine.service';
 import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
@@ -32,7 +32,7 @@ export type AppServices = {
   kanbanStateService: typeof kanbanStateService;
   ratchetService: typeof ratchetService;
   rateLimiter: typeof rateLimiter;
-  runScriptService: typeof RunScriptService;
+  runScriptService: RunScriptService;
   runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
   serverInstanceService: typeof serverInstanceService;
@@ -64,7 +64,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     kanbanStateService,
     ratchetService,
     rateLimiter,
-    runScriptService: RunScriptService,
+    runScriptService: runScriptService,
     runScriptStateMachine,
     schedulerService,
     serverInstanceService,

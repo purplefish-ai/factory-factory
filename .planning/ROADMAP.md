@@ -200,6 +200,12 @@ Plans:
 
 **Requirements:** RS-01, RS-02, RS-03
 
+**Plans:** 2 plans
+
+Plans:
+- [x] 07-01-PLAN.md — Move state machine + run-script service with RS-02 instance conversion
+- [x] 07-02-PLAN.md — Move startup-script service, populate barrel, and create smoke test
+
 **Delivers:**
 - Run script execution, state machine, and startup scripts in one module
 - Static Maps replaced with instance-based state
@@ -298,4 +304,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phases 4, 5, and 6 complete; ready for Phase 7*
+*Last updated: 2026-02-10 — Phase 7 complete (2 plans, RS-01 + RS-02 + RS-03 verified)*

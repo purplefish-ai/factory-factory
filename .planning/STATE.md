@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 07-run-script-domain-consolidation (ready to start)
+**Current Phase:** 07-run-script-domain-consolidation (Plan 02 of 02 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -15,7 +15,7 @@
 | 4 | GitHub Domain Consolidation | Complete | All 3 plans done |
 | 5 | Ratchet Domain Consolidation | Complete | All 3 plans done |
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
-| 7 | Run Script Domain Consolidation | Pending | — |
+| 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
 | 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
@@ -72,6 +72,11 @@
 | Logger import absolute for cross-domain | 2026-02-10 | Terminal service uses @/backend/services/logger.service (06-01) |
 | TerminalService class exported for tests | 2026-02-10 | Class export enables fresh instances in unit tests (06-01) |
 | Direct module path in terminal shim | 2026-02-10 | Shim imports from /terminal.service not barrel to avoid circular deps (06-01) |
+| biome-ignore for pre-existing complexity | 2026-02-10 | startRunScript/stopRunScript exceed max complexity; inherent to process lifecycle (07-01) |
+| registerShutdownHandlers() pattern | 2026-02-10 | Process signal handlers encapsulated in explicit method called after singleton creation (07-01) |
+| Instance type in app-context for RunScriptService | 2026-02-10 | Changed from typeof RunScriptService to RunScriptService (instance type) (07-01) |
+| Cross-domain workspace-state-machine via shim | 2026-02-10 | startup-script uses @/backend/services/ shim path to avoid cross-domain violation (07-02) |
+| Selective named exports in run-script barrel | 2026-02-10 | Barrel uses explicit named re-exports (no export *) per established convention (07-02) |
 
 ## Blockers
 
@@ -79,14 +84,10 @@ None.
 
 ## Context for Next Session
 
-Phase 4 complete: GitHub domain consolidated.
-Phase 5 complete: Ratchet domain consolidated with barrel + smoke test.
-Phase 6 complete: Terminal domain fully consolidated.
-3 files in src/backend/domains/terminal/: terminal.service, index, plus 2 test files.
-Barrel exports 1 runtime singleton + 1 class + 5 types. Smoke test verifies no circular dep breakage.
-Re-export shim at old services/ path. 1775 tests passing (34 new terminal domain tests).
-TERM-01, TERM-02 (verified), TERM-03 all satisfied.
-Ready for Phase 7 (Run Script Domain Consolidation).
+Phase 7 complete: Run-script domain consolidation done (RS-01).
+3 services in src/backend/domains/run-script/: run-script-state-machine.service, run-script.service, startup-script.service.
+Domain barrel exports full public API (5 runtime + 2 types). Smoke test passes.
+Re-export shims at old services/ paths for all 3 services. Ready for Phase 8 (Orchestration).
 
 ## Performance Metrics
 
@@ -110,7 +111,9 @@ Ready for Phase 7 (Run Script Domain Consolidation).
 | 04 | 02 | 11min | 2 | 5 |
 | 04 | 03 | 2min | 2 | 2 |
 | 06 | 01 | 4min | 2 | 5 |
+| 07 | 01 | 7min | 2 | 7 |
+| 07 | 02 | 3min | 2 | 4 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T17:10:49Z -- Merge sync completed, next up 07-01-PLAN.md*
+*Last session: 2026-02-10T17:58:30Z -- Completed 07-02-PLAN.md*
