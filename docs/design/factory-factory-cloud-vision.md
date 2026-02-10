@@ -32,3 +32,62 @@ The agent implements the design according to the original design doc, and then r
 The user gets home. The weather is beautiful, so they are invigorated and ready to go. They open up their laptop and check on the workspace. There's a PR, and greptile gives it 5/5. The design doc clearly includes the new edge case the user thought of, and the implementation matches the design exactly. 
 
 Perfect - now to do some testing!
+
+## Technical Architecture
+
+```mermaid
+graph TB
+    subgraph Desktop["Desktop Environment"]
+        FF_Desktop["Factory Factory<br/>(Desktop)"]
+    end
+
+    subgraph Cloud["Cloud Environment"]
+        FF_Cloud["Factory Factory Cloud"]
+        Claude_CLI["Claude CLI"]
+        FF_CLI["Factory Factory CLI"]
+        Ratchet["Ratchet Listener<br/>(GitHub Polling)"]
+    end
+
+    subgraph Mobile["Mobile Environment"]
+        FF_Mobile["Factory Factory<br/>Mobile App"]
+    end
+
+    subgraph External["External Services"]
+        GitHub["GitHub"]
+    end
+
+    FF_Desktop -->|"Send to Cloud"| FF_Cloud
+    FF_Desktop <-->|"Stream chat messages<br/>Send commands (stop, etc.)"| FF_Cloud
+
+    FF_Mobile <-->|"Get workspace state<br/>Stream messages"| FF_Cloud
+
+    FF_Cloud -->|"Execute work via"| FF_CLI
+    FF_CLI -->|"Manages"| Claude_CLI
+
+    FF_Cloud -->|"Manages"| Ratchet
+    Ratchet -->|"Poll for updates"| GitHub
+    Claude_CLI -->|"Push code changes"| GitHub
+
+    style FF_Desktop fill:#e1f5ff
+    style FF_Cloud fill:#fff4e1
+    style FF_Mobile fill:#e1f5ff
+    style Claude_CLI fill:#f0f0f0
+    style FF_CLI fill:#f0f0f0
+    style Ratchet fill:#f0f0f0
+```
+
+### Component Descriptions
+
+- **Factory Factory (Desktop)**: The main desktop application. Can send workspaces to cloud and receive streamed chat updates. Sends user commands like "stop" to cloud instances.
+
+- **Factory Factory Cloud**: Cloud service that manages workspace execution. Handles multiple workspaces, streams chat to desktop/mobile clients, and orchestrates Claude CLI execution via Factory Factory CLI.
+
+- **Factory Factory CLI**: Command-line interface used by FF Cloud to execute workspace operations and manage Claude CLI instances.
+
+- **Claude CLI**: The actual Claude agent execution environment, managed by FF CLI, that performs the development work.
+
+- **Ratchet Listener**: GitHub monitoring component that polls for PR updates, CI status, and review comments. Runs in the cloud alongside the workspace.
+
+- **Factory Factory Mobile**: Mobile application that acts as a pure frontend, fetching workspace state and streaming messages through FF Cloud.
+
+- **GitHub**: External service where code changes are pushed and PR status is monitored.
