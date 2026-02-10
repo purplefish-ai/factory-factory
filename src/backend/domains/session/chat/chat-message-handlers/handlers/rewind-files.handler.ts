@@ -1,6 +1,6 @@
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
 import type { RewindFilesMessage } from '@/shared/websocket';
+import { sessionService } from '../../../lifecycle/session.service';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
 

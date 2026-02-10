@@ -3,7 +3,6 @@ import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveSelectedModel } from '@/shared/claude';
-import { worktreeLifecycleService } from './worktree-lifecycle.service';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
@@ -26,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   startProvisioning: vi.fn(),
   markReady: vi.fn(),
   markFailed: vi.fn(),
+  getInitMode: vi.fn(),
+  clearInitMode: vi.fn(),
 }));
 
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
@@ -50,7 +51,7 @@ vi.mock('@/backend/services/git-ops.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/github-cli.service', () => ({
+vi.mock('@/backend/domains/github', () => ({
   githubCLIService: {
     getAuthenticatedUsername: mocks.getAuthenticatedUsername,
     getIssue: mocks.getIssue,
@@ -63,34 +64,28 @@ vi.mock('@/backend/services/factory-config.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/startup-script.service', () => ({
+vi.mock('@/backend/domains/run-script', () => ({
   startupScriptService: {
     runStartupScript: mocks.runStartupScript,
     hasStartupScript: mocks.hasStartupScript,
   },
 }));
 
-vi.mock('@/backend/services/session.service', () => ({
+vi.mock('@/backend/domains/session', () => ({
   sessionService: {
     startClaudeSession: mocks.startClaudeSession,
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
   },
-}));
-
-vi.mock('@/backend/services/session-domain.service', () => ({
   sessionDomainService: {
     enqueue: mocks.enqueue,
     emitDelta: mocks.emitDelta,
   },
-}));
-
-vi.mock('@/backend/services/chat-message-handlers.service', () => ({
   chatMessageHandlerService: {
     tryDispatchNextMessage: mocks.tryDispatchNextMessage,
   },
 }));
 
-vi.mock('@/backend/services/workspace-state-machine.service', () => ({
+vi.mock('@/backend/domains/workspace/lifecycle/state-machine.service', () => ({
   workspaceStateMachine: {
     startProvisioning: mocks.startProvisioning,
     markReady: mocks.markReady,
@@ -98,7 +93,17 @@ vi.mock('@/backend/services/workspace-state-machine.service', () => ({
   },
 }));
 
-describe('worktreeLifecycleService initialization', () => {
+vi.mock('@/backend/domains/workspace/worktree/worktree-lifecycle.service', () => ({
+  worktreeLifecycleService: {
+    getInitMode: mocks.getInitMode,
+    clearInitMode: mocks.clearInitMode,
+  },
+}));
+
+// Import orchestrator after mocks
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+
+describe('initializeWorkspaceWorktree orchestrator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -148,6 +153,8 @@ describe('worktreeLifecycleService initialization', () => {
     mocks.stopWorkspaceSessions.mockResolvedValue(undefined);
     mocks.enqueue.mockReturnValue({ position: 0 });
     mocks.tryDispatchNextMessage.mockResolvedValue(undefined);
+    mocks.getInitMode.mockResolvedValue(undefined);
+    mocks.clearInitMode.mockResolvedValue(undefined);
   });
 
   it('starts the default Claude session after startup script completes', async () => {
@@ -161,7 +168,7 @@ describe('worktreeLifecycleService initialization', () => {
     });
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
-    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+    await initializeWorkspaceWorktree('workspace-1', {
       branchName: 'main',
       useExistingBranch: false,
     });
@@ -214,7 +221,7 @@ describe('worktreeLifecycleService initialization', () => {
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
     mocks.enqueue.mockReturnValue({ position: 0 });
 
-    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+    await initializeWorkspaceWorktree('workspace-1', {
       branchName: 'main',
       useExistingBranch: false,
     });
@@ -244,7 +251,7 @@ describe('worktreeLifecycleService initialization', () => {
     });
     mocks.findByWorkspaceId.mockResolvedValue([]);
 
-    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+    await initializeWorkspaceWorktree('workspace-1', {
       branchName: 'main',
       useExistingBranch: false,
     });
@@ -256,7 +263,7 @@ describe('worktreeLifecycleService initialization', () => {
     mocks.runStartupScript.mockRejectedValue(new Error('boom'));
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
-    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+    await initializeWorkspaceWorktree('workspace-1', {
       branchName: 'main',
       useExistingBranch: false,
     });
@@ -277,7 +284,7 @@ describe('worktreeLifecycleService initialization', () => {
     });
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
-    await worktreeLifecycleService.initializeWorkspaceWorktree('workspace-1', {
+    await initializeWorkspaceWorktree('workspace-1', {
       branchName: 'main',
       useExistingBranch: false,
     });

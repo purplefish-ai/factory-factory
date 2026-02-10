@@ -2,6 +2,16 @@
 // Public API for the ratchet domain module.
 // Consumers should import from '@/backend/domains/ratchet' only.
 
+// Bridge interfaces for orchestration layer wiring
+export type {
+  RatchetGitHubBridge,
+  RatchetPRFullDetails,
+  RatchetPRStateSnapshot,
+  RatchetReviewComment,
+  RatchetSessionBridge,
+  RatchetStatusCheckInput,
+} from './bridges';
+
 export type { CIFailureDetails, CIFixResult } from './ci-fixer.service';
 // CI fixer
 export { ciFixerService } from './ci-fixer.service';

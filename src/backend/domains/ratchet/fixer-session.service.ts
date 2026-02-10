@@ -4,7 +4,7 @@ import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-sessi
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
+import type { RatchetSessionBridge } from './bridges';
 
 const logger = createLogger('fixer-session');
 
@@ -33,6 +33,20 @@ type SessionAcquisitionDecision =
 
 class FixerSessionService {
   private readonly pendingAcquisitions = new Map<string, Promise<AcquireAndDispatchResult>>();
+  private sessionBridge: RatchetSessionBridge | null = null;
+
+  configure(bridges: { session: RatchetSessionBridge }): void {
+    this.sessionBridge = bridges.session;
+  }
+
+  private get session(): RatchetSessionBridge {
+    if (!this.sessionBridge) {
+      throw new Error(
+        'FixerSessionService not configured: session bridge missing. Call configure() first.'
+      );
+    }
+    return this.sessionBridge;
+  }
 
   async acquireAndDispatch(input: AcquireAndDispatchInput): Promise<AcquireAndDispatchResult> {
     const key = `${input.workspaceId}:${input.workflow}`;
@@ -134,7 +148,7 @@ class FixerSessionService {
     existingSession: { id: string; status: SessionStatus },
     runningIdleAction: RunningIdleSessionAction
   ): SessionAcquisitionDecision {
-    const isWorking = sessionService.isSessionWorking(existingSession.id);
+    const isWorking = this.session.isSessionWorking(existingSession.id);
     if (isWorking) {
       return {
         action: 'already_active',
@@ -191,7 +205,7 @@ class FixerSessionService {
     await input.beforeStart?.({ sessionId: acquisitionResult.sessionId, prompt });
 
     if (input.dispatchMode === 'start_empty_and_send') {
-      await sessionService.startClaudeSession(acquisitionResult.sessionId, {
+      await this.session.startClaudeSession(acquisitionResult.sessionId, {
         initialPrompt: '',
       });
 
@@ -205,7 +219,7 @@ class FixerSessionService {
         promptSent,
       };
     } else {
-      await sessionService.startClaudeSession(acquisitionResult.sessionId, {
+      await this.session.startClaudeSession(acquisitionResult.sessionId, {
         initialPrompt: prompt,
       });
     }
@@ -219,7 +233,7 @@ class FixerSessionService {
   }
 
   private async sendMessageSafely(sessionId: string, prompt: string): Promise<boolean> {
-    const client = sessionService.getClient(sessionId);
+    const client = this.session.getClient(sessionId);
     if (!client) {
       logger.warn('Could not send fixer message because no client was found', { sessionId });
       return false;

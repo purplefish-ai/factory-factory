@@ -1,5 +1,6 @@
 import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { archiveWorkspace } from '@/backend/orchestration';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { ratchetService } from '../services/ratchet.service';
 import { sessionService } from '../services/session.service';
@@ -7,7 +8,6 @@ import { WorkspaceCreationService } from '../services/workspace-creation.service
 import { workspaceDataService } from '../services/workspace-data.service';
 import { deriveWorkspaceFlowStateFromWorkspace } from '../services/workspace-flow-state.service';
 import { workspaceQueryService } from '../services/workspace-query.service';
-import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -185,7 +185,7 @@ export const workspaceRouter = router({
     .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))
     .mutation(async ({ input }) => {
       const workspace = await getWorkspaceWithProjectOrThrow(input.id);
-      return worktreeLifecycleService.archiveWorkspace(workspace, {
+      return archiveWorkspace(workspace, {
         commitUncommitted: input.commitUncommitted ?? true,
       });
     }),

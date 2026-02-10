@@ -29,6 +29,7 @@ import {
   createRequestLoggerMiddleware,
   securityMiddleware,
 } from './middleware';
+import { configureDomainBridges } from './orchestration/domain-bridges.orchestrator';
 import { createHealthRouter } from './routers/api/health.router';
 import { createMcpRouter } from './routers/api/mcp.router';
 import { createProjectRouter } from './routers/api/project.router';
@@ -279,6 +280,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
             environment: configService.getEnvironment(),
           });
           process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
+
+          configureDomainBridges();
 
           try {
             await reconciliationService.cleanupOrphans();

@@ -2,6 +2,8 @@
 // Public API for the session domain module.
 // Consumers should import from '@/backend/domains/session' only.
 
+// Bridge interfaces for orchestration layer wiring
+export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
 export type { ConnectionInfo } from './chat/chat-connection.service';
 // Chat services
 export { chatConnectionService } from './chat/chat-connection.service';

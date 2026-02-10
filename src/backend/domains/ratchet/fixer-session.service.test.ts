@@ -1,6 +1,6 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClaudeClient } from '@/backend/claude';
+import type { RatchetSessionBridge } from './bridges';
 
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -21,14 +21,6 @@ vi.mock('@/backend/services/config.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/session.service', () => ({
-  sessionService: {
-    isSessionWorking: vi.fn(),
-    startClaudeSession: vi.fn(),
-    getClient: vi.fn(),
-  },
-}));
-
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -41,12 +33,21 @@ vi.mock('@/backend/services/logger.service', () => ({
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
-import { sessionService } from '@/backend/services/session.service';
 import { fixerSessionService } from './fixer-session.service';
+
+const mockSessionBridge: RatchetSessionBridge = {
+  isSessionRunning: vi.fn(),
+  isSessionWorking: vi.fn(),
+  stopClaudeSession: vi.fn(),
+  startClaudeSession: vi.fn(),
+  getClient: vi.fn(),
+  injectCommittedUserMessage: vi.fn(),
+};
 
 describe('FixerSessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fixerSessionService.configure({ session: mockSessionBridge });
   });
 
   it('skips when workspace is missing worktree', async () => {
@@ -74,7 +75,7 @@ describe('FixerSessionService', () => {
       status: SessionStatus.RUNNING,
     });
 
-    vi.mocked(sessionService.isSessionWorking).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(true);
 
     const result = await fixerSessionService.acquireAndDispatch({
       workspaceId: 'w1',
@@ -95,9 +96,9 @@ describe('FixerSessionService', () => {
       status: SessionStatus.RUNNING,
     });
 
-    vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
-    const client = { sendMessage: vi.fn() };
-    vi.mocked(sessionService.getClient).mockReturnValue(client as unknown as ClaudeClient);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
+    const client = { sendMessage: vi.fn(), isRunning: vi.fn() };
+    vi.mocked(mockSessionBridge.getClient).mockReturnValue(client);
 
     const result = await fixerSessionService.acquireAndDispatch({
       workspaceId: 'w1',
@@ -123,7 +124,7 @@ describe('FixerSessionService', () => {
     });
 
     vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
-    vi.mocked(sessionService.startClaudeSession).mockResolvedValue(undefined);
+    vi.mocked(mockSessionBridge.startClaudeSession).mockResolvedValue(undefined);
 
     const result = await fixerSessionService.acquireAndDispatch({
       workspaceId: 'w1',
@@ -134,7 +135,7 @@ describe('FixerSessionService', () => {
     });
 
     expect(result).toEqual({ status: 'started', sessionId: 's-new' });
-    expect(sessionService.startClaudeSession).toHaveBeenCalledWith('s-new', {
+    expect(mockSessionBridge.startClaudeSession).toHaveBeenCalledWith('s-new', {
       initialPrompt: 'prompt',
     });
   });
@@ -147,7 +148,7 @@ describe('FixerSessionService', () => {
     });
 
     vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
-    vi.mocked(sessionService.startClaudeSession).mockResolvedValue(undefined);
+    vi.mocked(mockSessionBridge.startClaudeSession).mockResolvedValue(undefined);
 
     const [first, second] = await Promise.all([
       fixerSessionService.acquireAndDispatch({
