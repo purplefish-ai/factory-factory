@@ -122,9 +122,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Move github-cli and pr-snapshot services with tests to domain
-- [ ] 04-02-PLAN.md — Move pr-review-fixer and pr-review-monitor services to domain
-- [ ] 04-03-PLAN.md — Populate GitHub domain barrel and create smoke test
+- [x] 04-01-PLAN.md — Move github-cli and pr-snapshot services with tests to domain
+- [x] 04-02-PLAN.md — Move pr-review-fixer and pr-review-monitor services to domain
+- [x] 04-03-PLAN.md — Populate GitHub domain barrel and create smoke test
 
 **Delivers:**
 - GitHub CLI interactions (PRs, issues, CI status) in one module
@@ -286,6 +286,13 @@ Plans:
 
 **Requirements:** WIRE-04, WIRE-05
 
+**Plans:** 3 plans
+
+Plans:
+- [x] 10-01-PLAN.md — Dependency-cruiser tightening, barrel enforcement, and Knip cleanup
+- [x] 10-02-PLAN.md — Documentation updates (AGENTS.md, ARCHITECTURE.md, REQUIREMENTS.md, ROADMAP.md)
+- [x] 10-03-PLAN.md — Full CI validation suite and smoke test
+
 **Delivers:**
 - Full test suite passes (`pnpm test`)
 - Type checking passes (`pnpm typecheck`)
@@ -319,4 +326,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 9 complete (3 plans executed, verified passed)*
+*Last updated: 2026-02-10 -- All 10 phases complete, v1 milestone achieved*

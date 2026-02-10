@@ -1,8 +1,8 @@
 # Project State
 
 **Project:** SRP Consolidation & Domain Module Refactor
-**Status:** In Progress
-**Current Phase:** 09-appcontext-import-rewiring (Plan 03 of 03 complete)
+**Status:** Complete
+**Current Phase:** 10-validation-stabilization (Plan 03 of 03 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -18,7 +18,7 @@
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
 | 8 | Orchestration Layer | Complete | All 4 plans done |
 | 9 | AppContext & Import Rewiring | Complete | All 3 plans done |
-| 10 | Validation & Stabilization | Pending | Depends on phase 9 |
+| 10 | Validation & Stabilization | Complete | All 3 plans done |
 
 ## Key Decisions
 
@@ -103,6 +103,12 @@
 | Test mock paths must match source import paths | 2026-02-10 | Vitest mocks intercept by path; when source imports change, mock paths must follow (09-03) |
 | Bridge configuration required in tests | 2026-02-10 | Services using bridge pattern need configure() in test beforeEach (09-03) |
 | Remove stale knip ignore entries | 2026-02-10 | Deleted directories no longer need knip exclusion globs (09-03) |
+| Barrel bypass for circular-dep avoidance | 2026-02-10 | interceptors/conversation-rename and orchestration/workspace-init retain direct paths (10-01) |
+| HistoryMessage from @/shared/claude | 2026-02-10 | conversation-analyzer imports shared type instead of deep domain path (10-01) |
+| ARCHITECTURE.md full rewrite over patching | 2026-02-10 | Avoid stale references by rewriting entirely post-refactor (10-02) |
+| HOTSPOTS preserved as historical record | 2026-02-10 | Added SUPERSEDED notice rather than deleting pre-refactor analysis (10-02) |
+| Domain-to-orchestration exceptions | 2026-02-10 | creation.service and reconciliation.service exempted from no-domains-importing-orchestration (10-01) |
+| Validation-only plan: no code changes | 2026-02-10 | All 7 CI checks + smoke test passed on first attempt, no fixes needed (10-03) |
 
 ## Blockers
 
@@ -110,9 +116,10 @@ None.
 
 ## Context for Next Session
 
-Phase 9 (AppContext & Import Rewiring) complete. All 3 plans done.
-Plan 03: Deleted all 61 deprecated shim files (29 services, 16 claude, 14 session-store, 2 shim tests). Rewired services/index.ts to infrastructure-only exports. Extracted getClaudeProjectPath to src/backend/lib/ for cross-domain use. Fixed test mock paths and bridge configuration. Zero dependency-cruiser violations, all 1609 tests pass.
-Ready for Phase 10 (Validation & Stabilization).
+All 10 phases of the SRP Consolidation & Domain Module Refactor are complete.
+Phase 10 (Validation & Stabilization): 3 plans executed. Dep-cruiser rules tightened, Knip cleaned up, documentation updated (AGENTS.md, ARCHITECTURE.md, REQUIREMENTS.md, ROADMAP.md), hotspots marked superseded.
+All 34 v1 requirements satisfied. Zero dependency-cruiser violations. All tests pass.
+The refactor is done -- future work should follow the domain module pattern documented in AGENTS.md.
 
 ## Performance Metrics
 
@@ -145,7 +152,10 @@ Ready for Phase 10 (Validation & Stabilization).
 | 09 | 01 | 10min | 2 | 7 |
 | 09 | 02 | 14min | 2 | 19 |
 | 09 | 03 | 9min | 2 | 81 |
+| 10 | 01 | 6min | 2 | 5 |
+| 10 | 02 | 8min | 2 | 7 |
+| 10 | 03 | 2min | 2 | 0 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T21:05:00Z -- Completed 09-03-PLAN.md*
+*Last session: 2026-02-10T22:05:31Z -- Completed 10-03-PLAN.md (final plan)*
