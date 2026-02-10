@@ -169,19 +169,30 @@ export class RunScriptService {
     this.runningProcesses.delete(workspaceId);
     this.outputListeners.delete(workspaceId);
 
-    // Check current state - if STOPPING, the stopRunScript handler will complete the transition.
-    // If already in a terminal state (COMPLETED/FAILED/IDLE), skip.
-    // Otherwise, transition to COMPLETED or FAILED based on exit code.
+    // Check current state:
+    // - STOPPING: best-effort STOPPING -> IDLE completion (stop flow may have failed mid-cleanup)
+    // - IDLE/COMPLETED/FAILED: already terminal, skip
+    // - otherwise: transition to COMPLETED or FAILED based on exit code
     try {
       const ws = await workspaceAccessor.findById(workspaceId);
       const status = ws?.runScriptStatus;
 
-      if (
-        status === 'STOPPING' ||
-        status === 'IDLE' ||
-        status === 'COMPLETED' ||
-        status === 'FAILED'
-      ) {
+      if (status === 'STOPPING') {
+        try {
+          await runScriptStateMachine.completeStopping(workspaceId);
+        } catch (error) {
+          logger.warn(
+            'Failed to complete STOPPING after process exit (likely already transitioned)',
+            {
+              workspaceId,
+              error: (error as Error).message,
+            }
+          );
+        }
+        return;
+      }
+
+      if (status === 'IDLE' || status === 'COMPLETED' || status === 'FAILED') {
         logger.debug(`Process exited while in ${status} state, skipping exit transition`, {
           workspaceId,
         });
