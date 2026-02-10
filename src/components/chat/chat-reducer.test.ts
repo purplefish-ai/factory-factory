@@ -927,7 +927,8 @@ describe('chatReducer', () => {
       expect(newState.gitBranch).toBeNull();
       expect(newState.pendingRequest).toEqual({ type: 'none' });
       expect(newState.sessionStatus).toEqual({ phase: 'loading' });
-      expect(newState.queuedMessages.size).toBe(0);
+      // Queued messages are preserved during switch to avoid visual disappearance
+      expect(newState.queuedMessages.size).toBe(1);
       expect(newState.toolUseIdToIndex.size).toBe(0);
       expect(newState.latestThinking).toBeNull();
     });
@@ -1630,6 +1631,78 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(1);
       expect(newState.messages[0]!.id).not.toBe('old-msg');
       expect(newState.sessionStatus).toEqual({ phase: 'running' });
+    });
+
+    it('should clear loading state after replay completes if still loading', () => {
+      const state: ChatState = {
+        ...initialState,
+        sessionStatus: { phase: 'loading' },
+        sessionRuntime: {
+          phase: 'loading',
+          processState: 'unknown',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:00.000Z',
+        },
+      };
+
+      const action: ChatAction = {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'message_state_changed',
+              id: 'msg-1',
+              newState: MessageState.ACCEPTED,
+              userMessage: {
+                text: 'Hello from history',
+                timestamp: '2024-01-01T00:00:00.000Z',
+                order: 0,
+              },
+            },
+          ],
+        },
+      };
+
+      const newState = chatReducer(state, action);
+
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.sessionStatus).toEqual({ phase: 'ready' });
+      expect(newState.sessionRuntime.phase).toBe('idle');
+    });
+
+    it('should not clear loading state if runtime update changes phase during replay', () => {
+      const state: ChatState = {
+        ...initialState,
+        sessionStatus: { phase: 'loading' },
+        sessionRuntime: {
+          phase: 'loading',
+          processState: 'unknown',
+          activity: 'IDLE',
+          updatedAt: '2026-02-08T00:00:00.000Z',
+        },
+      };
+
+      const action: ChatAction = {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [
+            {
+              type: 'session_runtime_updated',
+              sessionRuntime: {
+                phase: 'running',
+                processState: 'alive',
+                activity: 'WORKING',
+                updatedAt: '2026-02-08T00:00:00.000Z',
+              },
+            },
+          ],
+        },
+      };
+
+      const newState = chatReducer(state, action);
+
+      expect(newState.sessionStatus).toEqual({ phase: 'running' });
+      expect(newState.sessionRuntime.phase).toBe('running');
     });
   });
 

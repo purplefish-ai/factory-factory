@@ -30,10 +30,10 @@ export const SERVICE_CACHE_TTL_MS = Object.freeze({
 } as const);
 
 export const SERVICE_CONCURRENCY = Object.freeze({
-  ratchetWorkspaceChecks: 5,
-  ciMonitorWorkspaceChecks: 5,
-  prReviewMonitorWorkspaceChecks: 5,
-  schedulerPrSyncs: 5,
+  ratchetWorkspaceChecks: 20,
+  ciMonitorWorkspaceChecks: 20,
+  prReviewMonitorWorkspaceChecks: 20,
+  schedulerPrSyncs: 20,
 } as const);
 
 export const SERVICE_THRESHOLDS = Object.freeze({
