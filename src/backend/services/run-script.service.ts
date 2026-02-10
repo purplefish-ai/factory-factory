@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import treeKill from 'tree-kill';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { FactoryConfigService } from './factory-config.service';
 import { createLogger } from './logger.service';
@@ -420,27 +421,45 @@ export class RunScriptService {
         }
       }
 
-      // Kill the process
-      if (childProcess) {
+      // Kill the process tree
+      if (childProcess?.pid) {
+        const processPid = childProcess.pid;
         logger.info('Stopping run script via stored process', {
           workspaceId,
-          pid: childProcess.pid,
+          pid: processPid,
         });
-        childProcess.kill('SIGTERM');
-        RunScriptService.runningProcesses.delete(workspaceId);
+        await new Promise<void>((resolve) => {
+          treeKill(processPid, 'SIGTERM', (err) => {
+            if (err) {
+              logger.warn('Failed to tree-kill run script process', {
+                workspaceId,
+                pid: processPid,
+                error: err.message,
+              });
+              // Keep process tracked so later cleanup can retry
+            } else {
+              RunScriptService.runningProcesses.delete(workspaceId);
+            }
+            resolve();
+          });
+        });
       } else if (pid) {
         // Fallback: kill by PID if we don't have the process reference
         logger.info('Stopping run script via PID', { workspaceId, pid });
-        try {
-          process.kill(pid, 'SIGTERM');
-        } catch (error) {
-          // Process might already be dead
-          logger.warn('Failed to kill process, might already be stopped', {
-            workspaceId,
-            pid,
-            error,
+        await new Promise<void>((resolve) => {
+          treeKill(pid, 'SIGTERM', (err) => {
+            if (err) {
+              logger.warn('Failed to tree-kill process, might already be stopped', {
+                workspaceId,
+                pid,
+                error: err.message,
+              });
+            } else {
+              RunScriptService.runningProcesses.delete(workspaceId);
+            }
+            resolve();
           });
-        }
+        });
       }
 
       // Transition to IDLE state via state machine (completes stopping)
@@ -544,14 +563,21 @@ export class RunScriptService {
   }
 
   /**
-   * Synchronous cleanup for 'exit' event - kills processes without running cleanup scripts
+   * Synchronous cleanup for 'exit' event - kills processes without running cleanup scripts.
+   *
+   * Uses childProcess.kill() instead of tree-kill because this runs from the synchronous
+   * 'exit' event handler. For proper cleanup with full tree kill, graceful shutdown via
+   * SIGINT/SIGTERM handlers should be used instead (see cleanup() which calls stopRunScript).
+   *
    * @internal
    */
   static cleanupSync() {
     logger.info('Process exiting, killing any remaining run scripts');
     for (const [workspaceId, childProcess] of RunScriptService.runningProcesses.entries()) {
       try {
-        childProcess.kill('SIGKILL');
+        if (!childProcess.killed) {
+          childProcess.kill('SIGKILL');
+        }
         logger.info('Force killed run script on exit', {
           workspaceId,
           pid: childProcess.pid,
