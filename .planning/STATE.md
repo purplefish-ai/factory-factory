@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 02-session-domain-consolidation (Plan 06 of 06 complete -- PHASE COMPLETE)
+**Current Phase:** 03-workspace-domain-consolidation (Plan 05 of 05 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -11,7 +11,7 @@
 |-------|------|--------|-------|
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
-| 3 | Workspace Domain Consolidation | Pending | Largest service sprawl |
+| 3 | Workspace Domain Consolidation | Complete | All 5 plans done |
 | 4 | GitHub Domain Consolidation | Pending | — |
 | 5 | Ratchet Domain Consolidation | Pending | — |
 | 6 | Terminal Domain Consolidation | Pending | — |
@@ -48,6 +48,19 @@
 | Static imports in smoke test | 2026-02-10 | Biome forbids await import(); use static imports (02-06) |
 | No knip changes for shims | 2026-02-10 | Existing globs already cover all re-export shim paths (02-06) |
 | EventForwarderContext in barrel | 2026-02-10 | Additional type export for external consumers (02-06) |
+| Direct module paths in shims (not barrel) | 2026-02-10 | Re-export shims use direct module path to avoid circular deps (03-01) |
+| Cross-domain imports via absolute paths | 2026-02-10 | kanban-state uses @/backend/services/ for cross-domain deps (03-01) |
+| Intra-domain relative in workspace state/ | 2026-02-10 | kanban-state -> flow-state via ./flow-state (03-01) |
+| Absolute @/ imports in domain files | 2026-02-10 | Cross-layer refs use @/backend/ paths in workspace domain (03-02) |
+| Absolute mock paths in domain tests | 2026-02-10 | vi.mock paths updated to @/backend/ matching new imports (03-02) |
+| Absolute dynamic import for init.trpc | 2026-02-10 | '@/backend/trpc/workspace/init.trpc' prevents path breakage (03-04) |
+| cachedReviewCount as instance field (DOM-04) | 2026-02-10 | Moved from module scope to private field on WorkspaceQueryService (03-04) |
+| gitConcurrencyLimit kept module-level | 2026-02-10 | Stateless pLimit limiter stays as module const, not mutable state (03-04) |
+| Intra-domain relative in workspace query/ | 2026-02-10 | query/ -> state/ via ../state/kanban-state, ../state/flow-state (03-04) |
+| Cross-domain shim for sessionDomainService | 2026-02-10 | services/session-domain.service.ts shim avoids cross-domain import violation (03-03) |
+| Instance-method wrappers in shim | 2026-02-10 | Shim exports wrapper functions that delegate to singleton instance methods (03-03) |
+| Selective barrel exports for workspace domain | 2026-02-10 | Named re-exports (no export *) following Phase 2 session domain pattern (03-05) |
+| Biome auto-sorts barrel exports | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (03-05) |
 
 ## Blockers
 
@@ -55,12 +68,12 @@ None.
 
 ## Context for Next Session
 
-Phase 2 COMPLETE: All session domain consolidation finished.
-Session domain barrel at src/backend/domains/session/index.ts exports complete public API.
-Domain smoke test verifies all 15 exports are real (not undefined).
-All CI checks pass: typecheck, test (1758), lint, dep-cruise (718 modules), knip.
-Old paths have re-export shims. DOM-04 violations eliminated.
-Phases 3-7 are independent and can be planned/executed in parallel.
+Phase 3 COMPLETE: Workspace domain consolidation finished.
+All 9 workspace services moved to src/backend/domains/workspace/ with subdirectories: state/ (3), lifecycle/ (4), worktree/ (1), query/ (1).
+Barrel at src/backend/domains/workspace/index.ts exports 14 runtime values + 11 types.
+Smoke test verifies all exports defined. 4 DOM-04 globals eliminated.
+Re-export shims at all old services/ paths. 1737 tests passing.
+Ready for Phase 4 (GitHub Domain Consolidation).
 
 ## Performance Metrics
 
@@ -72,7 +85,12 @@ Phases 3-7 are independent and can be planned/executed in parallel.
 | 02 | 02 | 9min | 2 | 20 |
 | 02 | 04 | 20min | 2 | 25 |
 | 02 | 06 | 3min | 2 | 2 |
+| 03 | 01 | 5min | 2 | 9 |
+| 03 | 02 | 5min | 2 | 8 |
+| 03 | 04 | 5min | 2 | 5 |
+| 03 | 03 | 13min | 1 | 5 |
+| 03 | 05 | 3min | 2 | 2 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T13:16:04Z -- Completed 02-06-PLAN.md (Phase 02 complete)*
+*Last session: 2026-02-10T15:27:00Z -- Completed 03-05-PLAN.md*

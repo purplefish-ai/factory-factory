@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeKanbanColumn } from './kanban-state.service';
+import { computeKanbanColumn } from './kanban-state';
 
 describe('computeKanbanColumn', () => {
   describe('archived workspaces', () => {

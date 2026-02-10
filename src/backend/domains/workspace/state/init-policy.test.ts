@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getWorkspaceInitPolicy } from './workspace-init-policy.service';
+import { getWorkspaceInitPolicy } from './init-policy';
 
 describe('getWorkspaceInitPolicy', () => {
   it('returns creating worktree phase for NEW workspace', () => {

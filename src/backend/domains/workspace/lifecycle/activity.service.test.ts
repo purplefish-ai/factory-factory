@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: vi.fn().mockResolvedValue({ name: 'Test Workspace', claudeSessions: [] }),
   },
 }));
 
-import { workspaceActivityService } from './workspace-activity.service';
+import { workspaceActivityService } from './activity.service';
 
 describe('WorkspaceActivityService', () => {
   const workspaceIds: string[] = [];

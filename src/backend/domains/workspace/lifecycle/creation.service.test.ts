@@ -1,30 +1,27 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as claudeSessionAccessorModule from '@/backend/resource_accessors/claude-session.accessor';
+import * as projectAccessorModule from '@/backend/resource_accessors/project.accessor';
+import * as userSettingsAccessorModule from '@/backend/resource_accessors/user-settings.accessor';
+import * as workspaceAccessorModule from '@/backend/resource_accessors/workspace.accessor';
+import type { configService } from '@/backend/services/config.service';
+import * as gitOpsServiceModule from '@/backend/services/git-ops.service';
+import type { createLogger } from '@/backend/services/logger.service';
+import * as worktreeLifecycleServiceModule from '@/backend/services/worktree-lifecycle.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import * as claudeSessionAccessorModule from '../resource_accessors/claude-session.accessor';
-import * as projectAccessorModule from '../resource_accessors/project.accessor';
-import * as userSettingsAccessorModule from '../resource_accessors/user-settings.accessor';
-import * as workspaceAccessorModule from '../resource_accessors/workspace.accessor';
-import type { configService } from './config.service';
-import * as gitOpsServiceModule from './git-ops.service';
-import type { createLogger } from './logger.service';
-import {
-  WorkspaceCreationService,
-  type WorkspaceCreationSource,
-} from './workspace-creation.service';
-import * as worktreeLifecycleServiceModule from './worktree-lifecycle.service';
+import { WorkspaceCreationService, type WorkspaceCreationSource } from './creation.service';
 
 type ConfigService = typeof configService;
 type Logger = ReturnType<typeof createLogger>;
 
 // Mock dependencies
-vi.mock('../resource_accessors/workspace.accessor');
-vi.mock('../resource_accessors/project.accessor');
-vi.mock('../resource_accessors/user-settings.accessor');
-vi.mock('../resource_accessors/claude-session.accessor');
-vi.mock('./git-ops.service');
-vi.mock('./worktree-lifecycle.service');
-vi.mock('../trpc/workspace/init.trpc', () => ({
+vi.mock('@/backend/resource_accessors/workspace.accessor');
+vi.mock('@/backend/resource_accessors/project.accessor');
+vi.mock('@/backend/resource_accessors/user-settings.accessor');
+vi.mock('@/backend/resource_accessors/claude-session.accessor');
+vi.mock('@/backend/services/git-ops.service');
+vi.mock('@/backend/services/worktree-lifecycle.service');
+vi.mock('@/backend/trpc/workspace/init.trpc', () => ({
   initializeWorkspaceWorktree: vi.fn().mockResolvedValue(undefined),
 }));
 

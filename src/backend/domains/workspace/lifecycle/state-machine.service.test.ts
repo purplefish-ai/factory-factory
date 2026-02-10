@@ -5,7 +5,7 @@ const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
 const mockUpdateMany = vi.fn();
 
-vi.mock('../db', () => ({
+vi.mock('@/backend/db', () => ({
   prisma: {
     workspace: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
@@ -15,7 +15,7 @@ vi.mock('../db', () => ({
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -25,10 +25,7 @@ vi.mock('./logger.service', () => ({
 }));
 
 // Import after mocks are set up
-import {
-  WorkspaceStateMachineError,
-  workspaceStateMachine,
-} from './workspace-state-machine.service';
+import { WorkspaceStateMachineError, workspaceStateMachine } from './state-machine.service';
 
 describe('WorkspaceStateMachineService', () => {
   beforeEach(() => {

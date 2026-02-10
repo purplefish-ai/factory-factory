@@ -83,6 +83,15 @@ Plans:
 
 **Requirements:** WORK-01, WORK-02, WORK-03, WORK-04, WORK-05, DOM-04
 
+**Plans:** 5 plans
+
+Plans:
+- [x] 03-01-PLAN.md — Move pure state functions (flow-state, kanban-state, init-policy) to state/
+- [x] 03-02-PLAN.md — Move state machine, data, and activity services to lifecycle/
+- [x] 03-03-PLAN.md — Move worktree-lifecycle to worktree/ with DOM-04 refactoring (3 globals)
+- [x] 03-04-PLAN.md — Move creation and query services with DOM-04 refactoring (1 global)
+- [x] 03-05-PLAN.md — Populate workspace domain barrel and create smoke test
+
 **Delivers:**
 - Workspace lifecycle (creation, state machine, archival) in one module
 - Worktree management absorbed into workspace domain
@@ -98,6 +107,7 @@ Plans:
 - `src/backend/services/workspace-state-machine.service.ts` → domain
 - `src/backend/services/worktree-lifecycle.service.ts` → domain
 - `src/backend/services/kanban-state.service.ts` → domain
+- `src/backend/services/workspace-init-policy.service.ts` → domain
 
 **Success criteria:** All workspace operations flow through `src/backend/domains/workspace/`, existing workspace tests pass, new domain tests cover public API. `pnpm typecheck` passes.
 
@@ -269,4 +279,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 2 complete (6/6 plans executed, verified)*
+*Last updated: 2026-02-10 — Phase 3 complete (5 plans, 3 waves, 4 DOM-04 globals eliminated)*
