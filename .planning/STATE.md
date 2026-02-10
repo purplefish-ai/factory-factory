@@ -93,6 +93,7 @@ Ready for Plan 03 (barrel exports and smoke test).
 | 03 | 04 | 5min | 2 | 5 |
 | 03 | 03 | 13min | 1 | 5 |
 | 03 | 05 | 3min | 2 | 2 |
+| 04 | 01 | 11min | 2 | 7 |
 | 04 | 02 | 11min | 2 | 5 |
 
 ---
