@@ -185,7 +185,7 @@ export class RunScriptService {
             'Failed to complete STOPPING after process exit (likely already transitioned)',
             {
               workspaceId,
-              error: (error as Error).message,
+              error,
             }
           );
         }
@@ -209,7 +209,7 @@ export class RunScriptService {
       // Swallow state machine errors -- the state was likely already transitioned
       logger.warn('Exit handler state transition failed (likely already transitioned)', {
         workspaceId,
-        error: (error as Error).message,
+        error,
       });
     }
   }
@@ -364,7 +364,7 @@ export class RunScriptService {
       await this.killProcessTree(workspaceId, childProcess, pid);
 
       // Transition to IDLE state via state machine (completes stopping)
-      await runScriptStateMachine.completeStopping(workspaceId);
+      await this.completeStoppingAfterStop(workspaceId);
 
       return { success: true };
     } catch (error) {
@@ -418,6 +418,22 @@ export class RunScriptService {
         return true; // Raced -- caller should return success
       }
       throw error; // Unexpected -- re-throw
+    }
+  }
+
+  private async completeStoppingAfterStop(workspaceId: string): Promise<void> {
+    try {
+      await runScriptStateMachine.completeStopping(workspaceId);
+    } catch (error) {
+      // Exit handler may have raced and already completed STOPPING -> IDLE.
+      const fresh = await workspaceAccessor.findById(workspaceId);
+      if (fresh?.runScriptStatus === 'IDLE') {
+        logger.debug('completeStopping raced with exit handler, already IDLE', {
+          workspaceId,
+        });
+        return;
+      }
+      throw error;
     }
   }
 
