@@ -87,9 +87,4 @@ export class RateLimitBackoff {
   computeDelay(baseIntervalMs: number): number {
     return baseIntervalMs * this.multiplier;
   }
-
-  /** Whether the current cycle has been affected by rate limiting. */
-  get wasRateLimitedThisCycle(): boolean {
-    return this.rateLimitHitThisCycle;
-  }
 }
