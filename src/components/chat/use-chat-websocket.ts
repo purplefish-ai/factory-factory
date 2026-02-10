@@ -135,6 +135,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
   const sendRef = useRef<(message: unknown) => boolean>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chat = useChatState({
     dbSessionId,
@@ -161,6 +162,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           return;
         }
         currentLoadRequestIdRef.current = null;
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
       }
       chat.handleMessage(data);
     },
@@ -173,6 +178,17 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     chat.dispatch({ type: 'SESSION_LOADING_START' });
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     currentLoadRequestIdRef.current = loadRequestId;
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+    loadTimeoutRef.current = setTimeout(() => {
+      if (currentLoadRequestIdRef.current === loadRequestId) {
+        currentLoadRequestIdRef.current = null;
+        chat.dispatch({ type: 'SESSION_LOADING_END' });
+      }
+      loadTimeoutRef.current = null;
+    }, 10_000);
     sendRef.current({ type: 'list_sessions' });
     sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
   }, [chat.dispatch]);
@@ -180,6 +196,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     currentLoadRequestIdRef.current = null;
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
     chat.dispatch({ type: 'SESSION_LOADING_END' });
   }, [chat.dispatch]);
 

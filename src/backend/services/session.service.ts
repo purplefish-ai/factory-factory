@@ -266,6 +266,19 @@ class SessionService {
       };
     }
 
+    // Defensive normalization: persisted runtime can be left at `loading`
+    // after reconnect churn even when no process exists. A cold-start load
+    // should treat this as idle/stopped so clients can recover.
+    if (base.phase === 'loading') {
+      return {
+        ...base,
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
     return base;
   }
 
