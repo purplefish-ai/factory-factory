@@ -49,12 +49,12 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Move claude/ types, constants, protocol layer, and refactor registry (DOM-04)
-- [ ] 02-02-PLAN.md — Move claude/ process, permissions, client, session, monitoring + barrel
-- [ ] 02-03-PLAN.md — Move session-store/ (13 files) to domains/session/store/
-- [ ] 02-04-PLAN.md — Move lifecycle services, data service, and file logger
-- [ ] 02-05-PLAN.md — Move chat services and chat-message-handlers/ (28 files)
-- [ ] 02-06-PLAN.md — Update session domain barrel and create domain smoke test
+- [x] 02-01-PLAN.md — Move claude/ types, constants, protocol layer, and refactor registry (DOM-04)
+- [x] 02-02-PLAN.md — Move claude/ process, permissions, client, session, monitoring + barrel
+- [x] 02-03-PLAN.md — Move session-store/ (13 files) to domains/session/store/
+- [x] 02-04-PLAN.md — Move lifecycle services, data service, and file logger
+- [x] 02-05-PLAN.md — Move chat services and chat-message-handlers/ (28 files)
+- [x] 02-06-PLAN.md — Update session domain barrel and create domain smoke test
 
 **Delivers:**
 - Session lifecycle management (create, run, pause, resume, complete) in one module
@@ -269,4 +269,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 2 planned (6 plans)*
+*Last updated: 2026-02-10 — Phase 2 complete (6/6 plans executed, verified)*
