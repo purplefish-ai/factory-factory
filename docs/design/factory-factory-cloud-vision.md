@@ -877,24 +877,206 @@ packages/
 ✅ **Testing**: FF Core can be tested independently, works on desktop and in VMs
 ✅ **Clear boundary**: Open source = execution primitives, Closed source = multi-tenant infrastructure
 
+### How FF Cloud Consumes FF Core (Practical Details)
+
+**FF Core is published to public npm (open source):**
+
+```bash
+# packages/core/package.json
+{
+  "name": "@factory-factory/core",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/purplefish-ai/factory-factory"
+  }
+}
+```
+
+**FF Cloud (closed source, private repo) installs it like any npm package:**
+
+```bash
+# In factory-factory-cloud repo
+npm install @factory-factory/core
+
+# or
+pnpm add @factory-factory/core
+```
+
+**FF Cloud's package.json:**
+
+```json
+{
+  "name": "@factory-factory/cloud",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@factory-factory/core": "^1.0.0",
+    "express": "^4.18.0",
+    "@prisma/client": "^5.0.0",
+    "ws": "^8.0.0"
+    // ... other cloud-specific deps
+  }
+}
+```
+
+**FF Cloud imports and uses FF Core:**
+
+```typescript
+// src/services/workspace.service.ts (FF Cloud - closed source)
+import { WorkspaceManager, Session, ClaudeClient } from '@factory-factory/core';
+import type { Workspace, ClaudeProcessOptions } from '@factory-factory/core';
+
+export class CloudWorkspaceService {
+  async createWorkspace(userId: string, issueUrl: string): Promise<Workspace> {
+    // Multi-tenant logic (closed source)
+    const vm = await this.vmOrchestrator.provisionVM(userId);
+
+    // FF Core usage (open source library)
+    const workspaceManager = new WorkspaceManager({
+      dataDir: `/mnt/vm/${vm.id}/workspace`,
+      githubToken: await this.getGitHubToken(userId),
+    });
+
+    const workspace = await workspaceManager.createFromIssue(issueUrl);
+
+    // Store in cloud DB (closed source)
+    await this.db.workspace.create({ userId, workspaceId: workspace.id, vmId: vm.id });
+
+    return workspace;
+  }
+}
+```
+
+**Repository structure:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  github.com/purplefish-ai/factory-factory           │
+│  (PUBLIC REPO - Open Source)                        │
+│                                                     │
+│  packages/                                          │
+│    core/          ← Published to npm as @factory-factory/core
+│    desktop/       ← Uses @factory-factory/core     │
+│                                                     │
+│  Published to: npmjs.com/package/@factory-factory/core
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│  github.com/purplefish-ai/factory-factory-cloud     │
+│  (PRIVATE REPO - Closed Source)                     │
+│                                                     │
+│  src/                                               │
+│    services/                                        │
+│      user.service.ts                                │
+│      vm.service.ts                                  │
+│      workspace.service.ts  ← Uses @factory-factory/core from npm
+│    server.ts                                        │
+│                                                     │
+│  package.json:                                      │
+│    dependencies:                                    │
+│      "@factory-factory/core": "^1.0.0"              │
+└─────────────────────────────────────────────────────┘
+```
+
+**Version management:**
+
+- **FF Core** uses semantic versioning (1.0.0, 1.1.0, 2.0.0)
+- **FF Desktop** specifies version range: `"@factory-factory/core": "^1.0.0"`
+- **FF Cloud** can pin to specific version: `"@factory-factory/core": "1.2.3"` (more control)
+- Breaking changes in FF Core → major version bump (1.x → 2.0.0)
+- FF Cloud updates at its own pace, tests thoroughly before upgrading
+
+**Development workflow:**
+
+```bash
+# Working on FF Core (open source repo)
+cd packages/core
+pnpm build
+pnpm publish  # Publishes to npm
+
+# FF Cloud picks up the update
+cd ../factory-factory-cloud
+pnpm update @factory-factory/core  # Gets latest 1.x version
+pnpm test  # Verify compatibility
+git commit -m "Update to @factory-factory/core@1.2.0"
+```
+
+**Type safety across repos:**
+
+Since both are TypeScript, FF Cloud gets full type checking:
+
+```typescript
+// FF Cloud code (closed source)
+import { WorkspaceManager } from '@factory-factory/core';
+
+const manager = new WorkspaceManager({
+  dataDir: '/workspace',
+  githubToken: 'ghp_xxx',
+  invalidOption: true  // ❌ TypeScript error! Not in WorkspaceManagerOptions
+});
+
+// Type inference works
+const workspace = await manager.createFromIssue(issueUrl);
+workspace.id  // ✅ TypeScript knows this is a string
+```
+
+**Benefits of this approach:**
+
+✅ **FF Core is truly open source**: Anyone can install `@factory-factory/core` from npm
+✅ **FF Cloud is closed source**: Private repo, not published to npm
+✅ **Clean dependency**: FF Cloud depends on FF Core via npm, just like any other library
+✅ **Version control**: FF Cloud can pin to specific FF Core versions for stability
+✅ **Type safety**: TypeScript types are preserved across package boundary
+✅ **Independent releases**: FF Core can be updated without touching FF Cloud
+✅ **Community contributions**: Open source contributors improve FF Core, FF Cloud benefits automatically
+
+**Alternative: Monorepo with selective publishing**
+
+If you want both in one repo but keep cloud closed:
+
+```
+factory-factory/  (public repo)
+  packages/
+    core/         ← Published to npm (open source)
+    desktop/      ← Published to npm (open source)
+    cloud/        ← NOT published, gitignored (closed source, separate private repo)
+```
+
+But **separate repos is cleaner** because:
+- Clear boundary between open and closed source
+- No risk of accidentally committing cloud code to public repo
+- Cloud can have its own release cycle
+- Easier to manage access (cloud repo requires org membership)
+
 ### Migration Path
 
-**Phase 1: Extract FF Core library**
+**Phase 1: Extract FF Core library (2-3 weeks)**
 1. Create `packages/core/` with workspace, session, claude, ratchet modules
 2. Refactor `packages/desktop/` to use `@factory-factory/core`
-3. Publish `@factory-factory/core` to npm (open source)
+3. Publish `@factory-factory/core` to npm (open source, MIT license)
 4. Verify desktop still works with library
 
-**Phase 2: Build FF Cloud (closed source)**
-1. Create new private repo: `factory-factory-cloud`
-2. Build cloud server using `@factory-factory/core`
-3. Add multi-tenant features (users, billing, teams, VMs)
-4. Deploy cloud infrastructure
+**Phase 2: Build FF Cloud (3-4 weeks)**
+1. Create new private repo: `github.com/purplefish-ai/factory-factory-cloud`
+2. Install `@factory-factory/core` from npm: `pnpm add @factory-factory/core`
+3. Build cloud server using FF Core library
+4. Add multi-tenant features (users, billing, teams, VMs)
+5. Deploy cloud infrastructure
 
 **Phase 3: VM integration**
-1. Package FF Core into VM image
+1. Package FF Core into VM image (install from npm in VM)
 2. FF Cloud orchestrates VMs, each running FF Core
 3. Cloud server acts as relay between clients and VMs
+
+**Phase 4: Continuous iteration**
+- Improve FF Core (open source PRs, community contributions)
+- Publish new FF Core versions to npm
+- FF Cloud updates dependency at its own pace
+- Both desktop and cloud benefit from FF Core improvements
 
 This keeps FF's core mission (empowering developers with AI workspaces) open source, while building a sustainable closed-source cloud business on top.
 
