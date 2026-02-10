@@ -9,7 +9,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import type { configService } from '@/backend/services/config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
-import { setWorkspaceInitMode } from '@/backend/services/worktree-lifecycle.service';
+import { worktreeLifecycleService } from '../worktree/worktree-lifecycle.service';
 
 type ConfigService = typeof configService;
 type Logger = ReturnType<typeof createLogger>;
@@ -97,7 +97,7 @@ export class WorkspaceCreationService {
 
     // Set initialization mode if resuming existing branch
     if (initMode) {
-      await setWorkspaceInitMode(
+      await worktreeLifecycleService.setInitMode(
         workspace.id,
         initMode.useExistingBranch,
         initMode.worktreeBasePath
