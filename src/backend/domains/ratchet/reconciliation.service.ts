@@ -7,7 +7,7 @@ import {
 } from '@/backend/resource_accessors/index';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceStateMachine } from '@/backend/services/workspace-state-machine.service';
+import type { RatchetWorkspaceBridge } from './bridges';
 
 const logger = createLogger('reconciliation');
 
@@ -15,6 +15,18 @@ class ReconciliationService {
   private cleanupInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
   private cleanupInProgress: Promise<void> | null = null;
+  private _workspace: RatchetWorkspaceBridge | null = null;
+
+  configure(bridges: { workspace: RatchetWorkspaceBridge }): void {
+    this._workspace = bridges.workspace;
+  }
+
+  private get workspace(): RatchetWorkspaceBridge {
+    if (!this._workspace) {
+      throw new Error('ReconciliationService: bridges not configured. Call configure() first.');
+    }
+    return this._workspace;
+  }
 
   /**
    * Main reconciliation - just ensures workspaces have worktrees
@@ -87,7 +99,7 @@ class ReconciliationService {
       if (workspace.status === 'PROVISIONING') {
         // Stale provisioning - mark as failed so user can retry
         try {
-          await workspaceStateMachine.markFailed(
+          await this.workspace.markFailed(
             workspace.id,
             'Provisioning timed out. This may indicate a server restart during initialization. Please retry.'
           );

@@ -20,6 +20,7 @@ import {
   type RatchetGitHubBridge,
   type RatchetSessionBridge,
   ratchetService,
+  reconciliationService,
 } from '@/backend/domains/ratchet';
 import { startupScriptService } from '@/backend/domains/run-script';
 import {
@@ -65,6 +66,13 @@ export function configureDomainBridges(): void {
   fixerSessionService.configure({ session: ratchetSessionBridge });
   ciFixerService.configure({ session: ratchetSessionBridge });
   ciMonitorService.configure({ session: ratchetSessionBridge, github: ratchetGithubBridge });
+  reconciliationService.configure({
+    workspace: {
+      markFailed: async (id, reason) => {
+        await workspaceStateMachine.markFailed(id, reason);
+      },
+    },
+  });
 
   // === Workspace domain bridges ===
   kanbanStateService.configure({
