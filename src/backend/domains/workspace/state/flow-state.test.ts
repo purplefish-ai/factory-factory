@@ -1,9 +1,6 @@
 import { CIStatus, PRState, RatchetState } from '@prisma-gen/client';
 import { describe, expect, it } from 'vitest';
-import {
-  deriveWorkspaceFlowState,
-  deriveWorkspaceFlowStateFromWorkspace,
-} from './workspace-flow-state.service';
+import { deriveWorkspaceFlowState, deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 
 describe('deriveWorkspaceFlowState', () => {
   it('returns CI_WAIT and working when PR CI is pending (ratchet off)', () => {
