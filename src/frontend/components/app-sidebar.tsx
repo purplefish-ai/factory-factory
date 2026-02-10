@@ -489,12 +489,13 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
   useProjectSlugSync(pathname, isMocked, projects, selectedProjectSlug, setSelectedProjectSlug);
 
-  // Close mobile sidebar on navigation
-  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname triggers sidebar close on route change
+  // Close mobile sidebar whenever the route changes
+  const prevPathnameRef = useRef(pathname);
   useEffect(() => {
-    if (isMobile) {
+    if (isMobile && pathname !== prevPathnameRef.current) {
       setOpenMobile(false);
     }
+    prevPathnameRef.current = pathname;
   }, [pathname, isMobile, setOpenMobile]);
 
   const handleProjectChange = useCallback(

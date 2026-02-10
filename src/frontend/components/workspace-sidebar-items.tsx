@@ -145,7 +145,7 @@ export function ActiveWorkspaceItem({
       >
         <div className="flex w-full min-w-0 items-center gap-2">
           {/* Drag handle - outside Link to prevent navigation */}
-          {!hideDragHandle && (
+          {!hideDragHandle && sortableAttributes && sortableListeners && (
             <button
               type="button"
               className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
