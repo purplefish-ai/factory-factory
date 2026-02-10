@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { resumeModesSchema } from '@/shared/schemas/persisted-stores.schema';
 import {
   assertWorktreePathSafe,
-  setWorkspaceInitMode,
   WorktreePathSafetyError,
+  worktreeLifecycleService,
 } from './worktree-lifecycle.service';
 
 describe('worktreeLifecycleService path safety', () => {
@@ -32,8 +32,8 @@ describe('worktreeLifecycleService resume mode persistence', () => {
     const worktreeBasePath = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-resume-'));
     try {
       await Promise.all([
-        setWorkspaceInitMode('workspace-1', true, worktreeBasePath),
-        setWorkspaceInitMode('workspace-2', true, worktreeBasePath),
+        worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath),
+        worktreeLifecycleService.setInitMode('workspace-2', true, worktreeBasePath),
       ]);
 
       const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
@@ -54,14 +54,12 @@ describe('worktreeLifecycleService resume mode persistence', () => {
       const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
       await fs.writeFile(filePath, '{"invalid": "not a boolean"}', 'utf-8');
 
-      // Setting a mode should recover from malformed data
-      await setWorkspaceInitMode('workspace-1', true, worktreeBasePath);
+      await worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath);
 
       const content = await fs.readFile(filePath, 'utf-8');
       const parsed = JSON.parse(content);
       const data = resumeModesSchema.parse(parsed);
 
-      // Should have the new entry (malformed data is ignored)
       expect(data['workspace-1']).toBe(true);
     } finally {
       await fs.rm(worktreeBasePath, { recursive: true, force: true });
@@ -74,14 +72,12 @@ describe('worktreeLifecycleService resume mode persistence', () => {
       const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
       await fs.writeFile(filePath, '{invalid json', 'utf-8');
 
-      // Setting a mode should recover from corrupted JSON
-      await setWorkspaceInitMode('workspace-1', true, worktreeBasePath);
+      await worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath);
 
       const content = await fs.readFile(filePath, 'utf-8');
       const parsed = JSON.parse(content);
       const data = resumeModesSchema.parse(parsed);
 
-      // Should have the new entry (corrupted data is ignored)
       expect(data['workspace-1']).toBe(true);
     } finally {
       await fs.rm(worktreeBasePath, { recursive: true, force: true });
@@ -94,14 +90,12 @@ describe('worktreeLifecycleService resume mode persistence', () => {
       const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
       await fs.writeFile(filePath, '["array", "not", "object"]', 'utf-8');
 
-      // Setting a mode should recover from non-object data
-      await setWorkspaceInitMode('workspace-1', true, worktreeBasePath);
+      await worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath);
 
       const content = await fs.readFile(filePath, 'utf-8');
       const parsed = JSON.parse(content);
       const data = resumeModesSchema.parse(parsed);
 
-      // Should have the new entry (array data is ignored)
       expect(data['workspace-1']).toBe(true);
     } finally {
       await fs.rm(worktreeBasePath, { recursive: true, force: true });

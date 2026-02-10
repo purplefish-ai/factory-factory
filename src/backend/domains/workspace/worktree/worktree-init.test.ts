@@ -28,7 +28,7 @@ const mocks = vi.hoisted(() => ({
   markFailed: vi.fn(),
 }));
 
-vi.mock('../resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: mocks.findById,
     findByIdWithProject: mocks.findByIdWithProject,
@@ -36,13 +36,13 @@ vi.mock('../resource_accessors/workspace.accessor', () => ({
   },
 }));
 
-vi.mock('../resource_accessors/claude-session.accessor', () => ({
+vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
   claudeSessionAccessor: {
     findByWorkspaceId: mocks.findByWorkspaceId,
   },
 }));
 
-vi.mock('./git-ops.service', () => ({
+vi.mock('@/backend/services/git-ops.service', () => ({
   gitOpsService: {
     ensureBaseBranchExists: mocks.ensureBaseBranchExists,
     createWorktree: mocks.createWorktree,
@@ -50,47 +50,47 @@ vi.mock('./git-ops.service', () => ({
   },
 }));
 
-vi.mock('./github-cli.service', () => ({
+vi.mock('@/backend/services/github-cli.service', () => ({
   githubCLIService: {
     getAuthenticatedUsername: mocks.getAuthenticatedUsername,
     getIssue: mocks.getIssue,
   },
 }));
 
-vi.mock('./factory-config.service', () => ({
+vi.mock('@/backend/services/factory-config.service', () => ({
   FactoryConfigService: {
     readConfig: mocks.readConfig,
   },
 }));
 
-vi.mock('./startup-script.service', () => ({
+vi.mock('@/backend/services/startup-script.service', () => ({
   startupScriptService: {
     runStartupScript: mocks.runStartupScript,
     hasStartupScript: mocks.hasStartupScript,
   },
 }));
 
-vi.mock('./session.service', () => ({
+vi.mock('@/backend/services/session.service', () => ({
   sessionService: {
     startClaudeSession: mocks.startClaudeSession,
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
   },
 }));
 
-vi.mock('@/backend/domains/session/session-domain.service', () => ({
+vi.mock('@/backend/services/session-domain.service', () => ({
   sessionDomainService: {
     enqueue: mocks.enqueue,
     emitDelta: mocks.emitDelta,
   },
 }));
 
-vi.mock('./chat-message-handlers.service', () => ({
+vi.mock('@/backend/services/chat-message-handlers.service', () => ({
   chatMessageHandlerService: {
     tryDispatchNextMessage: mocks.tryDispatchNextMessage,
   },
 }));
 
-vi.mock('./workspace-state-machine.service', () => ({
+vi.mock('@/backend/services/workspace-state-machine.service', () => ({
   workspaceStateMachine: {
     startProvisioning: mocks.startProvisioning,
     markReady: mocks.markReady,
@@ -261,9 +261,7 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    // Session starts eagerly in parallel with scripts
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
-    // But gets stopped when initialization fails
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
   });
@@ -284,9 +282,7 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    // Session starts eagerly in parallel with scripts
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
-    // But gets stopped when script fails
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
   });
 });
