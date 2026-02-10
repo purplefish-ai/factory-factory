@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 03-workspace-domain-consolidation (Plan 02 of 05 complete)
+**Current Phase:** 03-workspace-domain-consolidation (Plan 04 of 05 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -11,7 +11,7 @@
 |-------|------|--------|-------|
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
-| 3 | Workspace Domain Consolidation | In Progress | Plan 02 of 05 done |
+| 3 | Workspace Domain Consolidation | In Progress | Plan 04 of 05 done |
 | 4 | GitHub Domain Consolidation | Pending | — |
 | 5 | Ratchet Domain Consolidation | Pending | — |
 | 6 | Terminal Domain Consolidation | Pending | — |
@@ -53,6 +53,10 @@
 | Intra-domain relative in workspace state/ | 2026-02-10 | kanban-state -> flow-state via ./flow-state (03-01) |
 | Absolute @/ imports in domain files | 2026-02-10 | Cross-layer refs use @/backend/ paths in workspace domain (03-02) |
 | Absolute mock paths in domain tests | 2026-02-10 | vi.mock paths updated to @/backend/ matching new imports (03-02) |
+| Absolute dynamic import for init.trpc | 2026-02-10 | '@/backend/trpc/workspace/init.trpc' prevents path breakage (03-04) |
+| cachedReviewCount as instance field (DOM-04) | 2026-02-10 | Moved from module scope to private field on WorkspaceQueryService (03-04) |
+| gitConcurrencyLimit kept module-level | 2026-02-10 | Stateless pLimit limiter stays as module const, not mutable state (03-04) |
+| Intra-domain relative in workspace query/ | 2026-02-10 | query/ -> state/ via ../state/kanban-state, ../state/flow-state (03-04) |
 
 ## Blockers
 
@@ -60,11 +64,14 @@ None.
 
 ## Context for Next Session
 
-Phase 3 IN PROGRESS: Workspace domain consolidation underway.
+Phase 3 IN PROGRESS: Workspace domain consolidation nearly complete.
 Plan 03-01 moved flow-state, kanban-state, and init-policy to domains/workspace/state/.
 Plan 03-02 moved state-machine, data, and activity services to domains/workspace/lifecycle/.
-All re-export shims at old paths. pnpm typecheck passes. 42 lifecycle tests passing.
-Plans 03-03 through 03-05 remain (workspace-helpers, init-policy barrel, workspace barrel).
+Plan 03-04 moved creation service to lifecycle/ and query service to query/.
+Dynamic import in creation.service.ts fixed to use absolute @/ alias.
+cachedReviewCount refactored from module-level to instance field (DOM-04).
+All re-export shims at old paths. pnpm typecheck passes. 12 creation tests + all others passing.
+Plan 03-05 remains (workspace barrel population).
 
 ## Performance Metrics
 
@@ -78,7 +85,8 @@ Plans 03-03 through 03-05 remain (workspace-helpers, init-policy barrel, workspa
 | 02 | 06 | 3min | 2 | 2 |
 | 03 | 01 | 5min | 2 | 9 |
 | 03 | 02 | 5min | 2 | 8 |
+| 03 | 04 | 5min | 2 | 5 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T15:05:00Z -- Completed 03-01-PLAN.md*
+*Last session: 2026-02-10T15:13:00Z -- Completed 03-04-PLAN.md*
