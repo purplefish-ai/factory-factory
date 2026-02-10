@@ -16,10 +16,10 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
-import { type AppContext, createAppContext } from '../../app-context';
 import type { ClaudeClient, ConnectionInfo } from '@/backend/domains/session';
-import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import { sessionDataService } from '@/backend/domains/session';
+import { type AppContext, createAppContext } from '../../app-context';
+import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import { toMessageString } from './message-utils';
 
 function sendBadRequest(socket: Duplex, message: string): void {
@@ -308,5 +308,5 @@ export const handleChatUpgrade = createChatUpgradeHandler(createAppContext());
 // Re-exports for external usage
 // ============================================================================
 
-export type { ChatMessageInput } from '../../schemas/websocket';
 export type { ConnectionInfo } from '@/backend/domains/session';
+export type { ChatMessageInput } from '../../schemas/websocket';

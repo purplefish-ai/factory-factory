@@ -33,7 +33,13 @@ export type {
   UserMessage,
 } from './claude';
 // Session history + Claude client (class, used as both type and value)
-export { ClaudeClient, ClaudeProcess, ProcessRegistry, processRegistry, SessionManager } from './claude';
+export {
+  ClaudeClient,
+  ClaudeProcess,
+  ProcessRegistry,
+  processRegistry,
+  SessionManager,
+} from './claude';
 // Session data access
 export { sessionDataService } from './data/session-data.service';
 export type { SessionProcessManager } from './lifecycle/session.process-manager';

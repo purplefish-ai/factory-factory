@@ -5,9 +5,9 @@
  * and updates the workspace with the PR URL when detected.
  */
 
+import { prSnapshotService } from '@/backend/domains/github';
 import { extractInputValue, isString } from '../schemas/tool-inputs.schema';
 import { createLogger } from '../services/logger.service';
-import { prSnapshotService } from '@/backend/domains/github';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('pr-detection');
