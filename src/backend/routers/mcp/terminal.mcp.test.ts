@@ -12,7 +12,13 @@ vi.mock('../../resource_accessors/claude-session.accessor', () => ({
   },
 }));
 
-vi.mock('../../services/terminal.service', () => ({
+vi.mock('@/backend/domains/session', () => ({
+  sessionDataService: {
+    findClaudeSessionById: (...args: unknown[]) => mockFindById(...args),
+  },
+}));
+
+vi.mock('@/backend/domains/terminal', () => ({
   terminalService: {
     getTerminal: (...args: unknown[]) => mockGetTerminal(...args),
     getTerminalsForWorkspace: (...args: unknown[]) => mockGetTerminalsForWorkspace(...args),

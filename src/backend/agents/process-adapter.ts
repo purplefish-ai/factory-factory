@@ -14,7 +14,7 @@ import {
   type ResultMessage,
   type StreamEventMessage,
   type ToolUseContent,
-} from '../claude/index';
+} from '@/backend/domains/session';
 import { executeMcpTool } from '../routers/mcp/server';
 import type { McpToolResponse } from '../routers/mcp/types';
 import { createLogger } from '../services/logger.service';

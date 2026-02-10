@@ -39,7 +39,7 @@ import {
   createDevLogsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
-import { reconciliationService } from './services/reconciliation.service';
+import { reconciliationService } from './domains/ratchet';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 

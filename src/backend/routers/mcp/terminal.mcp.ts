@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { sessionDataService } from '../../services/session-data.service';
-import type { TerminalInstance } from '../../services/terminal.service';
-import { terminalService } from '../../services/terminal.service';
+import { sessionDataService } from '@/backend/domains/session';
+import { type TerminalInstance, terminalService } from '@/backend/domains/terminal';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server';
 import type { McpToolContext, McpToolResponse } from './types';
 import { McpErrorCode } from './types';

@@ -17,10 +17,9 @@ import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '../../app-context';
-import type { ClaudeClient } from '../../claude/index';
+import type { ClaudeClient, ConnectionInfo } from '@/backend/domains/session';
 import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
-import type { ConnectionInfo } from '../../services/chat-connection.service';
-import { sessionDataService } from '../../services/session-data.service';
+import { sessionDataService } from '@/backend/domains/session';
 import { toMessageString } from './message-utils';
 
 function sendBadRequest(socket: Duplex, message: string): void {
@@ -310,4 +309,4 @@ export const handleChatUpgrade = createChatUpgradeHandler(createAppContext());
 // ============================================================================
 
 export type { ChatMessageInput } from '../../schemas/websocket';
-export type { ConnectionInfo } from '../../services/chat-connection.service';
+export type { ConnectionInfo } from '@/backend/domains/session';

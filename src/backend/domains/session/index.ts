@@ -15,7 +15,6 @@ export { chatMessageHandlerService } from './chat/chat-message-handlers.service'
 // Protocol types (commonly used by consumers)
 export type {
   AssistantMessage,
-  ClaudeClient,
   ClaudeClientOptions,
   ClaudeJson,
   ControlRequest,
@@ -33,8 +32,8 @@ export type {
   ToolUseContent,
   UserMessage,
 } from './claude';
-// Session history
-export { ClaudeProcess, ProcessRegistry, processRegistry, SessionManager } from './claude';
+// Session history + Claude client (class, used as both type and value)
+export { ClaudeClient, ClaudeProcess, ProcessRegistry, processRegistry, SessionManager } from './claude';
 // Session data access
 export { sessionDataService } from './data/session-data.service';
 export type { SessionProcessManager } from './lifecycle/session.process-manager';
