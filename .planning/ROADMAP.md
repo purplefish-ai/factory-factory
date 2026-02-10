@@ -252,6 +252,13 @@ Plans:
 
 **Requirements:** WIRE-01, WIRE-02, WIRE-03, DOM-03
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Rewire app-context.ts, fix reconciliation cross-domain bridge, fix domain-internal self-references
+- [ ] 09-02-PLAN.md — Rewire tRPC routers, WebSocket handlers, interceptors, agents, utils, and server.ts
+- [ ] 09-03-PLAN.md — Delete all shim files, update services/index.ts to infrastructure-only
+
 **Delivers:**
 - `app-context.ts` updated to import from domain barrel files
 - tRPC routers updated to import from domain barrel files
@@ -312,4 +319,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 8 complete (4 plans, ORCH-01 + ORCH-02 + ORCH-03 verified)*
+*Last updated: 2026-02-10 — Phase 9 planned (3 plans, WIRE-01 + WIRE-02 + WIRE-03 + DOM-03)*
