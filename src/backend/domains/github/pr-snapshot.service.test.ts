@@ -5,7 +5,7 @@ const mockUpdate = vi.fn();
 const mockFetchAndComputePRState = vi.fn();
 const mockUpdateCachedKanbanColumn = vi.fn();
 
-vi.mock('../resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: (...args: unknown[]) => mockFindById(...args),
     update: (...args: unknown[]) => mockUpdate(...args),
@@ -18,13 +18,13 @@ vi.mock('./github-cli.service', () => ({
   },
 }));
 
-vi.mock('./kanban-state.service', () => ({
+vi.mock('@/backend/services/kanban-state.service', () => ({
   kanbanStateService: {
     updateCachedKanbanColumn: (...args: unknown[]) => mockUpdateCachedKanbanColumn(...args),
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
