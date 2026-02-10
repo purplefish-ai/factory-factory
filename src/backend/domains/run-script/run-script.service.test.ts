@@ -48,6 +48,10 @@ type ExitHandlerCapable = {
   ) => Promise<void>;
 };
 
+type StopHandlerCapable = {
+  runningProcesses: Map<string, { pid: number }>;
+};
+
 describe('RunScriptService.handleProcessExit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,6 +113,7 @@ describe('RunScriptService.stopRunScript', () => {
     mockCompleteStopping.mockRejectedValue(new Error('already transitioned'));
 
     const service = new RunScriptService();
+    (service as unknown as StopHandlerCapable).runningProcesses.set('ws-1', { pid: 12_345 });
     const result = await service.stopRunScript('ws-1');
 
     expect(result).toEqual({ success: true });
