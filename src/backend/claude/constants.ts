@@ -1,11 +1,5 @@
 /**
- * Shared constants for Claude process/protocol integration.
+ * @deprecated Import from '@/backend/domains/session/claude/constants' instead.
+ * This re-export shim will be removed in Phase 9 (Import Rewiring).
  */
-export const CLAUDE_TIMEOUT_MS = Object.freeze({
-  processSpawn: 30_000,
-  protocolRequestDefault: 60_000,
-} as const);
-
-export const CLAUDE_LIMITS = Object.freeze({
-  protocolMaxLineLengthBytes: 1_000_000,
-} as const);
+export * from '@/backend/domains/session/claude/constants';
