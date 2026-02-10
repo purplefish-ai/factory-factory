@@ -2,14 +2,15 @@ import { type KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { projectAccessor } from '@/backend/resource_accessors/project.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
-import { chatEventForwarderService } from '@/backend/services/chat-event-forwarder.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
-import { githubCLIService } from '@/backend/services/github-cli.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { prSnapshotService } from '@/backend/services/pr-snapshot.service';
-import { sessionService } from '@/backend/services/session.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import type {
+  WorkspaceGitHubBridge,
+  WorkspacePRSnapshotBridge,
+  WorkspaceSessionBridge,
+} from '../bridges';
 import { deriveWorkspaceFlowStateFromWorkspace } from '../state/flow-state';
 import { computeKanbanColumn } from '../state/kanban-state';
 
@@ -52,6 +53,47 @@ class WorkspaceQueryService {
   /** Cached GitHub review count (DOM-04: moved from module scope to instance field) */
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
 
+  private sessionBridge: WorkspaceSessionBridge | null = null;
+  private githubBridge: WorkspaceGitHubBridge | null = null;
+  private prSnapshotBridge: WorkspacePRSnapshotBridge | null = null;
+
+  configure(bridges: {
+    session: WorkspaceSessionBridge;
+    github: WorkspaceGitHubBridge;
+    prSnapshot: WorkspacePRSnapshotBridge;
+  }): void {
+    this.sessionBridge = bridges.session;
+    this.githubBridge = bridges.github;
+    this.prSnapshotBridge = bridges.prSnapshot;
+  }
+
+  private get session(): WorkspaceSessionBridge {
+    if (!this.sessionBridge) {
+      throw new Error(
+        'WorkspaceQueryService not configured: session bridge missing. Call configure() first.'
+      );
+    }
+    return this.sessionBridge;
+  }
+
+  private get github(): WorkspaceGitHubBridge {
+    if (!this.githubBridge) {
+      throw new Error(
+        'WorkspaceQueryService not configured: github bridge missing. Call configure() first.'
+      );
+    }
+    return this.githubBridge;
+  }
+
+  private get prSnapshot(): WorkspacePRSnapshotBridge {
+    if (!this.prSnapshotBridge) {
+      throw new Error(
+        'WorkspaceQueryService not configured: prSnapshot bridge missing. Call configure() first.'
+      );
+    }
+    return this.prSnapshotBridge;
+  }
+
   async getProjectSummaryState(projectId: string) {
     const [project, workspaces] = await Promise.all([
       projectAccessor.findById(projectId),
@@ -63,7 +105,7 @@ class WorkspaceQueryService {
     const defaultBranch = project?.defaultBranch ?? 'main';
 
     // Get all pending requests from active sessions
-    const allPendingRequests = chatEventForwarderService.getAllPendingRequests();
+    const allPendingRequests = this.session.getAllPendingRequests();
 
     const workingStatusByWorkspace = new Map<string, boolean>();
     const flowStateByWorkspace = new Map<
@@ -76,7 +118,7 @@ class WorkspaceQueryService {
       flowStateByWorkspace.set(workspace.id, flowState);
 
       const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-      const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+      const isSessionWorking = this.session.isAnySessionWorking(sessionIds);
       workingStatusByWorkspace.set(workspace.id, isSessionWorking || flowState.isWorking);
 
       const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);
@@ -117,9 +159,9 @@ class WorkspaceQueryService {
       reviewCount = this.cachedReviewCount.count;
     } else {
       try {
-        const health = await githubCLIService.checkHealth();
+        const health = await this.github.checkHealth();
         if (health.isInstalled && health.isAuthenticated) {
-          const prs = await githubCLIService.listReviewRequests();
+          const prs = await this.github.listReviewRequests();
           reviewCount = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
           this.cachedReviewCount = { count: reviewCount, fetchedAt: now };
         }
@@ -191,12 +233,12 @@ class WorkspaceQueryService {
     });
 
     // Get all pending requests from active sessions
-    const allPendingRequests = chatEventForwarderService.getAllPendingRequests();
+    const allPendingRequests = this.session.getAllPendingRequests();
 
     return workspaces
       .map((workspace) => {
         const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-        const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+        const isSessionWorking = this.session.isAnySessionWorking(sessionIds);
         const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
         const isWorking = isSessionWorking || flowState.isWorking;
 
@@ -294,8 +336,8 @@ class WorkspaceQueryService {
       return { success: false, reason: 'no_pr_url' as const };
     }
 
-    const prResult = await prSnapshotService.refreshWorkspace(workspaceId, workspace.prUrl);
-    if (!prResult.success) {
+    const prResult = await this.prSnapshot.refreshWorkspace(workspaceId, workspace.prUrl);
+    if (!(prResult.success && prResult.snapshot)) {
       return { success: false, reason: 'fetch_failed' as const };
     }
 
@@ -327,7 +369,7 @@ class WorkspaceQueryService {
     await Promise.all(
       workspacesWithPRs.map((workspace) =>
         gitConcurrencyLimit(async () => {
-          const prResult = await prSnapshotService.refreshWorkspace(workspace.id, workspace.prUrl);
+          const prResult = await this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl);
           if (!prResult.success) {
             failed++;
             return;

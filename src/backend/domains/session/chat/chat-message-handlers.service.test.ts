@@ -25,11 +25,11 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
   sessionDomainService: mockSessionDomainService,
 }));
 
-vi.mock('@/backend/services/session.service', () => ({
+vi.mock('../lifecycle/session.service', () => ({
   sessionService: mockSessionService,
 }));
 
-vi.mock('@/backend/services/session-data.service', () => ({
+vi.mock('../data/session-data.service', () => ({
   sessionDataService: mockSessionDataService,
 }));
 
@@ -53,6 +53,12 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Configure the init policy bridge (replaces direct import of getWorkspaceInitPolicy)
+    chatMessageHandlerService.configure({
+      initPolicy: {
+        getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'allowed' }),
+      },
+    });
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessage);
     mockSessionDomainService.allocateOrder.mockReturnValue(0);
     mockSessionDataService.findClaudeSessionById.mockResolvedValue({

@@ -7,7 +7,7 @@
 
 import type { SessionStatus } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
+import type { RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 
 const logger = createLogger('ci-fixer');
@@ -31,6 +31,20 @@ export type CIFixResult =
 
 class CIFixerService {
   private readonly pendingFixes = new Map<string, Promise<CIFixResult>>();
+  private sessionBridge: RatchetSessionBridge | null = null;
+
+  configure(bridges: { session: RatchetSessionBridge }): void {
+    this.sessionBridge = bridges.session;
+  }
+
+  private get session(): RatchetSessionBridge {
+    if (!this.sessionBridge) {
+      throw new Error(
+        'CIFixerService not configured: session bridge missing. Call configure() first.'
+      );
+    }
+    return this.sessionBridge;
+  }
 
   async triggerCIFix(params: {
     workspaceId: string;
@@ -103,7 +117,7 @@ class CIFixerService {
     if (!session) {
       return false;
     }
-    return sessionService.isSessionWorking(session.id);
+    return this.session.isSessionWorking(session.id);
   }
 
   async getActiveCIFixSession(
@@ -118,7 +132,7 @@ class CIFixerService {
       return false;
     }
 
-    const client = sessionService.getClient(session.id);
+    const client = this.session.getClient(session.id);
     if (!client?.isRunning()) {
       return false;
     }

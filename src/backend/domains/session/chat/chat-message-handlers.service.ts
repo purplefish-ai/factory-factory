@@ -11,9 +11,6 @@
 import type { WebSocket } from 'ws';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
-import { sessionDataService } from '@/backend/services/session-data.service';
-import { getWorkspaceInitPolicy } from '@/backend/services/workspace-init-policy.service';
 import {
   type ClaudeContentItem,
   DEFAULT_THINKING_BUDGET,
@@ -22,7 +19,10 @@ import {
   resolveSelectedModel,
 } from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
+import type { SessionInitPolicyBridge } from '../bridges';
 import type { ClaudeClient } from '../claude/index';
+import { sessionDataService } from '../data/session-data.service';
+import { sessionService } from '../lifecycle/session.service';
 import { processAttachmentsAndBuildContent } from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
@@ -50,6 +50,25 @@ class ChatMessageHandlerService {
   private clientCreator: ClientCreator | null = null;
   /** Per-session override to allow dispatch under manual_resume policy. */
   private manualDispatchResumed = new Map<string, boolean>();
+
+  /** Cross-domain bridge for workspace init policy (injected by orchestration layer) */
+  private initPolicyBridge: SessionInitPolicyBridge | null = null;
+
+  /**
+   * Configure cross-domain bridges. Called once at startup by orchestration layer.
+   */
+  configure(bridges: { initPolicy: SessionInitPolicyBridge }): void {
+    this.initPolicyBridge = bridges.initPolicy;
+  }
+
+  private get initPolicy(): SessionInitPolicyBridge {
+    if (!this.initPolicyBridge) {
+      throw new Error(
+        'ChatMessageHandlerService not configured: initPolicy bridge missing. Call configure() first.'
+      );
+    }
+    return this.initPolicyBridge;
+  }
 
   private handlerRegistry = createChatMessageHandlerRegistry({
     getClientCreator: () => this.clientCreator,
@@ -344,7 +363,7 @@ class ChatMessageHandlerService {
       return 'blocked';
     }
 
-    const dispatchPolicy = getWorkspaceInitPolicy(session.workspace).dispatchPolicy;
+    const dispatchPolicy = this.initPolicy.getWorkspaceInitPolicy(session.workspace).dispatchPolicy;
     if (dispatchPolicy !== 'manual_resume') {
       this.manualDispatchResumed.delete(dbSessionId);
       return dispatchPolicy;

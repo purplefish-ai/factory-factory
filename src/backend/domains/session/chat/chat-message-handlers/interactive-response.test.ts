@@ -8,7 +8,7 @@ const mockAllocateOrder = vi.fn();
 const mockCommitSentUserMessageAtOrder = vi.fn();
 const mockEmitDelta = vi.fn();
 
-vi.mock('@/backend/services/session.service', () => ({
+vi.mock('../../lifecycle/session.service', () => ({
   sessionService: {
     getClient: (...args: unknown[]) => mockGetClient(...args),
   },

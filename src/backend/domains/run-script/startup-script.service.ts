@@ -12,7 +12,7 @@ import type { Project, Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceStateMachine } from '@/backend/services/workspace-state-machine.service';
+import type { RunScriptWorkspaceBridge } from './bridges';
 
 const logger = createLogger('startup-script');
 
@@ -29,6 +29,25 @@ export interface StartupScriptResult {
 }
 
 class StartupScriptService {
+  /** Cross-domain bridge for workspace state machine (injected by orchestration layer) */
+  private workspaceBridge: RunScriptWorkspaceBridge | null = null;
+
+  /**
+   * Configure cross-domain bridges. Called once at startup by orchestration layer.
+   */
+  configure(bridges: { workspace: RunScriptWorkspaceBridge }): void {
+    this.workspaceBridge = bridges.workspace;
+  }
+
+  private get workspace(): RunScriptWorkspaceBridge {
+    if (!this.workspaceBridge) {
+      throw new Error(
+        'StartupScriptService not configured: workspace bridge missing. Call configure() first.'
+      );
+    }
+    return this.workspaceBridge;
+  }
+
   /**
    * Run the startup script for a workspace synchronously.
    * Updates workspace status throughout execution via state machine.
@@ -44,7 +63,7 @@ class StartupScriptService {
     // Check if project has a startup script configured
     if (!(project.startupScriptCommand || project.startupScriptPath)) {
       // No script configured - mark as ready immediately
-      await workspaceStateMachine.markReady(workspace.id);
+      await this.workspace.markReady(workspace.id);
       return {
         success: true,
         exitCode: 0,
@@ -85,7 +104,7 @@ class StartupScriptService {
       const durationMs = Date.now() - startTime;
 
       if (result.success) {
-        await workspaceStateMachine.markReady(workspace.id);
+        await this.workspace.markReady(workspace.id);
         logger.info('Startup script completed successfully', {
           workspaceId: workspace.id,
           durationMs,
@@ -95,7 +114,7 @@ class StartupScriptService {
           ? `Script timed out after ${project.startupScriptTimeout}s`
           : `Script exited with code ${result.exitCode}: ${result.stderr.slice(0, 500)}`;
 
-        await workspaceStateMachine.markFailed(workspace.id, errorMessage);
+        await this.workspace.markFailed(workspace.id, errorMessage);
         logger.error('Startup script failed', {
           workspaceId: workspace.id,
           exitCode: result.exitCode,
@@ -112,7 +131,7 @@ class StartupScriptService {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      await workspaceStateMachine.markFailed(workspace.id, errorMessage);
+      await this.workspace.markFailed(workspace.id, errorMessage);
       logger.error('Startup script execution error', error as Error, {
         workspaceId: workspace.id,
       });

@@ -18,12 +18,6 @@ vi.mock('./github-cli.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/kanban-state.service', () => ({
-  kanbanStateService: {
-    updateCachedKanbanColumn: (...args: unknown[]) => mockUpdateCachedKanbanColumn(...args),
-  },
-}));
-
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -38,6 +32,12 @@ import { prSnapshotService } from './pr-snapshot.service';
 describe('PRSnapshotService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Configure bridge with mock kanban dependency
+    prSnapshotService.configure({
+      kanban: {
+        updateCachedKanbanColumn: (...args: unknown[]) => mockUpdateCachedKanbanColumn(...args),
+      },
+    });
   });
 
   describe('attachAndRefreshPR', () => {

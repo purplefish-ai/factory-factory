@@ -1,7 +1,7 @@
 import { KanbanColumn, PRState, type Workspace, WorkspaceStatus } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/index';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
+import type { WorkspaceSessionBridge } from '../bridges';
 import { deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 
 const logger = createLogger('kanban-state');
@@ -72,6 +72,21 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
 }
 
 class KanbanStateService {
+  private sessionBridge: WorkspaceSessionBridge | null = null;
+
+  configure(bridges: { session: WorkspaceSessionBridge }): void {
+    this.sessionBridge = bridges.session;
+  }
+
+  private get session(): WorkspaceSessionBridge {
+    if (!this.sessionBridge) {
+      throw new Error(
+        'KanbanStateService not configured: session bridge missing. Call configure() first.'
+      );
+    }
+    return this.sessionBridge;
+  }
+
   /**
    * Get kanban state for a single workspace, including real-time activity check.
    */
@@ -81,9 +96,9 @@ class KanbanStateService {
       return null;
     }
 
-    // Get real-time working status from session service
+    // Get real-time working status from session bridge
     const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-    const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+    const isSessionWorking = this.session.isAnySessionWorking(sessionIds);
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
     const isWorking = isSessionWorking || flowState.isWorking;
 

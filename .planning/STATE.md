@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 07-run-script-domain-consolidation (Plan 02 of 02 complete)
+**Current Phase:** 08-orchestration-layer (Plan 04 of 04 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -16,7 +16,7 @@
 | 5 | Ratchet Domain Consolidation | Complete | All 3 plans done |
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
-| 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
+| 8 | Orchestration Layer | Complete | All 4 plans done |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
 
@@ -77,6 +77,21 @@
 | Instance type in app-context for RunScriptService | 2026-02-10 | Changed from typeof RunScriptService to RunScriptService (instance type) (07-01) |
 | Cross-domain workspace-state-machine via shim | 2026-02-10 | startup-script uses @/backend/services/ shim path to avoid cross-domain violation (07-02) |
 | Selective named exports in run-script barrel | 2026-02-10 | Barrel uses explicit named re-exports (no export *) per established convention (07-02) |
+| clearInitMode made public for orchestrator | 2026-02-10 | Orchestrator needs access to clear init mode after worktree creation (08-01) |
+| Direct module paths for workspace in orchestrators | 2026-02-10 | Avoids circular dep: workspace barrel -> creation.service -> orchestrator -> workspace barrel (08-01) |
+| Module-level cached GitHub username in orchestrator | 2026-02-10 | Cross-domain caching moved from WorktreeLifecycleService instance field to orchestrator module scope (08-01) |
+| Knip ignore for orchestration directory | 2026-02-10 | Added src/backend/orchestration/*.ts to knip ignore for new orchestration files (08-01) |
+
+| Bridge interfaces with lightweight types | 2026-02-10 | Ratchet bridges.ts defines own types, no dependency on github/session domain types (08-02) |
+| configure() + fail-fast getter pattern | 2026-02-10 | Each ratchet service has configure(bridges) and private get session()/github() that throw if unconfigured (08-02) |
+| Bridge injection in tests over vi.mock | 2026-02-10 | ci-fixer test uses configure({session: mockBridge}) instead of vi.mock module path (08-02) |
+| Direct import for configureRatchetBridges | 2026-02-10 | Server.ts imports directly (not via barrel) to avoid circular dep with reconciliation (08-03) |
+| Locally-defined fixer types in github bridges | 2026-02-10 | GitHubFixerAcquireInput/Result defined locally to avoid cross-domain dep on ratchet (08-03) |
+| Bridge injection in pr-snapshot test | 2026-02-10 | configure({kanban: mock}) replaces vi.mock for cross-domain kanban-state service (08-03) |
+| Locally-defined types in session bridges | 2026-02-10 | SessionInitPolicyInput uses string status to avoid Prisma cross-domain dep (08-04) |
+| Cast at orchestration boundary | 2026-02-10 | getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput) bridges string vs enum types (08-04) |
+| Merged ratchet-bridges into domain-bridges | 2026-02-10 | Single configureDomainBridges() replaces separate configureRatchetBridges() (08-04) |
+| Intra-domain relative imports in session handlers | 2026-02-10 | 11 handler files converted from @/backend/services/ shim to relative paths (08-04) |
 
 ## Blockers
 
@@ -84,10 +99,12 @@ None.
 
 ## Context for Next Session
 
-Phase 7 complete: Run-script domain consolidation done (RS-01).
-3 services in src/backend/domains/run-script/: run-script-state-machine.service, run-script.service, startup-script.service.
-Domain barrel exports full public API (5 runtime + 2 types). Smoke test passes.
-Re-export shims at old services/ paths for all 3 services. Ready for Phase 8 (Orchestration).
+Phase 8 (Orchestration Layer) complete -- all 4 plans done.
+Plan 01: workspace-init and workspace-archive orchestrators.
+Plan 02: Ratchet domain bridge injection pattern.
+Plan 03: Workspace-query, kanban-state, pr-review-fixer, pr-snapshot bridge injection + ratchet bridge wiring.
+Plan 04: Session and run-script bridge injection. Consolidated configureDomainBridges() replaces configureRatchetBridges(). All 6 domains have zero cross-domain imports. dependency-cruiser validates clean.
+Ready for Phase 9 (AppContext & Import Rewiring).
 
 ## Performance Metrics
 
@@ -113,7 +130,11 @@ Re-export shims at old services/ paths for all 3 services. Ready for Phase 8 (Or
 | 06 | 01 | 4min | 2 | 5 |
 | 07 | 01 | 7min | 2 | 7 |
 | 07 | 02 | 3min | 2 | 4 |
+| 08 | 01 | 12min | 2 | 14 |
+| 08 | 02 | 2min | 2 | 7 |
+| 08 | 03 | 7min | 2 | 12 |
+| 08 | 04 | 8min | 2 | 24 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T17:58:30Z -- Completed 07-02-PLAN.md*
+*Last session: 2026-02-10T19:34:07Z -- Completed 08-04-PLAN.md*

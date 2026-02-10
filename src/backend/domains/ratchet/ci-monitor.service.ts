@@ -10,10 +10,9 @@ import pLimit from 'p-limit';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
-import { githubCLIService } from '@/backend/services/github-cli.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { sessionService } from '@/backend/services/session.service';
+import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
 import { ciFixerService } from './ci-fixer.service';
 
 const logger = createLogger('ci-monitor');
@@ -23,6 +22,32 @@ class CIMonitorService {
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ciMonitorWorkspaceChecks);
   private readonly backoff = new RateLimitBackoff();
+
+  private sessionBridge: RatchetSessionBridge | null = null;
+  private githubBridge: RatchetGitHubBridge | null = null;
+
+  configure(bridges: { session: RatchetSessionBridge; github: RatchetGitHubBridge }): void {
+    this.sessionBridge = bridges.session;
+    this.githubBridge = bridges.github;
+  }
+
+  private get session(): RatchetSessionBridge {
+    if (!this.sessionBridge) {
+      throw new Error(
+        'CIMonitorService not configured: session bridge missing. Call configure() first.'
+      );
+    }
+    return this.sessionBridge;
+  }
+
+  private get github(): RatchetGitHubBridge {
+    if (!this.githubBridge) {
+      throw new Error(
+        'CIMonitorService not configured: github bridge missing. Call configure() first.'
+      );
+    }
+    return this.githubBridge;
+  }
 
   /**
    * Start the CI monitor
@@ -155,7 +180,7 @@ class CIMonitorService {
 
     try {
       // Fetch current PR status from GitHub
-      const prResult = await githubCLIService.fetchAndComputePRState(workspace.prUrl);
+      const prResult = await this.github.fetchAndComputePRState(workspace.prUrl);
 
       if (!prResult) {
         logger.debug('Failed to fetch PR status', { workspaceId: workspace.id });
@@ -363,7 +388,7 @@ class CIMonitorService {
       }
 
       // Get the client for this session
-      const client = sessionService.getClient(runningSession.id);
+      const client = this.session.getClient(runningSession.id);
       if (!client) {
         logger.debug('Session has no active client', {
           workspaceId,
