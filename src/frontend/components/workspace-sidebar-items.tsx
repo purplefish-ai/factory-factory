@@ -141,26 +141,27 @@ export function ActiveWorkspaceItem({
           showAttentionGlow && 'waiting-pulse'
         )}
       >
-        <Link
-          to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
-          onClick={() => clearAttention(workspace.id)}
-        >
-          <div className="flex w-full min-w-0 items-center gap-2">
-            {/* Drag handle */}
-            <button
-              type="button"
-              className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
-              aria-label="Drag to reorder"
-              {...sortableAttributes}
-              {...sortableListeners}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-              }}
-            >
-              <GripVertical className="h-3 w-3" />
-            </button>
+        <div className="flex w-full min-w-0 items-center gap-2">
+          {/* Drag handle - outside Link to prevent navigation */}
+          <button
+            type="button"
+            className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
+            aria-label="Drag to reorder"
+            {...sortableAttributes}
+            {...sortableListeners}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <GripVertical className="h-3 w-3" />
+          </button>
 
+          <Link
+            to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
+            onClick={() => clearAttention(workspace.id)}
+            className="flex flex-1 min-w-0 items-center gap-2"
+          >
             {/* Status dot + ratchet toggle */}
             <div className="w-5 shrink-0 flex flex-col items-center gap-1.5 self-start mt-1.5">
               <Tooltip>
@@ -263,8 +264,8 @@ export function ActiveWorkspaceItem({
               {/* Row 3: files changed + deltas + PR */}
               <WorkspaceMetaRow workspace={workspace} stats={stats} />
             </div>
-          </div>
-        </Link>
+          </Link>
+        </div>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
