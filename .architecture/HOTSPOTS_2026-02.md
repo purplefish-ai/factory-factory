@@ -1,5 +1,13 @@
 # Factory Factory Backend Architecture Analysis
 
+> **SUPERSEDED:** This analysis was generated pre-refactor (2026-02-09). The SRP Consolidation & Domain Module Refactor (Phases 1-10, completed 2026-02-10) addressed all issues identified here:
+> - "97 service-to-service dependencies" -- Reduced via domain modules and orchestration layer
+> - "session.service.ts 27 dependents" -- Session logic consolidated into `src/backend/domains/session/`
+> - "`src/backend/claude/` mixed concerns" -- Absorbed into session domain at `domains/session/claude/`
+> - Action Plan Phases 1-3 -- Completed by SRP refactor Phases 1-9
+>
+> For current architecture, see `AGENTS.md` and `.planning/codebase/ARCHITECTURE.md`.
+
 **Generated:** 2026-02-09
 **Backend Modules Analyzed:** 202
 **Circular Dependencies:** 0 ✓
