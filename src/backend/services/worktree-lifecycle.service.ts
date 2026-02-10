@@ -772,6 +772,15 @@ class WorktreeLifecycleService {
         runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
       });
 
+      // Start Claude session eagerly - runs in parallel with setup scripts.
+      // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
+      const claudeSessionPromise = startDefaultClaudeSession(workspaceId).catch((error) => {
+        logger.error('Failed to start default Claude session', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
       const factorySetupResult = await runFactorySetupScriptIfConfigured(
         workspaceId,
         workspaceWithProject,
@@ -779,15 +788,7 @@ class WorktreeLifecycleService {
         factoryConfig
       );
       if (factorySetupResult.ran) {
-        // Only start Claude session if factory setup succeeded
-        if (factorySetupResult.success) {
-          void startDefaultClaudeSession(workspaceId).catch((error) => {
-            logger.error('Failed to start default Claude session after factory setup', {
-              workspaceId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          });
-        }
+        await claudeSessionPromise;
         return;
       }
 
@@ -797,26 +798,13 @@ class WorktreeLifecycleService {
         worktreeInfo.worktreePath
       );
       if (projectSetupResult.ran) {
-        // Only start Claude session if project setup succeeded
-        if (projectSetupResult.success) {
-          void startDefaultClaudeSession(workspaceId).catch((error) => {
-            logger.error('Failed to start default Claude session after project setup', {
-              workspaceId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          });
-        }
+        await claudeSessionPromise;
         return;
       }
 
-      // No setup scripts ran, mark ready and start Claude session
+      // No setup scripts ran, mark ready
       await workspaceStateMachine.markReady(workspaceId);
-      void startDefaultClaudeSession(workspaceId).catch((error) => {
-        logger.error('Failed to start default Claude session', {
-          workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
+      await claudeSessionPromise;
     } catch (error) {
       await handleWorkspaceInitFailure(workspaceId, error as Error);
     } finally {
