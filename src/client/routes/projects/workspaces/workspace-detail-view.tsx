@@ -9,13 +9,20 @@ import type { useSessionManagement, useWorkspaceData } from './use-workspace-det
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
-import { ArchivingOverlay } from './workspace-overlays';
+import {
+  ArchivingOverlay,
+  ScriptFailedBanner,
+  ScriptRunningBanner,
+} from './workspace-overlays';
 
 export interface WorkspaceDetailViewProps {
   workspaceLoading: boolean;
   workspace: ReturnType<typeof useWorkspaceData>['workspace'];
   workspaceId: string;
   handleBackToWorkspaces: () => void;
+  isInitializing: boolean;
+  isScriptRunning: boolean;
+  isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
   archivePending: boolean;
   availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
@@ -79,11 +86,46 @@ export interface WorkspaceDetailViewProps {
   handleArchive: (commitUncommitted: boolean) => void;
 }
 
+function ScriptBanner({
+  workspaceId,
+  isScriptRunning,
+  isScriptFailed,
+  workspaceInitStatus,
+}: {
+  workspaceId: string;
+  isScriptRunning: boolean;
+  isScriptFailed: boolean;
+  workspaceInitStatus: WorkspaceDetailViewProps['workspaceInitStatus'];
+}) {
+  if (isScriptRunning) {
+    return (
+      <ScriptRunningBanner
+        initOutput={workspaceInitStatus?.initOutput ?? null}
+        hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+      />
+    );
+  }
+  if (isScriptFailed) {
+    return (
+      <ScriptFailedBanner
+        workspaceId={workspaceId}
+        initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
+        initOutput={workspaceInitStatus?.initOutput ?? null}
+        hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+      />
+    );
+  }
+  return null;
+}
+
 export function WorkspaceDetailView({
   workspaceLoading,
   workspace,
   workspaceId,
   handleBackToWorkspaces,
+  isInitializing,
+  isScriptRunning,
+  isScriptFailed,
   workspaceInitStatus,
   archivePending,
   availableIdes,
@@ -177,6 +219,13 @@ export function WorkspaceDetailView({
         running={running}
         isCreatingSession={isCreatingSession}
         hasChanges={hasChanges}
+      />
+
+      <ScriptBanner
+        workspaceId={workspaceId}
+        isScriptRunning={isScriptRunning}
+        isScriptFailed={isScriptFailed}
+        workspaceInitStatus={workspaceInitStatus}
       />
 
       <ResizablePanelGroup

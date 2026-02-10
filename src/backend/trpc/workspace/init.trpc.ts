@@ -57,6 +57,7 @@ export const workspaceInitRouter = router({
       hasStartupScript: !!(
         workspace.project?.startupScriptCommand || workspace.project?.startupScriptPath
       ),
+      hasWorktreePath: !!workspace.worktreePath,
     };
   }),
 
