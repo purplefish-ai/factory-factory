@@ -90,6 +90,10 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     // Reset terminal tab state when workspace changes
     setTerminalTabState(null);
 
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     try {
       const storedTop = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
       if (
