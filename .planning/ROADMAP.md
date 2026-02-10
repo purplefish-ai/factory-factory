@@ -16,6 +16,11 @@ Refactor the flat `src/backend/services/` (45+ files) into domain modules under 
 
 **Requirements:** DOM-01, DOM-02
 
+**Plans:** 1 plan
+
+Plans:
+- [ ] 01-01-PLAN.md — Create domain directories, barrel files, and dependency-cruiser cross-domain rule
+
 **Delivers:**
 - Domain module directory structure for all 6 domains (`session`, `workspace`, `github`, `ratchet`, `terminal`, `run-script`)
 - Barrel file convention (`index.ts` per domain)
@@ -254,4 +259,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 after initial definition*
+*Last updated: 2026-02-10 after Phase 1 planning*
