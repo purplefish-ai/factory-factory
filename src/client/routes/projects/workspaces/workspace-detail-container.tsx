@@ -96,7 +96,7 @@ export function WorkspaceDetailContainer() {
     workspace?.creationSource === 'GITHUB_ISSUE' &&
     selectedDbSessionId !== null &&
     (sessionStatus.phase === 'loading' || sessionStatus.phase === 'ready') &&
-    (processStatus.state === 'unknown' || processStatus.state === 'alive') &&
+    processStatus.state !== 'alive' &&
     messages.some((message) => message.source === 'user') &&
     !messages.some((message) => message.source === 'claude');
 
