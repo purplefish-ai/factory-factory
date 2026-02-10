@@ -454,6 +454,8 @@ export class RunScriptService {
                 pid,
                 error: err.message,
               });
+            } else {
+              RunScriptService.runningProcesses.delete(workspaceId);
             }
             resolve();
           });
