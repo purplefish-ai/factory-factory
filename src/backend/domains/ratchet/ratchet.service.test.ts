@@ -1,6 +1,7 @@
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
 
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -17,33 +18,9 @@ vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
   },
 }));
 
-vi.mock('@/backend/services/github-cli.service', () => ({
-  githubCLIService: {
-    extractPRInfo: vi.fn(),
-    getPRFullDetails: vi.fn(),
-    getReviewComments: vi.fn(),
-    computeCIStatus: vi.fn(),
-    getAuthenticatedUsername: vi.fn(),
-  },
-}));
-
 vi.mock('./fixer-session.service', () => ({
   fixerSessionService: {
     acquireAndDispatch: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/services/session.service', () => ({
-  sessionService: {
-    isSessionRunning: vi.fn(),
-    isSessionWorking: vi.fn(),
-    stopClaudeSession: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/services/session-domain.service', () => ({
-  sessionDomainService: {
-    injectCommittedUserMessage: vi.fn(),
   },
 }));
 
@@ -58,17 +35,34 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
-import { githubCLIService } from '@/backend/services/github-cli.service';
-import { sessionService } from '@/backend/services/session.service';
 import { fixerSessionService } from './fixer-session.service';
 import { ratchetService } from './ratchet.service';
+
+const mockSessionBridge: RatchetSessionBridge = {
+  isSessionRunning: vi.fn(),
+  isSessionWorking: vi.fn(),
+  stopClaudeSession: vi.fn(),
+  startClaudeSession: vi.fn(),
+  getClient: vi.fn(),
+  injectCommittedUserMessage: vi.fn(),
+};
+
+const mockGitHubBridge: RatchetGitHubBridge = {
+  extractPRInfo: vi.fn(),
+  getPRFullDetails: vi.fn(),
+  getReviewComments: vi.fn(),
+  computeCIStatus: vi.fn(),
+  getAuthenticatedUsername: vi.fn(),
+  fetchAndComputePRState: vi.fn(),
+};
 
 describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
-    vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue(null);
-    vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
+    ratchetService.configure({ session: mockSessionBridge, github: mockGitHubBridge });
+    vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
   });
 
   it('checks workspaces and processes each', async () => {
@@ -174,7 +168,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         status: 'RUNNING',
       },
     ] as never);
-    vi.mocked(sessionService.isSessionWorking).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(true);
 
     const result = await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
@@ -274,7 +268,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         status: 'RUNNING',
       },
     ] as never);
-    vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
 
     vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
       status: 'started',
@@ -433,8 +427,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       sessionId: 'ratchet-session',
       promptSent: false,
     } as never);
-    vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
-    vi.mocked(sessionService.stopClaudeSession).mockResolvedValue();
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.stopClaudeSession).mockResolvedValue();
 
     const result = await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
@@ -446,7 +440,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
       ratchetActiveSessionId: null,
     });
-    expect(sessionService.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
+    expect(mockSessionBridge.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
   });
 
   it('does not dispatch on a clean PR with no new review activity', async () => {
@@ -515,7 +509,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ratchet-session',
       status: SessionStatus.RUNNING,
     } as never);
-    vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(false);
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
     const action = await unsafeCoerce<{
@@ -546,9 +540,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       id: 'ratchet-session',
       status: SessionStatus.RUNNING,
     } as never);
-    vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
-    vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
-    vi.mocked(sessionService.stopClaudeSession).mockResolvedValue();
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
+    vi.mocked(mockSessionBridge.stopClaudeSession).mockResolvedValue();
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
     const action = await unsafeCoerce<{
@@ -559,7 +553,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
       ratchetActiveSessionId: null,
     });
-    expect(sessionService.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
+    expect(mockSessionBridge.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
   });
 
   it('decides to trigger fixer when context is actionable', () => {

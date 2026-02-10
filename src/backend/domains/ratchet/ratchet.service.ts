@@ -17,11 +17,9 @@ import {
   SERVICE_CONCURRENCY,
   SERVICE_INTERVAL_MS,
 } from '@/backend/services/constants';
-import { githubCLIService } from '@/backend/services/github-cli.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { sessionService } from '@/backend/services/session.service';
-import { sessionDomainService } from '@/backend/services/session-domain.service';
+import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 
 const logger = createLogger('ratchet');
@@ -97,6 +95,32 @@ class RatchetService {
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
   private readonly backoff = new RateLimitBackoff();
+
+  private sessionBridge: RatchetSessionBridge | null = null;
+  private githubBridge: RatchetGitHubBridge | null = null;
+
+  configure(bridges: { session: RatchetSessionBridge; github: RatchetGitHubBridge }): void {
+    this.sessionBridge = bridges.session;
+    this.githubBridge = bridges.github;
+  }
+
+  private get session(): RatchetSessionBridge {
+    if (!this.sessionBridge) {
+      throw new Error(
+        'RatchetService not configured: session bridge missing. Call configure() first.'
+      );
+    }
+    return this.sessionBridge;
+  }
+
+  private get github(): RatchetGitHubBridge {
+    if (!this.githubBridge) {
+      throw new Error(
+        'RatchetService not configured: github bridge missing. Call configure() first.'
+      );
+    }
+    return this.githubBridge;
+  }
 
   start(): void {
     if (this.monitorLoop) {
@@ -699,16 +723,16 @@ class RatchetService {
       return null;
     }
 
-    if (!sessionService.isSessionRunning(session.id)) {
+    if (!this.session.isSessionRunning(session.id)) {
       await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
       return null;
     }
 
     // Ratchet session has completed its current unit of work: close it to avoid lingering idle agents.
-    if (!sessionService.isSessionWorking(session.id)) {
+    if (!this.session.isSessionWorking(session.id)) {
       await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
       try {
-        await sessionService.stopClaudeSession(session.id);
+        await this.session.stopClaudeSession(session.id);
       } catch (error) {
         logger.warn('Failed to stop completed ratchet session', {
           workspaceId: workspace.id,
@@ -724,13 +748,13 @@ class RatchetService {
 
   private async hasActiveSession(workspaceId: string): Promise<boolean> {
     const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
-    return sessions.some((session) => sessionService.isSessionWorking(session.id));
+    return sessions.some((session) => this.session.isSessionWorking(session.id));
   }
 
   private resolveRatchetPrContext(
     workspace: WorkspaceWithPR
   ): { repo: string; prNumber: number } | null {
-    const prInfo = githubCLIService.extractPRInfo(workspace.prUrl);
+    const prInfo = this.github.extractPRInfo(workspace.prUrl);
     if (!prInfo) {
       logger.warn('Could not parse PR URL', { prUrl: workspace.prUrl });
       return null;
@@ -762,8 +786,8 @@ class RatchetService {
 
     try {
       const [prDetails, reviewComments] = await Promise.all([
-        githubCLIService.getPRFullDetails(prContext.repo, prContext.prNumber),
-        githubCLIService.getReviewComments(prContext.repo, prContext.prNumber),
+        this.github.getPRFullDetails(prContext.repo, prContext.prNumber),
+        this.github.getReviewComments(prContext.repo, prContext.prNumber),
       ]);
 
       const statusCheckRollup =
@@ -774,7 +798,7 @@ class RatchetService {
           detailsUrl: check.detailsUrl,
         })) ?? null;
 
-      const ciStatus = githubCLIService.computeCIStatus(statusCheckRollup);
+      const ciStatus = this.github.computeCIStatus(statusCheckRollup);
 
       const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
       const latestReviewActivityAtMs = this.computeLatestReviewActivityAtMs(
@@ -917,7 +941,7 @@ class RatchetService {
       return this.cachedAuthenticatedUsername.value;
     }
 
-    const username = await githubCLIService.getAuthenticatedUsername();
+    const username = await this.github.getAuthenticatedUsername();
     this.cachedAuthenticatedUsername = {
       value: username,
       expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
@@ -962,7 +986,7 @@ class RatchetService {
         dispatchMode: 'start_empty_and_send',
         buildPrompt: () => buildRatchetDispatchPrompt(workspace.prUrl, prStateInfo.prNumber),
         beforeStart: ({ sessionId, prompt }) => {
-          sessionDomainService.injectCommittedUserMessage(sessionId, prompt);
+          this.session.injectCommittedUserMessage(sessionId, prompt);
         },
       });
 
@@ -974,8 +998,8 @@ class RatchetService {
             sessionId: result.sessionId,
           });
           await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
-          if (sessionService.isSessionRunning(result.sessionId)) {
-            await sessionService.stopClaudeSession(result.sessionId);
+          if (this.session.isSessionRunning(result.sessionId)) {
+            await this.session.stopClaudeSession(result.sessionId);
           }
           return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
         }
