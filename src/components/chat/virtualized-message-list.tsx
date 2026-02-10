@@ -5,6 +5,7 @@ import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent
 import { ThinkingCompletionProvider } from '@/components/agent-activity/message-renderers';
 import type { GroupedMessageItem } from '@/lib/claude-types';
 import { isStreamEventMessage, isToolSequence } from '@/lib/claude-types';
+import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { CompactingIndicator } from './compacting-indicator';
 
 // =============================================================================
@@ -35,6 +36,8 @@ interface VirtualizedMessageListProps {
   getUuidForMessageId?: (messageId: string) => string | undefined;
   /** Callback when user initiates rewind to a message */
   onRewindToMessage?: (uuid: string) => void;
+  /** Init banner for showing workspace initialization status */
+  initBanner?: WorkspaceInitBanner | null;
 }
 
 // =============================================================================
@@ -109,6 +112,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   isCompacting = false,
   getUuidForMessageId,
   onRewindToMessage,
+  initBanner,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
   const isAutoScrollingRef = useRef(false);
@@ -267,15 +271,24 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />
 
-        {/* Loading indicators after messages */}
-        {running && <LoadingIndicator className="py-4" />}
+        {/* Workspace initialization spinner (e.g., creating worktree, running init script) */}
+        {initBanner && initBanner.kind === 'info' && (
+          <div className="flex items-center gap-2 text-muted-foreground py-4">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">{initBanner.message}</span>
+          </div>
+        )}
 
+        {/* Agent starting spinner */}
         {startingSession && !running && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">{startingLabel}</span>
           </div>
         )}
+
+        {/* Loading indicators after messages */}
+        {running && <LoadingIndicator className="py-4" />}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} className="h-px" />
