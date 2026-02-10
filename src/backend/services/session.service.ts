@@ -165,8 +165,8 @@ class SessionService {
     sessionId: string,
     shouldCleanupTransientRatchetSession: boolean
   ): Promise<void> {
-    // Ratchet sessions are transient and should be cleaned up immediately on manual stop.
-    if (!shouldCleanupTransientRatchetSession || session?.workflow !== 'ratchet') {
+    // Ratchet sessions should always clear active pointer on stop.
+    if (session?.workflow !== 'ratchet') {
       return;
     }
 
@@ -178,6 +178,12 @@ class SessionService {
         workspaceId: session.workspaceId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+
+    // Session row deletion is optional so callers (e.g. explicit delete endpoint)
+    // can avoid double-delete races while still clearing the active pointer.
+    if (!shouldCleanupTransientRatchetSession) {
+      return;
     }
 
     try {

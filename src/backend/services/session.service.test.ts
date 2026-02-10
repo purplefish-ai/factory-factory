@@ -282,7 +282,7 @@ describe('SessionService', () => {
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
-  it('does not delete ratchet session when transient cleanup is disabled', async () => {
+  it('clears ratchet pointer but does not delete session when transient cleanup is disabled', async () => {
     vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(sessionProcessManager.stopClient).mockResolvedValue();
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
@@ -298,7 +298,10 @@ describe('SessionService', () => {
       cleanupTransientRatchetSession: false,
     });
 
-    expect(sessionRepository.clearRatchetActiveSession).not.toHaveBeenCalled();
+    expect(sessionRepository.clearRatchetActiveSession).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-3'
+    );
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
