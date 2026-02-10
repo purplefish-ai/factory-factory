@@ -20,6 +20,7 @@ import type { SessionRepository } from './session.repository';
 import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
+const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
 /**
  * Callback type for client creation hook.
@@ -35,6 +36,19 @@ class SessionService {
 
   private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
     return typeof client.isWorking === 'function' ? client.isWorking() : false;
+  }
+
+  private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
+    if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
+      return false;
+    }
+
+    const updatedAtMs = Date.parse(runtime.updatedAt);
+    if (Number.isNaN(updatedAtMs)) {
+      return false;
+    }
+
+    return Date.now() - updatedAtMs > STALE_LOADING_RUNTIME_MAX_AGE_MS;
   }
 
   /**
@@ -266,10 +280,9 @@ class SessionService {
       };
     }
 
-    // Defensive normalization: persisted runtime can be left at `loading`
-    // after reconnect churn even when no process exists. A cold-start load
-    // should treat this as idle/stopped so clients can recover.
-    if (base.phase === 'loading') {
+    // Defensive normalization for stale runtime snapshots: persisted loading
+    // can linger after reconnect churn even when no process exists.
+    if (this.isStaleLoadingRuntime(base)) {
       return {
         ...base,
         phase: 'idle',

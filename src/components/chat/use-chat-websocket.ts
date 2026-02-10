@@ -18,6 +18,8 @@ import type {
 } from './chat-reducer';
 import { useChatState } from './use-chat-state';
 
+const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -138,6 +140,34 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const clearLoadTimeout = useCallback(() => {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleLoadRetry = useCallback(
+    (loadGeneration: number, loadRequestId: string) => {
+      clearLoadTimeout();
+      loadTimeoutRef.current = setTimeout(() => {
+        if (
+          currentLoadGenerationRef.current !== loadGeneration ||
+          currentLoadRequestIdRef.current !== loadRequestId
+        ) {
+          loadTimeoutRef.current = null;
+          return;
+        }
+
+        const nextLoadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        currentLoadRequestIdRef.current = nextLoadRequestId;
+        sendRef.current({ type: 'load_session', loadRequestId: nextLoadRequestId });
+        scheduleLoadRetry(loadGeneration, nextLoadRequestId);
+      }, LOAD_SESSION_RETRY_TIMEOUT_MS);
+    },
+    [clearLoadTimeout]
+  );
+
   const chat = useChatState({
     dbSessionId,
     send: useCallback((message: unknown) => sendRef.current(message), []),
@@ -163,14 +193,11 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           return;
         }
         currentLoadRequestIdRef.current = null;
-        if (loadTimeoutRef.current) {
-          clearTimeout(loadTimeoutRef.current);
-          loadTimeoutRef.current = null;
-        }
+        clearLoadTimeout();
       }
       chat.handleMessage(data);
     },
-    [chat.handleMessage]
+    [chat.handleMessage, clearLoadTimeout]
   );
 
   // Handle connection established - request session data and available sessions
@@ -181,46 +208,27 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     currentLoadGenerationRef.current = loadGeneration;
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     currentLoadRequestIdRef.current = loadRequestId;
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-      loadTimeoutRef.current = null;
-    }
-    loadTimeoutRef.current = setTimeout(() => {
-      if (
-        currentLoadGenerationRef.current === loadGeneration &&
-        currentLoadRequestIdRef.current === loadRequestId
-      ) {
-        currentLoadRequestIdRef.current = null;
-        chat.dispatch({ type: 'SESSION_LOADING_END' });
-      }
-      loadTimeoutRef.current = null;
-    }, 10_000);
+    scheduleLoadRetry(loadGeneration, loadRequestId);
     sendRef.current({ type: 'list_sessions' });
     sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
-  }, [chat.dispatch]);
+  }, [chat.dispatch, scheduleLoadRetry]);
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     currentLoadRequestIdRef.current = null;
     currentLoadGenerationRef.current += 1;
-    if (loadTimeoutRef.current) {
-      clearTimeout(loadTimeoutRef.current);
-      loadTimeoutRef.current = null;
-    }
+    clearLoadTimeout();
     chat.dispatch({ type: 'SESSION_LOADING_END' });
-  }, [chat.dispatch]);
+  }, [chat.dispatch, clearLoadTimeout]);
 
   // Ensure pending load timers cannot fire after unmount.
   useEffect(() => {
     return () => {
       currentLoadRequestIdRef.current = null;
       currentLoadGenerationRef.current += 1;
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-        loadTimeoutRef.current = null;
-      }
+      clearLoadTimeout();
     };
-  }, []);
+  }, [clearLoadTimeout]);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
