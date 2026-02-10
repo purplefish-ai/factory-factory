@@ -1,63 +1,98 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-02-09
+**Analysis Date:** 2026-02-10
 
 ## Test Framework
 
 **Runner:**
 - Vitest v4.0.18
 - Config: `vitest.config.ts`
-- Node environment only (no browser testing in main suite)
-- Globals enabled: `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi` are available without imports
+- Environment: Node.js (`environment: 'node'`)
 
 **Assertion Library:**
-- Vitest built-in expect/assertions (Vitest includes `chai` matchers)
+- Vitest built-in expect API: `expect(actual).toBe(expected)`
 
 **Run Commands:**
 ```bash
-pnpm test              # Run all tests once
-pnpm test:watch       # Watch mode for development
-pnpm test:coverage    # Generate coverage report (HTML + JSON)
+pnpm test              # Run all tests (vitest run)
+pnpm test:watch       # Watch mode with auto-rerun
+pnpm test:coverage    # Generate coverage report
 ```
-
-**Coverage:**
-- Provider: v8
-- Reporters: text, json, json-summary, html
-- Scope: `src/backend/**/*.ts` only (frontend tests excluded from coverage)
-- Excludes: `*.test.ts`, `index.ts`, `src/backend/testing/**`
-- Thresholds: disabled (can be enabled as integration test coverage grows)
-- View coverage: run `pnpm test:coverage`, view HTML report in `coverage/`
 
 ## Test File Organization
 
 **Location:**
-- Co-located with source files (same directory)
-- Example: `src/backend/clients/git.client.ts` → `src/backend/clients/git.client.test.ts`
+- Co-located with source files, same directory
+- Tests live alongside the module they test
 
 **Naming:**
-- `{module}.test.ts` for unit tests
-- `{module}.test.tsx` for React component tests
+- `{module}.test.ts` for TypeScript modules (e.g., `git.client.test.ts`, `file-helpers.test.ts`)
+- `{module}.test.tsx` for React components (e.g., `use-workspace-list-state.test.ts`)
 
-**Structure:**
+**File Pattern:**
 ```
 src/backend/
+├── services/
+│   ├── chat-connection.service.ts
+│   └── chat-connection.service.test.ts  ← same directory
 ├── clients/
 │   ├── git.client.ts
 │   └── git.client.test.ts
-├── services/
-│   ├── logger.service.ts
-│   └── (no test - system service)
-└── resource_accessors/
-    ├── project.accessor.ts
-    └── project.accessor.test.ts
+└── lib/
+    ├── file-helpers.ts
+    └── file-helpers.test.ts
 ```
 
 ## Test Structure
 
 **Suite Organization:**
 ```typescript
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+describe('ModuleName', () => {
+  describe('methodName', () => {
+    beforeEach(() => {
+      // Setup
+    });
+
+    afterEach(() => {
+      // Cleanup
+    });
+
+    it('should do something', () => {
+      // Arrange
+      const input = ...;
+
+      // Act
+      const result = method(input);
+
+      // Assert
+      expect(result).toBe(expected);
+    });
+  });
+});
+```
+
+**Patterns:**
+
+1. **Describe blocks for organization:**
+   - Top-level describe for the class/module
+   - Nested describe for each method or logical grouping
+   - Describe blocks for categories (e.g., "safe paths", "path traversal attempts", "symlink scenarios")
+
+2. **Setup/Teardown:**
+   - `beforeEach()` - runs before each test
+   - `afterEach()` - runs after each test
+   - Use `vi.clearAllMocks()` in beforeEach
+   - Use `vi.resetAllMocks()` in afterEach for complete reset
+
+3. **Test naming:**
+   - Start with "should" or "when": `should create a client with valid config`
+   - Describe the behavior being tested: `should throw if baseRepoPath is missing`
+   - Clear about the expected outcome
+
+**Example from git.client.test.ts:**
+```typescript
 describe('GitClient', () => {
   const testConfig = {
     baseRepoPath: '/test/repo',
@@ -91,308 +126,333 @@ describe('GitClient', () => {
 });
 ```
 
-**Patterns:**
-- Use nested `describe()` blocks to organize related tests
-- Use `beforeEach()` to set up test fixtures (shared state)
-- Use `afterEach()` to clean up mocks and state
-- Use simple, descriptive test names starting with `it('should ...')`
-- Arrange-Act-Assert pattern within each test
-- Add section comments for logical test groups:
-  ```typescript
-  // ===========================================================================
-  // Constructor Tests
-  // ===========================================================================
-  ```
-
-**Setup:**
-- Global setup file: `src/backend/testing/setup.ts`
-- Runs before all tests
-- Clears and restores all mocks:
-  ```typescript
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-  ```
-
-**Teardown:**
-- `afterEach()` for test-specific cleanup
-- Global `afterEach()` in setup file restores all mocks
-
 ## Mocking
 
-**Framework:** Vitest's built-in `vi` module
+**Framework:** Vitest's `vi` object for mocking
 
-**Module Mocking Pattern:**
+**Patterns:**
+
+1. **Module mocking with `vi.mock()`:**
+   - Mock entire modules before import
+   - Use `vi.hoisted()` to create mocks in same scope
+   - Example from `chat-message-handlers.service.test.ts`:
 ```typescript
-// Mock BEFORE importing the module under test
-const mockQueryRaw = vi.fn();
-const mockGetEnvironment = vi.fn();
-
-vi.mock('../../resource_accessors/health.accessor', () => ({
-  healthAccessor: {
-    checkDatabaseConnection: () => mockQueryRaw(),
+const { mockSessionDomainService, mockSessionService } = vi.hoisted(() => ({
+  mockSessionDomainService: {
+    dequeueNext: vi.fn(),
+    requeueFront: vi.fn(),
+    markError: vi.fn(),
+    markIdle: vi.fn(),
+    markRunning: vi.fn(),
+    allocateOrder: vi.fn(),
+    emitDelta: vi.fn(),
+    commitSentUserMessageAtOrder: vi.fn(),
+    getQueueLength: vi.fn(),
+  },
+  mockSessionService: {
+    getClient: vi.fn(),
   },
 }));
 
-// Import AFTER mocks are defined
-import { createHealthRouter } from './health.router';
+vi.mock('@/backend/domains/session/session-domain.service', () => ({
+  sessionDomainService: mockSessionDomainService,
+}));
 
-describe('healthRouter', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Set default mock returns
-    mockGetEnvironment.mockReturnValue('development');
-    mockQueryRaw.mockResolvedValue([{ '1': 1 }]);
+vi.mock('./session.service', () => ({
+  sessionService: mockSessionService,
+}));
+
+// Then import after mocks are defined
+import { chatMessageHandlerService } from './chat-message-handlers.service';
+```
+
+2. **Method mocking on instances:**
+   - Assign mock functions to properties: `client.branchExists = () => Promise.resolve(false)`
+   - Use `vi.fn()` with return value setups
+   - Example from git.client.test.ts:
+```typescript
+describe('generateUniqueBranchName', () => {
+  it('should return base name when branch does not exist', async () => {
+    client.branchExists = () => Promise.resolve(false);
+
+    const name = await client.generateUniqueBranchName('martin-purplefish', 'jaguar');
+    expect(name).toBe('martin-purplefish/jaguar');
   });
 
-  it('tests the mocked module', async () => {
-    const response = await request(app).get('/health');
-    expect(response.status).toBe(200);
+  it('should increment until finding available name', async () => {
+    const existingNames = new Set([
+      'martin-purplefish/jaguar',
+      'martin-purplefish/jaguar-1',
+      'martin-purplefish/jaguar-2',
+    ]);
+
+    client.branchExists = (branchName: string) => Promise.resolve(existingNames.has(branchName));
+
+    const name = await client.generateUniqueBranchName('martin-purplefish', 'jaguar');
+    expect(name).toBe('martin-purplefish/jaguar-3');
   });
 });
 ```
 
-**Spy Pattern:**
+3. **Function mocking with implementation control:**
+   - Use `vi.fn().mockReturnValue()`, `vi.fn().mockResolvedValue()`, `vi.fn().mockRejectedValue()`
+   - Use `vi.fn().mockImplementation()` for custom behavior
+   - Example from file-helpers.test.ts:
 ```typescript
-const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+vi.mock('node:fs/promises', () => ({
+  realpath: vi.fn(),
+  stat: vi.fn(),
+}));
 
-try {
-  // Code that might call console.error
-} finally {
-  // Spy is automatically restored in afterEach from setup.ts
-}
+import { realpath, stat } from 'node:fs/promises';
+const mockedRealpath = vi.mocked(realpath);
+const mockedStat = vi.mocked(stat);
+
+describe('isPathSafe', () => {
+  it('should allow existing files within worktree', async () => {
+    mockedRealpath.mockImplementation((p) => {
+      if (p === path.resolve(worktreePath, 'src/index.ts')) {
+        return Promise.resolve(path.resolve(worktreePath, 'src/index.ts'));
+      }
+      if (p === path.resolve(worktreePath)) {
+        return Promise.resolve(path.resolve(worktreePath));
+      }
+      return Promise.reject(new Error('ENOENT'));
+    });
+
+    const result = await isPathSafe(worktreePath, 'src/index.ts');
+    expect(result).toBe(true);
+  });
+});
 ```
 
-**Mock Return Values:**
-- Use `.mockReturnValue()` for sync functions: `fn.mockReturnValue(value)`
-- Use `.mockResolvedValue()` for async functions: `fn.mockResolvedValue(value)`
-- Use `.mockImplementation()` for custom behavior: `fn.mockImplementation((arg) => ...)`
-- Use `.mockRejectedValue()` for Promise rejections: `fn.mockRejectedValue(error)`
-
 **What to Mock:**
-- External dependencies (databases, APIs, file system)
-- Imported modules (services, accessors, utilities)
-- Browser APIs (`localStorage`, `fetch`, etc.)
-- Time functions when testing timing-dependent code
+- External dependencies (file system, network, databases)
+- Services that have their own tests
+- Third-party library calls
+- Time-dependent operations (use `vi.useFakeTimers()`)
 
 **What NOT to Mock:**
-- Functions under test (the system being tested)
-- Pure utility functions without side effects
-- Zod schemas and type validators (test real validation)
-- Error constructors and error types
-- Constants and configuration
+- The module under test
+- Utility functions used by the module
+- Core logic flow (unless testing error paths)
+- Pure functions within the same module
 
 ## Fixtures and Factories
 
 **Test Data:**
+- Create objects inline in test blocks for clarity
+- Use factory functions for complex objects
+
+**Example from chat-message-handlers.service.test.ts:**
 ```typescript
-// Inline fixtures
-const testConfig = {
-  baseRepoPath: '/test/repo',
-  worktreeBase: '/test/worktrees',
+const queuedMessage: QueuedMessage = {
+  id: 'm1',
+  text: 'hello',
+  timestamp: '2026-02-01T00:00:00.000Z',
+  settings: {
+    selectedModel: null,
+    thinkingEnabled: false,
+    planModeEnabled: false,
+  },
 };
 
-// Factory functions
-function createMockReq(overrides: Record<string, unknown> = {}): Request {
-  return {
-    method: 'GET',
-    path: '/api/test',
-    headers: {},
-    ...overrides,
-  } as Request;
-}
-
-// Using unsafe coercion for complex mocks
-const appContext = unsafeCoerce<AppContext>({
-  services: {
-    configService: { getEnvironment: () => 'development' },
-    createLogger: () => ({ info: vi.fn(), error: vi.fn() }),
-  },
+// Reused in multiple tests
+beforeEach(() => {
+  mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessage);
+  mockSessionDomainService.allocateOrder.mockReturnValue(0);
 });
 ```
 
 **Location:**
-- Simple fixtures: inline in test file (describe block or beforeEach)
-- Complex fixtures: `src/backend/testing/` directory (shared across tests)
-- Helper utilities: `src/test-utils/` directory (e.g., `unsafe-coerce.ts`)
-
-**Unsafe Coerce Utility:**
-- File: `src/test-utils/unsafe-coerce.ts`
-- Purpose: Type-cast partial mocks to their full types
-- Usage: `unsafeCoerce<FullType>(partialMock)` when mocking complex objects
-- Use sparingly; only when partial mocking is necessary
+- Test data defined at top of test file or in beforeEach
+- No separate fixtures directory currently used
+- Keep test data close to tests using it
 
 ## Coverage
 
-**Requirements:** None enforced (thresholds disabled)
+**Requirements:**
+- No enforced threshold currently
+- Comment in config: "Thresholds disabled for now since unit tests use mocks. Enable as integration tests are added and coverage grows."
 
 **View Coverage:**
 ```bash
 pnpm test:coverage
-# Open coverage/index.html in browser
+# Generates: coverage/index.html for browsing results
 ```
 
-**Scope:**
-- Includes: `src/backend/**/*.ts`
-- Excludes: test files, index.ts, testing utilities
-
-**Strategy:**
-- Focus on critical business logic and error paths
-- Unit tests use mocks (high coverage, fast)
-- Integration tests planned for higher confidence as coverage grows
-- End-to-end tests use Playwright (run separately, not in vitest)
+**Configuration in vitest.config.ts:**
+```typescript
+coverage: {
+  provider: 'v8',
+  reporter: ['text', 'json', 'json-summary', 'html'],
+  include: ['src/backend/**/*.ts'],
+  exclude: ['src/backend/**/*.test.ts', 'src/backend/index.ts', 'src/backend/testing/**'],
+}
+```
 
 ## Test Types
 
 **Unit Tests:**
-- Scope: Single function or class method
-- Approach: Mock external dependencies, test logic in isolation
-- Example: `GitClient.getWorktreePath()` tests path construction
-- Should run in < 10ms each
-- File location: co-located with source
+- Focus: Testing individual functions/methods in isolation
+- Scope: Single module or small logical unit
+- Examples: git.client.test.ts, file-helpers.test.ts
+- Mocking: Mock external dependencies
+- Speed: Fast (milliseconds)
+- Reality: Use mocks heavily; don't test integration with actual services
 
 **Integration Tests:**
-- Not yet extensive (vitest configured for basics)
-- Approach: Test interactions between multiple modules
-- Example: Full workflow from request to database
-- Would use test database (not yet set up)
+- Focus: Testing interaction between multiple modules
+- Status: Not yet implemented (comment in config)
+- Plan: Will be added as coverage grows
 
 **E2E Tests:**
-- Framework: Playwright (not part of vitest suite)
-- Run separately from vitest
-- Test full user workflows through the app
-- Manual setup required; not in automated test suite yet
+- Status: Not used (frontend only, no dedicated E2E test suite)
+- Coverage: Manual testing or CI integration tests
 
 ## Common Patterns
 
 **Async Testing:**
 ```typescript
-it('should handle async operations', async () => {
-  const result = await client.createWorktree('test-workspace');
-  expect(result).toBeDefined();
-  expect(result.path).toContain('test-workspace');
+it('should work asynchronously', async () => {
+  // Using await
+  const result = await asyncFunction();
+  expect(result).toBe(expected);
+});
+
+// Or using Promise chains
+it('should resolve correctly', () => {
+  return expect(asyncFunction()).resolves.toBe(expected);
+});
+
+// Or using async/await with expect
+it('should return correct value', async () => {
+  await expect(asyncFunction()).resolves.toBe(expected);
 });
 ```
 
 **Error Testing:**
 ```typescript
-it('should throw on invalid config', () => {
+// Test that function throws
+it('should throw if baseRepoPath is missing', () => {
   expect(() => new GitClient({ baseRepoPath: '', worktreeBase: '/test' })).toThrow(
     'baseRepoPath is required'
   );
 });
 
-it('should reject on failed operation', async () => {
-  mockCommand.mockRejectedValue(new Error('Command failed'));
-  await expect(client.doSomething()).rejects.toThrow('Command failed');
+// Test async error with mocks
+it('reverts runtime to idle when dispatch fails after markRunning', async () => {
+  const client = {
+    sendMessage: vi.fn().mockRejectedValue(new Error('send failed')),
+    // ... other methods
+  };
+  mockSessionService.getClient.mockReturnValue(client);
+
+  await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+  expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
+  expect(mockSessionDomainService.markIdle).toHaveBeenCalledWith('s1', 'alive');
+  expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
 });
 ```
 
-**Multiple Files Testing:**
+**Mocking Stateful Behavior:**
 ```typescript
-describe('multiple files', () => {
-  it('should parse multiple files correctly', () => {
-    const output = ' M README.md\nM  package.json\n?? newfile.txt\n';
-    const result = parseGitStatusOutput(output);
-
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual({
-      path: 'README.md',
-      status: 'M',
-      staged: false,
-    });
-    expect(result[1]).toEqual({
-      path: 'package.json',
-      status: 'M',
-      staged: true,
-    });
-  });
-});
-```
-
-**Schema Validation Testing:**
-```typescript
-describe('ExitPlanModeInputSchema', () => {
-  it('accepts inline plan content (SDK format)', () => {
-    const input = {
-      plan: '# My Plan\n\n## Steps\n1. Do this\n2. Do that',
-      allowedPrompts: [{ tool: 'Bash', prompt: 'run tests' }],
-    };
-    const result = ExitPlanModeInputSchema.safeParse(input);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.plan).toBe('# My Plan\n\n## Steps\n1. Do this\n2. Do that');
+it('should increment until finding available name', async () => {
+  let callCount = 0;
+  client.branchExists = (_branchName: string) => {
+    callCount++;
+    // First call: base name exists
+    if (callCount === 1) {
+      return Promise.resolve(true);
     }
-  });
+    // Second call: -1 doesn't exist
+    return Promise.resolve(false);
+  };
 
-  it('rejects invalid structure', () => {
-    const input = { invalidKey: 'value' };
-    const result = ExitPlanModeInputSchema.safeParse(input);
-    expect(result.success).toBe(false);
+  const name = await client.generateUniqueBranchName('martin-purplefish', 'jaguar');
+  expect(name).toBe('martin-purplefish/jaguar-1');
+});
+```
+
+**Parametrized Tests:**
+```typescript
+describe('isAutoGeneratedBranchName', () => {
+  describe('hex-only branches (no prefix)', () => {
+    it('should match 6 hex characters', () => {
+      expect(isAutoGeneratedBranchName('abc123')).toBe(true);
+      expect(isAutoGeneratedBranchName('000000')).toBe(true);
+      expect(isAutoGeneratedBranchName('ffffff')).toBe(true);
+      expect(isAutoGeneratedBranchName('a1b2c3')).toBe(true);
+    });
+
+    it('should not match non-hex characters', () => {
+      expect(isAutoGeneratedBranchName('ghijkl')).toBe(false);
+      expect(isAutoGeneratedBranchName('xyz123')).toBe(false);
+    });
   });
 });
 ```
 
-**HTTP Testing with supertest:**
-```typescript
-import express from 'express';
-import request from 'supertest';
+## Setup and Teardown
 
-describe('healthRouter', () => {
-  let app: express.Express;
+**File-Level Setup:**
+From `src/backend/testing/setup.ts`:
+```typescript
+import { afterEach, beforeEach, vi } from 'vitest';
+
+// Reset all mocks between tests
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+```
+
+This file is configured as `setupFiles` in vitest.config.ts, ensuring all tests get clean mocks.
+
+**Test-Specific Setup:**
+- Use beforeEach/afterEach in describe blocks for test-specific setup
+- Example:
+```typescript
+describe('isPathSafe', () => {
+  const worktreePath = '/home/user/project';
 
   beforeEach(() => {
-    app = express();
-    app.use('/health', createHealthRouter(appContext));
+    vi.clearAllMocks();
   });
 
-  it('returns status ok', async () => {
-    const response = await request(app).get('/health');
-    expect(response.status).toBe(200);
-    expect(response.body.status).toBe('ok');
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 });
 ```
 
-**Mock Express Middleware:**
-```typescript
-function createMockReq(overrides: Record<string, unknown> = {}): Request {
-  return {
-    method: 'GET',
-    path: '/api/test',
-    headers: {},
-    ...overrides,
-  } as Request;
-}
+## Testing Guidelines
 
-function createMockRes() {
-  const headers: Record<string, string> = {};
-  return {
-    headers,
-    statusCode: 200,
-    header: vi.fn((name: string, value: string) => {
-      headers[name] = value;
-    }),
-    sendStatus: vi.fn(),
-  };
-}
+**When Testing Exception Handling:**
+- Verify the correct exception type and message
+- Verify error recovery (how the system handles the error)
+- Mock the failure condition
+- Assert both the error and any cleanup actions
 
-describe('middleware', () => {
-  it('sets security headers', () => {
-    const req = createMockReq();
-    const res = createMockRes() as Response;
-    const next = vi.fn() as NextFunction;
+**When Testing State Changes:**
+- Verify state before action
+- Perform action
+- Verify state after (or side effects)
+- Use mocked methods to track state changes: `expect(mockService.method).toHaveBeenCalledWith(...)`
 
-    securityMiddleware(req, res, next);
-    expect(res.header).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
-  });
-});
-```
+**When Testing Async Operations:**
+- Always await or use `.resolves`/`.rejects`
+- Mock any async dependencies with `mockResolvedValue()` or `mockRejectedValue()`
+- Verify both success and failure paths
+
+**Biome Linting Exceptions for Tests:**
+- Non-null assertions allowed in tests: `value!` (rule disabled in `*.test.ts` files)
+- This allows tests to be more concise while keeping assertions strict in production code
 
 ---
 
-*Testing analysis: 2026-02-09*
+*Testing analysis: 2026-02-10*
