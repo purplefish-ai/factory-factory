@@ -436,8 +436,10 @@ export class RunScriptService {
                 pid: processPid,
                 error: err.message,
               });
+              // Keep process tracked so later cleanup can retry
+            } else {
+              RunScriptService.runningProcesses.delete(workspaceId);
             }
-            RunScriptService.runningProcesses.delete(workspaceId);
             resolve();
           });
         });
