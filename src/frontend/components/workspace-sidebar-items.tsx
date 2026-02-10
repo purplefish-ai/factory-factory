@@ -30,7 +30,7 @@ import type { WorkspaceListItem } from './use-workspace-list-state';
 export function CreatingWorkspaceItem() {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton size="lg" className="h-auto px-1.5 py-2 cursor-default">
+      <SidebarMenuButton size="lg" className="h-auto px-2 py-2 cursor-default">
         <div className="flex items-center gap-1.5 w-full min-w-0">
           {/* Invisible drag handle spacer to match layout */}
           <div className="w-4 shrink-0" aria-hidden="true" />
@@ -61,7 +61,7 @@ export function ArchivingWorkspaceItem({
 }: ArchivingWorkspaceItemProps) {
   return (
     <SidebarMenuItem ref={sortableRef} style={sortableStyle}>
-      <SidebarMenuButton asChild className="h-auto px-1.5 py-2 opacity-50 pointer-events-none">
+      <SidebarMenuButton asChild className="h-auto px-2 py-2 opacity-50 pointer-events-none">
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
           <div className="flex items-center gap-1.5 w-full min-w-0">
             {/* Invisible drag handle spacer to match layout */}
@@ -138,7 +138,7 @@ export function ActiveWorkspaceItem({
         asChild
         isActive={isActive}
         className={cn(
-          'h-auto px-1.5 py-2',
+          'h-auto px-2 py-2',
           isDragging && 'opacity-50 bg-sidebar-accent',
           showAttentionGlow && 'waiting-pulse'
         )}
