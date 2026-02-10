@@ -54,10 +54,11 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
 // Constants
 // =============================================================================
 
-const STORAGE_KEY_RIGHT_PANEL = 'workspace-panel-right-visible';
+const STORAGE_KEY_RIGHT_PANEL_PREFIX = 'workspace-panel-right-visible-';
 const STORAGE_KEY_TABS_PREFIX = 'workspace-panel-tabs-';
 const STORAGE_KEY_ACTIVE_TAB_PREFIX = 'workspace-panel-active-tab-';
 const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-panel-bottom-tab-';
+const STORAGE_KEY_BOTTOM_TAB_OLD_PREFIX = 'workspace-right-panel-bottom-tab-'; // Old key for migration
 
 const CHAT_TAB: MainViewTab = {
   id: 'chat',
@@ -157,22 +158,33 @@ function loadBottomTabFromStorage(workspaceId: string): 'terminal' | 'dev-logs' 
     return 'terminal';
   }
   try {
+    // Try new key first
     const stored = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
     if (stored === 'terminal' || stored === 'dev-logs') {
       return stored;
     }
+
+    // Fallback to old key for migration
+    const oldStored = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_OLD_PREFIX}${workspaceId}`);
+    if (oldStored === 'terminal' || oldStored === 'dev-logs') {
+      // Migrate to new key
+      localStorage.setItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`, oldStored);
+      localStorage.removeItem(`${STORAGE_KEY_BOTTOM_TAB_OLD_PREFIX}${workspaceId}`);
+      return oldStored;
+    }
+
     return 'terminal';
   } catch {
     return 'terminal';
   }
 }
 
-function loadRightPanelVisibility(): boolean {
+function loadRightPanelVisibility(workspaceId: string): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
   try {
-    const stored = localStorage.getItem(STORAGE_KEY_RIGHT_PANEL);
+    const stored = localStorage.getItem(`${STORAGE_KEY_RIGHT_PANEL_PREFIX}${workspaceId}`);
     return stored === 'true';
   } catch {
     return false;
@@ -219,8 +231,8 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     const activeExists = storedTabs.some((tab) => tab.id === storedActiveTab);
     setActiveTabId(activeExists ? storedActiveTab : 'chat');
 
-    // Load right panel visibility (global)
-    setRightPanelVisibleState(loadRightPanelVisibility());
+    // Load right panel visibility (workspace-scoped)
+    setRightPanelVisibleState(loadRightPanelVisibility(workspaceId));
 
     // Load bottom tab state (workspace-scoped)
     setActiveBottomTabState(loadBottomTabFromStorage(workspaceId));
@@ -261,10 +273,13 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   }, [workspaceId, activeBottomTab]);
 
   // Persist visibility changes to localStorage
-  const setRightPanelVisible = useCallback((visible: boolean) => {
-    setRightPanelVisibleState(visible);
-    localStorage.setItem(STORAGE_KEY_RIGHT_PANEL, String(visible));
-  }, []);
+  const setRightPanelVisible = useCallback(
+    (visible: boolean) => {
+      setRightPanelVisibleState(visible);
+      localStorage.setItem(`${STORAGE_KEY_RIGHT_PANEL_PREFIX}${workspaceId}`, String(visible));
+    },
+    [workspaceId]
+  );
 
   const toggleRightPanel = useCallback(() => {
     setRightPanelVisible(!rightPanelVisible);
