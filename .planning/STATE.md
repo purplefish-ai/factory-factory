@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 05-ratchet-domain-consolidation (Plan 00 of ?? complete)
+**Current Phase:** 06-terminal-domain-consolidation (Plan 01 of 01 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -14,7 +14,7 @@
 | 3 | Workspace Domain Consolidation | Complete | All 5 plans done |
 | 4 | GitHub Domain Consolidation | Complete | All 3 plans done |
 | 5 | Ratchet Domain Consolidation | Pending | — |
-| 6 | Terminal Domain Consolidation | Pending | — |
+| 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Pending | — |
 | 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
@@ -66,6 +66,9 @@
 | Intra-domain relative for review subsystem | 2026-02-10 | pr-review-monitor uses ./github-cli.service and ./pr-review-fixer.service (04-02) |
 | Cross-domain absolute for review services | 2026-02-10 | pr-review-fixer uses @/backend/services/ for fixer-session, logger, session (04-02) |
 | Biome auto-sorts barrel exports (GitHub) | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (04-03) |
+| Logger import absolute for cross-domain | 2026-02-10 | Terminal service uses @/backend/services/logger.service (06-01) |
+| TerminalService class exported for tests | 2026-02-10 | Class export enables fresh instances in unit tests (06-01) |
+| Direct module path in terminal shim | 2026-02-10 | Shim imports from /terminal.service not barrel to avoid circular deps (06-01) |
 
 ## Blockers
 
@@ -73,11 +76,12 @@ None.
 
 ## Context for Next Session
 
-Phase 4 complete: GitHub domain fully consolidated.
-5 files in src/backend/domains/github/: github-cli, pr-snapshot, pr-review-fixer, pr-review-monitor, index.
-Barrel exports 4 runtime values + 10 types. Smoke test verifies no circular dep breakage.
-Re-export shims at all old services/ paths. 1741 tests passing.
-Ready for Phase 5 (Ratchet Domain Consolidation).
+Phase 6 complete: Terminal domain fully consolidated.
+3 files in src/backend/domains/terminal/: terminal.service, index, plus 2 test files.
+Barrel exports 1 runtime singleton + 1 class + 5 types. Smoke test verifies no circular dep breakage.
+Re-export shim at old services/ path. 1775 tests passing (34 new terminal domain tests).
+TERM-01, TERM-02 (verified), TERM-03 all satisfied.
+Ready for Phase 7 (Run Script Domain Consolidation).
 
 ## Performance Metrics
 
@@ -97,7 +101,8 @@ Ready for Phase 5 (Ratchet Domain Consolidation).
 | 04 | 01 | 11min | 2 | 7 |
 | 04 | 02 | 11min | 2 | 5 |
 | 04 | 03 | 2min | 2 | 2 |
+| 06 | 01 | 4min | 2 | 5 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T16:30:21Z -- Completed 04-03-PLAN.md*
+*Last session: 2026-02-10T17:09:17Z -- Completed 06-01-PLAN.md*
