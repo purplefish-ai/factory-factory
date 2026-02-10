@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { type ClaudeSession, SessionStatus } from '@prisma-gen/client';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import {
   createInitialSessionRuntimeState,
@@ -126,7 +126,7 @@ class SessionService {
     logger.info('Claude session stopped', { sessionId });
   }
 
-  private async loadSessionForStop(sessionId: string) {
+  private async loadSessionForStop(sessionId: string): Promise<ClaudeSession | null> {
     try {
       return await this.repository.getSessionById(sessionId);
     } catch (error) {
@@ -153,7 +153,7 @@ class SessionService {
   }
 
   private async cleanupTransientRatchetOnStop(
-    session: Awaited<ReturnType<typeof this.repository.getSessionById>>,
+    session: ClaudeSession | null,
     sessionId: string
   ): Promise<void> {
     // Ratchet sessions are transient and should be cleaned up immediately on manual stop.
