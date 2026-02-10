@@ -281,6 +281,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           });
           process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
 
+          configureDomainBridges();
+
           try {
             await reconciliationService.cleanupOrphans();
           } catch (error) {
@@ -299,7 +301,6 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           reconciliationService.startPeriodicCleanup();
           rateLimiter.start();
           schedulerService.start();
-          configureDomainBridges();
           ratchetService.start();
 
           logger.info('Server endpoints available', {

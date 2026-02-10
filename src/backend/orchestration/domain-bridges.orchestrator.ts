@@ -55,11 +55,7 @@ export function configureDomainBridges(): void {
     getReviewComments: (repo, pr) => githubCLIService.getReviewComments(repo, pr),
     computeCIStatus: (checks) =>
       githubCLIService.computeCIStatus(
-        checks?.map((c) => ({
-          status: c.status,
-          conclusion: c.conclusion ?? undefined,
-          state: undefined,
-        })) ?? null
+        checks?.map((c) => ({ ...c, conclusion: c.conclusion ?? undefined })) ?? null
       ),
     getAuthenticatedUsername: () => githubCLIService.getAuthenticatedUsername(),
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
