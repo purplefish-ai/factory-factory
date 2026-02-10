@@ -173,7 +173,7 @@ function AppSidebarHeader({
 }) {
   if (isMobile) {
     return (
-      <SidebarHeader className="border-b border-sidebar-border px-2 py-2.5">
+      <SidebarHeader className="border-b border-sidebar-border px-1.5 py-2.5">
         <div className="flex items-center gap-2">
           <Link to="/projects" className="shrink-0">
             <LogoIcon className="size-8" />
@@ -545,7 +545,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         <SidebarContent className="flex flex-col">
           {/* Workspaces section */}
           {selectedProjectSlug && (
-            <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden px-1.5">
+            <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
               <SidebarGroupLabel>
                 <Link
                   to={`/projects/${selectedProjectSlug}/workspaces`}
@@ -554,7 +554,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
                   Workspaces
                 </Link>
               </SidebarGroupLabel>
-              <div className="absolute right-1 top-2 flex items-center gap-0.5">
+              <div className="absolute right-0.5 top-2 flex items-center gap-0.5">
                 <Link
                   to={`/projects/${selectedProjectSlug}/workspaces`}
                   className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
@@ -596,7 +596,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
           <SidebarSeparator />
 
-          <SidebarGroup>
+          <SidebarGroup className="px-1">
             <SidebarGroupContent>
               <SidebarMenu>
                 {globalNavItems.map((item) => {
@@ -626,7 +626,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-sidebar-border px-3 py-2">
+        <SidebarFooter className="border-t border-sidebar-border px-2 py-2">
           {!isMocked && <ServerPortInfo />}
           <div className="flex items-center justify-between">
             <a
