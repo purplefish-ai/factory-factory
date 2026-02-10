@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { trpc } from '@/frontend/lib/trpc';
 import type { CommandInfo, TokenStats } from '@/lib/claude-types';
 import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
-import type { WorkspaceInitBanner, WorkspaceInitPhase } from '@/shared/workspace-init';
+import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { isResumeWorkspace } from './resume-workspace-storage';
 
 interface ChatContentProps {
@@ -55,7 +55,6 @@ interface ChatContentProps {
   cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
   getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
   autoStartPending?: boolean;
-  initPhase: WorkspaceInitPhase;
   initBanner: WorkspaceInitBanner | null;
 }
 
@@ -66,27 +65,11 @@ interface InitStatusBannerProps {
   onPlay: () => void;
 }
 
-function getStartingLabel(initPhase: WorkspaceInitPhase): string {
-  if (initPhase === 'CREATING_WORKTREE') {
-    return 'Creating worktree...';
-  }
-  if (initPhase === 'RUNNING_INIT_SCRIPT') {
-    return 'Running init script...';
-  }
-  return 'Starting agent...';
-}
-
 function shouldShowStartingState(
   sessionPhase: ReturnType<typeof useChatWebSocket>['sessionStatus']['phase'],
-  autoStartPending: boolean,
-  initPhase: WorkspaceInitPhase
+  autoStartPending: boolean
 ): boolean {
-  return (
-    sessionPhase === 'starting' ||
-    autoStartPending ||
-    initPhase === 'CREATING_WORKTREE' ||
-    initPhase === 'RUNNING_INIT_SCRIPT'
-  );
+  return sessionPhase === 'starting' || autoStartPending;
 }
 
 function getInputPlaceholder({
@@ -94,7 +77,6 @@ function getInputPlaceholder({
   stopping,
   displayStartingState,
   running,
-  initPhase,
   pendingRequest,
   sessionPhase,
   messageCount,
@@ -103,7 +85,6 @@ function getInputPlaceholder({
   stopping: boolean;
   displayStartingState: boolean;
   running: boolean;
-  initPhase: WorkspaceInitPhase;
   pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
   sessionPhase: ReturnType<typeof useChatWebSocket>['sessionStatus']['phase'];
   messageCount: number;
@@ -115,12 +96,6 @@ function getInputPlaceholder({
     return 'Stopping...';
   }
   if (displayStartingState && !running) {
-    if (initPhase === 'CREATING_WORKTREE') {
-      return 'Creating worktree...';
-    }
-    if (initPhase === 'RUNNING_INIT_SCRIPT') {
-      return 'Running init script...';
-    }
     return 'Agent is starting...';
   }
   if (pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode') {
@@ -151,6 +126,8 @@ const InitStatusBanner = memo(function InitStatusBanner({
   onRetry,
   onPlay,
 }: InitStatusBannerProps) {
+  const hasActions = banner.showRetry || banner.showPlay;
+
   return (
     <div className="px-4 pt-4">
       <div
@@ -166,20 +143,22 @@ const InitStatusBanner = memo(function InitStatusBanner({
         )}
         <div className="min-w-0 flex-1">
           <p>{banner.message}</p>
-          <div className="mt-2 flex items-center gap-2">
-            {banner.showRetry && (
-              <Button size="sm" variant="outline" disabled={retryPending} onClick={onRetry}>
-                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-                Retry setup
-              </Button>
-            )}
-            {banner.showPlay && (
-              <Button size="sm" onClick={onPlay}>
-                <Play className="h-3.5 w-3.5 mr-1.5" />
-                Dispatch queued messages
-              </Button>
-            )}
-          </div>
+          {hasActions && (
+            <div className="mt-2 flex items-center gap-2">
+              {banner.showRetry && (
+                <Button size="sm" variant="outline" disabled={retryPending} onClick={onRetry}>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  Retry setup
+                </Button>
+              )}
+              {banner.showPlay && (
+                <Button size="sm" onClick={onPlay}>
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                  Dispatch queued messages
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -224,7 +203,6 @@ export const ChatContent = memo(function ChatContent({
   cancelRewind,
   getUuidForMessageId,
   autoStartPending = false,
-  initPhase,
   initBanner,
 }: ChatContentProps) {
   const utils = trpc.useUtils();
@@ -266,11 +244,7 @@ export const ChatContent = memo(function ChatContent({
 
   const running = sessionStatus.phase === 'running';
   const stopping = sessionStatus.phase === 'stopping';
-  const displayStartingState = shouldShowStartingState(
-    sessionStatus.phase,
-    autoStartPending,
-    initPhase
-  );
+  const displayStartingState = shouldShowStartingState(sessionStatus.phase, autoStartPending);
   const loadingSession = sessionStatus.phase === 'loading';
 
   const permissionRequestId =
@@ -294,13 +268,10 @@ export const ChatContent = memo(function ChatContent({
     stopping,
     displayStartingState,
     running,
-    initPhase,
     pendingRequest,
     sessionPhase: sessionStatus.phase,
     messageCount: messages.length,
   });
-
-  const startingLabel = getStartingLabel(initPhase);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -323,7 +294,6 @@ export const ChatContent = memo(function ChatContent({
           running={running}
           startingSession={displayStartingState}
           loadingSession={loadingSession}
-          startingLabel={startingLabel}
           scrollContainerRef={viewportRef}
           onScroll={onScroll}
           messagesEndRef={messagesEndRef}

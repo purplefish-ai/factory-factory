@@ -240,9 +240,6 @@ export function WorkspaceDetailView({
                 cancelRewind={cancelRewind}
                 getUuidForMessageId={getUuidForMessageId}
                 autoStartPending={isIssueAutoStartPending}
-                initPhase={
-                  workspaceInitStatus?.phase ?? (hasWorktreePath ? 'READY' : 'CREATING_WORKTREE')
-                }
                 initBanner={workspaceInitStatus?.chatBanner ?? null}
               />
             </WorkspaceContentView>
