@@ -135,6 +135,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
   const sendRef = useRef<(message: unknown) => boolean>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
+  const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chat = useChatState({
@@ -176,6 +177,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const handleConnected = useCallback(() => {
     // Dispatch loading state to prevent flicker while replaying events
     chat.dispatch({ type: 'SESSION_LOADING_START' });
+    const loadGeneration = currentLoadGenerationRef.current + 1;
+    currentLoadGenerationRef.current = loadGeneration;
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     currentLoadRequestIdRef.current = loadRequestId;
     if (loadTimeoutRef.current) {
@@ -183,7 +186,10 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       loadTimeoutRef.current = null;
     }
     loadTimeoutRef.current = setTimeout(() => {
-      if (currentLoadRequestIdRef.current === loadRequestId) {
+      if (
+        currentLoadGenerationRef.current === loadGeneration &&
+        currentLoadRequestIdRef.current === loadRequestId
+      ) {
         currentLoadRequestIdRef.current = null;
         chat.dispatch({ type: 'SESSION_LOADING_END' });
       }
@@ -196,6 +202,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     currentLoadRequestIdRef.current = null;
+    currentLoadGenerationRef.current += 1;
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
       loadTimeoutRef.current = null;
