@@ -1,5 +1,5 @@
-import { sessionService } from '@/backend/services/session.service';
 import type { StopMessage } from '@/shared/websocket';
+import { sessionService } from '../../../lifecycle/session.service';
 import { chatEventForwarderService } from '../../chat-event-forwarder.service';
 import type { ChatMessageHandler } from '../types';
 

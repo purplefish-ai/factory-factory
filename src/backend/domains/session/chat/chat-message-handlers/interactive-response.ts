@@ -4,8 +4,8 @@ import {
   safeParseToolInput,
 } from '@/backend/schemas/tool-inputs.schema';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
 import { isInteractiveResponseTool } from '@/shared/pending-request-types';
+import { sessionService } from '../../lifecycle/session.service';
 import { DEBUG_CHAT_WS } from './constants';
 
 const logger = createLogger('chat-message-handlers');

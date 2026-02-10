@@ -2,6 +2,9 @@
 // Public API for the run script domain module.
 // Consumers should import from '@/backend/domains/run-script' only.
 
+// Bridge interfaces for orchestration layer wiring
+export type { RunScriptWorkspaceBridge } from './bridges';
+
 // Run script execution
 export { RunScriptService, runScriptService } from './run-script.service';
 

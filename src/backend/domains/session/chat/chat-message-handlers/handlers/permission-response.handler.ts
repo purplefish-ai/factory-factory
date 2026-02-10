@@ -1,7 +1,7 @@
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
 import type { PermissionResponseMessage } from '@/shared/websocket';
+import { sessionService } from '../../../lifecycle/session.service';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
 

@@ -1,7 +1,7 @@
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
 import type { UserInputMessage } from '@/shared/websocket';
 import type { ClaudeContentItem } from '../../../claude/types';
+import { sessionService } from '../../../lifecycle/session.service';
 import type { ChatMessageHandler } from '../types';
 
 const logger = createLogger('chat-message-handlers');

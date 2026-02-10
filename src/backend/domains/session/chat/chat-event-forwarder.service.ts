@@ -26,13 +26,13 @@ import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionFileLogger } from '@/backend/services/session-file-logger.service';
 import { slashCommandCacheService } from '@/backend/services/slash-command-cache.service';
-import { workspaceActivityService } from '@/backend/services/workspace-activity.service';
 import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
 import {
   type InteractiveResponseTool,
   isInteractiveResponseTool,
   type PendingInteractiveRequest,
 } from '../../../../shared/pending-request-types';
+import type { SessionWorkspaceBridge } from '../bridges';
 import type { ClaudeClient } from '../claude/index';
 import { chatConnectionService } from './chat-connection.service';
 
@@ -78,6 +78,25 @@ class ChatEventForwarderService {
   private workspaceNotificationsSetup = false;
   /** Track last compact boundary per session to avoid duplicate indicators */
   private lastCompactBoundaryAt = new Map<string, number>();
+
+  /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
+  private workspaceBridge: SessionWorkspaceBridge | null = null;
+
+  /**
+   * Configure cross-domain bridges. Called once at startup by orchestration layer.
+   */
+  configure(bridges: { workspace: SessionWorkspaceBridge }): void {
+    this.workspaceBridge = bridges.workspace;
+  }
+
+  private get workspace(): SessionWorkspaceBridge {
+    if (!this.workspaceBridge) {
+      throw new Error(
+        'ChatEventForwarderService not configured: workspace bridge missing. Call configure() first.'
+      );
+    }
+    return this.workspaceBridge;
+  }
 
   private forwardClaudeMessage(dbSessionId: string, message: ClaudeMessage): void {
     const order = sessionDomainService.appendClaudeEvent(dbSessionId, message);
@@ -142,7 +161,7 @@ class ChatEventForwarderService {
     }
     this.workspaceNotificationsSetup = true;
 
-    workspaceActivityService.on('request_notification', (data) => {
+    this.workspace.on('request_notification', (data) => {
       const { workspaceId, workspaceName, sessionCount, finishedAt } = data;
 
       logger.debug('Broadcasting workspace notification request', { workspaceId });
@@ -260,7 +279,7 @@ class ChatEventForwarderService {
       }
 
       // Mark workspace as active
-      workspaceActivityService.markSessionRunning(context.workspaceId, dbSessionId);
+      this.workspace.markSessionRunning(context.workspaceId, dbSessionId);
       this.syncRuntimeFromClient(dbSessionId, client);
     });
 
@@ -282,7 +301,7 @@ class ChatEventForwarderService {
           // idle callback to avoid leaving runtime stuck in WORKING.
           // Only mark workspace idle if the client stayed idle after dispatch.
           if (!client.isWorking()) {
-            workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+            this.workspace.markSessionIdle(context.workspaceId, dbSessionId);
           }
           this.syncRuntimeFromClient(dbSessionId, client);
         });
@@ -476,7 +495,7 @@ class ChatEventForwarderService {
       this.forwardClaudeMessage(dbSessionId, result as ClaudeMessage);
 
       // Mark session as idle
-      workspaceActivityService.markSessionIdle(context.workspaceId, dbSessionId);
+      this.workspace.markSessionIdle(context.workspaceId, dbSessionId);
       this.syncRuntimeFromClient(dbSessionId, client);
     });
 
