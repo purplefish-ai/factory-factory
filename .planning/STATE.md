@@ -57,6 +57,8 @@
 | cachedReviewCount as instance field (DOM-04) | 2026-02-10 | Moved from module scope to private field on WorkspaceQueryService (03-04) |
 | gitConcurrencyLimit kept module-level | 2026-02-10 | Stateless pLimit limiter stays as module const, not mutable state (03-04) |
 | Intra-domain relative in workspace query/ | 2026-02-10 | query/ -> state/ via ../state/kanban-state, ../state/flow-state (03-04) |
+| Cross-domain shim for sessionDomainService | 2026-02-10 | services/session-domain.service.ts shim avoids cross-domain import violation (03-03) |
+| Instance-method wrappers in shim | 2026-02-10 | Shim exports wrapper functions that delegate to singleton instance methods (03-03) |
 
 ## Blockers
 
@@ -67,10 +69,10 @@ None.
 Phase 3 IN PROGRESS: Workspace domain consolidation nearly complete.
 Plan 03-01 moved flow-state, kanban-state, and init-policy to domains/workspace/state/.
 Plan 03-02 moved state-machine, data, and activity services to domains/workspace/lifecycle/.
+Plan 03-03 moved worktree-lifecycle to domains/workspace/worktree/ with DOM-04 refactor (3 globals to instance fields).
 Plan 03-04 moved creation service to lifecycle/ and query service to query/.
-Dynamic import in creation.service.ts fixed to use absolute @/ alias.
-cachedReviewCount refactored from module-level to instance field (DOM-04).
-All re-export shims at old paths. pnpm typecheck passes. 12 creation tests + all others passing.
+Cross-domain session import handled via new services/session-domain.service.ts shim.
+All re-export shims at old paths. pnpm typecheck passes. 1723 tests passing.
 Plan 03-05 remains (workspace barrel population).
 
 ## Performance Metrics
@@ -86,7 +88,8 @@ Plan 03-05 remains (workspace barrel population).
 | 03 | 01 | 5min | 2 | 9 |
 | 03 | 02 | 5min | 2 | 8 |
 | 03 | 04 | 5min | 2 | 5 |
+| 03 | 03 | 13min | 1 | 5 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T15:13:00Z -- Completed 03-04-PLAN.md*
+*Last session: 2026-02-10T15:20:00Z -- Completed 03-03-PLAN.md*
