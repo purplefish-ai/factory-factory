@@ -625,16 +625,19 @@ This way, packages can be installed at runtime but don't persist across workspac
 **Architecture:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              FF Cloud Server (Single Codebase)              │
+│         FF Cloud Server (Closed Source)                     │
 │  - User management & authentication                         │
-│  - Workspace management (multi-tenant)                      │
+│  - Billing & quotas                                         │
 │  - VM orchestration (per workspace)                         │
-│  - Shared PostgreSQL database                               │
-│  - WebSocket handlers for all users                         │
+│  - Multi-tenant PostgreSQL database                         │
+│  - WebSocket relay & session management                     │
+│  - Uses FF as library (open source)                         │
 └─────────────────────────────────────────────────────────────┘
           ↓            ↓            ↓            ↓
     ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐
     │ VM (WS1)│  │ VM (WS2)│  │ VM (WS3)│  │ VM (WS4)│
+    │ FF Core │  │ FF Core │  │ FF Core │  │ FF Core │
+    │ (open)  │  │ (open)  │  │ (open)  │  │ (open)  │
     │ Claude  │  │ Claude  │  │ Claude  │  │ Claude  │
     │ CLI     │  │ CLI     │  │ CLI     │  │ CLI     │
     │ Git repo│  │ Git repo│  │ Git repo│  │ Git repo│
@@ -643,49 +646,295 @@ This way, packages can be installed at runtime but don't persist across workspac
 ```
 
 **Key Characteristics:**
-- **Single FF Cloud server** handles all users (multi-tenant)
-- **One VM per workspace** (cheaper option: one VM per user with multiple workspaces)
+- **FF Cloud server** (closed source) handles multi-tenancy, orchestration, billing
+- **FF core** (open source) runs in VMs, provides workspace execution primitives
+- **Clean separation**: Open source workspace logic, closed source cloud infrastructure
 - **Desktop migration**: Same as approach #1 (upload state, disconnect)
-- **One codebase**: FF extended to support cloud/multi-tenancy
+- **Two codebases**: FF Cloud (closed) + FF core (open), but FF core is reusable library
 
 **Pros:**
-- ✅ **Single codebase**: Easier to maintain, test, and deploy
-- ✅ **Faster MVP**: Extend existing FF rather than build new service
-- ✅ **Lower resource cost**: Shared FF server, only VMs for Claude CLI (~50MB per workspace VM)
+- ✅ **FF stays open source**: Core workspace logic remains in open source FF library
+- ✅ **Faster MVP**: Reuse FF core as library, build cloud wrapper around it
+- ✅ **Lower resource cost**: Shared orchestration layer, lightweight VMs run FF core
 - ✅ **Team features easier**: All data in shared PostgreSQL, simple queries for manager view
 - ✅ **Better observability**: One place for logs, metrics, debugging
-- ✅ **Simpler deployment**: One service + VM orchestration
+- ✅ **Simpler deployment**: One cloud service + VM orchestration
+- ✅ **Desktop parity**: VMs run same FF core that desktop uses
 
 **Cons:**
-- ❌ **Single point of failure**: FF Cloud server crash affects all users
-- ❌ **Multi-tenancy complexity**: Need userId checks everywhere, careful isolation
-- ❌ **Less user isolation**: Users share application server (mitigated by VM-per-workspace)
+- ❌ **Two codebases**: FF Cloud (closed) + FF core (open), but FF core is reusable
+- ❌ **FF core API design**: Need to expose clean library API for FF Cloud to use
+- ❌ **Single point of failure**: FF Cloud server crash affects all users (mitigated by horizontal scaling)
+- ❌ **Multi-tenancy in cloud layer**: Need userId checks, careful isolation in FF Cloud
 - ❌ **Harder to scale**: Need horizontal scaling (multiple FF Cloud instances + load balancer)
-- ❌ **Desktop/cloud divergence**: FF codebase gains cloud-specific code
+
+## Keeping FF Open Source (Approach #2 Architecture)
+
+**Constraint: FF itself must remain open source. FF Cloud must be closed source.**
+
+### Solution: FF as a Library
+
+**Refactor FF into two layers:**
+
+```
+┌──────────────────────────────────────────────────────────┐
+│           FF Cloud (Closed Source)                       │
+│  - Multi-tenant user management                          │
+│  - Billing, quotas, subscriptions                        │
+│  - VM orchestration and lifecycle                        │
+│  - Team features (manager view, sharing)                 │
+│  - Cloud-specific WebSocket relay                        │
+│  - PostgreSQL for multi-tenant data                      │
+└──────────────────────────────────────────────────────────┘
+                        ↓ uses
+┌──────────────────────────────────────────────────────────┐
+│           FF Core Library (Open Source)                  │
+│  - Workspace execution primitives                        │
+│  - Claude CLI process management                         │
+│  - Session management                                    │
+│  - Message state and history                             │
+│  - File operations and git integration                   │
+│  - Ratchet (auto-fix) logic                              │
+│  - SQLite for single-user workspace state                │
+└──────────────────────────────────────────────────────────┘
+```
+
+### FF Core Library API
+
+**FF Core exposes a clean TypeScript API that both desktop and cloud use:**
+
+```typescript
+// FF Core library (@factory-factory/core)
+import { WorkspaceManager, Session, ClaudeClient } from '@factory-factory/core';
+
+// Example: FF Cloud uses FF Core to manage workspaces in VMs
+class CloudWorkspaceService {
+  async createWorkspace(userId: string, issueUrl: string): Promise<Workspace> {
+    // Multi-tenant logic (closed source)
+    const vm = await this.vmOrchestrator.provisionVM(userId);
+
+    // FF Core library (open source)
+    const workspaceManager = new WorkspaceManager({
+      dataDir: `/vm/${vm.id}/workspace`,
+      githubToken: await this.getGitHubToken(userId),
+    });
+
+    const workspace = await workspaceManager.createFromIssue(issueUrl);
+
+    // Store in multi-tenant DB (closed source)
+    await this.db.workspace.create({
+      userId,
+      workspaceId: workspace.id,
+      vmId: vm.id,
+      // ...
+    });
+
+    return workspace;
+  }
+}
+```
+
+### What's Open Source (FF Core)
+
+**Desktop FF and FF Core in VMs both use this:**
+
+```typescript
+// @factory-factory/core (open source)
+
+export class WorkspaceManager {
+  createFromIssue(issueUrl: string): Promise<Workspace>
+  list(): Promise<Workspace[]>
+  get(id: string): Promise<Workspace>
+  delete(id: string): Promise<void>
+}
+
+export class Session {
+  start(workspaceId: string, prompt?: string): Promise<void>
+  sendMessage(content: string): Promise<void>
+  stop(): Promise<void>
+  getMessages(): Promise<Message[]>
+  on(event: 'message', handler: (msg: Message) => void): void
+}
+
+export class ClaudeClient {
+  spawn(options: ClaudeProcessOptions): Promise<ClaudeProcess>
+  sendUserMessage(content: string): Promise<void>
+  interrupt(): Promise<void>
+  // ... protocol management
+}
+
+export class RatchetService {
+  start(workspaceId: string, prUrl: string): Promise<void>
+  stop(workspaceId: string): Promise<void>
+  getStatus(workspaceId: string): Promise<RatchetStatus>
+}
+```
+
+### What's Closed Source (FF Cloud)
+
+**Cloud-specific orchestration and business logic:**
+
+```typescript
+// @factory-factory/cloud (closed source)
+
+export class UserService {
+  authenticate(token: string): Promise<User>
+  getQuota(userId: string): Promise<Quota>
+  checkBilling(userId: string): Promise<BillingStatus>
+}
+
+export class VMOrchestrator {
+  provisionVM(userId: string): Promise<VM>
+  terminateVM(vmId: string): Promise<void>
+  getVMPool(): Promise<VM[]>  // Warm pool management
+}
+
+export class TeamService {
+  getTeamWorkspaces(teamId: string): Promise<Workspace[]>
+  getTeamStats(teamId: string): Promise<TeamStats>
+  shareWorkspace(workspaceId: string, teamId: string): Promise<void>
+}
+
+export class CloudWebSocketRelay {
+  // Relay messages between desktop/mobile clients and VMs
+  relayToClient(userId: string, msg: Message): void
+  relayToVM(workspaceId: string, msg: Message): void
+}
+```
+
+### Refactoring FF Desktop for Library Extraction
+
+**Current FF Desktop architecture:**
+```
+src/
+  backend/
+    domains/
+      session/          ← Core session logic (open source)
+        claude/         ← Claude CLI management (open source)
+      workspace/        ← Workspace management (open source)
+      ratchet/          ← Auto-fix logic (open source)
+    server.ts           ← Desktop server (open source)
+  client/               ← Desktop UI (open source)
+  electron/             ← Electron wrapper (open source)
+```
+
+**Refactored for library extraction:**
+```
+packages/
+  core/                          ← @factory-factory/core (open source)
+    src/
+      workspace/                 ← Workspace primitives
+      session/                   ← Session management
+      claude/                    ← Claude CLI protocol
+      ratchet/                   ← Auto-fix logic
+      storage/
+        sqlite-adapter.ts        ← SQLite storage (desktop, VM)
+    package.json                 ← Published to npm
+
+  desktop/                       ← @factory-factory/desktop (open source)
+    src/
+      backend/
+        server.ts                ← Desktop server (uses @factory-factory/core)
+      client/                    ← Desktop UI
+      electron/                  ← Electron wrapper
+    package.json
+
+  cloud/                         ← @factory-factory/cloud (closed source, private repo)
+    src/
+      services/
+        user.service.ts          ← Multi-tenant user management
+        vm.service.ts            ← VM orchestration
+        team.service.ts          ← Team features
+        billing.service.ts       ← Billing & quotas
+      storage/
+        postgres-adapter.ts      ← PostgreSQL storage (multi-tenant)
+      server.ts                  ← Cloud server (uses @factory-factory/core)
+    package.json
+```
+
+### Desktop vs Cloud: Same Core, Different Wrappers
+
+| Component | Desktop (Open) | Cloud (Closed) |
+|-----------|----------------|----------------|
+| **Workspace logic** | `@factory-factory/core` | `@factory-factory/core` (in VM) |
+| **Session management** | `@factory-factory/core` | `@factory-factory/core` (in VM) |
+| **Claude CLI** | `@factory-factory/core` | `@factory-factory/core` (in VM) |
+| **Storage** | SQLite (local) | SQLite (per-VM) + PostgreSQL (multi-tenant) |
+| **UI** | Electron React app | Web app + Mobile app |
+| **Server** | Express (single-user) | Express (multi-tenant orchestration) |
+| **User management** | N/A (single user) | FF Cloud (closed source) |
+| **Billing** | N/A | FF Cloud (closed source) |
+| **Team features** | N/A | FF Cloud (closed source) |
+| **VM orchestration** | N/A | FF Cloud (closed source) |
+
+### Benefits of This Approach
+
+✅ **FF Core stays 100% open source**: All workspace execution logic is open
+✅ **Desktop stays open source**: Uses FF Core, no cloud-specific code
+✅ **Cloud-specific features are closed**: User management, billing, teams, VM orchestration
+✅ **Code reuse**: Desktop and Cloud VMs run identical FF Core
+✅ **Community contributions**: Open source contributors can improve FF Core, benefiting both desktop and cloud
+✅ **Testing**: FF Core can be tested independently, works on desktop and in VMs
+✅ **Clear boundary**: Open source = execution primitives, Closed source = multi-tenant infrastructure
+
+### Migration Path
+
+**Phase 1: Extract FF Core library**
+1. Create `packages/core/` with workspace, session, claude, ratchet modules
+2. Refactor `packages/desktop/` to use `@factory-factory/core`
+3. Publish `@factory-factory/core` to npm (open source)
+4. Verify desktop still works with library
+
+**Phase 2: Build FF Cloud (closed source)**
+1. Create new private repo: `factory-factory-cloud`
+2. Build cloud server using `@factory-factory/core`
+3. Add multi-tenant features (users, billing, teams, VMs)
+4. Deploy cloud infrastructure
+
+**Phase 3: VM integration**
+1. Package FF Core into VM image
+2. FF Cloud orchestrates VMs, each running FF Core
+3. Cloud server acts as relay between clients and VMs
+
+This keeps FF's core mission (empowering developers with AI workspaces) open source, while building a sustainable closed-source cloud business on top.
 
 ## Detailed Comparison
 
-| Dimension | Approach #1 (Decoupled) | Approach #2 (Monolithic) |
+| Dimension | Approach #1 (Decoupled) | Approach #2 (Library-based) |
 |-----------|-------------------------|--------------------------|
-| **Codebases** | 2 (FF Cloud + FF) | 1 (FF Cloud) |
-| **User isolation** | VM boundary (strong) | Application boundary (good) |
+| **Codebases** | 2 (FF Cloud + FF Server) | 2 (FF Cloud + FF Core lib) |
+| **Open source** | FF Server (full app) | FF Core (library only) |
+| **Closed source** | FF Cloud (orchestration) | FF Cloud (orchestration + business logic) |
+| **User isolation** | VM boundary (strong) | Application boundary (orchestration) + VM (execution) |
 | **Workspace isolation** | Container/process within user VM | VM per workspace (strong) |
-| **Resource cost/user** | ~500MB (VM + FF + 5 workspaces) | ~300MB (5 workspace VMs, shared FF) |
-| **Desktop parity** | Perfect (same FF code) | Good (cloud extensions) |
-| **Time to MVP** | 6-8 weeks | 3-4 weeks |
-| **Team features** | Hard (query multiple VMs) | Easy (shared DB) |
-| **Scaling strategy** | Vertical (bigger host for VMs) | Horizontal (multiple FF instances) |
+| **Resource cost/user** | ~500MB (VM + FF Server + 5 workspaces) | ~300MB (5 workspace VMs with FF Core, shared orchestration) |
+| **Desktop parity** | Perfect (same FF Server) | Perfect (same FF Core library) |
+| **Time to MVP** | 6-8 weeks | 4-5 weeks (extract library + build cloud) |
+| **Team features** | Hard (query multiple VMs) | Easy (shared PostgreSQL) |
+| **Scaling strategy** | Vertical (bigger host for VMs) | Horizontal (multiple FF Cloud instances) |
 | **Failure blast radius** | Single user | All users (mitigated by horizontal scaling) |
-| **Maintenance burden** | Higher (two systems) | Lower (one system) |
-| **Migration path** | Can't easily merge later | Can split later if needed |
+| **Maintenance burden** | Higher (two full applications) | Medium (library + cloud service) |
+| **Community value** | High (full FF is open) | Medium (core primitives open, cloud closed) |
+| **Migration path** | Can't easily merge later | Can add desktop features to core lib |
 
-## Recommendation: Start with Approach #2, Plan for Hybrid
+## Recommendation: Approach #2 with Library Extraction
 
-**Phase 1 (MVP): Monolithic FF Cloud**
-- Extend existing FF codebase to be multi-tenant
-- Shared FF Cloud server + VM per workspace
-- Faster time to market (3-4 weeks vs 6-8)
-- Lower resource costs in early days
+**Given the constraint that FF must stay open source:**
+
+Approach #2 is the clear winner, but requires refactoring FF into a library first. This keeps FF's core open while building a closed-source cloud business.
+
+**Phase 0 (Library Extraction): 2-3 weeks**
+- Extract FF Core as `@factory-factory/core` (open source npm package)
+- Core includes: workspace, session, claude, ratchet primitives
+- Refactor FF Desktop to use the library
+- Publish to npm, verify desktop works unchanged
+
+**Phase 1 (MVP): FF Cloud with Library: 3-4 weeks**
+- Build FF Cloud server (closed source) using `@factory-factory/core`
+- Add multi-tenant features: users, billing, teams, VM orchestration
+- VMs run FF Core for workspace execution
+- Cloud acts as orchestration layer and WebSocket relay
+- Lower resource costs: shared orchestration, lightweight VMs
 
 **Phase 2 (Scale): Optimize Resource Usage**
 - Move to **1 VM per user** with multiple workspaces inside
@@ -706,13 +955,23 @@ This way, packages can be installed at runtime but don't persist across workspac
 - Enables white-label deployments, on-premise installs
 
 **Why this path works:**
-1. ✅ **Fastest MVP**: Get to market quickly with approach #2
-2. ✅ **Learn from users**: Understand usage patterns before over-architecting
-3. ✅ **Cost optimization**: Start cheap (shared server), optimize later (VM per user)
-4. ✅ **Security when needed**: Add VM-per-workspace isolation for sensitive work
-5. ✅ **Enterprise path**: Can migrate big customers to approach #1 later
+1. ✅ **FF stays open source**: Core workspace execution logic remains fully open
+2. ✅ **Cloud is closed source**: Multi-tenant infrastructure, billing, teams are closed
+3. ✅ **Reasonable time to market**: 5-7 weeks total (2-3 for library + 3-4 for cloud)
+4. ✅ **Desktop benefits**: Library extraction improves FF Desktop architecture
+5. ✅ **Code reuse**: Desktop and cloud VMs use identical FF Core
+6. ✅ **Community value**: Open source contributors improve both desktop and cloud
+7. ✅ **Learn from users**: Understand usage patterns before over-architecting
+8. ✅ **Cost optimization**: Start cheap (shared server), optimize later (VM per user)
 
-**Decision point: If you prioritize speed to market and learning, start with Approach #2. If you need maximum security/isolation from day 1, use Approach #1.**
+**Decision rationale:**
+
+Given the constraint that **FF must stay open source** and **FF Cloud must be closed source**, Approach #2 with library extraction is the only viable path. Approach #1 would require keeping the full FF application open source, which conflicts with building a closed-source cloud business.
+
+The library approach provides the best of both worlds:
+- **Open source**: Core execution primitives (workspace, session, claude, ratchet)
+- **Closed source**: Cloud infrastructure (multi-tenancy, billing, teams, VM orchestration)
+- **Clear boundary**: Execution = open, Infrastructure = closed
 
 ## VM Startup Time Considerations
 
