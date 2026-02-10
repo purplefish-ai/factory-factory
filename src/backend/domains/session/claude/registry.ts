@@ -76,3 +76,7 @@ export class ProcessRegistry {
     return new Map(this.processes);
   }
 }
+
+// Internal singleton for use within the claude/ subdirectory.
+// External consumers should use their own ProcessRegistry instance.
+export const processRegistry = new ProcessRegistry();
