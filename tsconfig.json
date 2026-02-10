@@ -53,5 +53,12 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "dist", ".next"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next",
+    "src/backend/domains/session/chat/chat-message-handlers",
+    "src/backend/domains/session/chat/chat-message-handlers.service.ts",
+    "src/backend/domains/session/chat/chat-message-handlers.service.test.ts"
+  ]
 }

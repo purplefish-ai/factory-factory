@@ -7,7 +7,7 @@ const mockIsDevelopment = vi.hoisted(() => vi.fn());
 const mockCreateWriteStream = vi.hoisted(() => vi.fn());
 
 // Mock config service before importing the service
-vi.mock('./config.service', () => ({
+vi.mock('@/backend/services/config.service', () => ({
   configService: {
     getWsLogsPath: mockGetWsLogsPath,
     isDevelopment: mockIsDevelopment,
@@ -15,7 +15,7 @@ vi.mock('./config.service', () => ({
 }));
 
 // Mock logger before importing the service
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
