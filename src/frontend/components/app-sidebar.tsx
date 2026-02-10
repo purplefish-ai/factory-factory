@@ -14,8 +14,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ExternalLink, GitPullRequest, Kanban, Loader2, Plus, Settings } from 'lucide-react';
+import { ExternalLink, GitPullRequest, Kanban, Loader2, Plus, Settings, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
@@ -45,7 +47,7 @@ import { useCreateWorkspace } from '../hooks/use-create-workspace';
 import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
 import { useProjectContext } from '../lib/providers';
 import { trpc } from '../lib/trpc';
-import { Logo } from './logo';
+import { Logo, LogoIcon } from './logo';
 import { ThemeToggle } from './theme-toggle';
 import {
   type ServerWorkspace,
@@ -154,11 +156,130 @@ type AppSidebarMockData = {
   };
 };
 
+/**
+ * Sidebar header with logo, project selector, and close button (mobile only).
+ * Mobile: icon logo + project dropdown + close button in a single row.
+ * Desktop: text logo + project dropdown stacked vertically.
+ */
+function AppSidebarHeader({
+  isMobile,
+  onClose,
+  projectSelector,
+}: {
+  isMobile: boolean;
+  onClose: () => void;
+  projectSelector: React.ReactNode;
+}) {
+  if (isMobile) {
+    return (
+      <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
+        <div className="flex items-center gap-3">
+          <Link to="/projects" className="shrink-0">
+            <LogoIcon className="size-10" />
+          </Link>
+          <div className="flex-1 min-w-0">{projectSelector}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-md hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </SidebarHeader>
+    );
+  }
+
+  return (
+    <SidebarHeader className="border-b border-sidebar-border p-4">
+      <Link to="/projects">
+        <Logo
+          showIcon={false}
+          textClassName="text-lg"
+          className="hover:opacity-80 transition-opacity"
+        />
+      </Link>
+      <div className="mt-3">{projectSelector}</div>
+    </SidebarHeader>
+  );
+}
+
+/**
+ * Shared project selector dropdown used in both the mobile top bar and the desktop sidebar header.
+ */
+function ProjectSelectorDropdown({
+  selectedProjectSlug,
+  onProjectChange,
+  projects,
+}: {
+  selectedProjectSlug: string;
+  onProjectChange: (value: string) => void;
+  projects: Array<{ id: string; slug: string; name: string }> | undefined;
+}) {
+  return (
+    <Select value={selectedProjectSlug} onValueChange={onProjectChange}>
+      <SelectTrigger id="project-select" className="w-full">
+        <SelectValue placeholder="Select a project" />
+      </SelectTrigger>
+      <SelectContent>
+        {projects?.map((project) => (
+          <SelectItem key={project.id} value={project.slug}>
+            {project.name}
+          </SelectItem>
+        ))}
+        <SelectItem value="__create__" className="text-muted-foreground">
+          + Create project
+        </SelectItem>
+        <SelectItem value="__manage__" className="text-muted-foreground">
+          Manage projects...
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+/**
+ * On mobile, portals the project selector into the top bar header slot.
+ * On desktop, returns null (the selector is rendered inline in AppSidebarHeader).
+ */
+function MobileProjectSelector({
+  isMobile,
+  selectedProjectSlug,
+  onProjectChange,
+  projects,
+}: {
+  isMobile: boolean;
+  selectedProjectSlug: string;
+  onProjectChange: (value: string) => void;
+  projects: Array<{ id: string; slug: string; name: string }> | undefined;
+}) {
+  const [mobileSlot, setMobileSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (isMobile) {
+      setMobileSlot(document.getElementById('mobile-project-selector-slot'));
+    }
+  }, [isMobile]);
+
+  if (!(isMobile && mobileSlot)) {
+    return null;
+  }
+
+  return createPortal(
+    <ProjectSelectorDropdown
+      selectedProjectSlug={selectedProjectSlug}
+      onProjectChange={onProjectChange}
+      projects={projects}
+    />,
+    mobileSlot
+  );
+}
+
 export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const location = useLocation();
   const pathname = location.pathname;
   const navigate = useNavigate();
   const isMocked = Boolean(mockData);
+  const { isMobile, setOpenMobile } = useSidebar();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(() =>
     getInitialProjectSlug(mockData)
   );
@@ -370,6 +491,14 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
 
   useProjectSlugSync(pathname, isMocked, projects, selectedProjectSlug, setSelectedProjectSlug);
 
+  // Close mobile sidebar on navigation
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname triggers sidebar close on route change
+  useEffect(() => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  }, [pathname, isMobile, setOpenMobile]);
+
   const handleProjectChange = useCallback(
     (value: string) => {
       if (value === '__manage__') {
@@ -393,148 +522,139 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   ];
 
   return (
-    <Sidebar collapsible="none">
-      <SidebarHeader className="border-b border-sidebar-border p-4">
-        <Link to="/projects">
-          <Logo
-            showIcon={false}
-            textClassName="text-lg"
-            className="hover:opacity-80 transition-opacity"
-          />
-        </Link>
+    <>
+      <MobileProjectSelector
+        isMobile={isMobile}
+        selectedProjectSlug={selectedProjectSlug}
+        onProjectChange={handleProjectChange}
+        projects={projects}
+      />
 
-        <div className="mt-3">
-          <Select value={selectedProjectSlug} onValueChange={handleProjectChange}>
-            <SelectTrigger id="project-select" className="w-full">
-              <SelectValue placeholder="Select a project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects?.map((project) => (
-                <SelectItem key={project.id} value={project.slug}>
-                  {project.name}
-                </SelectItem>
-              ))}
-              <SelectItem value="__create__" className="text-muted-foreground">
-                + Create project
-              </SelectItem>
-              <SelectItem value="__manage__" className="text-muted-foreground">
-                Manage projects...
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </SidebarHeader>
+      <Sidebar collapsible={isMobile ? 'offcanvas' : 'none'}>
+        <AppSidebarHeader
+          isMobile={isMobile}
+          onClose={() => setOpenMobile(false)}
+          projectSelector={
+            <ProjectSelectorDropdown
+              selectedProjectSlug={selectedProjectSlug}
+              onProjectChange={handleProjectChange}
+              projects={projects}
+            />
+          }
+        />
 
-      <SidebarContent className="flex flex-col">
-        {/* Workspaces section */}
-        {selectedProjectSlug && (
-          <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <SidebarGroupLabel>
-              <Link
-                to={`/projects/${selectedProjectSlug}/workspaces`}
-                className="hover:text-foreground transition-colors"
-              >
-                Workspaces
-              </Link>
-            </SidebarGroupLabel>
-            <div className="absolute right-1 top-2 flex items-center gap-0.5">
-              <Link
-                to={`/projects/${selectedProjectSlug}/workspaces`}
-                className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                title="View Kanban board"
-              >
-                <Kanban className="h-3.5 w-3.5" />
-              </Link>
-              <button
-                type="button"
-                onClick={handleCreateWorkspace}
-                disabled={isCreating}
-                className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
-                title="New Workspace"
-              >
-                {isCreating ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Plus className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
-            <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
-              <WorkspaceList
-                workspaceList={workspaceList}
-                currentWorkspaceId={currentWorkspaceId}
-                selectedProjectId={selectedProjectId}
-                selectedProjectSlug={selectedProjectSlug}
-                isKanbanView={isKanbanView}
-                needsAttention={needsAttention}
-                clearAttention={clearAttention}
-                onArchiveRequest={handleArchiveRequest}
-                sensors={sensors}
-                onDragEnd={handleDragEnd}
-              />
+        <SidebarContent className="flex flex-col">
+          {/* Workspaces section */}
+          {selectedProjectSlug && (
+            <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <SidebarGroupLabel>
+                <Link
+                  to={`/projects/${selectedProjectSlug}/workspaces`}
+                  className="hover:text-foreground transition-colors"
+                >
+                  Workspaces
+                </Link>
+              </SidebarGroupLabel>
+              <div className="absolute right-1 top-2 flex items-center gap-0.5">
+                <Link
+                  to={`/projects/${selectedProjectSlug}/workspaces`}
+                  className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                  title="View Kanban board"
+                >
+                  <Kanban className="h-3.5 w-3.5" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleCreateWorkspace}
+                  disabled={isCreating}
+                  className="p-1 rounded hover:bg-sidebar-accent transition-colors text-sidebar-foreground/70 hover:text-sidebar-foreground disabled:opacity-50"
+                  title="New Workspace"
+                >
+                  {isCreating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+              <SidebarGroupContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-hide">
+                <WorkspaceList
+                  workspaceList={workspaceList}
+                  currentWorkspaceId={currentWorkspaceId}
+                  selectedProjectId={selectedProjectId}
+                  selectedProjectSlug={selectedProjectSlug}
+                  isKanbanView={isKanbanView}
+                  needsAttention={needsAttention}
+                  clearAttention={clearAttention}
+                  onArchiveRequest={handleArchiveRequest}
+                  sensors={sensors}
+                  onDragEnd={handleDragEnd}
+                  isMobile={isMobile}
+                />
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          <SidebarSeparator />
+
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {globalNavItems.map((item) => {
+                  const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
+                  const showBadge = item.href === '/reviews' && reviewCount > 0;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild isActive={isActive}>
+                        <Link to={item.href}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.label}</span>
+                          {showBadge && (
+                            <Badge
+                              variant="secondary"
+                              className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
+                            >
+                              {reviewCount}
+                            </Badge>
+                          )}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-        )}
+        </SidebarContent>
 
-        <SidebarSeparator />
+        <SidebarFooter className="border-t border-sidebar-border px-4 py-2">
+          {!isMocked && <ServerPortInfo />}
+          <div className="flex items-center justify-between">
+            <a
+              href="https://github.com/purplefish-ai/factory-factory"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+            >
+              GitHub
+              <ExternalLink className="h-3 w-3" />
+            </a>
+            <ThemeToggle />
+          </div>
+        </SidebarFooter>
 
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {globalNavItems.map((item) => {
-                const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
-                const showBadge = item.href === '/reviews' && reviewCount > 0;
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link to={item.href}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.label}</span>
-                        {showBadge && (
-                          <Badge
-                            variant="secondary"
-                            className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
-                          >
-                            {reviewCount}
-                          </Badge>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter className="border-t border-sidebar-border px-4 py-2">
-        {!isMocked && <ServerPortInfo />}
-        <div className="flex items-center justify-between">
-          <a
-            href="https://github.com/purplefish-ai/factory-factory"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
-          >
-            GitHub
-            <ExternalLink className="h-3 w-3" />
-          </a>
-          <ThemeToggle />
-        </div>
-      </SidebarFooter>
-
-      <ArchiveWorkspaceDialog
-        open={archiveDialogOpen}
-        onOpenChange={setArchiveDialogOpen}
-        hasUncommitted={archiveHasUncommitted}
-        onConfirm={(commitUncommitted) => {
-          if (workspaceToArchive) {
-            executeArchive(workspaceToArchive, commitUncommitted);
-          }
-        }}
-      />
-    </Sidebar>
+        <ArchiveWorkspaceDialog
+          open={archiveDialogOpen}
+          onOpenChange={setArchiveDialogOpen}
+          hasUncommitted={archiveHasUncommitted}
+          onConfirm={(commitUncommitted) => {
+            if (workspaceToArchive) {
+              executeArchive(workspaceToArchive, commitUncommitted);
+            }
+          }}
+        />
+      </Sidebar>
+    </>
   );
 }
 
@@ -552,6 +672,7 @@ function WorkspaceList({
   onArchiveRequest,
   sensors,
   onDragEnd,
+  isMobile,
 }: {
   workspaceList: WorkspaceListItem[];
   currentWorkspaceId: string | undefined;
@@ -563,41 +684,51 @@ function WorkspaceList({
   onArchiveRequest: (workspace: WorkspaceListItem) => void;
   sensors: ReturnType<typeof useSensors>;
   onDragEnd: (event: DragEndEvent) => void;
+  isMobile: boolean;
 }) {
+  const items = workspaceList.map((workspace) => {
+    if (workspace.uiState === 'creating') {
+      return <CreatingWorkspaceItem key={workspace.id} />;
+    }
+
+    return (
+      <SortableWorkspaceItem
+        key={workspace.id}
+        workspace={workspace}
+        isActive={currentWorkspaceId === workspace.id}
+        selectedProjectId={selectedProjectId}
+        selectedProjectSlug={selectedProjectSlug}
+        onArchiveRequest={onArchiveRequest}
+        disableRatchetAnimation={isKanbanView}
+        needsAttention={needsAttention}
+        clearAttention={clearAttention}
+        disabled={isMobile}
+      />
+    );
+  });
+
+  const menu = (
+    <SidebarMenu className="gap-2 p-1">
+      {items}
+      {workspaceList.length === 0 && (
+        <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+          No active workspaces
+        </div>
+      )}
+    </SidebarMenu>
+  );
+
+  if (isMobile) {
+    return menu;
+  }
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext
         items={workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id)}
         strategy={verticalListSortingStrategy}
       >
-        <SidebarMenu className="gap-2 p-1">
-          {workspaceList.map((workspace) => {
-            const isCreatingItem = workspace.uiState === 'creating';
-
-            if (isCreatingItem) {
-              return <CreatingWorkspaceItem key={workspace.id} />;
-            }
-
-            return (
-              <SortableWorkspaceItem
-                key={workspace.id}
-                workspace={workspace}
-                isActive={currentWorkspaceId === workspace.id}
-                selectedProjectId={selectedProjectId}
-                selectedProjectSlug={selectedProjectSlug}
-                onArchiveRequest={onArchiveRequest}
-                disableRatchetAnimation={isKanbanView}
-                needsAttention={needsAttention}
-                clearAttention={clearAttention}
-              />
-            );
-          })}
-          {workspaceList.length === 0 && (
-            <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-              No active workspaces
-            </div>
-          )}
-        </SidebarMenu>
+        {menu}
       </SortableContext>
     </DndContext>
   );
@@ -615,6 +746,7 @@ function SortableWorkspaceItem({
   disableRatchetAnimation,
   needsAttention,
   clearAttention,
+  disabled,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
@@ -624,9 +756,11 @@ function SortableWorkspaceItem({
   disableRatchetAnimation?: boolean;
   needsAttention: (workspaceId: string) => boolean;
   clearAttention: (workspaceId: string) => void;
+  disabled?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
+    disabled,
   });
 
   const style = {
@@ -664,6 +798,7 @@ function SortableWorkspaceItem({
       sortableAttributes={attributes}
       sortableListeners={listeners}
       isDragging={isDragging}
+      hideDragHandle={disabled}
     />
   );
 }

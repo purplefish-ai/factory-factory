@@ -93,6 +93,7 @@ interface ActiveWorkspaceItemProps {
   sortableAttributes: ReturnType<typeof useSortable>['attributes'];
   sortableListeners: ReturnType<typeof useSortable>['listeners'];
   isDragging: boolean;
+  hideDragHandle?: boolean;
 }
 
 export function ActiveWorkspaceItem({
@@ -109,6 +110,7 @@ export function ActiveWorkspaceItem({
   sortableAttributes,
   sortableListeners,
   isDragging,
+  hideDragHandle,
 }: ActiveWorkspaceItemProps) {
   const utils = trpc.useUtils();
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
@@ -143,19 +145,21 @@ export function ActiveWorkspaceItem({
       >
         <div className="flex w-full min-w-0 items-center gap-2">
           {/* Drag handle - outside Link to prevent navigation */}
-          <button
-            type="button"
-            className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
-            aria-label="Drag to reorder"
-            {...sortableAttributes}
-            {...sortableListeners}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <GripVertical className="h-3 w-3" />
-          </button>
+          {!hideDragHandle && (
+            <button
+              type="button"
+              className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
+              aria-label="Drag to reorder"
+              {...sortableAttributes}
+              {...sortableListeners}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
+              <GripVertical className="h-3 w-3" />
+            </button>
+          )}
 
           <Link
             to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
