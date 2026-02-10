@@ -87,12 +87,21 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
         // but preserving them ensures they remain visible during session switch.
         queuedMessages: state.queuedMessages,
       };
-    case 'SESSION_LOADING_START':
-      return withRuntime(state, {
+    case 'SESSION_LOADING_START': {
+      const loadingRuntime = {
         ...state.sessionRuntime,
-        phase: 'loading',
+        phase: 'loading' as const,
         updatedAt: new Date().toISOString(),
-      });
+      };
+      return {
+        ...state,
+        sessionRuntime: loadingRuntime,
+        sessionStatus: deriveSessionStatus(loadingRuntime),
+        // Preserve processStatus — SESSION_LOADING_START only signals a UI loading
+        // transition and should not re-derive processStatus from the runtime defaults.
+        // This keeps the initial 'unknown' state until SESSION_SNAPSHOT arrives.
+      };
+    }
     case 'SESSION_LOADING_END':
       return state.sessionRuntime.phase === 'loading'
         ? withRuntime(state, {
