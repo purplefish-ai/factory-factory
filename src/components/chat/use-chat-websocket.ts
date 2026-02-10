@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import type {
   ChatMessage,
@@ -209,6 +209,18 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     }
     chat.dispatch({ type: 'SESSION_LOADING_END' });
   }, [chat.dispatch]);
+
+  // Ensure pending load timers cannot fire after unmount.
+  useEffect(() => {
+    return () => {
+      currentLoadRequestIdRef.current = null;
+      currentLoadGenerationRef.current += 1;
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
