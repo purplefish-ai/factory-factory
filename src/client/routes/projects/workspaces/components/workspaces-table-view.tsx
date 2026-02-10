@@ -1,4 +1,5 @@
 import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import { GitBranch } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -22,6 +23,7 @@ import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-ba
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { formatStatusLabel } from '@/lib/formatters';
 import { NewWorkspaceButton } from './new-workspace-button';
 import { ResumeBranchButton } from './resume-branch-button';
@@ -33,6 +35,43 @@ const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'F
 type WorkspaceWithSessions = Workspace & {
   claudeSessions?: unknown[];
 };
+
+function MobileWorkspaceCard({
+  workspace,
+  slug,
+}: {
+  workspace: WorkspaceWithSessions;
+  slug: string;
+}) {
+  return (
+    <Link to={`/projects/${slug}/workspaces/${workspace.id}`} className="block">
+      <Card className="p-3 hover:border-primary/50 transition-colors">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-sm truncate">{workspace.name}</span>
+              <CIFailureWarning
+                ciStatus={workspace.prCiStatus as CIStatus}
+                prUrl={workspace.prUrl}
+                size="sm"
+              />
+            </div>
+            {workspace.branchName && (
+              <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground font-mono truncate">
+                <GitBranch className="h-3 w-3 shrink-0" />
+                <span className="truncate">{workspace.branchName}</span>
+              </div>
+            )}
+          </div>
+          <WorkspaceStatusBadge
+            status={workspace.status}
+            errorMessage={workspace.initErrorMessage}
+          />
+        </div>
+      </Card>
+    </Link>
+  );
+}
 
 export function WorkspacesTableView({
   workspaces,
@@ -59,8 +98,10 @@ export function WorkspacesTableView({
   isCreatingWorkspace: boolean;
   resumeDialog: React.ReactNode;
 }) {
+  const isMobile = useIsMobile();
+
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-3 md:p-6">
       <PageHeader title="Workspaces">
         <Select value={statusFilter} onValueChange={onStatusFilterChange}>
           <SelectTrigger className="w-[150px]">
@@ -80,10 +121,12 @@ export function WorkspacesTableView({
         <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
       </PageHeader>
 
-      <Card>
-        {isLoading ? (
+      {isLoading ? (
+        <Card>
           <Loading message="Loading workspaces..." />
-        ) : !workspaces || workspaces.length === 0 ? (
+        </Card>
+      ) : !workspaces || workspaces.length === 0 ? (
+        <Card>
           <Empty className="py-12">
             <EmptyHeader>
               <EmptyTitle>No workspaces found</EmptyTitle>
@@ -93,7 +136,15 @@ export function WorkspacesTableView({
               Create your first workspace
             </NewWorkspaceButton>
           </Empty>
-        ) : (
+        </Card>
+      ) : isMobile ? (
+        <div className="flex flex-col gap-2">
+          {workspaces.map((workspace: WorkspaceWithSessions) => (
+            <MobileWorkspaceCard key={workspace.id} workspace={workspace} slug={slug} />
+          ))}
+        </div>
+      ) : (
+        <Card>
           <Table>
             <TableHeader>
               <TableRow>
@@ -160,8 +211,8 @@ export function WorkspacesTableView({
               ))}
             </TableBody>
           </Table>
-        )}
-      </Card>
+        </Card>
+      )}
       {resumeDialog}
     </div>
   );

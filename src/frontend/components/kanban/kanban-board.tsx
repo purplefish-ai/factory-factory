@@ -15,9 +15,14 @@ export function KanbanControls() {
   const { syncAndRefetch, isSyncing } = useKanban();
 
   return (
-    <Button variant="outline" size="sm" onClick={() => syncAndRefetch()} disabled={isSyncing}>
-      <RefreshCw className={cn('h-4 w-4 mr-2', isSyncing && 'animate-spin')} />
-      {isSyncing ? 'Syncing...' : 'Refresh'}
+    <Button
+      variant="outline"
+      size="icon"
+      className="h-8 w-8"
+      onClick={() => syncAndRefetch()}
+      disabled={isSyncing}
+    >
+      <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
     </Button>
   );
 }
@@ -64,9 +69,9 @@ export function KanbanBoard() {
 
   if (isLoading) {
     return (
-      <div className="flex gap-4 pb-4 h-full overflow-x-auto">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto">
         {KANBAN_COLUMNS.map((column) => (
-          <div key={column.id} className="flex flex-col h-full w-[380px] shrink-0">
+          <div key={column.id} className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
             <Skeleton className="h-10 w-full rounded-t-lg rounded-b-none" />
             <Skeleton className="flex-1 w-full rounded-b-lg rounded-t-none" />
           </div>
@@ -90,7 +95,7 @@ export function KanbanBoard() {
   }
 
   return (
-    <div className="flex gap-4 pb-4 h-full overflow-x-auto">
+    <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto">
       {KANBAN_COLUMNS.map((column) => {
         // Special handling for the ISSUES column (UI-only, not from database)
         if (column.id === 'ISSUES') {
@@ -148,7 +153,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
 
   return (
     <>
-      <div className="flex flex-col h-full w-[380px] shrink-0">
+      <div className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
         {/* Column Header */}
         <div className="flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
           <div className="flex items-center gap-2">
@@ -162,7 +167,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
         {/* Column Content */}
         <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-b-lg bg-muted/30">
           {isEmpty ? (
-            <div className="flex items-center justify-center h-[150px] text-muted-foreground text-sm">
+            <div className="flex items-center justify-center h-[60px] md:h-[150px] text-muted-foreground text-sm">
               {column.description}
             </div>
           ) : (
