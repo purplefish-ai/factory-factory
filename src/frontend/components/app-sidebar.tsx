@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { useMobileProjectSlot } from '@/components/layout/resizable-layout';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -240,6 +241,8 @@ function ProjectSelectorDropdown({
 
 /**
  * On mobile, portals the project selector into the top bar header slot.
+ * Uses MobileSlotContext from ResizableLayout so the portal target is
+ * guaranteed to exist (the header renders before the sidebar in the DOM).
  * On desktop, returns null (the selector is rendered inline in AppSidebarHeader).
  */
 function MobileProjectSelector({
@@ -253,12 +256,7 @@ function MobileProjectSelector({
   onProjectChange: (value: string) => void;
   projects: Array<{ id: string; slug: string; name: string }> | undefined;
 }) {
-  const [mobileSlot, setMobileSlot] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    if (isMobile) {
-      setMobileSlot(document.getElementById('mobile-project-selector-slot'));
-    }
-  }, [isMobile]);
+  const mobileSlot = useMobileProjectSlot();
 
   if (!(isMobile && mobileSlot)) {
     return null;
@@ -691,6 +689,22 @@ function WorkspaceList({
       return <CreatingWorkspaceItem key={workspace.id} />;
     }
 
+    if (isMobile) {
+      return (
+        <StaticWorkspaceItem
+          key={workspace.id}
+          workspace={workspace}
+          isActive={currentWorkspaceId === workspace.id}
+          selectedProjectId={selectedProjectId}
+          selectedProjectSlug={selectedProjectSlug}
+          onArchiveRequest={onArchiveRequest}
+          disableRatchetAnimation={isKanbanView}
+          needsAttention={needsAttention}
+          clearAttention={clearAttention}
+        />
+      );
+    }
+
     return (
       <SortableWorkspaceItem
         key={workspace.id}
@@ -702,7 +716,6 @@ function WorkspaceList({
         disableRatchetAnimation={isKanbanView}
         needsAttention={needsAttention}
         clearAttention={clearAttention}
-        disabled={isMobile}
       />
     );
   });
@@ -735,7 +748,51 @@ function WorkspaceList({
 }
 
 /**
- * Sortable workspace item component for drag and drop reordering
+ * Non-sortable workspace item for mobile (no DndContext/useSortable required).
+ */
+function StaticWorkspaceItem({
+  workspace,
+  isActive,
+  selectedProjectId,
+  selectedProjectSlug,
+  onArchiveRequest,
+  disableRatchetAnimation,
+  needsAttention,
+  clearAttention,
+}: {
+  workspace: WorkspaceListItem;
+  isActive: boolean;
+  selectedProjectId?: string;
+  selectedProjectSlug: string;
+  onArchiveRequest: (workspace: WorkspaceListItem) => void;
+  disableRatchetAnimation?: boolean;
+  needsAttention: (workspaceId: string) => boolean;
+  clearAttention: (workspaceId: string) => void;
+}) {
+  if (workspace.uiState === 'archiving') {
+    return (
+      <ArchivingWorkspaceItem workspace={workspace} selectedProjectSlug={selectedProjectSlug} />
+    );
+  }
+
+  return (
+    <ActiveWorkspaceItem
+      workspace={workspace}
+      isActive={isActive}
+      selectedProjectId={selectedProjectId}
+      selectedProjectSlug={selectedProjectSlug}
+      onArchiveRequest={onArchiveRequest}
+      disableRatchetAnimation={disableRatchetAnimation}
+      needsAttention={needsAttention}
+      clearAttention={clearAttention}
+      hideDragHandle
+    />
+  );
+}
+
+/**
+ * Sortable workspace item component for drag and drop reordering.
+ * Must be rendered inside a DndContext/SortableContext.
  */
 function SortableWorkspaceItem({
   workspace,
@@ -746,7 +803,6 @@ function SortableWorkspaceItem({
   disableRatchetAnimation,
   needsAttention,
   clearAttention,
-  disabled,
 }: {
   workspace: WorkspaceListItem;
   isActive: boolean;
@@ -756,11 +812,9 @@ function SortableWorkspaceItem({
   disableRatchetAnimation?: boolean;
   needsAttention: (workspaceId: string) => boolean;
   clearAttention: (workspaceId: string) => void;
-  disabled?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: workspace.id,
-    disabled,
   });
 
   const style = {
@@ -768,10 +822,7 @@ function SortableWorkspaceItem({
     transition,
   };
 
-  const isArchivingItem = workspace.uiState === 'archiving';
-
-  // Archiving state: use dedicated component
-  if (isArchivingItem) {
+  if (workspace.uiState === 'archiving') {
     return (
       <ArchivingWorkspaceItem
         workspace={workspace}
@@ -782,7 +833,6 @@ function SortableWorkspaceItem({
     );
   }
 
-  // Active workspace: use dedicated component
   return (
     <ActiveWorkspaceItem
       workspace={workspace}
@@ -798,7 +848,6 @@ function SortableWorkspaceItem({
       sortableAttributes={attributes}
       sortableListeners={listeners}
       isDragging={isDragging}
-      hideDragHandle={disabled}
     />
   );
 }

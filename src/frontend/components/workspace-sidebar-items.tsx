@@ -49,8 +49,8 @@ export function CreatingWorkspaceItem() {
 interface ArchivingWorkspaceItemProps {
   workspace: WorkspaceListItem;
   selectedProjectSlug: string;
-  sortableRef: (node: HTMLElement | null) => void;
-  sortableStyle: React.CSSProperties;
+  sortableRef?: (node: HTMLElement | null) => void;
+  sortableStyle?: React.CSSProperties;
 }
 
 export function ArchivingWorkspaceItem({
@@ -88,11 +88,11 @@ interface ActiveWorkspaceItemProps {
   disableRatchetAnimation?: boolean;
   needsAttention: (workspaceId: string) => boolean;
   clearAttention: (workspaceId: string) => void;
-  sortableRef: (node: HTMLElement | null) => void;
-  sortableStyle: React.CSSProperties;
-  sortableAttributes: ReturnType<typeof useSortable>['attributes'];
-  sortableListeners: ReturnType<typeof useSortable>['listeners'];
-  isDragging: boolean;
+  sortableRef?: (node: HTMLElement | null) => void;
+  sortableStyle?: React.CSSProperties;
+  sortableAttributes?: ReturnType<typeof useSortable>['attributes'];
+  sortableListeners?: ReturnType<typeof useSortable>['listeners'];
+  isDragging?: boolean;
   hideDragHandle?: boolean;
 }
 

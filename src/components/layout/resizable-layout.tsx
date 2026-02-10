@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, type ReactNode, useContext, useState } from 'react';
 import { Link } from 'react-router';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -6,6 +6,17 @@ import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { LogoIcon } from '@/frontend/components/logo';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+
+/**
+ * Context to share the mobile project selector portal target element.
+ * The slot div is rendered in the mobile top bar header, and the AppSidebar
+ * portals the project selector dropdown into it via this context.
+ */
+const MobileSlotContext = createContext<HTMLElement | null>(null);
+
+export function useMobileProjectSlot(): HTMLElement | null {
+  return useContext(MobileSlotContext);
+}
 
 interface ResizableLayoutProps {
   sidebar: ReactNode;
@@ -15,25 +26,28 @@ interface ResizableLayoutProps {
 
 export function ResizableLayout({ sidebar, children, className }: ResizableLayoutProps) {
   const isMobile = useIsMobile();
+  const [slotElement, setSlotElement] = useState<HTMLElement | null>(null);
 
   return (
     <SidebarProvider>
       {sidebar ? (
         isMobile ? (
-          <div className={cn('h-svh w-full flex flex-col', className)}>
-            {/* On mobile, sidebar renders as a Sheet (drawer) via the Sidebar component */}
-            {sidebar}
-            <header className="flex items-center gap-3 border-b px-3 py-2.5 shrink-0">
-              <Link to="/projects" className="shrink-0">
-                <LogoIcon className="size-12" />
-              </Link>
-              <div id="mobile-project-selector-slot" className="flex-1 min-w-0" />
-              <SidebarTrigger />
-            </header>
-            <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-              {children}
-            </main>
-          </div>
+          <MobileSlotContext.Provider value={slotElement}>
+            <div className={cn('h-svh w-full flex flex-col', className)}>
+              <header className="flex items-center gap-3 border-b px-3 py-2.5 shrink-0">
+                <Link to="/projects" className="shrink-0">
+                  <LogoIcon className="size-12" />
+                </Link>
+                <div ref={setSlotElement} className="flex-1 min-w-0" />
+                <SidebarTrigger />
+              </header>
+              {/* Sidebar renders as a Sheet (overlay) on mobile, so DOM order doesn't affect layout */}
+              {sidebar}
+              <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+                {children}
+              </main>
+            </div>
+          </MobileSlotContext.Provider>
         ) : (
           <ResizablePanelGroup
             direction="horizontal"
