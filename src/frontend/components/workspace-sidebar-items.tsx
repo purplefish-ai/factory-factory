@@ -30,8 +30,8 @@ import type { WorkspaceListItem } from './use-workspace-list-state';
 export function CreatingWorkspaceItem() {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton size="lg" className="h-auto px-2 py-2.5 cursor-default">
-        <div className="flex items-center gap-2 w-full min-w-0">
+      <SidebarMenuButton size="lg" className="h-auto px-1.5 py-2 cursor-default">
+        <div className="flex items-center gap-1.5 w-full min-w-0">
           {/* Invisible drag handle spacer to match layout */}
           <div className="w-4 shrink-0" aria-hidden="true" />
           <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
@@ -61,9 +61,9 @@ export function ArchivingWorkspaceItem({
 }: ArchivingWorkspaceItemProps) {
   return (
     <SidebarMenuItem ref={sortableRef} style={sortableStyle}>
-      <SidebarMenuButton asChild className="h-auto px-2 py-2.5 opacity-50 pointer-events-none">
+      <SidebarMenuButton asChild className="h-auto px-1.5 py-2 opacity-50 pointer-events-none">
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
-          <div className="flex items-center gap-2 w-full min-w-0">
+          <div className="flex items-center gap-1.5 w-full min-w-0">
             {/* Invisible drag handle spacer to match layout */}
             <div className="w-4 shrink-0" aria-hidden="true" />
             <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
@@ -138,12 +138,12 @@ export function ActiveWorkspaceItem({
         asChild
         isActive={isActive}
         className={cn(
-          'h-auto px-2 py-2.5',
+          'h-auto px-1.5 py-2',
           isDragging && 'opacity-50 bg-sidebar-accent',
           showAttentionGlow && 'waiting-pulse'
         )}
       >
-        <div className="flex w-full min-w-0 items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-1.5">
           {/* Drag handle - outside Link to prevent navigation */}
           {!hideDragHandle && sortableAttributes && sortableListeners && (
             <button
@@ -164,7 +164,7 @@ export function ActiveWorkspaceItem({
           <Link
             to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
             onClick={() => clearAttention(workspace.id)}
-            className="flex flex-1 min-w-0 items-center gap-2"
+            className="flex flex-1 min-w-0 items-center gap-1.5"
           >
             {/* Status dot + ratchet toggle */}
             <div className="w-5 shrink-0 flex flex-col items-center gap-1.5 self-start mt-1.5">
@@ -201,8 +201,8 @@ export function ActiveWorkspaceItem({
 
             <div className="min-w-0 flex-1 space-y-0 self-start">
               {/* Row 1: name + timestamp + archive */}
-              <div className="flex items-center gap-2">
-                <span className="truncate font-medium text-sm leading-tight flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate font-medium text-sm leading-tight flex-1 min-w-0">
                   {workspace.name}
                 </span>
                 {workspace.lastActivityAt && (

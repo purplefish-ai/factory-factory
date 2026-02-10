@@ -545,7 +545,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         <SidebarContent className="flex flex-col">
           {/* Workspaces section */}
           {selectedProjectSlug && (
-            <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            <SidebarGroup className="flex-1 min-h-0 flex flex-col overflow-hidden px-1.5">
               <SidebarGroupLabel>
                 <Link
                   to={`/projects/${selectedProjectSlug}/workspaces`}
@@ -626,7 +626,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-sidebar-border px-4 py-2">
+        <SidebarFooter className="border-t border-sidebar-border px-3 py-2">
           {!isMocked && <ServerPortInfo />}
           <div className="flex items-center justify-between">
             <a
@@ -722,7 +722,7 @@ function WorkspaceList({
   });
 
   const menu = (
-    <SidebarMenu className="gap-2 p-1">
+    <SidebarMenu className="gap-1.5 p-0.5">
       {items}
       {workspaceList.length === 0 && (
         <div className="px-2 py-4 text-xs text-muted-foreground text-center">
