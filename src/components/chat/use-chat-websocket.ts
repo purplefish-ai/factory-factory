@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import type {
   ChatMessage,
@@ -17,6 +17,8 @@ import type {
   SessionStatus,
 } from './chat-reducer';
 import { useChatState } from './use-chat-state';
+
+const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 
 // =============================================================================
 // Types
@@ -135,6 +137,36 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
   const sendRef = useRef<(message: unknown) => boolean>(() => false);
   const currentLoadRequestIdRef = useRef<string | null>(null);
+  const currentLoadGenerationRef = useRef(0);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearLoadTimeout = useCallback(() => {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleLoadRetry = useCallback(
+    (loadGeneration: number, loadRequestId: string) => {
+      clearLoadTimeout();
+      loadTimeoutRef.current = setTimeout(() => {
+        if (
+          currentLoadGenerationRef.current !== loadGeneration ||
+          currentLoadRequestIdRef.current !== loadRequestId
+        ) {
+          loadTimeoutRef.current = null;
+          return;
+        }
+
+        const nextLoadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        currentLoadRequestIdRef.current = nextLoadRequestId;
+        sendRef.current({ type: 'load_session', loadRequestId: nextLoadRequestId });
+        scheduleLoadRetry(loadGeneration, nextLoadRequestId);
+      }, LOAD_SESSION_RETRY_TIMEOUT_MS);
+    },
+    [clearLoadTimeout]
+  );
 
   const chat = useChatState({
     dbSessionId,
@@ -161,27 +193,42 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           return;
         }
         currentLoadRequestIdRef.current = null;
+        clearLoadTimeout();
       }
       chat.handleMessage(data);
     },
-    [chat.handleMessage]
+    [chat.handleMessage, clearLoadTimeout]
   );
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
     // Dispatch loading state to prevent flicker while replaying events
     chat.dispatch({ type: 'SESSION_LOADING_START' });
+    const loadGeneration = currentLoadGenerationRef.current + 1;
+    currentLoadGenerationRef.current = loadGeneration;
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     currentLoadRequestIdRef.current = loadRequestId;
+    scheduleLoadRetry(loadGeneration, loadRequestId);
     sendRef.current({ type: 'list_sessions' });
     sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
-  }, [chat.dispatch]);
+  }, [chat.dispatch, scheduleLoadRetry]);
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     currentLoadRequestIdRef.current = null;
+    currentLoadGenerationRef.current += 1;
+    clearLoadTimeout();
     chat.dispatch({ type: 'SESSION_LOADING_END' });
-  }, [chat.dispatch]);
+  }, [chat.dispatch, clearLoadTimeout]);
+
+  // Ensure pending load timers cannot fire after unmount.
+  useEffect(() => {
+    return () => {
+      currentLoadRequestIdRef.current = null;
+      currentLoadGenerationRef.current += 1;
+      clearLoadTimeout();
+    };
+  }, [clearLoadTimeout]);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
