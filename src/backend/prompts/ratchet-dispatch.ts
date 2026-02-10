@@ -23,6 +23,7 @@ Execute autonomously in this order:
 4. Run build/lint/test and fix failures.
 5. Push your changes.
 6. Comment briefly on addressed review comments and resolve them.
+7. Request re-review from reviewers whose comments you addressed using \`gh pr edit {{PR_NUMBER}} --add-reviewer <login>\`.
 
 If review feedback is non-actionable, explain why in session output and exit without code changes.
 
