@@ -219,7 +219,7 @@ export function ScriptFailedBanner({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-destructive">
           <AlertTriangle className="h-3 w-3" />
-          <span>Startup script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</span>
+          <span>Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</span>
         </div>
         <div className="flex items-center gap-1">
           {hasStartupScript && initOutput && (
