@@ -90,9 +90,7 @@ import {
 import { configureDomainBridges } from './domain-bridges.orchestrator';
 
 // Helper to extract bridge argument from a mocked configure call.
-// Uses `any` to avoid Record<string, ...> undefined-access type noise in tests.
-// biome-ignore lint/suspicious/noExplicitAny: test helper for bridge extraction
-function getBridge(mockFn: (...args: any[]) => any): any {
+function getBridge<T>(mockFn: (arg: T) => void): T {
   return vi.mocked(mockFn).mock.calls[0]![0];
 }
 
@@ -188,10 +186,8 @@ describe('configureDomainBridges', () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.session.injectCommittedUserMessage('s1', { text: 'msg' });
-      expect(sessionDomainService.injectCommittedUserMessage).toHaveBeenCalledWith('s1', {
-        text: 'msg',
-      });
+      bridge.session.injectCommittedUserMessage('s1', 'msg');
+      expect(sessionDomainService.injectCommittedUserMessage).toHaveBeenCalledWith('s1', 'msg');
     });
 
     it('github bridge delegates extractPRInfo to githubCLIService', () => {
@@ -290,16 +286,16 @@ describe('configureDomainBridges', () => {
       configureDomainBridges();
       const bridge = getBridge(chatEventForwarderService.configure);
 
-      bridge.workspace.on('some-event', handler);
-      expect(workspaceActivityService.on).toHaveBeenCalledWith('some-event', handler);
+      bridge.workspace.on('request_notification', handler);
+      expect(workspaceActivityService.on).toHaveBeenCalledWith('request_notification', handler);
     });
 
     it('chatMessageHandler initPolicy bridge delegates getWorkspaceInitPolicy', () => {
       configureDomainBridges();
       const bridge = getBridge(chatMessageHandlerService.configure);
 
-      bridge.initPolicy.getWorkspaceInitPolicy({ workspaceId: 'ws1' });
-      expect(getWorkspaceInitPolicy).toHaveBeenCalledWith({ workspaceId: 'ws1' });
+      bridge.initPolicy.getWorkspaceInitPolicy({ status: 'READY' });
+      expect(getWorkspaceInitPolicy).toHaveBeenCalledWith({ status: 'READY' });
     });
   });
 
