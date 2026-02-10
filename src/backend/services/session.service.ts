@@ -93,7 +93,10 @@ class SessionService {
    * Stop a Claude session gracefully.
    * All sessions use ClaudeClient for unified lifecycle management.
    */
-  async stopClaudeSession(sessionId: string): Promise<void> {
+  async stopClaudeSession(
+    sessionId: string,
+    options?: { cleanupTransientRatchetSession?: boolean }
+  ): Promise<void> {
     if (this.processManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
@@ -121,7 +124,12 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    await this.cleanupTransientRatchetOnStop(session, sessionId);
+    const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
+    await this.cleanupTransientRatchetOnStop(
+      session,
+      sessionId,
+      shouldCleanupTransientRatchetSession
+    );
 
     logger.info('Claude session stopped', { sessionId });
   }
@@ -154,10 +162,11 @@ class SessionService {
 
   private async cleanupTransientRatchetOnStop(
     session: ClaudeSession | null,
-    sessionId: string
+    sessionId: string,
+    shouldCleanupTransientRatchetSession: boolean
   ): Promise<void> {
     // Ratchet sessions are transient and should be cleaned up immediately on manual stop.
-    if (session?.workflow !== 'ratchet') {
+    if (!shouldCleanupTransientRatchetSession || session?.workflow !== 'ratchet') {
       return;
     }
 

@@ -282,6 +282,26 @@ describe('SessionService', () => {
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
+  it('does not delete ratchet session when transient cleanup is disabled', async () => {
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(sessionProcessManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-3',
+        workspaceId: 'workspace-1',
+        workflow: 'ratchet',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    await sessionService.stopClaudeSession('session-3', {
+      cleanupTransientRatchetSession: false,
+    });
+
+    expect(sessionRepository.clearRatchetActiveSession).not.toHaveBeenCalled();
+    expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
+  });
+
   it('still stops process and clears queued work when session lookup fails', async () => {
     vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(sessionRepository.getSessionById).mockRejectedValueOnce(new Error('db unavailable'));

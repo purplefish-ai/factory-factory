@@ -142,7 +142,9 @@ export const sessionRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { sessionService, sessionDomainService } = ctx.appContext.services;
       // Stop process first to prevent orphaned Claude processes
-      await sessionService.stopClaudeSession(input.id);
+      await sessionService.stopClaudeSession(input.id, {
+        cleanupTransientRatchetSession: false,
+      });
       // Clear any in-memory session store state
       sessionDomainService.clearSession(input.id);
       return sessionDataService.deleteClaudeSession(input.id);
