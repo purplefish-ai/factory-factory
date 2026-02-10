@@ -173,10 +173,10 @@ function AppSidebarHeader({
 }) {
   if (isMobile) {
     return (
-      <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
-        <div className="flex items-center gap-3">
+      <SidebarHeader className="border-b border-sidebar-border px-2 py-2.5">
+        <div className="flex items-center gap-2">
           <Link to="/projects" className="shrink-0">
-            <LogoIcon className="size-10" />
+            <LogoIcon className="size-8" />
           </Link>
           <div className="flex-1 min-w-0">{projectSelector}</div>
           <button

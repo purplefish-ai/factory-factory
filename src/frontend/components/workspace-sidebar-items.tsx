@@ -298,15 +298,17 @@ function WorkspaceMetaRow({
   const deletionsText = hasStats && stats?.deletions ? `-${stats.deletions}` : '';
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_40px_40px_72px] items-center gap-x-2 text-xs text-muted-foreground">
-      <WorkspaceCiBadge workspace={workspace} sidebarStatus={sidebarStatus} />
-      <span className="w-10 text-right tabular-nums text-green-600 dark:text-green-400">
+    <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
+      <div className="min-w-0 flex-1">
+        <WorkspaceCiBadge workspace={workspace} sidebarStatus={sidebarStatus} />
+      </div>
+      <span className="shrink-0 text-right tabular-nums text-green-600 dark:text-green-400">
         {additionsText}
       </span>
-      <span className="w-10 text-left tabular-nums text-red-600 dark:text-red-400">
+      <span className="shrink-0 text-left tabular-nums text-red-600 dark:text-red-400">
         {deletionsText}
       </span>
-      {showPR ? <WorkspacePrButton workspace={workspace} /> : <WorkspacePrSpacer />}
+      {showPR && <WorkspacePrButton workspace={workspace} />}
     </div>
   );
 }
@@ -332,10 +334,6 @@ function WorkspaceCiBadge({
   );
 }
 
-function WorkspacePrSpacer() {
-  return <span className="w-[72px]" aria-hidden="true" />;
-}
-
 function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
   const tooltipSuffix = getPrTooltipSuffix(workspace);
   return (
@@ -351,7 +349,7 @@ function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
             }
           }}
           className={cn(
-            'flex w-[72px] items-center justify-end gap-1 text-xs hover:opacity-80 transition-opacity p-0',
+            'flex shrink-0 items-center gap-1 text-xs hover:opacity-80 transition-opacity p-0',
             workspace.prState === 'MERGED'
               ? 'text-green-500'
               : 'text-muted-foreground hover:text-foreground'
@@ -359,11 +357,7 @@ function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
         >
           <GitPullRequest className="h-3 w-3" />
           <span>#{workspace.prNumber}</span>
-          {workspace.prState === 'MERGED' ? (
-            <CheckCircle2 className="h-3 w-3 text-green-500" />
-          ) : (
-            <CheckCircle2 className="h-3 w-3 opacity-0" aria-hidden="true" />
-          )}
+          {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">
