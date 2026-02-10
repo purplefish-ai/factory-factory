@@ -106,3 +106,238 @@ graph TB
 - **Factory Factory Mobile**: Mobile application that acts as a pure frontend, fetching workspace state and streaming messages through FF Cloud.
 
 - **GitHub**: External service where code changes are pushed and PR status is monitored.
+
+## Factory Factory CLI API
+
+The FF CLI needs to expose these capabilities for FF Cloud to orchestrate cloud workspaces:
+
+### Workspace Lifecycle Management
+
+```bash
+# Create a new workspace from a GitHub issue
+ff workspace create --issue <issue-url> --workspace-id <id>
+
+# Start an existing workspace (resumes work)
+ff workspace start --workspace-id <id>
+
+# Stop a workspace gracefully
+ff workspace stop --workspace-id <id>
+
+# Get workspace status and metadata
+ff workspace status --workspace-id <id> --json
+```
+
+### Chat Interaction
+
+```bash
+# Send a message to the workspace's Claude CLI session
+ff chat send --workspace-id <id> --message <text>
+
+# Stream chat output from the workspace (blocks until new messages)
+ff chat stream --workspace-id <id> --json
+
+# Get chat history
+ff chat history --workspace-id <id> --limit <n> --json
+```
+
+### Ratchet (Auto-Fix) Management
+
+```bash
+# Start ratchet listener for a workspace
+ff ratchet start --workspace-id <id> --pr-url <url>
+
+# Stop ratchet listener
+ff ratchet stop --workspace-id <id>
+
+# Get ratchet status (is it running? what's the PR state?)
+ff ratchet status --workspace-id <id> --json
+
+# Toggle auto-fix on/off for a workspace
+ff ratchet toggle --workspace-id <id> --enabled <true|false>
+```
+
+### Workspace State & Metadata
+
+```bash
+# Export full workspace state (for syncing to cloud DB)
+ff workspace export --workspace-id <id> --json
+
+# List all workspaces
+ff workspace list --json
+
+# Get workspace file tree and recent changes
+ff workspace files --workspace-id <id> --json
+
+# Get git branch and commit info
+ff workspace git-status --workspace-id <id> --json
+```
+
+### Team & Multi-User Support
+
+```bash
+# List workspaces for a specific user/team
+ff workspace list --user-id <id> --json
+
+# Get aggregated stats for team view
+ff team stats --team-id <id> --json
+```
+
+### Session Management
+
+```bash
+# Create a new session in a workspace
+ff session create --workspace-id <id> --prompt <text>
+
+# Get session status and output
+ff session status --session-id <id> --json
+
+# List sessions for a workspace
+ff session list --workspace-id <id> --json
+```
+
+### Design Considerations
+
+- **JSON Output**: All commands that return data should support `--json` for machine-readable output
+- **Streaming**: Chat streaming should output newline-delimited JSON for real-time updates
+- **Error Handling**: Exit codes and structured error messages for FF Cloud to handle failures
+- **Authentication**: CLI should support API tokens for cloud service authentication
+- **Idempotency**: Operations like `workspace create` should be idempotent (rerunning same command is safe)
+- **Process Management**: CLI manages long-running Claude CLI processes, keeping them alive and handling crashes
+
+## Chat Streaming Architecture
+
+### How Claude CLI Outputs Messages
+
+Claude CLI is a subprocess managed by Factory Factory. It communicates via events that are captured by FF's `ChatEventForwarderService`:
+
+1. **Claude CLI subprocess** emits events (tool use, thinking, text, completion)
+2. **ChatEventForwarderService** listens to these events via `ClaudeClient`
+3. For each event:
+   - Store the event in `MessageStateService` (for replay on reconnect)
+   - Forward to all connected frontends via `ChatConnectionService.forwardToSession()`
+
+The current architecture uses **WebSockets** for real-time bidirectional communication between FF backend and frontend.
+
+### Event Types from Claude CLI
+
+Based on the current implementation, Claude CLI emits these event types:
+
+- **Stream events**: Text chunks, tool use, thinking tokens
+- **Status events**: `running: true/false`
+- **Interactive requests**: User questions, permission requests
+- **Completion events**: Message finished, with final state
+
+### How `ff chat stream` Should Work
+
+For FF Cloud to stream chat to desktop/mobile clients, `ff chat stream` needs to:
+
+#### 1. Output Format: Newline-Delimited JSON (NDJSON)
+
+Each line is a JSON object representing a chat event:
+
+```bash
+$ ff chat stream --workspace-id abc123 --json
+{"type":"status","running":true,"timestamp":"2026-02-10T10:30:00Z"}
+{"type":"message_state_changed","messageId":"msg-1","state":"DISPATCHED"}
+{"type":"claude_message","role":"assistant","content":[{"type":"text","text":"Let me check..."}]}
+{"type":"claude_message","role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/foo/bar.ts"}}]}
+{"type":"user_question","requestId":"req-1","questions":[...]}
+{"type":"status","running":false,"timestamp":"2026-02-10T10:31:00Z"}
+```
+
+#### 2. Message Types (matches WebSocket protocol)
+
+The CLI should output the same message types that FF's WebSocket currently sends:
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `status` | Claude running state | `{"type":"status","running":true}` |
+| `message_state_changed` | User message state updates | `{"type":"message_state_changed","messageId":"msg-1","state":"ACCEPTED"}` |
+| `claude_message` | Claude's streaming response | `{"type":"claude_message","role":"assistant","content":[...]}` |
+| `user_question` | AskUserQuestion tool invocation | `{"type":"user_question","requestId":"req-1","questions":[...]}` |
+| `permission_request` | Permission dialog | `{"type":"permission_request","requestId":"req-2",...}` |
+| `messages_snapshot` | Full state (on connect/reconnect) | `{"type":"messages_snapshot","messages":[...],"sessionStatus":{...}}` |
+
+#### 3. Stream Behavior
+
+```bash
+# Blocking: waits for new events and outputs them as they arrive
+ff chat stream --workspace-id abc123 --json
+
+# With timeout: exits after 30s of no activity
+ff chat stream --workspace-id abc123 --json --timeout 30s
+
+# From a specific point: only new events after timestamp
+ff chat stream --workspace-id abc123 --json --since 2026-02-10T10:30:00Z
+```
+
+The command should:
+- Block and output events in real-time as they occur
+- Flush after each event (for immediate streaming)
+- Exit cleanly when the workspace stops or the CLI is interrupted (SIGINT/SIGTERM)
+
+#### 4. FF Cloud Integration
+
+FF Cloud would:
+
+1. **Start streaming** when a client connects:
+   ```bash
+   ff chat stream --workspace-id abc123 --json
+   ```
+
+2. **Parse NDJSON output** line by line
+
+3. **Forward to WebSocket/HTTP clients**: Relay each event to connected desktop/mobile clients
+
+4. **Handle reconnection**: When a client reconnects, send `messages_snapshot` first (via `ff chat history`), then resume streaming
+
+### Sending Messages to Claude CLI
+
+For sending user input, FF Cloud uses:
+
+```bash
+# Send a text message
+ff chat send --workspace-id abc123 --message "Fix the bug in auth.ts"
+
+# Send with attachments (as JSON)
+ff chat send --workspace-id abc123 --json '{
+  "text": "Review this screenshot",
+  "attachments": [{"id":"att-1","name":"bug.png","data":"base64..."}]
+}'
+
+# Answer a question
+ff chat send --workspace-id abc123 --type question_response --json '{
+  "requestId": "req-1",
+  "answers": {"question1": "option1"}
+}'
+
+# Stop the session
+ff chat send --workspace-id abc123 --type stop
+```
+
+### State Synchronization
+
+When a client first connects or reconnects:
+
+```bash
+# Get full snapshot of current state
+ff chat history --workspace-id abc123 --json
+```
+
+Returns:
+```json
+{
+  "type": "messages_snapshot",
+  "messages": [
+    {"id":"msg-1","role":"user","text":"Fix the bug"},
+    {"id":"msg-2","role":"assistant","content":[...]}
+  ],
+  "sessionStatus": {
+    "phase": "running",
+    "isRunning": true
+  },
+  "pendingInteractiveRequest": null
+}
+```
+
+This matches the `messages_snapshot` format that the current WebSocket implementation sends, ensuring consistency between desktop and cloud.
