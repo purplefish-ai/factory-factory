@@ -12,6 +12,7 @@
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import { WS_READY_STATE } from '@/backend/constants';
+import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { interceptorRegistry } from '@/backend/interceptors';
 import type { EventEmitterListener } from '@/backend/lib/event-emitter-types';
@@ -24,7 +25,6 @@ import {
 } from '@/backend/schemas/tool-inputs.schema';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionFileLogger } from '@/backend/services/session-file-logger.service';
 import { slashCommandCacheService } from '@/backend/services/slash-command-cache.service';
 import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
 import {

@@ -54,7 +54,7 @@ vi.mock('@/backend/interceptors', () => ({
   },
 }));
 
-vi.mock('@/backend/services/session-file-logger.service', () => ({
+vi.mock('@/backend/domains/session/logging/session-file-logger.service', () => ({
   sessionFileLogger: {
     log: vi.fn(),
   },
