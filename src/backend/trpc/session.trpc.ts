@@ -132,7 +132,9 @@ export const sessionRouter = router({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
-      await sessionService.stopClaudeSession(input.id);
+      await sessionService.stopClaudeSession(input.id, {
+        cleanupTransientRatchetSession: false,
+      });
       return sessionDataService.findClaudeSessionById(input.id);
     }),
 
