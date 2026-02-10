@@ -354,35 +354,41 @@ function createShutdownHandler(
 
     // Wait for graceful shutdown, then force kill remaining
     setTimeout(async () => {
-      await Promise.allSettled(termPromises);
+      try {
+        await Promise.allSettled(termPromises);
 
-      const alive = processes.filter(({ proc }) => proc.exitCode === null);
-      let killFailed = false;
+        const alive = processes.filter(({ proc }) => proc.exitCode === null);
 
-      if (alive.length > 0) {
-        console.log(
-          chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
-        );
-        const killResults = await Promise.allSettled(
-          alive
-            .filter(({ proc }) => proc.pid)
-            .map(async ({ name, proc }) => {
-              try {
-                await treeKillAsync(proc.pid as number, 'SIGKILL');
-              } catch (err) {
-                console.error(
-                  chalk.yellow(
-                    `  Failed to force kill ${name} (${proc.pid}): ${(err as Error).message}`
-                  )
-                );
-                throw err;
-              }
-            })
-        );
-        killFailed = killResults.some((r) => r.status === 'rejected');
+        if (alive.length > 0) {
+          console.log(
+            chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
+          );
+          const killResults = await Promise.allSettled(
+            alive
+              .filter(({ proc }) => proc.pid)
+              .map(async ({ name, proc }) => {
+                try {
+                  await treeKillAsync(proc.pid as number, 'SIGKILL');
+                } catch (err) {
+                  console.error(
+                    chalk.yellow(
+                      `  Failed to force kill ${name} (${proc.pid}): ${(err as Error).message}`
+                    )
+                  );
+                  throw err;
+                }
+              })
+          );
+          const killFailed = killResults.some((r) => r.status === 'rejected');
+          if (killFailed) {
+            process.exitCode = 1;
+          }
+        }
+      } catch (err) {
+        // Handle any unexpected errors in shutdown handler to avoid unhandled rejection
+        console.error(chalk.red(`  Shutdown error: ${(err as Error).message}`));
+        process.exitCode = 1;
       }
-
-      process.exit(killFailed ? 1 : 0);
     }, 5000);
   };
 }
