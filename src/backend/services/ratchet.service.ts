@@ -700,6 +700,21 @@ class RatchetService {
       return null;
     }
 
+    // Ratchet session has completed its current unit of work: close it to avoid lingering idle agents.
+    if (!sessionService.isSessionWorking(session.id)) {
+      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      try {
+        await sessionService.stopClaudeSession(session.id);
+      } catch (error) {
+        logger.warn('Failed to stop completed ratchet session', {
+          workspaceId: workspace.id,
+          sessionId: session.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return null;
+    }
+
     return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
   }
 
