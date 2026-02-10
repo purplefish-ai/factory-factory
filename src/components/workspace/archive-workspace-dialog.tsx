@@ -22,7 +22,6 @@ export type ArchiveWorkspaceDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hasUncommitted: boolean;
-  isPending: boolean;
   onConfirm: (commitUncommitted: boolean) => void;
   description?: string;
   warningText?: string;
@@ -33,7 +32,6 @@ export function ArchiveWorkspaceDialog({
   open,
   onOpenChange,
   hasUncommitted,
-  isPending,
   onConfirm,
   description = defaultDescription,
   warningText = defaultWarning,
@@ -69,14 +67,14 @@ export function ArchiveWorkspaceDialog({
           </label>
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {
               event.preventDefault();
               onConfirm(commitChangesChecked);
               onOpenChange(false);
             }}
-            disabled={isPending || (hasUncommitted && !commitChangesChecked)}
+            disabled={hasUncommitted && !commitChangesChecked}
             className={buttonVariants({ variant: 'destructive' })}
           >
             Archive
