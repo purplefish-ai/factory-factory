@@ -90,7 +90,10 @@ function createSessionSwitchResetState(): Pick<
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
-    sessionRuntime: createInitialSessionRuntimeState(),
+    sessionRuntime: {
+      ...createInitialSessionRuntimeState(),
+      phase: 'loading', // Override to 'loading' for session switch
+    },
     slashCommands: [], // Clear for new session - will be sent when Claude starts
     slashCommandsLoaded: false,
   };

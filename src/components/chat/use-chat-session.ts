@@ -30,6 +30,8 @@ export interface UseChatSessionOptions {
   dispatch: React.Dispatch<ChatAction>;
   /** Tool input accumulator ref to clear on session switch */
   toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>;
+  /** Session runtime phase from state - used to clear loading timeout */
+  sessionRuntimePhase: string;
 }
 
 export interface UseChatSessionReturn {
@@ -41,7 +43,7 @@ export interface UseChatSessionReturn {
  * Hook for managing chat session switching and settings loading.
  */
 export function useChatSession(options: UseChatSessionOptions): UseChatSessionReturn {
-  const { dbSessionId, dispatch, toolInputAccumulatorRef } = options;
+  const { dbSessionId, dispatch, toolInputAccumulatorRef, sessionRuntimePhase } = options;
 
   const prevDbSessionIdRef = useRef<string | null>(null);
   const loadedDraftRef = useRef<string>('');
@@ -103,6 +105,15 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       }
     };
   }, [dbSessionId, dispatch, toolInputAccumulatorRef]);
+
+  // Clear loading timeout when session runtime phase changes away from loading
+  useEffect(() => {
+    if (sessionRuntimePhase !== 'loading' && loadingTimeoutRef.current) {
+      debug.log('Session runtime phase changed, clearing loading timeout');
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  }, [sessionRuntimePhase]);
 
   return {
     loadedDraft: loadedDraftRef.current,
