@@ -3,6 +3,19 @@ import type { createLogger } from './logger.service';
 type Logger = ReturnType<typeof createLogger>;
 
 /**
+ * Check whether a lowercased error message indicates a GitHub rate limit.
+ * Shared by both RateLimitBackoff (polling services) and GitHubCLIService
+ * (error classification) so the detection patterns stay in sync.
+ */
+export function isRateLimitMessage(lowerMessage: string): boolean {
+  return (
+    lowerMessage.includes('429') ||
+    lowerMessage.includes('rate limit') ||
+    lowerMessage.includes('throttl')
+  );
+}
+
+/**
  * Shared rate limit backoff logic for polling services.
  *
  * Tracks whether a rate limit was hit during a polling cycle and applies
@@ -51,11 +64,7 @@ export class RateLimitBackoff {
     baseIntervalMs: number
   ): boolean {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const lowerMessage = errorMessage.toLowerCase();
-    const isRateLimit =
-      lowerMessage.includes('429') ||
-      lowerMessage.includes('rate limit') ||
-      lowerMessage.includes('throttl');
+    const isRateLimit = isRateLimitMessage(errorMessage.toLowerCase());
 
     if (isRateLimit) {
       if (!this.rateLimitHitThisCycle && this.multiplier < this.maxMultiplier) {

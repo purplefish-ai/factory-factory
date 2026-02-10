@@ -11,6 +11,7 @@ import type {
   ReviewAction,
 } from '@/shared/github-types';
 import { createLogger } from './logger.service';
+import { isRateLimitMessage } from './rate-limit-backoff';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
@@ -461,7 +462,7 @@ class GitHubCLIService {
    * Check if error indicates rate limiting (429).
    */
   private isRateLimitError(message: string): boolean {
-    return message.includes('429') || message.includes('rate limit') || message.includes('throttl');
+    return isRateLimitMessage(message);
   }
 
   /**
