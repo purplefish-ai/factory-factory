@@ -120,6 +120,7 @@ export function WorkspaceDetailContainer() {
     handleSelectSession,
     handleCloseSession,
     handleNewChat,
+    handleNewPlan,
     handleQuickAction,
   } = useSessionManagement({
     workspaceId: workspaceId,
@@ -243,6 +244,7 @@ export function WorkspaceDetailContainer() {
       isDeletingSession={deleteSession.isPending}
       handleSelectSession={handleSelectSession}
       handleNewChat={handleNewChat}
+      handleNewPlan={handleNewPlan}
       handleCloseChatSession={handleCloseChatSession}
       maxSessions={maxSessions}
       hasWorktreePath={!!workspace?.worktreePath}

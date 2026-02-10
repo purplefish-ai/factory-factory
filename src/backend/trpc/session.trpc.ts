@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { SessionManager } from '../claude/session';
 import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
+import { planFileService } from '../services/plan-file.service';
 import { sessionDataService } from '../services/session-data.service';
 import { workspaceDataService } from '../services/workspace-data.service';
 import { publicProcedure, router } from './trpc';
@@ -92,6 +93,29 @@ export const sessionRouter = router({
         ...input,
         claudeProjectPath,
       });
+
+      // For plan workflow sessions, create the plan file and store its path
+      if (input.workflow === 'plan' && workspace?.worktreePath) {
+        try {
+          const planFilePath = await planFileService.createPlanFile(
+            workspace.worktreePath,
+            workspace.branchName
+          );
+          const updatedSession = await sessionDataService.updateClaudeSession(session.id, {
+            planFilePath,
+          });
+          return updatedSession;
+        } catch (error) {
+          // Clean up session if plan file creation fails
+          await sessionDataService.deleteClaudeSession(session.id);
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Failed to create plan file',
+            cause: error,
+          });
+        }
+      }
+
       return session;
     }),
 

@@ -36,6 +36,7 @@ class SessionDataService {
       claudeSessionId?: string | null;
       claudeProjectPath?: string | null;
       claudeProcessPid?: number | null;
+      planFilePath?: string | null;
     }
   ): Promise<ClaudeSession> {
     return claudeSessionAccessor.update(id, data);

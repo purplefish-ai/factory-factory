@@ -148,6 +148,7 @@ describe('WorkspaceCreationService', () => {
       claudeSessionId: null,
       claudeProjectPath: null,
       claudeProcessPid: null,
+      planFilePath: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
