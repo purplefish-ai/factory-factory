@@ -2,6 +2,9 @@
 
 ## Project Structure & Module Organization
 - `src/backend/`: Express + tRPC server, WebSocket handlers, and resource accessors
+- `src/backend/domains/`: Domain modules (session, workspace, github, ratchet, terminal, run-script)
+- `src/backend/orchestration/`: Cross-domain coordination layer (bridges, workspace init/archive)
+- `src/backend/services/`: Infrastructure-only services (logger, config, scheduler, port, health, etc.)
 - `src/client/`: React UI (routes in `src/client/routes/`, router in `src/client/router.tsx`)
 - `src/cli/`: CLI entrypoint and commands
 - `src/components/`: Shared UI components (shadcn/ui)
@@ -25,6 +28,16 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - TypeScript project with strict type checking.
 - Formatting and linting are enforced by Biome (`pnpm check:fix`).
 - Prefer existing patterns and directory conventions; keep backend logic in `src/backend/` and UI in `src/client/`.
+
+## Backend Domain Module Pattern
+- **6 domains:** session, workspace, github, ratchet, terminal, run-script (all in `src/backend/domains/`)
+- Each domain has an `index.ts` barrel file as the sole public API
+- Consumers must import from barrel (`@/backend/domains/session`), never from internal paths
+- Domains never import from sibling domains (enforced by dependency-cruiser `no-cross-domain-imports` rule)
+- Cross-domain coordination uses bridge interfaces + orchestration layer in `src/backend/orchestration/`
+- `src/backend/services/` contains ONLY infrastructure/cross-cutting services (logger, config, scheduler, etc.)
+- New domain logic goes in `domains/{name}/`, new infrastructure goes in `services/`
+- Tests are co-located within each domain module
 
 ## Testing Guidelines
 - Tests are run with Vitest (`pnpm test`, `pnpm test:watch`, `pnpm test:coverage`).
