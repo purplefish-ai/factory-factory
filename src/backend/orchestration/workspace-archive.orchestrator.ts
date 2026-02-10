@@ -3,8 +3,7 @@ import { githubCLIService } from '@/backend/domains/github';
 import { runScriptService } from '@/backend/domains/run-script';
 import { sessionService } from '@/backend/domains/session';
 import { terminalService } from '@/backend/domains/terminal';
-import { workspaceStateMachine } from '@/backend/domains/workspace/lifecycle/state-machine.service';
-import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
+import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
 import { createLogger } from '@/backend/services/logger.service';
 import type { WorkspaceWithProject } from './types';
 
