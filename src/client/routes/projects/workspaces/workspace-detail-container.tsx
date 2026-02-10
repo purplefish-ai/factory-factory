@@ -5,7 +5,7 @@ import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
-
+import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
@@ -36,6 +36,12 @@ export function WorkspaceDetailContainer() {
   );
 
   const { workspaceInitStatus } = useWorkspaceInitStatus(workspaceId, workspace, utils);
+  useEffect(() => {
+    const phase = workspaceInitStatus?.phase;
+    if (phase === 'READY' || phase === 'ARCHIVED') {
+      forgetResumeWorkspace(workspaceId);
+    }
+  }, [workspaceId, workspaceInitStatus?.phase]);
 
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     initialDbSessionId ?? null

@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowDown, Loader2, Play, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
 import type { useChatWebSocket } from '@/components/chat';
 import {
   AgentLiveDock,
@@ -14,6 +15,7 @@ import { trpc } from '@/frontend/lib/trpc';
 import type { CommandInfo, TokenStats } from '@/lib/claude-types';
 import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
 import type { WorkspaceInitBanner, WorkspaceInitPhase } from '@/shared/workspace-init';
+import { isResumeWorkspace } from './resume-workspace-storage';
 
 interface ChatContentProps {
   workspaceId: string;
@@ -230,6 +232,9 @@ export const ChatContent = memo(function ChatContent({
     onSuccess: () => {
       utils.workspace.getInitStatus.invalidate({ id: workspaceId });
     },
+    onError: (error) => {
+      toast.error(error.message);
+    },
   });
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
   const latestToolSequence = useMemo(() => {
@@ -304,7 +309,12 @@ export const ChatContent = memo(function ChatContent({
           <InitStatusBanner
             banner={initBanner}
             retryPending={retryInit.isPending}
-            onRetry={() => retryInit.mutate({ id: workspaceId })}
+            onRetry={() =>
+              retryInit.mutate({
+                id: workspaceId,
+                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
+              })
+            }
             onPlay={resumeQueuedMessages}
           />
         )}
