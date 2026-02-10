@@ -11,7 +11,7 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/session.service', () => ({
+vi.mock('../../../lifecycle/session.service', () => ({
   sessionService: {
     getSessionOptions: mocks.getSessionOptions,
   },
