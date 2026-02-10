@@ -1,10 +1,9 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { SessionManager } from '../claude/session';
+import { SessionManager, sessionDataService } from '@/backend/domains/session';
+import { workspaceDataService } from '@/backend/domains/workspace';
 import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
-import { sessionDataService } from '../services/session-data.service';
-import { workspaceDataService } from '../services/workspace-data.service';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({

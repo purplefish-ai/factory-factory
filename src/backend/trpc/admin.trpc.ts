@@ -9,12 +9,12 @@ import { open, stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { type DecisionLog, SessionStatus } from '@prisma-gen/client';
 import { z } from 'zod';
+import { sessionDataService } from '@/backend/domains/session';
+import { workspaceDataService } from '@/backend/domains/workspace';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { dataBackupService } from '../services';
 import { decisionLogQueryService } from '../services/decision-log-query.service';
 import { getLogFilePath } from '../services/logger.service';
-import { sessionDataService } from '../services/session-data.service';
-import { workspaceDataService } from '../services/workspace-data.service';
 import { type Context, publicProcedure, router } from './trpc';
 
 const loggerName = 'admin-trpc';

@@ -5,7 +5,7 @@
  */
 
 import { TRPCError } from '@trpc/server';
-import { workspaceDataService } from '../../services/workspace-data.service';
+import { workspaceDataService } from '@/backend/domains/workspace';
 
 /**
  * Find a workspace by ID or throw a NOT_FOUND error.
