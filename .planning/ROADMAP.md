@@ -86,11 +86,11 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Move pure state functions (flow-state, kanban-state, init-policy) to state/
-- [ ] 03-02-PLAN.md — Move state machine, data, and activity services to lifecycle/
-- [ ] 03-03-PLAN.md — Move worktree-lifecycle to worktree/ with DOM-04 refactoring (3 globals)
-- [ ] 03-04-PLAN.md — Move creation and query services with DOM-04 refactoring (1 global)
-- [ ] 03-05-PLAN.md — Populate workspace domain barrel and create smoke test
+- [x] 03-01-PLAN.md — Move pure state functions (flow-state, kanban-state, init-policy) to state/
+- [x] 03-02-PLAN.md — Move state machine, data, and activity services to lifecycle/
+- [x] 03-03-PLAN.md — Move worktree-lifecycle to worktree/ with DOM-04 refactoring (3 globals)
+- [x] 03-04-PLAN.md — Move creation and query services with DOM-04 refactoring (1 global)
+- [x] 03-05-PLAN.md — Populate workspace domain barrel and create smoke test
 
 **Delivers:**
 - Workspace lifecycle (creation, state machine, archival) in one module
@@ -279,4 +279,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 3 planned (5 plans in 3 waves)*
+*Last updated: 2026-02-10 — Phase 3 complete (5 plans, 3 waves, 4 DOM-04 globals eliminated)*
