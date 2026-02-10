@@ -276,7 +276,7 @@ export const ChatContent = memo(function ChatContent({
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        {initBanner && (
+        {initBanner && initBanner.kind !== 'info' && (
           <InitStatusBanner
             banner={initBanner}
             retryPending={retryInit.isPending}
@@ -303,6 +303,7 @@ export const ChatContent = memo(function ChatContent({
           isCompacting={isCompacting}
           getUuidForMessageId={getUuidForMessageId}
           onRewindToMessage={startRewindPreview}
+          initBanner={initBanner}
         />
       </div>
 
