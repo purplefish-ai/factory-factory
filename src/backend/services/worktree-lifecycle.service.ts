@@ -31,6 +31,9 @@ const LOCK_ACQUIRE_TIMEOUT_MS = 5000; // Maximum time to wait for lock
 const LOCK_RETRY_DELAY_MS = 50; // Initial retry delay
 const LOCK_MAX_RETRY_DELAY_MS = 500; // Maximum retry delay
 const LOCK_MAX_STALE_RETRIES = 3; // Maximum retries after removing stale locks
+// Stale threshold must be MUCH larger than acquire timeout to avoid removing active locks
+// A lock is only stale if held for 5x the normal acquisition timeout (25 seconds)
+const LOCK_STALE_THRESHOLD_MS = LOCK_ACQUIRE_TIMEOUT_MS * 5; // 25 seconds
 
 /**
  * Get inode from file handle, closing the handle regardless of success.
@@ -132,7 +135,10 @@ async function tryRemoveStaleLock(lockPath: string): Promise<boolean> {
     const lockAge = Date.now() - stats.mtimeMs;
 
     // If lock is not old enough, it's not stale
-    if (lockAge < LOCK_ACQUIRE_TIMEOUT_MS) {
+    // CRITICAL: Stale threshold must be much larger than acquire timeout
+    // to avoid removing locks that are actively held but simply waiting
+    // for a long-running critical section to complete
+    if (lockAge < LOCK_STALE_THRESHOLD_MS) {
       return false;
     }
 
