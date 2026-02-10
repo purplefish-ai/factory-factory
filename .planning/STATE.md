@@ -105,6 +105,8 @@
 | Remove stale knip ignore entries | 2026-02-10 | Deleted directories no longer need knip exclusion globs (09-03) |
 | Barrel bypass for circular-dep avoidance | 2026-02-10 | interceptors/conversation-rename and orchestration/workspace-init retain direct paths (10-01) |
 | HistoryMessage from @/shared/claude | 2026-02-10 | conversation-analyzer imports shared type instead of deep domain path (10-01) |
+| ARCHITECTURE.md full rewrite over patching | 2026-02-10 | Avoid stale references by rewriting entirely post-refactor (10-02) |
+| HOTSPOTS preserved as historical record | 2026-02-10 | Added SUPERSEDED notice rather than deleting pre-refactor analysis (10-02) |
 | Domain-to-orchestration exceptions | 2026-02-10 | creation.service and reconciliation.service exempted from no-domains-importing-orchestration (10-01) |
 
 ## Blockers
@@ -150,6 +152,7 @@ The refactor is done -- future work should follow the domain module pattern docu
 | 09 | 02 | 14min | 2 | 19 |
 | 09 | 03 | 9min | 2 | 81 |
 | 10 | 01 | 6min | 2 | 5 |
+| 10 | 02 | 8min | 2 | 7 |
 
 ---
 *State initialized: 2026-02-10*
