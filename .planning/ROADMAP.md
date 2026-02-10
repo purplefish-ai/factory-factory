@@ -173,7 +173,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — Move terminal.service.ts to domain, create shim, barrel, and unit tests
+- [x] 06-01-PLAN.md — Move terminal.service.ts to domain, create shim, barrel, and unit tests
 
 **Delivers:**
 - Terminal pty management, output buffering, monitoring in one module
@@ -291,4 +291,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 6 planned (1 plan, 1 wave, TERM-02 already satisfied)*
+*Last updated: 2026-02-10 — Phase 6 complete (1 plan, TERM-01/02/03 satisfied, 1775 tests passing)*
