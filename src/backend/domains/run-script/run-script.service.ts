@@ -27,6 +27,9 @@ export class RunScriptService {
   // Track whether we're shutting down to prevent double cleanup
   private isShuttingDown = false;
 
+  // Guard against duplicate handler registration on module reload
+  private shutdownHandlersRegistered = false;
+
   /**
    * Start the run script for a workspace
    * @param workspaceId - Workspace ID
@@ -613,6 +616,11 @@ export class RunScriptService {
    * Called once at module load time after singleton creation.
    */
   registerShutdownHandlers(): void {
+    if (this.shutdownHandlersRegistered) {
+      return;
+    }
+    this.shutdownHandlersRegistered = true;
+
     // Register cleanup handlers for graceful shutdown
     // These handlers allow async cleanup (unlike 'exit' which is synchronous)
     // Note: We don't call process.exit() to allow other shutdown handlers to run
