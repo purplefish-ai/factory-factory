@@ -6,7 +6,8 @@ import {
   sessionDomainService,
   sessionService,
 } from '@/backend/domains/session';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
+import { workspaceStateMachine } from '@/backend/domains/workspace/lifecycle/state-machine.service';
+import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';

@@ -1,4 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration';
 import {
   claudeSessionAccessor,
   terminalSessionAccessor,
@@ -7,7 +8,6 @@ import {
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceStateMachine } from '@/backend/services/workspace-state-machine.service';
-import { initializeWorkspaceWorktree } from '@/backend/trpc/workspace/init.trpc';
 
 const logger = createLogger('reconciliation');
 

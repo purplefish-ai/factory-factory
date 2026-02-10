@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration';
 import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
 import { workspaceDataService } from '../../services/workspace-data.service';
@@ -8,26 +9,10 @@ import { workspaceStateMachine } from '../../services/workspace-state-machine.se
 import {
   getWorkspaceInitMode,
   setWorkspaceInitMode,
-  worktreeLifecycleService,
 } from '../../services/worktree-lifecycle.service';
 import { publicProcedure, router } from '../trpc';
 
 const logger = createLogger('workspace-init-trpc');
-// =============================================================================
-// Background Initialization
-// =============================================================================
-
-/**
- * Initialize workspace worktree in the background.
- * This function is called after the workspace record is created and allows
- * the API to return immediately while the worktree is being set up.
- */
-export function initializeWorkspaceWorktree(
-  workspaceId: string,
-  options?: { branchName?: string; useExistingBranch?: boolean }
-): Promise<void> {
-  return worktreeLifecycleService.initializeWorkspaceWorktree(workspaceId, options);
-}
 
 // =============================================================================
 // Router

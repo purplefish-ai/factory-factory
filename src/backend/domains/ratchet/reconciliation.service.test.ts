@@ -26,7 +26,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 // Mock initializeWorkspaceWorktree
 const mockInitializeWorkspaceWorktree = vi.fn();
-vi.mock('@/backend/trpc/workspace/init.trpc', () => ({
+vi.mock('@/backend/orchestration', () => ({
   initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
 }));
 

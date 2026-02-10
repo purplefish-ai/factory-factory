@@ -260,7 +260,8 @@ export class WorkspaceCreationService {
     logger: Logger
   ): void {
     // Import initializeWorkspaceWorktree dynamically to avoid circular dependency
-    import('@/backend/trpc/workspace/init.trpc')
+    // (workspace barrel -> creation.service -> orchestration barrel -> orchestrator -> workspace barrel)
+    import('@/backend/orchestration/workspace-init.orchestrator')
       .then(({ initializeWorkspaceWorktree }) => {
         const branchName =
           source.type === 'MANUAL'
