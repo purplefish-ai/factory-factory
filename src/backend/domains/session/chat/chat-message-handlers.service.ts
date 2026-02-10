@@ -12,6 +12,8 @@ import type { WebSocket } from 'ws';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionService } from '@/backend/services/session.service';
+import { sessionDataService } from '@/backend/services/session-data.service';
+import { getWorkspaceInitPolicy } from '@/backend/services/workspace-init-policy.service';
 import {
   type ClaudeContentItem,
   DEFAULT_THINKING_BUDGET,
@@ -46,10 +48,13 @@ class ChatMessageHandlerService {
 
   /** Client creator function - injected to avoid circular dependencies */
   private clientCreator: ClientCreator | null = null;
+  /** Per-session override to allow dispatch under manual_resume policy. */
+  private manualDispatchResumed = new Map<string, boolean>();
 
   private handlerRegistry = createChatMessageHandlerRegistry({
     getClientCreator: () => this.clientCreator,
     tryDispatchNextMessage: this.tryDispatchNextMessage.bind(this),
+    setManualDispatchResume: this.setManualDispatchResume.bind(this),
   });
 
   /**
@@ -59,6 +64,24 @@ class ChatMessageHandlerService {
     this.clientCreator = creator;
   }
 
+  setManualDispatchResume(sessionId: string, resumed: boolean): void {
+    if (resumed) {
+      this.manualDispatchResumed.set(sessionId, true);
+      return;
+    }
+    this.manualDispatchResumed.delete(sessionId);
+  }
+
+  private isDispatchInProgress(dbSessionId: string): boolean {
+    if (!this.dispatchInProgress.get(dbSessionId)) {
+      return false;
+    }
+    if (DEBUG_CHAT_WS) {
+      logger.info('[Chat WS] Dispatch already in progress, skipping', { dbSessionId });
+    }
+    return true;
+  }
+
   /**
    * Try to dispatch the next queued message to Claude.
    * Auto-starts the client if needed.
@@ -66,10 +89,7 @@ class ChatMessageHandlerService {
    */
   async tryDispatchNextMessage(dbSessionId: string): Promise<void> {
     // Guard against concurrent dispatch calls for the same session
-    if (this.dispatchInProgress.get(dbSessionId)) {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Dispatch already in progress, skipping', { dbSessionId });
-      }
+    if (this.isDispatchInProgress(dbSessionId)) {
       return;
     }
 
@@ -83,6 +103,11 @@ class ChatMessageHandlerService {
     }
 
     try {
+      const dispatchGate = await this.getDispatchGateSafely(dbSessionId, msg);
+      if (dispatchGate === 'blocked' || dispatchGate === 'manual_resume') {
+        return;
+      }
+
       let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
 
       // Auto-start: create client if needed, using the dequeued message's settings
@@ -309,6 +334,44 @@ class ChatMessageHandlerService {
    */
   private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
     return processAttachmentsAndBuildContent(msg.text, msg.attachments);
+  }
+
+  private async evaluateDispatchGate(
+    dbSessionId: string
+  ): Promise<'allowed' | 'blocked' | 'manual_resume'> {
+    const session = await sessionDataService.findClaudeSessionById(dbSessionId);
+    if (!session) {
+      return 'blocked';
+    }
+
+    const dispatchPolicy = getWorkspaceInitPolicy(session.workspace).dispatchPolicy;
+    if (dispatchPolicy !== 'manual_resume') {
+      this.manualDispatchResumed.delete(dbSessionId);
+      return dispatchPolicy;
+    }
+
+    return this.manualDispatchResumed.get(dbSessionId) ? 'allowed' : 'manual_resume';
+  }
+
+  private async getDispatchGateSafely(
+    dbSessionId: string,
+    msg: QueuedMessage
+  ): Promise<'allowed' | 'blocked' | 'manual_resume'> {
+    try {
+      const dispatchGate = await this.evaluateDispatchGate(dbSessionId);
+      if (dispatchGate === 'blocked' || dispatchGate === 'manual_resume') {
+        sessionDomainService.requeueFront(dbSessionId, msg);
+      }
+      return dispatchGate;
+    } catch (error) {
+      logger.error('[Chat WS] Failed to evaluate dispatch gate, re-queueing message', {
+        dbSessionId,
+        messageId: msg.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      sessionDomainService.requeueFront(dbSessionId, msg);
+      return 'blocked';
+    }
   }
 
   // ============================================================================

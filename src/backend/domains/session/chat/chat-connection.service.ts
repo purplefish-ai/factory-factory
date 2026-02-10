@@ -24,7 +24,7 @@ const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
 export interface ConnectionInfo {
   ws: WebSocket;
   dbSessionId: string | null;
-  workingDir: string;
+  workingDir: string | null;
 }
 
 // ============================================================================

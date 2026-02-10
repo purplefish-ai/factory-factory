@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createLogger } from '../../services/logger.service';
 import { startupScriptService } from '../../services/startup-script.service';
 import { workspaceDataService } from '../../services/workspace-data.service';
+import { getWorkspaceInitPolicy } from '../../services/workspace-init-policy.service';
 import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
 import {
   getWorkspaceInitMode,
@@ -43,16 +44,20 @@ export const workspaceInitRouter = router({
       });
     }
 
+    const initPolicy = getWorkspaceInitPolicy(workspace);
+
     return {
-      // Return status field - frontend maps NEW/PROVISIONING/FAILED to show overlay
       status: workspace.status,
       initErrorMessage: workspace.initErrorMessage,
       initOutput: workspace.initOutput,
       initStartedAt: workspace.initStartedAt,
       initCompletedAt: workspace.initCompletedAt,
+      phase: initPolicy.phase,
+      chatBanner: initPolicy.banner,
       hasStartupScript: !!(
         workspace.project?.startupScriptCommand || workspace.project?.startupScriptPath
       ),
+      hasWorktreePath: !!workspace.worktreePath,
     };
   }),
 

@@ -173,6 +173,7 @@ describe('worktreeLifecycleService initialization', () => {
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
       initialPrompt: '',
     });
+    expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
 
   it('emits accepted delta with resolved selectedModel for auto-issue prompt', async () => {
@@ -251,7 +252,7 @@ describe('worktreeLifecycleService initialization', () => {
     expect(mocks.startClaudeSession).not.toHaveBeenCalled();
   });
 
-  it('does not start session when initialization fails', async () => {
+  it('stops eagerly-started session when initialization fails', async () => {
     mocks.runStartupScript.mockRejectedValue(new Error('boom'));
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
@@ -260,12 +261,14 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).not.toHaveBeenCalled();
+    // Session starts eagerly in parallel with scripts
+    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    // But gets stopped when initialization fails
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
   });
 
-  it('stops sessions when startup script reports failure', async () => {
+  it('stops eagerly-started session when startup script reports failure', async () => {
     mocks.runStartupScript.mockResolvedValue({
       success: false,
       exitCode: 1,
@@ -281,9 +284,9 @@ describe('worktreeLifecycleService initialization', () => {
       useExistingBranch: false,
     });
 
-    // Should NOT start session when script fails
-    expect(mocks.startClaudeSession).not.toHaveBeenCalled();
-    // stopWorkspaceSessions is still called but is a no-op (no sessions running)
+    // Session starts eagerly in parallel with scripts
+    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    // But gets stopped when script fails
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
   });
 });

@@ -32,6 +32,7 @@ describe('createStartHandler', () => {
         getOrCreate: vi.fn(),
       }),
       tryDispatchNextMessage: vi.fn(),
+      setManualDispatchResume: vi.fn(),
     });
 
     await handler({

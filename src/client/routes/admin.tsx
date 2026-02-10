@@ -1,4 +1,4 @@
-import { Download, FileJson, FileText, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Download, FileJson, FileText, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -34,7 +34,13 @@ function getEnabledFeatures(features?: Record<string, boolean>): string {
   return enabled.length > 0 ? enabled.join(', ') : 'none';
 }
 
-function FactoryConfigSection({ projectId }: { projectId: string }) {
+function ProjectFactoryConfigCard({
+  projectId,
+  projectName,
+}: {
+  projectId: string;
+  projectName: string;
+}) {
   const { data: factoryConfig } = trpc.workspace.getFactoryConfig.useQuery({ projectId });
 
   const refreshConfigs = trpc.workspace.refreshFactoryConfigs.useMutation({
@@ -57,50 +63,104 @@ function FactoryConfigSection({ projectId }: { projectId: string }) {
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-        <div>
-          <CardTitle className="flex items-center gap-2">
-            <FileJson className="w-5 h-5" />
-            Factory Configuration
-          </CardTitle>
-          <CardDescription>
-            {factoryConfig
-              ? 'Configuration for workspace setup and run scripts (factory-factory.json)'
-              : 'No factory-factory.json found in this repository. Create one to configure workspace setup and run scripts.'}
-          </CardDescription>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={refreshConfigs.isPending}
-          className="gap-2"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
-          Refresh All Workspaces
-        </Button>
-      </CardHeader>
-      {factoryConfig && (
-        <CardContent className="space-y-4">
-          <FactoryConfigScripts factoryConfig={factoryConfig} variant="card" />
-
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p>
-              <strong>Location:</strong> factory-factory.json in repository root
-            </p>
-            <p>
-              <strong>Port Allocation:</strong> Use{' '}
-              <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for automatic
-              port allocation
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              <strong>Note:</strong> Click "Refresh All Workspaces" to update existing workspaces
-              after changing factory-factory.json
-            </p>
+    <div className="rounded-lg border bg-card">
+      <div className="border-b bg-muted/50 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-sm">{projectName}</h3>
+            {factoryConfig ? (
+              <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                Configured
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="bg-muted">
+                <FileJson className="w-3 h-3 mr-1" />
+                Not configured
+              </Badge>
+            )}
           </div>
-        </CardContent>
-      )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={refreshConfigs.isPending}
+            className="gap-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
+            Refresh Workspaces
+          </Button>
+        </div>
+      </div>
+
+      <div className="p-4">
+        {factoryConfig ? (
+          <div className="space-y-4">
+            <FactoryConfigScripts factoryConfig={factoryConfig} variant="card" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              No factory-factory.json found in this repository. Create one to configure workspace
+              setup and run scripts.
+            </p>
+            <div className="text-xs text-muted-foreground space-y-1 bg-muted/50 rounded-md p-3">
+              <p className="font-medium">To add configuration:</p>
+              <ol className="list-decimal list-inside space-y-1 ml-2">
+                <li>
+                  Create{' '}
+                  <code className="bg-background px-1 py-0.5 rounded">factory-factory.json</code> in
+                  repository root
+                </li>
+                <li>Add scripts for setup, run, and/or cleanup</li>
+                <li>Click "Refresh Workspaces" above</li>
+              </ol>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FactoryConfigSection({ projects }: { projects: Array<{ id: string; name: string }> }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileJson className="w-5 h-5" />
+          Factory Configuration
+        </CardTitle>
+        <CardDescription>
+          Configuration for workspace setup and run scripts (factory-factory.json)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {projects.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No projects found.</p>
+        ) : (
+          <div className="space-y-4">
+            {projects.map((project) => (
+              <ProjectFactoryConfigCard
+                key={project.id}
+                projectId={project.id}
+                projectName={project.name}
+              />
+            ))}
+
+            <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+              <p>
+                <strong>Port Allocation:</strong> Use{' '}
+                <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for
+                automatic port allocation
+              </p>
+              <p>
+                <strong>Location:</strong> factory-factory.json in repository root
+              </p>
+            </div>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 }
@@ -520,7 +580,7 @@ export default function AdminDashboardPage() {
     }
   );
 
-  // Get first project for factory config refresh
+  // Get all projects for factory config section
   const { data: projects } = trpc.project.list.useQuery();
 
   const resetApiStats = trpc.admin.resetApiUsageStats.useMutation({
@@ -563,9 +623,7 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Factory Configuration */}
-        {projects && projects.length > 0 && projects[0] && (
-          <FactoryConfigSection projectId={projects[0].id} />
-        )}
+        {projects && <FactoryConfigSection projects={projects} />}
 
         {/* User Settings */}
         <NotificationSettingsSection />

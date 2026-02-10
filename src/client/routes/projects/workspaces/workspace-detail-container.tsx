@@ -5,7 +5,7 @@ import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
-
+import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
@@ -35,11 +35,17 @@ export function WorkspaceDetailContainer() {
     { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
   );
 
-  const { workspaceInitStatus, isInitializing } = useWorkspaceInitStatus(
+  const { workspaceInitStatus, isScriptRunning, isScriptFailed } = useWorkspaceInitStatus(
     workspaceId,
     workspace,
     utils
   );
+  useEffect(() => {
+    const phase = workspaceInitStatus?.phase;
+    if (phase === 'READY' || phase === 'ARCHIVED') {
+      forgetResumeWorkspace(workspaceId);
+    }
+  }, [workspaceId, workspaceInitStatus?.phase]);
 
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     initialDbSessionId ?? null
@@ -63,6 +69,7 @@ export function WorkspaceDetailContainer() {
     inputAttachments,
     queuedMessages,
     removeQueuedMessage,
+    resumeQueuedMessages,
     latestThinking,
     pendingMessages,
     isCompacting,
@@ -85,7 +92,6 @@ export function WorkspaceDetailContainer() {
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
-    workingDir: workspace?.worktreePath ?? undefined,
     dbSessionId: selectedDbSessionId,
   });
 
@@ -225,7 +231,8 @@ export function WorkspaceDetailContainer() {
       workspace={workspace}
       workspaceId={workspaceId}
       handleBackToWorkspaces={handleBackToWorkspaces}
-      isInitializing={isInitializing}
+      isScriptRunning={isScriptRunning}
+      isScriptFailed={isScriptFailed}
       workspaceInitStatus={workspaceInitStatus}
       archivePending={archiveWorkspace.isPending}
       availableIdes={availableIdes}
@@ -268,6 +275,7 @@ export function WorkspaceDetailContainer() {
       setInputAttachments={setInputAttachments}
       queuedMessages={queuedMessages}
       removeQueuedMessage={removeQueuedMessage}
+      resumeQueuedMessages={resumeQueuedMessages}
       latestThinking={latestThinking}
       pendingMessages={pendingMessages}
       isCompacting={isCompacting}

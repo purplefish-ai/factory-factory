@@ -9,14 +9,15 @@ import type { useSessionManagement, useWorkspaceData } from './use-workspace-det
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
-import { ArchivingOverlay, InitializationOverlay } from './workspace-overlays';
+import { ArchivingOverlay, ScriptFailedBanner, ScriptRunningBanner } from './workspace-overlays';
 
 export interface WorkspaceDetailViewProps {
   workspaceLoading: boolean;
   workspace: ReturnType<typeof useWorkspaceData>['workspace'];
   workspaceId: string;
   handleBackToWorkspaces: () => void;
-  isInitializing: boolean;
+  isScriptRunning: boolean;
+  isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
   archivePending: boolean;
   availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
@@ -59,6 +60,7 @@ export interface WorkspaceDetailViewProps {
   setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
   queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
+  resumeQueuedMessages: ReturnType<typeof useChatWebSocket>['resumeQueuedMessages'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
@@ -79,12 +81,45 @@ export interface WorkspaceDetailViewProps {
   handleArchive: (commitUncommitted: boolean) => void;
 }
 
+function ScriptBanner({
+  workspaceId,
+  isScriptRunning,
+  isScriptFailed,
+  workspaceInitStatus,
+}: {
+  workspaceId: string;
+  isScriptRunning: boolean;
+  isScriptFailed: boolean;
+  workspaceInitStatus: WorkspaceDetailViewProps['workspaceInitStatus'];
+}) {
+  if (isScriptRunning) {
+    return (
+      <ScriptRunningBanner
+        initOutput={workspaceInitStatus?.initOutput ?? null}
+        hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+      />
+    );
+  }
+  if (isScriptFailed) {
+    return (
+      <ScriptFailedBanner
+        workspaceId={workspaceId}
+        initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
+        initOutput={workspaceInitStatus?.initOutput ?? null}
+        hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+      />
+    );
+  }
+  return null;
+}
+
 export function WorkspaceDetailView({
   workspaceLoading,
   workspace,
   workspaceId,
   handleBackToWorkspaces,
-  isInitializing,
+  isScriptRunning,
+  isScriptFailed,
   workspaceInitStatus,
   archivePending,
   availableIdes,
@@ -127,6 +162,7 @@ export function WorkspaceDetailView({
   setInputAttachments,
   queuedMessages,
   removeQueuedMessage,
+  resumeQueuedMessages,
   latestThinking,
   pendingMessages,
   isCompacting,
@@ -163,16 +199,6 @@ export function WorkspaceDetailView({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      {isInitializing && (
-        <InitializationOverlay
-          workspaceId={workspaceId}
-          status={workspaceInitStatus?.status ?? 'PROVISIONING'}
-          initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
-          initOutput={workspaceInitStatus?.initOutput ?? null}
-          hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
-        />
-      )}
-
       {archivePending && <ArchivingOverlay />}
 
       <WorkspaceHeader
@@ -187,6 +213,13 @@ export function WorkspaceDetailView({
         running={running}
         isCreatingSession={isCreatingSession}
         hasChanges={hasChanges}
+      />
+
+      <ScriptBanner
+        workspaceId={workspaceId}
+        isScriptRunning={isScriptRunning}
+        isScriptFailed={isScriptFailed}
+        workspaceInitStatus={workspaceInitStatus}
       />
 
       <ResizablePanelGroup
@@ -236,6 +269,7 @@ export function WorkspaceDetailView({
                 setInputAttachments={setInputAttachments}
                 queuedMessages={queuedMessages}
                 removeQueuedMessage={removeQueuedMessage}
+                resumeQueuedMessages={resumeQueuedMessages}
                 latestThinking={latestThinking}
                 pendingMessages={pendingMessages}
                 isCompacting={isCompacting}
@@ -249,6 +283,7 @@ export function WorkspaceDetailView({
                 cancelRewind={cancelRewind}
                 getUuidForMessageId={getUuidForMessageId}
                 autoStartPending={isIssueAutoStartPending}
+                initBanner={workspaceInitStatus?.chatBanner ?? null}
               />
             </WorkspaceContentView>
           </div>
