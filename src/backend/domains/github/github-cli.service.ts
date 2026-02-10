@@ -1,0 +1,1289 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { CIStatus, PRState } from '@prisma-gen/client';
+import { z } from 'zod';
+import { createLogger } from '@/backend/services/logger.service';
+import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
+import type {
+  GitHubComment,
+  GitHubLabel,
+  GitHubReview,
+  GitHubStatusCheck,
+  PRWithFullDetails,
+  ReviewAction,
+} from '@/shared/github-types';
+
+const execFileAsync = promisify(execFile);
+const logger = createLogger('github-cli');
+
+const GH_TIMEOUT_MS = Object.freeze({
+  healthVersion: 5000,
+  healthAuth: 10_000,
+  userLookup: 10_000,
+  default: 30_000,
+  reviewDetails: 10_000,
+  diff: 60_000,
+} as const);
+
+const GH_MAX_BUFFER_BYTES = Object.freeze({
+  diff: 10 * 1024 * 1024, // 10MB buffer for large diffs
+} as const);
+
+/**
+ * Zod schemas for gh CLI JSON responses
+ */
+const statusCheckRollupItemSchema = z
+  .object({
+    status: z.string().optional(),
+    conclusion: z.string().optional(),
+    state: z.string().optional(),
+  })
+  .refine((item) => item.status !== undefined || item.state !== undefined, {
+    message: 'statusCheckRollup items must include status or state',
+  });
+
+/**
+ * Transform empty string to null for reviewDecision field.
+ * The gh CLI returns "" (empty string) when a PR has no review decision,
+ * as the Go backend serializes GraphQL null enum values as empty strings.
+ */
+const reviewDecisionSchema = z.preprocess(
+  (val) => (val === '' ? null : val),
+  z.enum(['APPROVED', 'CHANGES_REQUESTED', 'REVIEW_REQUIRED']).nullable()
+);
+
+const prStatusSchema = z.object({
+  number: z.number(),
+  state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
+  isDraft: z.boolean(),
+  reviewDecision: reviewDecisionSchema,
+  mergedAt: z.string().nullable(),
+  updatedAt: z.string(),
+  statusCheckRollup: z.array(statusCheckRollupItemSchema).nullable(),
+});
+
+const authorSchema = z.object({
+  login: z.string(),
+});
+
+const repositorySchema = z.object({
+  nameWithOwner: z.string(),
+});
+
+const basePRSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  url: z.string(),
+  repository: repositorySchema,
+  author: authorSchema,
+  createdAt: z.string(),
+  isDraft: z.boolean(),
+});
+
+const prDetailsSchema = z.object({
+  reviewDecision: reviewDecisionSchema,
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
+  changedFiles: z.number().optional(),
+});
+
+const prListItemSchema = z.object({
+  number: z.number(),
+  url: z.string(),
+  state: z.string(),
+});
+
+const fullPRCheckRunSchema = z.object({
+  __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
+  name: z.string(),
+  status: z.string(),
+  conclusion: z.string().nullable().optional(),
+  detailsUrl: z.string().optional(),
+});
+
+const fullPRStatusContextSchema = z.object({
+  __typename: z.enum(['CheckRun', 'StatusContext']).optional(),
+  context: z.string(),
+  state: z.string(),
+  targetUrl: z.string().optional(),
+  detailsUrl: z.string().optional(),
+});
+
+const fullPRDetailsSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  url: z.string(),
+  author: authorSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  isDraft: z.boolean(),
+  state: z.enum(['OPEN', 'CLOSED', 'MERGED']),
+  reviewDecision: reviewDecisionSchema,
+  statusCheckRollup: z.array(z.union([fullPRCheckRunSchema, fullPRStatusContextSchema])).nullable(),
+  reviews: z.array(
+    z
+      .object({
+        id: z.string(),
+        author: z.object({ login: z.string() }),
+        state: z.string(),
+        submittedAt: z.string(),
+        body: z.string().optional(),
+      })
+      .passthrough()
+  ),
+  comments: z.array(
+    z
+      .object({
+        id: z.string(),
+        author: z.object({ login: z.string() }),
+        body: z.string(),
+        createdAt: z.string(),
+        updatedAt: z.string().nullish(),
+        url: z.string(),
+      })
+      .passthrough()
+  ),
+  labels: z.array(
+    z
+      .object({
+        name: z.string(),
+        color: z.string(),
+      })
+      .passthrough()
+  ),
+  additions: z.number().optional(),
+  deletions: z.number().optional(),
+  changedFiles: z.number().optional(),
+  headRefName: z.string().optional(),
+  baseRefName: z.string().optional(),
+  mergeStateStatus: z
+    .enum(['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'])
+    .optional(),
+});
+
+const CHECK_STATUS_VALUES = ['COMPLETED', 'IN_PROGRESS', 'PENDING', 'QUEUED'] as const;
+const CHECK_CONCLUSION_VALUES = [
+  'SUCCESS',
+  'FAILURE',
+  'SKIPPED',
+  'CANCELLED',
+  'TIMED_OUT',
+  'ACTION_REQUIRED',
+] as const;
+const REVIEW_STATE_VALUES = [
+  'APPROVED',
+  'CHANGES_REQUESTED',
+  'COMMENTED',
+  'PENDING',
+  'DISMISSED',
+] as const;
+
+function normalizeCheckStatus(status: string): GitHubStatusCheck['status'] {
+  return (CHECK_STATUS_VALUES as readonly string[]).includes(status)
+    ? (status as GitHubStatusCheck['status'])
+    : 'PENDING';
+}
+
+function normalizeCheckConclusion(
+  conclusion: string | null | undefined
+): GitHubStatusCheck['conclusion'] {
+  if (conclusion === null || conclusion === undefined) {
+    return null;
+  }
+  return (CHECK_CONCLUSION_VALUES as readonly string[]).includes(conclusion)
+    ? (conclusion as NonNullable<GitHubStatusCheck['conclusion']>)
+    : null;
+}
+
+function normalizeStatusContextStatus(state: string): GitHubStatusCheck['status'] {
+  if (state === 'PENDING' || state === 'EXPECTED') {
+    return 'PENDING';
+  }
+  return 'COMPLETED';
+}
+
+function normalizeStatusContextConclusion(state: string): GitHubStatusCheck['conclusion'] {
+  switch (state) {
+    case 'SUCCESS':
+      return 'SUCCESS';
+    case 'FAILURE':
+    case 'ERROR':
+      return 'FAILURE';
+    case 'TIMED_OUT':
+      return 'TIMED_OUT';
+    case 'ACTION_REQUIRED':
+      return 'ACTION_REQUIRED';
+    case 'CANCELLED':
+      return 'CANCELLED';
+    case 'SKIPPED':
+      return 'SKIPPED';
+    default:
+      return null;
+  }
+}
+
+function normalizeReviewState(state: string): GitHubReview['state'] {
+  return (REVIEW_STATE_VALUES as readonly string[]).includes(state)
+    ? (state as GitHubReview['state'])
+    : 'PENDING';
+}
+
+function mapStatusChecks(
+  checks: NonNullable<z.infer<typeof fullPRDetailsSchema>['statusCheckRollup']>
+): GitHubStatusCheck[] {
+  return checks.map((check) => {
+    if ('context' in check) {
+      return {
+        __typename: 'StatusContext',
+        name: check.context,
+        status: normalizeStatusContextStatus(check.state),
+        conclusion: normalizeStatusContextConclusion(check.state),
+        detailsUrl: check.targetUrl ?? check.detailsUrl,
+      };
+    }
+
+    return {
+      __typename: check.__typename ?? 'CheckRun',
+      name: check.name,
+      status: normalizeCheckStatus(check.status),
+      conclusion: normalizeCheckConclusion(check.conclusion),
+      detailsUrl: check.detailsUrl,
+    };
+  });
+}
+
+function mapReviews(reviews: z.infer<typeof fullPRDetailsSchema>['reviews']): GitHubReview[] {
+  return reviews.map((review) => ({
+    id: review.id,
+    author: review.author,
+    state: normalizeReviewState(review.state),
+    submittedAt: review.submittedAt,
+    body: review.body,
+  }));
+}
+
+function mapComments(comments: z.infer<typeof fullPRDetailsSchema>['comments']): GitHubComment[] {
+  return comments.map((comment) => ({
+    id: comment.id,
+    author: comment.author,
+    body: comment.body,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt ?? comment.createdAt,
+    url: comment.url,
+  }));
+}
+
+function mapLabels(labels: z.infer<typeof fullPRDetailsSchema>['labels']): GitHubLabel[] {
+  return labels.map((label) => ({
+    name: label.name,
+    color: label.color,
+  }));
+}
+
+const issueSchema = z.object({
+  number: z.number(),
+  title: z.string(),
+  body: z.string(),
+  url: z.string(),
+  state: z.enum(['OPEN', 'CLOSED']),
+  createdAt: z.string(),
+  author: authorSchema,
+});
+
+const reviewCommentSchema = z.object({
+  id: z.number(),
+  user: z.object({
+    login: z.string(),
+  }),
+  body: z.string(),
+  path: z.string(),
+  line: z.number().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  html_url: z.string(),
+});
+
+/**
+ * Parse and validate gh CLI JSON output using a Zod schema.
+ * Logs and throws on validation failure.
+ */
+function parseGhJson<T>(schema: z.ZodSchema<T>, stdout: string, context: string): T {
+  try {
+    const data = JSON.parse(stdout);
+    return schema.parse(data);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error('Invalid gh CLI JSON response', {
+        context,
+        validationErrors: error.issues,
+        stdout: stdout.slice(0, 500), // Log first 500 chars for debugging
+      });
+      throw new Error(`Invalid gh CLI response for ${context}: ${error.message}`);
+    }
+    // JSON parse error
+    logger.error('Failed to parse gh CLI JSON', {
+      context,
+      error: error instanceof Error ? error.message : String(error),
+      stdout: stdout.slice(0, 500),
+    });
+    throw new Error(`Failed to parse gh CLI JSON for ${context}`);
+  }
+}
+
+/**
+ * Execute async functions with limited concurrency, preserving order.
+ */
+async function mapWithConcurrencyLimit<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  limit: number
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      const item = items[index];
+      if (item === undefined) {
+        throw new Error(`Unexpected undefined item at index ${index}`);
+      }
+      results[index] = await fn(item);
+    }
+  }
+
+  // Start `limit` workers
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+
+  return results;
+}
+
+export type GitHubCLIErrorType =
+  | 'cli_not_installed'
+  | 'auth_required'
+  | 'pr_not_found'
+  | 'network_error'
+  | 'rate_limit'
+  | 'unknown';
+
+export interface PRStatusFromGitHub {
+  number: number;
+  state: 'OPEN' | 'CLOSED' | 'MERGED';
+  isDraft: boolean;
+  reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  mergedAt: string | null;
+  updatedAt: string;
+  statusCheckRollup: Array<{
+    status?: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
+    conclusion?: string; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, etc.
+    state?: string; // Legacy format support
+  }> | null;
+}
+
+export interface PRInfo {
+  owner: string;
+  repo: string;
+  number: number;
+}
+
+export interface ReviewRequestedPR {
+  number: number;
+  title: string;
+  url: string;
+  repository: { nameWithOwner: string };
+  author: { login: string };
+  createdAt: string;
+  isDraft: boolean;
+  reviewDecision: 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED' | null;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+}
+
+export interface GitHubCLIHealthStatus {
+  isInstalled: boolean;
+  isAuthenticated: boolean;
+  version?: string;
+  error?: string;
+  errorType?: GitHubCLIErrorType;
+}
+
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+  state: 'OPEN' | 'CLOSED';
+  createdAt: string;
+  author: { login: string };
+}
+
+/**
+ * Service for interacting with GitHub via the `gh` CLI.
+ * Uses the locally authenticated gh CLI instead of API tokens.
+ */
+class GitHubCLIService {
+  /**
+   * Check if error indicates CLI is not installed.
+   */
+  private isCliNotInstalledError(message: string): boolean {
+    return message.includes('enoent') || message.includes('not found');
+  }
+
+  /**
+   * Check if error indicates authentication is required.
+   */
+  private isAuthRequiredError(message: string): boolean {
+    return (
+      message.includes('authentication') ||
+      message.includes('not logged in') ||
+      message.includes('gh auth login')
+    );
+  }
+
+  /**
+   * Check if error indicates PR was not found.
+   */
+  private isPRNotFoundError(message: string): boolean {
+    return message.includes('could not resolve') || message.includes('not found');
+  }
+
+  /**
+   * Check if error indicates a network issue.
+   */
+  private isNetworkError(message: string): boolean {
+    return (
+      message.includes('network') || message.includes('timeout') || message.includes('connection')
+    );
+  }
+
+  /**
+   * Check if error indicates rate limiting (429).
+   */
+  private isRateLimitError(message: string): boolean {
+    return isRateLimitMessage(message);
+  }
+
+  /**
+   * Classify an error from gh CLI execution.
+   */
+  private classifyError(error: unknown): GitHubCLIErrorType {
+    const message = error instanceof Error ? error.message : String(error);
+    const lowerMessage = message.toLowerCase();
+
+    if (this.isCliNotInstalledError(lowerMessage)) {
+      return 'cli_not_installed';
+    }
+
+    if (this.isAuthRequiredError(lowerMessage)) {
+      return 'auth_required';
+    }
+
+    if (this.isPRNotFoundError(lowerMessage)) {
+      return 'pr_not_found';
+    }
+
+    if (this.isRateLimitError(lowerMessage)) {
+      return 'rate_limit';
+    }
+
+    if (this.isNetworkError(lowerMessage)) {
+      return 'network_error';
+    }
+
+    return 'unknown';
+  }
+
+  /**
+   * Log error with appropriate level and hint based on error type.
+   */
+  private logGitHubCLIError(
+    errorType: GitHubCLIErrorType,
+    errorMessage: string,
+    context: Record<string, unknown>
+  ): void {
+    if (errorType === 'cli_not_installed') {
+      logger.error('GitHub CLI configuration issue', {
+        ...context,
+        errorType,
+        error: errorMessage,
+        hint: 'Install gh CLI from https://cli.github.com/',
+      });
+    } else if (errorType === 'auth_required') {
+      logger.error('GitHub CLI configuration issue', {
+        ...context,
+        errorType,
+        error: errorMessage,
+        hint: 'Run `gh auth login` to authenticate',
+      });
+    } else if (errorType === 'pr_not_found') {
+      logger.warn('PR not found', { ...context, errorType });
+    } else if (errorType === 'rate_limit') {
+      logger.warn('GitHub API rate limit hit', {
+        ...context,
+        errorType,
+        error: errorMessage,
+        hint: 'Polling intervals have been increased to reduce API pressure',
+      });
+    } else {
+      logger.error('Failed to fetch PR status via gh CLI', {
+        ...context,
+        errorType,
+        error: errorMessage,
+      });
+    }
+  }
+
+  /**
+   * Get the authenticated user's GitHub username.
+   * Returns null if not authenticated or gh CLI is not available.
+   */
+  async getAuthenticatedUsername(): Promise<string | null> {
+    try {
+      const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login'], {
+        timeout: GH_TIMEOUT_MS.userLookup,
+      });
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Check if gh CLI is installed and authenticated.
+   */
+  async checkHealth(): Promise<GitHubCLIHealthStatus> {
+    // Check if gh is installed
+    try {
+      const { stdout: versionOutput } = await execFileAsync('gh', ['--version'], {
+        timeout: GH_TIMEOUT_MS.healthVersion,
+      });
+      const versionMatch = versionOutput.match(/gh version ([\d.]+)/);
+      const version = versionMatch?.[1];
+
+      // Check if authenticated
+      try {
+        await execFileAsync('gh', ['auth', 'status'], { timeout: GH_TIMEOUT_MS.healthAuth });
+        return { isInstalled: true, isAuthenticated: true, version };
+      } catch {
+        return {
+          isInstalled: true,
+          isAuthenticated: false,
+          version,
+          error: 'GitHub CLI is not authenticated. Run `gh auth login` to authenticate.',
+          errorType: 'auth_required',
+        };
+      }
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      return {
+        isInstalled: false,
+        isAuthenticated: false,
+        error:
+          errorType === 'cli_not_installed'
+            ? 'GitHub CLI (gh) is not installed. Install from https://cli.github.com/'
+            : `Failed to check gh CLI: ${error instanceof Error ? error.message : String(error)}`,
+        errorType,
+      };
+    }
+  }
+
+  /**
+   * Extract PR info (owner, repo, number) from a GitHub PR URL.
+   */
+  extractPRInfo(prUrl: string): PRInfo | null {
+    // Match URLs like:
+    // https://github.com/owner/repo/pull/123
+    // https://github.com/owner/repo/pull/123/files
+    const match = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      owner: match[1] as string,
+      repo: match[2] as string,
+      number: Number.parseInt(match[3] as string, 10),
+    };
+  }
+
+  /**
+   * Get PR status from GitHub using the gh CLI.
+   */
+  async getPRStatus(prUrl: string): Promise<PRStatusFromGitHub | null> {
+    const prInfo = this.extractPRInfo(prUrl);
+    if (!prInfo) {
+      logger.warn('Could not parse PR URL', { prUrl });
+      return null;
+    }
+
+    try {
+      // Use gh pr view with --json to get structured data
+      // Using execFile with args array prevents shell injection
+      const { stdout } = await execFileAsync(
+        'gh',
+        [
+          'pr',
+          'view',
+          String(prInfo.number),
+          '--repo',
+          `${prInfo.owner}/${prInfo.repo}`,
+          '--json',
+          'number,state,isDraft,reviewDecision,mergedAt,updatedAt,statusCheckRollup',
+        ],
+        { timeout: GH_TIMEOUT_MS.default }
+      );
+
+      return parseGhJson(prStatusSchema, stdout, 'getPRStatus');
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logGitHubCLIError(errorType, errorMessage, { prUrl });
+      // Re-throw rate limit errors so callers can apply backoff
+      if (errorType === 'rate_limit') {
+        throw error;
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Convert GitHub status check rollup to our CIStatus enum.
+   * Handles both GitHub Check Run format (status + conclusion) and legacy format (state).
+   */
+  computeCIStatus(
+    statusCheckRollup: Array<{
+      status?: string;
+      conclusion?: string;
+      state?: string;
+    }> | null
+  ): CIStatus {
+    if (!statusCheckRollup || statusCheckRollup.length === 0) {
+      return CIStatus.UNKNOWN;
+    }
+
+    // Helper to get the effective state from a check
+    const getEffectiveState = (check: {
+      status?: string;
+      conclusion?: string;
+      state?: string;
+    }): string => {
+      // For GitHub Check Runs: use conclusion if completed, otherwise use status
+      if (check.status === 'COMPLETED' && check.conclusion) {
+        return check.conclusion;
+      }
+      // For legacy format or non-completed checks
+      return check.state || check.status || 'PENDING';
+    };
+
+    // Check for any failures first
+    const hasFailure = statusCheckRollup.some((check) => {
+      const state = getEffectiveState(check);
+      return state === 'FAILURE' || state === 'ERROR' || state === 'ACTION_REQUIRED';
+    });
+    if (hasFailure) {
+      return CIStatus.FAILURE;
+    }
+
+    // Check if any are still pending/running
+    const hasPending = statusCheckRollup.some((check) => {
+      const state = getEffectiveState(check);
+      return (
+        state === 'PENDING' ||
+        state === 'EXPECTED' ||
+        state === 'QUEUED' ||
+        state === 'IN_PROGRESS' ||
+        check.status === 'QUEUED' ||
+        check.status === 'IN_PROGRESS'
+      );
+    });
+    if (hasPending) {
+      return CIStatus.PENDING;
+    }
+
+    // All checks passed (ignoring NEUTRAL, CANCELLED, SKIPPED)
+    const allSuccess = statusCheckRollup.every((check) => {
+      const state = getEffectiveState(check);
+      return (
+        state === 'SUCCESS' || state === 'NEUTRAL' || state === 'CANCELLED' || state === 'SKIPPED'
+      );
+    });
+    if (allSuccess) {
+      return CIStatus.SUCCESS;
+    }
+
+    // Default to unknown for any other state combinations
+    return CIStatus.UNKNOWN;
+  }
+
+  /**
+   * Convert GitHub PR status to our PRState enum.
+   */
+  computePRState(status: PRStatusFromGitHub): PRState {
+    // Check if merged first
+    if (status.mergedAt || status.state === 'MERGED') {
+      return PRState.MERGED;
+    }
+
+    // Check if closed (but not merged)
+    if (status.state === 'CLOSED') {
+      return PRState.CLOSED;
+    }
+
+    // PR is open - check draft status and review state
+    if (status.isDraft) {
+      return PRState.DRAFT;
+    }
+
+    // Check review decision
+    if (status.reviewDecision === 'APPROVED') {
+      return PRState.APPROVED;
+    }
+
+    if (status.reviewDecision === 'CHANGES_REQUESTED') {
+      return PRState.CHANGES_REQUESTED;
+    }
+
+    // Default to OPEN for open PRs without special review state
+    return PRState.OPEN;
+  }
+
+  /**
+   * Fetch PR status and convert to our PRState.
+   * Returns null if PR cannot be fetched.
+   */
+  async fetchAndComputePRState(prUrl: string): Promise<{
+    prState: PRState;
+    prNumber: number;
+    prReviewState: string | null;
+    prCiStatus: CIStatus;
+  } | null> {
+    const status = await this.getPRStatus(prUrl);
+    if (!status) {
+      return null;
+    }
+
+    return {
+      prState: this.computePRState(status),
+      prNumber: status.number,
+      prReviewState: status.reviewDecision,
+      prCiStatus: this.computeCIStatus(status.statusCheckRollup),
+    };
+  }
+
+  /**
+   * List all PRs where the authenticated user is requested as a reviewer.
+   * Fetches reviewDecision for each PR to show accurate status.
+   */
+  async listReviewRequests(): Promise<ReviewRequestedPR[]> {
+    const { stdout } = await execFileAsync(
+      'gh',
+      [
+        'search',
+        'prs',
+        '--review-requested=@me',
+        '--state=open',
+        '--json',
+        'number,title,url,repository,author,createdAt,isDraft',
+      ],
+      { timeout: GH_TIMEOUT_MS.default }
+    );
+
+    const basePRs = parseGhJson(z.array(basePRSchema), stdout, 'listReviewRequests');
+
+    // Fetch reviewDecision and stats for each PR with limited concurrency to avoid rate limits
+    const prsWithDetails = await mapWithConcurrencyLimit(
+      basePRs,
+      async (pr) => {
+        try {
+          const { stdout: prDetails } = await execFileAsync(
+            'gh',
+            [
+              'pr',
+              'view',
+              String(pr.number),
+              '--repo',
+              pr.repository.nameWithOwner,
+              '--json',
+              'reviewDecision,additions,deletions,changedFiles',
+            ],
+            { timeout: GH_TIMEOUT_MS.reviewDetails }
+          );
+          const details = parseGhJson(prDetailsSchema, prDetails, 'listReviewRequests:prDetails');
+          return {
+            ...pr,
+            reviewDecision: details.reviewDecision,
+            additions: details.additions ?? 0,
+            deletions: details.deletions ?? 0,
+            changedFiles: details.changedFiles ?? 0,
+          };
+        } catch {
+          // If we can't fetch details, use defaults
+          return { ...pr, reviewDecision: null, additions: 0, deletions: 0, changedFiles: 0 };
+        }
+      },
+      5 // Limit to 5 concurrent requests to avoid GitHub rate limits
+    );
+
+    return prsWithDetails;
+  }
+
+  /**
+   * Find a PR for a given branch in a repository.
+   * Checks both open and merged PRs to handle workspaces where the PR was merged.
+   * Returns the PR URL if found, null otherwise.
+   */
+  async findPRForBranch(
+    owner: string,
+    repo: string,
+    branchName: string
+  ): Promise<{ url: string; number: number } | null> {
+    try {
+      // Fetch all PRs (open and merged) in a single API call
+      const { stdout } = await execFileAsync(
+        'gh',
+        [
+          'pr',
+          'list',
+          '--head',
+          branchName,
+          '--repo',
+          `${owner}/${repo}`,
+          '--state',
+          'all',
+          '--json',
+          'number,url,state',
+          '--limit',
+          '10',
+        ],
+        { timeout: GH_TIMEOUT_MS.default }
+      );
+
+      const prs = parseGhJson(z.array(prListItemSchema), stdout, 'findPRForBranch');
+      if (prs.length === 0) {
+        return null;
+      }
+
+      // Prefer open PRs over merged/closed ones
+      const openPr = prs.find((pr) => pr.state === 'OPEN');
+      if (openPr) {
+        return { url: openPr.url, number: openPr.number };
+      }
+
+      // Fall back to merged PR if no open one exists
+      const mergedPr = prs.find((pr) => pr.state === 'MERGED');
+      if (mergedPr) {
+        return { url: mergedPr.url, number: mergedPr.number };
+      }
+
+      return null;
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      if (errorType !== 'cli_not_installed' && errorType !== 'auth_required') {
+        logger.debug('No PR found for branch', { owner, repo, branchName });
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Approve a PR.
+   */
+  async approvePR(owner: string, repo: string, prNumber: number): Promise<void> {
+    const args = ['pr', 'review', String(prNumber), '--repo', `${owner}/${repo}`, '--approve'];
+
+    try {
+      await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+      logger.info('PR approved successfully', { owner, repo, prNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to approve PR via gh CLI', {
+        owner,
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to approve PR: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get full PR details including reviews, comments, labels, and CI status.
+   */
+  async getPRFullDetails(repo: string, prNumber: number): Promise<PRWithFullDetails> {
+    const fields = [
+      'number',
+      'title',
+      'url',
+      'author',
+      'createdAt',
+      'updatedAt',
+      'isDraft',
+      'state',
+      'reviewDecision',
+      'statusCheckRollup',
+      'reviews',
+      'comments',
+      'labels',
+      'additions',
+      'deletions',
+      'changedFiles',
+      'headRefName',
+      'baseRefName',
+      'mergeStateStatus',
+    ].join(',');
+
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
+        { timeout: GH_TIMEOUT_MS.default }
+      );
+
+      const data = parseGhJson(fullPRDetailsSchema, stdout, 'getPRFullDetails');
+
+      // Extract repository info from the repo string
+      const [, repoName] = repo.split('/') as [string, string];
+
+      return {
+        number: data.number,
+        title: data.title,
+        url: data.url,
+        author: data.author,
+        repository: {
+          name: repoName,
+          nameWithOwner: repo,
+        },
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        isDraft: data.isDraft,
+        state: data.state,
+        reviewDecision: data.reviewDecision,
+        statusCheckRollup: data.statusCheckRollup ? mapStatusChecks(data.statusCheckRollup) : null,
+        reviews: mapReviews(data.reviews),
+        comments: mapComments(data.comments),
+        labels: mapLabels(data.labels),
+        additions: data.additions || 0,
+        deletions: data.deletions || 0,
+        changedFiles: data.changedFiles || 0,
+        headRefName: data.headRefName || '',
+        baseRefName: data.baseRefName || '',
+        mergeStateStatus: data.mergeStateStatus || 'UNKNOWN',
+      };
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to fetch PR details via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to fetch PR details: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get the diff for a PR.
+   */
+  async getPRDiff(repo: string, prNumber: number): Promise<string> {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['pr', 'diff', String(prNumber), '--repo', repo],
+        { timeout: GH_TIMEOUT_MS.diff, maxBuffer: GH_MAX_BUFFER_BYTES.diff }
+      );
+
+      return stdout;
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to fetch PR diff via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to fetch PR diff: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Submit a review for a PR (approve, request changes, or comment).
+   */
+  async submitReview(
+    repo: string,
+    prNumber: number,
+    action: ReviewAction,
+    body?: string
+  ): Promise<void> {
+    const actionFlags: Record<ReviewAction, string> = {
+      approve: '--approve',
+      'request-changes': '--request-changes',
+      comment: '--comment',
+    };
+
+    const args = ['pr', 'review', String(prNumber), '--repo', repo, actionFlags[action]];
+
+    if (body && (action === 'request-changes' || action === 'comment')) {
+      args.push('--body', body);
+    }
+
+    try {
+      await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+      logger.info('PR review submitted successfully', { repo, prNumber, action });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to submit PR review via gh CLI', {
+        repo,
+        prNumber,
+        action,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to submit review: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * List open issues for a repository.
+   * Fetches fresh on every call (no caching).
+   * @param assignee - Filter by assignee. Use '@me' for issues assigned to the authenticated user.
+   */
+  async listIssues(
+    owner: string,
+    repo: string,
+    options: { limit?: number; assignee?: string } = {}
+  ): Promise<GitHubIssue[]> {
+    const { limit = 50, assignee } = options;
+    try {
+      const args = [
+        'issue',
+        'list',
+        '--repo',
+        `${owner}/${repo}`,
+        '--state',
+        'open',
+        '--json',
+        'number,title,body,url,state,createdAt,author',
+        '--limit',
+        String(limit),
+      ];
+
+      if (assignee) {
+        args.push('--assignee', assignee);
+      }
+
+      const { stdout } = await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+
+      return parseGhJson(z.array(issueSchema), stdout, 'listIssues');
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to list issues via gh CLI', {
+        owner,
+        repo,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to list issues: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get review comments (line-level comments on code) for a PR.
+   * These are different from regular PR comments - they're attached to specific lines in the diff.
+   */
+  async getReviewComments(
+    repo: string,
+    prNumber: number
+  ): Promise<
+    Array<{
+      id: number;
+      author: { login: string };
+      body: string;
+      path: string;
+      line: number | null;
+      createdAt: string;
+      updatedAt: string;
+      url: string;
+    }>
+  > {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        ['api', `repos/${repo}/pulls/${prNumber}/comments`, '--paginate'],
+        { timeout: GH_TIMEOUT_MS.default }
+      );
+
+      if (!stdout.trim()) {
+        return [];
+      }
+
+      const comments = parseGhJson(z.array(reviewCommentSchema), stdout, 'getReviewComments');
+      return comments.map((comment) => ({
+        id: comment.id,
+        author: { login: comment.user.login },
+        body: comment.body,
+        path: comment.path,
+        line: comment.line,
+        createdAt: comment.created_at,
+        updatedAt: comment.updated_at,
+        url: comment.html_url,
+      }));
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to fetch PR review comments via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to fetch PR review comments: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Add a comment to a PR.
+   */
+  async addPRComment(repo: string, prNumber: number, body: string): Promise<void> {
+    try {
+      await execFileAsync(
+        'gh',
+        ['pr', 'comment', String(prNumber), '--repo', repo, '--body', body],
+        {
+          timeout: GH_TIMEOUT_MS.default,
+        }
+      );
+      logger.info('PR comment added successfully', { repo, prNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to add PR comment via gh CLI', {
+        repo,
+        prNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to add PR comment: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Add a comment to a GitHub issue.
+   */
+  async addIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string
+  ): Promise<void> {
+    try {
+      await execFileAsync(
+        'gh',
+        ['issue', 'comment', String(issueNumber), '--repo', `${owner}/${repo}`, '--body', body],
+        { timeout: GH_TIMEOUT_MS.default }
+      );
+      logger.info('Issue comment added successfully', { owner, repo, issueNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to add issue comment via gh CLI', {
+        owner,
+        repo,
+        issueNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to add issue comment: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get a single GitHub issue by number.
+   */
+  async getIssue(owner: string, repo: string, issueNumber: number): Promise<GitHubIssue | null> {
+    try {
+      const { stdout } = await execFileAsync(
+        'gh',
+        [
+          'issue',
+          'view',
+          String(issueNumber),
+          '--repo',
+          `${owner}/${repo}`,
+          '--json',
+          'number,title,body,url,state,createdAt,author',
+        ],
+        { timeout: GH_TIMEOUT_MS.default }
+      );
+
+      return parseGhJson(issueSchema, stdout, 'getIssue');
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to get issue via gh CLI', {
+        owner,
+        repo,
+        issueNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      // Return null instead of throwing - issue might not exist or be inaccessible
+      return null;
+    }
+  }
+
+  /**
+   * Close a GitHub issue.
+   */
+  async closeIssue(owner: string, repo: string, issueNumber: number): Promise<void> {
+    try {
+      await execFileAsync(
+        'gh',
+        ['issue', 'close', String(issueNumber), '--repo', `${owner}/${repo}`],
+        { timeout: GH_TIMEOUT_MS.default }
+      );
+      logger.info('Issue closed successfully', { owner, repo, issueNumber });
+    } catch (error) {
+      const errorType = this.classifyError(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error('Failed to close issue via gh CLI', {
+        owner,
+        repo,
+        issueNumber,
+        errorType,
+        error: errorMessage,
+      });
+
+      throw new Error(`Failed to close issue: ${errorMessage}`);
+    }
+  }
+}
+
+export const githubCLIService = new GitHubCLIService();

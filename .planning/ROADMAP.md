@@ -119,6 +119,13 @@ Plans:
 
 **Requirements:** GH-01, GH-02, GH-03
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Move github-cli and pr-snapshot services with tests to domain
+- [ ] 04-02-PLAN.md — Move pr-review-fixer and pr-review-monitor services to domain
+- [ ] 04-03-PLAN.md — Populate GitHub domain barrel and create smoke test
+
 **Delivers:**
 - GitHub CLI interactions (PRs, issues, CI status) in one module
 - PR snapshot and review monitoring consolidated
@@ -169,6 +176,11 @@ Plans:
 **Goal:** Consolidate terminal management into `src/backend/domains/terminal/`.
 
 **Requirements:** TERM-01, TERM-02, TERM-03
+
+**Plans:** 1 plan
+
+Plans:
+- [x] 06-01-PLAN.md — Move terminal.service.ts to domain, create shim, barrel, and unit tests
 
 **Delivers:**
 - Terminal pty management, output buffering, monitoring in one module
@@ -286,4 +298,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 5 complete (3 plans, 14min total)*
+*Last updated: 2026-02-10 — Phases 4, 5, and 6 complete; ready for Phase 7*

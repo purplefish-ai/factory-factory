@@ -1,4 +1,14 @@
 // Domain: terminal
-// Public API will be populated during Phase 6 (Terminal Domain Consolidation).
+// Public API for the terminal domain module.
+// Consumers should import from '@/backend/domains/terminal' only.
 
-export {};
+// --- Terminal PTY management, output buffering, and monitoring ---
+export {
+  type CreateTerminalOptions,
+  type CreateTerminalResult,
+  type TerminalInstance,
+  type TerminalOutput,
+  type TerminalResourceUsage,
+  TerminalService,
+  terminalService,
+} from './terminal.service';
