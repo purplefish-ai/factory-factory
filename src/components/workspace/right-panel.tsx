@@ -78,12 +78,6 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     // On first load or workspace change: if provisioning, switch to setup logs
     if (prev === undefined && (status === 'NEW' || status === 'PROVISIONING')) {
       setActiveBottomTab('setup-logs');
-      return;
-    }
-
-    // When transitioning from provisioning to ready/failed, switch back to terminal
-    if (prev === 'PROVISIONING' && (status === 'READY' || status === 'FAILED')) {
-      setActiveBottomTab('terminal');
     }
   }, [initStatus?.status]);
 
@@ -199,6 +193,25 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
         <div className="flex flex-col h-full min-h-0">
           {/* Unified tab bar with terminal tabs inline */}
           <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
+            <TabButton
+              label="Setup Logs"
+              icon={<Play className="h-3.5 w-3.5" />}
+              isActive={activeBottomTab === 'setup-logs'}
+              onSelect={() => handleBottomTabChange('setup-logs')}
+            />
+            <TabButton
+              label="Dev Logs"
+              icon={
+                <span
+                  className={cn(
+                    'w-1.5 h-1.5 rounded-full',
+                    devLogs.connected ? 'bg-green-500' : 'bg-red-500'
+                  )}
+                />
+              }
+              isActive={activeBottomTab === 'dev-logs'}
+              onSelect={() => handleBottomTabChange('dev-logs')}
+            />
             {/* Show Terminal tab only if no terminals are open, otherwise show inline terminal tabs */}
             {activeBottomTab === 'terminal' &&
             terminalTabState &&
@@ -223,37 +236,12 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 )}
               </>
             )}
-            <TabButton
-              label="Dev Logs"
-              icon={
-                <span
-                  className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    devLogs.connected ? 'bg-green-500' : 'bg-red-500'
-                  )}
-                />
-              }
-              isActive={activeBottomTab === 'dev-logs'}
-              onSelect={() => handleBottomTabChange('dev-logs')}
-            />
-            <TabButton
-              label="Setup Logs"
-              icon={<Play className="h-3.5 w-3.5" />}
-              isActive={activeBottomTab === 'setup-logs'}
-              onSelect={() => handleBottomTabChange('setup-logs')}
-            />
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-hidden">
-            {activeBottomTab === 'terminal' && (
-              <TerminalPanel
-                ref={terminalPanelRef}
-                workspaceId={workspaceId}
-                className="h-full"
-                hideHeader
-                onStateChange={handleTerminalStateChange}
-              />
+            {activeBottomTab === 'setup-logs' && (
+              <SetupLogsPanel workspaceId={workspaceId} className="h-full" />
             )}
             {activeBottomTab === 'dev-logs' && (
               <DevLogsPanel
@@ -262,8 +250,14 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 className="h-full"
               />
             )}
-            {activeBottomTab === 'setup-logs' && (
-              <SetupLogsPanel workspaceId={workspaceId} className="h-full" />
+            {activeBottomTab === 'terminal' && (
+              <TerminalPanel
+                ref={terminalPanelRef}
+                workspaceId={workspaceId}
+                className="h-full"
+                hideHeader
+                onStateChange={handleTerminalStateChange}
+              />
             )}
           </div>
         </div>
