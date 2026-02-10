@@ -602,7 +602,7 @@ class WorktreeLifecycleService {
     return modes[workspaceId];
   }
 
-  private async clearInitMode(workspaceId: string, worktreeBasePath?: string): Promise<void> {
+  async clearInitMode(workspaceId: string, worktreeBasePath?: string): Promise<void> {
     this.initModes.delete(workspaceId);
     if (!worktreeBasePath) {
       return;
