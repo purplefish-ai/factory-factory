@@ -150,4 +150,54 @@ describe('SessionProcessManager', () => {
     const newClient = await manager.getOrCreateClient('s1', options, handlers, context);
     expect(newClient).toBe(client2);
   });
+
+  it('properly awaits pending creation to prevent premature ref count cleanup', async () => {
+    const manager = new SessionProcessManager();
+    const options = { workingDir: '/tmp', sessionId: 's1' } as ClaudeClientOptions;
+    const handlers = {};
+    const context = { workspaceId: 'w1', workingDir: '/tmp' };
+
+    const client = new MockClaudeClient();
+    let resolveCreate: (value: ClaudeClientType) => void = () => undefined;
+    let createCallCount = 0;
+
+    vi.spyOn(ClaudeClient, 'create').mockImplementation(() => {
+      createCallCount++;
+      return new Promise<ClaudeClientType>((resolve) => {
+        resolveCreate = resolve;
+      });
+    });
+
+    // Start first creation (will set pendingCreation)
+    const firstCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Wait for first call to enter lock and set pendingCreation
+    await Promise.resolve();
+
+    // Start second call - should find and await the pending promise
+    const secondCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Start third call - should also wait on the same lock
+    const thirdCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Verify all calls are pending
+    await Promise.resolve();
+
+    // Resolve the creation
+    resolveCreate(unsafeCoerce<ClaudeClientType>(client));
+
+    // All calls should resolve to the same client
+    const [first, second, third] = await Promise.all([firstCall, secondCall, thirdCall]);
+
+    expect(first).toBe(client);
+    expect(second).toBe(client);
+    expect(third).toBe(client);
+
+    // Only one creation should have happened
+    expect(createCallCount).toBe(1);
+
+    // If 'return pending' wasn't awaited, the ref count would have been
+    // prematurely decremented, potentially allowing a fourth call to create
+    // a new lock and bypass the queue
+  });
 });

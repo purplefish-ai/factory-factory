@@ -73,7 +73,7 @@ export class SessionProcessManager {
         const pending = this.pendingCreation.get(sessionId);
         if (pending) {
           logger.debug('Waiting for pending client creation', { sessionId });
-          return pending;
+          return await pending;
         }
 
         // No existing or pending - create new client
