@@ -1,5 +1,7 @@
+import type { SessionStatus as DbSessionStatus } from '@prisma-gen/client';
 import {
   Activity,
+  CheckCircle2,
   Circle,
   CircleSlash,
   FileCode,
@@ -28,6 +30,7 @@ interface Session {
   name: string | null;
   workflow?: string;
   isWorking?: boolean;
+  status: DbSessionStatus;
 }
 
 // =============================================================================
@@ -57,34 +60,67 @@ interface StatusInfo {
   icon: LucideIcon;
 }
 
-function getStatusInfo(
-  sessionStatus: SessionStatus | undefined,
-  processStatus: ProcessStatus | undefined,
-  isRunning: boolean
-): StatusInfo {
-  // For non-selected sessions, we only know if they're running
-  if (!(sessionStatus && processStatus)) {
-    if (isRunning) {
-      return {
-        color: 'text-brand',
-        pulse: true,
-        spin: false,
-        label: 'Running',
-        description: 'Processing a request',
-        icon: Activity,
-      };
-    }
+const IDLE_STATUS: StatusInfo = {
+  color: 'text-emerald-500',
+  pulse: false,
+  spin: false,
+  label: 'Idle',
+  description: 'Ready for input',
+  icon: Circle,
+};
+
+function getFallbackStatusInfo(isRunning: boolean, persistedStatus?: DbSessionStatus): StatusInfo {
+  if (isRunning || persistedStatus === 'RUNNING') {
     return {
-      color: 'text-emerald-500',
-      pulse: false,
+      color: 'text-brand',
+      pulse: true,
       spin: false,
-      label: 'Idle',
-      description: 'Ready for input',
-      icon: Circle,
+      label: 'Running',
+      description: 'Processing a request',
+      icon: Activity,
     };
   }
 
-  // For selected session, use detailed status
+  if (persistedStatus === 'PAUSED') {
+    return {
+      color: 'text-muted-foreground',
+      pulse: false,
+      spin: false,
+      label: 'Paused',
+      description: 'Session paused',
+      icon: CircleSlash,
+    };
+  }
+
+  if (persistedStatus === 'COMPLETED') {
+    return {
+      color: 'text-blue-500',
+      pulse: false,
+      spin: false,
+      label: 'Completed',
+      description: 'Session finished',
+      icon: CheckCircle2,
+    };
+  }
+
+  if (persistedStatus === 'FAILED') {
+    return {
+      color: 'text-destructive',
+      pulse: false,
+      spin: false,
+      label: 'Failed',
+      description: 'Session failed',
+      icon: XCircle,
+    };
+  }
+
+  return IDLE_STATUS;
+}
+
+function getSelectedSessionStatusInfo(
+  sessionStatus: SessionStatus,
+  processStatus: ProcessStatus
+): StatusInfo {
   const phase = sessionStatus.phase;
 
   if (phase === 'loading' || processStatus.state === 'unknown') {
@@ -131,6 +167,7 @@ function getStatusInfo(
         icon: XCircle,
       };
     }
+
     return {
       color: 'text-muted-foreground',
       pulse: false,
@@ -152,15 +189,23 @@ function getStatusInfo(
     };
   }
 
-  // idle or ready
-  return {
-    color: 'text-emerald-500',
-    pulse: false,
-    spin: false,
-    label: 'Idle',
-    description: 'Ready for input',
-    icon: Circle,
-  };
+  return IDLE_STATUS;
+}
+
+function getStatusInfo(
+  sessionStatus: SessionStatus | undefined,
+  processStatus: ProcessStatus | undefined,
+  isRunning: boolean,
+  persistedStatus?: DbSessionStatus
+): StatusInfo {
+  // For non-selected sessions, derive from persisted DB status.
+  // We still prioritize in-memory running state for freshness.
+  if (!(sessionStatus && processStatus)) {
+    return getFallbackStatusInfo(isRunning, persistedStatus);
+  }
+
+  // For selected session, use detailed status.
+  return getSelectedSessionStatusInfo(sessionStatus, processStatus);
 }
 
 interface StatusDotProps {
@@ -168,10 +213,17 @@ interface StatusDotProps {
   processStatus?: ProcessStatus;
   isRunning: boolean;
   isCIFix?: boolean;
+  persistedStatus?: DbSessionStatus;
 }
 
-function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusDotProps) {
-  const status = getStatusInfo(sessionStatus, processStatus, isRunning);
+function StatusDot({
+  sessionStatus,
+  processStatus,
+  isRunning,
+  isCIFix,
+  persistedStatus,
+}: StatusDotProps) {
+  const status = getStatusInfo(sessionStatus, processStatus, isRunning, persistedStatus);
   const StatusIcon = status.icon;
 
   // CI fix sessions show wrench icon instead of dot
@@ -257,6 +309,7 @@ interface SessionTabItemProps {
   isCIFix?: boolean;
   sessionStatus?: SessionStatus;
   processStatus?: ProcessStatus;
+  persistedStatus?: DbSessionStatus;
   onSelect: () => void;
   onClose?: () => void;
 }
@@ -268,6 +321,7 @@ function SessionTabItem({
   isCIFix,
   sessionStatus,
   processStatus,
+  persistedStatus,
   onSelect,
   onClose,
 }: SessionTabItemProps) {
@@ -279,6 +333,7 @@ function SessionTabItem({
           processStatus={processStatus}
           isRunning={isRunning ?? false}
           isCIFix={isCIFix}
+          persistedStatus={persistedStatus}
         />
       }
       label={label}
@@ -352,6 +407,7 @@ export function MainViewTabBar({
             isCIFix={session.workflow === 'ci-fix'}
             sessionStatus={isSelected ? sessionStatus : undefined}
             processStatus={isSelected ? processStatus : undefined}
+            persistedStatus={session.status}
             onSelect={() => {
               onSelectSession?.(session.id);
               selectTab('chat');

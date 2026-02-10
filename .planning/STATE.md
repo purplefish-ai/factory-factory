@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 03-workspace-domain-consolidation (Plan 05 of 05 complete)
+**Current Phase:** 07-run-script-domain-consolidation (ready to start)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -12,9 +12,9 @@
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
 | 3 | Workspace Domain Consolidation | Complete | All 5 plans done |
-| 4 | GitHub Domain Consolidation | Pending | — |
-| 5 | Ratchet Domain Consolidation | Pending | — |
-| 6 | Terminal Domain Consolidation | Pending | — |
+| 4 | GitHub Domain Consolidation | Complete | All 3 plans done |
+| 5 | Ratchet Domain Consolidation | Complete | All 3 plans done |
+| 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Pending | — |
 | 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
@@ -61,6 +61,17 @@
 | Instance-method wrappers in shim | 2026-02-10 | Shim exports wrapper functions that delegate to singleton instance methods (03-03) |
 | Selective barrel exports for workspace domain | 2026-02-10 | Named re-exports (no export *) following Phase 2 session domain pattern (03-05) |
 | Biome auto-sorts barrel exports | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (03-05) |
+| Knip ignore glob for domain services | 2026-02-10 | src/backend/domains/**/*.service.ts added to knip ignore (04-01) |
+| Biome auto-sorts domain file imports | 2026-02-10 | Imports reordered alphabetically by path in domain files (04-01) |
+| Intra-domain relative for review subsystem | 2026-02-10 | pr-review-monitor uses ./github-cli.service and ./pr-review-fixer.service (04-02) |
+| Cross-domain absolute for review services | 2026-02-10 | pr-review-fixer uses @/backend/services/ for fixer-session, logger, session (04-02) |
+| Biome auto-sorts barrel exports (GitHub) | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (04-03) |
+| Knip ignore for domain service files | 2026-02-10 | ci-monitor has no external consumers; added domains/**/*.service.ts to knip ignore (05-01) |
+| Cross-domain import via services/ shim | 2026-02-10 | ratchet.service imports sessionDomainService through services/ shim, not direct domain path (05-02) |
+| Biome auto-sorts ratchet barrel exports | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (05-03) |
+| Logger import absolute for cross-domain | 2026-02-10 | Terminal service uses @/backend/services/logger.service (06-01) |
+| TerminalService class exported for tests | 2026-02-10 | Class export enables fresh instances in unit tests (06-01) |
+| Direct module path in terminal shim | 2026-02-10 | Shim imports from /terminal.service not barrel to avoid circular deps (06-01) |
 
 ## Blockers
 
@@ -68,12 +79,14 @@ None.
 
 ## Context for Next Session
 
-Phase 3 COMPLETE: Workspace domain consolidation finished.
-All 9 workspace services moved to src/backend/domains/workspace/ with subdirectories: state/ (3), lifecycle/ (4), worktree/ (1), query/ (1).
-Barrel at src/backend/domains/workspace/index.ts exports 14 runtime values + 11 types.
-Smoke test verifies all exports defined. 4 DOM-04 globals eliminated.
-Re-export shims at all old services/ paths. 1737 tests passing.
-Ready for Phase 4 (GitHub Domain Consolidation).
+Phase 4 complete: GitHub domain consolidated.
+Phase 5 complete: Ratchet domain consolidated with barrel + smoke test.
+Phase 6 complete: Terminal domain fully consolidated.
+3 files in src/backend/domains/terminal/: terminal.service, index, plus 2 test files.
+Barrel exports 1 runtime singleton + 1 class + 5 types. Smoke test verifies no circular dep breakage.
+Re-export shim at old services/ path. 1775 tests passing (34 new terminal domain tests).
+TERM-01, TERM-02 (verified), TERM-03 all satisfied.
+Ready for Phase 7 (Run Script Domain Consolidation).
 
 ## Performance Metrics
 
@@ -90,7 +103,14 @@ Ready for Phase 4 (GitHub Domain Consolidation).
 | 03 | 04 | 5min | 2 | 5 |
 | 03 | 03 | 13min | 1 | 5 |
 | 03 | 05 | 3min | 2 | 2 |
+| 05 | 01 | 5min | 2 | 9 |
+| 05 | 02 | 7min | 2 | 6 |
+| 05 | 03 | 2min | 2 | 2 |
+| 04 | 01 | 11min | 2 | 7 |
+| 04 | 02 | 11min | 2 | 5 |
+| 04 | 03 | 2min | 2 | 2 |
+| 06 | 01 | 4min | 2 | 5 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T15:27:00Z -- Completed 03-05-PLAN.md*
+*Last session: 2026-02-10T17:10:49Z -- Merge sync completed, next up 07-01-PLAN.md*

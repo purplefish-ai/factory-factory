@@ -2,26 +2,26 @@ import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClaudeClient } from '@/backend/claude';
 
-vi.mock('../resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: vi.fn(),
   },
 }));
 
-vi.mock('../resource_accessors/claude-session.accessor', () => ({
+vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
   claudeSessionAccessor: {
     findByWorkspaceId: vi.fn(),
     acquireFixerSession: vi.fn(),
   },
 }));
 
-vi.mock('./config.service', () => ({
+vi.mock('@/backend/services/config.service', () => ({
   configService: {
     getMaxSessionsPerWorkspace: vi.fn(),
   },
 }));
 
-vi.mock('./session.service', () => ({
+vi.mock('@/backend/services/session.service', () => ({
   sessionService: {
     isSessionWorking: vi.fn(),
     startClaudeSession: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock('./session.service', () => ({
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -38,11 +38,11 @@ vi.mock('./logger.service', () => ({
   }),
 }));
 
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { configService } from './config.service';
+import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import { configService } from '@/backend/services/config.service';
+import { sessionService } from '@/backend/services/session.service';
 import { fixerSessionService } from './fixer-session.service';
-import { sessionService } from './session.service';
 
 describe('FixerSessionService', () => {
   beforeEach(() => {

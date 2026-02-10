@@ -2,7 +2,7 @@ import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
-vi.mock('../resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findWithPRsForRatchet: vi.fn(),
     findForRatchetById: vi.fn(),
@@ -10,14 +10,14 @@ vi.mock('../resource_accessors/workspace.accessor', () => ({
   },
 }));
 
-vi.mock('../resource_accessors/claude-session.accessor', () => ({
+vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
   claudeSessionAccessor: {
     findById: vi.fn(),
     findByWorkspaceId: vi.fn(),
   },
 }));
 
-vi.mock('./github-cli.service', () => ({
+vi.mock('@/backend/services/github-cli.service', () => ({
   githubCLIService: {
     extractPRInfo: vi.fn(),
     getPRFullDetails: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock('./fixer-session.service', () => ({
   },
 }));
 
-vi.mock('./session.service', () => ({
+vi.mock('@/backend/services/session.service', () => ({
   sessionService: {
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
@@ -41,13 +41,13 @@ vi.mock('./session.service', () => ({
   },
 }));
 
-vi.mock('../domains/session/session-domain.service', () => ({
+vi.mock('@/backend/services/session-domain.service', () => ({
   sessionDomainService: {
     injectCommittedUserMessage: vi.fn(),
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
     info: vi.fn(),
@@ -56,12 +56,12 @@ vi.mock('./logger.service', () => ({
   }),
 }));
 
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import { githubCLIService } from '@/backend/services/github-cli.service';
+import { sessionService } from '@/backend/services/session.service';
 import { fixerSessionService } from './fixer-session.service';
-import { githubCLIService } from './github-cli.service';
 import { ratchetService } from './ratchet.service';
-import { sessionService } from './session.service';
 
 describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {

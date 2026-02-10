@@ -15,7 +15,7 @@ vi.mock('node:util', () => ({
   promisify: (fn: unknown) => fn,
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     get info() {
       return mockLoggerInfo;

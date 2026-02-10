@@ -5,7 +5,7 @@ const mockFindMany = vi.fn();
 const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
 
-vi.mock('../db', () => ({
+vi.mock('@/backend/db', () => ({
   prisma: {
     workspace: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
@@ -15,7 +15,7 @@ vi.mock('../db', () => ({
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -26,12 +26,12 @@ vi.mock('./logger.service', () => ({
 
 // Mock initializeWorkspaceWorktree
 const mockInitializeWorkspaceWorktree = vi.fn();
-vi.mock('../trpc/workspace/init.trpc', () => ({
+vi.mock('@/backend/trpc/workspace/init.trpc', () => ({
   initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
 }));
 
 // Import after mocks are set up
-import { workspaceAccessor } from '../resource_accessors/index';
+import { workspaceAccessor } from '@/backend/resource_accessors/index';
 import { reconciliationService } from './reconciliation.service';
 
 describe('ReconciliationService', () => {
