@@ -138,7 +138,7 @@ const fullPRDetailsSchema = z.object({
         author: z.object({ login: z.string() }),
         body: z.string(),
         createdAt: z.string(),
-        updatedAt: z.string().optional(),
+        updatedAt: z.string().nullish(),
         url: z.string(),
       })
       .passthrough()

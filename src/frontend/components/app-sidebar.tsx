@@ -528,11 +528,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}
         hasUncommitted={archiveHasUncommitted}
-        isPending={
-          workspaceToArchive
-            ? workspaceList.find((w) => w.id === workspaceToArchive)?.uiState === 'archiving'
-            : false
-        }
         onConfirm={(commitUncommitted) => {
           if (workspaceToArchive) {
             executeArchive(workspaceToArchive, commitUncommitted);

@@ -11,10 +11,23 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
+import treeKill from 'tree-kill';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { getLogFilePath } from '@/backend/services/logger.service';
 
 const execPromise = promisify(exec);
+
+function treeKillAsync(pid: number, signal: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    treeKill(pid, signal, (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -72,16 +85,26 @@ async function waitForService(
     console.log(chalk.green(`  ✓ ${serviceName} ready on port ${port}`));
   } catch {
     console.error(chalk.red(`\n  ✗ ${serviceName} failed to start on port ${port}`));
-    killAllProcesses(processes);
+    await killAllProcesses(processes);
     process.exit(1);
   }
 }
 
-// Kill all tracked processes
-function killAllProcesses(processes: { name: string; proc: ChildProcess }[]): void {
-  for (const { proc } of processes) {
-    proc.kill('SIGTERM');
-  }
+// Kill all tracked processes and their child process trees
+async function killAllProcesses(processes: { name: string; proc: ChildProcess }[]): Promise<void> {
+  await Promise.allSettled(
+    processes
+      .filter(({ proc }) => proc.pid)
+      .map(async ({ name, proc }) => {
+        try {
+          await treeKillAsync(proc.pid as number, 'SIGTERM');
+        } catch (err) {
+          console.error(
+            chalk.yellow(`  Failed to kill ${name} (${proc.pid}): ${(err as Error).message}`)
+          );
+        }
+      })
+  );
 }
 
 // Create an exit promise for a process that resolves during shutdown, rejects on unexpected exit
@@ -315,21 +338,57 @@ function createShutdownHandler(
     shutdownState.shuttingDown = true;
 
     console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
-    for (const { proc } of processes) {
-      proc.kill('SIGTERM');
-    }
 
-    setTimeout(() => {
-      const alive = processes.filter(({ proc }) => !proc.killed && proc.exitCode === null);
-      if (alive.length > 0) {
-        console.log(
-          chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
-        );
-        for (const { proc } of alive) {
-          proc.kill('SIGKILL');
+    // Send SIGTERM to all process trees
+    const termPromises = processes
+      .filter(({ proc }) => proc.pid)
+      .map(async ({ name, proc }) => {
+        try {
+          await treeKillAsync(proc.pid as number, 'SIGTERM');
+        } catch (err) {
+          console.error(
+            chalk.yellow(`  Failed to kill ${name} (${proc.pid}): ${(err as Error).message}`)
+          );
         }
+      });
+
+    // Wait for graceful shutdown, then force kill remaining
+    setTimeout(async () => {
+      try {
+        await Promise.allSettled(termPromises);
+
+        const alive = processes.filter(({ proc }) => proc.exitCode === null);
+
+        if (alive.length > 0) {
+          console.log(
+            chalk.red(`  Force killing remaining processes: ${alive.map((p) => p.name).join(', ')}`)
+          );
+          const killResults = await Promise.allSettled(
+            alive
+              .filter(({ proc }) => proc.pid)
+              .map(async ({ name, proc }) => {
+                try {
+                  await treeKillAsync(proc.pid as number, 'SIGKILL');
+                } catch (err) {
+                  console.error(
+                    chalk.yellow(
+                      `  Failed to force kill ${name} (${proc.pid}): ${(err as Error).message}`
+                    )
+                  );
+                  throw err;
+                }
+              })
+          );
+          const killFailed = killResults.some((r) => r.status === 'rejected');
+          if (killFailed) {
+            process.exitCode = 1;
+          }
+        }
+      } catch (err) {
+        // Handle any unexpected errors in shutdown handler to avoid unhandled rejection
+        console.error(chalk.red(`  Shutdown error: ${(err as Error).message}`));
+        process.exitCode = 1;
       }
-      process.exit(1);
     }, 5000);
   };
 }
@@ -519,9 +578,9 @@ async function startDevelopmentMode(
   await Promise.race([
     createExitPromise(backend, 'Backend', shutdownState),
     createExitPromise(frontend, 'Frontend', shutdownState),
-  ]).catch((error) => {
+  ]).catch(async (error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    killAllProcesses(processes);
+    await killAllProcesses(processes);
     process.exit(1);
   });
 }
@@ -573,9 +632,9 @@ async function startProductionMode(
   const onReady = createOnReady(backendPort);
   await onReady();
 
-  await createExitPromise(backend, 'Server', shutdownState).catch((error) => {
+  await createExitPromise(backend, 'Server', shutdownState).catch(async (error) => {
     console.error(chalk.red(`\n  ✗ ${error.message}`));
-    killAllProcesses(processes);
+    await killAllProcesses(processes);
     process.exit(1);
   });
 }
