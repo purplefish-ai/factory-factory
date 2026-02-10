@@ -32,7 +32,6 @@ export class RunScriptService {
    * @param workspaceId - Workspace ID
    * @returns Object with success status, port (if allocated), and pid
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: process lifecycle with race-condition handling requires this complexity
   async startRunScript(workspaceId: string): Promise<{
     success: boolean;
     port?: number;
@@ -106,183 +105,196 @@ export class RunScriptService {
       this.outputBuffers.set(workspaceId, startMessage);
 
       // Register event handlers BEFORE async state transition to avoid missing events
-      // Handle process exit
-      childProcess.on('exit', async (code, signal) => {
-        logger.info('Run script exited', {
-          workspaceId,
-          pid,
-          code,
-          signal,
-        });
-
-        this.runningProcesses.delete(workspaceId);
-        this.outputListeners.delete(workspaceId);
-
-        // Check current state - if STOPPING, the stopRunScript handler will complete the transition.
-        // If already in a terminal state (COMPLETED/FAILED/IDLE), skip.
-        // Otherwise, transition to COMPLETED or FAILED based on exit code.
-        try {
-          const ws = await workspaceAccessor.findById(workspaceId);
-          const status = ws?.runScriptStatus;
-
-          if (
-            status === 'STOPPING' ||
-            status === 'IDLE' ||
-            status === 'COMPLETED' ||
-            status === 'FAILED'
-          ) {
-            logger.debug(`Process exited while in ${status} state, skipping exit transition`, {
-              workspaceId,
-            });
-            return;
-          }
-
-          // Normal exit from RUNNING (or STARTING if the process exits very fast)
-          if (code === 0) {
-            await runScriptStateMachine.markCompleted(workspaceId);
-          } else {
-            await runScriptStateMachine.markFailed(workspaceId);
-          }
-        } catch (error) {
-          // Swallow state machine errors -- the state was likely already transitioned
-          logger.warn('Exit handler state transition failed (likely already transitioned)', {
-            workspaceId,
-            error: (error as Error).message,
-          });
-        }
-      });
-
-      // Capture and broadcast stdout/stderr
-      const handleOutput = (data: Buffer) => {
-        const output = data.toString();
-
-        // Add to buffer (with size limit)
-        const currentBuffer = this.outputBuffers.get(workspaceId) ?? '';
-        let newBuffer = currentBuffer + output;
-
-        // Trim buffer if it exceeds max size (keep last N chars)
-        if (newBuffer.length > MAX_OUTPUT_BUFFER_SIZE) {
-          newBuffer = newBuffer.slice(-MAX_OUTPUT_BUFFER_SIZE);
-        }
-
-        this.outputBuffers.set(workspaceId, newBuffer);
-
-        // Broadcast to listeners
-        const listeners = this.outputListeners.get(workspaceId);
-        if (listeners) {
-          for (const listener of listeners) {
-            listener(output);
-          }
-        }
-      };
-
-      childProcess.stdout?.on('data', handleOutput);
-      childProcess.stdout?.on('error', (error) => {
-        logger.warn('Run script stdout stream error', { workspaceId, error, pid });
-      });
-
-      childProcess.stderr?.on('data', handleOutput);
-      childProcess.stderr?.on('error', (error) => {
-        logger.warn('Run script stderr stream error', { workspaceId, error, pid });
-      });
-
-      // Handle spawn errors
-      childProcess.on('error', async (error) => {
-        logger.error('Run script spawn error', error, { workspaceId, pid });
-        this.runningProcesses.delete(workspaceId);
-        // Transition to FAILED via state machine (with error handling for race conditions)
-        try {
-          await runScriptStateMachine.markFailed(workspaceId);
-        } catch (stateError) {
-          logger.warn(
-            'Failed to transition to FAILED on spawn error (likely already transitioned)',
-            {
-              workspaceId,
-              error: stateError,
-            }
-          );
-        }
-      });
+      this.registerProcessHandlers(workspaceId, childProcess, pid);
 
       // Transition to RUNNING state AFTER registering all event handlers
       // This ensures we don't miss any events that fire during the async DB operation.
-      // If the process exits very fast, the exit handler may have already transitioned
-      // STARTING -> COMPLETED/FAILED before we get here. In that case, markRunning will
-      // fail because the CAS expects STARTING but finds COMPLETED/FAILED. That's fine --
-      // the process lifecycle completed correctly.
-      try {
-        await runScriptStateMachine.markRunning(workspaceId, {
-          pid,
-          port,
-        });
-      } catch (markRunningError) {
-        // Check if the process already exited and the exit handler transitioned the state
-        const ws = await workspaceAccessor.findById(workspaceId);
-        const currentStatus = ws?.runScriptStatus;
-        if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
-          logger.info(
-            'Process exited before markRunning -- exit handler already transitioned state',
-            {
-              workspaceId,
-              pid,
-              currentStatus,
-            }
-          );
-          return { success: true, port, pid };
-        }
-        // Concurrent stop completed (STARTING -> STOPPING -> IDLE) while we were spawning.
-        // Kill the orphaned process so it doesn't leak.
-        if (currentStatus === 'IDLE' || currentStatus === 'STOPPING') {
-          logger.info('Concurrent stop completed before markRunning -- killing orphaned process', {
-            workspaceId,
-            pid,
-            currentStatus,
-          });
-          try {
-            childProcess.kill('SIGTERM');
-          } catch {
-            /* already dead */
-          }
-          this.runningProcesses.delete(workspaceId);
-          return { success: false, error: 'Run script was stopped before it could start' };
-        }
-        throw markRunningError;
-      }
-
-      return {
-        success: true,
-        port,
-        pid,
-      };
+      return await this.transitionToRunning(workspaceId, childProcess, pid, port);
     } catch (error) {
-      logger.error('Failed to start run script', error as Error, {
-        workspaceId,
-      });
+      return this.handleStartError(workspaceId, error as Error);
+    }
+  }
 
-      // Only transition to FAILED if THIS call initiated the STARTING state
-      // If the error is a state machine error (e.g., concurrent start), don't mark as FAILED
-      const isStateMachineError = (error as Error).name === 'RunScriptStateMachineError';
+  private registerProcessHandlers(
+    workspaceId: string,
+    childProcess: ChildProcess,
+    pid: number
+  ): void {
+    // Handle process exit
+    childProcess.on('exit', (code, signal) => {
+      this.handleProcessExit(workspaceId, pid, code, signal);
+    });
 
-      if (!isStateMachineError) {
-        // This was a real error (spawn failure, port allocation, etc.)
-        // Transition to FAILED if we're stuck in STARTING state
-        try {
-          const workspace = await workspaceAccessor.findById(workspaceId);
-          if (workspace?.runScriptStatus === 'STARTING') {
-            await runScriptStateMachine.markFailed(workspaceId);
-          }
-        } catch (stateError) {
-          logger.error('Failed to transition to FAILED state', stateError as Error, {
-            workspaceId,
-          });
-        }
+    // Capture and broadcast stdout/stderr
+    const handleOutput = (data: Buffer) => {
+      this.appendOutput(workspaceId, data.toString());
+    };
+
+    childProcess.stdout?.on('data', handleOutput);
+    childProcess.stdout?.on('error', (error) => {
+      logger.warn('Run script stdout stream error', { workspaceId, error, pid });
+    });
+
+    childProcess.stderr?.on('data', handleOutput);
+    childProcess.stderr?.on('error', (error) => {
+      logger.warn('Run script stderr stream error', { workspaceId, error, pid });
+    });
+
+    // Handle spawn errors
+    childProcess.on('error', async (error) => {
+      logger.error('Run script spawn error', error, { workspaceId, pid });
+      this.runningProcesses.delete(workspaceId);
+      try {
+        await runScriptStateMachine.markFailed(workspaceId);
+      } catch (stateError) {
+        logger.warn('Failed to transition to FAILED on spawn error (likely already transitioned)', {
+          workspaceId,
+          error: stateError,
+        });
+      }
+    });
+  }
+
+  private async handleProcessExit(
+    workspaceId: string,
+    pid: number,
+    code: number | null,
+    signal: string | null
+  ): Promise<void> {
+    logger.info('Run script exited', { workspaceId, pid, code, signal });
+
+    this.runningProcesses.delete(workspaceId);
+    this.outputListeners.delete(workspaceId);
+
+    // Check current state - if STOPPING, the stopRunScript handler will complete the transition.
+    // If already in a terminal state (COMPLETED/FAILED/IDLE), skip.
+    // Otherwise, transition to COMPLETED or FAILED based on exit code.
+    try {
+      const ws = await workspaceAccessor.findById(workspaceId);
+      const status = ws?.runScriptStatus;
+
+      if (
+        status === 'STOPPING' ||
+        status === 'IDLE' ||
+        status === 'COMPLETED' ||
+        status === 'FAILED'
+      ) {
+        logger.debug(`Process exited while in ${status} state, skipping exit transition`, {
+          workspaceId,
+        });
+        return;
       }
 
-      return {
-        success: false,
+      // Normal exit from RUNNING (or STARTING if the process exits very fast)
+      if (code === 0) {
+        await runScriptStateMachine.markCompleted(workspaceId);
+      } else {
+        await runScriptStateMachine.markFailed(workspaceId);
+      }
+    } catch (error) {
+      // Swallow state machine errors -- the state was likely already transitioned
+      logger.warn('Exit handler state transition failed (likely already transitioned)', {
+        workspaceId,
         error: (error as Error).message,
-      };
+      });
     }
+  }
+
+  private appendOutput(workspaceId: string, output: string): void {
+    const currentBuffer = this.outputBuffers.get(workspaceId) ?? '';
+    let newBuffer = currentBuffer + output;
+
+    if (newBuffer.length > MAX_OUTPUT_BUFFER_SIZE) {
+      newBuffer = newBuffer.slice(-MAX_OUTPUT_BUFFER_SIZE);
+    }
+
+    this.outputBuffers.set(workspaceId, newBuffer);
+
+    const listeners = this.outputListeners.get(workspaceId);
+    if (listeners) {
+      for (const listener of listeners) {
+        listener(output);
+      }
+    }
+  }
+
+  private async transitionToRunning(
+    workspaceId: string,
+    childProcess: ChildProcess,
+    pid: number,
+    port: number | undefined
+  ): Promise<{ success: boolean; port?: number; pid?: number; error?: string }> {
+    // If the process exits very fast, the exit handler may have already transitioned
+    // STARTING -> COMPLETED/FAILED before we get here. In that case, markRunning will
+    // fail because the CAS expects STARTING but finds COMPLETED/FAILED. That's fine --
+    // the process lifecycle completed correctly.
+    try {
+      await runScriptStateMachine.markRunning(workspaceId, { pid, port });
+      return { success: true, port, pid };
+    } catch (markRunningError) {
+      return this.handleMarkRunningRace(workspaceId, childProcess, pid, port, markRunningError);
+    }
+  }
+
+  private async handleMarkRunningRace(
+    workspaceId: string,
+    childProcess: ChildProcess,
+    pid: number,
+    port: number | undefined,
+    markRunningError: unknown
+  ): Promise<{ success: boolean; port?: number; pid?: number; error?: string }> {
+    // Check if the process already exited and the exit handler transitioned the state
+    const ws = await workspaceAccessor.findById(workspaceId);
+    const currentStatus = ws?.runScriptStatus;
+    if (currentStatus === 'COMPLETED' || currentStatus === 'FAILED') {
+      logger.info('Process exited before markRunning -- exit handler already transitioned state', {
+        workspaceId,
+        pid,
+        currentStatus,
+      });
+      return { success: true, port, pid };
+    }
+    // Concurrent stop completed (STARTING -> STOPPING -> IDLE) while we were spawning.
+    // Kill the orphaned process so it doesn't leak.
+    if (currentStatus === 'IDLE' || currentStatus === 'STOPPING') {
+      logger.info('Concurrent stop completed before markRunning -- killing orphaned process', {
+        workspaceId,
+        pid,
+        currentStatus,
+      });
+      try {
+        childProcess.kill('SIGTERM');
+      } catch {
+        /* already dead */
+      }
+      this.runningProcesses.delete(workspaceId);
+      return { success: false, error: 'Run script was stopped before it could start' };
+    }
+    throw markRunningError;
+  }
+
+  private async handleStartError(
+    workspaceId: string,
+    error: Error
+  ): Promise<{ success: boolean; error?: string }> {
+    logger.error('Failed to start run script', error, { workspaceId });
+
+    // Only transition to FAILED if THIS call initiated the STARTING state
+    // If the error is a state machine error (e.g., concurrent start), don't mark as FAILED
+    if (error.name !== 'RunScriptStateMachineError') {
+      try {
+        const workspace = await workspaceAccessor.findById(workspaceId);
+        if (workspace?.runScriptStatus === 'STARTING') {
+          await runScriptStateMachine.markFailed(workspaceId);
+        }
+      } catch (stateError) {
+        logger.error('Failed to transition to FAILED state', stateError as Error, {
+          workspaceId,
+        });
+      }
+    }
+
+    return { success: false, error: error.message };
   }
 
   /**
@@ -290,7 +302,6 @@ export class RunScriptService {
    * @param workspaceId - Workspace ID
    * @returns Object with success status
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: process lifecycle with cleanup and race-condition handling requires this complexity
   async stopRunScript(workspaceId: string): Promise<{
     success: boolean;
     error?: string;
@@ -312,174 +323,175 @@ export class RunScriptService {
 
       // Terminal states: kill any orphaned process, then reset to IDLE
       if (status === 'COMPLETED' || status === 'FAILED') {
-        if (childProcess) {
-          logger.warn('Killing orphaned process in terminal state', {
-            workspaceId,
-            pid: childProcess.pid,
-          });
-          try {
-            childProcess.kill('SIGTERM');
-          } catch {
-            /* already dead */
-          }
-          this.runningProcesses.delete(workspaceId);
-        }
-        // Reset to IDLE so user can start again
-        try {
-          await runScriptStateMachine.reset(workspaceId);
-        } catch {
-          // State may have already moved -- that's fine
-        }
-        return { success: true };
+        return this.handleTerminalStateStop(workspaceId, childProcess);
       }
 
       // STARTING or RUNNING -- attempt STOPPING transition
       if (!(childProcess || pid)) {
-        // No process reference and not in a stoppable state
         return { success: false, error: 'No run script is running' };
       }
 
       // Transition to STOPPING (works from both STARTING and RUNNING)
-      try {
-        await runScriptStateMachine.beginStopping(workspaceId);
-      } catch (error) {
-        // Race: state moved to a terminal state between our read and the CAS write.
-        // Re-read and treat as already stopped.
-        const fresh = await workspaceAccessor.findById(workspaceId);
-        const freshStatus = fresh?.runScriptStatus;
-        if (
-          freshStatus === 'COMPLETED' ||
-          freshStatus === 'FAILED' ||
-          freshStatus === 'IDLE' ||
-          freshStatus === 'STOPPING'
-        ) {
-          logger.debug('beginStopping raced with exit handler, treating as stopped', {
-            workspaceId,
-            freshStatus,
-          });
-          return { success: true };
-        }
-        throw error; // Unexpected -- re-throw
+      const raced = await this.attemptBeginStopping(workspaceId);
+      if (raced) {
+        return { success: true };
       }
 
       // Run cleanup script if configured
       if (workspace.runScriptCleanupCommand && workspace.worktreePath) {
-        logger.info('Running cleanup script before stopping', {
-          workspaceId,
-          cleanupCommand: workspace.runScriptCleanupCommand,
+        await this.runCleanupScript(workspaceId, {
+          runScriptCleanupCommand: workspace.runScriptCleanupCommand,
+          worktreePath: workspace.worktreePath,
+          runScriptPort: workspace.runScriptPort,
         });
-
-        try {
-          const cleanupCommand = workspace.runScriptPort
-            ? FactoryConfigService.substitutePort(
-                workspace.runScriptCleanupCommand,
-                workspace.runScriptPort
-              )
-            : workspace.runScriptCleanupCommand;
-
-          const cleanupProcess = spawn('bash', ['-c', cleanupCommand], {
-            cwd: workspace.worktreePath,
-            detached: false,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-
-          // Add error handlers for stdout/stderr streams to prevent unhandled errors
-          cleanupProcess.stdout?.on('error', (error) => {
-            logger.warn('Cleanup script stdout stream error', { workspaceId, error });
-          });
-          cleanupProcess.stderr?.on('error', (error) => {
-            logger.warn('Cleanup script stderr stream error', { workspaceId, error });
-          });
-
-          // Wait for cleanup to complete (with timeout)
-          await new Promise<void>((resolve) => {
-            const timeout = setTimeout(() => {
-              logger.warn('Cleanup script timed out, proceeding anyway', {
-                workspaceId,
-              });
-              cleanupProcess.kill('SIGTERM');
-              resolve();
-            }, 5000); // 5 second timeout
-
-            cleanupProcess.on('exit', (code) => {
-              clearTimeout(timeout);
-              logger.info('Cleanup script completed', {
-                workspaceId,
-                exitCode: code,
-              });
-              resolve();
-            });
-
-            cleanupProcess.on('error', (error) => {
-              clearTimeout(timeout);
-              logger.error('Cleanup script error', error, {
-                workspaceId,
-              });
-              resolve(); // Continue despite error
-            });
-          });
-        } catch (error) {
-          logger.error('Failed to run cleanup script', error as Error, {
-            workspaceId,
-          });
-          // Continue with stopping the process even if cleanup fails
-        }
       }
 
       // Kill the process tree
-      if (childProcess?.pid) {
-        const processPid = childProcess.pid;
-        logger.info('Stopping run script via stored process', {
-          workspaceId,
-          pid: processPid,
-        });
-        await new Promise<void>((resolve) => {
-          treeKill(processPid, 'SIGTERM', (err) => {
-            if (err) {
-              logger.warn('Failed to tree-kill run script process', {
-                workspaceId,
-                pid: processPid,
-                error: err.message,
-              });
-              // Keep process tracked so later cleanup can retry
-            } else {
-              this.runningProcesses.delete(workspaceId);
-            }
-            resolve();
-          });
-        });
-      } else if (pid) {
-        // Fallback: kill by PID if we don't have the process reference
-        logger.info('Stopping run script via PID', { workspaceId, pid });
-        await new Promise<void>((resolve) => {
-          treeKill(pid, 'SIGTERM', (err) => {
-            if (err) {
-              logger.warn('Failed to tree-kill process, might already be stopped', {
-                workspaceId,
-                pid,
-                error: err.message,
-              });
-            } else {
-              this.runningProcesses.delete(workspaceId);
-            }
-            resolve();
-          });
-        });
-      }
+      await this.killProcessTree(workspaceId, childProcess, pid);
 
       // Transition to IDLE state via state machine (completes stopping)
       await runScriptStateMachine.completeStopping(workspaceId);
 
       return { success: true };
     } catch (error) {
-      logger.error('Failed to stop run script', error as Error, {
-        workspaceId,
-      });
-      return {
-        success: false,
-        error: (error as Error).message,
-      };
+      logger.error('Failed to stop run script', error as Error, { workspaceId });
+      return { success: false, error: (error as Error).message };
     }
+  }
+
+  private async handleTerminalStateStop(
+    workspaceId: string,
+    childProcess: ChildProcess | undefined
+  ): Promise<{ success: boolean }> {
+    if (childProcess) {
+      logger.warn('Killing orphaned process in terminal state', {
+        workspaceId,
+        pid: childProcess.pid,
+      });
+      try {
+        childProcess.kill('SIGTERM');
+      } catch {
+        /* already dead */
+      }
+      this.runningProcesses.delete(workspaceId);
+    }
+    try {
+      await runScriptStateMachine.reset(workspaceId);
+    } catch {
+      // State may have already moved -- that's fine
+    }
+    return { success: true };
+  }
+
+  private async attemptBeginStopping(workspaceId: string): Promise<boolean> {
+    try {
+      await runScriptStateMachine.beginStopping(workspaceId);
+      return false; // No race -- continue with stop flow
+    } catch (error) {
+      // Race: state moved to a terminal state between our read and the CAS write.
+      const fresh = await workspaceAccessor.findById(workspaceId);
+      const freshStatus = fresh?.runScriptStatus;
+      if (
+        freshStatus === 'COMPLETED' ||
+        freshStatus === 'FAILED' ||
+        freshStatus === 'IDLE' ||
+        freshStatus === 'STOPPING'
+      ) {
+        logger.debug('beginStopping raced with exit handler, treating as stopped', {
+          workspaceId,
+          freshStatus,
+        });
+        return true; // Raced -- caller should return success
+      }
+      throw error; // Unexpected -- re-throw
+    }
+  }
+
+  private async runCleanupScript(
+    workspaceId: string,
+    workspace: {
+      runScriptCleanupCommand: string;
+      worktreePath: string;
+      runScriptPort: number | null;
+    }
+  ): Promise<void> {
+    logger.info('Running cleanup script before stopping', {
+      workspaceId,
+      cleanupCommand: workspace.runScriptCleanupCommand,
+    });
+
+    try {
+      const cleanupCommand = workspace.runScriptPort
+        ? FactoryConfigService.substitutePort(
+            workspace.runScriptCleanupCommand,
+            workspace.runScriptPort
+          )
+        : workspace.runScriptCleanupCommand;
+
+      const cleanupProcess = spawn('bash', ['-c', cleanupCommand], {
+        cwd: workspace.worktreePath,
+        detached: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      cleanupProcess.stdout?.on('error', (error) => {
+        logger.warn('Cleanup script stdout stream error', { workspaceId, error });
+      });
+      cleanupProcess.stderr?.on('error', (error) => {
+        logger.warn('Cleanup script stderr stream error', { workspaceId, error });
+      });
+
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          logger.warn('Cleanup script timed out, proceeding anyway', { workspaceId });
+          cleanupProcess.kill('SIGTERM');
+          resolve();
+        }, 5000);
+
+        cleanupProcess.on('exit', (code) => {
+          clearTimeout(timeout);
+          logger.info('Cleanup script completed', { workspaceId, exitCode: code });
+          resolve();
+        });
+
+        cleanupProcess.on('error', (error) => {
+          clearTimeout(timeout);
+          logger.error('Cleanup script error', error, { workspaceId });
+          resolve();
+        });
+      });
+    } catch (error) {
+      logger.error('Failed to run cleanup script', error as Error, { workspaceId });
+    }
+  }
+
+  private async killProcessTree(
+    workspaceId: string,
+    childProcess: ChildProcess | undefined,
+    pid: number | null
+  ): Promise<void> {
+    const targetPid = childProcess?.pid ?? pid;
+    if (!targetPid) {
+      return;
+    }
+
+    const source = childProcess?.pid ? 'stored process' : 'PID';
+    logger.info(`Stopping run script via ${source}`, { workspaceId, pid: targetPid });
+
+    await new Promise<void>((resolve) => {
+      treeKill(targetPid, 'SIGTERM', (err) => {
+        if (err) {
+          logger.warn('Failed to tree-kill run script process', {
+            workspaceId,
+            pid: targetPid,
+            error: err.message,
+          });
+        } else {
+          this.runningProcesses.delete(workspaceId);
+        }
+        resolve();
+      });
+    });
   }
 
   /**
