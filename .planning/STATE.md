@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 08-orchestration-layer (Plan 04 of 04 complete)
+**Current Phase:** 09-appcontext-import-rewiring (Plan 01 of 03 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -17,7 +17,7 @@
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
 | 8 | Orchestration Layer | Complete | All 4 plans done |
-| 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
+| 9 | AppContext & Import Rewiring | In Progress | Plan 01 done (10min) |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
 
 ## Key Decisions
@@ -92,6 +92,10 @@
 | Cast at orchestration boundary | 2026-02-10 | getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput) bridges string vs enum types (08-04) |
 | Merged ratchet-bridges into domain-bridges | 2026-02-10 | Single configureDomainBridges() replaces separate configureRatchetBridges() (08-04) |
 | Intra-domain relative imports in session handlers | 2026-02-10 | 11 handler files converted from @/backend/services/ shim to relative paths (08-04) |
+| Test mocks target source module paths | 2026-02-10 | Vitest module mocking is path-specific; mock must match internal import path, not barrel (09-01) |
+| SessionManager mock on @/backend/claude path | 2026-02-10 | session-hydrator.ts imports SessionManager from @/backend/claude, so mock targets that path (09-01) |
+| RatchetWorkspaceBridge only needs markFailed | 2026-02-10 | Reconciliation doesn't use markReady; that's handled by orchestrator (09-01) |
+| Async wrapper for bridge return type narrowing | 2026-02-10 | Bridge wiring uses async wrapper to convert Promise<Workspace> to Promise<void> (09-01) |
 
 ## Blockers
 
@@ -99,12 +103,9 @@ None.
 
 ## Context for Next Session
 
-Phase 8 (Orchestration Layer) complete -- all 4 plans done.
-Plan 01: workspace-init and workspace-archive orchestrators.
-Plan 02: Ratchet domain bridge injection pattern.
-Plan 03: Workspace-query, kanban-state, pr-review-fixer, pr-snapshot bridge injection + ratchet bridge wiring.
-Plan 04: Session and run-script bridge injection. Consolidated configureDomainBridges() replaces configureRatchetBridges(). All 6 domains have zero cross-domain imports. dependency-cruiser validates clean.
-Ready for Phase 9 (AppContext & Import Rewiring).
+Phase 9 (AppContext & Import Rewiring) plan 01 complete.
+Plan 01: app-context.ts rewired to domain barrels, reconciliation.service.ts bridge-injected for workspace markFailed, session domain internal imports fixed.
+Ready for Plan 02 (consumer rewiring) and Plan 03 (shim deletion).
 
 ## Performance Metrics
 
@@ -134,7 +135,8 @@ Ready for Phase 9 (AppContext & Import Rewiring).
 | 08 | 02 | 2min | 2 | 7 |
 | 08 | 03 | 7min | 2 | 12 |
 | 08 | 04 | 8min | 2 | 24 |
+| 09 | 01 | 10min | 2 | 7 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T19:34:07Z -- Completed 08-04-PLAN.md*
+*Last session: 2026-02-10T20:48:25Z -- Completed 09-01-PLAN.md*
