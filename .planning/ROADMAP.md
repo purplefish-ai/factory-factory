@@ -46,6 +46,16 @@ Plans:
 
 **Requirements:** SESS-01, SESS-02, SESS-03, SESS-04, SESS-05, DOM-04
 
+**Plans:** 6 plans
+
+Plans:
+- [x] 02-01-PLAN.md — Move claude/ types, constants, protocol layer, and refactor registry (DOM-04)
+- [x] 02-02-PLAN.md — Move claude/ process, permissions, client, session, monitoring + barrel
+- [x] 02-03-PLAN.md — Move session-store/ (13 files) to domains/session/store/
+- [x] 02-04-PLAN.md — Move lifecycle services, data service, and file logger
+- [x] 02-05-PLAN.md — Move chat services and chat-message-handlers/ (28 files)
+- [x] 02-06-PLAN.md — Update session domain barrel and create domain smoke test
+
 **Delivers:**
 - Session lifecycle management (create, run, pause, resume, complete) in one module
 - Claude process management (`src/backend/claude/`) absorbed into session domain
@@ -259,4 +269,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 1 complete ✓*
+*Last updated: 2026-02-10 — Phase 2 complete (6/6 plans executed, verified)*

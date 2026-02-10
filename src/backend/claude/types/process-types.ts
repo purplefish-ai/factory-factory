@@ -1,18 +1,5 @@
 /**
- * Shared types for Claude process management.
- * Extracted to avoid circular dependencies between process.ts and registry.ts.
+ * @deprecated Import from '@/backend/domains/session/claude/types/process-types' instead.
+ * This re-export shim will be removed in Phase 9 (Import Rewiring).
  */
-
-/**
- * Process lifecycle states.
- */
-export type ProcessStatus = 'starting' | 'ready' | 'running' | 'exited';
-
-/**
- * Resource usage snapshot for a process.
- */
-export interface ResourceUsage {
-  cpu: number;
-  memory: number;
-  timestamp: Date;
-}
+export * from '@/backend/domains/session/claude/types/process-types';

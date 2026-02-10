@@ -1,7 +1,10 @@
 import { createLogger } from '@/backend/services/logger.service';
-import { SessionHydrator } from '@/backend/services/session-store/session-hydrator';
-import { handleProcessExit } from '@/backend/services/session-store/session-process-exit';
-import { SessionPublisher } from '@/backend/services/session-store/session-publisher';
+import type { ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
+import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { SessionHydrator } from './store/session-hydrator';
+import { handleProcessExit } from './store/session-process-exit';
+import { SessionPublisher } from './store/session-publisher';
 import {
   clearPendingInteractiveRequest,
   clearPendingInteractiveRequestIfMatches,
@@ -11,18 +14,15 @@ import {
   removeQueuedMessage,
   requeueFront,
   setPendingInteractiveRequest,
-} from '@/backend/services/session-store/session-queue';
-import { SessionRuntimeMachine } from '@/backend/services/session-store/session-runtime-machine';
-import type { SessionStore } from '@/backend/services/session-store/session-store.types';
-import { SessionStoreRegistry } from '@/backend/services/session-store/session-store-registry';
+} from './store/session-queue';
+import { SessionRuntimeMachine } from './store/session-runtime-machine';
+import type { SessionStore } from './store/session-store.types';
+import { SessionStoreRegistry } from './store/session-store-registry';
 import {
   appendClaudeEvent,
   commitSentUserMessageWithOrder,
   injectCommittedUserMessage,
-} from '@/backend/services/session-store/session-transcript';
-import type { ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
-import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
-import type { SessionRuntimeState } from '@/shared/session-runtime';
+} from './store/session-transcript';
 
 const logger = createLogger('session-domain-service');
 

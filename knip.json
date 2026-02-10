@@ -22,7 +22,11 @@
     "src/backend/clients/index.ts",
     "src/backend/trpc/index.ts",
     "src/backend/trpc/procedures/index.ts",
-    "src/backend/domains/*/index.ts"
+    "src/backend/domains/*/index.ts",
+    "src/backend/domains/**/*/index.ts",
+    "src/backend/services/session-store/*.ts",
+    "src/backend/claude/*.ts",
+    "src/backend/claude/**/*.ts"
   ],
   "ignoreDependencies": [
     "autoprefixer",
