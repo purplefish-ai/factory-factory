@@ -1598,14 +1598,26 @@ Predict which workspaces users will start and pre-warm them:
 ```mermaid
 graph TB
     subgraph Desktop["Desktop Environment"]
-        FF_Desktop["Factory Factory<br/>(Desktop)"]
+        FF_Desktop["Factory Factory Desktop<br/>(Electron)"]
     end
 
-    subgraph Cloud["Cloud Environment"]
-        FF_Cloud["Factory Factory Cloud"]
-        Claude_CLI["Claude CLI"]
-        FF_CLI["Factory Factory CLI"]
-        Ratchet["Ratchet Listener<br/>(GitHub Polling)"]
+    subgraph Cloud["Cloud Infrastructure"]
+        FF_Cloud["FF Cloud Server<br/>(Closed Source)<br/>Multi-tenant orchestration"]
+
+        subgraph VM1["VM (User A, Workspace 1)"]
+            Core1["FF Core Library<br/>(Open Source)"]
+            Claude1["Claude CLI"]
+        end
+
+        subgraph VM2["VM (User A, Workspace 2)"]
+            Core2["FF Core Library<br/>(Open Source)"]
+            Claude2["Claude CLI"]
+        end
+
+        subgraph VM3["VM (User B, Workspace 1)"]
+            Core3["FF Core Library<br/>(Open Source)"]
+            Claude3["Claude CLI"]
+        end
     end
 
     subgraph Mobile["Mobile Environment"]
@@ -1614,275 +1626,296 @@ graph TB
 
     subgraph External["External Services"]
         GitHub["GitHub"]
+        Anthropic["Anthropic API<br/>(claude.ai)"]
     end
 
     FF_Desktop -->|"Send to Cloud"| FF_Cloud
-    FF_Desktop <-->|"Stream chat messages<br/>Send commands (stop, etc.)"| FF_Cloud
+    FF_Desktop <-->|"WebSocket<br/>(Stream messages)"| FF_Cloud
 
-    FF_Mobile <-->|"Get workspace state<br/>Stream messages"| FF_Cloud
+    FF_Mobile <-->|"WebSocket<br/>(Stream messages)"| FF_Cloud
 
-    FF_Cloud -->|"Execute work via"| FF_CLI
-    FF_CLI -->|"Manages"| Claude_CLI
+    FF_Cloud -->|"Orchestrate"| VM1
+    FF_Cloud -->|"Orchestrate"| VM2
+    FF_Cloud -->|"Orchestrate"| VM3
 
-    FF_Cloud -->|"Manages"| Ratchet
-    Ratchet -->|"Poll for updates"| GitHub
-    Claude_CLI -->|"Push code changes"| GitHub
+    Core1 -->|"Manages"| Claude1
+    Core2 -->|"Manages"| Claude2
+    Core3 -->|"Manages"| Claude3
+
+    Claude1 -->|"API Calls"| Anthropic
+    Claude2 -->|"API Calls"| Anthropic
+    Claude3 -->|"API Calls"| Anthropic
+
+    Core1 -->|"Git operations"| GitHub
+    Core2 -->|"Git operations"| GitHub
+    Core3 -->|"Git operations"| GitHub
+
+    Core1 -.->|"Ratchet polls"| GitHub
+    Core2 -.->|"Ratchet polls"| GitHub
+    Core3 -.->|"Ratchet polls"| GitHub
 
     style FF_Desktop fill:#e1f5ff
     style FF_Cloud fill:#fff4e1
     style FF_Mobile fill:#e1f5ff
-    style Claude_CLI fill:#f0f0f0
-    style FF_CLI fill:#f0f0f0
-    style Ratchet fill:#f0f0f0
+    style Core1 fill:#d4f1d4
+    style Core2 fill:#d4f1d4
+    style Core3 fill:#d4f1d4
+    style Claude1 fill:#f0f0f0
+    style Claude2 fill:#f0f0f0
+    style Claude3 fill:#f0f0f0
+    style VM1 fill:#f9f9f9
+    style VM2 fill:#f9f9f9
+    style VM3 fill:#f9f9f9
 ```
 
 ### Component Descriptions
 
-- **Factory Factory (Desktop)**: The main desktop application. Can send workspaces to cloud and receive streamed chat updates. Sends user commands like "stop" to cloud instances.
+- **Factory Factory Desktop (Electron)**: Desktop application using FF Core library. Runs workspaces locally or sends them to cloud. Streams real-time updates via WebSocket.
 
-- **Factory Factory Cloud**: Cloud service that manages workspace execution. Handles multiple workspaces, streams chat to desktop/mobile clients, and orchestrates Claude CLI execution via Factory Factory CLI.
+- **FF Cloud Server (Closed Source)**: Multi-tenant orchestration layer. Handles authentication, billing, VM provisioning, and WebSocket relay between clients and VMs. Does NOT execute workspaces directly.
 
-- **Factory Factory CLI**: Command-line interface used by FF Cloud to execute workspace operations and manage Claude CLI instances.
+- **VMs (Docker/Firecracker)**: Isolated execution environments, one per workspace (Phase 1) or one per user (Phase 2). Each VM runs FF Core library to manage workspace execution.
 
-- **Claude CLI**: The actual Claude agent execution environment, managed by FF CLI, that performs the development work.
+- **FF Core Library (Open Source)**: Published to npm as `@factory-factory/core`. Provides workspace execution primitives: Claude CLI management, session management, git operations, ratchet logic. Used by both desktop and cloud VMs.
 
-- **Ratchet Listener**: GitHub monitoring component that polls for PR updates, CI status, and review comments. Runs in the cloud alongside the workspace.
+- **Claude CLI**: Subprocess managed by FF Core that wraps the Anthropic Claude API. Handles tool execution, streaming responses, and conversation management.
 
-- **Factory Factory Mobile**: Mobile application that acts as a pure frontend, fetching workspace state and streaming messages through FF Cloud.
+- **Factory Factory Mobile**: Mobile application (pure frontend) that connects to FF Cloud to view workspaces and interact with running sessions via WebSocket.
 
-- **GitHub**: External service where code changes are pushed and PR status is monitored.
+- **Ratchet**: Auto-fix system built into FF Core. Polls GitHub for PR status (CI failures, review comments) and automatically spawns fix sessions. Runs inside VMs alongside workspaces.
 
-## Factory Factory CLI API
+- **GitHub**: External service for git operations (push, pull) and ratchet polling (PR status, CI checks).
 
-The FF CLI needs to expose these capabilities for FF Cloud to orchestrate cloud workspaces:
+- **Anthropic API**: Cloud service that powers Claude CLI. Each Claude CLI subprocess makes API calls to claude.ai for AI responses.
 
-### Workspace Lifecycle Management
+## How FF Cloud Communicates with VMs
 
-```bash
-# Create a new workspace from a GitHub issue
-ff workspace create --issue <issue-url> --workspace-id <id>
+FF Cloud doesn't communicate with VMs via CLI commands. Instead, FF Core library runs **inside each VM** and FF Cloud communicates via:
 
-# Start an existing workspace (resumes work)
-ff workspace start --workspace-id <id>
+1. **VM Management API**: Provision/terminate VMs, execute commands in VMs
+2. **WebSocket Relay**: Real-time message streaming between clients and VMs
+3. **PostgreSQL**: Store workspace metadata, user info, billing
 
-# Stop a workspace gracefully
-ff workspace stop --workspace-id <id>
+### Architecture: FF Cloud as WebSocket Relay
 
-# Get workspace status and metadata
-ff workspace status --workspace-id <id> --json
+```
+┌──────────────┐                     ┌─────────────────┐                     ┌──────────────┐
+│   Desktop    │◄────WebSocket──────►│   FF Cloud      │◄────WebSocket──────►│  VM (User A) │
+│   Client     │                     │   Relay Server  │                     │  FF Core     │
+└──────────────┘                     │                 │                     │  Claude CLI  │
+                                     │  - Routes msgs  │                     └──────────────┘
+┌──────────────┐                     │  - Auth/billing │
+│   Mobile     │◄────WebSocket──────►│  - PostgreSQL   │◄────WebSocket──────►┌──────────────┐
+│   Client     │                     │  - VM mgmt      │                     │  VM (User B) │
+└──────────────┘                     └─────────────────┘                     │  FF Core     │
+                                                                              │  Claude CLI  │
+                                                                              └──────────────┘
 ```
 
-### Chat Interaction
+### VM Communication via FF Core Library
 
-```bash
-# Send a message to the workspace's Claude CLI session
-ff chat send --workspace-id <id> --message <text>
+**FF Cloud executes code in VMs using FF Core:**
 
-# Stream chat output from the workspace (blocks until new messages)
-ff chat stream --workspace-id <id> --json
+```typescript
+// FF Cloud (closed source) - orchestration layer
+class VMService {
+  async createWorkspace(userId: string, issueUrl: string) {
+    // 1. Provision VM (closed source)
+    const vm = await this.vmOrchestrator.provisionVM(userId);
 
-# Get chat history
-ff chat history --workspace-id <id> --limit <n> --json
-```
+    // 2. Execute FF Core code inside VM via SSH/API
+    const result = await this.executeInVM(vm.id, async () => {
+      // This code runs INSIDE the VM
+      const { WorkspaceManager } = await import('@factory-factory/core');
 
-### Ratchet (Auto-Fix) Management
+      const manager = new WorkspaceManager({
+        dataDir: '/workspace',
+        githubToken: process.env.GITHUB_TOKEN,
+      });
 
-```bash
-# Start ratchet listener for a workspace
-ff ratchet start --workspace-id <id> --pr-url <url>
+      return await manager.createFromIssue(issueUrl);
+    });
 
-# Stop ratchet listener
-ff ratchet stop --workspace-id <id>
+    // 3. Store in cloud DB (closed source)
+    await db.workspace.create({
+      userId,
+      workspaceId: result.id,
+      vmId: vm.id,
+    });
 
-# Get ratchet status (is it running? what's the PR state?)
-ff ratchet status --workspace-id <id> --json
-
-# Toggle auto-fix on/off for a workspace
-ff ratchet toggle --workspace-id <id> --enabled <true|false>
-```
-
-### Workspace State & Metadata
-
-```bash
-# Export full workspace state (for syncing to cloud DB)
-ff workspace export --workspace-id <id> --json
-
-# List all workspaces
-ff workspace list --json
-
-# Get workspace file tree and recent changes
-ff workspace files --workspace-id <id> --json
-
-# Get git branch and commit info
-ff workspace git-status --workspace-id <id> --json
-```
-
-### Team & Multi-User Support
-
-```bash
-# List workspaces for a specific user/team
-ff workspace list --user-id <id> --json
-
-# Get aggregated stats for team view
-ff team stats --team-id <id> --json
-```
-
-### Session Management
-
-```bash
-# Create a new session in a workspace
-ff session create --workspace-id <id> --prompt <text>
-
-# Get session status and output
-ff session status --session-id <id> --json
-
-# List sessions for a workspace
-ff session list --workspace-id <id> --json
-```
-
-### Design Considerations
-
-- **JSON Output**: All commands that return data should support `--json` for machine-readable output
-- **Streaming**: Chat streaming should output newline-delimited JSON for real-time updates
-- **Error Handling**: Exit codes and structured error messages for FF Cloud to handle failures
-- **Authentication**: CLI should support API tokens for cloud service authentication
-- **Idempotency**: Operations like `workspace create` should be idempotent (rerunning same command is safe)
-- **Process Management**: CLI manages long-running Claude CLI processes, keeping them alive and handling crashes
-
-## Chat Streaming Architecture
-
-### How Claude CLI Outputs Messages
-
-Claude CLI is a subprocess managed by Factory Factory. It communicates via events that are captured by FF's `ChatEventForwarderService`:
-
-1. **Claude CLI subprocess** emits events (tool use, thinking, text, completion)
-2. **ChatEventForwarderService** listens to these events via `ClaudeClient`
-3. For each event:
-   - Store the event in `MessageStateService` (for replay on reconnect)
-   - Forward to all connected frontends via `ChatConnectionService.forwardToSession()`
-
-The current architecture uses **WebSockets** for real-time bidirectional communication between FF backend and frontend.
-
-### Event Types from Claude CLI
-
-Based on the current implementation, Claude CLI emits these event types:
-
-- **Stream events**: Text chunks, tool use, thinking tokens
-- **Status events**: `running: true/false`
-- **Interactive requests**: User questions, permission requests
-- **Completion events**: Message finished, with final state
-
-### How `ff chat stream` Should Work
-
-For FF Cloud to stream chat to desktop/mobile clients, `ff chat stream` needs to:
-
-#### 1. Output Format: Newline-Delimited JSON (NDJSON)
-
-Each line is a JSON object representing a chat event:
-
-```bash
-$ ff chat stream --workspace-id abc123 --json
-{"type":"status","running":true,"timestamp":"2026-02-10T10:30:00Z"}
-{"type":"message_state_changed","messageId":"msg-1","state":"DISPATCHED"}
-{"type":"claude_message","role":"assistant","content":[{"type":"text","text":"Let me check..."}]}
-{"type":"claude_message","role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/foo/bar.ts"}}]}
-{"type":"user_question","requestId":"req-1","questions":[...]}
-{"type":"status","running":false,"timestamp":"2026-02-10T10:31:00Z"}
-```
-
-#### 2. Message Types (matches WebSocket protocol)
-
-The CLI should output the same message types that FF's WebSocket currently sends:
-
-| Type | Description | Example |
-|------|-------------|---------|
-| `status` | Claude running state | `{"type":"status","running":true}` |
-| `message_state_changed` | User message state updates | `{"type":"message_state_changed","messageId":"msg-1","state":"ACCEPTED"}` |
-| `claude_message` | Claude's streaming response | `{"type":"claude_message","role":"assistant","content":[...]}` |
-| `user_question` | AskUserQuestion tool invocation | `{"type":"user_question","requestId":"req-1","questions":[...]}` |
-| `permission_request` | Permission dialog | `{"type":"permission_request","requestId":"req-2",...}` |
-| `messages_snapshot` | Full state (on connect/reconnect) | `{"type":"messages_snapshot","messages":[...],"sessionStatus":{...}}` |
-
-#### 3. Stream Behavior
-
-```bash
-# Blocking: waits for new events and outputs them as they arrive
-ff chat stream --workspace-id abc123 --json
-
-# With timeout: exits after 30s of no activity
-ff chat stream --workspace-id abc123 --json --timeout 30s
-
-# From a specific point: only new events after timestamp
-ff chat stream --workspace-id abc123 --json --since 2026-02-10T10:30:00Z
-```
-
-The command should:
-- Block and output events in real-time as they occur
-- Flush after each event (for immediate streaming)
-- Exit cleanly when the workspace stops or the CLI is interrupted (SIGINT/SIGTERM)
-
-#### 4. FF Cloud Integration
-
-FF Cloud would:
-
-1. **Start streaming** when a client connects:
-   ```bash
-   ff chat stream --workspace-id abc123 --json
-   ```
-
-2. **Parse NDJSON output** line by line
-
-3. **Forward to WebSocket/HTTP clients**: Relay each event to connected desktop/mobile clients
-
-4. **Handle reconnection**: When a client reconnects, send `messages_snapshot` first (via `ff chat history`), then resume streaming
-
-### Sending Messages to Claude CLI
-
-For sending user input, FF Cloud uses:
-
-```bash
-# Send a text message
-ff chat send --workspace-id abc123 --message "Fix the bug in auth.ts"
-
-# Send with attachments (as JSON)
-ff chat send --workspace-id abc123 --json '{
-  "text": "Review this screenshot",
-  "attachments": [{"id":"att-1","name":"bug.png","data":"base64..."}]
-}'
-
-# Answer a question
-ff chat send --workspace-id abc123 --type question_response --json '{
-  "requestId": "req-1",
-  "answers": {"question1": "option1"}
-}'
-
-# Stop the session
-ff chat send --workspace-id abc123 --type stop
-```
-
-### State Synchronization
-
-When a client first connects or reconnects:
-
-```bash
-# Get full snapshot of current state
-ff chat history --workspace-id abc123 --json
-```
-
-Returns:
-```json
-{
-  "type": "messages_snapshot",
-  "messages": [
-    {"id":"msg-1","role":"user","text":"Fix the bug"},
-    {"id":"msg-2","role":"assistant","content":[...]}
-  ],
-  "sessionStatus": {
-    "phase": "running",
-    "isRunning": true
-  },
-  "pendingInteractiveRequest": null
+    return result;
+  }
 }
 ```
 
-This matches the `messages_snapshot` format that the current WebSocket implementation sends, ensuring consistency between desktop and cloud.
+### WebSocket Message Streaming
+
+**Client → FF Cloud → VM:**
+
+```typescript
+// Desktop/Mobile client sends message
+websocket.send({
+  type: 'user_message',
+  workspaceId: 'ws-123',
+  content: 'Fix the bug in auth.ts'
+});
+
+// FF Cloud routes to correct VM
+class CloudWebSocketRelay {
+  async handleClientMessage(userId: string, msg: ClientMessage) {
+    // Find which VM owns this workspace
+    const workspace = await db.workspace.findOne({
+      id: msg.workspaceId,
+      userId,  // Security: ensure user owns workspace
+    });
+
+    // Forward to VM's WebSocket connection
+    const vmConnection = this.vmConnections.get(workspace.vmId);
+    vmConnection.send({
+      type: 'user_message',
+      content: msg.content,
+    });
+  }
+}
+
+// VM (FF Core) receives and processes
+class VMWebSocketHandler {
+  async handleMessage(msg: Message) {
+    // FF Core inside VM handles the message
+    const session = await Session.get(msg.workspaceId);
+    await session.sendMessage(msg.content);
+
+    // FF Core emits events as Claude processes the message
+    session.on('message', (claudeMsg) => {
+      // Send back to FF Cloud
+      this.vmWebSocket.send({
+        type: 'claude_message',
+        workspaceId: msg.workspaceId,
+        message: claudeMsg,
+      });
+    });
+  }
+}
+```
+
+**VM → FF Cloud → Client:**
+
+```typescript
+// FF Core in VM emits Claude response
+session.on('message', (msg) => {
+  vmWebSocket.send({
+    type: 'claude_message',
+    workspaceId: 'ws-123',
+    message: msg,
+  });
+});
+
+// FF Cloud relays to all connected clients for this workspace
+class CloudWebSocketRelay {
+  async handleVMMessage(vmId: string, msg: VMMessage) {
+    // Find all clients subscribed to this workspace
+    const clients = this.clientsByWorkspace.get(msg.workspaceId) || [];
+
+    // Forward to each client
+    for (const client of clients) {
+      client.send({
+        type: 'claude_message',
+        content: msg.message,
+      });
+    }
+  }
+}
+```
+
+### Message Types (Same as Desktop)
+
+FF Cloud uses the same message types that Desktop FF already uses:
+
+| Type | Direction | Description |
+|------|-----------|-------------|
+| `user_message` | Client → VM | User sends message to Claude |
+| `claude_message` | VM → Client | Claude's response (streaming) |
+| `status` | VM → Client | Session status (running/idle) |
+| `user_question` | VM → Client | AskUserQuestion tool |
+| `permission_request` | VM → Client | Permission prompt |
+| `question_response` | Client → VM | Answer to question |
+| `permission_response` | Client → VM | Permission approval/denial |
+| `messages_snapshot` | VM → Client | Full state on connect |
+
+### Key Differences from Desktop
+
+| Aspect | Desktop FF | FF Cloud |
+|--------|-----------|----------|
+| **FF Core location** | Runs on user's machine | Runs inside VMs |
+| **Communication** | Direct (local WebSocket) | Relayed (client ↔ cloud ↔ VM) |
+| **Database** | SQLite (local) | PostgreSQL (multi-tenant) + SQLite (per-VM) |
+| **Authentication** | N/A (single user) | JWT tokens, userId checks |
+| **VM management** | N/A | Provision, monitor, terminate VMs |
+| **Message routing** | Direct | FF Cloud routes by workspaceId → vmId |
+
+### Implementation: VM WebSocket Server
+
+Each VM runs a small WebSocket server that FF Cloud connects to:
+
+```typescript
+// Inside VM (using FF Core)
+class VMWebSocketServer {
+  constructor() {
+    this.wss = new WebSocketServer({ port: 8080 });
+    this.wss.on('connection', (ws) => {
+      // FF Cloud connects here
+      ws.on('message', (data) => {
+        const msg = JSON.parse(data);
+        this.handleCloudMessage(msg);
+      });
+    });
+  }
+
+  async handleCloudMessage(msg: Message) {
+    // Use FF Core to handle the message
+    switch (msg.type) {
+      case 'user_message':
+        await this.handleUserMessage(msg);
+        break;
+      case 'question_response':
+        await this.handleQuestionResponse(msg);
+        break;
+      // ... other message types
+    }
+  }
+
+  async handleUserMessage(msg: UserMessage) {
+    const { Session } = await import('@factory-factory/core');
+    const session = await Session.get(msg.workspaceId);
+
+    // Send to Claude CLI (FF Core manages this)
+    await session.sendMessage(msg.content);
+
+    // FF Core emits events, we forward to cloud
+    session.on('message', (claudeMsg) => {
+      this.sendToCloud({
+        type: 'claude_message',
+        workspaceId: msg.workspaceId,
+        message: claudeMsg,
+      });
+    });
+  }
+
+  sendToCloud(msg: any) {
+    // Send to FF Cloud via WebSocket
+    this.ws.send(JSON.stringify(msg));
+  }
+}
+
+// Start server when VM boots
+const server = new VMWebSocketServer();
+```
+
+### Benefits of This Approach
+
+✅ **No CLI overhead**: FF Core is a library, not a CLI subprocess
+✅ **Type safety**: TypeScript types across the entire stack
+✅ **Real-time streaming**: WebSocket for instant message relay
+✅ **Reuses desktop logic**: Same FF Core in desktop and cloud VMs
+✅ **Simple routing**: FF Cloud maps workspaceId → vmId → forward message
+✅ **Security**: Authentication at cloud layer, FF Core doesn't handle multi-tenancy
