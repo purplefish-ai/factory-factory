@@ -48,6 +48,9 @@
 | Static imports in smoke test | 2026-02-10 | Biome forbids await import(); use static imports (02-06) |
 | No knip changes for shims | 2026-02-10 | Existing globs already cover all re-export shim paths (02-06) |
 | EventForwarderContext in barrel | 2026-02-10 | Additional type export for external consumers (02-06) |
+| Direct module paths in shims (not barrel) | 2026-02-10 | Re-export shims use direct module path to avoid circular deps (03-01) |
+| Cross-domain imports via absolute paths | 2026-02-10 | kanban-state uses @/backend/services/ for cross-domain deps (03-01) |
+| Intra-domain relative in workspace state/ | 2026-02-10 | kanban-state -> flow-state via ./flow-state (03-01) |
 | Absolute @/ imports in domain files | 2026-02-10 | Cross-layer refs use @/backend/ paths in workspace domain (03-02) |
 | Absolute mock paths in domain tests | 2026-02-10 | vi.mock paths updated to @/backend/ matching new imports (03-02) |
 
@@ -58,7 +61,7 @@ None.
 ## Context for Next Session
 
 Phase 3 IN PROGRESS: Workspace domain consolidation underway.
-Plan 03-01 moved flow-state and kanban-state to domains/workspace/state/.
+Plan 03-01 moved flow-state, kanban-state, and init-policy to domains/workspace/state/.
 Plan 03-02 moved state-machine, data, and activity services to domains/workspace/lifecycle/.
 All re-export shims at old paths. pnpm typecheck passes. 42 lifecycle tests passing.
 Plans 03-03 through 03-05 remain (workspace-helpers, init-policy barrel, workspace barrel).
@@ -73,8 +76,9 @@ Plans 03-03 through 03-05 remain (workspace-helpers, init-policy barrel, workspa
 | 02 | 02 | 9min | 2 | 20 |
 | 02 | 04 | 20min | 2 | 25 |
 | 02 | 06 | 3min | 2 | 2 |
+| 03 | 01 | 5min | 2 | 9 |
 | 03 | 02 | 5min | 2 | 8 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T15:04:21Z -- Completed 03-02-PLAN.md*
+*Last session: 2026-02-10T15:05:00Z -- Completed 03-01-PLAN.md*
