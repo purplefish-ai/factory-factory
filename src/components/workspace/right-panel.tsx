@@ -1,4 +1,4 @@
-import { FileQuestion, Files, GitCompare, ListTodo, Plus, Terminal, X } from 'lucide-react';
+import { FileQuestion, Files, GitCompare, ListTodo, Play, Plus, Terminal, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { DevLogsPanel } from './dev-logs-panel';
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
+import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
@@ -27,7 +28,7 @@ const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-right-panel-bottom-tab-';
 // =============================================================================
 
 type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
-type BottomPanelTab = 'terminal' | 'dev-logs';
+type BottomPanelTab = 'terminal' | 'dev-logs' | 'setup-logs';
 
 // =============================================================================
 // Main Component
@@ -78,7 +79,11 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
       }
 
       const storedBottom = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
-      if (storedBottom === 'terminal' || storedBottom === 'dev-logs') {
+      if (
+        storedBottom === 'terminal' ||
+        storedBottom === 'dev-logs' ||
+        storedBottom === 'setup-logs'
+      ) {
         setActiveBottomTab(storedBottom);
       }
     } catch {
@@ -201,6 +206,12 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
               isActive={activeBottomTab === 'dev-logs'}
               onSelect={() => handleBottomTabChange('dev-logs')}
             />
+            <TabButton
+              label="Setup Logs"
+              icon={<Play className="h-3.5 w-3.5" />}
+              isActive={activeBottomTab === 'setup-logs'}
+              onSelect={() => handleBottomTabChange('setup-logs')}
+            />
           </div>
 
           {/* Content */}
@@ -220,6 +231,9 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 outputEndRef={devLogs.outputEndRef}
                 className="h-full"
               />
+            )}
+            {activeBottomTab === 'setup-logs' && (
+              <SetupLogsPanel workspaceId={workspaceId} className="h-full" />
             )}
           </div>
         </div>
