@@ -26,7 +26,7 @@ export function WorkspacesBoardView({
 }) {
   return (
     <KanbanProvider projectId={projectId} projectSlug={slug}>
-      <div className="flex flex-col h-screen p-6 gap-4">
+      <div className="flex flex-col h-screen p-3 md:p-6 gap-3 md:gap-4">
         <PageHeader title="Workspaces">
           <KanbanControls />
           <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
