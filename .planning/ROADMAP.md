@@ -143,9 +143,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Move fixer-session, ci-fixer, and ci-monitor to ratchet domain
-- [ ] 05-02-PLAN.md — Move ratchet and reconciliation services to ratchet domain
-- [ ] 05-03-PLAN.md — Populate ratchet domain barrel and create smoke test
+- [x] 05-01-PLAN.md — Move fixer-session, ci-fixer, and ci-monitor to ratchet domain
+- [x] 05-02-PLAN.md — Move ratchet and reconciliation services to ratchet domain
+- [x] 05-03-PLAN.md — Populate ratchet domain barrel and create smoke test
 
 **Delivers:**
 - Ratchet polling, CI monitoring, and auto-fix dispatch in one module
@@ -286,4 +286,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 5 planned (3 plans, 3 waves)*
+*Last updated: 2026-02-10 — Phase 5 complete (3 plans, 14min total)*
