@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 09-appcontext-import-rewiring (Plan 01 of 03 complete)
+**Current Phase:** 09-appcontext-import-rewiring (Plan 02 of 03 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -17,7 +17,7 @@
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
 | 8 | Orchestration Layer | Complete | All 4 plans done |
-| 9 | AppContext & Import Rewiring | In Progress | Plan 01 done (10min) |
+| 9 | AppContext & Import Rewiring | In Progress | Plans 01-02 done |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
 
 ## Key Decisions
@@ -96,6 +96,9 @@
 | SessionManager mock on @/backend/claude path | 2026-02-10 | session-hydrator.ts imports SessionManager from @/backend/claude, so mock targets that path (09-01) |
 | RatchetWorkspaceBridge only needs markFailed | 2026-02-10 | Reconciliation doesn't use markReady; that's handled by orchestrator (09-01) |
 | Async wrapper for bridge return type narrowing | 2026-02-10 | Bridge wiring uses async wrapper to convert Promise<Workspace> to Promise<void> (09-01) |
+| Direct module paths for circular dep avoidance | 2026-02-10 | conversation-rename.interceptor.ts and conversation-analyzer.ts use direct paths instead of session barrel (09-02) |
+| ClaudeClient as value export in session barrel | 2026-02-10 | Moved from type-only to value export since process-adapter.ts uses ClaudeClient.create() (09-02) |
+| worktreeLifecycleService instance methods in init.trpc | 2026-02-10 | Replaced getWorkspaceInitMode/setWorkspaceInitMode free functions with instance methods (09-02) |
 
 ## Blockers
 
@@ -103,9 +106,10 @@ None.
 
 ## Context for Next Session
 
-Phase 9 (AppContext & Import Rewiring) plan 01 complete.
+Phase 9 (AppContext & Import Rewiring) plans 01-02 complete.
 Plan 01: app-context.ts rewired to domain barrels, reconciliation.service.ts bridge-injected for workspace markFailed, session domain internal imports fixed.
-Ready for Plan 02 (consumer rewiring) and Plan 03 (shim deletion).
+Plan 02: All 17+ external consumer files (tRPC routers, WebSocket handlers, interceptors, agents, utils, server.ts) rewired from shim imports to domain barrel imports. ClaudeClient moved to value export in session barrel. Circular dep avoidance via direct module paths for interceptor/util files.
+Ready for Plan 03 (shim deletion).
 
 ## Performance Metrics
 
@@ -136,7 +140,8 @@ Ready for Plan 02 (consumer rewiring) and Plan 03 (shim deletion).
 | 08 | 03 | 7min | 2 | 12 |
 | 08 | 04 | 8min | 2 | 24 |
 | 09 | 01 | 10min | 2 | 7 |
+| 09 | 02 | 14min | 2 | 19 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T20:48:25Z -- Completed 09-01-PLAN.md*
+*Last session: 2026-02-10T20:52:00Z -- Completed 09-02-PLAN.md*
