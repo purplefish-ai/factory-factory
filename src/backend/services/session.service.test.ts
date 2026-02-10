@@ -536,6 +536,46 @@ describe('SessionService', () => {
     });
   });
 
+  it('normalizes stale loading runtime to idle when no process is active', () => {
+    vi.spyOn(sessionDomainService, 'getRuntimeSnapshot').mockReturnValue({
+      phase: 'loading',
+      processState: 'unknown',
+      activity: 'IDLE',
+      updatedAt: new Date('2026-02-10T01:45:35.844Z').toISOString(),
+    });
+    vi.mocked(sessionProcessManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionProcessManager.getPendingClient).mockReturnValue(undefined);
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
+
+    const runtime = sessionService.getRuntimeSnapshot('session-1');
+
+    expect(runtime).toMatchObject({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+    });
+  });
+
+  it('keeps recent loading runtime when no process is active', () => {
+    vi.spyOn(sessionDomainService, 'getRuntimeSnapshot').mockReturnValue({
+      phase: 'loading',
+      processState: 'unknown',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
+    vi.mocked(sessionProcessManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionProcessManager.getPendingClient).mockReturnValue(undefined);
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
+
+    const runtime = sessionService.getRuntimeSnapshot('session-1');
+
+    expect(runtime).toMatchObject({
+      phase: 'loading',
+      processState: 'unknown',
+      activity: 'IDLE',
+    });
+  });
+
   it('getOrCreateClient and startClaudeSession produce identical DB state', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
