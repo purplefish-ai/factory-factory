@@ -34,21 +34,57 @@ const LOCK_MAX_STALE_RETRIES = 3; // Maximum retries after removing stale locks
 
 /**
  * Create cleanup function for file lock.
+ * Verifies ownership via inode comparison before unlinking to prevent
+ * deleting another process's lock file.
  */
 function createLockCleanup(
   fileHandle: fs.FileHandle | undefined,
   lockPath: string
 ): () => Promise<void> {
   return async () => {
+    if (!fileHandle) {
+      return;
+    }
+
     try {
-      // Close the file handle (ignore errors - file may already be closed)
-      await fileHandle?.close().catch(() => {
-        // Ignore close errors
+      // Get the inode of our open file handle
+      const handleStat = await fileHandle.stat();
+      const handleIno = handleStat.ino;
+
+      // Close the file handle before unlinking
+      await fileHandle.close().catch(() => {
+        // Ignore close errors - file may already be closed
       });
-      // Unlink the lock file (ignore errors - file may already be deleted)
-      await fs.unlink(lockPath).catch(() => {
-        // Lock file may already be deleted; ignore error
-      });
+
+      // Verify the file at lockPath is still our lock file by comparing inodes
+      try {
+        const pathStat = await fs.stat(lockPath);
+        if (pathStat.ino === handleIno) {
+          // Same inode - this is our lock file, safe to unlink
+          await fs.unlink(lockPath).catch(() => {
+            // Another process may have already removed it; ignore error
+          });
+        } else {
+          // Different inode - another process created a new lock file at this path
+          // Do NOT unlink - that would delete their active lock
+          logger.debug('Lock file inode changed, not unlinking (owned by another process)', {
+            lockPath,
+            ourIno: handleIno,
+            currentIno: pathStat.ino,
+          });
+        }
+      } catch (statError) {
+        const code = (statError as NodeJS.ErrnoException | undefined)?.code;
+        if (code === 'ENOENT') {
+          // Lock file already removed by another process or stale cleanup - this is fine
+          return;
+        }
+        // Other stat errors - log but don't propagate
+        logger.warn('Failed to stat lock file during cleanup', {
+          lockPath,
+          error: statError instanceof Error ? statError.message : String(statError),
+        });
+      }
     } catch (error) {
       logger.warn('Failed to clean up lock file', {
         lockPath,
