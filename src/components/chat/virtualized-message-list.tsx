@@ -199,9 +199,17 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   }, [scrollContainerRef, handleScroll]);
 
   // Show loading state while session is loading (prevents flicker during event replay)
+  // If there's also an init banner, show both spinners
+  const showingInitSpinner = initBanner && initBanner.kind === 'info';
   if (loadingSession) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+      <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
+        {showingInitSpinner && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">{initBanner.message}</span>
+          </div>
+        )}
         <div className="flex items-center gap-2 text-muted-foreground">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <span className="text-sm">Loading session...</span>
@@ -211,7 +219,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   }
 
   // Show empty state if no messages and not starting/initializing
-  const showingInitSpinner = initBanner && initBanner.kind === 'info';
   if (messages.length === 0 && !(running || startingSession || showingInitSpinner)) {
     return <EmptyState />;
   }
