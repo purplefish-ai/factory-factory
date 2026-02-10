@@ -203,15 +203,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
     const dbSessionId = url.searchParams.get('sessionId') || null;
     const rawWorkingDir = url.searchParams.get('workingDir');
-
-    if (!rawWorkingDir) {
-      logger.warn('Missing workingDir parameter', { connectionId });
-      sendBadRequest(socket, 'Missing workingDir parameter');
-      return;
-    }
-
-    const workingDir = validateWorkingDir(rawWorkingDir);
-    if (!workingDir) {
+    const workingDir = rawWorkingDir ? validateWorkingDir(rawWorkingDir) : null;
+    if (rawWorkingDir && !workingDir) {
       logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
       sendBadRequest(socket, 'Invalid workingDir');
       return;
@@ -279,7 +272,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
           }
-          await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir, message);
+          await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir ?? '', message);
         } catch (error) {
           logger.error('Error handling chat message', error as Error);
           sendChatError(ws, dbSessionId, 'Invalid message format');

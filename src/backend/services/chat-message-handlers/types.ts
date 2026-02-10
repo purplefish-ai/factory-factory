@@ -27,4 +27,5 @@ export type ChatMessageHandler<T extends ChatMessageInput = ChatMessageInput> = 
 export interface HandlerRegistryDependencies {
   getClientCreator: () => ClientCreator | null;
   tryDispatchNextMessage: (sessionId: string) => Promise<void>;
+  setManualDispatchResume: (sessionId: string, resumed: boolean) => void;
 }

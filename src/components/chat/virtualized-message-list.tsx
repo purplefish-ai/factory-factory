@@ -16,6 +16,7 @@ interface VirtualizedMessageListProps {
   running: boolean;
   startingSession: boolean;
   loadingSession: boolean;
+  startingLabel?: string;
   /** Ref to the scroll container (viewport) */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /** Called when user scrolls */
@@ -98,6 +99,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   running,
   startingSession,
   loadingSession,
+  startingLabel = 'Starting agent...',
   scrollContainerRef,
   onScroll,
   messagesEndRef,
@@ -271,7 +273,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {startingSession && !running && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Starting agent...</span>
+            <span className="text-sm">{startingLabel}</span>
           </div>
         )}
 

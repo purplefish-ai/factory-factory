@@ -35,11 +35,7 @@ export function WorkspaceDetailContainer() {
     { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
   );
 
-  const { workspaceInitStatus, isInitializing } = useWorkspaceInitStatus(
-    workspaceId,
-    workspace,
-    utils
-  );
+  const { workspaceInitStatus } = useWorkspaceInitStatus(workspaceId, workspace, utils);
 
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     initialDbSessionId ?? null
@@ -63,6 +59,7 @@ export function WorkspaceDetailContainer() {
     inputAttachments,
     queuedMessages,
     removeQueuedMessage,
+    resumeQueuedMessages,
     latestThinking,
     pendingMessages,
     isCompacting,
@@ -85,7 +82,6 @@ export function WorkspaceDetailContainer() {
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
-    workingDir: workspace?.worktreePath ?? undefined,
     dbSessionId: selectedDbSessionId,
   });
 
@@ -225,7 +221,6 @@ export function WorkspaceDetailContainer() {
       workspace={workspace}
       workspaceId={workspaceId}
       handleBackToWorkspaces={handleBackToWorkspaces}
-      isInitializing={isInitializing}
       workspaceInitStatus={workspaceInitStatus}
       archivePending={archiveWorkspace.isPending}
       availableIdes={availableIdes}
@@ -268,6 +263,7 @@ export function WorkspaceDetailContainer() {
       setInputAttachments={setInputAttachments}
       queuedMessages={queuedMessages}
       removeQueuedMessage={removeQueuedMessage}
+      resumeQueuedMessages={resumeQueuedMessages}
       latestThinking={latestThinking}
       pendingMessages={pendingMessages}
       isCompacting={isCompacting}

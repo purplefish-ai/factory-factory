@@ -108,6 +108,11 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     userMessageId: z.string().min(1),
     dryRun: z.boolean().optional(),
   }),
+
+  // Resume dispatching queued messages after a manual pause.
+  z.object({
+    type: z.literal('resume_queued_messages'),
+  }),
 ]);
 
 // ============================================================================
@@ -129,3 +134,7 @@ export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permi
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
 export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;
 export type RewindFilesMessage = Extract<ChatMessageInput, { type: 'rewind_files' }>;
+export type ResumeQueuedMessagesInput = Extract<
+  ChatMessageInput,
+  { type: 'resume_queued_messages' }
+>;
