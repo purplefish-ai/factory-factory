@@ -74,4 +74,12 @@ describe('ChatMessageSchema', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('accepts resume_queued_messages', () => {
+    const result = ChatMessageSchema.safeParse({
+      type: 'resume_queued_messages',
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

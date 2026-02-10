@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { QueuedMessage } from '@/shared/claude';
 
-const { mockSessionDomainService, mockSessionService } = vi.hoisted(() => ({
+const { mockSessionDomainService, mockSessionService, mockSessionDataService } = vi.hoisted(() => ({
   mockSessionDomainService: {
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
@@ -16,6 +16,9 @@ const { mockSessionDomainService, mockSessionService } = vi.hoisted(() => ({
   mockSessionService: {
     getClient: vi.fn(),
   },
+  mockSessionDataService: {
+    findClaudeSessionById: vi.fn(),
+  },
 }));
 
 vi.mock('@/backend/domains/session/session-domain.service', () => ({
@@ -24,6 +27,10 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
 
 vi.mock('./session.service', () => ({
   sessionService: mockSessionService,
+}));
+
+vi.mock('./session-data.service', () => ({
+  sessionDataService: mockSessionDataService,
 }));
 
 vi.mock('./chat-message-handlers/registry', () => ({
@@ -48,6 +55,13 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     vi.clearAllMocks();
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessage);
     mockSessionDomainService.allocateOrder.mockReturnValue(0);
+    mockSessionDataService.findClaudeSessionById.mockResolvedValue({
+      workspace: {
+        status: 'READY',
+        worktreePath: '/tmp/w1',
+        initErrorMessage: null,
+      },
+    });
   });
 
   it('reverts runtime to idle when dispatch fails after markRunning', async () => {
@@ -95,5 +109,24 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1');
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+  });
+
+  it('requeues message when dispatch gate evaluation throws', async () => {
+    const client = {
+      isWorking: vi.fn().mockReturnValue(false),
+      isRunning: vi.fn().mockReturnValue(true),
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+    };
+    mockSessionService.getClient.mockReturnValue(client);
+    mockSessionDataService.findClaudeSessionById.mockRejectedValue(new Error('db down'));
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+    expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
   });
 });

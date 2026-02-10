@@ -9,6 +9,7 @@ export {
   type QuestionResponseMessage,
   type QueueMessageInput,
   type RemoveQueuedMessageInput,
+  type ResumeQueuedMessagesInput,
   type RewindFilesMessage,
   type SetModelMessage,
   type SetThinkingBudgetMessage,

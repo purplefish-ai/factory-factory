@@ -21,6 +21,7 @@ import type {
   QuestionResponseMessage,
   QueueMessageInput,
   RemoveQueuedMessageInput,
+  ResumeQueuedMessagesInput,
   RewindFilesMessage,
   StopMessage,
 } from '@/shared/websocket';
@@ -60,6 +61,7 @@ export interface UseChatActionsReturn {
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   removeQueuedMessage: (id: string) => void;
+  resumeQueuedMessages: () => void;
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
   startRewindPreview: (userMessageUuid: string) => void;
@@ -213,6 +215,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     [send]
   );
 
+  const resumeQueuedMessages = useCallback(() => {
+    send({ type: 'resume_queued_messages' } as ResumeQueuedMessagesInput);
+  }, [send]);
+
   const dismissTaskNotification = useCallback(
     (id: string) => {
       dispatch({ type: 'DISMISS_TASK_NOTIFICATION', payload: { id } });
@@ -346,6 +352,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     answerQuestion,
     updateSettings,
     removeQueuedMessage,
+    resumeQueuedMessages,
     dismissTaskNotification,
     clearTaskNotifications,
     startRewindPreview,

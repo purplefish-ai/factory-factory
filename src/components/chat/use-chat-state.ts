@@ -68,6 +68,7 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   inputAttachments: MessageAttachment[];
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
+  resumeQueuedMessages: () => void;
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
