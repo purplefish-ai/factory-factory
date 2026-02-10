@@ -361,4 +361,182 @@ describe('TerminalService', () => {
       );
     });
   });
+
+  // =========================================================================
+  // Output buffer truncation
+  // =========================================================================
+  describe('output buffer management', () => {
+    it('truncates output buffer when exceeding MAX_OUTPUT_BUFFER_SIZE', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      // Simulate large output (over 100KB limit)
+      const bigChunk = 'A'.repeat(80 * 1024);
+      onDataCallback?.(bigChunk);
+
+      const moreData = 'B'.repeat(50 * 1024);
+      onDataCallback?.(moreData);
+
+      const instance = service.getTerminal('ws-1', terminalId);
+      // Buffer should be capped at 100KB
+      expect(instance?.outputBuffer.length).toBe(100 * 1024);
+      // Should end with the most recent data
+      expect(instance?.outputBuffer.endsWith('B'.repeat(50 * 1024))).toBe(true);
+    });
+
+    it('preserves output buffer below the limit', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      onDataCallback?.('hello world');
+
+      const instance = service.getTerminal('ws-1', terminalId);
+      expect(instance?.outputBuffer).toBe('hello world');
+    });
+
+    it('accumulates output across multiple data events', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      onDataCallback?.('line1\n');
+      onDataCallback?.('line2\n');
+      onDataCallback?.('line3\n');
+
+      const instance = service.getTerminal('ws-1', terminalId);
+      expect(instance?.outputBuffer).toBe('line1\nline2\nline3\n');
+    });
+  });
+
+  // =========================================================================
+  // Exit auto-cleanup
+  // =========================================================================
+  describe('exit auto-cleanup', () => {
+    it('automatically destroys terminal on PTY exit', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+      expect(service.getTerminal('ws-1', terminalId)).not.toBeNull();
+
+      // Simulate PTY exit
+      onExitCallback?.({ exitCode: 0 });
+
+      expect(service.getTerminal('ws-1', terminalId)).toBeNull();
+      expect(service.getActiveTerminalCount()).toBe(0);
+    });
+
+    it('clears workspace terminal map when last terminal exits', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      onExitCallback?.({ exitCode: 1 });
+
+      expect(service.getTerminalsForWorkspace('ws-1')).toHaveLength(0);
+      expect(service.getTerminal('ws-1', terminalId)).toBeNull();
+    });
+
+    it('does not destroy other terminals when one exits', async () => {
+      await service.createTerminal(defaultOpts);
+      // Create a second terminal - need fresh callbacks
+      const secondCallbacks: {
+        onData?: (d: string) => void;
+        onExit?: (e: { exitCode: number }) => void;
+      } = {};
+      mockPtyOnData.mockImplementationOnce((cb: (data: string) => void) => {
+        secondCallbacks.onData = cb;
+        return { dispose: vi.fn() };
+      });
+      mockPtyOnExit.mockImplementationOnce((cb: (e: { exitCode: number }) => void) => {
+        secondCallbacks.onExit = cb;
+        return { dispose: vi.fn() };
+      });
+      await service.createTerminal(defaultOpts);
+
+      expect(service.getTerminalsForWorkspace('ws-1')).toHaveLength(2);
+
+      // Exit only the first terminal
+      onExitCallback?.({ exitCode: 0 });
+
+      expect(service.getTerminalsForWorkspace('ws-1')).toHaveLength(1);
+    });
+  });
+
+  // =========================================================================
+  // Active terminal cleared on destroy
+  // =========================================================================
+  describe('active terminal cleanup on destroy', () => {
+    it('clears active terminal when the active terminal is destroyed', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+      service.setActiveTerminal('ws-1', terminalId);
+      expect(service.getActiveTerminal('ws-1')).toBe(terminalId);
+
+      service.destroyTerminal('ws-1', terminalId);
+      expect(service.getActiveTerminal('ws-1')).toBeNull();
+    });
+
+    it('does not clear active terminal when a different terminal is destroyed', async () => {
+      const { terminalId: firstId } = await service.createTerminal(defaultOpts);
+      const { terminalId: secondId } = await service.createTerminal(defaultOpts);
+      service.setActiveTerminal('ws-1', firstId);
+
+      service.destroyTerminal('ws-1', secondId);
+      expect(service.getActiveTerminal('ws-1')).toBe(firstId);
+    });
+  });
+
+  // =========================================================================
+  // Multiple listeners
+  // =========================================================================
+  describe('multiple listeners', () => {
+    it('fires all output listeners for a terminal', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
+      service.onOutput(terminalId, listener1);
+      service.onOutput(terminalId, listener2);
+
+      onDataCallback?.('test');
+
+      expect(listener1).toHaveBeenCalledWith('test');
+      expect(listener2).toHaveBeenCalledWith('test');
+    });
+
+    it('fires all exit listeners for a terminal', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+      const listener1 = vi.fn();
+      const listener2 = vi.fn();
+      service.onExit(terminalId, listener1);
+      service.onExit(terminalId, listener2);
+
+      onExitCallback?.({ exitCode: 42 });
+
+      expect(listener1).toHaveBeenCalledWith(42);
+      expect(listener2).toHaveBeenCalledWith(42);
+    });
+  });
+
+  // =========================================================================
+  // Listener cleanup edge cases
+  // =========================================================================
+  describe('listener cleanup edge cases', () => {
+    it('unsubscribing output listener that was already removed is a no-op', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+      const listener = vi.fn();
+      const unsub = service.onOutput(terminalId, listener);
+
+      // Destroy terminal clears all listeners
+      service.destroyTerminal('ws-1', terminalId);
+
+      // Unsubscribe after destroy should not throw
+      expect(() => unsub()).not.toThrow();
+    });
+
+    it('unsubscribing exit listener that was already removed is a no-op', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+      const listener = vi.fn();
+      const unsub = service.onExit(terminalId, listener);
+
+      service.destroyTerminal('ws-1', terminalId);
+
+      expect(() => unsub()).not.toThrow();
+    });
+
+    it('registering listener for non-existent terminal does not throw', () => {
+      const unsub = service.onOutput('nonexistent', vi.fn());
+      expect(() => unsub()).not.toThrow();
+    });
+  });
 });

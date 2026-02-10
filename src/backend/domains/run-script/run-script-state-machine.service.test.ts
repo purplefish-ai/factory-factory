@@ -596,4 +596,96 @@ describe('RunScriptStateMachineService', () => {
       expect(error.message).toBe('Custom error');
     });
   });
+
+  describe('verifyRunning edge cases', () => {
+    it('should handle race condition when markFailed throws', async () => {
+      const workspace = {
+        id: 'ws-1',
+        runScriptStatus: 'RUNNING',
+        runScriptPid: 999_999, // Non-existent pid
+      };
+      const refreshedWorkspace = {
+        ...workspace,
+        runScriptStatus: 'IDLE',
+      };
+
+      // verifyRunning reads workspace: RUNNING with stale pid
+      mockFindUnique.mockResolvedValueOnce(workspace);
+      // markFailed -> transition reads workspace again
+      mockFindUnique.mockResolvedValueOnce(workspace);
+      // CAS fails because exit handler already transitioned
+      mockUpdateMany.mockResolvedValueOnce({ count: 0 });
+      // transition refetches to report conflict
+      mockFindUnique.mockResolvedValueOnce({ ...workspace, runScriptStatus: 'IDLE' });
+      // verifyRunning catch block refetches to return current state
+      mockFindUnique.mockResolvedValueOnce(refreshedWorkspace);
+
+      const result = await runScriptStateMachine.verifyRunning('ws-1');
+
+      // Should return the refreshed status, not throw
+      expect(result).toBe('IDLE');
+    });
+
+    it('should return RUNNING status when pid is null (no process to verify)', async () => {
+      const workspace = {
+        id: 'ws-1',
+        runScriptStatus: 'RUNNING',
+        runScriptPid: null,
+      };
+
+      mockFindUnique.mockResolvedValue(workspace);
+
+      const result = await runScriptStateMachine.verifyRunning('ws-1');
+
+      // With null pid, the process check is skipped
+      expect(result).toBe('RUNNING');
+    });
+
+    it('should return status directly for non-RUNNING states', async () => {
+      for (const status of ['IDLE', 'STARTING', 'STOPPING', 'COMPLETED', 'FAILED'] as const) {
+        mockFindUnique.mockResolvedValueOnce({
+          id: 'ws-1',
+          runScriptStatus: status,
+          runScriptPid: null,
+        });
+
+        const result = await runScriptStateMachine.verifyRunning('ws-1');
+        expect(result).toBe(status);
+      }
+    });
+  });
+
+  describe('invalid transitions are exhaustively rejected', () => {
+    const invalidTransitions: [string, string][] = [
+      ['IDLE', 'RUNNING'],
+      ['IDLE', 'STOPPING'],
+      ['IDLE', 'COMPLETED'],
+      ['IDLE', 'FAILED'],
+      ['IDLE', 'IDLE'],
+      ['STARTING', 'STARTING'],
+      ['STARTING', 'IDLE'],
+      ['RUNNING', 'STARTING'],
+      ['RUNNING', 'RUNNING'],
+      ['RUNNING', 'IDLE'],
+      ['STOPPING', 'RUNNING'],
+      ['STOPPING', 'STARTING'],
+      ['STOPPING', 'STOPPING'],
+      ['STOPPING', 'COMPLETED'],
+      ['STOPPING', 'FAILED'],
+      ['COMPLETED', 'RUNNING'],
+      ['COMPLETED', 'STOPPING'],
+      ['COMPLETED', 'COMPLETED'],
+      ['COMPLETED', 'FAILED'],
+      ['FAILED', 'RUNNING'],
+      ['FAILED', 'STOPPING'],
+      ['FAILED', 'COMPLETED'],
+      ['FAILED', 'FAILED'],
+    ];
+
+    for (const [from, to] of invalidTransitions) {
+      it(`should reject ${from} -> ${to}`, () => {
+        expect(runScriptStateMachine.isValidTransition(from as never, to as never)).toBe(false);
+      });
+    }
+  });
 });
