@@ -1919,3 +1919,360 @@ const server = new VMWebSocketServer();
 ✅ **Reuses desktop logic**: Same FF Core in desktop and cloud VMs
 ✅ **Simple routing**: FF Cloud maps workspaceId → vmId → forward message
 ✅ **Security**: Authentication at cloud layer, FF Core doesn't handle multi-tenancy
+
+## Ratchet Handoff: Desktop → Cloud
+
+**Problem**: When a workspace is sent to cloud, the desktop's ratchet service (which polls GitHub for PR status) needs to stop, and the cloud's ratchet service needs to start. How do we coordinate this handoff?
+
+### Current Ratchet Architecture (Desktop)
+
+**How ratchet works today (desktop FF):**
+
+1. **Ratchet Service** runs in the desktop backend, polls all workspaces with PRs every 1 minute
+2. For each workspace with `ratchetEnabled: true`:
+   - Fetches PR status from GitHub (CI status, review comments)
+   - Compares current state to last known state (stored in `ratchetState`, `ratchetLastCiRunId`, `prReviewLastCheckedAt`)
+   - If state changed (CI failed, new review comments), dispatches a "fixer session"
+3. **Fixer session**: Spawns a Claude CLI session with a ratchet-specific prompt, attempts to fix the issue
+4. **State tracking** (in workspace table):
+   - `ratchetEnabled`: User toggle (workspace-level)
+   - `ratchetState`: Current PR state (IDLE/CI_RUNNING/CI_FAILED/REVIEW_PENDING/READY/MERGED)
+   - `ratchetActiveSessionId`: ID of active fixer session (null if idle)
+   - `ratchetLastCiRunId`: Last known CI run ID (prevents duplicate dispatches)
+   - `prReviewLastCheckedAt`: Timestamp of last review activity check
+
+**Key insight:** Ratchet is a **stateful polling loop** with state stored in the workspace table.
+
+### Handoff Challenge
+
+When "Send to Cloud" is clicked:
+
+1. Desktop must **stop polling** this workspace (no longer its responsibility)
+2. Cloud must **start polling** this workspace (now cloud's responsibility)
+3. **State must transfer** seamlessly (no duplicate fixes, no missed events)
+4. **In-flight fixer sessions** must complete gracefully (desktop) or transfer (cloud)
+
+### Solution: Location-Aware Ratchet with State Transfer
+
+#### 1. Add `location` Field to Workspace Table
+
+```typescript
+// Workspace table (both desktop and cloud DBs)
+model Workspace {
+  // ... existing fields
+  ratchetEnabled: boolean
+  ratchetState: RatchetState
+  ratchetActiveSessionId: string?
+  ratchetLastCiRunId: string?
+  prReviewLastCheckedAt: DateTime?
+
+  // NEW: Where is this workspace running?
+  location: WorkspaceLocation  // DESKTOP | CLOUD
+  cloudVmId: string?           // VM ID if location=CLOUD
+}
+
+enum WorkspaceLocation {
+  DESKTOP
+  CLOUD
+}
+```
+
+#### 2. Desktop Ratchet Service Filters by Location
+
+**Desktop ratchet loop:**
+
+```typescript
+// Desktop: src/backend/services/ratchet.service.ts
+class RatchetService {
+  private async findWorkspacesWithPRs(): Promise<WorkspaceWithPR[]> {
+    // Only poll workspaces that are DESKTOP
+    return await workspaceAccessor.findMany({
+      where: {
+        prUrl: { not: null },
+        ratchetEnabled: true,
+        location: 'DESKTOP',  // ← NEW: Desktop only polls desktop workspaces
+      },
+    });
+  }
+}
+```
+
+**Cloud ratchet loop (identical logic, different filter):**
+
+```typescript
+// Cloud: FF Cloud backend
+class CloudRatchetService {
+  private async findWorkspacesWithPRs(): Promise<WorkspaceWithPR[]> {
+    // Only poll workspaces that are CLOUD
+    return await db.workspace.findMany({
+      where: {
+        prUrl: { not: null },
+        ratchetEnabled: true,
+        location: 'CLOUD',  // ← Cloud only polls cloud workspaces
+      },
+    });
+  }
+}
+```
+
+**Result:** Desktop and cloud ratchet loops automatically filter by location, no coordination needed.
+
+#### 3. Send to Cloud: Update Location + Transfer State
+
+**Desktop "Send to Cloud" flow:**
+
+```typescript
+// Desktop: src/backend/trpc/workspace.trpc.ts
+async function sendWorkspaceToCloud(workspaceId: string) {
+  // 1. Upload workspace state to cloud
+  const workspace = await workspaceAccessor.findById(workspaceId);
+
+  const cloudWorkspaceId = await ffCloudAPI.createWorkspace({
+    // ... workspace details
+    ratchetEnabled: workspace.ratchetEnabled,
+    ratchetState: workspace.ratchetState,
+    ratchetLastCiRunId: workspace.ratchetLastCiRunId,
+    prReviewLastCheckedAt: workspace.prReviewLastCheckedAt,
+    // ↑ Transfer ratchet state to cloud DB
+  });
+
+  // 2. Update location to CLOUD (stops desktop polling)
+  await workspaceAccessor.update(workspaceId, {
+    location: 'CLOUD',
+    cloudVmId: cloudWorkspaceId,
+  });
+
+  // 3. Desktop ratchet service will ignore this workspace on next poll
+  // 4. Cloud ratchet service will pick it up on next poll (within 1 minute)
+}
+```
+
+**Cloud workspace creation:**
+
+```typescript
+// Cloud: src/services/workspace.service.ts
+async function createWorkspaceFromDesktop(data: DesktopWorkspaceData) {
+  // 1. Provision VM
+  const vm = await vmOrchestrator.provisionVM(userId);
+
+  // 2. Create workspace in VM using FF Core
+  const workspace = await vmService.executeInVM(vm.id, async () => {
+    const manager = new WorkspaceManager({ dataDir: '/workspace' });
+    return await manager.createFromIssue(data.issueUrl);
+  });
+
+  // 3. Store in cloud DB with transferred ratchet state
+  await db.workspace.create({
+    userId,
+    workspaceId: workspace.id,
+    vmId: vm.id,
+    location: 'CLOUD',  // ← Mark as cloud workspace
+    prUrl: data.prUrl,
+    ratchetEnabled: data.ratchetEnabled,
+    ratchetState: data.ratchetState,           // ← Transferred from desktop
+    ratchetLastCiRunId: data.ratchetLastCiRunId,
+    prReviewLastCheckedAt: data.prReviewLastCheckedAt,
+  });
+
+  // 4. Cloud ratchet service will pick this up on next poll
+}
+```
+
+#### 4. Handling In-Flight Fixer Sessions
+
+**Scenario:** Desktop ratchet dispatched a fixer session, then user clicks "Send to Cloud" before fixer completes.
+
+**Option A: Let desktop fixer complete (simpler)**
+
+```typescript
+async function sendWorkspaceToCloud(workspaceId: string) {
+  const workspace = await workspaceAccessor.findById(workspaceId);
+
+  // Check if ratchet fixer is active
+  if (workspace.ratchetActiveSessionId) {
+    const session = await sessionAccessor.findById(workspace.ratchetActiveSessionId);
+
+    if (session.status === 'ACTIVE' || session.status === 'RUNNING') {
+      throw new Error(
+        'Cannot send workspace to cloud while ratchet fixer is active. ' +
+        'Please wait for fixer to complete or stop the fixer session.'
+      );
+    }
+  }
+
+  // Safe to send to cloud
+  await uploadToCloud(workspace);
+  await workspaceAccessor.update(workspaceId, { location: 'CLOUD' });
+}
+```
+
+**User experience:**
+- User clicks "Send to Cloud"
+- If ratchet fixer is active: Show error message "Fixer is running, please wait..."
+- After fixer completes: User can retry "Send to Cloud"
+
+**Option B: Transfer session to cloud (more complex)**
+
+```typescript
+async function sendWorkspaceToCloud(workspaceId: string) {
+  const workspace = await workspaceAccessor.findById(workspaceId);
+
+  // 1. Upload workspace state + active sessions
+  const activeSession = workspace.ratchetActiveSessionId
+    ? await sessionAccessor.findById(workspace.ratchetActiveSessionId)
+    : null;
+
+  await ffCloudAPI.createWorkspace({
+    ...workspace,
+    activeSession: activeSession ? {
+      sessionId: activeSession.id,
+      claudeSessionId: activeSession.claudeSessionId,
+      status: activeSession.status,
+      messages: await sessionAccessor.getMessages(activeSession.id),
+      // ... full session state
+    } : null,
+  });
+
+  // 2. Stop desktop session (interrupt Claude CLI)
+  if (activeSession) {
+    await sessionService.interrupt(activeSession.id);
+  }
+
+  // 3. Update location
+  await workspaceAccessor.update(workspaceId, { location: 'CLOUD' });
+
+  // 4. Cloud VM resumes the session using transferred state
+}
+```
+
+**Recommendation:** Use **Option A (block send if fixer active)** for MVP:
+- Simpler implementation
+- Avoids complex session state transfer
+- Rare edge case (fixer sessions are short, ~2-5 minutes)
+- User can easily wait or stop the fixer
+
+#### 5. Pull from Cloud: Reverse Handoff
+
+When user clicks "Pull from Cloud" (bring workspace back to desktop):
+
+```typescript
+async function pullWorkspaceFromCloud(cloudWorkspaceId: string) {
+  // 1. Download workspace state from cloud
+  const cloudWorkspace = await ffCloudAPI.getWorkspace(cloudWorkspaceId);
+
+  // 2. Stop cloud VM (cloud ratchet will stop polling this workspace)
+  await ffCloudAPI.terminateVM(cloudWorkspace.vmId);
+
+  // 3. Create/update local workspace
+  await workspaceAccessor.upsert(cloudWorkspace.workspaceId, {
+    ...cloudWorkspace,
+    location: 'DESKTOP',  // ← Mark as desktop workspace
+    cloudVmId: null,
+    ratchetState: cloudWorkspace.ratchetState,  // ← Transfer state back
+    ratchetLastCiRunId: cloudWorkspace.ratchetLastCiRunId,
+    prReviewLastCheckedAt: cloudWorkspace.prReviewLastCheckedAt,
+  });
+
+  // 4. Desktop ratchet will pick this up on next poll
+}
+```
+
+### Handoff Summary
+
+| Step | Desktop Action | Cloud Action | Ratchet Impact |
+|------|---------------|--------------|----------------|
+| **1. Send to Cloud** | Upload workspace state, set `location='CLOUD'` | Create workspace in VM, store in cloud DB | Desktop stops polling (location filter), cloud starts polling |
+| **2. Cloud polling** | N/A (ignores workspace) | Cloud ratchet service polls workspace every 1 minute | Cloud dispatches fixers if PR state changes |
+| **3. Pull from Cloud** | Download state, set `location='DESKTOP'`, terminate cloud VM | VM terminates, workspace removed from cloud DB | Cloud stops polling (VM gone), desktop resumes polling |
+
+### State Synchronization Details
+
+**What gets transferred:**
+
+| Field | Desktop → Cloud | Cloud → Desktop | Purpose |
+|-------|----------------|-----------------|---------|
+| `ratchetEnabled` | ✅ Yes | ✅ Yes | User's toggle preference |
+| `ratchetState` | ✅ Yes | ✅ Yes | Current PR state (IDLE/CI_FAILED/etc.) |
+| `ratchetLastCiRunId` | ✅ Yes | ✅ Yes | Prevents duplicate fix dispatches |
+| `prReviewLastCheckedAt` | ✅ Yes | ✅ Yes | Last review activity timestamp |
+| `ratchetActiveSessionId` | ❌ No (block send if active) | ❌ No | Session is environment-specific |
+
+**What doesn't get transferred:**
+- Active fixer sessions (must complete before send/pull)
+- Session message history (optional: could transfer for continuity)
+- Claude CLI process state (each environment spawns fresh)
+
+### Edge Cases
+
+#### Edge Case 1: User sends to cloud, immediately pulls back
+
+**Behavior:**
+1. Desktop uploads state, sets `location='CLOUD'`
+2. Desktop ratchet stops polling immediately
+3. Cloud ratchet picks up workspace within 1 minute
+4. User pulls back before cloud ratchet runs first check
+5. Desktop ratchet resumes polling, no state lost
+
+**Result:** No duplicate checks, no missed events (at most 1 minute gap)
+
+#### Edge Case 2: Cloud ratchet dispatches fixer, user pulls workspace
+
+**Behavior:**
+1. Cloud ratchet dispatches fixer session in VM
+2. User clicks "Pull from Cloud"
+3. Cloud: Block pull request if fixer active (same as Option A above)
+4. User waits for fixer to complete
+5. Pull succeeds after fixer finishes
+
+**Alternative:** Transfer fixer session to desktop (Option B), but MVP should just block.
+
+#### Edge Case 3: GitHub rate limit during handoff
+
+**Behavior:**
+1. Desktop ratchet hit rate limit, backed off to 5 minute interval
+2. User sends workspace to cloud
+3. Cloud ratchet starts fresh, no backoff state transfer
+4. Cloud may immediately hit rate limit, applies its own backoff
+
+**Solution (Phase 2):** Transfer backoff state in workspace metadata:
+
+```typescript
+model Workspace {
+  // ... existing fields
+  ratchetBackoffMultiplier: number?  // Current backoff multiplier
+  ratchetBackoffExpiresAt: DateTime?  // When backoff resets
+}
+```
+
+For MVP: Accept that cloud might hit rate limit immediately after handoff (rare, self-healing).
+
+### Implementation Checklist
+
+**Phase 1 (MVP):**
+- [x] Add `location` and `cloudVmId` fields to workspace schema
+- [ ] Update desktop ratchet service to filter by `location='DESKTOP'`
+- [ ] Implement cloud ratchet service (identical logic, filter by `location='CLOUD'`)
+- [ ] Update "Send to Cloud" to transfer ratchet state
+- [ ] Block "Send to Cloud" if ratchet fixer is active
+- [ ] Update "Pull from Cloud" to transfer ratchet state back
+- [ ] Test: Desktop ratchet stops polling after send
+- [ ] Test: Cloud ratchet picks up workspace within 1 minute
+- [ ] Test: No duplicate fix dispatches during handoff
+- [ ] Test: Pull from cloud resumes desktop ratchet correctly
+
+**Phase 2 (Enhancements):**
+- [ ] Transfer active fixer sessions (Option B)
+- [ ] Transfer backoff state to prevent immediate rate limits
+- [ ] Add UI indicator: "Ratchet active on: Desktop | Cloud"
+- [ ] Metrics: Track handoff success rate, state transfer errors
+- [ ] Graceful degradation: If cloud ratchet fails, notify user to pull back
+
+### Benefits of This Approach
+
+✅ **No coordination overhead**: Desktop and cloud ratchet loops are independent
+✅ **Automatic handoff**: Changing `location` field triggers handoff
+✅ **No duplicate fixes**: State transfer prevents re-processing same PR state
+✅ **Stateless services**: Ratchet services don't need to communicate, just read DB
+✅ **Resilient**: If cloud ratchet fails, user can pull back to desktop
+✅ **Same code**: Desktop and cloud use identical FF Core ratchet logic
+✅ **Fast handoff**: Cloud picks up within 1 minute (ratchet poll interval)
