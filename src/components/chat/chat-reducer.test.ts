@@ -927,7 +927,8 @@ describe('chatReducer', () => {
       expect(newState.gitBranch).toBeNull();
       expect(newState.pendingRequest).toEqual({ type: 'none' });
       expect(newState.sessionStatus).toEqual({ phase: 'loading' });
-      expect(newState.queuedMessages.size).toBe(0);
+      // Queued messages are preserved during switch to avoid visual disappearance
+      expect(newState.queuedMessages.size).toBe(1);
       expect(newState.toolUseIdToIndex.size).toBe(0);
       expect(newState.latestThinking).toBeNull();
     });
