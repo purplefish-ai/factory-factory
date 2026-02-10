@@ -1,6 +1,6 @@
-import { chatConnectionService } from '@/backend/services/chat-connection.service';
-import { sessionFileLogger } from '@/backend/services/session-file-logger.service';
 import type { SessionDeltaEvent, WebSocketMessage } from '@/shared/claude';
+import { chatConnectionService } from '../chat/chat-connection.service';
+import { sessionFileLogger } from '../logging/session-file-logger.service';
 import { buildReplayEvents, buildSnapshotMessages } from './session-replay-builder';
 import type { SessionStore, SnapshotReason } from './session-store.types';
 import { normalizeTranscript } from './session-transcript';

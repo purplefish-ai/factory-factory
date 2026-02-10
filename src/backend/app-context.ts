@@ -1,24 +1,31 @@
-import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { chatConnectionService } from './services/chat-connection.service';
-import { chatEventForwarderService } from './services/chat-event-forwarder.service';
-import { chatMessageHandlerService } from './services/chat-message-handlers.service';
+// Domain imports (from barrel files)
+import { githubCLIService } from './domains/github';
+import { ratchetService } from './domains/ratchet';
+import {
+  type RunScriptService,
+  runScriptService,
+  runScriptStateMachine,
+  startupScriptService,
+} from './domains/run-script';
+import {
+  chatConnectionService,
+  chatEventForwarderService,
+  chatMessageHandlerService,
+  type SessionFileLogger,
+  sessionDomainService,
+  sessionFileLogger,
+  sessionService,
+} from './domains/session';
+import { terminalService } from './domains/terminal';
+import { kanbanStateService, workspaceStateMachine } from './domains/workspace';
+// Infrastructure imports (stay in services/)
 import { cliHealthService } from './services/cli-health.service';
 import { configService } from './services/config.service';
-import { githubCLIService } from './services/github-cli.service';
-import { kanbanStateService } from './services/kanban-state.service';
 import { createLogger } from './services/logger.service';
 import { findAvailablePort } from './services/port.service';
-import { ratchetService } from './services/ratchet.service';
 import { rateLimiter } from './services/rate-limiter.service';
-import { type RunScriptService, runScriptService } from './services/run-script.service';
-import { runScriptStateMachine } from './services/run-script-state-machine.service';
 import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
-import { sessionService } from './services/session.service';
-import { type SessionFileLogger, sessionFileLogger } from './services/session-file-logger.service';
-import { startupScriptService } from './services/startup-script.service';
-import { terminalService } from './services/terminal.service';
-import { workspaceStateMachine } from './services/workspace-state-machine.service';
 
 export type AppServices = {
   chatConnectionService: typeof chatConnectionService;

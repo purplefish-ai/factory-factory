@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionManager } from '@/backend/claude';
+import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { chatConnectionService } from '@/backend/services/chat-connection.service';
 
 vi.mock('@/backend/claude', async () => {
   const actual = await vi.importActual<typeof import('@/backend/claude')>('@/backend/claude');
@@ -14,7 +14,7 @@ vi.mock('@/backend/claude', async () => {
   };
 });
 
-vi.mock('@/backend/services/chat-connection.service', () => ({
+vi.mock('@/backend/domains/session/chat/chat-connection.service', () => ({
   chatConnectionService: {
     forwardToSession: vi.fn(),
     values: vi.fn(() => [][Symbol.iterator]()),
