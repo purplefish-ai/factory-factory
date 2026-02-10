@@ -1,6 +1,6 @@
-import type { SetThinkingBudgetMessage } from '@/shared/websocket';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionService } from '@/backend/services/session.service';
+import type { SetThinkingBudgetMessage } from '@/shared/websocket';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
 

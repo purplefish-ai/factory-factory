@@ -10,6 +10,8 @@
 
 import type { WebSocket } from 'ws';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { createLogger } from '@/backend/services/logger.service';
+import { sessionService } from '@/backend/services/session.service';
 import {
   type ClaudeContentItem,
   DEFAULT_THINKING_BUDGET,
@@ -23,8 +25,6 @@ import { processAttachmentsAndBuildContent } from './chat-message-handlers/attac
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
 import type { ClientCreator } from './chat-message-handlers/types';
-import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
 
 const logger = createLogger('chat-message-handlers');
 

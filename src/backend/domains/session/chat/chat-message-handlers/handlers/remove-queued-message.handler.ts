@@ -1,7 +1,7 @@
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { createLogger } from '@/backend/services/logger.service';
 import { MessageState } from '@/shared/claude';
 import type { RemoveQueuedMessageInput } from '@/shared/websocket';
-import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
 

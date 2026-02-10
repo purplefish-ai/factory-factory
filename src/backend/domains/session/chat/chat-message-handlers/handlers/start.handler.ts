@@ -1,7 +1,7 @@
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import type { StartMessageInput } from '@/shared/websocket';
 import { createLogger } from '@/backend/services/logger.service';
 import { sessionService } from '@/backend/services/session.service';
+import type { StartMessageInput } from '@/shared/websocket';
 import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
 import { getValidModel } from '../utils';
 

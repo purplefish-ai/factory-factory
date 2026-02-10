@@ -6,8 +6,8 @@
  */
 
 import type { ClaudeContentItem } from '@/backend/domains/session/claude/types';
-import type { MessageAttachment } from '@/shared/claude/protocol';
 import { createLogger } from '@/backend/services/logger.service';
+import type { MessageAttachment } from '@/shared/claude/protocol';
 import { resolveAttachmentContentType } from './attachment-utils';
 
 const logger = createLogger('attachment-processing');
