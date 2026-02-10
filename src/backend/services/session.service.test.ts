@@ -242,6 +242,46 @@ describe('SessionService', () => {
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
   });
 
+  it('deletes ratchet session record during manual stop', async () => {
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(sessionProcessManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+        workflow: 'ratchet',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    vi.mocked(sessionRepository.clearRatchetActiveSession).mockResolvedValue();
+    vi.mocked(sessionRepository.deleteSession).mockResolvedValue({} as never);
+
+    await sessionService.stopClaudeSession('session-1');
+
+    expect(sessionRepository.clearRatchetActiveSession).toHaveBeenCalledWith(
+      'workspace-1',
+      'session-1'
+    );
+    expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('does not delete non-ratchet session during manual stop', async () => {
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(sessionProcessManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-2',
+        workspaceId: 'workspace-1',
+        workflow: 'default',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    await sessionService.stopClaudeSession('session-2');
+
+    expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
+  });
+
   it('marks process as stopped when client creation fails', async () => {
     const session = {
       id: 'session-1',

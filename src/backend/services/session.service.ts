@@ -99,6 +99,8 @@ class SessionService {
       return;
     }
 
+    const session = await this.repository.getSessionById(sessionId);
+
     const current = this.getRuntimeSnapshot(sessionId);
     sessionDomainService.setRuntimeSnapshot(sessionId, {
       ...current,
@@ -123,6 +125,13 @@ class SessionService {
       activity: 'IDLE',
       updatedAt: new Date().toISOString(),
     });
+
+    // Ratchet sessions are transient and should be cleaned up immediately on manual stop.
+    if (session?.workflow === 'ratchet') {
+      await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
+      await this.repository.deleteSession(sessionId);
+      logger.debug('Deleted transient ratchet session after stop', { sessionId });
+    }
 
     logger.info('Claude session stopped', { sessionId });
   }
