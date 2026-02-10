@@ -29,7 +29,7 @@ import {
   createRequestLoggerMiddleware,
   securityMiddleware,
 } from './middleware';
-import { configureRatchetBridges } from './orchestration/ratchet-bridges.orchestrator';
+import { configureDomainBridges } from './orchestration/domain-bridges.orchestrator';
 import { createHealthRouter } from './routers/api/health.router';
 import { createMcpRouter } from './routers/api/mcp.router';
 import { createProjectRouter } from './routers/api/project.router';
@@ -299,7 +299,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           reconciliationService.startPeriodicCleanup();
           rateLimiter.start();
           schedulerService.start();
-          configureRatchetBridges();
+          configureDomainBridges();
           ratchetService.start();
 
           logger.info('Server endpoints available', {
