@@ -5,10 +5,8 @@
  * Prevents duplicate concurrent review-fixing sessions per workspace.
  */
 
-import type { SessionStatus } from '@prisma-gen/client';
-import { fixerSessionService } from '@/backend/services/fixer-session.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionService } from '@/backend/services/session.service';
+import type { GitHubFixerBridge, GitHubSessionBridge } from './bridges';
 
 const logger = createLogger('pr-review-fixer');
 
@@ -41,6 +39,31 @@ export type PRReviewFixResult =
 
 class PRReviewFixerService {
   private readonly pendingFixes = new Map<string, Promise<PRReviewFixResult>>();
+  private sessionBridge: GitHubSessionBridge | null = null;
+  private fixerBridge: GitHubFixerBridge | null = null;
+
+  configure(bridges: { session: GitHubSessionBridge; fixer: GitHubFixerBridge }): void {
+    this.sessionBridge = bridges.session;
+    this.fixerBridge = bridges.fixer;
+  }
+
+  private get session(): GitHubSessionBridge {
+    if (!this.sessionBridge) {
+      throw new Error(
+        'PRReviewFixerService not configured: session bridge missing. Call configure() first.'
+      );
+    }
+    return this.sessionBridge;
+  }
+
+  private get fixer(): GitHubFixerBridge {
+    if (!this.fixerBridge) {
+      throw new Error(
+        'PRReviewFixerService not configured: fixer bridge missing. Call configure() first.'
+      );
+    }
+    return this.fixerBridge;
+  }
 
   async triggerReviewFix(params: {
     workspaceId: string;
@@ -77,7 +100,7 @@ class PRReviewFixerService {
     const { workspaceId, prUrl, prNumber, commentDetails, customPrompt } = params;
 
     try {
-      const result = await fixerSessionService.acquireAndDispatch({
+      const result = await this.fixer.acquireAndDispatch({
         workspaceId,
         workflow: PR_REVIEW_FIX_WORKFLOW,
         sessionName: 'PR Review Fixing',
@@ -115,13 +138,13 @@ class PRReviewFixerService {
     if (!session) {
       return false;
     }
-    return sessionService.isSessionWorking(session.id);
+    return this.session.isSessionWorking(session.id);
   }
 
   async getActiveReviewFixSession(
     workspaceId: string
-  ): Promise<{ id: string; status: SessionStatus } | null> {
-    return await fixerSessionService.getActiveSession(workspaceId, PR_REVIEW_FIX_WORKFLOW);
+  ): Promise<{ id: string; status: string } | null> {
+    return await this.fixer.getActiveSession(workspaceId, PR_REVIEW_FIX_WORKFLOW);
   }
 
   async notifyReviewsAddressed(workspaceId: string): Promise<boolean> {
@@ -130,7 +153,7 @@ class PRReviewFixerService {
       return false;
     }
 
-    const client = sessionService.getClient(session.id);
+    const client = this.session.getClient(session.id);
     if (!client?.isRunning()) {
       return false;
     }

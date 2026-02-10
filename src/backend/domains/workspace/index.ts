@@ -2,6 +2,12 @@
 // Public API for the workspace domain module.
 // Consumers should import from '@/backend/domains/workspace' only.
 
+// Bridge interfaces for orchestration layer wiring
+export type {
+  WorkspaceGitHubBridge,
+  WorkspacePRSnapshotBridge,
+  WorkspaceSessionBridge,
+} from './bridges';
 export { workspaceActivityService } from './lifecycle/activity.service';
 export {
   type WorkspaceCreationDependencies,

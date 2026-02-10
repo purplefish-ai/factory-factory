@@ -2,6 +2,14 @@
 // Public API for the GitHub domain module.
 // Consumers should import from '@/backend/domains/github' only.
 
+// Bridge interfaces for orchestration layer wiring
+export type {
+  GitHubFixerAcquireInput,
+  GitHubFixerAcquireResult,
+  GitHubFixerBridge,
+  GitHubKanbanBridge,
+  GitHubSessionBridge,
+} from './bridges';
 // --- GitHub CLI wrapper ---
 export {
   type GitHubCLIErrorType,

@@ -1,6 +1,6 @@
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
-import { kanbanStateService } from '@/backend/services/kanban-state.service';
 import { createLogger } from '@/backend/services/logger.service';
+import type { GitHubKanbanBridge } from './bridges';
 import { githubCLIService } from './github-cli.service';
 
 const logger = createLogger('pr-snapshot');
@@ -29,6 +29,21 @@ export type AttachAndRefreshResult =
   | { success: false; reason: 'workspace_not_found' | 'fetch_failed' | 'error' };
 
 class PRSnapshotService {
+  private kanbanBridge: GitHubKanbanBridge | null = null;
+
+  configure(bridges: { kanban: GitHubKanbanBridge }): void {
+    this.kanbanBridge = bridges.kanban;
+  }
+
+  private get kanban(): GitHubKanbanBridge {
+    if (!this.kanbanBridge) {
+      throw new Error(
+        'PRSnapshotService not configured: kanban bridge missing. Call configure() first.'
+      );
+    }
+    return this.kanbanBridge;
+  }
+
   /**
    * Canonical operation to attach a PR URL to a workspace and refresh its snapshot.
    * This is the single entry point for setting prUrl and PR snapshot fields.
@@ -53,7 +68,7 @@ class PRSnapshotService {
           prUrl,
           prUpdatedAt: new Date(),
         });
-        await kanbanStateService.updateCachedKanbanColumn(workspaceId);
+        await this.kanban.updateCachedKanbanColumn(workspaceId);
         logger.warn('Attached PR URL but could not fetch snapshot', { workspaceId, prUrl });
         return { success: false, reason: 'fetch_failed' };
       }
@@ -158,7 +173,7 @@ class PRSnapshotService {
 
     await workspaceAccessor.update(workspaceId, updateData);
 
-    await kanbanStateService.updateCachedKanbanColumn(workspaceId);
+    await this.kanban.updateCachedKanbanColumn(workspaceId);
   }
 }
 
