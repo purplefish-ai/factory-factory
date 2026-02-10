@@ -15,9 +15,14 @@ export function KanbanControls() {
   const { syncAndRefetch, isSyncing } = useKanban();
 
   return (
-    <Button variant="outline" size="sm" onClick={() => syncAndRefetch()} disabled={isSyncing}>
-      <RefreshCw className={cn('h-4 w-4 mr-2', isSyncing && 'animate-spin')} />
-      {isSyncing ? 'Syncing...' : 'Refresh'}
+    <Button
+      variant="outline"
+      size="icon"
+      className="h-8 w-8"
+      onClick={() => syncAndRefetch()}
+      disabled={isSyncing}
+    >
+      <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
     </Button>
   );
 }
