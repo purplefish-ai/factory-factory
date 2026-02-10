@@ -1,4 +1,3 @@
-import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { SessionStatus } from '@prisma-gen/client';
@@ -6,7 +5,9 @@ import { TRPCError } from '@trpc/server';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { MessageState, resolveSelectedModel } from '@/shared/claude';
 import { resumeModesSchema } from '@/shared/schemas/persisted-stores.schema';
+import { writeFileAtomic } from '../lib/atomic-file';
 import { pathExists } from '../lib/file-helpers';
+import { FileLockMutex } from '../lib/file-lock-mutex';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { chatMessageHandlerService } from './chat-message-handlers.service';
@@ -26,266 +27,19 @@ const RESUME_MODE_FILENAME = '.ff-resume-modes.json';
 const RESUME_MODE_LOCK_FILENAME = '.ff-resume-modes.json.lock';
 const resumeModeLocks = new Map<string, Promise<void>>();
 
-// File-based lock configuration
-const LOCK_ACQUIRE_TIMEOUT_MS = 5000; // Maximum time to wait for lock
-const LOCK_RETRY_DELAY_MS = 50; // Initial retry delay
-const LOCK_MAX_RETRY_DELAY_MS = 500; // Maximum retry delay
-const LOCK_MAX_STALE_RETRIES = 3; // Maximum retries after removing stale locks
-// Stale threshold must be MUCH larger than acquire timeout to avoid removing active locks
-// A lock is only stale if held for 5x the normal acquisition timeout (25 seconds)
-const LOCK_STALE_THRESHOLD_MS = LOCK_ACQUIRE_TIMEOUT_MS * 5; // 25 seconds
-
-/**
- * Get inode from file handle, closing the handle regardless of success.
- * Returns undefined if stat fails.
- */
-async function getInodeAndClose(
-  fileHandle: fs.FileHandle,
-  lockPath: string
-): Promise<number | undefined> {
-  let handleIno: number | undefined;
-
-  try {
-    const handleStat = await fileHandle.stat();
-    handleIno = handleStat.ino;
-  } catch (error) {
-    logger.warn('Failed to stat file handle during cleanup', {
-      lockPath,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  } finally {
-    // CRITICAL: Always close the file handle to prevent leaking file descriptors
-    await fileHandle.close().catch((closeError) => {
-      logger.warn('Failed to close file handle during cleanup', {
-        lockPath,
-        error: closeError instanceof Error ? closeError.message : String(closeError),
-      });
-    });
-  }
-
-  return handleIno;
-}
-
-/**
- * Verify lock ownership and unlink if we own it.
- */
-async function unlinkIfOwned(lockPath: string, expectedIno: number): Promise<void> {
-  try {
-    const pathStat = await fs.stat(lockPath);
-    if (pathStat.ino === expectedIno) {
-      // Same inode - this is our lock file, safe to unlink
-      await fs.unlink(lockPath).catch(() => {
-        // Another process may have already removed it; ignore error
-      });
-    } else {
-      // Different inode - another process created a new lock file at this path
-      logger.debug('Lock file inode changed, not unlinking (owned by another process)', {
-        lockPath,
-        ourIno: expectedIno,
-        currentIno: pathStat.ino,
-      });
-    }
-  } catch (statError) {
-    const code = (statError as NodeJS.ErrnoException | undefined)?.code;
-    if (code === 'ENOENT') {
-      // Lock file already removed - this is fine
-      return;
-    }
-    logger.warn('Failed to stat lock file during cleanup', {
-      lockPath,
-      error: statError instanceof Error ? statError.message : String(statError),
-    });
-  }
-}
-
-/**
- * Create cleanup function for file lock.
- * Verifies ownership via inode comparison before unlinking to prevent
- * deleting another process's lock file.
- */
-function createLockCleanup(
-  fileHandle: fs.FileHandle | undefined,
-  lockPath: string
-): () => Promise<void> {
-  return async () => {
-    if (!fileHandle) {
-      return;
-    }
-
-    const handleIno = await getInodeAndClose(fileHandle, lockPath);
-    if (handleIno === undefined) {
-      // Couldn't get inode - can't verify ownership, don't unlink
-      return;
-    }
-
-    await unlinkIfOwned(lockPath, handleIno);
-  };
-}
-
-/**
- * Attempt to unlink stale lock file, returning true if removed or doesn't exist.
- * Returns false if unlink failed due to permissions or other persistent errors.
- */
-async function unlinkStaleLock(lockPath: string): Promise<boolean> {
-  try {
-    await fs.unlink(lockPath);
-    return true; // Successfully removed
-  } catch (unlinkError) {
-    const unlinkCode = (unlinkError as NodeJS.ErrnoException | undefined)?.code;
-    if (unlinkCode === 'ENOENT') {
-      // Lock already removed by another process - that's fine
-      return true;
-    }
-    // Other errors (EPERM, EACCES, etc.) - lock still exists
-    logger.warn('Failed to unlink stale lock file', {
-      lockPath,
-      error: unlinkError instanceof Error ? unlinkError.message : String(unlinkError),
-      code: unlinkCode,
-    });
-    return false; // Lock still exists, removal failed
-  }
-}
-
-/**
- * Verify stale lock hasn't been replaced, then attempt removal.
- * Returns true if removed or doesn't exist, false otherwise.
- */
-async function verifyAndUnlinkStaleLock(lockPath: string, expectedIno: number): Promise<boolean> {
-  try {
-    const verifyStats = await fs.stat(lockPath);
-    if (verifyStats.ino !== expectedIno) {
-      // File changed - another process created a new lock
-      logger.debug('Lock file inode changed, not removing (new lock created)', {
-        lockPath,
-        originalIno: expectedIno,
-        currentIno: verifyStats.ino,
-      });
-      return false;
-    }
-    // Same inode - still the stale lock, safe to remove
-    return await unlinkStaleLock(lockPath);
-  } catch (verifyError) {
-    const code = (verifyError as NodeJS.ErrnoException | undefined)?.code;
-    if (code === 'ENOENT') {
-      // Lock file disappeared - another process cleaned it up
-      return true;
-    }
-    // Other errors during verification - don't remove
-    logger.warn('Failed to verify lock file before removal', {
-      lockPath,
-      error: verifyError instanceof Error ? verifyError.message : String(verifyError),
-    });
-    return false;
-  }
-}
-
-/**
- * Check if lock file is stale and remove it if so.
- * Returns true if lock was removed or doesn't exist.
- *
- * Uses inode verification to prevent TOCTOU race where another process
- * could create a new lock between our stat() and unlink() calls.
- */
-async function tryRemoveStaleLock(lockPath: string): Promise<boolean> {
-  try {
-    const stats = await fs.stat(lockPath);
-    const lockAge = Date.now() - stats.mtimeMs;
-
-    // If lock is not old enough, it's not stale
-    // CRITICAL: Stale threshold must be much larger than acquire timeout
-    // to avoid removing locks that are actively held but simply waiting
-    // for a long-running critical section to complete
-    if (lockAge < LOCK_STALE_THRESHOLD_MS) {
-      return false;
-    }
-
-    // Lock appears stale, but we must verify ownership before removing
-    logger.warn('Attempting to remove stale lock file', {
-      lockPath,
-      lockAgeMs: lockAge,
-      inode: stats.ino,
-    });
-
-    // Verify the lock is still the same file before unlinking (prevent TOCTOU)
-    return await verifyAndUnlinkStaleLock(lockPath, stats.ino);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException | undefined)?.code;
-    if (code === 'ENOENT') {
-      // Lock file doesn't exist - another process cleaned it up
-      return true;
-    }
-    // Other errors - assume lock still exists
-    logger.warn('Failed to check stale lock file', {
-      lockPath,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
-}
-
-/**
- * Handle lock acquisition after timeout by attempting to remove stale locks.
- * Returns true if should retry, false if should throw error.
- */
-async function handleLockTimeout(
-  lockPath: string,
-  staleRetryCount: number
-): Promise<{ shouldRetry: boolean; newCount: number }> {
-  if (staleRetryCount >= LOCK_MAX_STALE_RETRIES) {
-    return { shouldRetry: false, newCount: staleRetryCount };
-  }
-
-  const removed = await tryRemoveStaleLock(lockPath);
-  if (!removed) {
-    return { shouldRetry: false, newCount: staleRetryCount };
-  }
-
-  // Wait a short time before retrying to avoid tight spin loop
-  await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_DELAY_MS));
-  return { shouldRetry: true, newCount: staleRetryCount + 1 };
-}
-
-/**
- * Acquire a cross-process file lock using atomic file creation.
- * Returns a cleanup function to release the lock.
- */
-async function acquireFileLock(lockPath: string): Promise<() => Promise<void>> {
-  const startTime = Date.now();
-  let retryDelay = LOCK_RETRY_DELAY_MS;
-  let staleRetryCount = 0;
-
-  while (true) {
-    try {
-      // Try to create lock file exclusively (atomic operation)
-      const fileHandle = await fs.open(lockPath, 'wx');
-      return createLockCleanup(fileHandle, lockPath);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException | undefined)?.code;
-
-      // EEXIST means lock file already exists (another process holds the lock)
-      if (code !== 'EEXIST') {
-        // Other errors (permissions, disk full, etc.) - propagate
-        throw error;
-      }
-
-      const elapsed = Date.now() - startTime;
-      if (elapsed >= LOCK_ACQUIRE_TIMEOUT_MS) {
-        const { shouldRetry, newCount } = await handleLockTimeout(lockPath, staleRetryCount);
-        staleRetryCount = newCount;
-        if (shouldRetry) {
-          continue;
-        }
-        throw new Error(
-          `Failed to acquire lock after ${LOCK_ACQUIRE_TIMEOUT_MS}ms and ${staleRetryCount} stale removal attempts: ${lockPath}`
-        );
-      }
-
-      // Wait before retrying (exponential backoff)
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
-      retryDelay = Math.min(retryDelay * 2, LOCK_MAX_RETRY_DELAY_MS);
-    }
-  }
-}
+const LOCK_ACQUIRE_TIMEOUT_MS = 5000;
+const LOCK_RETRY_DELAY_MS = 50;
+const LOCK_MAX_RETRY_DELAY_MS = 500;
+const LOCK_MAX_STALE_RETRIES = 3;
+const LOCK_STALE_THRESHOLD_MS = LOCK_ACQUIRE_TIMEOUT_MS * 5;
+const resumeModeFileLock = new FileLockMutex({
+  acquireTimeoutMs: LOCK_ACQUIRE_TIMEOUT_MS,
+  postTimeoutWaitMs: 0,
+  initialRetryDelayMs: LOCK_RETRY_DELAY_MS,
+  maxRetryDelayMs: LOCK_MAX_RETRY_DELAY_MS,
+  maxStaleRetries: LOCK_MAX_STALE_RETRIES,
+  staleThresholdMs: LOCK_STALE_THRESHOLD_MS,
+});
 
 async function withResumeModeLock<T>(
   worktreeBasePath: string,
@@ -308,7 +62,7 @@ async function withResumeModeLock<T>(
   try {
     // Ensure directory exists before creating lock file
     await fs.mkdir(worktreeBasePath, { recursive: true });
-    releaseLock = await acquireFileLock(lockPath);
+    releaseLock = await resumeModeFileLock.acquire(lockPath);
     return await handler();
   } finally {
     // Release file lock first
@@ -362,18 +116,8 @@ async function writeResumeModes(
   worktreeBasePath: string,
   modes: Record<string, boolean>
 ): Promise<void> {
-  await fs.mkdir(worktreeBasePath, { recursive: true });
   const targetPath = path.join(worktreeBasePath, RESUME_MODE_FILENAME);
-  const tmpPath = `${targetPath}.${crypto.randomUUID()}.tmp`;
-  await fs.writeFile(tmpPath, JSON.stringify(modes), 'utf-8');
-  try {
-    await fs.rename(tmpPath, targetPath);
-  } catch (err) {
-    await fs.unlink(tmpPath).catch(() => {
-      // Best-effort cleanup; nothing to do if the temp file is already gone
-    });
-    throw err;
-  }
+  await writeFileAtomic(targetPath, JSON.stringify(modes), { encoding: 'utf-8' });
 }
 
 async function updateResumeModes(

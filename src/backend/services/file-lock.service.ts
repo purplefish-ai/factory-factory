@@ -20,6 +20,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
 import { persistedLockStoreSchema } from '@/shared/schemas/persisted-stores.schema';
+import { writeFileAtomic } from '../lib/atomic-file';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from './constants';
 import { createLogger } from './logger.service';
@@ -302,7 +303,9 @@ export class FileLockService {
         })),
       };
 
-      await fs.writeFile(lockFilePath, JSON.stringify(persisted, null, 2), 'utf-8');
+      await writeFileAtomic(lockFilePath, JSON.stringify(persisted, null, 2), {
+        encoding: 'utf-8',
+      });
       logger.debug('Persisted locks to disk', {
         worktreePath: store.worktreePath,
         count: store.locks.size,
