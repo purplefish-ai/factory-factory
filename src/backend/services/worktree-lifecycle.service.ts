@@ -122,27 +122,76 @@ function createLockCleanup(
 /**
  * Check if lock file is stale and remove it if so.
  * Returns true if lock was removed or doesn't exist.
+ *
+ * Uses inode verification to prevent TOCTOU race where another process
+ * could create a new lock between our stat() and unlink() calls.
  */
 async function tryRemoveStaleLock(lockPath: string): Promise<boolean> {
   try {
     const stats = await fs.stat(lockPath);
     const lockAge = Date.now() - stats.mtimeMs;
 
-    // If lock is older than or equal to timeout, consider it stale and remove it
-    if (lockAge >= LOCK_ACQUIRE_TIMEOUT_MS) {
-      logger.warn('Removing stale lock file', {
-        lockPath,
-        lockAgeMs: lockAge,
-      });
+    // If lock is not old enough, it's not stale
+    if (lockAge < LOCK_ACQUIRE_TIMEOUT_MS) {
+      return false;
+    }
+
+    // Lock appears stale, but we must verify ownership before removing
+    const staleIno = stats.ino;
+
+    logger.warn('Attempting to remove stale lock file', {
+      lockPath,
+      lockAgeMs: lockAge,
+      inode: staleIno,
+    });
+
+    // Verify the lock is still the same file before unlinking (prevent TOCTOU)
+    // Between our initial stat() and now, another process could have:
+    // 1. Removed the stale lock
+    // 2. Created a new lock at the same path (different inode)
+    // We must NOT delete their new lock
+    try {
+      const verifyStats = await fs.stat(lockPath);
+      if (verifyStats.ino !== staleIno) {
+        // File changed - another process created a new lock
+        logger.debug('Lock file inode changed, not removing (new lock created)', {
+          lockPath,
+          originalIno: staleIno,
+          currentIno: verifyStats.ino,
+        });
+        return false;
+      }
+
+      // Same inode - still the stale lock, safe to remove
       await fs.unlink(lockPath).catch(() => {
-        // Lock may have been removed by another process; ignore
+        // Another process may have removed it between verify and unlink; ignore
       });
       return true;
+    } catch (verifyError) {
+      const code = (verifyError as NodeJS.ErrnoException | undefined)?.code;
+      if (code === 'ENOENT') {
+        // Lock file disappeared - another process cleaned it up
+        return true;
+      }
+      // Other errors during verification - don't remove
+      logger.warn('Failed to verify lock file before removal', {
+        lockPath,
+        error: verifyError instanceof Error ? verifyError.message : String(verifyError),
+      });
+      return false;
     }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'ENOENT') {
+      // Lock file doesn't exist - another process cleaned it up
+      return true;
+    }
+    // Other errors - assume lock still exists
+    logger.warn('Failed to check stale lock file', {
+      lockPath,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
-  } catch (_error) {
-    // Lock file disappeared - another process cleaned it up
-    return true;
   }
 }
 
