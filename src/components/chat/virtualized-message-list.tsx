@@ -210,8 +210,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     );
   }
 
-  // Show empty state if no messages and not starting
-  if (messages.length === 0 && !(running || startingSession)) {
+  // Show empty state if no messages and not starting/initializing
+  const showingInitSpinner = initBanner && initBanner.kind === 'info';
+  if (messages.length === 0 && !(running || startingSession || showingInitSpinner)) {
     return <EmptyState />;
   }
 
