@@ -29,10 +29,13 @@ export interface MainViewTab {
   label: string;
 }
 
+export type BottomPanelTab = 'terminal' | 'dev-logs';
+
 export interface WorkspacePanelState {
   tabs: MainViewTab[]; // Always has at least 'chat' tab
   activeTabId: string;
   rightPanelVisible: boolean;
+  activeBottomTab: BottomPanelTab;
 }
 
 interface WorkspacePanelContextValue extends WorkspacePanelState {
@@ -41,6 +44,7 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
   selectTab: (id: string) => void;
   toggleRightPanel: () => void;
   setRightPanelVisible: (visible: boolean) => void;
+  setActiveBottomTab: (tab: BottomPanelTab) => void;
   getScrollState: (tabId: string, mode: ScrollMode) => ScrollState | null;
   setScrollState: (tabId: string, mode: ScrollMode, state: ScrollState) => void;
   clearScrollState: (tabId: string) => void;
@@ -53,6 +57,7 @@ interface WorkspacePanelContextValue extends WorkspacePanelState {
 const STORAGE_KEY_RIGHT_PANEL = 'workspace-panel-right-visible';
 const STORAGE_KEY_TABS_PREFIX = 'workspace-panel-tabs-';
 const STORAGE_KEY_ACTIVE_TAB_PREFIX = 'workspace-panel-active-tab-';
+const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-panel-bottom-tab-';
 
 const CHAT_TAB: MainViewTab = {
   id: 'chat',
@@ -147,6 +152,33 @@ function saveActiveTabToStorage(workspaceId: string, activeTabId: string): void 
   }
 }
 
+function loadBottomTabFromStorage(workspaceId: string): 'terminal' | 'dev-logs' {
+  if (typeof window === 'undefined') {
+    return 'terminal';
+  }
+  try {
+    const stored = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
+    if (stored === 'terminal' || stored === 'dev-logs') {
+      return stored;
+    }
+    return 'terminal';
+  } catch {
+    return 'terminal';
+  }
+}
+
+function loadRightPanelVisibility(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_RIGHT_PANEL);
+    return stored === 'true';
+  } catch {
+    return false;
+  }
+}
+
 // =============================================================================
 // Context
 // =============================================================================
@@ -170,6 +202,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   const [tabs, setTabs] = useState<MainViewTab[]>([CHAT_TAB]);
   const [activeTabId, setActiveTabId] = useState<string>('chat');
   const [rightPanelVisible, setRightPanelVisibleState] = useState<boolean>(false);
+  const [activeBottomTab, setActiveBottomTabState] = useState<BottomPanelTab>('terminal');
 
   // Load persisted state from localStorage on mount or workspaceId change
   useEffect(() => {
@@ -186,13 +219,11 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     const activeExists = storedTabs.some((tab) => tab.id === storedActiveTab);
     setActiveTabId(activeExists ? storedActiveTab : 'chat');
 
-    // Load right panel visibility (global, with SSR check)
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY_RIGHT_PANEL);
-      if (stored !== null) {
-        setRightPanelVisibleState(stored === 'true');
-      }
-    }
+    // Load right panel visibility (global)
+    setRightPanelVisibleState(loadRightPanelVisibility());
+
+    // Load bottom tab state (workspace-scoped)
+    setActiveBottomTabState(loadBottomTabFromStorage(workspaceId));
 
     // Load scroll states (workspace-scoped)
     if (typeof window !== 'undefined') {
@@ -214,6 +245,20 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     saveTabsToStorage(workspaceId, tabs);
     saveActiveTabToStorage(workspaceId, activeTabId);
   }, [workspaceId, tabs, activeTabId]);
+
+  // Persist bottom tab when it changes (skip until load is complete)
+  useEffect(() => {
+    if (loadedForWorkspaceRef.current !== workspaceId) {
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`, activeBottomTab);
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  }, [workspaceId, activeBottomTab]);
 
   // Persist visibility changes to localStorage
   const setRightPanelVisible = useCallback((visible: boolean) => {
@@ -320,16 +365,22 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     setActiveTabId(id);
   }, []);
 
+  const setActiveBottomTab = useCallback((tab: BottomPanelTab) => {
+    setActiveBottomTabState(tab);
+  }, []);
+
   const value = useMemo<WorkspacePanelContextValue>(
     () => ({
       tabs,
       activeTabId,
       rightPanelVisible,
+      activeBottomTab,
       openTab,
       closeTab,
       selectTab,
       toggleRightPanel,
       setRightPanelVisible,
+      setActiveBottomTab,
       getScrollState,
       setScrollState,
       clearScrollState,
@@ -338,11 +389,13 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
       tabs,
       activeTabId,
       rightPanelVisible,
+      activeBottomTab,
       openTab,
       closeTab,
       selectTab,
       toggleRightPanel,
       setRightPanelVisible,
+      setActiveBottomTab,
       getScrollState,
       setScrollState,
       clearScrollState,
