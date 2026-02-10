@@ -270,7 +270,6 @@ export function WorkspaceDetailView({
         open={archiveDialogOpen}
         onOpenChange={setArchiveDialogOpen}
         hasUncommitted={hasUncommitted}
-        isPending={archivePending}
         onConfirm={handleArchive}
       />
     </div>
