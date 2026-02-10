@@ -106,10 +106,16 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     };
   }, [dbSessionId, dispatch, toolInputAccumulatorRef]);
 
-  // Clear loading timeout when session runtime phase changes away from loading
+  // Clear loading timeout when session runtime phase transitions away from loading.
+  // We track the previous phase to avoid clearing the timeout on mount when the
+  // initial phase is 'idle' (before SESSION_LOADING_START has re-rendered).
+  const prevRuntimePhaseRef = useRef(sessionRuntimePhase);
   useEffect(() => {
-    if (sessionRuntimePhase !== 'loading' && loadingTimeoutRef.current) {
-      debug.log('Session runtime phase changed, clearing loading timeout');
+    const prevPhase = prevRuntimePhaseRef.current;
+    prevRuntimePhaseRef.current = sessionRuntimePhase;
+
+    if (prevPhase === 'loading' && sessionRuntimePhase !== 'loading' && loadingTimeoutRef.current) {
+      debug.log('Session runtime phase changed from loading, clearing loading timeout');
       clearTimeout(loadingTimeoutRef.current);
       loadingTimeoutRef.current = null;
     }
