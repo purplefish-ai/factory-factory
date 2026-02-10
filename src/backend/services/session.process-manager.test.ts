@@ -120,4 +120,34 @@ describe('SessionProcessManager', () => {
     // Only one create should have been called due to lock
     expect(createCallCount).toBe(1);
   });
+
+  it('clears both creationLocks and lockRefCounts in stopAllClients', async () => {
+    const manager = new SessionProcessManager();
+    const options = { workingDir: '/tmp', sessionId: 's1' } as ClaudeClientOptions;
+    const handlers = {};
+    const context = { workspaceId: 'w1', workingDir: '/tmp' };
+
+    const client = new MockClaudeClient();
+    vi.spyOn(ClaudeClient, 'create').mockResolvedValue(unsafeCoerce<ClaudeClientType>(client));
+
+    // Create a client through normal flow
+    await manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Verify client exists
+    expect(manager.getClient('s1')).toBeDefined();
+
+    // Stop all clients
+    await manager.stopAllClients();
+
+    // Verify everything is cleaned up
+    expect(manager.getClient('s1')).toBeUndefined();
+
+    // Try creating a new client with the same sessionId
+    // This should work without issues from stale ref counts
+    const client2 = new MockClaudeClient();
+    vi.spyOn(ClaudeClient, 'create').mockResolvedValue(unsafeCoerce<ClaudeClientType>(client2));
+
+    const newClient = await manager.getOrCreateClient('s1', options, handlers, context);
+    expect(newClient).toBe(client2);
+  });
 });

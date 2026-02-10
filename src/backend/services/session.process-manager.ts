@@ -205,6 +205,7 @@ export class SessionProcessManager {
     }
     this.clients.clear();
     this.creationLocks.clear();
+    this.lockRefCounts.clear();
 
     logger.info('All clients stopped and cleaned up');
   }
