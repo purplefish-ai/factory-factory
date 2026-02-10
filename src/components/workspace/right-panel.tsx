@@ -5,6 +5,7 @@ import type { ChatMessage } from '@/components/chat';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
 import { DevLogsPanel } from './dev-logs-panel';
@@ -56,6 +57,35 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
   const handleTerminalStateChange = useCallback((state: TerminalTabState) => {
     setTerminalTabState(state);
   }, []);
+
+  // Auto-switch to Setup Logs during provisioning, back to terminal when done
+  const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
+    { id: workspaceId },
+    {
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
+      },
+    }
+  );
+  const prevInitStatusRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const status = initStatus?.status;
+    const prev = prevInitStatusRef.current;
+    prevInitStatusRef.current = status;
+
+    // On first load or workspace change: if provisioning, switch to setup logs
+    if (prev === undefined && (status === 'NEW' || status === 'PROVISIONING')) {
+      setActiveBottomTab('setup-logs');
+      return;
+    }
+
+    // When transitioning from provisioning to ready/failed, switch back to terminal
+    if (prev === 'PROVISIONING' && (status === 'READY' || status === 'FAILED')) {
+      setActiveBottomTab('terminal');
+    }
+  }, [initStatus?.status]);
 
   // Load persisted tabs from localStorage on mount or workspaceId change
   useEffect(() => {
