@@ -1,15 +1,14 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { startupScriptService } from '@/backend/domains/run-script';
+import {
+  getWorkspaceInitPolicy,
+  workspaceDataService,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/domains/workspace';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration';
 import { createLogger } from '../../services/logger.service';
-import { startupScriptService } from '../../services/startup-script.service';
-import { workspaceDataService } from '../../services/workspace-data.service';
-import { getWorkspaceInitPolicy } from '../../services/workspace-init-policy.service';
-import { workspaceStateMachine } from '../../services/workspace-state-machine.service';
-import {
-  getWorkspaceInitMode,
-  setWorkspaceInitMode,
-} from '../../services/worktree-lifecycle.service';
 import { publicProcedure, router } from '../trpc';
 
 const logger = createLogger('workspace-init-trpc');
@@ -79,9 +78,16 @@ export const workspaceInitRouter = router({
         }
         const resumeMode =
           input.useExistingBranch ??
-          (await getWorkspaceInitMode(workspace.id, workspace.project.worktreeBasePath));
+          (await worktreeLifecycleService.getInitMode(
+            workspace.id,
+            workspace.project.worktreeBasePath
+          ));
         if (resumeMode !== undefined) {
-          await setWorkspaceInitMode(workspace.id, resumeMode, workspace.project.worktreeBasePath);
+          await worktreeLifecycleService.setInitMode(
+            workspace.id,
+            resumeMode,
+            workspace.project.worktreeBasePath
+          );
         }
         // Run full initialization (creates worktree + runs startup script)
         initializeWorkspaceWorktree(workspace.id, {

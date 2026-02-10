@@ -6,14 +6,14 @@
  * a more descriptive branch name.
  */
 
-import { SessionManager } from '../claude/session';
+import { SessionManager } from '@/backend/domains/session/claude';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { buildBranchRenameInstruction } from '../prompts/branch-rename';
 import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
 import { projectAccessor } from '../resource_accessors/project.accessor';
 import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
 import { configService } from '../services/config.service';
 import { createLogger } from '../services/logger.service';
-import { sessionService } from '../services/session.service';
 import { countUserMessages, extractKeyTopics } from '../utils/conversation-analyzer';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 

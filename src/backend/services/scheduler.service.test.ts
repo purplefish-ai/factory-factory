@@ -15,13 +15,10 @@ vi.mock('../resource_accessors/workspace.accessor', () => ({
   },
 }));
 
-vi.mock('./github-cli.service', () => ({
+vi.mock('@/backend/domains/github', () => ({
   githubCLIService: {
     findPRForBranch: (...args: unknown[]) => mockFindPRForBranch(...args),
   },
-}));
-
-vi.mock('./pr-snapshot.service', () => ({
   prSnapshotService: {
     refreshWorkspace: (...args: unknown[]) => mockRefreshWorkspace(...args),
     attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),

@@ -9,9 +9,9 @@
 
 import type { WebSocket } from 'ws';
 import { WS_READY_STATE } from '@/backend/constants';
+import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { sessionFileLogger } from '@/backend/services/session-file-logger.service';
 
 const logger = createLogger('chat-connection');
 

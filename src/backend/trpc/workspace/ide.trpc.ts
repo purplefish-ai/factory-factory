@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { workspaceDataService } from '@/backend/domains/workspace';
 import { checkIdeAvailable, openPathInIde } from '../../lib/ide-helpers';
 import { userSettingsQueryService } from '../../services/user-settings-query.service';
-import { workspaceDataService } from '../../services/workspace-data.service';
 import { publicProcedure, router } from '../trpc';
 
 export const workspaceIdeRouter = router({

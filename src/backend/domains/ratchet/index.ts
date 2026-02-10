@@ -10,6 +10,7 @@ export type {
   RatchetReviewComment,
   RatchetSessionBridge,
   RatchetStatusCheckInput,
+  RatchetWorkspaceBridge,
 } from './bridges';
 
 export type { CIFailureDetails, CIFixResult } from './ci-fixer.service';

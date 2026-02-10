@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage } from '@/shared/claude';
 import type { ClaudeContentItem, ClaudeJson, ClaudeMessage } from './types';
@@ -31,8 +31,7 @@ export interface SessionInfo {
 
 export class SessionManager {
   static getProjectPath(workingDir: string): string {
-    const escapedPath = workingDir.replace(/\//g, '-');
-    return join(homedir(), '.claude', 'projects', escapedPath);
+    return getClaudeProjectPath(workingDir);
   }
 
   static getSessionPath(claudeSessionId: string, workingDir: string): string {

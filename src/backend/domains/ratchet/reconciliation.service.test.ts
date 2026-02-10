@@ -38,6 +38,20 @@ describe('ReconciliationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    reconciliationService.configure({
+      workspace: {
+        markFailed: async (workspaceId: string, reason: string) => {
+          const current = await mockFindUnique({ where: { id: workspaceId } });
+          if (!current) {
+            throw new Error('Not found');
+          }
+          await mockUpdate({
+            where: { id: workspaceId },
+            data: { status: 'FAILED', initErrorMessage: reason },
+          });
+        },
+      },
+    });
   });
 
   afterEach(() => {

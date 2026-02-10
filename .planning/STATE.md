@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 08-orchestration-layer (Plan 04 of 04 complete)
+**Current Phase:** 09-appcontext-import-rewiring (Plan 03 of 03 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -17,7 +17,7 @@
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
 | 8 | Orchestration Layer | Complete | All 4 plans done |
-| 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
+| 9 | AppContext & Import Rewiring | Complete | All 3 plans done |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
 
 ## Key Decisions
@@ -92,6 +92,17 @@
 | Cast at orchestration boundary | 2026-02-10 | getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput) bridges string vs enum types (08-04) |
 | Merged ratchet-bridges into domain-bridges | 2026-02-10 | Single configureDomainBridges() replaces separate configureRatchetBridges() (08-04) |
 | Intra-domain relative imports in session handlers | 2026-02-10 | 11 handler files converted from @/backend/services/ shim to relative paths (08-04) |
+| Test mocks target source module paths | 2026-02-10 | Vitest module mocking is path-specific; mock must match internal import path, not barrel (09-01) |
+| SessionManager mock on @/backend/claude path | 2026-02-10 | session-hydrator.ts imports SessionManager from @/backend/claude, so mock targets that path (09-01) |
+| RatchetWorkspaceBridge only needs markFailed | 2026-02-10 | Reconciliation doesn't use markReady; that's handled by orchestrator (09-01) |
+| Async wrapper for bridge return type narrowing | 2026-02-10 | Bridge wiring uses async wrapper to convert Promise<Workspace> to Promise<void> (09-01) |
+| Direct module paths for circular dep avoidance | 2026-02-10 | conversation-rename.interceptor.ts and conversation-analyzer.ts use direct paths instead of session barrel (09-02) |
+| ClaudeClient as value export in session barrel | 2026-02-10 | Moved from type-only to value export since process-adapter.ts uses ClaudeClient.create() (09-02) |
+| worktreeLifecycleService instance methods in init.trpc | 2026-02-10 | Replaced getWorkspaceInitMode/setWorkspaceInitMode free functions with instance methods (09-02) |
+| Extract getClaudeProjectPath to lib/ | 2026-02-10 | Pure utility in src/backend/lib/claude-paths.ts avoids cross-domain imports (09-03) |
+| Test mock paths must match source import paths | 2026-02-10 | Vitest mocks intercept by path; when source imports change, mock paths must follow (09-03) |
+| Bridge configuration required in tests | 2026-02-10 | Services using bridge pattern need configure() in test beforeEach (09-03) |
+| Remove stale knip ignore entries | 2026-02-10 | Deleted directories no longer need knip exclusion globs (09-03) |
 
 ## Blockers
 
@@ -99,12 +110,9 @@ None.
 
 ## Context for Next Session
 
-Phase 8 (Orchestration Layer) complete -- all 4 plans done.
-Plan 01: workspace-init and workspace-archive orchestrators.
-Plan 02: Ratchet domain bridge injection pattern.
-Plan 03: Workspace-query, kanban-state, pr-review-fixer, pr-snapshot bridge injection + ratchet bridge wiring.
-Plan 04: Session and run-script bridge injection. Consolidated configureDomainBridges() replaces configureRatchetBridges(). All 6 domains have zero cross-domain imports. dependency-cruiser validates clean.
-Ready for Phase 9 (AppContext & Import Rewiring).
+Phase 9 (AppContext & Import Rewiring) complete. All 3 plans done.
+Plan 03: Deleted all 61 deprecated shim files (29 services, 16 claude, 14 session-store, 2 shim tests). Rewired services/index.ts to infrastructure-only exports. Extracted getClaudeProjectPath to src/backend/lib/ for cross-domain use. Fixed test mock paths and bridge configuration. Zero dependency-cruiser violations, all 1609 tests pass.
+Ready for Phase 10 (Validation & Stabilization).
 
 ## Performance Metrics
 
@@ -134,7 +142,10 @@ Ready for Phase 9 (AppContext & Import Rewiring).
 | 08 | 02 | 2min | 2 | 7 |
 | 08 | 03 | 7min | 2 | 12 |
 | 08 | 04 | 8min | 2 | 24 |
+| 09 | 01 | 10min | 2 | 7 |
+| 09 | 02 | 14min | 2 | 19 |
+| 09 | 03 | 9min | 2 | 81 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T19:34:07Z -- Completed 08-04-PLAN.md*
+*Last session: 2026-02-10T21:05:00Z -- Completed 09-03-PLAN.md*

@@ -1,5 +1,5 @@
 import { SessionStatus } from '@prisma-gen/client';
-import { SessionManager } from '@/backend/claude/session';
+import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
@@ -124,7 +124,7 @@ class FixerSessionService {
       workflow: input.workflow,
       sessionName: input.sessionName,
       maxSessions: configService.getMaxSessionsPerWorkspace(),
-      claudeProjectPath: SessionManager.getProjectPath(worktreePath),
+      claudeProjectPath: getClaudeProjectPath(worktreePath),
     });
 
     if (acquisition.outcome === 'limit_reached') {

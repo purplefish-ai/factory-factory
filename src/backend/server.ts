@@ -23,6 +23,7 @@ import { WebSocketServer } from 'ws';
 import { agentProcessAdapter } from './agents/process-adapter';
 import { type AppContext, createAppContext } from './app-context';
 import { prisma } from './db';
+import { reconciliationService } from './domains/ratchet';
 import { registerInterceptors } from './interceptors';
 import {
   createCorsMiddleware,
@@ -39,7 +40,6 @@ import {
   createDevLogsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
-import { reconciliationService } from './services/reconciliation.service';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 

@@ -1,4 +1,4 @@
-import { SessionManager } from '@/backend/claude';
+import { SessionManager } from '@/backend/domains/session/claude/session';
 import type { ChatMessage } from '@/shared/claude';
 import type { SessionStore } from './session-store.types';
 import {
