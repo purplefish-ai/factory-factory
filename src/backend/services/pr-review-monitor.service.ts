@@ -2,7 +2,7 @@
  * PR Review Monitor Service
  *
  * Watches all PRs for new review comments and triggers auto-fix sessions.
- * Runs on a 2-minute polling interval.
+ * Runs on a 3-minute polling interval with adaptive backoff on rate limits.
  */
 
 import pLimit from 'p-limit';
@@ -11,6 +11,7 @@ import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from './constants';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
 import { prReviewFixerService, type ReviewCommentDetails } from './pr-review-fixer.service';
+import { RateLimitBackoff } from './rate-limit-backoff';
 
 const logger = createLogger('pr-review-monitor');
 
@@ -24,6 +25,7 @@ class PRReviewMonitorService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.prReviewMonitorWorkspaceChecks);
+  private readonly backoff = new RateLimitBackoff();
 
   /**
    * Start the PR review monitor
@@ -65,21 +67,27 @@ class PRReviewMonitorService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
+        this.backoff.beginCycle();
         await this.checkAllWorkspaces();
+        this.backoff.resetIfCleanCycle(logger, 'PR review monitor');
       } catch (err) {
         logger.error('PR review monitor check failed', err as Error);
       }
 
-      // Wait for the interval before next check (unless shutting down)
       if (!this.isShuttingDown) {
-        await this.sleep(SERVICE_INTERVAL_MS.prReviewMonitorPoll);
+        const delayMs = this.backoff.computeDelay(SERVICE_INTERVAL_MS.prReviewMonitorPoll);
+        if (this.backoff.currentMultiplier > 1) {
+          logger.debug('Using backoff delay for next PR review monitor check', {
+            baseIntervalMs: SERVICE_INTERVAL_MS.prReviewMonitorPoll,
+            backoffMultiplier: this.backoff.currentMultiplier,
+            delayMs,
+          });
+        }
+        await this.sleep(delayMs);
       }
     }
   }
 
-  /**
-   * Sleep for specified milliseconds
-   */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -311,10 +319,13 @@ class PRReviewMonitorService {
 
       return { hasNewComments: true, triggered: false };
     } catch (error) {
-      logger.error('PR review check failed for workspace', error as Error, {
-        workspaceId: workspace.id,
-        prUrl: workspace.prUrl,
-      });
+      this.backoff.handleError(
+        error,
+        logger,
+        'PR review monitor',
+        { workspaceId: workspace.id, prUrl: workspace.prUrl },
+        SERVICE_INTERVAL_MS.prReviewMonitorPoll
+      );
       return { hasNewComments: false, triggered: false };
     }
   }

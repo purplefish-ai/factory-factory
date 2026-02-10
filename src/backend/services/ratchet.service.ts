@@ -17,6 +17,7 @@ import { SERVICE_CACHE_TTL_MS, SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from '
 import { fixerSessionService } from './fixer-session.service';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
+import { RateLimitBackoff } from './rate-limit-backoff';
 import { sessionService } from './session.service';
 
 const logger = createLogger('ratchet');
@@ -91,6 +92,7 @@ class RatchetService {
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
+  private readonly backoff = new RateLimitBackoff();
 
   start(): void {
     if (this.monitorLoop) {
@@ -118,13 +120,23 @@ class RatchetService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
+        this.backoff.beginCycle();
         await this.checkAllWorkspaces();
+        this.backoff.resetIfCleanCycle(logger, 'Ratchet');
       } catch (err) {
         logger.error('Ratchet check failed', err as Error);
       }
 
       if (!this.isShuttingDown) {
-        await this.sleep(SERVICE_INTERVAL_MS.ratchetPoll);
+        const delayMs = this.backoff.computeDelay(SERVICE_INTERVAL_MS.ratchetPoll);
+        if (this.backoff.currentMultiplier > 1) {
+          logger.debug('Using backoff delay for next ratchet check', {
+            baseIntervalMs: SERVICE_INTERVAL_MS.ratchetPoll,
+            backoffMultiplier: this.backoff.currentMultiplier,
+            delayMs,
+          });
+        }
+        await this.sleep(delayMs);
       }
     }
   }
@@ -768,10 +780,13 @@ class RatchetService {
         prNumber: prDetails.number,
       };
     } catch (error) {
-      logger.error('Failed to fetch PR state', error as Error, {
-        workspaceId: workspace.id,
-        prUrl: workspace.prUrl,
-      });
+      this.backoff.handleError(
+        error,
+        logger,
+        'Ratchet',
+        { workspaceId: workspace.id, prUrl: workspace.prUrl },
+        SERVICE_INTERVAL_MS.ratchetPoll
+      );
       return null;
     }
   }

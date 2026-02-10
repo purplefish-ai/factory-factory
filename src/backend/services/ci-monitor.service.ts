@@ -2,7 +2,7 @@
  * CI Monitor Service
  *
  * Watches all PRs for CI failures and notifies active Claude sessions.
- * Runs on a 1-minute polling interval.
+ * Runs on a 3-minute polling interval with adaptive backoff on rate limits.
  */
 
 import { CIStatus, SessionStatus } from '@prisma-gen/client';
@@ -13,6 +13,7 @@ import { ciFixerService } from './ci-fixer.service';
 import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from './constants';
 import { githubCLIService } from './github-cli.service';
 import { createLogger } from './logger.service';
+import { RateLimitBackoff } from './rate-limit-backoff';
 import { sessionService } from './session.service';
 
 const logger = createLogger('ci-monitor');
@@ -21,6 +22,7 @@ class CIMonitorService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ciMonitorWorkspaceChecks);
+  private readonly backoff = new RateLimitBackoff();
 
   /**
    * Start the CI monitor
@@ -60,21 +62,27 @@ class CIMonitorService {
   private async runContinuousLoop(): Promise<void> {
     while (!this.isShuttingDown) {
       try {
+        this.backoff.beginCycle();
         await this.checkAllWorkspaces();
+        this.backoff.resetIfCleanCycle(logger, 'CI monitor');
       } catch (err) {
         logger.error('CI monitor check failed', err as Error);
       }
 
-      // Wait for the interval before next check (unless shutting down)
       if (!this.isShuttingDown) {
-        await this.sleep(SERVICE_INTERVAL_MS.ciMonitorPoll);
+        const delayMs = this.backoff.computeDelay(SERVICE_INTERVAL_MS.ciMonitorPoll);
+        if (this.backoff.currentMultiplier > 1) {
+          logger.debug('Using backoff delay for next CI monitor check', {
+            baseIntervalMs: SERVICE_INTERVAL_MS.ciMonitorPoll,
+            backoffMultiplier: this.backoff.currentMultiplier,
+            delayMs,
+          });
+        }
+        await this.sleep(delayMs);
       }
     }
   }
 
-  /**
-   * Sleep for specified milliseconds
-   */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -190,10 +198,13 @@ class CIMonitorService {
 
       return { hasFailed: currentStatus === CIStatus.FAILURE, notified };
     } catch (error) {
-      logger.error('CI check failed for workspace', error as Error, {
-        workspaceId: workspace.id,
-        prUrl: workspace.prUrl,
-      });
+      this.backoff.handleError(
+        error,
+        logger,
+        'CI monitor',
+        { workspaceId: workspace.id, prUrl: workspace.prUrl },
+        SERVICE_INTERVAL_MS.ciMonitorPoll
+      );
       return { hasFailed: false, notified: false };
     }
   }

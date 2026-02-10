@@ -11,6 +11,7 @@ import type {
   ReviewAction,
 } from '@/shared/github-types';
 import { createLogger } from './logger.service';
+import { isRateLimitMessage } from './rate-limit-backoff';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
@@ -363,6 +364,7 @@ export type GitHubCLIErrorType =
   | 'auth_required'
   | 'pr_not_found'
   | 'network_error'
+  | 'rate_limit'
   | 'unknown';
 
 export interface PRStatusFromGitHub {
@@ -457,6 +459,13 @@ class GitHubCLIService {
   }
 
   /**
+   * Check if error indicates rate limiting (429).
+   */
+  private isRateLimitError(message: string): boolean {
+    return isRateLimitMessage(message);
+  }
+
+  /**
    * Classify an error from gh CLI execution.
    */
   private classifyError(error: unknown): GitHubCLIErrorType {
@@ -473,6 +482,10 @@ class GitHubCLIService {
 
     if (this.isPRNotFoundError(lowerMessage)) {
       return 'pr_not_found';
+    }
+
+    if (this.isRateLimitError(lowerMessage)) {
+      return 'rate_limit';
     }
 
     if (this.isNetworkError(lowerMessage)) {
@@ -506,6 +519,13 @@ class GitHubCLIService {
       });
     } else if (errorType === 'pr_not_found') {
       logger.warn('PR not found', { ...context, errorType });
+    } else if (errorType === 'rate_limit') {
+      logger.warn('GitHub API rate limit hit', {
+        ...context,
+        errorType,
+        error: errorMessage,
+        hint: 'Polling intervals have been increased to reduce API pressure',
+      });
     } else {
       logger.error('Failed to fetch PR status via gh CLI', {
         ...context,
@@ -621,6 +641,10 @@ class GitHubCLIService {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       this.logGitHubCLIError(errorType, errorMessage, { prUrl });
+      // Re-throw rate limit errors so callers can apply backoff
+      if (errorType === 'rate_limit') {
+        throw error;
+      }
       return null;
     }
   }
