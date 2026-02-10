@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 02-session-domain-consolidation (Plan 06 of 06 complete -- PHASE COMPLETE)
+**Current Phase:** 03-workspace-domain-consolidation (Plan 02 of 05 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -11,7 +11,7 @@
 |-------|------|--------|-------|
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
-| 3 | Workspace Domain Consolidation | Pending | Largest service sprawl |
+| 3 | Workspace Domain Consolidation | In Progress | Plan 02 of 05 done |
 | 4 | GitHub Domain Consolidation | Pending | — |
 | 5 | Ratchet Domain Consolidation | Pending | — |
 | 6 | Terminal Domain Consolidation | Pending | — |
@@ -48,6 +48,8 @@
 | Static imports in smoke test | 2026-02-10 | Biome forbids await import(); use static imports (02-06) |
 | No knip changes for shims | 2026-02-10 | Existing globs already cover all re-export shim paths (02-06) |
 | EventForwarderContext in barrel | 2026-02-10 | Additional type export for external consumers (02-06) |
+| Absolute @/ imports in domain files | 2026-02-10 | Cross-layer refs use @/backend/ paths in workspace domain (03-02) |
+| Absolute mock paths in domain tests | 2026-02-10 | vi.mock paths updated to @/backend/ matching new imports (03-02) |
 
 ## Blockers
 
@@ -55,12 +57,11 @@ None.
 
 ## Context for Next Session
 
-Phase 2 COMPLETE: All session domain consolidation finished.
-Session domain barrel at src/backend/domains/session/index.ts exports complete public API.
-Domain smoke test verifies all 15 exports are real (not undefined).
-All CI checks pass: typecheck, test (1758), lint, dep-cruise (718 modules), knip.
-Old paths have re-export shims. DOM-04 violations eliminated.
-Phases 3-7 are independent and can be planned/executed in parallel.
+Phase 3 IN PROGRESS: Workspace domain consolidation underway.
+Plan 03-01 moved flow-state and kanban-state to domains/workspace/state/.
+Plan 03-02 moved state-machine, data, and activity services to domains/workspace/lifecycle/.
+All re-export shims at old paths. pnpm typecheck passes. 42 lifecycle tests passing.
+Plans 03-03 through 03-05 remain (workspace-helpers, init-policy barrel, workspace barrel).
 
 ## Performance Metrics
 
@@ -72,7 +73,8 @@ Phases 3-7 are independent and can be planned/executed in parallel.
 | 02 | 02 | 9min | 2 | 20 |
 | 02 | 04 | 20min | 2 | 25 |
 | 02 | 06 | 3min | 2 | 2 |
+| 03 | 02 | 5min | 2 | 8 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T13:16:04Z -- Completed 02-06-PLAN.md (Phase 02 complete)*
+*Last session: 2026-02-10T15:04:21Z -- Completed 03-02-PLAN.md*
