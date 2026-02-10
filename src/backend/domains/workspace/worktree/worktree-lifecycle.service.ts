@@ -12,7 +12,7 @@ import { FactoryConfigService } from '@/backend/services/factory-config.service'
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { githubCLIService } from '@/backend/services/github-cli.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { RunScriptService } from '@/backend/services/run-script.service';
+import { runScriptService } from '@/backend/services/run-script.service';
 import { sessionService } from '@/backend/services/session.service';
 import { sessionDomainService } from '@/backend/services/session-domain.service';
 import { startupScriptService } from '@/backend/services/startup-script.service';
@@ -690,7 +690,7 @@ class WorktreeLifecycleService {
 
     try {
       await sessionService.stopWorkspaceSessions(workspace.id);
-      await RunScriptService.stopRunScript(workspace.id);
+      await runScriptService.stopRunScript(workspace.id);
       terminalService.destroyWorkspaceTerminals(workspace.id);
     } catch (error) {
       logger.error('Failed to cleanup workspace resources before archive', {
