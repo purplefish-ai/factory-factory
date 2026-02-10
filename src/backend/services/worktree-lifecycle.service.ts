@@ -33,6 +33,69 @@ const LOCK_MAX_RETRY_DELAY_MS = 500; // Maximum retry delay
 const LOCK_MAX_STALE_RETRIES = 3; // Maximum retries after removing stale locks
 
 /**
+ * Get inode from file handle, closing the handle regardless of success.
+ * Returns undefined if stat fails.
+ */
+async function getInodeAndClose(
+  fileHandle: fs.FileHandle,
+  lockPath: string
+): Promise<number | undefined> {
+  let handleIno: number | undefined;
+
+  try {
+    const handleStat = await fileHandle.stat();
+    handleIno = handleStat.ino;
+  } catch (error) {
+    logger.warn('Failed to stat file handle during cleanup', {
+      lockPath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  } finally {
+    // CRITICAL: Always close the file handle to prevent leaking file descriptors
+    await fileHandle.close().catch((closeError) => {
+      logger.warn('Failed to close file handle during cleanup', {
+        lockPath,
+        error: closeError instanceof Error ? closeError.message : String(closeError),
+      });
+    });
+  }
+
+  return handleIno;
+}
+
+/**
+ * Verify lock ownership and unlink if we own it.
+ */
+async function unlinkIfOwned(lockPath: string, expectedIno: number): Promise<void> {
+  try {
+    const pathStat = await fs.stat(lockPath);
+    if (pathStat.ino === expectedIno) {
+      // Same inode - this is our lock file, safe to unlink
+      await fs.unlink(lockPath).catch(() => {
+        // Another process may have already removed it; ignore error
+      });
+    } else {
+      // Different inode - another process created a new lock file at this path
+      logger.debug('Lock file inode changed, not unlinking (owned by another process)', {
+        lockPath,
+        ourIno: expectedIno,
+        currentIno: pathStat.ino,
+      });
+    }
+  } catch (statError) {
+    const code = (statError as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'ENOENT') {
+      // Lock file already removed - this is fine
+      return;
+    }
+    logger.warn('Failed to stat lock file during cleanup', {
+      lockPath,
+      error: statError instanceof Error ? statError.message : String(statError),
+    });
+  }
+}
+
+/**
  * Create cleanup function for file lock.
  * Verifies ownership via inode comparison before unlinking to prevent
  * deleting another process's lock file.
@@ -46,51 +109,13 @@ function createLockCleanup(
       return;
     }
 
-    try {
-      // Get the inode of our open file handle
-      const handleStat = await fileHandle.stat();
-      const handleIno = handleStat.ino;
-
-      // Close the file handle before unlinking
-      await fileHandle.close().catch(() => {
-        // Ignore close errors - file may already be closed
-      });
-
-      // Verify the file at lockPath is still our lock file by comparing inodes
-      try {
-        const pathStat = await fs.stat(lockPath);
-        if (pathStat.ino === handleIno) {
-          // Same inode - this is our lock file, safe to unlink
-          await fs.unlink(lockPath).catch(() => {
-            // Another process may have already removed it; ignore error
-          });
-        } else {
-          // Different inode - another process created a new lock file at this path
-          // Do NOT unlink - that would delete their active lock
-          logger.debug('Lock file inode changed, not unlinking (owned by another process)', {
-            lockPath,
-            ourIno: handleIno,
-            currentIno: pathStat.ino,
-          });
-        }
-      } catch (statError) {
-        const code = (statError as NodeJS.ErrnoException | undefined)?.code;
-        if (code === 'ENOENT') {
-          // Lock file already removed by another process or stale cleanup - this is fine
-          return;
-        }
-        // Other stat errors - log but don't propagate
-        logger.warn('Failed to stat lock file during cleanup', {
-          lockPath,
-          error: statError instanceof Error ? statError.message : String(statError),
-        });
-      }
-    } catch (error) {
-      logger.warn('Failed to clean up lock file', {
-        lockPath,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    const handleIno = await getInodeAndClose(fileHandle, lockPath);
+    if (handleIno === undefined) {
+      // Couldn't get inode - can't verify ownership, don't unlink
+      return;
     }
+
+    await unlinkIfOwned(lockPath, handleIno);
   };
 }
 
