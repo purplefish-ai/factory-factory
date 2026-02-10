@@ -22,7 +22,7 @@ Required Sequence:
 3. Check for unaddressed code review comments and address them.
 4. Run build/lint/test and fix any resulting failures.
 5. Push your changes.
-6. Comment briefly on addressed review comments and resolve them.
+6. Comment briefly on addressed review comments and resolve them. IMPORTANT: When responding to a comment, explicitly @ mention the person who made the comment (e.g., "@username - fixed as suggested").
 7. Request re-review from reviewers whose comments you addressed using `gh pr edit {{PR_NUMBER}} --add-reviewer <login>`.
 
 Completion Criteria:

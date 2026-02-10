@@ -1,5 +1,5 @@
-import { AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -124,6 +124,155 @@ export function InitializationOverlay({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Script Running Banner (non-blocking)
+// =============================================================================
+
+interface ScriptRunningBannerProps {
+  initOutput: string | null;
+  hasStartupScript: boolean;
+}
+
+export function ScriptRunningBanner({ initOutput, hasStartupScript }: ScriptRunningBannerProps) {
+  const [expanded, setExpanded] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current && initOutput !== null) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [initOutput]);
+
+  return (
+    <div className="border-b bg-muted/50 px-4 py-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span>Running startup script...</span>
+        </div>
+        {hasStartupScript && initOutput && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? (
+              <ChevronDown className="h-3 w-3 mr-1" />
+            ) : (
+              <ChevronRight className="h-3 w-3 mr-1" />
+            )}
+            {expanded ? 'Hide output' : 'Show output'}
+          </Button>
+        )}
+      </div>
+      {expanded && hasStartupScript && (
+        <ScrollArea
+          viewportRef={scrollRef}
+          className="mt-2 h-32 w-full rounded-md border bg-zinc-950"
+        >
+          <pre className="p-2 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
+            {initOutput || <span className="text-zinc-500 italic">Waiting for output...</span>}
+          </pre>
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Script Failed Banner (non-blocking)
+// =============================================================================
+
+interface ScriptFailedBannerProps {
+  workspaceId: string;
+  initErrorMessage: string | null;
+  initOutput: string | null;
+  hasStartupScript: boolean;
+}
+
+export function ScriptFailedBanner({
+  workspaceId,
+  initErrorMessage,
+  initOutput,
+  hasStartupScript,
+}: ScriptFailedBannerProps) {
+  const [expanded, setExpanded] = useState(false);
+  const utils = trpc.useUtils();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const retryInit = trpc.workspace.retryInit.useMutation({
+    onSuccess: () => {
+      utils.workspace.getInitStatus.invalidate({ id: workspaceId });
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  return (
+    <div className="border-b bg-destructive/10 px-4 py-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertTriangle className="h-3 w-3" />
+          <span>Startup script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {hasStartupScript && initOutput && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? (
+                <ChevronDown className="h-3 w-3 mr-1" />
+              ) : (
+                <ChevronRight className="h-3 w-3 mr-1" />
+              )}
+              {expanded ? 'Hide output' : 'Show output'}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() =>
+              retryInit.mutate({
+                id: workspaceId,
+                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
+              })
+            }
+            disabled={retryInit.isPending}
+          >
+            {retryInit.isPending ? (
+              <>
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Retrying...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Retry
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      {expanded && hasStartupScript && (
+        <ScrollArea
+          viewportRef={scrollRef}
+          className="mt-2 h-32 w-full rounded-md border bg-zinc-950"
+        >
+          <pre className="p-2 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
+            {initOutput}
+          </pre>
+        </ScrollArea>
+      )}
     </div>
   );
 }

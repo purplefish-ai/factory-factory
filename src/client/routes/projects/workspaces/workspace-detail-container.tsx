@@ -35,7 +35,11 @@ export function WorkspaceDetailContainer() {
     { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
   );
 
-  const { workspaceInitStatus } = useWorkspaceInitStatus(workspaceId, workspace, utils);
+  const { workspaceInitStatus, isScriptRunning, isScriptFailed } = useWorkspaceInitStatus(
+    workspaceId,
+    workspace,
+    utils
+  );
   useEffect(() => {
     const phase = workspaceInitStatus?.phase;
     if (phase === 'READY' || phase === 'ARCHIVED') {
@@ -227,6 +231,8 @@ export function WorkspaceDetailContainer() {
       workspace={workspace}
       workspaceId={workspaceId}
       handleBackToWorkspaces={handleBackToWorkspaces}
+      isScriptRunning={isScriptRunning}
+      isScriptFailed={isScriptFailed}
       workspaceInitStatus={workspaceInitStatus}
       archivePending={archiveWorkspace.isPending}
       availableIdes={availableIdes}
