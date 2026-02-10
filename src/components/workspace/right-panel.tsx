@@ -16,20 +16,19 @@ import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './t
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
 import { useDevLogs } from './use-dev-logs';
+import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
 const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
-const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-right-panel-bottom-tab-';
 
 // =============================================================================
 // Types
 // =============================================================================
 
 type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
-type BottomPanelTab = 'terminal' | 'dev-logs' | 'setup-logs';
 
 // =============================================================================
 // Main Component
@@ -45,7 +44,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
-  const [activeBottomTab, setActiveBottomTab] = useState<BottomPanelTab>('terminal');
+  const { activeBottomTab, setActiveBottomTab } = useWorkspacePanel();
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
   // Single shared dev logs connection for both tab indicator and panel content
@@ -79,7 +78,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     if (prev === undefined && (status === 'NEW' || status === 'PROVISIONING')) {
       setActiveBottomTab('setup-logs');
     }
-  }, [initStatus?.status]);
+  }, [initStatus?.status, setActiveBottomTab]);
 
   // Load persisted tabs from localStorage on mount or workspaceId change
   useEffect(() => {
@@ -101,15 +100,6 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
       ) {
         setActiveTopTab(storedTop);
       }
-
-      const storedBottom = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
-      if (
-        storedBottom === 'terminal' ||
-        storedBottom === 'dev-logs' ||
-        storedBottom === 'setup-logs'
-      ) {
-        setActiveBottomTab(storedBottom);
-      }
     } catch {
       // Ignore storage errors
     }
@@ -125,19 +115,17 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     }
   };
 
-  const handleBottomTabChange = (tab: BottomPanelTab) => {
-    setActiveBottomTab(tab);
-    // Reset terminal tab state when switching away from terminal
-    // to avoid stale state when TerminalPanel remounts
-    if (tab !== 'terminal') {
-      setTerminalTabState(null);
-    }
-    try {
-      localStorage.setItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`, tab);
-    } catch {
-      // Ignore storage errors
-    }
-  };
+  const handleBottomTabChange = useCallback(
+    (tab: BottomPanelTab) => {
+      setActiveBottomTab(tab);
+      // Reset terminal tab state when switching away from terminal
+      // to avoid stale state when TerminalPanel remounts
+      if (tab !== 'terminal') {
+        setTerminalTabState(null);
+      }
+    },
+    [setActiveBottomTab]
+  );
 
   return (
     <ResizablePanelGroup
