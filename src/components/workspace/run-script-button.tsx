@@ -2,12 +2,15 @@ import { Loader2, Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/frontend/lib/trpc';
+import { useWorkspacePanel } from './workspace-panel-context';
 
 interface RunScriptButtonProps {
   workspaceId: string;
 }
 
 export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
+  const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanel();
+
   // Query run script status (React Query automatically deduplicates with same key)
   const { data: status, refetch } = trpc.workspace.getRunScriptStatus.useQuery(
     { workspaceId },
@@ -23,6 +26,8 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const startScript = trpc.workspace.startRunScript.useMutation({
     onSuccess: () => {
       refetch();
+      setActiveBottomTab('dev-logs');
+      setRightPanelVisible(true);
     },
   });
 

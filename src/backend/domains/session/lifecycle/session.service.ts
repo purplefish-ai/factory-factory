@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { type ClaudeSession, SessionStatus } from '@prisma-gen/client';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   createInitialSessionRuntimeState,
@@ -107,11 +107,15 @@ class SessionService {
    * Stop a Claude session gracefully.
    * All sessions use ClaudeClient for unified lifecycle management.
    */
-  async stopClaudeSession(sessionId: string): Promise<void> {
+  async stopClaudeSession(
+    sessionId: string,
+    options?: { cleanupTransientRatchetSession?: boolean }
+  ): Promise<void> {
     if (this.processManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
+    const session = await this.loadSessionForStop(sessionId);
 
     const current = this.getRuntimeSnapshot(sessionId);
     sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -122,11 +126,7 @@ class SessionService {
     });
 
     await this.processManager.stopClient(sessionId);
-
-    await this.repository.updateSession(sessionId, {
-      status: SessionStatus.IDLE,
-      claudeProcessPid: null,
-    });
+    await this.updateStoppedSessionState(sessionId);
 
     sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
 
@@ -138,7 +138,77 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
+    const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
+    await this.cleanupTransientRatchetOnStop(
+      session,
+      sessionId,
+      shouldCleanupTransientRatchetSession
+    );
+
     logger.info('Claude session stopped', { sessionId });
+  }
+
+  private async loadSessionForStop(sessionId: string): Promise<ClaudeSession | null> {
+    try {
+      return await this.repository.getSessionById(sessionId);
+    } catch (error) {
+      logger.warn('Failed to load session before stop; continuing with process shutdown', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  private async updateStoppedSessionState(sessionId: string): Promise<void> {
+    try {
+      await this.repository.updateSession(sessionId, {
+        status: SessionStatus.IDLE,
+        claudeProcessPid: null,
+      });
+    } catch (error) {
+      logger.warn('Failed to update session state during stop; continuing cleanup', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async cleanupTransientRatchetOnStop(
+    session: ClaudeSession | null,
+    sessionId: string,
+    shouldCleanupTransientRatchetSession: boolean
+  ): Promise<void> {
+    // Ratchet sessions should always clear active pointer on stop.
+    if (session?.workflow !== 'ratchet') {
+      return;
+    }
+
+    try {
+      await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
+    } catch (error) {
+      logger.warn('Failed clearing ratchet active session pointer during stop', {
+        sessionId,
+        workspaceId: session.workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    // Session row deletion is optional so callers (e.g. explicit delete endpoint)
+    // can avoid double-delete races while still clearing the active pointer.
+    if (!shouldCleanupTransientRatchetSession) {
+      return;
+    }
+
+    try {
+      await this.repository.deleteSession(sessionId);
+      logger.debug('Deleted transient ratchet session after stop', { sessionId });
+    } catch (error) {
+      logger.warn('Failed deleting transient ratchet session during stop', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
