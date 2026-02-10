@@ -7,8 +7,8 @@ import * as workspaceAccessorModule from '@/backend/resource_accessors/workspace
 import type { configService } from '@/backend/services/config.service';
 import * as gitOpsServiceModule from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
-import * as worktreeLifecycleServiceModule from '@/backend/services/worktree-lifecycle.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
+import * as worktreeLifecycleServiceModule from '../worktree/worktree-lifecycle.service';
 import { WorkspaceCreationService, type WorkspaceCreationSource } from './creation.service';
 
 type ConfigService = typeof configService;
@@ -20,7 +20,7 @@ vi.mock('@/backend/resource_accessors/project.accessor');
 vi.mock('@/backend/resource_accessors/user-settings.accessor');
 vi.mock('@/backend/resource_accessors/claude-session.accessor');
 vi.mock('@/backend/services/git-ops.service');
-vi.mock('@/backend/services/worktree-lifecycle.service');
+vi.mock('../worktree/worktree-lifecycle.service');
 vi.mock('@/backend/trpc/workspace/init.trpc', () => ({
   initializeWorkspaceWorktree: vi.fn().mockResolvedValue(undefined),
 }));
@@ -149,7 +149,10 @@ describe('WorkspaceCreationService', () => {
       updatedAt: new Date(),
     });
 
-    vi.spyOn(worktreeLifecycleServiceModule, 'setWorkspaceInitMode').mockResolvedValue();
+    vi.spyOn(
+      worktreeLifecycleServiceModule.worktreeLifecycleService,
+      'setInitMode'
+    ).mockResolvedValue();
   });
 
   describe('create', () => {
@@ -250,11 +253,9 @@ describe('WorkspaceCreationService', () => {
           mockProject,
           'existing-branch'
         );
-        expect(worktreeLifecycleServiceModule.setWorkspaceInitMode).toHaveBeenCalledWith(
-          'ws-123',
-          true,
-          '/path/to/worktrees'
-        );
+        expect(
+          worktreeLifecycleServiceModule.worktreeLifecycleService.setInitMode
+        ).toHaveBeenCalledWith('ws-123', true, '/path/to/worktrees');
       });
 
       it('should use branch name as workspace name when name not provided', async () => {
