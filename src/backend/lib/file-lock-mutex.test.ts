@@ -111,6 +111,33 @@ describe('FileLockMutex', () => {
     }
   });
 
+  it('removes stale lock with zero post-timeout window', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'stale-zero-post.lock');
+    await fs.writeFile(lockPath, 'stale', 'utf-8');
+
+    const staleTime = new Date(Date.now() - 60_000);
+    await fs.utimes(lockPath, staleTime, staleTime);
+
+    const mutex = new FileLockMutex({
+      acquireTimeoutMs: 30,
+      postTimeoutWaitMs: 0,
+      initialRetryDelayMs: 5,
+      maxRetryDelayMs: 10,
+      maxStaleRetries: 2,
+      staleThresholdMs: 20,
+    });
+
+    try {
+      const release = await mutex.acquire(lockPath);
+      expect(await exists(lockPath)).toBe(true);
+      await release();
+      expect(await exists(lockPath)).toBe(false);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
   it('does not unlink a replaced lock file on release', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
     const lockPath = path.join(baseDir, 'replaced.lock');

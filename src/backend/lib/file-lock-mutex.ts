@@ -87,20 +87,28 @@ export class FileLockMutex {
     const elapsed = Date.now() - startTime;
     const hardTimeoutMs = this.options.acquireTimeoutMs + this.options.postTimeoutWaitMs;
 
-    if (elapsed >= hardTimeoutMs) {
-      throw new FileLockTimeoutError(
-        `Failed to acquire lock after ${hardTimeoutMs}ms and ${staleRetryCount} stale removal attempts: ${lockPath}`
-      );
-    }
-
     if (elapsed < this.options.acquireTimeoutMs) {
       return { staleRetryCount, continueImmediately: false };
     }
 
     const staleResolution = await this.tryHandleStaleLockAfterTimeout(lockPath, staleRetryCount);
+    if (staleResolution.staleRemoved) {
+      return {
+        staleRetryCount: staleResolution.newCount,
+        continueImmediately: true,
+      };
+    }
+
+    const elapsedAfterStaleCheck = Date.now() - startTime;
+    if (elapsedAfterStaleCheck >= hardTimeoutMs) {
+      throw new FileLockTimeoutError(
+        `Failed to acquire lock after ${hardTimeoutMs}ms and ${staleResolution.newCount} stale removal attempts: ${lockPath}`
+      );
+    }
+
     return {
       staleRetryCount: staleResolution.newCount,
-      continueImmediately: staleResolution.staleRemoved,
+      continueImmediately: false,
     };
   }
 
