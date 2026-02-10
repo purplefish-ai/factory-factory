@@ -282,6 +282,19 @@ describe('SessionService', () => {
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
+  it('still stops process and clears queued work when session lookup fails', async () => {
+    vi.mocked(sessionProcessManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(sessionRepository.getSessionById).mockRejectedValueOnce(new Error('db unavailable'));
+    vi.mocked(sessionProcessManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockRejectedValueOnce(new Error('missing row'));
+    const clearQueuedWorkSpy = vi.spyOn(sessionDomainService, 'clearQueuedWork');
+
+    await expect(sessionService.stopClaudeSession('session-err')).resolves.toBeUndefined();
+
+    expect(sessionProcessManager.stopClient).toHaveBeenCalledWith('session-err');
+    expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-err', { emitSnapshot: false });
+  });
+
   it('marks process as stopped when client creation fails', async () => {
     const session = {
       id: 'session-1',

@@ -98,8 +98,7 @@ class SessionService {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
-
-    const session = await this.repository.getSessionById(sessionId);
+    const session = await this.loadSessionForStop(sessionId);
 
     const current = this.getRuntimeSnapshot(sessionId);
     sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -110,11 +109,7 @@ class SessionService {
     });
 
     await this.processManager.stopClient(sessionId);
-
-    await this.repository.updateSession(sessionId, {
-      status: SessionStatus.IDLE,
-      claudeProcessPid: null,
-    });
+    await this.updateStoppedSessionState(sessionId);
 
     sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
 
@@ -126,14 +121,65 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    // Ratchet sessions are transient and should be cleaned up immediately on manual stop.
-    if (session?.workflow === 'ratchet') {
-      await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
-      await this.repository.deleteSession(sessionId);
-      logger.debug('Deleted transient ratchet session after stop', { sessionId });
-    }
+    await this.cleanupTransientRatchetOnStop(session, sessionId);
 
     logger.info('Claude session stopped', { sessionId });
+  }
+
+  private async loadSessionForStop(sessionId: string) {
+    try {
+      return await this.repository.getSessionById(sessionId);
+    } catch (error) {
+      logger.warn('Failed to load session before stop; continuing with process shutdown', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  private async updateStoppedSessionState(sessionId: string): Promise<void> {
+    try {
+      await this.repository.updateSession(sessionId, {
+        status: SessionStatus.IDLE,
+        claudeProcessPid: null,
+      });
+    } catch (error) {
+      logger.warn('Failed to update session state during stop; continuing cleanup', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async cleanupTransientRatchetOnStop(
+    session: Awaited<ReturnType<typeof this.repository.getSessionById>>,
+    sessionId: string
+  ): Promise<void> {
+    // Ratchet sessions are transient and should be cleaned up immediately on manual stop.
+    if (session?.workflow !== 'ratchet') {
+      return;
+    }
+
+    try {
+      await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
+    } catch (error) {
+      logger.warn('Failed clearing ratchet active session pointer during stop', {
+        sessionId,
+        workspaceId: session.workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      await this.repository.deleteSession(sessionId);
+      logger.debug('Deleted transient ratchet session after stop', { sessionId });
+    } catch (error) {
+      logger.warn('Failed deleting transient ratchet session during stop', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
