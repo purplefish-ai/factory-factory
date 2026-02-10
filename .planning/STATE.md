@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 02-session-domain-consolidation (Plan 05 of 06 complete)
+**Current Phase:** 02-session-domain-consolidation (Plan 06 of 06 complete -- PHASE COMPLETE)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -10,7 +10,7 @@
 | Phase | Name | Status | Notes |
 |-------|------|--------|-------|
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
-| 2 | Session Domain Consolidation | In Progress | Plan 05/06 done |
+| 2 | Session Domain Consolidation | Complete | All 6 plans done |
 | 3 | Workspace Domain Consolidation | Pending | Largest service sprawl |
 | 4 | GitHub Domain Consolidation | Pending | — |
 | 5 | Ratchet Domain Consolidation | Pending | — |
@@ -45,6 +45,9 @@
 | Free-function to instance-based registry | 2026-02-10 | process-manager uses processRegistry methods directly (02-04) |
 | Remove unused shims eagerly | 2026-02-10 | Shims with 0 external consumers deleted instead of kept (02-04) |
 | tsconfig exclude for WIP files | 2026-02-10 | Parallel plan 05 WIP files excluded from tsc (02-04) |
+| Static imports in smoke test | 2026-02-10 | Biome forbids await import(); use static imports (02-06) |
+| No knip changes for shims | 2026-02-10 | Existing globs already cover all re-export shim paths (02-06) |
+| EventForwarderContext in barrel | 2026-02-10 | Additional type export for external consumers (02-06) |
 
 ## Blockers
 
@@ -52,10 +55,11 @@ None.
 
 ## Context for Next Session
 
-Phase 2 Plan 05 complete: all chat services (connection, event-forwarder, message-handlers) and 15 handler files moved to domains/session/chat/.
-DOM-04 fix applied: chatWsMsgCounter moved inside ChatConnectionService class.
-Only Plan 06 remains (final cleanup/integration for session domain).
-src/backend/services/chat*.ts now contain only re-export shims.
+Phase 2 COMPLETE: All session domain consolidation finished.
+Session domain barrel at src/backend/domains/session/index.ts exports complete public API.
+Domain smoke test verifies all 15 exports are real (not undefined).
+All CI checks pass: typecheck, test (1758), lint, dep-cruise (718 modules), knip.
+Old paths have re-export shims. DOM-04 violations eliminated.
 Phases 3-7 are independent and can be planned/executed in parallel.
 
 ## Performance Metrics
@@ -67,7 +71,8 @@ Phases 3-7 are independent and can be planned/executed in parallel.
 | 02 | 03 | 8min | 2 | 24 |
 | 02 | 02 | 9min | 2 | 20 |
 | 02 | 04 | 20min | 2 | 25 |
+| 02 | 06 | 3min | 2 | 2 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T13:08:00Z -- Completed 02-04-PLAN.md*
+*Last session: 2026-02-10T13:16:04Z -- Completed 02-06-PLAN.md (Phase 02 complete)*
