@@ -1,7 +1,7 @@
 # Project State
 
 **Project:** SRP Consolidation & Domain Module Refactor
-**Status:** Complete
+**Status:** v1.0 milestone complete
 **Current Phase:** 10-validation-stabilization (Plan 03 of 03 complete)
 **Last Updated:** 2026-02-10
 
@@ -114,12 +114,18 @@
 
 None.
 
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-02-10)
+
+**Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
+**Current focus:** v1.0 milestone complete. No next milestone planned.
+
 ## Context for Next Session
 
-All 10 phases of the SRP Consolidation & Domain Module Refactor are complete.
-Phase 10 (Validation & Stabilization): 3 plans executed. Dep-cruiser rules tightened, Knip cleaned up, documentation updated (AGENTS.md, ARCHITECTURE.md, REQUIREMENTS.md, ROADMAP.md), hotspots marked superseded.
-All 34 v1 requirements satisfied. Zero dependency-cruiser violations. All tests pass.
-The refactor is done -- future work should follow the domain module pattern documented in AGENTS.md.
+v1.0 SRP Consolidation milestone archived. All 10 phases complete, 31 plans executed, 34 requirements satisfied.
+Future work should follow the domain module pattern documented in AGENTS.md.
+Milestone archive at `.planning/milestones/v1.0-ROADMAP.md` and `.planning/milestones/v1.0-REQUIREMENTS.md`.
 
 ## Performance Metrics
 
