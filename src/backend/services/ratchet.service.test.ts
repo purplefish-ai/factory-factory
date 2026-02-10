@@ -528,6 +528,40 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  it('stops and clears active ratchet session when runtime is idle', async () => {
+    const workspace = {
+      id: 'ws-idle-active',
+      prUrl: 'https://github.com/example/repo/pull/11',
+      prNumber: 11,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.CI_FAILED,
+      ratchetActiveSessionId: 'ratchet-session',
+      ratchetLastCiRunId: null,
+      prReviewLastCheckedAt: null,
+    };
+
+    vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
+      id: 'ratchet-session',
+      status: SessionStatus.RUNNING,
+    } as never);
+    vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
+    vi.mocked(sessionService.isSessionWorking).mockReturnValue(false);
+    vi.mocked(sessionService.stopClaudeSession).mockResolvedValue();
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    const action = await unsafeCoerce<{
+      getActiveRatchetSession: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).getActiveRatchetSession(workspace);
+
+    expect(action).toBeNull();
+    expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
+      ratchetActiveSessionId: null,
+    });
+    expect(sessionService.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
+  });
+
   it('decides to trigger fixer when context is actionable', () => {
     const decision = unsafeCoerce<{
       decideRatchetAction: (context: unknown) => { type: string };
