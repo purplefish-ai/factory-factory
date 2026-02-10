@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 08-orchestration-layer (Plan 02 of 04 complete)
+**Current Phase:** 08-orchestration-layer (Plan 03 of 04 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -16,7 +16,7 @@
 | 5 | Ratchet Domain Consolidation | Complete | All 3 plans done |
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
-| 8 | Orchestration Layer | In Progress | Plans 01-02 done |
+| 8 | Orchestration Layer | In Progress | Plans 01-03 done |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
 
@@ -85,6 +85,9 @@
 | Bridge interfaces with lightweight types | 2026-02-10 | Ratchet bridges.ts defines own types, no dependency on github/session domain types (08-02) |
 | configure() + fail-fast getter pattern | 2026-02-10 | Each ratchet service has configure(bridges) and private get session()/github() that throw if unconfigured (08-02) |
 | Bridge injection in tests over vi.mock | 2026-02-10 | ci-fixer test uses configure({session: mockBridge}) instead of vi.mock module path (08-02) |
+| Direct import for configureRatchetBridges | 2026-02-10 | Server.ts imports directly (not via barrel) to avoid circular dep with reconciliation (08-03) |
+| Locally-defined fixer types in github bridges | 2026-02-10 | GitHubFixerAcquireInput/Result defined locally to avoid cross-domain dep on ratchet (08-03) |
+| Bridge injection in pr-snapshot test | 2026-02-10 | configure({kanban: mock}) replaces vi.mock for cross-domain kanban-state service (08-03) |
 
 ## Blockers
 
@@ -92,10 +95,11 @@ None.
 
 ## Context for Next Session
 
-Phase 8 plans 01-02 complete.
+Phase 8 plans 01-03 complete.
 Plan 01: Orchestration layer initialized with workspace-init and workspace-archive orchestrators.
 Plan 02: All ratchet domain services (ratchet, fixer-session, ci-fixer, ci-monitor) have zero cross-domain imports. Bridge interfaces (RatchetSessionBridge, RatchetGitHubBridge) defined in bridges.ts and exported from barrel.
-Ready for Phase 8 plan 03 (orchestration layer wiring) and plan 04.
+Plan 03: Ratchet bridges wired at startup via configureRatchetBridges() orchestrator. Workspace-query, kanban-state, pr-review-fixer, pr-snapshot converted to bridge injection with zero cross-domain imports. Bridge types exported from workspace and github barrels.
+Ready for Phase 8 plan 04 (remaining orchestration wiring for workspace and github bridges).
 
 ## Performance Metrics
 
@@ -123,7 +127,8 @@ Ready for Phase 8 plan 03 (orchestration layer wiring) and plan 04.
 | 07 | 02 | 3min | 2 | 4 |
 | 08 | 01 | 12min | 2 | 14 |
 | 08 | 02 | 2min | 2 | 7 |
+| 08 | 03 | 7min | 2 | 12 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T19:12:32Z -- Completed 08-02-PLAN.md*
+*Last session: 2026-02-10T19:22:53Z -- Completed 08-03-PLAN.md*
