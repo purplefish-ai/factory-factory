@@ -173,6 +173,7 @@ describe('worktreeLifecycleService initialization', () => {
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
       initialPrompt: '',
     });
+    expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
 
   it('emits accepted delta with resolved selectedModel for auto-issue prompt', async () => {

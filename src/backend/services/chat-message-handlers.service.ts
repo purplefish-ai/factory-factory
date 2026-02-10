@@ -103,9 +103,8 @@ class ChatMessageHandlerService {
     }
 
     try {
-      const dispatchGate = await this.evaluateDispatchGate(dbSessionId);
+      const dispatchGate = await this.getDispatchGateSafely(dbSessionId, msg);
       if (dispatchGate === 'blocked' || dispatchGate === 'manual_resume') {
-        sessionDomainService.requeueFront(dbSessionId, msg);
         return;
       }
 
@@ -352,6 +351,27 @@ class ChatMessageHandlerService {
     }
 
     return this.manualDispatchResumed.get(dbSessionId) ? 'allowed' : 'manual_resume';
+  }
+
+  private async getDispatchGateSafely(
+    dbSessionId: string,
+    msg: QueuedMessage
+  ): Promise<'allowed' | 'blocked' | 'manual_resume'> {
+    try {
+      const dispatchGate = await this.evaluateDispatchGate(dbSessionId);
+      if (dispatchGate === 'blocked' || dispatchGate === 'manual_resume') {
+        sessionDomainService.requeueFront(dbSessionId, msg);
+      }
+      return dispatchGate;
+    } catch (error) {
+      logger.error('[Chat WS] Failed to evaluate dispatch gate, re-queueing message', {
+        dbSessionId,
+        messageId: msg.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      sessionDomainService.requeueFront(dbSessionId, msg);
+      return 'blocked';
+    }
   }
 
   // ============================================================================
