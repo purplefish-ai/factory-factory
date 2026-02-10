@@ -79,4 +79,45 @@ describe('SessionProcessManager', () => {
 
     expect(onExit).not.toHaveBeenCalled();
   });
+
+  it('preserves lock during concurrent operations even if client exits', async () => {
+    const manager = new SessionProcessManager();
+    const options = { workingDir: '/tmp', sessionId: 's1' } as ClaudeClientOptions;
+    const handlers = {};
+    const context = { workspaceId: 'w1', workingDir: '/tmp' };
+
+    const client1 = new MockClaudeClient();
+    let createCallCount = 0;
+    let resolveCreate: (value: ClaudeClientType) => void = () => undefined;
+
+    vi.spyOn(ClaudeClient, 'create').mockImplementation(() => {
+      createCallCount++;
+      return new Promise<ClaudeClientType>((resolve) => {
+        resolveCreate = resolve;
+      });
+    });
+
+    // Start two concurrent creations
+    const firstCall = manager.getOrCreateClient('s1', options, handlers, context);
+    const secondCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Wait for first to start
+    await Promise.resolve();
+
+    // Resolve and get first client
+    resolveCreate(unsafeCoerce<ClaudeClientType>(client1));
+    const firstClient = await firstCall;
+    expect(firstClient).toBe(client1);
+
+    // Simulate exit event
+    client1.emit('exit', { code: 0 });
+    await Promise.resolve();
+
+    // Second call should still get the same client (was queued before exit)
+    const secondClient = await secondCall;
+    expect(secondClient).toBe(client1);
+
+    // Only one create should have been called due to lock
+    expect(createCallCount).toBe(1);
+  });
 });

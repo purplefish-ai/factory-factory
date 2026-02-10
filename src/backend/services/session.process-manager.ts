@@ -29,6 +29,7 @@ export class SessionProcessManager {
   private readonly pendingCreation = new Map<string, Promise<ClaudeClient>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
+  private readonly lockRefCounts = new Map<string, number>();
   private onClientCreatedCallback: ClientCreatedCallback | null = null;
 
   setOnClientCreated(callback: ClientCreatedCallback): void {
@@ -51,33 +52,50 @@ export class SessionProcessManager {
     if (!lock) {
       lock = pLimit(1);
       this.creationLocks.set(sessionId, lock);
+      this.lockRefCounts.set(sessionId, 0);
     }
+
+    // Increment reference count while lock is in use
+    const currentCount = this.lockRefCounts.get(sessionId) ?? 0;
+    this.lockRefCounts.set(sessionId, currentCount + 1);
 
     // Atomically check and create within the lock to prevent race conditions
     return lock(async () => {
-      // Check for existing running client
-      const existing = this.clients.get(sessionId);
-      if (existing?.isRunning()) {
-        logger.debug('Returning existing running client', { sessionId });
-        return existing;
-      }
-
-      // Check for pending creation
-      const pending = this.pendingCreation.get(sessionId);
-      if (pending) {
-        logger.debug('Waiting for pending client creation', { sessionId });
-        return pending;
-      }
-
-      // No existing or pending - create new client
-      logger.info('Creating new ClaudeClient', { sessionId, options });
-      const createPromise = this.createClient(sessionId, options, handlers, context);
-      this.pendingCreation.set(sessionId, createPromise);
-
       try {
-        return await createPromise;
+        // Check for existing running client
+        const existing = this.clients.get(sessionId);
+        if (existing?.isRunning()) {
+          logger.debug('Returning existing running client', { sessionId });
+          return existing;
+        }
+
+        // Check for pending creation
+        const pending = this.pendingCreation.get(sessionId);
+        if (pending) {
+          logger.debug('Waiting for pending client creation', { sessionId });
+          return pending;
+        }
+
+        // No existing or pending - create new client
+        logger.info('Creating new ClaudeClient', { sessionId, options });
+        const createPromise = this.createClient(sessionId, options, handlers, context);
+        this.pendingCreation.set(sessionId, createPromise);
+
+        try {
+          return await createPromise;
+        } finally {
+          this.pendingCreation.delete(sessionId);
+        }
       } finally {
-        this.pendingCreation.delete(sessionId);
+        // Decrement reference count and clean up lock if no longer in use
+        const refCount = this.lockRefCounts.get(sessionId) ?? 1;
+        const newCount = refCount - 1;
+        if (newCount <= 0) {
+          this.creationLocks.delete(sessionId);
+          this.lockRefCounts.delete(sessionId);
+        } else {
+          this.lockRefCounts.set(sessionId, newCount);
+        }
       }
     });
   }
@@ -138,7 +156,7 @@ export class SessionProcessManager {
     } finally {
       this.stoppingInProgress.delete(sessionId);
       this.clients.delete(sessionId);
-      this.creationLocks.delete(sessionId);
+      // Note: creationLocks cleaned up by reference counting in getOrCreateClient
     }
   }
 
@@ -261,8 +279,8 @@ export class SessionProcessManager {
 
     client.on('exit', async (result) => {
       this.clients.delete(sessionId);
-      this.creationLocks.delete(sessionId);
       this.pendingCreation.delete(sessionId);
+      // Note: creationLocks cleaned up by reference counting in getOrCreateClient
 
       if (this.stoppingInProgress.has(sessionId)) {
         logger.debug('Skipping exit handler status update - stop in progress', { sessionId });
