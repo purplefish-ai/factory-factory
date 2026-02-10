@@ -30,8 +30,8 @@ import type { WorkspaceListItem } from './use-workspace-list-state';
 export function CreatingWorkspaceItem() {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton size="lg" className="h-auto px-2 py-2.5 cursor-default">
-        <div className="flex items-center gap-2 w-full min-w-0">
+      <SidebarMenuButton size="lg" className="h-auto px-2 py-2 cursor-default">
+        <div className="flex items-center gap-1.5 w-full min-w-0">
           {/* Invisible drag handle spacer to match layout */}
           <div className="w-4 shrink-0" aria-hidden="true" />
           <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-foreground/40 border-t-foreground" />
@@ -49,8 +49,8 @@ export function CreatingWorkspaceItem() {
 interface ArchivingWorkspaceItemProps {
   workspace: WorkspaceListItem;
   selectedProjectSlug: string;
-  sortableRef: (node: HTMLElement | null) => void;
-  sortableStyle: React.CSSProperties;
+  sortableRef?: (node: HTMLElement | null) => void;
+  sortableStyle?: React.CSSProperties;
 }
 
 export function ArchivingWorkspaceItem({
@@ -61,9 +61,9 @@ export function ArchivingWorkspaceItem({
 }: ArchivingWorkspaceItemProps) {
   return (
     <SidebarMenuItem ref={sortableRef} style={sortableStyle}>
-      <SidebarMenuButton asChild className="h-auto px-2 py-2.5 opacity-50 pointer-events-none">
+      <SidebarMenuButton asChild className="h-auto px-2 py-2 opacity-50 pointer-events-none">
         <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
-          <div className="flex items-center gap-2 w-full min-w-0">
+          <div className="flex items-center gap-1.5 w-full min-w-0">
             {/* Invisible drag handle spacer to match layout */}
             <div className="w-4 shrink-0" aria-hidden="true" />
             <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
@@ -88,11 +88,12 @@ interface ActiveWorkspaceItemProps {
   disableRatchetAnimation?: boolean;
   needsAttention: (workspaceId: string) => boolean;
   clearAttention: (workspaceId: string) => void;
-  sortableRef: (node: HTMLElement | null) => void;
-  sortableStyle: React.CSSProperties;
-  sortableAttributes: ReturnType<typeof useSortable>['attributes'];
-  sortableListeners: ReturnType<typeof useSortable>['listeners'];
-  isDragging: boolean;
+  sortableRef?: (node: HTMLElement | null) => void;
+  sortableStyle?: React.CSSProperties;
+  sortableAttributes?: ReturnType<typeof useSortable>['attributes'];
+  sortableListeners?: ReturnType<typeof useSortable>['listeners'];
+  isDragging?: boolean;
+  hideDragHandle?: boolean;
 }
 
 export function ActiveWorkspaceItem({
@@ -109,6 +110,7 @@ export function ActiveWorkspaceItem({
   sortableAttributes,
   sortableListeners,
   isDragging,
+  hideDragHandle,
 }: ActiveWorkspaceItemProps) {
   const utils = trpc.useUtils();
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
@@ -136,31 +138,33 @@ export function ActiveWorkspaceItem({
         asChild
         isActive={isActive}
         className={cn(
-          'h-auto px-2 py-2.5',
+          'h-auto px-2 py-2',
           isDragging && 'opacity-50 bg-sidebar-accent',
           showAttentionGlow && 'waiting-pulse'
         )}
       >
-        <div className="flex w-full min-w-0 items-center gap-2">
+        <div className="flex w-full min-w-0 items-center gap-1.5">
           {/* Drag handle - outside Link to prevent navigation */}
-          <button
-            type="button"
-            className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
-            aria-label="Drag to reorder"
-            {...sortableAttributes}
-            {...sortableListeners}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-          >
-            <GripVertical className="h-3 w-3" />
-          </button>
+          {!hideDragHandle && sortableAttributes && sortableListeners && (
+            <button
+              type="button"
+              className="w-4 shrink-0 flex justify-center cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground bg-transparent border-none p-0"
+              aria-label="Drag to reorder"
+              {...sortableAttributes}
+              {...sortableListeners}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
+              <GripVertical className="h-3 w-3" />
+            </button>
+          )}
 
           <Link
             to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}
             onClick={() => clearAttention(workspace.id)}
-            className="flex flex-1 min-w-0 items-center gap-2"
+            className="flex flex-1 min-w-0 items-center gap-1.5"
           >
             {/* Status dot + ratchet toggle */}
             <div className="w-5 shrink-0 flex flex-col items-center gap-1.5 self-start mt-1.5">
@@ -197,8 +201,8 @@ export function ActiveWorkspaceItem({
 
             <div className="min-w-0 flex-1 space-y-0 self-start">
               {/* Row 1: name + timestamp + archive */}
-              <div className="flex items-center gap-2">
-                <span className="truncate font-medium text-sm leading-tight flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate font-medium text-sm leading-tight flex-1 min-w-0">
                   {workspace.name}
                 </span>
                 {workspace.lastActivityAt && (
@@ -294,15 +298,17 @@ function WorkspaceMetaRow({
   const deletionsText = hasStats && stats?.deletions ? `-${stats.deletions}` : '';
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_40px_40px_72px] items-center gap-x-2 text-xs text-muted-foreground">
-      <WorkspaceCiBadge workspace={workspace} sidebarStatus={sidebarStatus} />
-      <span className="w-10 text-right tabular-nums text-green-600 dark:text-green-400">
+    <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
+      <div className="min-w-0 flex-1">
+        <WorkspaceCiBadge workspace={workspace} sidebarStatus={sidebarStatus} />
+      </div>
+      <span className="shrink-0 text-right tabular-nums text-green-600 dark:text-green-400">
         {additionsText}
       </span>
-      <span className="w-10 text-left tabular-nums text-red-600 dark:text-red-400">
+      <span className="shrink-0 text-left tabular-nums text-red-600 dark:text-red-400">
         {deletionsText}
       </span>
-      {showPR ? <WorkspacePrButton workspace={workspace} /> : <WorkspacePrSpacer />}
+      {showPR && <WorkspacePrButton workspace={workspace} />}
     </div>
   );
 }
@@ -328,10 +334,6 @@ function WorkspaceCiBadge({
   );
 }
 
-function WorkspacePrSpacer() {
-  return <span className="w-[72px]" aria-hidden="true" />;
-}
-
 function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
   const tooltipSuffix = getPrTooltipSuffix(workspace);
   return (
@@ -347,7 +349,7 @@ function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
             }
           }}
           className={cn(
-            'flex w-[72px] items-center justify-end gap-1 text-xs hover:opacity-80 transition-opacity p-0',
+            'flex shrink-0 items-center gap-1 text-xs hover:opacity-80 transition-opacity p-0',
             workspace.prState === 'MERGED'
               ? 'text-green-500'
               : 'text-muted-foreground hover:text-foreground'
@@ -355,11 +357,7 @@ function WorkspacePrButton({ workspace }: { workspace: WorkspaceListItem }) {
         >
           <GitPullRequest className="h-3 w-3" />
           <span>#{workspace.prNumber}</span>
-          {workspace.prState === 'MERGED' ? (
-            <CheckCircle2 className="h-3 w-3 text-green-500" />
-          ) : (
-            <CheckCircle2 className="h-3 w-3 opacity-0" aria-hidden="true" />
-          )}
+          {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
         </button>
       </TooltipTrigger>
       <TooltipContent side="right">

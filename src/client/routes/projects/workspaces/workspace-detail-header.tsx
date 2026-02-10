@@ -45,14 +45,16 @@ function WorkspaceTitle({
 }) {
   if (workspace.branchName) {
     return (
-      <div className="flex items-center gap-2">
-        <GitBranch className="h-4 w-4 text-muted-foreground" />
-        <h1 className="text-lg font-semibold font-mono">{workspace.branchName}</h1>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <GitBranch className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground shrink-0" />
+        <h1 className="text-sm md:text-lg font-semibold font-mono truncate">
+          {workspace.branchName}
+        </h1>
       </div>
     );
   }
 
-  return <h1 className="text-lg font-semibold">{workspace.name}</h1>;
+  return <h1 className="text-sm md:text-lg font-semibold truncate">{workspace.name}</h1>;
 }
 
 function WorkspacePrAction({
@@ -202,8 +204,8 @@ export function WorkspaceHeader({
   hasChanges,
 }: WorkspaceHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-2 border-b">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-2 px-2 py-1.5 md:px-4 md:py-2 border-b">
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
         <WorkspaceTitle workspace={workspace} />
         <RunScriptPortBadge workspaceId={workspaceId} />
         <WorkspacePrAction
@@ -215,7 +217,7 @@ export function WorkspaceHeader({
         />
         <WorkspaceCiStatus workspace={workspace} running={running} />
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-end gap-0.5 md:gap-1 shrink-0">
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
         <QuickActionsMenu
           onExecuteAgent={(action) => {
