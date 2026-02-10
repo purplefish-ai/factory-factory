@@ -9,7 +9,7 @@ type Logger = ReturnType<typeof createLogger>;
  */
 export function isRateLimitMessage(lowerMessage: string): boolean {
   return (
-    lowerMessage.includes('429') ||
+    lowerMessage.includes('http 429') ||
     lowerMessage.includes('rate limit') ||
     lowerMessage.includes('throttl')
   );
