@@ -119,6 +119,13 @@ Plans:
 
 **Requirements:** GH-01, GH-02, GH-03
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Move github-cli and pr-snapshot services with tests to domain
+- [ ] 04-02-PLAN.md — Move pr-review-fixer and pr-review-monitor services to domain
+- [ ] 04-03-PLAN.md — Populate GitHub domain barrel and create smoke test
+
 **Delivers:**
 - GitHub CLI interactions (PRs, issues, CI status) in one module
 - PR snapshot and review monitoring consolidated
@@ -279,4 +286,4 @@ Phase 1 (Foundation) ───────────────────�
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-10 — Phase 3 complete (5 plans, 3 waves, 4 DOM-04 globals eliminated)*
+*Last updated: 2026-02-10 — Phase 4 planned (3 plans, 2 waves, no DOM-04 work needed)*
