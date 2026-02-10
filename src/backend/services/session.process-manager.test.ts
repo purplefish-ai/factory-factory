@@ -25,22 +25,30 @@ describe('SessionProcessManager', () => {
 
     const client = new MockClaudeClient();
     let resolveCreate: (value: ClaudeClientType) => void = () => undefined;
-    const createPromise = new Promise<ClaudeClientType>((resolve) => {
-      resolveCreate = resolve;
+    let createCallCount = 0;
+
+    const createSpy = vi.spyOn(ClaudeClient, 'create').mockImplementation(() => {
+      createCallCount++;
+      return new Promise<ClaudeClientType>((resolve) => {
+        resolveCreate = resolve;
+      });
     });
 
-    const createSpy = vi
-      .spyOn(ClaudeClient, 'create')
-      .mockImplementation(async () => createPromise);
-
+    // Start two concurrent creation requests
     const first = manager.getOrCreateClient('s1', options, handlers, context);
     const second = manager.getOrCreateClient('s1', options, handlers, context);
 
-    expect(createSpy).toHaveBeenCalledTimes(1);
+    // Wait for at least one microtask to ensure mutex has processed
+    await Promise.resolve();
 
+    // Both calls should eventually resolve to the same client
     resolveCreate(unsafeCoerce<ClaudeClientType>(client));
 
     const [client1, client2] = await Promise.all([first, second]);
+
+    // Should only have called create once due to mutex
+    expect(createCallCount).toBe(1);
+    expect(createSpy).toHaveBeenCalledTimes(1);
     expect(client1).toBe(client);
     expect(client2).toBe(client);
   });
@@ -70,5 +78,126 @@ describe('SessionProcessManager', () => {
     await manager.stopClient('s1');
 
     expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it('preserves lock during concurrent operations even if client exits', async () => {
+    const manager = new SessionProcessManager();
+    const options = { workingDir: '/tmp', sessionId: 's1' } as ClaudeClientOptions;
+    const handlers = {};
+    const context = { workspaceId: 'w1', workingDir: '/tmp' };
+
+    const client1 = new MockClaudeClient();
+    let createCallCount = 0;
+    let resolveCreate: (value: ClaudeClientType) => void = () => undefined;
+
+    vi.spyOn(ClaudeClient, 'create').mockImplementation(() => {
+      createCallCount++;
+      return new Promise<ClaudeClientType>((resolve) => {
+        resolveCreate = resolve;
+      });
+    });
+
+    // Start two concurrent creations
+    const firstCall = manager.getOrCreateClient('s1', options, handlers, context);
+    const secondCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Wait for first to start
+    await Promise.resolve();
+
+    // Resolve and get first client
+    resolveCreate(unsafeCoerce<ClaudeClientType>(client1));
+    const firstClient = await firstCall;
+    expect(firstClient).toBe(client1);
+
+    // Simulate exit event
+    client1.emit('exit', { code: 0 });
+    await Promise.resolve();
+
+    // Second call should still get the same client (was queued before exit)
+    const secondClient = await secondCall;
+    expect(secondClient).toBe(client1);
+
+    // Only one create should have been called due to lock
+    expect(createCallCount).toBe(1);
+  });
+
+  it('clears both creationLocks and lockRefCounts in stopAllClients', async () => {
+    const manager = new SessionProcessManager();
+    const options = { workingDir: '/tmp', sessionId: 's1' } as ClaudeClientOptions;
+    const handlers = {};
+    const context = { workspaceId: 'w1', workingDir: '/tmp' };
+
+    const client = new MockClaudeClient();
+    vi.spyOn(ClaudeClient, 'create').mockResolvedValue(unsafeCoerce<ClaudeClientType>(client));
+
+    // Create a client through normal flow
+    await manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Verify client exists
+    expect(manager.getClient('s1')).toBeDefined();
+
+    // Stop all clients
+    await manager.stopAllClients();
+
+    // Verify everything is cleaned up
+    expect(manager.getClient('s1')).toBeUndefined();
+
+    // Try creating a new client with the same sessionId
+    // This should work without issues from stale ref counts
+    const client2 = new MockClaudeClient();
+    vi.spyOn(ClaudeClient, 'create').mockResolvedValue(unsafeCoerce<ClaudeClientType>(client2));
+
+    const newClient = await manager.getOrCreateClient('s1', options, handlers, context);
+    expect(newClient).toBe(client2);
+  });
+
+  it('properly awaits pending creation to prevent premature ref count cleanup', async () => {
+    const manager = new SessionProcessManager();
+    const options = { workingDir: '/tmp', sessionId: 's1' } as ClaudeClientOptions;
+    const handlers = {};
+    const context = { workspaceId: 'w1', workingDir: '/tmp' };
+
+    const client = new MockClaudeClient();
+    let resolveCreate: (value: ClaudeClientType) => void = () => undefined;
+    let createCallCount = 0;
+
+    vi.spyOn(ClaudeClient, 'create').mockImplementation(() => {
+      createCallCount++;
+      return new Promise<ClaudeClientType>((resolve) => {
+        resolveCreate = resolve;
+      });
+    });
+
+    // Start first creation (will set pendingCreation)
+    const firstCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Wait for first call to enter lock and set pendingCreation
+    await Promise.resolve();
+
+    // Start second call - should find and await the pending promise
+    const secondCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Start third call - should also wait on the same lock
+    const thirdCall = manager.getOrCreateClient('s1', options, handlers, context);
+
+    // Verify all calls are pending
+    await Promise.resolve();
+
+    // Resolve the creation
+    resolveCreate(unsafeCoerce<ClaudeClientType>(client));
+
+    // All calls should resolve to the same client
+    const [first, second, third] = await Promise.all([firstCall, secondCall, thirdCall]);
+
+    expect(first).toBe(client);
+    expect(second).toBe(client);
+    expect(third).toBe(client);
+
+    // Only one creation should have happened
+    expect(createCallCount).toBe(1);
+
+    // If 'return pending' wasn't awaited, the ref count would have been
+    // prematurely decremented, potentially allowing a fourth call to create
+    // a new lock and bypass the queue
   });
 });

@@ -130,6 +130,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dbSessionId,
     dispatch,
     toolInputAccumulatorRef,
+    sessionRuntimePhase: state.sessionRuntime.phase,
   });
 
   // =============================================================================

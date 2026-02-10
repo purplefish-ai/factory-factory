@@ -179,7 +179,7 @@ describe('SchedulerService', () => {
       mockFindNeedingPRDiscovery.mockResolvedValue([]);
 
       schedulerService.start();
-      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000); // Updated to 3 minutes to match new polling interval
 
       expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(1);
       expect(mockFindNeedingPRDiscovery).toHaveBeenCalledTimes(1);

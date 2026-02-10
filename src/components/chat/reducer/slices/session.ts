@@ -7,10 +7,14 @@ function deriveSessionStatus(runtime: ChatState['sessionRuntime']): ChatState['s
       return { phase: 'loading' };
     case 'starting':
       return { phase: 'starting' };
-    case 'running':
-      return { phase: 'running' };
     case 'stopping':
       return { phase: 'stopping' };
+    case 'running':
+      // If process is stopped, show ready instead of running
+      if (runtime.processState === 'stopped') {
+        return { phase: 'ready' };
+      }
+      return { phase: 'running' };
     case 'idle':
     case 'error':
       return { phase: 'ready' };
@@ -79,13 +83,25 @@ export function reduceSessionSlice(state: ChatState, action: ChatAction): ChatSt
       return {
         ...state,
         ...createSessionSwitchResetState(),
+        // Preserve queued messages - they will be reconstructed from replay events,
+        // but preserving them ensures they remain visible during session switch.
+        queuedMessages: state.queuedMessages,
       };
-    case 'SESSION_LOADING_START':
-      return withRuntime(state, {
+    case 'SESSION_LOADING_START': {
+      const loadingRuntime = {
         ...state.sessionRuntime,
-        phase: 'loading',
+        phase: 'loading' as const,
         updatedAt: new Date().toISOString(),
-      });
+      };
+      return {
+        ...state,
+        sessionRuntime: loadingRuntime,
+        sessionStatus: deriveSessionStatus(loadingRuntime),
+        // Preserve processStatus — SESSION_LOADING_START only signals a UI loading
+        // transition and should not re-derive processStatus from the runtime defaults.
+        // This keeps the initial 'unknown' state until SESSION_SNAPSHOT arrives.
+      };
+    }
     case 'SESSION_LOADING_END':
       return state.sessionRuntime.phase === 'loading'
         ? withRuntime(state, {
