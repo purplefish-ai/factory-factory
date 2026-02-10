@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 04-github-domain-consolidation (Plan 02 of 03 complete)
+**Current Phase:** 05-ratchet-domain-consolidation (Plan 00 of ?? complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -12,7 +12,7 @@
 | 1 | Foundation & Domain Scaffolding | Complete | Plan 01 done (2min) |
 | 2 | Session Domain Consolidation | Complete | All 6 plans done |
 | 3 | Workspace Domain Consolidation | Complete | All 5 plans done |
-| 4 | GitHub Domain Consolidation | In Progress | Plans 01-02 done |
+| 4 | GitHub Domain Consolidation | Complete | All 3 plans done |
 | 5 | Ratchet Domain Consolidation | Pending | — |
 | 6 | Terminal Domain Consolidation | Pending | — |
 | 7 | Run Script Domain Consolidation | Pending | — |
@@ -65,6 +65,7 @@
 | Biome auto-sorts domain file imports | 2026-02-10 | Imports reordered alphabetically by path in domain files (04-01) |
 | Intra-domain relative for review subsystem | 2026-02-10 | pr-review-monitor uses ./github-cli.service and ./pr-review-fixer.service (04-02) |
 | Cross-domain absolute for review services | 2026-02-10 | pr-review-fixer uses @/backend/services/ for fixer-session, logger, session (04-02) |
+| Biome auto-sorts barrel exports (GitHub) | 2026-02-10 | Exports reordered alphabetically by import path; section comments remain as landmarks (04-03) |
 
 ## Blockers
 
@@ -72,11 +73,11 @@ None.
 
 ## Context for Next Session
 
-Phase 4 Plans 01-02 complete: GitHub domain file migration done.
-5 files in src/backend/domains/github/: github-cli, pr-review-fixer, pr-review-monitor, pr-snapshot, index.
-pr-review-monitor uses intra-domain relative imports for github-cli and pr-review-fixer.
-Re-export shims at all old services/ paths. 1737 tests passing.
-Ready for Plan 03 (barrel exports and smoke test).
+Phase 4 complete: GitHub domain fully consolidated.
+5 files in src/backend/domains/github/: github-cli, pr-snapshot, pr-review-fixer, pr-review-monitor, index.
+Barrel exports 4 runtime values + 10 types. Smoke test verifies no circular dep breakage.
+Re-export shims at all old services/ paths. 1741 tests passing.
+Ready for Phase 5 (Ratchet Domain Consolidation).
 
 ## Performance Metrics
 
@@ -95,7 +96,8 @@ Ready for Plan 03 (barrel exports and smoke test).
 | 03 | 05 | 3min | 2 | 2 |
 | 04 | 01 | 11min | 2 | 7 |
 | 04 | 02 | 11min | 2 | 5 |
+| 04 | 03 | 2min | 2 | 2 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T16:25:45Z -- Completed 04-02-PLAN.md*
+*Last session: 2026-02-10T16:30:21Z -- Completed 04-03-PLAN.md*
