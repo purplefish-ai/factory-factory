@@ -98,6 +98,18 @@ module.exports = {
       to: { path: "^src/backend/services/session-store\\.service\\.ts$" },
     },
     {
+      name: "no-cross-domain-imports",
+      severity: "error",
+      comment:
+        "Domain modules must not import from sibling domains directly. " +
+        "Cross-domain coordination goes through the orchestration layer (Phase 8).",
+      from: { path: "^src/backend/domains/([^/]+)/" },
+      to: {
+        path: "^src/backend/domains/([^/]+)/",
+        pathNot: "^src/backend/domains/$1/",
+      },
+    },
+    {
       name: "only-accessors-import-db",
       severity: "error",
       comment:
