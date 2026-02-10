@@ -1,18 +1,11 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClaudeClient } from '@/backend/claude';
+import type { RatchetSessionBridge } from './bridges';
 
 vi.mock('./fixer-session.service', () => ({
   fixerSessionService: {
     acquireAndDispatch: vi.fn(),
     getActiveSession: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/services/session.service', () => ({
-  sessionService: {
-    isSessionWorking: vi.fn(),
-    getClient: vi.fn(),
   },
 }));
 
@@ -25,13 +18,22 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { sessionService } from '@/backend/services/session.service';
 import { ciFixerService } from './ci-fixer.service';
 import { fixerSessionService } from './fixer-session.service';
+
+const mockSessionBridge: RatchetSessionBridge = {
+  isSessionRunning: vi.fn(),
+  isSessionWorking: vi.fn(),
+  stopClaudeSession: vi.fn(),
+  startClaudeSession: vi.fn(),
+  getClient: vi.fn(),
+  injectCommittedUserMessage: vi.fn(),
+};
 
 describe('CIFixerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    ciFixerService.configure({ session: mockSessionBridge });
   });
 
   it('returns started when shared fixer service starts a session', async () => {
@@ -100,7 +102,7 @@ describe('CIFixerService', () => {
       id: 's1',
       status: SessionStatus.RUNNING,
     });
-    vi.mocked(sessionService.isSessionWorking).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(true);
 
     await expect(ciFixerService.isFixingInProgress('w1')).resolves.toBe(true);
   });
@@ -115,7 +117,7 @@ describe('CIFixerService', () => {
       isRunning: vi.fn().mockReturnValue(true),
       sendMessage: vi.fn().mockResolvedValue(undefined),
     };
-    vi.mocked(sessionService.getClient).mockReturnValue(client as unknown as ClaudeClient);
+    vi.mocked(mockSessionBridge.getClient).mockReturnValue(client);
 
     await expect(ciFixerService.notifyCIPassed('w1')).resolves.toBe(true);
     expect(client.sendMessage).toHaveBeenCalled();
