@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 07-run-script-domain-consolidation (Plan 01 of 02 complete)
+**Current Phase:** 07-run-script-domain-consolidation (Plan 02 of 02 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -15,7 +15,7 @@
 | 4 | GitHub Domain Consolidation | Complete | All 3 plans done |
 | 5 | Ratchet Domain Consolidation | Complete | All 3 plans done |
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
-| 7 | Run Script Domain Consolidation | In Progress | Plan 01 done (7min) |
+| 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
 | 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
@@ -75,6 +75,8 @@
 | biome-ignore for pre-existing complexity | 2026-02-10 | startRunScript/stopRunScript exceed max complexity; inherent to process lifecycle (07-01) |
 | registerShutdownHandlers() pattern | 2026-02-10 | Process signal handlers encapsulated in explicit method called after singleton creation (07-01) |
 | Instance type in app-context for RunScriptService | 2026-02-10 | Changed from typeof RunScriptService to RunScriptService (instance type) (07-01) |
+| Cross-domain workspace-state-machine via shim | 2026-02-10 | startup-script uses @/backend/services/ shim path to avoid cross-domain violation (07-02) |
+| Selective named exports in run-script barrel | 2026-02-10 | Barrel uses explicit named re-exports (no export *) per established convention (07-02) |
 
 ## Blockers
 
@@ -82,11 +84,10 @@ None.
 
 ## Context for Next Session
 
-Phase 7 plan 01 complete: Run-script core services moved to domain.
-2 files in src/backend/domains/run-script/: run-script-state-machine.service, run-script.service + 1 test.
-RS-02 instance conversion complete: 0 static members, 0 module-level mutable state.
-Re-export shims at old services/ paths. app-context.ts updated to instance type.
-Ready for Phase 7 Plan 02 (barrel exports and smoke test).
+Phase 7 complete: Run-script domain consolidation done (RS-01).
+3 services in src/backend/domains/run-script/: run-script-state-machine.service, run-script.service, startup-script.service.
+Domain barrel exports full public API (5 runtime + 2 types). Smoke test passes.
+Re-export shims at old services/ paths for all 3 services. Ready for Phase 8 (Orchestration).
 
 ## Performance Metrics
 
@@ -111,7 +112,8 @@ Ready for Phase 7 Plan 02 (barrel exports and smoke test).
 | 04 | 03 | 2min | 2 | 2 |
 | 06 | 01 | 4min | 2 | 5 |
 | 07 | 01 | 7min | 2 | 7 |
+| 07 | 02 | 3min | 2 | 4 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T17:52:52Z -- Completed 07-01-PLAN.md*
+*Last session: 2026-02-10T17:58:30Z -- Completed 07-02-PLAN.md*
