@@ -2,7 +2,7 @@
 
 **Project:** SRP Consolidation & Domain Module Refactor
 **Status:** In Progress
-**Current Phase:** 07-run-script-domain-consolidation (Plan 02 of 02 complete)
+**Current Phase:** 08-orchestration-layer (Plan 01 of 04 complete)
 **Last Updated:** 2026-02-10
 
 ## Progress
@@ -16,7 +16,7 @@
 | 5 | Ratchet Domain Consolidation | Complete | All 3 plans done |
 | 6 | Terminal Domain Consolidation | Complete | Plan 01 done (4min) |
 | 7 | Run Script Domain Consolidation | Complete | All 2 plans done |
-| 8 | Orchestration Layer | Pending | Depends on phases 2-7 |
+| 8 | Orchestration Layer | In Progress | Plan 01 done (12min) |
 | 9 | AppContext & Import Rewiring | Pending | Depends on phase 8 |
 | 10 | Validation & Stabilization | Pending | Depends on phase 9 |
 
@@ -77,6 +77,10 @@
 | Instance type in app-context for RunScriptService | 2026-02-10 | Changed from typeof RunScriptService to RunScriptService (instance type) (07-01) |
 | Cross-domain workspace-state-machine via shim | 2026-02-10 | startup-script uses @/backend/services/ shim path to avoid cross-domain violation (07-02) |
 | Selective named exports in run-script barrel | 2026-02-10 | Barrel uses explicit named re-exports (no export *) per established convention (07-02) |
+| clearInitMode made public for orchestrator | 2026-02-10 | Orchestrator needs access to clear init mode after worktree creation (08-01) |
+| Direct module paths for workspace in orchestrators | 2026-02-10 | Avoids circular dep: workspace barrel -> creation.service -> orchestrator -> workspace barrel (08-01) |
+| Module-level cached GitHub username in orchestrator | 2026-02-10 | Cross-domain caching moved from WorktreeLifecycleService instance field to orchestrator module scope (08-01) |
+| Knip ignore for orchestration directory | 2026-02-10 | Added src/backend/orchestration/*.ts to knip ignore for new orchestration files (08-01) |
 
 ## Blockers
 
@@ -84,10 +88,12 @@ None.
 
 ## Context for Next Session
 
-Phase 7 complete: Run-script domain consolidation done (RS-01).
-3 services in src/backend/domains/run-script/: run-script-state-machine.service, run-script.service, startup-script.service.
-Domain barrel exports full public API (5 runtime + 2 types). Smoke test passes.
-Re-export shims at old services/ paths for all 3 services. Ready for Phase 8 (Orchestration).
+Phase 8 plan 01 complete: Orchestration layer initialized.
+Extracted initializeWorkspaceWorktree and archiveWorkspace from worktree-lifecycle.service.ts into src/backend/orchestration/.
+worktree-lifecycle.service.ts now has zero cross-domain imports (pure worktree manager).
+Orchestrators use direct module paths for workspace domain imports (avoids barrel circular dep).
+reconciliation.service.ts tRPC layer violation fixed (imports from orchestration now).
+Ready for Phase 8 plans 02-04 (ratchet orchestration, etc.).
 
 ## Performance Metrics
 
@@ -113,7 +119,8 @@ Re-export shims at old services/ paths for all 3 services. Ready for Phase 8 (Or
 | 06 | 01 | 4min | 2 | 5 |
 | 07 | 01 | 7min | 2 | 7 |
 | 07 | 02 | 3min | 2 | 4 |
+| 08 | 01 | 12min | 2 | 14 |
 
 ---
 *State initialized: 2026-02-10*
-*Last session: 2026-02-10T17:58:30Z -- Completed 07-02-PLAN.md*
+*Last session: 2026-02-10T19:06:50Z -- Completed 08-01-PLAN.md*
