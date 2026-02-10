@@ -37,6 +37,7 @@ describe('FileLockMutex', () => {
 
     const mutex = new FileLockMutex({
       acquireTimeoutMs: 40,
+      postTimeoutWaitMs: 0,
       initialRetryDelayMs: 5,
       maxRetryDelayMs: 10,
       maxStaleRetries: 0,
@@ -45,6 +46,40 @@ describe('FileLockMutex', () => {
 
     try {
       await expect(mutex.acquire(lockPath)).rejects.toBeInstanceOf(FileLockTimeoutError);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps waiting during post-timeout window and acquires once lock is released', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'contention.lock');
+
+    const holder = new FileLockMutex({
+      acquireTimeoutMs: 20,
+      postTimeoutWaitMs: 120,
+      initialRetryDelayMs: 5,
+      maxRetryDelayMs: 10,
+      maxStaleRetries: 0,
+      staleThresholdMs: 10_000,
+    });
+    const contender = new FileLockMutex({
+      acquireTimeoutMs: 20,
+      postTimeoutWaitMs: 120,
+      initialRetryDelayMs: 5,
+      maxRetryDelayMs: 10,
+      maxStaleRetries: 0,
+      staleThresholdMs: 10_000,
+    });
+
+    try {
+      const releaseHolder = await holder.acquire(lockPath);
+      setTimeout(() => {
+        void releaseHolder();
+      }, 40);
+
+      const releaseContender = await contender.acquire(lockPath);
+      await releaseContender();
     } finally {
       await fs.rm(baseDir, { recursive: true, force: true });
     }
@@ -60,6 +95,7 @@ describe('FileLockMutex', () => {
 
     const mutex = new FileLockMutex({
       acquireTimeoutMs: 30,
+      postTimeoutWaitMs: 50,
       initialRetryDelayMs: 5,
       maxRetryDelayMs: 10,
       maxStaleRetries: 2,

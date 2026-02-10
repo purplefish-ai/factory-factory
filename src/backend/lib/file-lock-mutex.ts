@@ -10,6 +10,7 @@ const DEFAULT_LOCK_MAX_STALE_RETRIES = 3;
 
 export interface FileLockMutexOptions {
   acquireTimeoutMs: number;
+  postTimeoutWaitMs: number;
   initialRetryDelayMs: number;
   maxRetryDelayMs: number;
   maxStaleRetries: number;
@@ -31,6 +32,8 @@ export class FileLockMutex {
 
     this.options = {
       acquireTimeoutMs,
+      postTimeoutWaitMs:
+        options.postTimeoutWaitMs ?? options.staleThresholdMs ?? acquireTimeoutMs * 5,
       initialRetryDelayMs: options.initialRetryDelayMs ?? DEFAULT_LOCK_RETRY_DELAY_MS,
       maxRetryDelayMs: options.maxRetryDelayMs ?? DEFAULT_LOCK_MAX_RETRY_DELAY_MS,
       maxStaleRetries: options.maxStaleRetries ?? DEFAULT_LOCK_MAX_STALE_RETRIES,
@@ -48,30 +51,58 @@ export class FileLockMutex {
         const fileHandle = await fs.open(lockPath, 'wx');
         return this.createLockCleanup(fileHandle, lockPath);
       } catch (error) {
-        const code = (error as NodeJS.ErrnoException | undefined)?.code;
+        const resolution = await this.resolveAcquireContention({
+          error,
+          lockPath,
+          startTime,
+          staleRetryCount,
+        });
+        staleRetryCount = resolution.staleRetryCount;
 
-        if (code !== 'EEXIST') {
-          throw error;
-        }
-
-        const elapsed = Date.now() - startTime;
-        if (elapsed >= this.options.acquireTimeoutMs) {
-          const { shouldRetry, newCount } = await this.handleLockTimeout(lockPath, staleRetryCount);
-          staleRetryCount = newCount;
-
-          if (shouldRetry) {
-            continue;
-          }
-
-          throw new FileLockTimeoutError(
-            `Failed to acquire lock after ${this.options.acquireTimeoutMs}ms and ${staleRetryCount} stale removal attempts: ${lockPath}`
-          );
+        if (resolution.continueImmediately) {
+          continue;
         }
 
         await this.sleep(retryDelay);
         retryDelay = Math.min(retryDelay * 2, this.options.maxRetryDelayMs);
       }
     }
+  }
+
+  private async resolveAcquireContention({
+    error,
+    lockPath,
+    startTime,
+    staleRetryCount,
+  }: {
+    error: unknown;
+    lockPath: string;
+    startTime: number;
+    staleRetryCount: number;
+  }): Promise<{ staleRetryCount: number; continueImmediately: boolean }> {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code !== 'EEXIST') {
+      throw error;
+    }
+
+    const elapsed = Date.now() - startTime;
+    const hardTimeoutMs = this.options.acquireTimeoutMs + this.options.postTimeoutWaitMs;
+
+    if (elapsed >= hardTimeoutMs) {
+      throw new FileLockTimeoutError(
+        `Failed to acquire lock after ${hardTimeoutMs}ms and ${staleRetryCount} stale removal attempts: ${lockPath}`
+      );
+    }
+
+    if (elapsed < this.options.acquireTimeoutMs) {
+      return { staleRetryCount, continueImmediately: false };
+    }
+
+    const staleResolution = await this.tryHandleStaleLockAfterTimeout(lockPath, staleRetryCount);
+    return {
+      staleRetryCount: staleResolution.newCount,
+      continueImmediately: staleResolution.staleRemoved,
+    };
   }
 
   private createLockCleanup(fileHandle: fs.FileHandle, lockPath: string): () => Promise<void> {
@@ -145,21 +176,21 @@ export class FileLockMutex {
     }
   }
 
-  private async handleLockTimeout(
+  private async tryHandleStaleLockAfterTimeout(
     lockPath: string,
     staleRetryCount: number
-  ): Promise<{ shouldRetry: boolean; newCount: number }> {
+  ): Promise<{ staleRemoved: boolean; newCount: number }> {
     if (staleRetryCount >= this.options.maxStaleRetries) {
-      return { shouldRetry: false, newCount: staleRetryCount };
+      return { staleRemoved: false, newCount: staleRetryCount };
     }
 
     const removed = await this.tryRemoveStaleLock(lockPath);
     if (!removed) {
-      return { shouldRetry: false, newCount: staleRetryCount };
+      return { staleRemoved: false, newCount: staleRetryCount };
     }
 
     await this.sleep(this.options.initialRetryDelayMs);
-    return { shouldRetry: true, newCount: staleRetryCount + 1 };
+    return { staleRemoved: true, newCount: staleRetryCount + 1 };
   }
 
   private async tryRemoveStaleLock(lockPath: string): Promise<boolean> {

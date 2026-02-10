@@ -249,10 +249,9 @@ describe('FileLockService', () => {
       expect(fs.rename).toHaveBeenCalled();
 
       const writeCall = vi.mocked(fs.writeFile).mock.calls[0]!;
-      expect(String(writeCall[0])).toContain(
-        path.join(mockWorktreePath, '.context', 'advisory-locks.json')
-      );
-      expect(String(writeCall[0])).toContain('.tmp');
+      const tmpWritePath = String(writeCall[0]);
+      expect(path.dirname(tmpWritePath)).toBe(path.join(mockWorktreePath, '.context'));
+      expect(path.basename(tmpWritePath)).toMatch(/^\.tmp-/);
       expect(vi.mocked(fs.rename).mock.calls[0]?.[1]).toBe(
         path.join(mockWorktreePath, '.context', 'advisory-locks.json')
       );

@@ -19,7 +19,7 @@ export async function writeFileAtomic(
   const directory = path.dirname(targetPath);
   await fs.mkdir(directory, { recursive: true });
 
-  const tmpPath = `${targetPath}.${randomUUID()}.tmp`;
+  const tmpPath = path.join(directory, `.tmp-${randomUUID()}`);
 
   if (typeof content === 'string') {
     await fs.writeFile(tmpPath, content, {
