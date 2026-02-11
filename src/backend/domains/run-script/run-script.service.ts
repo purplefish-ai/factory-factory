@@ -330,8 +330,15 @@ export class RunScriptService {
       const pid = workspace.runScriptPid;
       const status = workspace.runScriptStatus;
 
-      // Already stopped or idle -- nothing to do
-      if (status === 'IDLE' || status === 'STOPPING') {
+      // Already idle -- nothing to do
+      if (status === 'IDLE') {
+        return { success: true };
+      }
+
+      // STOPPING can be sticky if a previous stop flow failed mid-cleanup.
+      // Try to complete it opportunistically.
+      if (status === 'STOPPING') {
+        await this.completeStoppingAfterStop(workspaceId);
         return { success: true };
       }
 
@@ -511,14 +518,23 @@ export class RunScriptService {
     await new Promise<void>((resolve) => {
       treeKill(targetPid, 'SIGTERM', (err) => {
         if (err) {
-          logger.warn('Failed to tree-kill run script process', {
-            workspaceId,
-            pid: targetPid,
-            error: err.message,
-          });
-        } else {
-          this.runningProcesses.delete(workspaceId);
+          const errorCode = (err as NodeJS.ErrnoException).code;
+          const message = err.message;
+          if (errorCode === 'ESRCH' || message.includes('No such process')) {
+            logger.debug('Run script process already exited before tree-kill', {
+              workspaceId,
+              pid: targetPid,
+              error: message,
+            });
+          } else {
+            logger.warn('Failed to tree-kill run script process', {
+              workspaceId,
+              pid: targetPid,
+              error: message,
+            });
+          }
         }
+        this.runningProcesses.delete(workspaceId);
         resolve();
       });
     });

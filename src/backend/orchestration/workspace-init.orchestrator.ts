@@ -10,6 +10,7 @@ import { workspaceStateMachine } from '@/backend/domains/workspace/lifecycle/sta
 import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -19,18 +20,38 @@ import type { WorkspaceWithProject } from './types';
 const logger = createLogger('workspace-init-orchestrator');
 
 // Module-level cached GitHub username (cross-domain logic: caches githubCLIService result)
-let cachedGitHubUsername: string | null | undefined;
+let cachedGitHubUsername: {
+  value: string | null;
+  fetchedAtMs: number;
+  expiresAtMs: number;
+} | null = null;
 
 async function getCachedGitHubUsername(): Promise<string | null> {
-  if (cachedGitHubUsername === undefined) {
-    cachedGitHubUsername = await githubCLIService.getAuthenticatedUsername();
+  const nowMs = Date.now();
+  if (
+    cachedGitHubUsername &&
+    nowMs >= cachedGitHubUsername.fetchedAtMs &&
+    nowMs < cachedGitHubUsername.expiresAtMs
+  ) {
+    return cachedGitHubUsername.value;
   }
-  return cachedGitHubUsername ?? null;
+
+  const value = await githubCLIService.getAuthenticatedUsername();
+  cachedGitHubUsername = {
+    value: value ?? null,
+    fetchedAtMs: nowMs,
+    expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
+  };
+  return cachedGitHubUsername.value;
 }
 
 async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
   try {
-    await workspaceStateMachine.startProvisioning(workspaceId);
+    const started = await workspaceStateMachine.startProvisioning(workspaceId);
+    if (!started) {
+      logger.warn('Skipping workspace initialization: retry limit exceeded', { workspaceId });
+      return false;
+    }
     return true;
   } catch (error) {
     logger.error('Failed to start provisioning', error as Error, { workspaceId });
