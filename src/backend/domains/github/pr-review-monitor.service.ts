@@ -31,7 +31,7 @@ class PRReviewMonitorService {
    * Start the PR review monitor
    */
   start(): void {
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       return; // Already running
     }
 
@@ -52,7 +52,7 @@ class PRReviewMonitorService {
   async stop(): Promise<void> {
     this.isShuttingDown = true;
 
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       logger.debug('Waiting for PR review monitor loop to complete');
       await this.monitorLoop;
       this.monitorLoop = null;

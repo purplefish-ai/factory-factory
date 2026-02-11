@@ -58,7 +58,7 @@ export function useCreateWorkspace(
       utils.workspace.list.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
       setIsCreating(false);
-      navigate(`/projects/${projectSlug}/workspaces/${workspace.id}`);
+      void navigate(`/projects/${projectSlug}/workspaces/${workspace.id}`);
     } catch (error) {
       setIsCreating(false);
       const message = error instanceof Error ? error.message : 'Unknown error';

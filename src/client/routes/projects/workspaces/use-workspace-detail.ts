@@ -199,7 +199,7 @@ export function useSessionManagement({
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: () => {
-      navigate(`/projects/${slug}/workspaces`);
+      void navigate(`/projects/${slug}/workspaces`);
     },
   });
 

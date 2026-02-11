@@ -371,13 +371,15 @@ class StartupScriptService {
 
       // Flush immediately if buffer is large enough
       if (buffer.length >= 4096) {
-        flush();
+        void flush();
         return;
       }
 
       // Otherwise, schedule a debounced flush
       if (!flushTimeout) {
-        flushTimeout = setTimeout(flush, 500);
+        flushTimeout = setTimeout(() => {
+          void flush();
+        }, 500);
       }
     };
 

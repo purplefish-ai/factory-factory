@@ -53,7 +53,7 @@ class CIMonitorService {
    * Start the CI monitor
    */
   start(): void {
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       return; // Already running
     }
 
@@ -72,7 +72,7 @@ class CIMonitorService {
   async stop(): Promise<void> {
     this.isShuttingDown = true;
 
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       logger.debug('Waiting for CI monitor loop to complete');
       await this.monitorLoop;
       this.monitorLoop = null;

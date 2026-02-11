@@ -52,7 +52,7 @@ class ReconciliationService {
       }
 
       // Avoid overlapping cleanup runs.
-      if (this.cleanupInProgress) {
+      if (this.cleanupInProgress !== null) {
         return;
       }
 
@@ -86,7 +86,7 @@ class ReconciliationService {
     }
 
     // Wait for any in-flight cleanup to complete
-    if (this.cleanupInProgress) {
+    if (this.cleanupInProgress !== null) {
       logger.debug('Waiting for in-flight cleanup to complete');
       await this.cleanupInProgress;
     }

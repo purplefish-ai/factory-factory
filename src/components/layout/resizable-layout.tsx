@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useState } from 'react';
+import { createContext, type ReactElement, type ReactNode, useContext, useState } from 'react';
 import { Link } from 'react-router';
 
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
@@ -19,7 +19,7 @@ export function useMobileProjectSlot(): HTMLElement | null {
 }
 
 interface ResizableLayoutProps {
-  sidebar: ReactNode;
+  sidebar: ReactElement | null;
   children: ReactNode;
   className?: string;
 }

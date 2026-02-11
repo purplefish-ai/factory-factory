@@ -61,7 +61,7 @@ class SchedulerService {
       this.syncInterval = null;
     }
 
-    if (this.syncInProgress) {
+    if (this.syncInProgress !== null) {
       logger.debug('Waiting for in-flight PR sync to complete');
       await this.syncInProgress;
     }

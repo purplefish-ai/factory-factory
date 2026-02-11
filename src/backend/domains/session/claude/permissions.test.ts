@@ -1061,7 +1061,7 @@ describe('DeferredHandler', () => {
       const eventHandler = vi.fn();
       handler.on('permission_request', eventHandler);
 
-      handler.onCanUseTool(requestWithoutId);
+      const promise = handler.onCanUseTool(requestWithoutId);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(eventHandler).toHaveBeenCalled();
@@ -1070,6 +1070,7 @@ describe('DeferredHandler', () => {
 
       // Clean up
       handler.approve(emittedId);
+      await promise;
     });
 
     it('should use callback_id when provided (even empty string)', async () => {
@@ -1091,7 +1092,7 @@ describe('DeferredHandler', () => {
       const eventHandler = vi.fn();
       handler.on('hook_request', eventHandler);
 
-      handler.onPreToolUseHook(hookWithEmptyId);
+      const promise = handler.onPreToolUseHook(hookWithEmptyId);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(eventHandler).toHaveBeenCalled();
@@ -1101,6 +1102,7 @@ describe('DeferredHandler', () => {
 
       // Clean up - need to use empty string to approve
       handler.approve('');
+      await promise;
     });
   });
 });
