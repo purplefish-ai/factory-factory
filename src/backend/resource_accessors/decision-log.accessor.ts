@@ -48,7 +48,7 @@ class DecisionLogAccessor {
   }
 
   /**
-   * Create an automatic decision log entry for MCP tool calls
+   * Create an automatic decision log entry for tool calls
    */
   createAutomatic(
     agentId: string,
