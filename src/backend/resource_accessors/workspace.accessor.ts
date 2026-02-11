@@ -206,12 +206,17 @@ class WorkspaceAccessor {
   }
 
   /**
-   * Update a workspace with arbitrary Prisma update input.
-   * Used by state-machine transitions that compute update payloads dynamically.
+   * Atomic compare-and-swap transition for workspace status.
+   * Returns count=1 only when current status matches fromStatus.
+   * Used to prevent race conditions in state transitions.
    */
-  updateRaw(id: string, data: Prisma.WorkspaceUpdateInput): Promise<Workspace> {
-    return prisma.workspace.update({
-      where: { id },
+  transitionWithCas(
+    id: string,
+    fromStatus: WorkspaceStatus,
+    data: Prisma.WorkspaceUpdateManyMutationInput
+  ): Promise<{ count: number }> {
+    return prisma.workspace.updateMany({
+      where: { id, status: fromStatus },
       data,
     });
   }
