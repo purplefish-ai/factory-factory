@@ -9,30 +9,30 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 
 ## Current Position
 
-Phase: 12 of 18 (Domain Event Emission)
-Plan: 1 of 2 in current phase
-Status: Executing
-Last activity: 2026-02-11 -- Completed 12-01 (domain event emission for workspace + run-script state machines)
+Phase: 12 of 18 (Domain Event Emission) -- COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-11 -- Completed 12-02 (PR snapshot + ratchet event emission, EVNT-05 verified)
 
-Progress: [██░░░░░░░░] 14%
+Progress: [██░░░░░░░░] 15%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 8min
-- Total execution time: 0.4 hours
+- Total execution time: 0.55 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 11-snapshot-store | 2 | 21min | 10min |
-| 12-domain-event-emission | 1 | 3min | 3min |
+| 12-domain-event-emission | 2 | 12min | 6min |
 
 **Recent Trend:**
-- Last 5 plans: 12min, 9min, 3min
-- Trend: improving
+- Last 5 plans: 12min, 9min, 3min, 9min
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -55,6 +55,8 @@ Recent decisions affecting current work:
 - [11-02]: Derived state tests use responsive mock derivation functions
 - [12-01]: Events emitted AFTER successful CAS mutation, never before or on failure
 - [12-01]: EventEmitter pattern (Node.js native) over custom pub/sub for simplicity
+- [12-02]: PR snapshot always emits (no dedup) -- Phase 13 coalescer handles dedup
+- [12-02]: Ratchet emits only on actual state change (guard check before emit)
 
 ### Pending Todos
 
@@ -67,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 12-01-PLAN.md
+Stopped at: Completed 12-02-PLAN.md -- Phase 12 complete
 Resume file: None
