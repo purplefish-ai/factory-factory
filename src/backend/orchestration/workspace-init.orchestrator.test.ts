@@ -904,32 +904,23 @@ describe('initializeWorkspaceWorktree', () => {
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 
-    it('retries dispatch using idle session selection when older non-idle sessions exist', async () => {
+    it('retries dispatch using the started session id without re-querying session status', async () => {
       setupHappyPath();
-      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockImplementation(
-        (_workspaceId, opts) => {
-          if (opts?.status === SessionStatus.IDLE) {
-            return Promise.resolve([
-              unsafeCoerce({
-                id: 'session-idle',
-                status: SessionStatus.IDLE,
-                model: 'claude-sonnet',
-              }),
-            ]);
-          }
-
-          return Promise.resolve([
-            unsafeCoerce({
-              id: 'session-running',
-              status: SessionStatus.RUNNING,
-              model: 'claude-sonnet',
-            }),
-          ]);
-        }
-      );
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({
+          id: 'session-idle',
+          status: SessionStatus.IDLE,
+          model: 'claude-sonnet',
+        }),
+      ]);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
+      expect(claudeSessionAccessor.findByWorkspaceId).toHaveBeenCalledTimes(1);
+      expect(claudeSessionAccessor.findByWorkspaceId).toHaveBeenCalledWith(WORKSPACE_ID, {
+        status: SessionStatus.IDLE,
+        limit: 1,
+      });
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenNthCalledWith(
         1,
