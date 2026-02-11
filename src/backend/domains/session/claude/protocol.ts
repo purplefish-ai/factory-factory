@@ -165,7 +165,11 @@ export class ClaudeProtocol extends EventEmitter {
       });
 
       // Fire-and-forget the send - backpressure handled internally
-      this.sendRaw(message).catch(reject);
+      this.sendRaw(message).catch((error) => {
+        clearTimeout(timeoutId);
+        this.pendingRequests.delete(requestId);
+        reject(error);
+      });
     });
   }
 
@@ -327,7 +331,11 @@ export class ClaudeProtocol extends EventEmitter {
       });
 
       // Fire-and-forget the send - backpressure handled internally
-      this.sendRaw(message).catch(reject);
+      this.sendRaw(message).catch((error) => {
+        clearTimeout(timeoutId);
+        this.pendingRequests.delete(requestId);
+        reject(error);
+      });
     });
   }
 
