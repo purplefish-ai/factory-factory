@@ -533,6 +533,14 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   }
 
   /**
+   * Get all workspace IDs currently in the store.
+   * Used by reconciliation to detect stale entries.
+   */
+  getAllWorkspaceIds(): string[] {
+    return [...this.entries.keys()];
+  }
+
+  /**
    * Get the number of entries in the store (for testing/debugging).
    */
   size(): number {
