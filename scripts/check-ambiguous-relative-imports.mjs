@@ -40,6 +40,10 @@ function hasResolvableDirectoryIndex(absoluteStem) {
   return RESOLVABLE_EXTENSIONS.some((ext) => existsSync(path.join(absoluteStem, `index${ext}`)));
 }
 
+function isParentRelativeSpecifier(specifier) {
+  return specifier === '..' || specifier.startsWith('../');
+}
+
 function getScriptKind(filePath) {
   if (filePath.endsWith('.tsx')) {
     return ts.ScriptKind.TSX;
@@ -98,7 +102,7 @@ function findImportViolations(filePath) {
       continue;
     }
 
-    if (specifier.startsWith('../')) {
+    if (isParentRelativeSpecifier(specifier)) {
       parentRelativeFindings.push({
         file: path.relative(ROOT_DIR, filePath),
         line: entry.line,
