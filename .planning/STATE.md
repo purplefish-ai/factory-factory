@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 ## Current Position
 
 Phase: 16 of 18 (Client Integration - Sidebar)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-11 -- Phase 15 complete and verified (5/5 must-haves, WSKT-01/02/03/04/05)
+Plan: 1 of 1 in current phase
+Status: Phase complete
+Last activity: 2026-02-11 -- Phase 16 Plan 01 complete (sidebar WebSocket sync)
 
-Progress: [██████░░░░] 63%
+Progress: [███████░░░] 68%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
+- Total plans completed: 9
 - Average duration: 6min
-- Total execution time: 0.85 hours
+- Total execution time: 1.02 hours
 
 **By Phase:**
 
@@ -32,10 +32,11 @@ Progress: [██████░░░░] 63%
 | 13-event-collector | 1 | 5min | 5min |
 | 14-safety-net-reconciliation | 2 | 9min | 4min |
 | 15-websocket-transport | 1 | 4min | 4min |
+| 16-client-integration-sidebar | 1 | 10min | 10min |
 
 **Recent Trend:**
-- Last 5 plans: 9min, 5min, 6min, 3min, 4min
-- Trend: stable
+- Last 5 plans: 5min, 6min, 3min, 4min, 10min
+- Trend: stable (10min outlier due to type compatibility fixes)
 
 *Updated after each plan completion*
 
@@ -69,6 +70,9 @@ Recent decisions affecting current work:
 - [14-01]: Extracted helper methods to keep reconcile() under Biome complexity limit
 - [Phase 15-01]: Store subscription via idempotent ensureStoreSubscription() guard (once, not per-connection)
 - [Phase 15-01]: Connection map keyed by projectId for O(1) project-scoped fan-out
+- [16-01]: Client-side WorkspaceSnapshotEntry type defined locally (not imported from backend build boundary)
+- [16-01]: Type assertion (as never) for tRPC setData updaters due to createdAt string|Date vs Date mismatch
+- [16-01]: createdAt converted to Date in mapping function to match tRPC-inferred cache type
 
 ### Pending Todos
 
@@ -81,5 +85,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 15 complete and verified -- ready to plan Phase 16
+Stopped at: Completed 16-01-PLAN.md -- Phase 16 complete
 Resume file: None
