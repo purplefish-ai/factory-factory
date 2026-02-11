@@ -45,11 +45,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Snapshot entries include derived state fields (sidebarStatus, kanbanColumn, flowPhase, ciObservation) that recompute when underlying fields change
   4. The service lives in src/backend/services/ and has zero imports from @/backend/domains/
   5. Concurrent updates to the same workspace preserve the newest data via field-level timestamps
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 11-01: TBD
-- [ ] 11-02: TBD
+- [ ] 11-01-PLAN.md -- Core snapshot store service with types, class implementation, barrel export, and bridge wiring
+- [ ] 11-02-PLAN.md -- Comprehensive test suite covering all 8 requirements (STORE-01 through STORE-06, ARCH-01, ARCH-02)
 
 ### Phase 12: Domain Event Emission
 **Goal**: Every domain that produces state relevant to project-level UI emits typed events on state transitions, without knowing who listens
@@ -159,7 +159,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 11. Snapshot Store | v1.1 | 0/TBD | Not started | - |
+| 11. Snapshot Store | v1.1 | 0/2 | Planned | - |
 | 12. Domain Event Emission | v1.1 | 0/TBD | Not started | - |
 | 13. Event Collector | v1.1 | 0/TBD | Not started | - |
 | 14. Safety-Net Reconciliation | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- v1.1 milestone roadmap created*
+*Last updated: 2026-02-11 -- Phase 11 planned (2 plans)*
