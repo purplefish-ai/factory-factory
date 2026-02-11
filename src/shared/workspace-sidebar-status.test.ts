@@ -43,24 +43,36 @@ describe('workspace-sidebar-status', () => {
     expect(result.ciState).toBe('MERGED');
   });
 
-  it('uses ratchet CI failure even when PR snapshot is stale', () => {
+  it('prefers PR snapshot CI failure over stale ratchet CI running', () => {
     const result = deriveWorkspaceSidebarStatus({
       isWorking: false,
       prUrl: 'https://github.com/o/r/pull/1',
       prState: 'OPEN',
-      prCiStatus: 'SUCCESS',
-      ratchetState: 'CI_FAILED',
+      prCiStatus: 'FAILURE',
+      ratchetState: 'CI_RUNNING',
     });
 
     expect(result.ciState).toBe('FAILING');
   });
 
-  it('uses ratchet CI running even when PR snapshot is stale', () => {
+  it('prefers PR snapshot CI passing over stale ratchet CI running', () => {
     const result = deriveWorkspaceSidebarStatus({
       isWorking: false,
       prUrl: 'https://github.com/o/r/pull/1',
       prState: 'OPEN',
       prCiStatus: 'SUCCESS',
+      ratchetState: 'CI_RUNNING',
+    });
+
+    expect(result.ciState).toBe('PASSING');
+  });
+
+  it('uses ratchet CI state as fallback when PR CI status is unknown', () => {
+    const result = deriveWorkspaceSidebarStatus({
+      isWorking: false,
+      prUrl: 'https://github.com/o/r/pull/1',
+      prState: 'OPEN',
+      prCiStatus: 'UNKNOWN',
       ratchetState: 'CI_RUNNING',
     });
 
