@@ -82,7 +82,7 @@ export class TerminalService {
   // Exit listeners by terminalId
   private exitListeners = new Map<string, Set<(exitCode: number) => void>>();
 
-  // Active terminal per workspace (for MCP tool to know which terminal user is viewing)
+  // Active terminal per workspace (tracks which terminal the user is viewing)
   private activeTerminals = new Map<string, string>();
 
   // Resource monitoring interval

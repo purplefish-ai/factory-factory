@@ -276,9 +276,6 @@ importers:
       '@storybook/addon-docs':
         specifier: 10.2.4
         version: 10.2.4(@types/react@19.2.10)(esbuild@0.27.2)(rollup@4.57.1)(storybook@10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(vite@7.3.1(@types/node@25.2.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))(webpack@4.41.2)
-      '@storybook/addon-mcp':
-        specifier: ^0.2.2
-        version: 0.2.2(storybook@10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)
       '@storybook/addon-themes':
         specifier: 10.2.4
         version: 10.2.4(storybook@10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))
@@ -2188,11 +2185,6 @@ packages:
     peerDependencies:
       storybook: ^10.2.4
 
-  '@storybook/addon-mcp@0.2.2':
-    resolution: {integrity: sha512-TpmDogRcwQUhmenV2pH4d5q3bfvEhiq2N3Pu5K3L2TgKDA02Oe7cGIJvQWCRLcKjI5mUoxbIRdPAmxAqL0Ywvw==}
-    peerDependencies:
-      storybook: ^9.1.16 || ^10.0.0 || ^10.1.0-0 || ^10.2.0-0 || ^10.3.0-0 || ^10.4.0-0
-
   '@storybook/addon-themes@10.2.4':
     resolution: {integrity: sha512-rNSDcWatn26kAxdOWF9AtwnL+1PWKGMYkbWjaNjqLlf1iTj+4CS1kJ1zBk1j/VVd9I9ohXHxgAtUjGsgxsCQTQ==}
     peerDependencies:
@@ -2230,9 +2222,6 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  '@storybook/mcp@0.2.1':
-    resolution: {integrity: sha512-vvSbBPxm1/MqelHc6SY+XpCtoJcsCfhb+ebnAZ13gh6EaFcnfvYg6Ccl7JW9pwXbbBdyTToJ6Pzii0z/auSNEw==}
 
   '@storybook/react-dom-shim@10.2.4':
     resolution: {integrity: sha512-i22OtrZ7GeZPt/odLf0vqyDhRSKyaLsHkkKSBcANQfzRRnBZmiz2FchOtWm9uvoDWybQsTruZq7kTdtpEhwyGw==}
@@ -2395,26 +2384,6 @@ packages:
     engines: {node: '>=12', npm: '>=6'}
     peerDependencies:
       '@testing-library/dom': '>=7.21.4'
-
-  '@tmcp/adapter-valibot@0.1.5':
-    resolution: {integrity: sha512-9P2wrVYPngemNK0UvPb/opC722/jfd09QxXmme1TRp/wPsl98vpSk/MXt24BCMqBRv4Dvs0xxJH4KHDcjXW52Q==}
-    peerDependencies:
-      tmcp: ^1.17.0
-      valibot: ^1.1.0
-
-  '@tmcp/session-manager@0.2.1':
-    resolution: {integrity: sha512-DOGy9LfufXCy1wfpGHZ6qPSDQtRnTVwOb71+41ffovTqzLMZlK3iLK/LIsekHxIiku+iIAUiqEKN+DHbqEm8IA==}
-    peerDependencies:
-      tmcp: ^1.16.3
-
-  '@tmcp/transport-http@0.8.4':
-    resolution: {integrity: sha512-n/4oIYjHyX5i6LFC3+qlxtc/IIv1xoqLhPVbdA5VYDyUWU6QRBU3+ffMXQuAPs0Q6Z+ZCzcO30V90yRMAxuriQ==}
-    peerDependencies:
-      '@tmcp/auth': ^0.3.3 || ^0.4.0
-      tmcp: ^1.18.0
-    peerDependenciesMeta:
-      '@tmcp/auth':
-        optional: true
 
   '@trpc/client@11.9.0':
     resolution: {integrity: sha512-3r4RT/GbR263QO+2gCPyrs5fEYaXua3/AzCs+GbWC09X0F+mVkyBpO3GRSDObiNU/N1YB597U7WGW3WA1d1TVw==}
@@ -2690,11 +2659,6 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
-
-  '@valibot/to-json-schema@1.5.0':
-    resolution: {integrity: sha512-GE7DmSr1C2UCWPiV0upRH6mv0cCPsqYGs819fb6srCS1tWhyXrkGGe+zxUiwzn/L1BOfADH4sNjY/YHCuP8phQ==}
-    peerDependencies:
-      valibot: ^1.2.0
 
   '@vitejs/plugin-react@5.1.3':
     resolution: {integrity: sha512-NVUnA6gQCl8jfoYqKqQU5Clv0aPw14KkZYCsX6T9Lfu9slI0LOU10OTwFHS/WmptsMMpshNd/1tuWsHQ2Uk+cg==}
@@ -3977,9 +3941,6 @@ packages:
     resolution: {integrity: sha512-p7VutNr1O/QrxysMo3E45FjYDTeXBy0iTltPFNSqKAIfjDSXC+4dj+qfyuD8bfAXrW/y6lW3O76VaYNPKfpKrg==}
     engines: {node: '>=4.0.0'}
 
-  esm-env@1.2.2:
-    resolution: {integrity: sha512-Epxrv+Nr/CaL4ZcFGPJIYLWFom+YeV1DqMLHJoEd9SYRxNbaFruBwfEX/kkHUJf55j2+TUbmDcmuilbP1TmXHA==}
-
   esprima@4.0.1:
     resolution: {integrity: sha512-eGuFFw7Upda+g4p+QHvnW0RyTX/SVeJBDM/gCtMARO0cLuT2HcEKnTPvhjV6aGeqrCB/sbNop0Kszm0jsaWU4A==}
     engines: {node: '>=4'}
@@ -4718,9 +4679,6 @@ packages:
 
   json-parse-better-errors@1.0.2:
     resolution: {integrity: sha512-mrqyZKfX5EhL7hvqcV6WG1yYjnjeuYDzDhhcAAUrq8Po85NBQBJP+ZDUT75qZQ98IkUoBqdkExkukOU7Ts2wrw==}
-
-  json-rpc-2.0@1.7.1:
-    resolution: {integrity: sha512-JqZjhjAanbpkXIzFE7u8mE/iFblawwlXtONaCvRqI+pyABVz7B4M1EUNpyVW+dZjqgQ2L5HFmZCmOCgUKm00hg==}
 
   json-schema-traverse@0.4.1:
     resolution: {integrity: sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==}
@@ -5550,9 +5508,6 @@ packages:
     resolution: {integrity: sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q==}
     engines: {node: '>=12'}
 
-  picoquery@2.5.0:
-    resolution: {integrity: sha512-j1kgOFxtaCyoFCkpoYG2Oj3OdGakadO7HZ7o5CqyRazlmBekKhbDoUnNnXASE07xSY4nDImWZkrZv7toSxMi/g==}
-
   pidtree@0.6.0:
     resolution: {integrity: sha512-eG2dWTVw5bzqGRztnHExczNxt5VGsE6OwTeCG3fdUf9KBsZzO3R5OIIIzWR+iZA0NtZ+RDVdaoE2dK1cn6jH4g==}
     engines: {node: '>=0.10'}
@@ -6240,9 +6195,6 @@ packages:
   sprintf-js@1.1.3:
     resolution: {integrity: sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA==}
 
-  sqids@0.3.0:
-    resolution: {integrity: sha512-lOQK1ucVg+W6n3FhRwwSeUijxe93b51Bfz5PMRMihVf1iVkl82ePQG7V5vwrhzB11v0NtsR25PSZRGiSomJaJw==}
-
   sqlstring@2.3.3:
     resolution: {integrity: sha512-qC9iz2FlN7DQl3+wjwn3802RTyjCx7sDvfQEXchwa6CWOx07/WVfh91gBmQ9fahw8snwGEWU3xGzOt4tFyHLxg==}
     engines: {node: '>= 0.6'}
@@ -6490,9 +6442,6 @@ packages:
     resolution: {integrity: sha512-Plu6V8fF/XU6d2k8jPtlQf5F4Xx2hAin4r2C2ca7wR8NK5MbRTo9huLUWRe28f3Uk8bYZfg74tit/dSjc18xnw==}
     hasBin: true
 
-  tmcp@1.19.2:
-    resolution: {integrity: sha512-/AEG/jlzflGKqCKm7GNdhz50VtFlN+3vcnKd+iQJXcHdIPrpCRMolEj57SfgcXcfE2ouX7J6Q05gPKsS2NZhKg==}
-
   tmp-promise@3.0.3:
     resolution: {integrity: sha512-RwM7MoPojPxsOBYnyd2hy0bxtIlVrihNs9pj5SUvY8Zz1sQcQG2tG1hSr8PDxfgEB8RNKDhqbIlroIarSNDNsQ==}
 
@@ -6660,9 +6609,6 @@ packages:
 
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
-
-  uri-template-matcher@1.1.2:
-    resolution: {integrity: sha512-uZc1h12jdO3m/R77SfTEOuo6VbMhgWznaawKpBjRGSJb7i91x5PgI37NQJtG+Cerxkk0yr1pylBY2qG1kQ+aEQ==}
 
   url@0.11.4:
     resolution: {integrity: sha512-oCwdVC7mTuWiPyjLUz/COz5TLk6wgp0RCsN+wHZ2Ekneac9w8uuV0njcbbie2ME+Vs+d6duwmYuR3HgQXs1fOg==}
@@ -8761,19 +8707,6 @@ snapshots:
       - vite
       - webpack
 
-  '@storybook/addon-mcp@0.2.2(storybook@10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)':
-    dependencies:
-      '@storybook/mcp': 0.2.1(typescript@5.9.3)
-      '@tmcp/adapter-valibot': 0.1.5(tmcp@1.19.2(typescript@5.9.3))(valibot@1.2.0(typescript@5.9.3))
-      '@tmcp/transport-http': 0.8.4(tmcp@1.19.2(typescript@5.9.3))
-      picoquery: 2.5.0
-      storybook: 10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      tmcp: 1.19.2(typescript@5.9.3)
-      valibot: 1.2.0(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@tmcp/auth'
-      - typescript
-
   '@storybook/addon-themes@10.2.4(storybook@10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))':
     dependencies:
       storybook: 10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -8806,16 +8739,6 @@ snapshots:
     dependencies:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-
-  '@storybook/mcp@0.2.1(typescript@5.9.3)':
-    dependencies:
-      '@tmcp/adapter-valibot': 0.1.5(tmcp@1.19.2(typescript@5.9.3))(valibot@1.2.0(typescript@5.9.3))
-      '@tmcp/transport-http': 0.8.4(tmcp@1.19.2(typescript@5.9.3))
-      tmcp: 1.19.2(typescript@5.9.3)
-      valibot: 1.2.0(typescript@5.9.3)
-    transitivePeerDependencies:
-      - '@tmcp/auth'
-      - typescript
 
   '@storybook/react-dom-shim@10.2.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(storybook@10.2.4(@testing-library/dom@10.4.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))':
     dependencies:
@@ -8985,23 +8908,6 @@ snapshots:
   '@testing-library/user-event@14.6.1(@testing-library/dom@10.4.1)':
     dependencies:
       '@testing-library/dom': 10.4.1
-
-  '@tmcp/adapter-valibot@0.1.5(tmcp@1.19.2(typescript@5.9.3))(valibot@1.2.0(typescript@5.9.3))':
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      '@valibot/to-json-schema': 1.5.0(valibot@1.2.0(typescript@5.9.3))
-      tmcp: 1.19.2(typescript@5.9.3)
-      valibot: 1.2.0(typescript@5.9.3)
-
-  '@tmcp/session-manager@0.2.1(tmcp@1.19.2(typescript@5.9.3))':
-    dependencies:
-      tmcp: 1.19.2(typescript@5.9.3)
-
-  '@tmcp/transport-http@0.8.4(tmcp@1.19.2(typescript@5.9.3))':
-    dependencies:
-      '@tmcp/session-manager': 0.2.1(tmcp@1.19.2(typescript@5.9.3))
-      esm-env: 1.2.2
-      tmcp: 1.19.2(typescript@5.9.3)
 
   '@trpc/client@11.9.0(@trpc/server@11.9.0(typescript@5.9.3))(typescript@5.9.3)':
     dependencies:
@@ -9331,10 +9237,6 @@ snapshots:
     optional: true
 
   '@ungap/structured-clone@1.3.0': {}
-
-  '@valibot/to-json-schema@1.5.0(valibot@1.2.0(typescript@5.9.3))':
-    dependencies:
-      valibot: 1.2.0(typescript@5.9.3)
 
   '@vitejs/plugin-react@5.1.3(vite@7.3.1(@types/node@25.2.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))':
     dependencies:
@@ -11038,8 +10940,6 @@ snapshots:
       estraverse: 4.3.0
     optional: true
 
-  esm-env@1.2.2: {}
-
   esprima@4.0.1: {}
 
   esrecurse@4.3.0:
@@ -11887,8 +11787,6 @@ snapshots:
 
   json-parse-better-errors@1.0.2:
     optional: true
-
-  json-rpc-2.0@1.7.1: {}
 
   json-schema-traverse@0.4.1: {}
 
@@ -13031,8 +12929,6 @@ snapshots:
 
   picomatch@4.0.3: {}
 
-  picoquery@2.5.0: {}
-
   pidtree@0.6.0: {}
 
   pidusage@4.0.1:
@@ -13903,8 +13799,6 @@ snapshots:
   sprintf-js@1.1.3:
     optional: true
 
-  sqids@0.3.0: {}
-
   sqlstring@2.3.3: {}
 
   ssri@12.0.0:
@@ -14195,16 +14089,6 @@ snapshots:
     dependencies:
       tldts-core: 7.0.21
 
-  tmcp@1.19.2(typescript@5.9.3):
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      json-rpc-2.0: 1.7.1
-      sqids: 0.3.0
-      uri-template-matcher: 1.1.2
-      valibot: 1.2.0(typescript@5.9.3)
-    transitivePeerDependencies:
-      - typescript
-
   tmp-promise@3.0.3:
     dependencies:
       tmp: 0.2.5
@@ -14391,8 +14275,6 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
-
-  uri-template-matcher@1.1.2: {}
 
   url@0.11.4:
     dependencies:

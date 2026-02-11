@@ -15,8 +15,6 @@ import {
   type StreamEventMessage,
   type ToolUseContent,
 } from '@/backend/domains/session';
-import { executeMcpTool } from '@/backend/routers/mcp/server';
-import type { McpToolResponse } from '@/backend/routers/mcp/types';
 import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('agent-process-adapter');
@@ -51,17 +49,6 @@ export interface ToolUseEventData {
   toolUse: { type: 'tool_use'; tool: string; input: Record<string, unknown>; id: string };
 }
 
-export interface ToolResultEventData {
-  agentId: string;
-  toolResult: {
-    type: 'tool_result';
-    tool_use_id: string;
-    result: unknown;
-    is_error: boolean;
-  };
-  mcpResponse: McpToolResponse;
-}
-
 export interface ResultEventData {
   agentId: string;
   /** Claude CLI session ID from the result message (used for history in ~/.claude/projects/) */
@@ -89,7 +76,6 @@ export interface ErrorEventData {
 export interface AgentProcessEvents {
   message: MessageEventData;
   tool_use: ToolUseEventData;
-  tool_result: ToolResultEventData;
   result: ResultEventData;
   exit: ExitEventData;
   error: ErrorEventData;
@@ -98,7 +84,6 @@ export interface AgentProcessEvents {
 export interface AgentProcessAdapterEvents {
   message: (data: MessageEventData) => void;
   tool_use: (data: ToolUseEventData) => void;
-  tool_result: (data: ToolResultEventData) => void;
   result: (data: ResultEventData) => void;
   exit: (data: ExitEventData) => void;
   error: (data: ErrorEventData) => void;
@@ -114,8 +99,7 @@ export interface AgentProcessAdapterEvents {
  * Responsibilities:
  * - Map agentId to ClaudeClient instances
  * - Listen for messages and re-emit with agentId
- * - Handle tool_use messages by calling executeMcpTool()
- * - Send tool results using proper tool_result content blocks
+ * - Forward tool_use messages for observability
  * - Handle process exit and update agent status
  */
 export class AgentProcessAdapter extends EventEmitter {
@@ -129,13 +113,12 @@ export class AgentProcessAdapter extends EventEmitter {
    */
   private setupClientListeners(agentId: string, client: ClaudeClient): void {
     // Handle tool use events
-    client.on('tool_use', async (toolUse: ToolUseContent) => {
+    client.on('tool_use', (toolUse: ToolUseContent) => {
       logger.info('Handling tool use', { agentId, tool: toolUse.name, toolId: toolUse.id });
       this.emit('tool_use', {
         agentId,
         toolUse: { type: 'tool_use', tool: toolUse.name, input: toolUse.input, id: toolUse.id },
       });
-      await this.executeToolAndRespond(agentId, client, toolUse);
     });
 
     // Handle message events (for UI forwarding)
@@ -179,64 +162,6 @@ export class AgentProcessAdapter extends EventEmitter {
     client.on('error', (error: Error) => {
       logger.error('Agent error', error, { agentId });
       this.emit('error', { agentId, error });
-    });
-  }
-
-  /**
-   * Execute MCP tool and send result back to Claude using proper tool_result content block
-   */
-  private async executeToolAndRespond(
-    agentId: string,
-    client: ClaudeClient,
-    toolUse: ToolUseContent
-  ): Promise<void> {
-    let mcpResponse: McpToolResponse;
-
-    try {
-      // Execute the tool via MCP server
-      mcpResponse = await executeMcpTool(agentId, toolUse.name, toolUse.input);
-
-      logger.info('Tool execution completed', {
-        agentId,
-        tool: toolUse.name,
-        toolId: toolUse.id,
-        success: mcpResponse.success,
-      });
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error('Tool execution failed', err, {
-        agentId,
-        tool: toolUse.name,
-        toolId: toolUse.id,
-      });
-
-      mcpResponse = {
-        success: false,
-        error: {
-          code: 'EXECUTION_ERROR',
-          message: err.message,
-          details: { stack: err.stack },
-        },
-        timestamp: new Date(),
-      };
-    }
-
-    // Send result using proper tool_result content block
-    const resultData = mcpResponse.success
-      ? (mcpResponse.data as string | object)
-      : { error: mcpResponse.error.message };
-    client.sendToolResult(toolUse.id, resultData, !mcpResponse.success);
-
-    // Emit tool_result event
-    this.emit('tool_result', {
-      agentId,
-      toolResult: {
-        type: 'tool_result',
-        tool_use_id: toolUse.id,
-        result: mcpResponse.success ? mcpResponse.data : { error: mcpResponse.error.message },
-        is_error: !mcpResponse.success,
-      },
-      mcpResponse,
     });
   }
 
