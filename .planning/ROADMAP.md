@@ -24,7 +24,7 @@ See [v1.0 Roadmap Archive](milestones/v1.0-ROADMAP.md) for full phase details.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 11: Snapshot Store** -- In-memory store with versioned per-workspace entries, cleanup contracts, and derived state
+- [x] **Phase 11: Snapshot Store** -- In-memory store with versioned per-workspace entries, cleanup contracts, and derived state ✓ 2026-02-11
 - [ ] **Phase 12: Domain Event Emission** -- Add EventEmitter capability to workspace, GitHub, ratchet, run-script, and session domains
 - [ ] **Phase 13: Event Collector** -- Orchestration layer wiring domain events to snapshot store updates with coalescing
 - [ ] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection
@@ -48,8 +48,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 11-01-PLAN.md -- Core snapshot store service with types, class implementation, barrel export, and bridge wiring
-- [ ] 11-02-PLAN.md -- Comprehensive test suite covering all 8 requirements (STORE-01 through STORE-06, ARCH-01, ARCH-02)
+- [x] 11-01-PLAN.md -- Core snapshot store service with types, class implementation, barrel export, and bridge wiring
+- [x] 11-02-PLAN.md -- Comprehensive test suite covering all 8 requirements (STORE-01 through STORE-06, ARCH-01, ARCH-02)
 
 ### Phase 12: Domain Event Emission
 **Goal**: Every domain that produces state relevant to project-level UI emits typed events on state transitions, without knowing who listens
@@ -159,7 +159,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 11. Snapshot Store | v1.1 | 0/2 | Planned | - |
+| 11. Snapshot Store | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 12. Domain Event Emission | v1.1 | 0/TBD | Not started | - |
 | 13. Event Collector | v1.1 | 0/TBD | Not started | - |
 | 14. Safety-Net Reconciliation | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 11 planned (2 plans)*
+*Last updated: 2026-02-11 -- Phase 11 complete (2/2 plans, verified)*
