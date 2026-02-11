@@ -43,19 +43,30 @@ class ReconciliationService {
       return; // Already running
     }
 
+    this.isShuttingDown = false;
+
     this.cleanupInterval = setInterval(() => {
       // Skip if shutdown has started
       if (this.isShuttingDown) {
         return;
       }
+
+      // Avoid overlapping cleanup runs.
+      if (this.cleanupInProgress) {
+        return;
+      }
+
       // Track the cleanup promise so we can wait for it during shutdown
-      this.cleanupInProgress = this.cleanupOrphans()
+      const cleanupPromise = this.cleanupOrphans()
         .catch((err) => {
           logger.error('Periodic orphan cleanup failed', err as Error);
         })
         .finally(() => {
-          this.cleanupInProgress = null;
+          if (this.cleanupInProgress === cleanupPromise) {
+            this.cleanupInProgress = null;
+          }
         });
+      this.cleanupInProgress = cleanupPromise;
     }, SERVICE_INTERVAL_MS.reconciliationCleanup);
 
     logger.info('Started periodic orphan cleanup', {

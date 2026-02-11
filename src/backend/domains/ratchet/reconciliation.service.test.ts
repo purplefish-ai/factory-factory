@@ -54,7 +54,8 @@ describe('ReconciliationService', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await reconciliationService.stopPeriodicCleanup();
     vi.useRealTimers();
   });
 
@@ -181,6 +182,67 @@ describe('ReconciliationService', () => {
 
       // Should not throw
       await expect(reconciliationService.reconcile()).resolves.not.toThrow();
+    });
+  });
+
+  describe('periodic cleanup', () => {
+    it('does not start overlapping cleanup runs while one is in progress', async () => {
+      const releaseCleanup: { current: (() => void) | null } = { current: null };
+      const cleanupSpy = vi
+        .spyOn(reconciliationService, 'cleanupOrphans')
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              releaseCleanup.current = () => resolve();
+            })
+        )
+        .mockResolvedValue(undefined);
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersToNextTimerAsync();
+      await vi.advanceTimersToNextTimerAsync();
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+
+      if (releaseCleanup.current) {
+        releaseCleanup.current();
+      }
+      await Promise.resolve();
+      await vi.advanceTimersToNextTimerAsync();
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('waits for in-flight cleanup before stopping', async () => {
+      const releaseCleanup: { current: (() => void) | null } = { current: null };
+      const cleanupSpy = vi
+        .spyOn(reconciliationService, 'cleanupOrphans')
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              releaseCleanup.current = () => resolve();
+            })
+        )
+        .mockResolvedValue(undefined);
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersToNextTimerAsync();
+
+      let stopped = false;
+      const stopPromise = reconciliationService.stopPeriodicCleanup().then(() => {
+        stopped = true;
+      });
+
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+
+      if (releaseCleanup.current) {
+        releaseCleanup.current();
+      }
+      await stopPromise;
+      expect(stopped).toBe(true);
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

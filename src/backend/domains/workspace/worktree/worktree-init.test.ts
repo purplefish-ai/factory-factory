@@ -157,6 +157,18 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     mocks.clearInitMode.mockResolvedValue(undefined);
   });
 
+  it('short-circuits when startProvisioning returns null (max retries exceeded)', async () => {
+    mocks.startProvisioning.mockResolvedValue(null);
+
+    await initializeWorkspaceWorktree('workspace-1', {
+      branchName: 'main',
+      useExistingBranch: false,
+    });
+
+    expect(mocks.findByIdWithProject).not.toHaveBeenCalled();
+    expect(mocks.createWorktree).not.toHaveBeenCalled();
+  });
+
   it('starts the default Claude session after startup script completes', async () => {
     mocks.runStartupScript.mockResolvedValue({
       success: true,
@@ -291,5 +303,47 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
 
     expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
+  });
+
+  it('refreshes cached GitHub username after TTL expiry', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+      mocks.readConfig.mockResolvedValue(null);
+      mocks.getAuthenticatedUsername
+        .mockResolvedValueOnce('user-a')
+        .mockResolvedValueOnce('user-b');
+
+      await initializeWorkspaceWorktree('workspace-1', {
+        branchName: 'main',
+        useExistingBranch: false,
+      });
+
+      vi.setSystemTime(new Date('2026-01-01T00:06:00.000Z'));
+
+      await initializeWorkspaceWorktree('workspace-1', {
+        branchName: 'main',
+        useExistingBranch: false,
+      });
+
+      expect(mocks.getAuthenticatedUsername).toHaveBeenCalledTimes(2);
+      expect(mocks.createWorktree).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        'workspace-workspace-1',
+        'main',
+        expect.objectContaining({ branchPrefix: 'user-a' })
+      );
+      expect(mocks.createWorktree).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        'workspace-workspace-1',
+        'main',
+        expect.objectContaining({ branchPrefix: 'user-b' })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

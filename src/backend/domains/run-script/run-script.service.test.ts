@@ -142,14 +142,16 @@ describe('RunScriptService.stopRunScript', () => {
     expect(mockBeginStopping).not.toHaveBeenCalled();
   });
 
-  it('returns success immediately when already STOPPING', async () => {
+  it('reconciles STOPPING state to IDLE before returning success', async () => {
     mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'STOPPING' });
+    mockCompleteStopping.mockResolvedValue(undefined);
 
     const service = new RunScriptService();
     const result = await service.stopRunScript('ws-1');
 
     expect(result).toEqual({ success: true });
     expect(mockBeginStopping).not.toHaveBeenCalled();
+    expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
   });
 
   it('handles COMPLETED state by resetting to IDLE', async () => {
@@ -216,6 +218,30 @@ describe('RunScriptService.stopRunScript', () => {
     const result = await service.stopRunScript('ws-1');
 
     expect(result).toEqual({ success: true });
+  });
+
+  it('clears in-memory process entry even when tree-kill reports an error', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 12_345,
+      runScriptCleanupCommand: null,
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: null,
+    });
+    mockBeginStopping.mockResolvedValue(undefined);
+    mockCompleteStopping.mockResolvedValue(undefined);
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) =>
+        callback(new Error('ESRCH'))
+    );
+
+    const service = new RunScriptService();
+    (service as unknown as StopHandlerCapable).runningProcesses.set('ws-1', { pid: 12_345 });
+    const result = await service.stopRunScript('ws-1');
+
+    expect(result).toEqual({ success: true });
+    expect((service as unknown as StopHandlerCapable).runningProcesses.has('ws-1')).toBe(false);
   });
 });
 

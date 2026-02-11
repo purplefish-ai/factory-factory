@@ -80,7 +80,9 @@ describe('archiveWorkspace', () => {
     );
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
-    vi.mocked(runScriptService.stopRunScript).mockResolvedValue(undefined as never);
+    vi.mocked(runScriptService.stopRunScript).mockResolvedValue(
+      unsafeCoerce({ success: true } as const)
+    );
     vi.mocked(terminalService.destroyWorkspaceTerminals).mockReturnValue(undefined);
   });
 
@@ -152,41 +154,57 @@ describe('archiveWorkspace', () => {
     });
   });
 
-  describe('process cleanup errors', () => {
-    it('continues to worktree cleanup when session stop fails', async () => {
+  describe('process cleanup errors (fail closed)', () => {
+    it('fails archive when session stop fails', async () => {
       vi.mocked(sessionService.stopWorkspaceSessions).mockRejectedValue(
         new Error('session stop failed')
       );
       const workspace = makeWorkspace();
 
-      await archiveWorkspace(workspace, defaultOptions);
-
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalled();
-      expect(workspaceStateMachine.archive).toHaveBeenCalled();
+      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
+        /Failed to cleanup workspace resources before archive/
+      );
+      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(workspaceStateMachine.archive).not.toHaveBeenCalled();
     });
 
-    it('continues to worktree cleanup when run script stop fails', async () => {
+    it('fails archive when run script stop rejects', async () => {
       vi.mocked(runScriptService.stopRunScript).mockRejectedValue(
         new Error('run script stop failed')
       );
       const workspace = makeWorkspace();
 
-      await archiveWorkspace(workspace, defaultOptions);
-
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalled();
-      expect(workspaceStateMachine.archive).toHaveBeenCalled();
+      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
+        /Failed to cleanup workspace resources before archive/
+      );
+      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(workspaceStateMachine.archive).not.toHaveBeenCalled();
     });
 
-    it('continues to worktree cleanup when terminal destroy throws', async () => {
+    it('fails archive when run script stop returns unsuccessful result', async () => {
+      vi.mocked(runScriptService.stopRunScript).mockResolvedValue(
+        unsafeCoerce({ success: false, error: 'stop failed' })
+      );
+      const workspace = makeWorkspace();
+
+      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
+        /Failed to cleanup workspace resources before archive/
+      );
+      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(workspaceStateMachine.archive).not.toHaveBeenCalled();
+    });
+
+    it('fails archive when terminal destroy throws', async () => {
       vi.mocked(terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
         throw new Error('terminal destroy failed');
       });
       const workspace = makeWorkspace();
 
-      await archiveWorkspace(workspace, defaultOptions);
-
-      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalled();
-      expect(workspaceStateMachine.archive).toHaveBeenCalled();
+      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow(
+        /Failed to cleanup workspace resources before archive/
+      );
+      expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
+      expect(workspaceStateMachine.archive).not.toHaveBeenCalled();
     });
   });
 
@@ -321,7 +339,7 @@ describe('archiveWorkspace', () => {
       }) as never);
       vi.mocked(runScriptService.stopRunScript).mockImplementation((() => {
         callOrder.push('stopRunScript');
-        return Promise.resolve(undefined);
+        return Promise.resolve(unsafeCoerce({ success: true }));
       }) as never);
       vi.mocked(terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
         callOrder.push('destroyTerminals');
@@ -341,7 +359,6 @@ describe('archiveWorkspace', () => {
       const archiveIdx = callOrder.indexOf('archive');
       expect(worktreeIdx).toBeGreaterThan(-1);
       expect(archiveIdx).toBeGreaterThan(worktreeIdx);
-      // Process stops happen before worktree cleanup
       expect(callOrder.indexOf('stopSessions')).toBeLessThan(worktreeIdx);
     });
 

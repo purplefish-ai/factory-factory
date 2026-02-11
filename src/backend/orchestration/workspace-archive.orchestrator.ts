@@ -69,14 +69,33 @@ export async function archiveWorkspace(
     });
   }
 
-  try {
-    await sessionService.stopWorkspaceSessions(workspace.id);
-    await runScriptService.stopRunScript(workspace.id);
-    terminalService.destroyWorkspaceTerminals(workspace.id);
-  } catch (error) {
+  const cleanupResults = await Promise.allSettled([
+    sessionService.stopWorkspaceSessions(workspace.id),
+    (async () => {
+      const result = await runScriptService.stopRunScript(workspace.id);
+      if (!result.success) {
+        throw new Error(result.error ?? 'Unknown run script stop failure');
+      }
+    })(),
+    Promise.resolve().then(() => {
+      terminalService.destroyWorkspaceTerminals(workspace.id);
+    }),
+  ]);
+
+  const cleanupErrors = cleanupResults.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : []
+  );
+
+  if (cleanupErrors.length > 0) {
     logger.error('Failed to cleanup workspace resources before archive', {
       workspaceId: workspace.id,
-      error: error instanceof Error ? error.message : String(error),
+      errors: cleanupErrors.map((error) =>
+        error instanceof Error ? error.message : String(error)
+      ),
+    });
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Failed to cleanup workspace resources before archive',
     });
   }
 
