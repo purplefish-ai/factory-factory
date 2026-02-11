@@ -74,8 +74,9 @@ class WorkspaceStateMachineService {
 
   /**
    * Transition a workspace to a new status with validation.
+   * Uses compare-and-swap to prevent race conditions.
    *
-   * @throws WorkspaceStateMachineError if the transition is invalid
+   * @throws WorkspaceStateMachineError if the transition is invalid or status changed
    */
   async transition(
     workspaceId: string,
@@ -124,7 +125,24 @@ class WorkspaceStateMachineService {
         break;
     }
 
-    const updated = await workspaceAccessor.updateRaw(workspaceId, updateData);
+    // Use compare-and-swap to prevent race conditions
+    const result = await workspaceAccessor.transitionWithCas(
+      workspaceId,
+      currentStatus,
+      updateData
+    );
+
+    if (result.count === 0) {
+      throw new WorkspaceStateMachineError(
+        workspaceId,
+        currentStatus,
+        targetStatus,
+        'Transition failed: status changed by another process'
+      );
+    }
+
+    // Re-read workspace after successful CAS update
+    const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
 
     logger.debug('Workspace status transitioned', {
       workspaceId,
