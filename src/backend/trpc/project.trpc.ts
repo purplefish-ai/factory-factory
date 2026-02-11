@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { gitCommandC } from '../lib/shell';
-import { FactoryConfigService } from '../services/factory-config.service';
-import { projectManagementService } from '../services/project-management.service';
+import { gitCommandC } from '@/backend/lib/shell';
+import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { projectManagementService } from '@/backend/services/project-management.service';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {

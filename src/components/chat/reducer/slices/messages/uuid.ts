@@ -1,5 +1,5 @@
-import { debugLog } from '../../helpers';
-import type { ChatAction, ChatState } from '../../types';
+import { debugLog } from '@/components/chat/reducer/helpers';
+import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 
 export function reduceMessageUuidSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

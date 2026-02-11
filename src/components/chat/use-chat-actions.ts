@@ -26,7 +26,7 @@ import type {
   StopMessage,
 } from '@/shared/websocket';
 import { persistSettings } from './chat-persistence';
-import type { ChatAction, ChatState } from './chat-reducer';
+import type { ChatAction, ChatState } from './reducer';
 
 // =============================================================================
 // Types

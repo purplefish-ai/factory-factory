@@ -1,11 +1,9 @@
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
-
+import type { SlashKeyResult } from '@/components/chat/slash-command-palette';
 import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
 import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
-
-import type { SlashKeyResult } from '../../slash-command-palette';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;

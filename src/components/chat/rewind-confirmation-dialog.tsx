@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import type { RewindPreviewState } from './chat-reducer';
+import type { RewindPreviewState } from './reducer';
 
 export interface RewindConfirmationDialogProps {
   /** Preview state from the reducer (null when dialog should be closed) */

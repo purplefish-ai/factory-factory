@@ -15,7 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { trpc } from '../../../frontend/lib/trpc';
+import { trpc } from '@/frontend/lib/trpc';
 
 export default function ProjectsListPage() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);

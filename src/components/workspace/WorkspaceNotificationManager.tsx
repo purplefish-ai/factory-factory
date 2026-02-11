@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react';
-import { trpc } from '../../frontend/lib/trpc';
+import { trpc } from '@/frontend/lib/trpc';
 
 interface NotificationRequest {
   workspaceId: string;

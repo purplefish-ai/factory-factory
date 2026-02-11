@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { AppContext } from '../app-context';
 
 // Mock configService CORS config
 const mockGetCorsConfig = vi.fn();

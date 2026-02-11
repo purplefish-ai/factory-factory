@@ -7,7 +7,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { expandEnvVars } from '../lib/env';
+import { expandEnvVars } from '@/backend/lib/env';
 import { SERVICE_TIMEOUT_MS } from './constants';
 import { createLogger } from './logger.service';
 

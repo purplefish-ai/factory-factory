@@ -16,11 +16,11 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
+import { type AppContext, createAppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants';
 import type { ClaudeClient, ConnectionInfo } from '@/backend/domains/session';
 import { sessionDataService } from '@/backend/domains/session';
-import { type AppContext, createAppContext } from '../../app-context';
-import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
+import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
 import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
@@ -316,4 +316,4 @@ export const handleChatUpgrade = createChatUpgradeHandler(createAppContext());
 // ============================================================================
 
 export type { ConnectionInfo } from '@/backend/domains/session';
-export type { ChatMessageInput } from '../../schemas/websocket';
+export type { ChatMessageInput } from '@/backend/schemas/websocket';

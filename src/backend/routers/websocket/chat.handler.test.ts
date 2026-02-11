@@ -2,7 +2,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
-import type { AppContext } from '../../app-context';
+import type { AppContext } from '@/backend/app-context';
 import { createChatUpgradeHandler } from './chat.handler';
 
 describe('createChatUpgradeHandler', () => {

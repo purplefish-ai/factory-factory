@@ -1,8 +1,8 @@
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { AppContext } from '../../app-context';
 
 // Mock dependencies before importing the router
 const mockQueryRaw = vi.fn();
@@ -10,7 +10,7 @@ const mockGetEnvironment = vi.fn();
 const mockGetAppVersion = vi.fn();
 const mockGetApiUsageStats = vi.fn();
 
-vi.mock('../../resource_accessors/health.accessor', () => ({
+vi.mock('@/backend/resource_accessors/health.accessor', () => ({
   healthAccessor: {
     checkDatabaseConnection: () => mockQueryRaw(),
   },

@@ -6,8 +6,8 @@
  */
 
 import { prSnapshotService } from '@/backend/domains/github';
-import { extractInputValue, isString } from '../schemas/tool-inputs.schema';
-import { createLogger } from '../services/logger.service';
+import { extractInputValue, isString } from '@/backend/schemas/tool-inputs.schema';
+import { createLogger } from '@/backend/services/logger.service';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('pr-detection');

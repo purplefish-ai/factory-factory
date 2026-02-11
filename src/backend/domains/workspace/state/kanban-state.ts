@@ -1,7 +1,7 @@
 import { KanbanColumn, PRState, type Workspace, WorkspaceStatus } from '@prisma-gen/client';
+import type { WorkspaceSessionBridge } from '@/backend/domains/workspace/bridges';
 import { workspaceAccessor } from '@/backend/resource_accessors/index';
 import { createLogger } from '@/backend/services/logger.service';
-import type { WorkspaceSessionBridge } from '../bridges';
 import { deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 import { deriveWorkspaceRuntimeState } from './workspace-runtime-state';
 

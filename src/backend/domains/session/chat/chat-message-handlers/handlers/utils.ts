@@ -1,6 +1,6 @@
 import type WebSocket from 'ws';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { sessionService } from '../../../lifecycle/session.service';
 
 interface GetClientOptions {
   sessionId: string;

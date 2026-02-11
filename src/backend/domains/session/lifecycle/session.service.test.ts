@@ -1,8 +1,8 @@
 import { SessionStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClaudeClient } from '@/backend/domains/session/claude/client';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { ClaudeClient } from '../claude/client';
-import { sessionDomainService } from '../session-domain.service';
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({

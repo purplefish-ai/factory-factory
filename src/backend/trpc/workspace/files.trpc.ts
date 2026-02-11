@@ -7,8 +7,8 @@ import {
   isBinaryContent,
   isPathSafe,
   MAX_FILE_SIZE,
-} from '../../lib/file-helpers';
-import { type Context, publicProcedure, router } from '../trpc';
+} from '@/backend/lib/file-helpers';
+import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
 
 const loggerName = 'workspace-files-trpc';

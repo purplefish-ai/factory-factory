@@ -1,10 +1,13 @@
+import { resolveAttachmentContentType } from '@/backend/domains/session/chat/chat-message-handlers/attachment-utils';
+import { tryHandleAsInteractiveResponse } from '@/backend/domains/session/chat/chat-message-handlers/interactive-response';
+import type {
+  ChatMessageHandler,
+  HandlerRegistryDependencies,
+} from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { buildQueuedMessage } from '@/backend/domains/session/chat/chat-message-handlers/utils';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { MessageState, resolveSelectedModel } from '@/shared/claude';
 import type { QueueMessageInput } from '@/shared/websocket';
-import { resolveAttachmentContentType } from '../attachment-utils';
-import { tryHandleAsInteractiveResponse } from '../interactive-response';
-import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
-import { buildQueuedMessage } from '../utils';
 
 /**
  * Extract text content from text attachments.

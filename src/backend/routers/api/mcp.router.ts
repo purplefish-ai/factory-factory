@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { type AppContext, createAppContext } from '../../app-context';
-import { HTTP_STATUS } from '../../constants';
-import { executeMcpTool } from '../mcp/index';
+import { type AppContext, createAppContext } from '@/backend/app-context';
+import { HTTP_STATUS } from '@/backend/constants';
+import { executeMcpTool } from '@/backend/routers/mcp/index';
 
 // ============================================================================
 // MCP Tool Execution Routes

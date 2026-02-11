@@ -1,8 +1,11 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+  ClaudeClientOptions,
+  ClaudeClient as ClaudeClientType,
+} from '@/backend/domains/session/claude/client';
+import { ClaudeClient } from '@/backend/domains/session/claude/client';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { ClaudeClientOptions, ClaudeClient as ClaudeClientType } from '../claude/client';
-import { ClaudeClient } from '../claude/client';
 import { SessionProcessManager } from './session.process-manager';
 
 class MockClaudeClient extends EventEmitter {

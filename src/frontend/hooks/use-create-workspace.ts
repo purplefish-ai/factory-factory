@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { trpc } from '@/frontend/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
-import { trpc } from '../lib/trpc';
-import { createOptimisticWorkspaceCacheData } from '../lib/workspace-cache-helpers';
 
 /**
  * Shared hook for creating workspaces with consistent behavior across the app.

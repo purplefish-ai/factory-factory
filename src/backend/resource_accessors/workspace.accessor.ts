@@ -8,7 +8,7 @@ import type {
   Workspace,
   WorkspaceStatus,
 } from '@prisma-gen/client';
-import { prisma } from '../db';
+import { prisma } from '@/backend/db';
 
 /**
  * Threshold for considering a PROVISIONING workspace as stale.

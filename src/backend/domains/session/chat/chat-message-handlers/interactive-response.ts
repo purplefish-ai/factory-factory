@@ -1,3 +1,4 @@
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import {
   AskUserQuestionInputSchema,
@@ -5,7 +6,6 @@ import {
 } from '@/backend/schemas/tool-inputs.schema';
 import { createLogger } from '@/backend/services/logger.service';
 import { isInteractiveResponseTool } from '@/shared/pending-request-types';
-import { sessionService } from '../../lifecycle/session.service';
 import { DEBUG_CHAT_WS } from './constants';
 
 const logger = createLogger('chat-message-handlers');

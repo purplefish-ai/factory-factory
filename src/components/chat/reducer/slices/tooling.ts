@@ -1,5 +1,5 @@
-import { handleToolInputUpdate } from '../helpers';
-import type { ChatAction, ChatState } from '../types';
+import { handleToolInputUpdate } from '@/components/chat/reducer/helpers';
+import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 
 export function reduceToolingSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

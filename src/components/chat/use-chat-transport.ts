@@ -2,8 +2,8 @@ import { useCallback } from 'react';
 import type { WebSocketMessage } from '@/lib/claude-types';
 import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
-import type { ChatAction, ChatState } from './chat-reducer';
-import { createActionFromWebSocketMessage } from './chat-reducer';
+import type { ChatAction, ChatState } from './reducer';
+import { createActionFromWebSocketMessage } from './reducer';
 import {
   clearToolInputAccumulator,
   handleToolInputStreaming,

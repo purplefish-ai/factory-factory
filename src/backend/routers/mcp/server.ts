@@ -1,5 +1,5 @@
-import { decisionLogQueryService } from '../../services/decision-log-query.service';
-import { createLogger } from '../../services/logger.service';
+import { decisionLogQueryService } from '@/backend/services/decision-log-query.service';
+import { createLogger } from '@/backend/services/logger.service';
 import { CRITICAL_TOOLS, isTransientError } from './errors';
 import type { McpToolContext, McpToolRegistryEntry, McpToolResponse } from './types';
 import { McpErrorCode } from './types';

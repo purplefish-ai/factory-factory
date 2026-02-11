@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { SlashCommandPalette } from '@/components/chat/slash-command-palette';
+import { ContextWindowIndicator } from '@/components/chat/usage-stats';
 import { Button } from '@/components/ui/button';
 import {
   InputGroup,
@@ -13,7 +14,6 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
-import { ContextWindowIndicator } from '../usage-stats';
 
 import { ModelSelector } from './components/model-selector';
 import { QuickActionsDropdown } from './components/quick-actions-dropdown';

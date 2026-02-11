@@ -8,13 +8,13 @@
 
 import { SessionManager } from '@/backend/domains/session/claude';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
-import { buildBranchRenameInstruction } from '../prompts/branch-rename';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { projectAccessor } from '../resource_accessors/project.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { configService } from '../services/config.service';
-import { createLogger } from '../services/logger.service';
-import { countUserMessages, extractKeyTopics } from '../utils/conversation-analyzer';
+import { buildBranchRenameInstruction } from '@/backend/prompts/branch-rename';
+import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { projectAccessor } from '@/backend/resource_accessors/project.accessor';
+import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import { configService } from '@/backend/services/config.service';
+import { createLogger } from '@/backend/services/logger.service';
+import { countUserMessages, extractKeyTopics } from '@/backend/utils/conversation-analyzer';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('conversation-rename');

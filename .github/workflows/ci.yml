@@ -44,6 +44,9 @@ jobs:
       - name: Run Biome check
         run: pnpm check
 
+      - name: Check ambiguous relative imports
+        run: pnpm check:imports
+
       - name: Enforce Biome ignore budget
         run: pnpm check:biome-ignores
 

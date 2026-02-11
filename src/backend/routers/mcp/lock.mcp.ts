@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { fileLockService } from '../../services/file-lock.service';
+import { fileLockService } from '@/backend/services/file-lock.service';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server';
 import type { McpToolContext, McpToolResponse } from './types';
 import { McpErrorCode } from './types';

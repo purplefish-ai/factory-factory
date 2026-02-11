@@ -20,7 +20,7 @@ vi.mock('@/backend/domains/terminal', () => ({
   },
 }));
 
-vi.mock('../../services/logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),

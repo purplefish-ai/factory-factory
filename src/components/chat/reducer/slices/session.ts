@@ -1,5 +1,5 @@
-import { createSessionSwitchResetState } from '../state';
-import type { ChatAction, ChatState } from '../types';
+import { createSessionSwitchResetState } from '@/components/chat/reducer/state';
+import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 
 function deriveSessionStatus(runtime: ChatState['sessionRuntime']): ChatState['sessionStatus'] {
   switch (runtime.phase) {

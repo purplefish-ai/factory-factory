@@ -5,8 +5,8 @@
  */
 
 import { z } from 'zod';
-import { execCommand } from '../lib/shell';
-import { userSettingsQueryService } from '../services/user-settings-query.service';
+import { execCommand } from '@/backend/lib/shell';
+import { userSettingsQueryService } from '@/backend/services/user-settings-query.service';
 import { publicProcedure, router } from './trpc';
 
 export const userSettingsRouter = router({

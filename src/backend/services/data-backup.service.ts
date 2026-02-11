@@ -8,30 +8,26 @@
 import { type Prisma, RatchetState, RunScriptStatus } from '@prisma-gen/client';
 import type { z } from 'zod';
 import {
-  type ExportData,
-  type ExportDataV1,
-  type ExportDataV2,
-  exportDataSchema,
-  type exportedClaudeSessionSchema,
-  type exportedProjectSchema,
-  type exportedTerminalSessionSchema,
-  type exportedUserSettingsSchemaV1,
-  type exportedUserSettingsSchemaV2,
-  type exportedWorkspaceSchemaV1,
-  type exportedWorkspaceSchemaV2,
-} from '@/shared/schemas/export-data.schema';
-import {
   type DataBackupTransactionClient,
   dataBackupAccessor,
-} from '../resource_accessors/data-backup.accessor';
+} from '@/backend/resource_accessors/data-backup.accessor';
+import type {
+  ExportData,
+  ExportDataV1,
+  ExportDataV2,
+  exportedClaudeSessionSchema,
+  exportedProjectSchema,
+  exportedTerminalSessionSchema,
+  exportedUserSettingsSchemaV1,
+  exportedUserSettingsSchemaV2,
+  exportedWorkspaceSchemaV1,
+  exportedWorkspaceSchemaV2,
+} from '@/shared/schemas/export-data.schema';
 import { createLogger } from './logger.service';
 
 type TransactionClient = DataBackupTransactionClient;
 
 const logger = createLogger('data-backup');
-
-// Re-export schema and types for backwards compatibility
-export { exportDataSchema, type ExportData, type ExportDataV1, type ExportDataV2 };
 
 // ============================================================================
 // Types
