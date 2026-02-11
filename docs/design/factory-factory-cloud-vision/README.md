@@ -133,7 +133,7 @@ graph TB
 
 - **FF Cloud Server (Closed Source)**: Multi-tenant orchestration layer. Handles authentication, billing, VM provisioning, and WebSocket relay between clients and VMs. Does NOT execute workspaces directly.
 
-- **VMs (Docker/Firecracker)**: Isolated execution environments, one per workspace (Phase 1) or one per user (Phase 2). Each VM runs FF Core library to manage workspace execution.
+- **VMs (Docker/Firecracker)**: Isolated execution environments, one per user. All of a user's workspaces run inside their VM as Claude CLI subprocesses managed by FF Core. User authenticates to GitHub and Anthropic inside their VM via terminal.
 
 - **FF Core Library (Open Source)**: Published to npm as `@factory-factory/core`. Provides workspace execution primitives: Claude CLI management, session management, git operations, ratchet logic. Used by both desktop and cloud VMs.
 
@@ -725,94 +725,17 @@ export class CloudWorkspaceService {
 
 ## Implementation Phases (Cloud MVP)
 
-### Phase 1: Core Library Extraction
+See [V1 - MVP Plan](./V1%20-%20MVP%20plan/README.md) for detailed per-phase docs.
 
-Convert the current FF repo into a pnpm monorepo and extract execution primitives into a standalone library.
+| Phase | Name | What it delivers |
+|-------|------|-----------------|
+| 1 | Core Library Extraction | `@factory-factory/core` published to npm, desktop works via the library |
+| 2 | FF Cloud Server + VM Execution | Per-user VMs running workspaces in Docker, terminal onboarding for gh/claude auth |
+| 3 | Auth & Billing | User accounts, multi-tenant enforcement, Stripe billing |
+| 4 | WebSocket Relay + Web Frontend | Real-time streaming and a web UI for cloud workspaces |
+| 5 | Ratchet Handoff | Ratchet works across desktop/cloud |
 
-**Monorepo setup:**
-- Add `pnpm-workspace.yaml` defining `packages/*`
-- Create `packages/core/` and `packages/desktop/`
-
-**Extract into `packages/core/` (`@factory-factory/core`):**
-- All 6 domains: session (Claude CLI management), workspace (state machine, lifecycle), ratchet (auto-fix polling), github (PR/CI integration), terminal (subprocess management), run-script (startup scripts)
-- Infrastructure services: logger, config, git-ops, scheduler, file-lock, rate-limiter
-- Resource accessors (Prisma data access layer)
-- Prisma schema and migrations (SQLite, single-tenant)
-- Bridge interfaces as the public API surface — these are the contract between core and consumers
-
-**Refactor `packages/desktop/`:**
-- Move remaining code (server, tRPC routers, WebSocket handlers, Electron, UI) into `packages/desktop/`
-- Replace all internal domain imports with `@factory-factory/core`
-- Wire bridge implementations in desktop's orchestration layer (same wiring, new import paths)
-
-**Verify and publish:**
-- All existing tests pass against the monorepo structure
-- Desktop app works identically from user's perspective
-- Publish `@factory-factory/core` to npm
-
-**Done when:** Desktop FF works exactly as before, but internally uses the extracted core library. `@factory-factory/core` is published and installable by any consumer.
-
-### Phase 2: FF Cloud Server + VM Execution
-
-Stand up the cloud server and get workspaces executing in Docker containers.
-
-**New private repo (`factory-factory-cloud`):**
-- Express server with `@factory-factory/core` as npm dependency
-- PostgreSQL schema for multi-tenant data (users, workspaces, VMs)
-- Auth & user management (JWT, accounts, API keys)
-
-**VM orchestration:**
-- Docker container provisioning (1 container per workspace)
-- FF Core running inside each container with its own SQLite
-- Container lifecycle: create, monitor health, terminate
-- Warm pool for fast startup (~500ms target)
-- Container image with FF Core + Claude CLI pre-installed
-
-**Desktop integration:**
-- "Send to Cloud" flow: upload workspace state, set `location='CLOUD'`, provision container
-- "Pull from Cloud" flow: download state, terminate container, set `location='DESKTOP'`
-- Block send/pull if ratchet fixer session is active
-
-**Done when:** A workspace can be created in a cloud container, execute Claude sessions, and be sent to/pulled from cloud via the desktop app. No real-time streaming yet — just execution.
-
-### Phase 3: WebSocket Relay + Web Frontend
-
-Wire up real-time communication and build a web UI so users can interact with cloud workspaces.
-
-**WebSocket relay (FF Cloud):**
-- Client <-> FF Cloud <-> VM message routing
-- Reuse the same message types desktop already uses (`user_message`, `claude_message`, `status`, `user_question`, `permission_request`, etc.)
-- Route messages by `workspaceId` → `vmId`
-- Auth on every WebSocket connection (JWT)
-- Reconnection and state recovery (`messages_snapshot` on connect)
-
-**Web frontend:**
-- Workspace list (view all cloud workspaces)
-- Create workspace from GitHub issue
-- Session view: send messages, see Claude responses, answer questions, approve permissions
-- Workspace status indicators (running, idle, waiting for input)
-
-**Done when:** A user can log into the web app, create a workspace, interact with Claude in real time, and see the same experience they'd get on desktop.
-
-### Phase 4: Ratchet Handoff + Billing
-
-Make ratchet work across desktop/cloud and add billing so the product can ship.
-
-**Location-aware ratchet:**
-- Add `location` field (`DESKTOP` | `CLOUD`) to workspace model
-- Desktop ratchet filters by `location='DESKTOP'`, cloud ratchet filters by `location='CLOUD'`
-- State transfer on send/pull: `ratchetEnabled`, `ratchetState`, `ratchetLastCiRunId`, `prReviewLastCheckedAt`
-- Cloud ratchet picks up workspace within 1 poll interval after handoff
-
-**Billing:**
-- Usage tracking (compute minutes, API calls)
-- Subscription tiers and quotas
-- Payment integration (Stripe)
-- Quota enforcement: check before provisioning containers
-
-**Done when:** Ratchet works seamlessly whether a workspace is on desktop or cloud. Users can sign up, pay, and use the product within their plan limits.
-
----
+**VM model:** 1 VM per user (not per workspace). All workspaces run inside the user's VM as Claude CLI subprocesses managed by FF Core. Credentials (GitHub, Anthropic) are stored in the VM — the user authenticates via a terminal session during onboarding, same as they would on desktop.
 
 See [Appendix: Alternative Approaches](./appendix-alternatives.md) for VM startup time analysis and comparison tables.
 

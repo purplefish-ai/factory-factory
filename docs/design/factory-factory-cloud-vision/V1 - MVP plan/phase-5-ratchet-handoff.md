@@ -1,8 +1,8 @@
-# Phase 4: Ratchet Handoff
+# Phase 5: Ratchet Handoff
 
 **Goal:** Make ratchet (auto-fix) work seamlessly across desktop and cloud.
 
-## 4.1 Location-Aware Ratchet
+## 5.1 Location-Aware Ratchet
 
 Add a `location` field to the workspace model:
 
@@ -29,4 +29,4 @@ enum WorkspaceLocation {
 
 ## Done when
 
-Ratchet works seamlessly whether a workspace is on desktop or cloud — no duplicate fixes, no missed events during handoff.
+Ratchet works seamlessly whether a workspace is on desktop or cloud — no duplicate fixes, no missed events during handoff. The Cloud MVP is shippable.

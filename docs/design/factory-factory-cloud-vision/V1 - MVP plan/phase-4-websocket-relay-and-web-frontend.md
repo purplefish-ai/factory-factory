@@ -1,8 +1,8 @@
-# Phase 3: WebSocket Relay + Web Frontend
+# Phase 4: WebSocket Relay + Web Frontend
 
 **Goal:** Wire up real-time communication and build a web UI so users can interact with cloud workspaces without the desktop app.
 
-## 3.1 WebSocket Relay
+## 4.1 WebSocket Relay
 
 FF Cloud acts as a message router between clients and VMs:
 
@@ -29,11 +29,11 @@ Client (web/desktop) <--WebSocket--> FF Cloud <--WebSocket--> VM (FF Core)
 | `permission_response` | Client -> VM | Permission approval/denial |
 | `messages_snapshot` | VM -> Client | Full state on connect/reconnect |
 
-**Auth:** JWT validated on every WebSocket connection.
+**Auth:** JWT validated on every WebSocket connection (built in phase 3).
 
 **Reconnection:** On reconnect, VM sends `messages_snapshot` with full conversation state so the client can catch up.
 
-## 3.2 Web Frontend
+## 4.2 Web Frontend
 
 A web app (React, similar stack to desktop UI) that connects to FF Cloud:
 
