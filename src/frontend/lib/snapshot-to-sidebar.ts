@@ -7,36 +7,16 @@
  * but only includes fields needed for mapping.
  */
 
-import type {
-  CIStatus,
-  PRState,
-  RatchetState,
-  RunScriptStatus,
-  SessionStatus,
-} from '@prisma-gen/browser';
+import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@prisma-gen/browser';
 import type { ServerWorkspace } from '@/frontend/components/use-workspace-list-state';
+import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 // =============================================================================
 // Snapshot message types (client-side mirror of server messages)
 // =============================================================================
 
-export interface WorkspaceSessionSummary {
-  sessionId: string;
-  name: string | null;
-  workflow: string | null;
-  model: string | null;
-  persistedStatus: SessionStatus;
-  runtimePhase: 'loading' | 'starting' | 'running' | 'idle' | 'stopping' | 'error';
-  processState: 'unknown' | 'alive' | 'stopped';
-  activity: 'WORKING' | 'IDLE';
-  updatedAt: string;
-  lastExit: {
-    code: number | null;
-    timestamp: string;
-    unexpected: boolean;
-  } | null;
-}
+export type WorkspaceSessionSummary = SessionSummary;
 
 /**
  * A workspace snapshot entry as sent by the /snapshots WebSocket endpoint.

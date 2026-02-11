@@ -526,6 +526,19 @@ describe('useProjectSnapshotSync', () => {
       expect(mockWorkspaceGetSetData).toHaveBeenCalledTimes(1);
       expect(mockWorkspaceGetSetData).toHaveBeenCalledWith({ id: 'ws-1' }, expect.any(Function));
     });
+
+    it('snapshot_removed clears the workspace.get cache entry', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+      });
+
+      expect(mockWorkspaceGetSetData).toHaveBeenCalledTimes(1);
+      expect(mockWorkspaceGetSetData).toHaveBeenCalledWith({ id: 'ws-1' }, undefined);
+    });
   });
 
   // ===========================================================================

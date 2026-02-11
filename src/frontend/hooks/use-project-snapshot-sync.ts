@@ -236,6 +236,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
             removeFromKanbanCache(message.workspaceId, prev)) as never);
 
+          // Clear workspace detail cache so the detail view does not retain stale data
+          setWorkspaceDetailData({ id: message.workspaceId }, undefined as never);
+
           // Invalidate workspace.list cache so table view refetches with fresh data
           utils.workspace.list.invalidate({ projectId });
           break;
