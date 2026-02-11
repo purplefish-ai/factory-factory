@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 ## Current Position
 
 Phase: 15 of 18 (WebSocket Transport)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-11 -- Phase 14 complete and verified (12/12 must-haves, RCNL-01/02/03/04)
+Plan: 1 of 1 in current phase
+Status: Plan 15-01 complete
+Last activity: 2026-02-11 -- Phase 15 Plan 01 complete (/snapshots WebSocket endpoint)
 
 Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 6min
-- Total execution time: 0.78 hours
+- Total execution time: 0.85 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [█████░░░░░] 50%
 | 12-domain-event-emission | 2 | 12min | 6min |
 | 13-event-collector | 1 | 5min | 5min |
 | 14-safety-net-reconciliation | 2 | 9min | 4min |
+| 15-websocket-transport | 1 | 4min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 3min, 9min, 5min, 6min, 3min
+- Last 5 plans: 9min, 5min, 6min, 3min, 4min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [14-01]: Bridge pattern for session domain access in reconciliation (consistent with existing bridges)
 - [14-01]: Static imports from domain barrels in orchestration layer (same as event-collector)
 - [14-01]: Extracted helper methods to keep reconcile() under Biome complexity limit
+- [Phase 15-01]: Store subscription via idempotent ensureStoreSubscription() guard (once, not per-connection)
+- [Phase 15-01]: Connection map keyed by projectId for O(1) project-scoped fan-out
 
 ### Pending Todos
 
@@ -78,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 14 complete and verified -- ready to plan Phase 15
+Stopped at: Completed 15-01-PLAN.md -- /snapshots WebSocket endpoint with tests and server wiring
 Resume file: None
