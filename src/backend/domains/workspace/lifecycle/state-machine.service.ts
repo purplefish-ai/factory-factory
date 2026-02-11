@@ -74,9 +74,6 @@ export interface StartProvisioningOptions {
 }
 
 class WorkspaceStateMachineService extends EventEmitter {
-  constructor() {
-    super();
-  }
   /**
    * Check if a state transition is valid.
    */

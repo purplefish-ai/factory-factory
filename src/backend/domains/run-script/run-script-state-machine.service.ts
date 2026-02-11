@@ -73,9 +73,6 @@ export interface TransitionOptions {
 }
 
 class RunScriptStateMachineService extends EventEmitter {
-  constructor() {
-    super();
-  }
   /**
    * Check if a state transition is valid.
    */

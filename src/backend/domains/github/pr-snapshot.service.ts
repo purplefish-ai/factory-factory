@@ -42,10 +42,6 @@ export interface PRSnapshotUpdatedEvent {
 class PRSnapshotService extends EventEmitter {
   private kanbanBridge: GitHubKanbanBridge | null = null;
 
-  constructor() {
-    super();
-  }
-
   configure(bridges: { kanban: GitHubKanbanBridge }): void {
     this.kanbanBridge = bridges.kanban;
   }

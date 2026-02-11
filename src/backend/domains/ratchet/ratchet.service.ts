@@ -110,10 +110,6 @@ class RatchetService extends EventEmitter {
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
 
-  constructor() {
-    super();
-  }
-
   configure(bridges: { session: RatchetSessionBridge; github: RatchetGitHubBridge }): void {
     this.sessionBridge = bridges.session;
     this.githubBridge = bridges.github;
