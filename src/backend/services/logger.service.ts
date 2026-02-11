@@ -51,16 +51,30 @@ function getLogLevelPriority(level: LogLevel): number {
 
 /**
  * Safely stringify an object, handling circular references.
- * Returns a string representation or a placeholder if circular structures are detected.
+ * Uses a WeakSet to track seen objects and replaces circular references
+ * with a placeholder, preserving all non-circular data.
  */
 function safeStringify(obj: unknown): string {
+  const seen = new WeakSet();
+
   try {
-    return JSON.stringify(obj);
-  } catch (err) {
-    if (err instanceof TypeError && err.message.includes('circular')) {
-      return '[Circular Structure]';
-    }
-    // For other errors, attempt a basic string conversion
+    return JSON.stringify(obj, (_key, value) => {
+      // Handle non-object values and null
+      if (typeof value !== 'object' || value === null) {
+        return value;
+      }
+
+      // Check for circular reference
+      if (seen.has(value)) {
+        return '[Circular]';
+      }
+
+      // Track this object
+      seen.add(value);
+      return value;
+    });
+  } catch {
+    // Fallback for any other errors (e.g., BigInt serialization)
     return String(obj);
   }
 }

@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from './logger.service';
 
+// Mock node:fs to prevent real file I/O during tests
+vi.mock('node:fs', () => {
+  const mockWriteStream = {
+    write: vi.fn(),
+    on: vi.fn(),
+  };
+  return {
+    existsSync: vi.fn(() => true),
+    mkdirSync: vi.fn(),
+    createWriteStream: vi.fn(() => mockWriteStream),
+  };
+});
+
 // Helper type for testing circular references - allows dynamic property assignment
 type CircularTestObject = Record<string, unknown>;
 
