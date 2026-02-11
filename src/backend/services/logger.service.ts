@@ -51,9 +51,9 @@ function getLogLevelPriority(level: LogLevel): number {
 
 /**
  * Safely stringify an object, handling circular references.
- * Uses a two-pass approach: first pass pre-processes with ancestor tracking
- * to replace circular references, second pass uses JSON.stringify to respect
- * toJSON() methods and handle special objects correctly.
+ * Pre-processes with ancestor tracking to replace circular references,
+ * invokes toJSON() on objects that define it, then uses JSON.stringify
+ * on the safe result.
  */
 function safeStringify(obj: unknown): string {
   try {
@@ -69,9 +69,9 @@ function safeStringify(obj: unknown): string {
         return '[Circular]';
       }
 
-      // If object has toJSON, let JSON.stringify handle it (don't traverse)
+      // If object has toJSON, preprocess its result instead of skipping traversal
       if ('toJSON' in value && typeof (value as Record<string, unknown>).toJSON === 'function') {
-        return value;
+        return preprocessValue((value as { toJSON: () => unknown }).toJSON());
       }
 
       ancestors.add(value);

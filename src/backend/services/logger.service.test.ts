@@ -177,6 +177,31 @@ describe('LoggerService', () => {
       expect(logEntry.context.timestamp).toBe('2024-01-01T00:00:00.000Z');
       expect(logEntry.context.nested.createdAt).toBe('2024-01-01T00:00:00.000Z');
     });
+
+    it('should handle toJSON() that returns a circular structure', () => {
+      const logger = createLogger('test');
+      const circular: CircularTestObject = { data: 'value' };
+      circular.self = circular;
+
+      const obj = {
+        custom: {
+          toJSON() {
+            return circular;
+          },
+        },
+      };
+
+      logger.info('Test toJSON circular', obj);
+
+      expect(mockWriteStream.write).toHaveBeenCalled();
+      const calls = mockWriteStream.write.mock.calls;
+      const lastCall = calls[calls.length - 1] as [string];
+      const logEntry = JSON.parse(lastCall[0].toString().trim());
+
+      // toJSON result should be traversed and circular ref replaced
+      expect(logEntry.context.custom.data).toBe('value');
+      expect(logEntry.context.custom.self).toBe('[Circular]');
+    });
   });
 
   describe('agentEvent', () => {
