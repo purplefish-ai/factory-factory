@@ -79,7 +79,7 @@ export function InitializationOverlay({
               <h2 className="text-lg font-semibold">Setting up workspace...</h2>
               <p className="text-sm text-muted-foreground">
                 {isProvisioning && hasStartupScript
-                  ? 'Running startup script. This may take a few minutes.'
+                  ? 'Running init script. This may take a few minutes.'
                   : 'Creating git worktree and preparing your workspace.'}
               </p>
             </div>
@@ -152,7 +152,7 @@ export function ScriptRunningBanner({ initOutput, hasStartupScript }: ScriptRunn
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span>Running startup script...</span>
+          <span>Running init script...</span>
         </div>
         {hasStartupScript && initOutput && (
           <Button
@@ -219,7 +219,7 @@ export function ScriptFailedBanner({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-destructive">
           <AlertTriangle className="h-3 w-3" />
-          <span>Startup script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</span>
+          <span>Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</span>
         </div>
         <div className="flex items-center gap-1">
           {hasStartupScript && initOutput && (
