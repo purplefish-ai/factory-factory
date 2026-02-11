@@ -37,15 +37,18 @@ export function deriveWorkspaceSidebarStatus(
     return { activityState, ciState: 'MERGED' };
   }
 
-  if (input.ratchetState === 'CI_FAILED') {
-    return { activityState, ciState: 'FAILING' };
+  const ciStateFromSnapshot = deriveCiVisualStateFromPrCiStatus(input.prCiStatus);
+  if (ciStateFromSnapshot === 'UNKNOWN') {
+    if (input.ratchetState === 'CI_FAILED') {
+      return { activityState, ciState: 'FAILING' };
+    }
+
+    if (input.ratchetState === 'CI_RUNNING') {
+      return { activityState, ciState: 'RUNNING' };
+    }
   }
 
-  if (input.ratchetState === 'CI_RUNNING') {
-    return { activityState, ciState: 'RUNNING' };
-  }
-
-  return { activityState, ciState: deriveCiVisualStateFromPrCiStatus(input.prCiStatus) };
+  return { activityState, ciState: ciStateFromSnapshot };
 }
 
 export function getWorkspaceActivityTooltip(state: WorkspaceSidebarActivityState): string {
