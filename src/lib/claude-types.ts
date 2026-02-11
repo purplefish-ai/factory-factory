@@ -1,7 +1,7 @@
 /**
  * Frontend helper utilities and UI-specific types for the Claude chat protocol.
  *
- * Core protocol types/constants are defined in src/shared/claude/protocol.ts
+ * Core protocol types/constants are defined in src/shared/claude/protocol/
  * and re-exported here for convenience.
  */
 
