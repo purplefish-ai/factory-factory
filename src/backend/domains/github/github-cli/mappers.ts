@@ -17,6 +17,7 @@ const CHECK_CONCLUSION_VALUES = [
   'CANCELLED',
   'TIMED_OUT',
   'ACTION_REQUIRED',
+  'NEUTRAL',
 ] as const;
 const REVIEW_STATE_VALUES = [
   'APPROVED',
@@ -65,6 +66,8 @@ function normalizeStatusContextConclusion(state: string): GitHubStatusCheck['con
       return 'CANCELLED';
     case 'SKIPPED':
       return 'SKIPPED';
+    case 'NEUTRAL':
+      return 'NEUTRAL';
     default:
       return null;
   }
