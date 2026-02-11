@@ -178,7 +178,7 @@ export class SnapshotReconciliationService {
 
     // Set up periodic reconciliation
     this.interval = setInterval(() => {
-      if (this.isShuttingDown || this.reconcileInProgress) {
+      if (this.isShuttingDown || this.reconcileInProgress !== null) {
         return;
       }
       this.reconcileInProgress = this.reconcile()
@@ -204,7 +204,7 @@ export class SnapshotReconciliationService {
       clearInterval(this.interval);
       this.interval = null;
     }
-    if (this.reconcileInProgress) {
+    if (this.reconcileInProgress !== null) {
       await this.reconcileInProgress;
     }
   }

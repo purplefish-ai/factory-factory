@@ -320,7 +320,7 @@ class RateLimiter {
     }
 
     // Wait for in-flight queue processing to complete
-    if (this.queueProcessingPromise) {
+    if (this.queueProcessingPromise !== null) {
       logger.debug('Waiting for in-flight queue processing to complete');
       await this.queueProcessingPromise;
     }

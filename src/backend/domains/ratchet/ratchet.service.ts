@@ -134,7 +134,7 @@ class RatchetService extends EventEmitter {
   }
 
   start(): void {
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       return;
     }
 
@@ -148,7 +148,7 @@ class RatchetService extends EventEmitter {
     this.isShuttingDown = true;
     this.wakeSleep();
 
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       logger.debug('Waiting for ratchet monitor loop to complete');
       await this.monitorLoop;
       this.monitorLoop = null;

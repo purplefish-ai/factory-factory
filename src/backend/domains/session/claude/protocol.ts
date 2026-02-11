@@ -425,7 +425,7 @@ export class ClaudeProtocol extends EventEmitter {
    */
   private async sendRaw(message: unknown): Promise<void> {
     // Wait for any pending drain
-    if (this.drainPromise) {
+    if (this.drainPromise !== null) {
       await this.drainPromise;
     }
 

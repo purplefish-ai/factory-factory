@@ -436,7 +436,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       // If we archived the currently viewed workspace, navigate to the workspaces list
       const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
       if (variables.id === currentId) {
-        navigate(`/projects/${selectedProjectSlug}/workspaces`);
+        void navigate(`/projects/${selectedProjectSlug}/workspaces`);
       }
     },
     onError: (error, variables) => {
@@ -505,16 +505,16 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const handleProjectChange = useCallback(
     (value: string) => {
       if (value === '__manage__') {
-        navigate('/projects');
+        void navigate('/projects');
         return;
       }
       if (value === '__create__') {
-        navigate('/projects/new');
+        void navigate('/projects/new');
         return;
       }
       setSelectedProjectSlug(value);
       localStorage.setItem(SELECTED_PROJECT_KEY, value);
-      navigate(`/projects/${value}/workspaces`);
+      void navigate(`/projects/${value}/workspaces`);
     },
     [navigate]
   );

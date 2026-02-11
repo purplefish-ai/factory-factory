@@ -87,6 +87,10 @@
         "noArrayIndexKey": "error",
         "noUnsafeDeclarationMerging": "error"
       },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      },
       "complexity": {
         "noBannedTypes": "error",
         "noExcessiveCognitiveComplexity": "error",

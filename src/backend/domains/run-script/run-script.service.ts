@@ -125,7 +125,14 @@ export class RunScriptService {
   ): void {
     // Handle process exit
     childProcess.on('exit', (code, signal) => {
-      this.handleProcessExit(workspaceId, pid, code, signal);
+      void this.handleProcessExit(workspaceId, pid, code, signal).catch((error) => {
+        logger.error('Failed to handle run script exit', error as Error, {
+          workspaceId,
+          pid,
+          code,
+          signal,
+        });
+      });
     });
 
     // Capture and broadcast stdout/stderr

@@ -24,7 +24,7 @@ function RootLayout() {
       !pathname.startsWith('/projects/new') &&
       !isProjectSpecificRoute
     ) {
-      navigate('/projects/new');
+      void navigate('/projects/new');
     }
   }, [isLoading, projects, pathname, navigate]);
 

@@ -48,7 +48,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
           setError(errorMessage);
         }
       };
-      renderDiagram();
+      void renderDiagram();
     }
   }, [chart]);
 
