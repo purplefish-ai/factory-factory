@@ -1,11 +1,10 @@
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { trpc } from '@/frontend/lib/trpc';
-import { forgetResumeWorkspace, isResumeWorkspace } from './resume-workspace-storage';
+import { InitOutputPanel } from './init-output-panel';
+import { forgetResumeWorkspace } from './resume-workspace-storage';
+import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
 // =============================================================================
 // Workspace Initialization Overlay
@@ -28,24 +27,7 @@ export function InitializationOverlay({
   initOutput,
   hasStartupScript,
 }: InitializationOverlayProps) {
-  const utils = trpc.useUtils();
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const retryInit = trpc.workspace.retryInit.useMutation({
-    onSuccess: () => {
-      utils.workspace.getInitStatus.invalidate({ id: workspaceId });
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
-
-  // Auto-scroll to bottom when new output arrives
-  useEffect(() => {
-    if (scrollRef.current && initOutput !== null) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [initOutput]);
+  const { retry, retryInit } = useRetryWorkspaceInit(workspaceId);
 
   useEffect(() => {
     if (status === 'READY' || status === 'ARCHIVED') {
@@ -89,27 +71,15 @@ export function InitializationOverlay({
         {/* Startup Script Output */}
         {showLogs && (
           <div className="w-full mt-4">
-            <ScrollArea
-              viewportRef={scrollRef}
+            <InitOutputPanel
+              output={initOutput}
               className="h-48 w-full rounded-md border bg-zinc-950 text-left"
-            >
-              <pre className="p-3 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
-                {initOutput || <span className="text-zinc-500 italic">Waiting for output...</span>}
-              </pre>
-            </ScrollArea>
+            />
           </div>
         )}
 
         {isFailed && (
-          <Button
-            onClick={() =>
-              retryInit.mutate({
-                id: workspaceId,
-                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
-              })
-            }
-            disabled={retryInit.isPending}
-          >
+          <Button onClick={retry} disabled={retryInit.isPending}>
             {retryInit.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -139,13 +109,6 @@ interface ScriptRunningBannerProps {
 
 export function ScriptRunningBanner({ initOutput, hasStartupScript }: ScriptRunningBannerProps) {
   const [expanded, setExpanded] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (scrollRef.current && initOutput !== null) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [initOutput]);
 
   return (
     <div className="border-b bg-muted/50 px-4 py-2">
@@ -171,14 +134,10 @@ export function ScriptRunningBanner({ initOutput, hasStartupScript }: ScriptRunn
         )}
       </div>
       {expanded && hasStartupScript && (
-        <ScrollArea
-          viewportRef={scrollRef}
+        <InitOutputPanel
+          output={initOutput}
           className="mt-2 h-32 w-full rounded-md border bg-zinc-950"
-        >
-          <pre className="p-2 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
-            {initOutput || <span className="text-zinc-500 italic">Waiting for output...</span>}
-          </pre>
-        </ScrollArea>
+        />
       )}
     </div>
   );
@@ -202,17 +161,7 @@ export function ScriptFailedBanner({
   hasStartupScript,
 }: ScriptFailedBannerProps) {
   const [expanded, setExpanded] = useState(false);
-  const utils = trpc.useUtils();
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const retryInit = trpc.workspace.retryInit.useMutation({
-    onSuccess: () => {
-      utils.workspace.getInitStatus.invalidate({ id: workspaceId });
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
+  const { retry, retryInit } = useRetryWorkspaceInit(workspaceId);
 
   return (
     <div className="border-b bg-destructive/10 px-4 py-2">
@@ -241,12 +190,7 @@ export function ScriptFailedBanner({
             variant="outline"
             size="sm"
             className="h-6 px-2 text-xs"
-            onClick={() =>
-              retryInit.mutate({
-                id: workspaceId,
-                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
-              })
-            }
+            onClick={retry}
             disabled={retryInit.isPending}
           >
             {retryInit.isPending ? (
@@ -264,14 +208,10 @@ export function ScriptFailedBanner({
         </div>
       </div>
       {expanded && hasStartupScript && (
-        <ScrollArea
-          viewportRef={scrollRef}
+        <InitOutputPanel
+          output={initOutput}
           className="mt-2 h-32 w-full rounded-md border bg-zinc-950"
-        >
-          <pre className="p-2 text-xs font-mono text-zinc-300 whitespace-pre-wrap break-words">
-            {initOutput}
-          </pre>
-        </ScrollArea>
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/index';
 import { createLogger } from '@/backend/services/logger.service';
 import type { WorkspaceSessionBridge } from '../bridges';
 import { deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
+import { deriveWorkspaceRuntimeState } from './workspace-runtime-state';
 
 const logger = createLogger('kanban-state');
 
@@ -96,15 +97,13 @@ class KanbanStateService {
       return null;
     }
 
-    // Get real-time working status from session bridge
-    const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-    const isSessionWorking = this.session.isAnySessionWorking(sessionIds);
-    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-    const isWorking = isSessionWorking || flowState.isWorking;
+    const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
+      this.session.isAnySessionWorking(sessionIds)
+    );
 
     const kanbanColumn = computeKanbanColumn({
       lifecycle: workspace.status,
-      isWorking,
+      isWorking: runtimeState.isWorking,
       prState: workspace.prState,
       hasHadSessions: workspace.hasHadSessions,
     });
@@ -112,7 +111,7 @@ class KanbanStateService {
     return {
       workspace,
       kanbanColumn,
-      isWorking,
+      isWorking: runtimeState.isWorking,
     };
   }
 
@@ -125,14 +124,14 @@ class KanbanStateService {
     workingStatusMap: Map<string, boolean>
   ): WorkspaceWithKanbanState[] {
     return workspaces.map((workspace) => {
-      const isWorking = workingStatusMap.get(workspace.id) ?? false;
-      const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-      const effectiveWorking = isWorking || flowState.isWorking;
+      const runtimeState = deriveWorkspaceRuntimeState(workspace, (_sessionIds, workspaceId) => {
+        return workingStatusMap.get(workspaceId) ?? false;
+      });
 
       // Compute live kanban column (real-time activity overlays cached PR state)
       const kanbanColumn = computeKanbanColumn({
         lifecycle: workspace.status,
-        isWorking: effectiveWorking,
+        isWorking: runtimeState.isWorking,
         prState: workspace.prState,
         hasHadSessions: workspace.hasHadSessions,
       });
@@ -140,7 +139,7 @@ class KanbanStateService {
       return {
         workspace,
         kanbanColumn,
-        isWorking: effectiveWorking,
+        isWorking: runtimeState.isWorking,
       };
     });
   }
