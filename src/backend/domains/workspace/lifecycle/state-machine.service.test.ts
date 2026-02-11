@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock Prisma
 const mockFindUnique = vi.fn();
+const mockFindUniqueOrThrow = vi.fn();
 const mockUpdate = vi.fn();
 const mockUpdateMany = vi.fn();
 
@@ -9,6 +10,7 @@ vi.mock('@/backend/db', () => ({
   prisma: {
     workspace: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
     },
@@ -92,7 +94,7 @@ describe('WorkspaceStateMachineService', () => {
 
       mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.transition('ws-1', 'PROVISIONING');
 
@@ -111,8 +113,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'PROVISIONING' };
       const updatedWorkspace = { ...workspace, status: 'READY', worktreePath: '/path/to/worktree' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.transition('ws-1', 'READY', {
         worktreePath: '/path/to/worktree',
@@ -137,8 +140,9 @@ describe('WorkspaceStateMachineService', () => {
         initErrorMessage: 'Git clone failed',
       };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.transition('ws-1', 'FAILED', {
         errorMessage: 'Git clone failed',
@@ -195,17 +199,15 @@ describe('WorkspaceStateMachineService', () => {
       // Both callers read PROVISIONING state
       const workspace = { id: 'ws-1', status: 'PROVISIONING' };
 
-      // First transition succeeds
       mockFindUnique
         .mockResolvedValueOnce(workspace) // First caller reads PROVISIONING
-        .mockResolvedValueOnce({ ...workspace, status: 'READY' }); // First caller re-reads READY
-
-      // Second transition fails CAS
-      mockFindUnique.mockResolvedValueOnce(workspace); // Second caller reads PROVISIONING
+        .mockResolvedValueOnce(workspace); // Second caller reads PROVISIONING
 
       mockUpdateMany
         .mockResolvedValueOnce({ count: 1 }) // First updateMany succeeds
         .mockResolvedValueOnce({ count: 0 }); // Second updateMany fails (status already changed)
+
+      mockFindUniqueOrThrow.mockResolvedValueOnce({ ...workspace, status: 'READY' }); // First caller re-reads READY
 
       // Run transitions in parallel
       const [result1, result2Promise] = await Promise.allSettled([
@@ -244,8 +246,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'READY' };
       const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.transition('ws-1', 'ARCHIVED');
 
@@ -256,8 +259,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'FAILED' };
       const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.transition('ws-1', 'ARCHIVED');
 
@@ -270,8 +274,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'NEW', initRetryCount: 0 };
       const updatedWorkspace = { ...workspace, status: 'PROVISIONING' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.startProvisioning('ws-1');
 
@@ -361,8 +366,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'PROVISIONING' };
       const updatedWorkspace = { ...workspace, status: 'READY' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.markReady('ws-1');
 
@@ -378,8 +384,9 @@ describe('WorkspaceStateMachineService', () => {
         branchName: 'feature/test',
       };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       await workspaceStateMachine.markReady('ws-1', {
         worktreePath: '/path',
@@ -401,8 +408,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'PROVISIONING' };
       const updatedWorkspace = { ...workspace, status: 'FAILED' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.markFailed('ws-1');
 
@@ -417,8 +425,9 @@ describe('WorkspaceStateMachineService', () => {
         initErrorMessage: 'Timeout exceeded',
       };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       await workspaceStateMachine.markFailed('ws-1', 'Timeout exceeded');
 
@@ -436,8 +445,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'READY' };
       const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.archive('ws-1');
 
@@ -448,8 +458,9 @@ describe('WorkspaceStateMachineService', () => {
       const workspace = { id: 'ws-1', status: 'FAILED' };
       const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
 
-      mockFindUnique.mockResolvedValueOnce(workspace).mockResolvedValueOnce(updatedWorkspace);
+      mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
       const result = await workspaceStateMachine.archive('ws-1');
 
