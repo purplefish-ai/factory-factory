@@ -1012,6 +1012,27 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  describe('shutdown behavior', () => {
+    it('stops immediately while monitor loop is sleeping', async () => {
+      vi.useFakeTimers();
+
+      vi.spyOn(ratchetService, 'checkAllWorkspaces').mockResolvedValue({
+        checked: 0,
+        stateChanges: 0,
+        actionsTriggered: 0,
+        results: [],
+      });
+
+      ratchetService.start();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      await expect(ratchetService.stop()).resolves.toBeUndefined();
+
+      vi.useRealTimers();
+    });
+  });
+
   describe('checkWorkspaceById', () => {
     it('returns null when shutting down', async () => {
       unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = true;
