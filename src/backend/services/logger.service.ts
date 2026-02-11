@@ -11,6 +11,7 @@
 import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { expandEnvVars } from '../lib/env';
 
 type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -60,7 +61,8 @@ let _logFilePath: string | null = null;
 
 function initLogFileStream(): WriteStream | null {
   try {
-    const baseDir = process.env.BASE_DIR || join(homedir(), 'factory-factory');
+    const rawBaseDir = process.env.BASE_DIR;
+    const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), 'factory-factory');
     const logsDir = join(baseDir, 'logs');
     if (!existsSync(logsDir)) {
       mkdirSync(logsDir, { recursive: true });
@@ -90,7 +92,8 @@ export function getLogFilePath(): string {
   if (_logFilePath) {
     return _logFilePath;
   }
-  const baseDir = process.env.BASE_DIR || join(homedir(), 'factory-factory');
+  const rawBaseDir = process.env.BASE_DIR;
+  const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), 'factory-factory');
   return join(baseDir, 'logs', 'server.log');
 }
 
