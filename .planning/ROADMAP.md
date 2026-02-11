@@ -118,10 +118,10 @@ Plans:
   1. Sidebar workspace state updates appear within ~200ms of a backend mutation (not waiting for 2s poll)
   2. React Query cache is updated via queryClient.setQueryData from WebSocket message handlers, so existing query consumers read fresh data without refetch
   3. Sidebar remains correct after WebSocket disconnection and reconnection (no stale state persists)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 16-01: TBD
+- [ ] 16-01-PLAN.md -- Snapshot-to-sidebar mapping, sync hook, AppSidebar wiring, Vite proxy
 
 ### Phase 17: Client Integration - Kanban and Workspace List
 **Goal**: Kanban board and workspace list both read from WebSocket-driven snapshots, and all three project-level surfaces show consistent state with a relaxed polling fallback
