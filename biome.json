@@ -168,7 +168,7 @@
         "src/components/chat/virtualized-message-list.tsx",
         "src/frontend/components/pr-detail-panel.tsx",
         "src/lib/diff/parse.ts",
-        "src/shared/claude/protocol.ts"
+        "src/shared/claude/protocol/index.ts"
       ],
       "linter": {
         "rules": {
