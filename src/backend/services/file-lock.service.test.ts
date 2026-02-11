@@ -817,4 +817,114 @@ describe('FileLockService', () => {
       );
     });
   });
+
+  describe('race condition prevention', () => {
+    it('should prevent concurrent initialization from creating duplicate stores', async () => {
+      // Create a fresh service instance to avoid any cached state
+      const service = new FileLockService();
+      const workspaceId = 'ws-race-test';
+      const worktreePath = '/tmp/ws-race-test';
+
+      // Mock session resolution for both agents
+      mockFindById.mockImplementation(async () => ({
+        workspaceId,
+        workspace: { worktreePath },
+      }));
+
+      // Mock slow disk read to trigger race condition window
+      // Use a promise we control instead of setTimeout to avoid fake timer issues
+      let readCallCount = 0;
+      let resolveRead: (() => void) | undefined;
+      const readPromise = new Promise<void>((resolve) => {
+        resolveRead = resolve;
+      });
+
+      vi.mocked(fs.readFile).mockImplementation(async () => {
+        readCallCount++;
+        // Wait for our controlled promise to ensure both calls are in flight
+        await readPromise;
+        throw { code: 'ENOENT' }; // Simulate no existing locks
+      });
+
+      // Start two acquisition requests concurrently for the SAME file in an UNLOADED workspace
+      const promise1 = service.acquireLock('agent-1', { filePath: 'test.txt' });
+      const promise2 = service.acquireLock('agent-2', { filePath: 'test.txt' });
+
+      // Give both calls time to reach the readFile call
+      await Promise.resolve();
+
+      // Now resolve the read to let both continue
+      resolveRead?.();
+
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+
+      // Only ONE agent should have acquired the lock (mutual exclusion)
+      const bothAcquired = result1.acquired && result2.acquired;
+      expect(bothAcquired).toBe(false);
+
+      // Exactly one should succeed, one should fail
+      const acquiredCount = (result1.acquired ? 1 : 0) + (result2.acquired ? 1 : 0);
+      expect(acquiredCount).toBe(1);
+
+      // Check that only one agent owns the lock
+      const check1 = await service.checkLock('agent-1', { filePath: 'test.txt' });
+      const check2 = await service.checkLock('agent-2', { filePath: 'test.txt' });
+
+      // Exactly one agent should own the lock
+      const ownershipCount =
+        (check1.lock?.isOwnedByMe ? 1 : 0) + (check2.lock?.isOwnedByMe ? 1 : 0);
+      expect(ownershipCount).toBe(1);
+
+      // Both should see the file as locked
+      expect(check1.isLocked).toBe(true);
+      expect(check2.isLocked).toBe(true);
+
+      // Only one disk read should have occurred (initialization deduplication)
+      expect(readCallCount).toBe(1);
+    });
+
+    it('should handle concurrent lock acquisitions for different files correctly', async () => {
+      const service = new FileLockService();
+      const workspaceId = 'ws-multi-file';
+      const worktreePath = '/tmp/ws-multi-file';
+
+      mockFindById.mockResolvedValue({
+        workspaceId,
+        workspace: { worktreePath },
+      });
+
+      // Use controlled promise instead of setTimeout
+      let resolveRead: (() => void) | undefined;
+      const readPromise = new Promise<void>((resolve) => {
+        resolveRead = resolve;
+      });
+
+      vi.mocked(fs.readFile).mockImplementation(async () => {
+        await readPromise;
+        throw { code: 'ENOENT' };
+      });
+
+      // Start acquisitions for DIFFERENT files concurrently
+      const promise1 = service.acquireLock('agent-1', { filePath: 'file1.txt' });
+      const promise2 = service.acquireLock('agent-2', { filePath: 'file2.txt' });
+
+      await Promise.resolve();
+      resolveRead?.();
+
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+
+      // Both should succeed since they're acquiring different files
+      expect(result1.acquired).toBe(true);
+      expect(result2.acquired).toBe(true);
+
+      // Verify both locks exist
+      const check1 = await service.checkLock('agent-1', { filePath: 'file1.txt' });
+      const check2 = await service.checkLock('agent-2', { filePath: 'file2.txt' });
+
+      expect(check1.isLocked).toBe(true);
+      expect(check1.lock?.isOwnedByMe).toBe(true);
+      expect(check2.isLocked).toBe(true);
+      expect(check2.lock?.isOwnedByMe).toBe(true);
+    });
+  });
 });

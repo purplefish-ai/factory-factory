@@ -138,6 +138,9 @@ export class FileLockService {
   // In-memory storage: workspaceId -> WorkspaceLockStore
   private stores = new Map<string, WorkspaceLockStore>();
 
+  // Track initialization promises to prevent race conditions during concurrent store creation
+  private initializationPromises = new Map<string, Promise<WorkspaceLockStore>>();
+
   // Cleanup interval handle
   private cleanupInterval?: NodeJS.Timeout;
   private hasCheckedRuntime = false;
@@ -321,23 +324,40 @@ export class FileLockService {
 
   /**
    * Get or create lock store for a workspace
+   * Uses promise deduplication to prevent race conditions during concurrent initialization
    */
   private async getOrCreateStore(context: WorkspaceContext): Promise<WorkspaceLockStore> {
     this.ensureRuntimeWarningChecked();
 
-    let store = this.stores.get(context.workspaceId);
-
-    if (!store) {
-      const locks = await this.loadFromDisk(context.worktreePath);
-      store = {
-        workspaceId: context.workspaceId,
-        worktreePath: context.worktreePath,
-        locks,
-      };
-      this.stores.set(context.workspaceId, store);
+    // Check if store already exists
+    const store = this.stores.get(context.workspaceId);
+    if (store) {
+      return store;
     }
 
-    return store;
+    // Check if initialization is already in progress
+    let initPromise = this.initializationPromises.get(context.workspaceId);
+    if (!initPromise) {
+      // Start initialization
+      initPromise = (async () => {
+        try {
+          const locks = await this.loadFromDisk(context.worktreePath);
+          const newStore: WorkspaceLockStore = {
+            workspaceId: context.workspaceId,
+            worktreePath: context.worktreePath,
+            locks,
+          };
+          this.stores.set(context.workspaceId, newStore);
+          return newStore;
+        } finally {
+          // Always clean up the promise, even on error, to allow retry
+          this.initializationPromises.delete(context.workspaceId);
+        }
+      })();
+      this.initializationPromises.set(context.workspaceId, initPromise);
+    }
+
+    return await initPromise;
   }
 
   /**
@@ -666,6 +686,7 @@ export class FileLockService {
    */
   clearStores(): void {
     this.stores.clear();
+    this.initializationPromises.clear();
   }
 }
 
