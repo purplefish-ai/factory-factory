@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-11)
 
 **Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
-**Current focus:** Phase 12 - Domain Event Emission
+**Current focus:** Phase 13 - Event Collector
 
 ## Current Position
 
-Phase: 12 of 18 (Domain Event Emission) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-11 -- Completed 12-02 (PR snapshot + ratchet event emission, EVNT-05 verified)
+Phase: 13 of 18 (Event Collector)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-11 -- Phase 12 complete (verified, 6/6 must-haves)
 
-Progress: [██░░░░░░░░] 15%
+Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -69,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 12-02-PLAN.md -- Phase 12 complete
+Stopped at: Phase 12 complete and verified -- ready to plan Phase 13
 Resume file: None

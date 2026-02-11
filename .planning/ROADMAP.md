@@ -25,7 +25,7 @@ See [v1.0 Roadmap Archive](milestones/v1.0-ROADMAP.md) for full phase details.
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 11: Snapshot Store** -- In-memory store with versioned per-workspace entries, cleanup contracts, and derived state ✓ 2026-02-11
-- [ ] **Phase 12: Domain Event Emission** -- Add EventEmitter capability to workspace, GitHub, ratchet, run-script, and session domains
+- [x] **Phase 12: Domain Event Emission** -- Add EventEmitter capability to workspace, GitHub, ratchet, run-script, and session domains ✓ 2026-02-11
 - [ ] **Phase 13: Event Collector** -- Orchestration layer wiring domain events to snapshot store updates with coalescing
 - [ ] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection
 - [ ] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project
@@ -64,8 +64,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 12-01-PLAN.md -- Workspace state machine (EVNT-01) and run-script state machine (EVNT-04) event emission with tests
-- [ ] 12-02-PLAN.md -- PR snapshot (EVNT-02) and ratchet (EVNT-03) event emission with tests, EVNT-05 verification
+- [x] 12-01-PLAN.md -- Workspace state machine (EVNT-01) and run-script state machine (EVNT-04) event emission with tests
+- [x] 12-02-PLAN.md -- PR snapshot (EVNT-02) and ratchet (EVNT-03) event emission with tests, EVNT-05 verification
 
 ### Phase 13: Event Collector
 **Goal**: A single orchestrator wires all domain events to snapshot store updates, translating domain-native events into store mutations with coalescing
@@ -160,7 +160,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Snapshot Store | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
-| 12. Domain Event Emission | v1.1 | 0/2 | Not started | - |
+| 12. Domain Event Emission | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 13. Event Collector | v1.1 | 0/TBD | Not started | - |
 | 14. Safety-Net Reconciliation | v1.1 | 0/TBD | Not started | - |
 | 15. WebSocket Transport | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 12 planned (2 plans)*
+*Last updated: 2026-02-11 -- Phase 12 complete (2/2 plans, all EVNT requirements satisfied)*
