@@ -28,6 +28,7 @@ vi.mock('@/hooks/use-websocket-transport', () => ({
 
 const mockSetData = vi.fn();
 const mockKanbanSetData = vi.fn();
+const mockListInvalidate = vi.fn();
 
 vi.mock('@/frontend/lib/trpc', () => ({
   trpc: {
@@ -38,6 +39,9 @@ vi.mock('@/frontend/lib/trpc', () => ({
         },
         listWithKanbanState: {
           setData: mockKanbanSetData,
+        },
+        list: {
+          invalidate: mockListInvalidate,
         },
       },
     }),
@@ -98,6 +102,7 @@ describe('useProjectSnapshotSync', () => {
     capturedOptions = null;
     mockSetData.mockReset();
     mockKanbanSetData.mockReset();
+    mockListInvalidate.mockClear();
   });
 
   it('sets URL to null when projectId is undefined', () => {
@@ -471,6 +476,53 @@ describe('useProjectSnapshotSync', () => {
       const [, updater] = mockKanbanSetData.mock.calls[0]!;
       const result = updater(undefined);
       expect(result).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // workspace.list cache invalidation tests
+  // ===========================================================================
+
+  describe('workspace.list cache invalidation', () => {
+    it('snapshot_full invalidates workspace.list cache', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry()],
+      });
+
+      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+    });
+
+    it('snapshot_changed invalidates workspace.list cache', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry(),
+      });
+
+      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+    });
+
+    it('snapshot_removed invalidates workspace.list cache', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+      });
+
+      expect(mockListInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
     });
   });
 });

@@ -1,7 +1,8 @@
 /**
  * React hook that syncs /snapshots WebSocket messages into both the
  * getProjectSummaryState (sidebar) and listWithKanbanState (kanban)
- * React Query cache entries.
+ * React Query cache entries. Also invalidates the workspace.list cache
+ * so the table view refetches with fresh data on every snapshot event.
  *
  * Follows the use-dev-logs.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
@@ -130,6 +131,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           // (matches server behavior: READY workspaces with no sessions are hidden)
           setKanbanData({ projectId: message.projectId }, ((prev: KanbanCacheData) =>
             buildKanbanCacheFromFull(message.entries, prev)) as never);
+
+          // Invalidate workspace.list cache so table view refetches with fresh data
+          utils.workspace.list.invalidate({ projectId: message.projectId });
           break;
         }
 
@@ -165,6 +169,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           // Update kanban cache
           setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
             upsertKanbanCacheEntry(message.entry, prev)) as never);
+
+          // Invalidate workspace.list cache so table view refetches with fresh data
+          utils.workspace.list.invalidate({ projectId });
           break;
         }
 
@@ -189,6 +196,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           // Update kanban cache
           setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
             removeFromKanbanCache(message.workspaceId, prev)) as never);
+
+          // Invalidate workspace.list cache so table view refetches with fresh data
+          utils.workspace.list.invalidate({ projectId });
           break;
         }
       }
