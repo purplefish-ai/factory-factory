@@ -3,9 +3,9 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
+import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants';
 import type { SnapshotChangedEvent, SnapshotRemovedEvent } from '@/backend/services';
-import type { AppContext } from '../../app-context';
 import { createSnapshotsUpgradeHandler, snapshotConnections } from './snapshots.handler';
 
 // ============================================================================
@@ -61,7 +61,7 @@ vi.mock('./upgrade-utils', () => ({
   sendBadRequest: mockSendBadRequest,
 }));
 
-vi.mock('../../app-context', () => ({
+vi.mock('@/backend/app-context', () => ({
   createAppContext: vi.fn(() => ({
     services: {
       createLogger: vi.fn(() => ({

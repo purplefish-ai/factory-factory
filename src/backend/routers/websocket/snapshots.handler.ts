@@ -9,6 +9,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
+import { type AppContext, createAppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants';
 import {
   SNAPSHOT_CHANGED,
@@ -17,7 +18,6 @@ import {
   type SnapshotRemovedEvent,
   workspaceSnapshotStore,
 } from '@/backend/services';
-import { type AppContext, createAppContext } from '../../app-context';
 import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
