@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock Prisma
 const mockFindUnique = vi.fn();
@@ -26,7 +26,9 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 // Import after mocks are set up
 import {
+  RUN_SCRIPT_STATUS_CHANGED,
   RunScriptStateMachineError,
+  type RunScriptStatusChangedEvent,
   runScriptStateMachine,
 } from './run-script-state-machine.service';
 
@@ -652,6 +654,104 @@ describe('RunScriptStateMachineService', () => {
         const result = await runScriptStateMachine.verifyRunning('ws-1');
         expect(result).toBe(status);
       }
+    });
+  });
+
+  describe('event emission', () => {
+    afterEach(() => {
+      runScriptStateMachine.removeAllListeners();
+    });
+
+    it('emits run_script_status_changed after successful transition', async () => {
+      const workspace = { id: 'ws-1', runScriptStatus: 'IDLE' };
+      const updatedWorkspace = { ...workspace, runScriptStatus: 'STARTING' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const events: RunScriptStatusChangedEvent[] = [];
+      runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
+        events.push(event);
+      });
+
+      await runScriptStateMachine.transition('ws-1', 'STARTING');
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({
+        workspaceId: 'ws-1',
+        fromStatus: 'IDLE',
+        toStatus: 'STARTING',
+      });
+    });
+
+    it('does NOT emit on CAS failure', async () => {
+      const workspace = { id: 'ws-1', runScriptStatus: 'IDLE' };
+
+      mockFindUnique
+        .mockResolvedValueOnce(workspace) // initial read
+        .mockResolvedValueOnce({ ...workspace, runScriptStatus: 'STARTING' }); // refetch after CAS fail
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      const events: RunScriptStatusChangedEvent[] = [];
+      runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
+        events.push(event);
+      });
+
+      await expect(runScriptStateMachine.transition('ws-1', 'STARTING')).rejects.toThrow(
+        RunScriptStateMachineError
+      );
+
+      expect(events).toHaveLength(0);
+    });
+
+    it('does NOT emit on invalid transition', async () => {
+      const workspace = { id: 'ws-1', runScriptStatus: 'IDLE' };
+      mockFindUnique.mockResolvedValue(workspace);
+
+      const events: RunScriptStatusChangedEvent[] = [];
+      runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
+        events.push(event);
+      });
+
+      await expect(runScriptStateMachine.transition('ws-1', 'RUNNING')).rejects.toThrow(
+        RunScriptStateMachineError
+      );
+
+      expect(events).toHaveLength(0);
+    });
+
+    it('emits event for each transition in a multi-step flow', async () => {
+      const events: RunScriptStatusChangedEvent[] = [];
+      runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
+        events.push(event);
+      });
+
+      // Step 1: IDLE -> STARTING
+      mockFindUnique.mockResolvedValueOnce({ id: 'ws-1', runScriptStatus: 'IDLE' });
+      mockUpdateMany.mockResolvedValueOnce({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValueOnce({ id: 'ws-1', runScriptStatus: 'STARTING' });
+
+      await runScriptStateMachine.transition('ws-1', 'STARTING');
+
+      // Step 2: STARTING -> RUNNING
+      mockFindUnique.mockResolvedValueOnce({ id: 'ws-1', runScriptStatus: 'STARTING' });
+      mockUpdateMany.mockResolvedValueOnce({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValueOnce({ id: 'ws-1', runScriptStatus: 'RUNNING' });
+
+      await runScriptStateMachine.transition('ws-1', 'RUNNING');
+
+      expect(events).toHaveLength(2);
+      expect(events[0]).toEqual({
+        workspaceId: 'ws-1',
+        fromStatus: 'IDLE',
+        toStatus: 'STARTING',
+      });
+      expect(events[1]).toEqual({
+        workspaceId: 'ws-1',
+        fromStatus: 'STARTING',
+        toStatus: 'RUNNING',
+      });
     });
   });
 

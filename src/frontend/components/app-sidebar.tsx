@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/sidebar';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
+import { useProjectSnapshotSync } from '@/frontend/hooks/use-project-snapshot-sync';
 import { useWorkspaceAttention } from '@/frontend/hooks/use-workspace-attention';
 import { useProjectContext } from '@/frontend/lib/providers';
 import { trpc } from '@/frontend/lib/trpc';
@@ -296,9 +297,12 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   // Fetch unified project summary state (workspaces + working status + git stats + review count)
   const { data: projectStateData } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
-    { enabled: !!selectedProjectId && !isMocked, refetchInterval: isMocked ? false : 2000 }
+    { enabled: !!selectedProjectId && !isMocked, refetchInterval: isMocked ? false : 30_000 }
   );
   const projectState = mockData?.projectState ?? projectStateData;
+
+  // Sync workspace snapshots from WebSocket to React Query cache (CLNT-01, CLNT-04)
+  useProjectSnapshotSync(isMocked ? undefined : selectedProjectId);
 
   const serverWorkspaces = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
@@ -463,9 +467,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     [executeArchive]
   );
 
-  const workspacePendingArchive = workspaceToArchive
-    ? serverWorkspaces?.find((workspace) => workspace.id === workspaceToArchive)
-    : null;
+  const workspacePendingArchive = serverWorkspaces?.find(
+    (workspace) => workspace.id === workspaceToArchive
+  );
   const archiveHasUncommitted = workspacePendingArchive?.gitStats?.hasUncommitted === true;
 
   // Get current workspace ID from URL
