@@ -10,27 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 ## Current Position
 
 Phase: 12 of 18 (Domain Event Emission)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-11 -- Phase 11 complete (verified, 8/8 must-haves)
+Plan: 1 of 2 in current phase
+Status: Executing
+Last activity: 2026-02-11 -- Completed 12-01 (domain event emission for workspace + run-script state machines)
 
-Progress: [█░░░░░░░░░] 12%
+Progress: [██░░░░░░░░] 14%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 10min
-- Total execution time: 0.35 hours
+- Total plans completed: 3
+- Average duration: 8min
+- Total execution time: 0.4 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 11-snapshot-store | 2 | 21min | 10min |
+| 12-domain-event-emission | 1 | 3min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 12min, 9min
+- Last 5 plans: 12min, 9min, 3min
 - Trend: improving
 
 *Updated after each plan completion*
@@ -52,6 +53,8 @@ Recent decisions affecting current work:
 - [11-02]: ARCH-02 test checks import statements only, not JSDoc comments
 - [11-02]: Field-group timestamp tests isolate groups by providing only specific-group fields
 - [11-02]: Derived state tests use responsive mock derivation functions
+- [12-01]: Events emitted AFTER successful CAS mutation, never before or on failure
+- [12-01]: EventEmitter pattern (Node.js native) over custom pub/sub for simplicity
 
 ### Pending Todos
 
@@ -64,5 +67,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 11 complete and verified -- ready to plan Phase 12
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
