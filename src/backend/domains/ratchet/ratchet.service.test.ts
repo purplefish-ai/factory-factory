@@ -1,5 +1,5 @@
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
 
@@ -36,7 +36,11 @@ vi.mock('@/backend/services/logger.service', () => ({
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { fixerSessionService } from './fixer-session.service';
-import { ratchetService } from './ratchet.service';
+import {
+  RATCHET_STATE_CHANGED,
+  type RatchetStateChangedEvent,
+  ratchetService,
+} from './ratchet.service';
 
 const mockSessionBridge: RatchetSessionBridge = {
   isSessionRunning: vi.fn(),
@@ -1244,6 +1248,198 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         type: 'ERROR',
         error: 'No worktree path',
       });
+    });
+  });
+
+  describe('event emission', () => {
+    afterEach(() => {
+      ratchetService.removeAllListeners();
+    });
+
+    it('emits ratchet_state_changed when disabled workspace state changes', async () => {
+      const workspace = {
+        id: 'ws-disabled-change',
+        prUrl: 'https://github.com/example/repo/pull/30',
+        prNumber: 30,
+        ratchetEnabled: false,
+        ratchetState: RatchetState.CI_FAILED,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const events: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        events.push(event);
+      });
+
+      await unsafeCoerce<{
+        processWorkspace: (w: typeof workspace) => Promise<unknown>;
+      }>(ratchetService).processWorkspace(workspace);
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({
+        workspaceId: 'ws-disabled-change',
+        fromState: RatchetState.CI_FAILED,
+        toState: RatchetState.IDLE,
+      });
+    });
+
+    it('does NOT emit when disabled workspace state is already IDLE', async () => {
+      const workspace = {
+        id: 'ws-disabled-idle',
+        prUrl: 'https://github.com/example/repo/pull/31',
+        prNumber: 31,
+        ratchetEnabled: false,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const events: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        events.push(event);
+      });
+
+      await unsafeCoerce<{
+        processWorkspace: (w: typeof workspace) => Promise<unknown>;
+      }>(ratchetService).processWorkspace(workspace);
+
+      expect(events).toHaveLength(0);
+    });
+
+    it('emits ratchet_state_changed on main path when state changes', async () => {
+      const workspace = {
+        id: 'ws-state-change',
+        prUrl: 'https://github.com/example/repo/pull/32',
+        prNumber: 32,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue({
+        ciStatus: CIStatus.FAILURE,
+        snapshotKey: 'new-snapshot-key',
+        hasChangesRequested: false,
+        latestReviewActivityAtMs: null,
+        statusCheckRollup: null,
+        prState: 'OPEN',
+        prNumber: 32,
+      });
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'ratchet-session-32',
+        promptSent: true,
+      } as never);
+
+      const events: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        events.push(event);
+      });
+
+      await unsafeCoerce<{
+        processWorkspace: (w: typeof workspace) => Promise<unknown>;
+      }>(ratchetService).processWorkspace(workspace);
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toEqual({
+        workspaceId: 'ws-state-change',
+        fromState: RatchetState.IDLE,
+        toState: RatchetState.CI_FAILED,
+      });
+    });
+
+    it('does NOT emit when main path state unchanged', async () => {
+      const workspace = {
+        id: 'ws-no-change',
+        prUrl: 'https://github.com/example/repo/pull/33',
+        prNumber: 33,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_FAILED,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue({
+        ciStatus: CIStatus.FAILURE,
+        snapshotKey: 'new-snapshot-key',
+        hasChangesRequested: false,
+        latestReviewActivityAtMs: null,
+        statusCheckRollup: null,
+        prState: 'OPEN',
+        prNumber: 33,
+      });
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'ratchet-session-33',
+        promptSent: true,
+      } as never);
+
+      const events: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        events.push(event);
+      });
+
+      await unsafeCoerce<{
+        processWorkspace: (w: typeof workspace) => Promise<unknown>;
+      }>(ratchetService).processWorkspace(workspace);
+
+      expect(events).toHaveLength(0);
+    });
+
+    it('does NOT emit on error path', async () => {
+      const workspace = {
+        id: 'ws-error',
+        prUrl: 'https://github.com/example/repo/pull/34',
+        prNumber: 34,
+        ratchetEnabled: true,
+        ratchetState: RatchetState.CI_FAILED,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue(null);
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const events: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        events.push(event);
+      });
+
+      const result = await unsafeCoerce<{
+        processWorkspace: (w: typeof workspace) => Promise<unknown>;
+      }>(ratchetService).processWorkspace(workspace);
+
+      expect(result).toMatchObject({
+        action: { type: 'ERROR' },
+      });
+      expect(events).toHaveLength(0);
     });
   });
 });

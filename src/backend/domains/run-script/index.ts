@@ -10,7 +10,9 @@ export { RunScriptService, runScriptService } from './run-script.service';
 
 // State machine
 export {
+  RUN_SCRIPT_STATUS_CHANGED,
   RunScriptStateMachineError,
+  type RunScriptStatusChangedEvent,
   runScriptStateMachine,
   type TransitionOptions,
 } from './run-script-state-machine.service';
