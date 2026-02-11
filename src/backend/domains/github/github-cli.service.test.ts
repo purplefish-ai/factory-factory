@@ -815,17 +815,8 @@ describe('GitHubCLIService', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null when only closed PRs exist', async () => {
-      const prs = [
-        {
-          number: 12,
-          url: 'https://github.com/o/r/pull/12',
-          state: 'CLOSED',
-          createdAt: '2024-01-01T00:00:00Z',
-        },
-      ];
-
-      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
+    it('should return null when no open PRs exist (empty result from --state open)', async () => {
+      mockExecFile.mockResolvedValue({ stdout: JSON.stringify([]), stderr: '' });
 
       const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
       expect(result).toBeNull();

@@ -267,21 +267,11 @@ class GitHubCLIService {
         return null;
       }
 
-      // Filter PRs created after workspace creation
-      let filteredPRs = prs.filter((pr) => pr.state === 'OPEN');
+      // Filter out PRs created before the workspace (prevents branch name collisions)
+      const filteredPRs = workspaceCreatedAt
+        ? prs.filter((pr) => new Date(pr.createdAt) >= workspaceCreatedAt)
+        : prs;
 
-      if (workspaceCreatedAt) {
-        filteredPRs = filteredPRs.filter((pr) => {
-          const prCreatedAt = new Date(pr.createdAt);
-          return prCreatedAt >= workspaceCreatedAt;
-        });
-      }
-
-      if (filteredPRs.length === 0) {
-        return null;
-      }
-
-      // Return the first matching PR (most recent due to gh CLI default sorting)
       const pr = filteredPRs[0];
       if (!pr) {
         return null;
