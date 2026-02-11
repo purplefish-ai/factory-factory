@@ -165,7 +165,7 @@ export class ClaudeProtocol extends EventEmitter {
       });
 
       // Fire-and-forget the send - backpressure handled internally
-      void this.sendRaw(message);
+      this.sendRaw(message).catch(reject);
     });
   }
 
@@ -327,7 +327,7 @@ export class ClaudeProtocol extends EventEmitter {
       });
 
       // Fire-and-forget the send - backpressure handled internally
-      void this.sendRaw(message);
+      this.sendRaw(message).catch(reject);
     });
   }
 

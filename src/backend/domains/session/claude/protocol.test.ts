@@ -1112,6 +1112,70 @@ describe('ClaudeProtocol', () => {
   });
 
   // ===========================================================================
+  // sendRaw Error Handling Tests
+  // ===========================================================================
+
+  describe('sendRaw error handling', () => {
+    it('should reject sendInitialize immediately if sendRaw fails', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      // Protocol is created but NOT started, so sendRaw will throw "Protocol stopped"
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      const initPromise = protocol2.sendInitialize();
+
+      // If the bug exists, this will NOT reject immediately because sendRaw's
+      // error is unhandled (due to 'void') and doesn't reach the promise executor.
+      // The test will time out after 5 seconds instead of rejecting immediately.
+      await expect(initPromise).rejects.toThrow('Protocol stopped');
+    });
+
+    it('should reject sendRewindFiles immediately if sendRaw fails', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      // Protocol is created but NOT started, so sendRaw will throw "Protocol stopped"
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      const rewindPromise = protocol2.sendRewindFiles('msg-123');
+
+      // If the bug exists, this will NOT reject immediately because sendRaw's
+      // error is unhandled (due to 'void') and doesn't reach the promise executor.
+      await expect(rewindPromise).rejects.toThrow('Protocol stopped');
+    });
+
+    it('should cleanup pending request when sendInitialize fails immediately', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      const initPromise = protocol2.sendInitialize();
+
+      // Should reject with error
+      await expect(initPromise).rejects.toThrow('Protocol stopped');
+
+      // After rejection, the pending request should not remain in the map
+      // (we can't directly access pendingRequests, but we can verify via starting the protocol)
+      protocol2.start();
+      protocol2.stop();
+    });
+
+    it('should cleanup pending request when sendRewindFiles fails immediately', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      const rewindPromise = protocol2.sendRewindFiles('msg-123');
+
+      // Should reject with error
+      await expect(rewindPromise).rejects.toThrow('Protocol stopped');
+
+      // After rejection, the pending request should not remain in the map
+      protocol2.start();
+      protocol2.stop();
+    });
+  });
+
+  // ===========================================================================
   // Edge Cases Tests
   // ===========================================================================
 
