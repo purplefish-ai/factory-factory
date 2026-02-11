@@ -47,6 +47,18 @@ const IDLE_STATUS: SessionTabRuntimeInfo = {
 };
 
 function getFallbackStatusInfo(persistedStatus?: DbSessionStatus): SessionTabRuntimeInfo {
+  if (persistedStatus === 'RUNNING') {
+    return {
+      color: 'text-brand',
+      pulse: true,
+      spin: false,
+      label: 'Running',
+      description: 'Processing your request',
+      icon: Activity,
+      isRunning: true,
+    };
+  }
+
   if (persistedStatus === 'PAUSED') {
     return {
       color: 'text-muted-foreground',

@@ -25,6 +25,7 @@ export interface GitHubStatusCheck {
     | 'CANCELLED'
     | 'TIMED_OUT'
     | 'ACTION_REQUIRED'
+    | 'NEUTRAL'
     | null;
   detailsUrl?: string;
 }
