@@ -132,10 +132,10 @@ Plans:
   2. Workspace list reflects new/changed workspaces within ~200ms of mutation
   3. All three consumers (sidebar, kanban, workspace list) show the same workspace state at any given moment
   4. A polling fallback remains active at 30-60s cadence as safety net during migration period
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 17-01: TBD
+- [ ] 17-01-PLAN.md -- Snapshot-to-kanban mapping, sync hook extension, reduced polling cadences
 
 ### Phase 18: Architecture Validation
 **Goal**: The complete snapshot service integration passes all architecture rules and causes zero test regressions
