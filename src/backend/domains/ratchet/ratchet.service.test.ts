@@ -60,6 +60,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
+    unsafeCoerce<{ reviewPollTrackers: Map<string, unknown> }>(
+      ratchetService
+    ).reviewPollTrackers.clear();
     ratchetService.configure({ session: mockSessionBridge, github: mockGitHubBridge });
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
@@ -1152,6 +1155,297 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(workspaceAccessor.update).toHaveBeenCalledWith('ws-3', {
         ratchetActiveSessionId: null,
       });
+    });
+  });
+
+  describe('review comment backoff polling', () => {
+    const cleanWorkspace = {
+      id: 'ws-poll',
+      prUrl: 'https://github.com/example/repo/pull/100',
+      prNumber: 100,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'old-snapshot',
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+
+    const cleanPrState = {
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'new-snapshot',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: new Date('2026-01-01T00:00:00Z').getTime(),
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 100,
+    };
+
+    const prStateWithComments = {
+      ...cleanPrState,
+      snapshotKey: 'snapshot-with-comments',
+      hasChangesRequested: true,
+      latestReviewActivityAtMs: new Date('2026-01-03T00:00:00Z').getTime(),
+    };
+
+    const getTrackers = () =>
+      unsafeCoerce<{
+        reviewPollTrackers: Map<
+          string,
+          { snapshotKey: string; startedAt: number; pollCount: number }
+        >;
+      }>(ratchetService).reviewPollTrackers;
+
+    const callProcessWorkspace = (workspace: typeof cleanWorkspace) =>
+      unsafeCoerce<{
+        processWorkspace: (w: typeof workspace) => Promise<{
+          workspaceId: string;
+          action: { type: string; reason?: string };
+        }>;
+      }>(ratchetService).processWorkspace(workspace);
+
+    it('creates tracker when PR is first seen as clean with state change', async () => {
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue(cleanPrState);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      const result = await callProcessWorkspace(cleanWorkspace);
+
+      expect(result.action.type).toBe('WAITING');
+      expect(getTrackers().has('ws-poll')).toBe(true);
+      expect(getTrackers().get('ws-poll')?.snapshotKey).toBe('new-snapshot');
+      expect(getTrackers().get('ws-poll')?.pollCount).toBe(0);
+    });
+
+    it('does not create tracker when state has not changed', async () => {
+      const workspace = { ...cleanWorkspace, ratchetLastCiRunId: 'new-snapshot' };
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue(cleanPrState);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      await callProcessWorkspace(workspace);
+
+      expect(getTrackers().has('ws-poll')).toBe(false);
+    });
+
+    it('skips re-poll when not enough time has elapsed', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'new-snapshot',
+        startedAt: Date.now(),
+        pollCount: 0,
+      });
+
+      const fetchSpy = vi
+        .spyOn(
+          unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+          'fetchPRState'
+        )
+        .mockResolvedValue(cleanPrState);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      await callProcessWorkspace(cleanWorkspace);
+
+      // fetchPRState called once for the initial check, but NOT a second time for the poll
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(getTrackers().get('ws-poll')?.pollCount).toBe(0);
+    });
+
+    it('re-polls and finds comments when time has elapsed', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'new-snapshot',
+        startedAt: Date.now() - 3 * 60_000, // 3 min ago, past the 2-min first offset
+        pollCount: 0,
+      });
+
+      const fetchSpy = vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      );
+      // First call: initial fetchPRState returns clean state
+      fetchSpy.mockResolvedValueOnce(cleanPrState);
+      // Second call: re-poll returns state with comments
+      fetchSpy.mockResolvedValueOnce(prStateWithComments);
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'ratchet-poll-session',
+        promptSent: true,
+      } as never);
+
+      const result = await callProcessWorkspace(cleanWorkspace);
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(result.action.type).toBe('TRIGGERED_FIXER');
+      expect(getTrackers().has('ws-poll')).toBe(false);
+    });
+
+    it('increments pollCount when re-poll still finds clean PR', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'new-snapshot',
+        startedAt: Date.now() - 3 * 60_000,
+        pollCount: 0,
+      });
+
+      const fetchSpy = vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      );
+      fetchSpy.mockResolvedValue(cleanPrState);
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      await callProcessWorkspace(cleanWorkspace);
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(getTrackers().get('ws-poll')?.pollCount).toBe(1);
+    });
+
+    it('stamps snapshot after exhausting all polls', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'new-snapshot',
+        startedAt: Date.now() - 130 * 60_000, // well past 2 hours
+        pollCount: 5,
+      });
+
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue(cleanPrState);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      await callProcessWorkspace(cleanWorkspace);
+
+      expect(getTrackers().has('ws-poll')).toBe(false);
+      expect(workspaceAccessor.update).toHaveBeenCalledWith('ws-poll', {
+        ratchetLastCiRunId: 'new-snapshot',
+      });
+    });
+
+    it('resets tracker when snapshotKey changes', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'different-snapshot',
+        startedAt: Date.now() - 10 * 60_000,
+        pollCount: 3,
+      });
+
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue(cleanPrState);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      await callProcessWorkspace(cleanWorkspace);
+
+      const tracker = getTrackers().get('ws-poll');
+      expect(tracker?.snapshotKey).toBe('new-snapshot');
+      expect(tracker?.pollCount).toBe(0);
+    });
+
+    it('cleans up tracker when decision is not clean PR', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'new-snapshot',
+        startedAt: Date.now(),
+        pollCount: 1,
+      });
+
+      const failedPrState = {
+        ...cleanPrState,
+        ciStatus: CIStatus.FAILURE,
+        snapshotKey: 'failed-snapshot',
+      };
+
+      vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      ).mockResolvedValue(failedPrState);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+      vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+        status: 'started',
+        sessionId: 'fixer',
+        promptSent: true,
+      } as never);
+
+      await callProcessWorkspace(cleanWorkspace);
+
+      expect(getTrackers().has('ws-poll')).toBe(false);
+    });
+
+    it('continues to next cycle when fetchPRState returns null during re-poll', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'new-snapshot',
+        startedAt: Date.now() - 3 * 60_000,
+        pollCount: 0,
+      });
+
+      const fetchSpy = vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      );
+      fetchSpy.mockResolvedValueOnce(cleanPrState);
+      fetchSpy.mockResolvedValueOnce(null);
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      const result = await callProcessWorkspace(cleanWorkspace);
+
+      expect(result.action.type).toBe('WAITING');
+      expect(getTrackers().get('ws-poll')?.pollCount).toBe(1);
+    });
+
+    it('skips re-poll when shutting down', async () => {
+      getTrackers().set('ws-poll', {
+        snapshotKey: 'new-snapshot',
+        startedAt: Date.now() - 3 * 60_000,
+        pollCount: 0,
+      });
+
+      unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
+      const fetchSpy = vi.spyOn(
+        unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+        'fetchPRState'
+      );
+      fetchSpy.mockResolvedValueOnce(cleanPrState);
+      fetchSpy.mockResolvedValueOnce(cleanPrState);
+
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+
+      // Set shutting down after buildRatchetDecisionContext runs but before poll
+      // We do this by checking at the handleReviewCommentPoll level
+      const handlePollSpy = vi.spyOn(
+        unsafeCoerce<{
+          handleReviewCommentPoll: (...args: unknown[]) => Promise<unknown>;
+        }>(ratchetService),
+        'handleReviewCommentPoll'
+      );
+      handlePollSpy.mockImplementationOnce(async (...args: unknown[]) => {
+        unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = true;
+        handlePollSpy.mockRestore();
+        return await unsafeCoerce<{
+          handleReviewCommentPoll: (...a: unknown[]) => Promise<unknown>;
+        }>(ratchetService).handleReviewCommentPoll(...args);
+      });
+
+      const result = await callProcessWorkspace(cleanWorkspace);
+
+      expect(result.action.type).toBe('WAITING');
+      // fetchPRState should only have been called once (initial), not for re-poll
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
   });
 

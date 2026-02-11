@@ -26,6 +26,26 @@ const logger = createLogger('ratchet');
 
 const RATCHET_WORKFLOW = 'ratchet';
 
+/** Absolute offsets (ms) from first "clean PR" detection for review comment re-polls. */
+const REVIEW_POLL_OFFSETS_MS = [
+  2 * 60_000, //   2 min — catches fast bots
+  5 * 60_000, //   5 min
+  15 * 60_000, //  15 min
+  45 * 60_000, //  45 min
+  120 * 60_000, // 120 min — final check at 2 hours
+];
+
+interface ReviewPollTracker {
+  snapshotKey: string;
+  startedAt: number;
+  pollCount: number;
+}
+
+type ReviewPollResult =
+  | { action: 'waiting' }
+  | { action: 'exhausted' }
+  | { action: 'comments-found'; freshPrState: PRStateInfo };
+
 interface PRStateInfo {
   ciStatus: CIStatus;
   snapshotKey: string;
@@ -97,6 +117,7 @@ class RatchetService {
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
   private readonly backoff = new RateLimitBackoff();
+  private readonly reviewPollTrackers = new Map<string, ReviewPollTracker>();
 
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
@@ -303,6 +324,55 @@ class RatchetService {
 
       const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateInfo);
       const decision = this.decideRatchetAction(decisionContext);
+
+      if (decisionContext.isCleanPrWithNoNewReviewActivity) {
+        const pollResult = await this.handleReviewCommentPoll(
+          workspace,
+          prStateInfo,
+          authenticatedUsername,
+          decisionContext.hasStateChangedSinceLastDispatch
+        );
+
+        if (pollResult.action === 'comments-found') {
+          const freshContext = await this.buildRatchetDecisionContext(
+            workspace,
+            pollResult.freshPrState
+          );
+          const freshDecision = this.decideRatchetAction(freshContext);
+          const freshAction = await this.applyRatchetDecision(freshContext, freshDecision);
+
+          await this.updateWorkspaceAfterCheck(
+            workspace,
+            pollResult.freshPrState,
+            freshAction,
+            freshContext.finalState
+          );
+          this.logWorkspaceRatchetingDecision(
+            workspace,
+            freshContext.previousState,
+            freshContext.finalState,
+            freshAction,
+            pollResult.freshPrState,
+            freshContext
+          );
+
+          return {
+            workspaceId: workspace.id,
+            previousState: freshContext.previousState,
+            newState: freshContext.finalState,
+            action: freshAction,
+          };
+        }
+
+        if (pollResult.action === 'exhausted') {
+          await workspaceAccessor.update(workspace.id, {
+            ratchetLastCiRunId: prStateInfo.snapshotKey,
+          });
+        }
+      } else {
+        this.reviewPollTrackers.delete(workspace.id);
+      }
+
       const action = await this.applyRatchetDecision(decisionContext, decision);
 
       await this.updateWorkspaceAfterCheck(
@@ -710,6 +780,97 @@ class RatchetService {
     }
 
     return prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime();
+  }
+
+  private async handleReviewCommentPoll(
+    workspace: WorkspaceWithPR,
+    prStateInfo: PRStateInfo,
+    authenticatedUsername: string | null,
+    hasStateChangedSinceLastDispatch: boolean
+  ): Promise<ReviewPollResult> {
+    const existing = this.reviewPollTrackers.get(workspace.id);
+
+    if (!existing) {
+      if (!hasStateChangedSinceLastDispatch) {
+        return { action: 'waiting' };
+      }
+      this.reviewPollTrackers.set(workspace.id, {
+        snapshotKey: prStateInfo.snapshotKey,
+        startedAt: Date.now(),
+        pollCount: 0,
+      });
+      logger.info('Started review comment backoff polling', {
+        workspaceId: workspace.id,
+        snapshotKey: prStateInfo.snapshotKey,
+      });
+      return { action: 'waiting' };
+    }
+
+    if (existing.snapshotKey !== prStateInfo.snapshotKey) {
+      this.reviewPollTrackers.set(workspace.id, {
+        snapshotKey: prStateInfo.snapshotKey,
+        startedAt: Date.now(),
+        pollCount: 0,
+      });
+      logger.info('Reset review comment backoff polling (new snapshot)', {
+        workspaceId: workspace.id,
+        snapshotKey: prStateInfo.snapshotKey,
+      });
+      return { action: 'waiting' };
+    }
+
+    if (existing.pollCount >= REVIEW_POLL_OFFSETS_MS.length) {
+      this.reviewPollTrackers.delete(workspace.id);
+      logger.info('Review comment backoff polling exhausted', {
+        workspaceId: workspace.id,
+        totalPolls: existing.pollCount,
+        elapsedMs: Date.now() - existing.startedAt,
+      });
+      return { action: 'exhausted' };
+    }
+
+    const offset = REVIEW_POLL_OFFSETS_MS[existing.pollCount];
+    if (offset === undefined) {
+      return { action: 'waiting' };
+    }
+    const nextPollAt = existing.startedAt + offset;
+    if (Date.now() < nextPollAt) {
+      return { action: 'waiting' };
+    }
+
+    if (this.isShuttingDown) {
+      return { action: 'waiting' };
+    }
+
+    const freshPrState = await this.fetchPRState(workspace, authenticatedUsername);
+    existing.pollCount++;
+
+    if (!freshPrState) {
+      return { action: 'waiting' };
+    }
+
+    if (!this.shouldSkipCleanPR(workspace, freshPrState)) {
+      this.reviewPollTrackers.delete(workspace.id);
+      logger.info('Review comments detected during backoff poll', {
+        workspaceId: workspace.id,
+        pollNumber: existing.pollCount,
+        elapsedMs: Date.now() - existing.startedAt,
+        latestReviewActivityAtMs: freshPrState.latestReviewActivityAtMs,
+      });
+      return { action: 'comments-found', freshPrState };
+    }
+
+    if (existing.pollCount >= REVIEW_POLL_OFFSETS_MS.length) {
+      this.reviewPollTrackers.delete(workspace.id);
+      logger.info('Review comment backoff polling exhausted', {
+        workspaceId: workspace.id,
+        totalPolls: existing.pollCount,
+        elapsedMs: Date.now() - existing.startedAt,
+      });
+      return { action: 'exhausted' };
+    }
+
+    return { action: 'waiting' };
   }
 
   private hasStateChangedSinceLastDispatch(
