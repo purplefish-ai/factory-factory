@@ -486,6 +486,56 @@ describe('configureEventCollector', () => {
     );
   });
 
+  it('workspace_active only enqueues isWorking and does not refresh session summaries', () => {
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_active');
+    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+
+    handler({ workspaceId: 'ws-1' });
+
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).not.toHaveBeenCalled();
+  });
+
+  it('workspace_idle only enqueues isWorking and does not refresh session summaries', () => {
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_idle');
+    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+
+    handler({ workspaceId: 'ws-1' });
+
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).not.toHaveBeenCalled();
+  });
+
+  it('workspace active transition performs one session summary query', () => {
+    configureEventCollector();
+
+    const sessionActivityCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'session_activity_changed');
+    const sessionActivityHandler = sessionActivityCall![1] as (event: {
+      workspaceId: string;
+      sessionId: string;
+      isWorking: boolean;
+    }) => void;
+
+    const activeCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_active');
+    const activeHandler = activeCall![1] as (event: { workspaceId: string }) => void;
+
+    sessionActivityHandler({ workspaceId: 'ws-1', sessionId: 's-1', isWorking: true });
+    activeHandler({ workspaceId: 'ws-1' });
+
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
+  });
+
   it('session_activity_changed refreshes session summaries', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',

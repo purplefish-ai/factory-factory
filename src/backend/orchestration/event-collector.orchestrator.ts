@@ -268,13 +268,11 @@ export function configureEventCollector(): void {
   // 5. Workspace activity (active)
   workspaceActivityService.on('workspace_active', ({ workspaceId }: { workspaceId: string }) => {
     coalescer.enqueue(workspaceId, { isWorking: true }, 'event:workspace_active');
-    void refreshWorkspaceSessionSummaries(coalescer, workspaceId, 'event:workspace_active');
   });
 
   // 6. Workspace activity (idle)
   workspaceActivityService.on('workspace_idle', ({ workspaceId }: { workspaceId: string }) => {
     coalescer.enqueue(workspaceId, { isWorking: false }, 'event:workspace_idle');
-    void refreshWorkspaceSessionSummaries(coalescer, workspaceId, 'event:workspace_idle');
   });
 
   // 7. Session-level activity changes (running/idle transitions)
