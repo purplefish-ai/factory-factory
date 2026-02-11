@@ -476,8 +476,7 @@ async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
-    const session = idleSession;
-    await chatMessageHandlerService.tryDispatchNextMessage(session.id);
+    await chatMessageHandlerService.tryDispatchNextMessage(idleSession.id);
   } catch (error) {
     logger.warn('Failed to retry queued dispatch after workspace became ready', {
       workspaceId,
