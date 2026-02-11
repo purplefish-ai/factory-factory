@@ -105,11 +105,10 @@ Plans:
   3. When a workspace snapshot changes, only the changed workspace entry is pushed to clients subscribed to that project
   4. Clients subscribed to different projects do not receive each other's updates
   5. After a client disconnects and reconnects, it receives a full snapshot to recover from any events missed during disconnection
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 15-01: TBD
-- [ ] 15-02: TBD
+- [ ] 15-01-PLAN.md -- Snapshot WebSocket handler with project-scoped fan-out, server wiring, and tests
 
 ### Phase 16: Client Integration - Sidebar
 **Goal**: The sidebar displays workspace state from WebSocket-pushed snapshots instead of its 2-second tRPC polling loop
@@ -163,11 +162,11 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 12. Domain Event Emission | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 13. Event Collector | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 14. Safety-Net Reconciliation | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
-| 15. WebSocket Transport | v1.1 | 0/TBD | Not started | - |
+| 15. WebSocket Transport | v1.1 | 0/1 | Planning complete | - |
 | 16. Client Integration - Sidebar | v1.1 | 0/TBD | Not started | - |
 | 17. Client Integration - Kanban and Workspace List | v1.1 | 0/TBD | Not started | - |
 | 18. Architecture Validation | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 14 complete (2/2 plans, RCNL-01/02/03/04 verified)*
+*Last updated: 2026-02-11 -- Phase 15 planned (1 plan, WSKT-01/02/03/04/05)*
