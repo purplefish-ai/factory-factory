@@ -18,6 +18,7 @@ import {
   ciMonitorService,
   fixerSessionService,
   type RatchetGitHubBridge,
+  type RatchetPRSnapshotBridge,
   type RatchetSessionBridge,
   ratchetService,
   reconciliationService,
@@ -30,6 +31,8 @@ import {
   sessionService,
 } from '@/backend/domains/session';
 import {
+  computeKanbanColumn,
+  deriveWorkspaceFlowState,
   getWorkspaceInitPolicy,
   kanbanStateService,
   type WorkspaceInitPolicyInput,
@@ -37,6 +40,8 @@ import {
   workspaceQueryService,
   workspaceStateMachine,
 } from '@/backend/domains/workspace';
+import { workspaceSnapshotStore } from '@/backend/services';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export function configureDomainBridges(): void {
   // === Ratchet domain bridges ===
@@ -62,10 +67,31 @@ export function configureDomainBridges(): void {
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
   };
 
-  ratchetService.configure({ session: ratchetSessionBridge, github: ratchetGithubBridge });
+  const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
+    recordCIObservation: ({ workspaceId, ciStatus, failedAt, observedAt }) =>
+      prSnapshotService.recordCIObservation(workspaceId, {
+        ciStatus,
+        failedAt,
+        observedAt,
+      }),
+    recordCINotification: (workspaceId, notifiedAt) =>
+      prSnapshotService.recordCINotification(workspaceId, notifiedAt),
+    recordReviewCheck: (workspaceId, checkedAt) =>
+      prSnapshotService.recordReviewCheck(workspaceId, { checkedAt }),
+  };
+
+  ratchetService.configure({
+    session: ratchetSessionBridge,
+    github: ratchetGithubBridge,
+    snapshot: ratchetSnapshotBridge,
+  });
   fixerSessionService.configure({ session: ratchetSessionBridge });
   ciFixerService.configure({ session: ratchetSessionBridge });
-  ciMonitorService.configure({ session: ratchetSessionBridge, github: ratchetGithubBridge });
+  ciMonitorService.configure({
+    session: ratchetSessionBridge,
+    github: ratchetGithubBridge,
+    snapshot: ratchetSnapshotBridge,
+  });
   reconciliationService.configure({
     workspace: {
       markFailed: async (id, reason) => {
@@ -135,5 +161,16 @@ export function configureDomainBridges(): void {
       markReady: (id) => workspaceStateMachine.markReady(id),
       markFailed: (id, msg) => workspaceStateMachine.markFailed(id, msg),
     },
+  });
+
+  // === Snapshot store derivation functions ===
+  workspaceSnapshotStore.configure({
+    deriveFlowState: (input) =>
+      deriveWorkspaceFlowState({
+        ...input,
+        prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
+      }),
+    computeKanbanColumn: (input) => computeKanbanColumn(input),
+    deriveSidebarStatus: (input) => deriveWorkspaceSidebarStatus(input),
   });
 }

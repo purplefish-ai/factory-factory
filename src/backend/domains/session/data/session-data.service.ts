@@ -70,10 +70,7 @@ class SessionDataService {
     return terminalSessionAccessor.create(data);
   }
 
-  updateTerminalSession(
-    id: string,
-    data: { name?: string; status?: SessionStatus; pid?: number | null }
-  ): Promise<TerminalSession> {
+  updateTerminalSession(id: string, data: { name?: string }): Promise<TerminalSession> {
     return terminalSessionAccessor.update(id, data);
   }
 

@@ -43,7 +43,7 @@ export default function NewWorkspacePage() {
         return createOptimisticWorkspaceCacheData(workspace);
       });
 
-      navigate(`/projects/${slug}/workspaces/${workspace.id}`);
+      void navigate(`/projects/${slug}/workspaces/${workspace.id}`);
     },
     onError: (err) => {
       setError(err.message);

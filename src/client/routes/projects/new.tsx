@@ -170,7 +170,7 @@ export default function NewProjectPage() {
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
       utils.project.list.invalidate();
-      navigate(`/projects/${project.slug}`);
+      void navigate(`/projects/${project.slug}`);
     },
     onError: (err) => {
       setError(err.message);
@@ -197,7 +197,7 @@ export default function NewProjectPage() {
   const handleImportSuccess = async () => {
     // Invalidate projects list and wait for refetch before navigating
     await utils.project.list.invalidate();
-    navigate('/projects');
+    await navigate('/projects');
   };
 
   // Onboarding view when no projects exist

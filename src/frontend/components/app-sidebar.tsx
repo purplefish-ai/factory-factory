@@ -44,6 +44,7 @@ import {
 } from '@/components/ui/sidebar';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
+import { useProjectSnapshotSync } from '@/frontend/hooks/use-project-snapshot-sync';
 import { useWorkspaceAttention } from '@/frontend/hooks/use-workspace-attention';
 import { useProjectContext } from '@/frontend/lib/providers';
 import { trpc } from '@/frontend/lib/trpc';
@@ -296,9 +297,12 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   // Fetch unified project summary state (workspaces + working status + git stats + review count)
   const { data: projectStateData } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
-    { enabled: !!selectedProjectId && !isMocked, refetchInterval: isMocked ? false : 2000 }
+    { enabled: !!selectedProjectId && !isMocked, refetchInterval: isMocked ? false : 30_000 }
   );
   const projectState = mockData?.projectState ?? projectStateData;
+
+  // Sync workspace snapshots from WebSocket to React Query cache (CLNT-01, CLNT-04)
+  useProjectSnapshotSync(isMocked ? undefined : selectedProjectId);
 
   const serverWorkspaces = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
@@ -432,7 +436,7 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
       // If we archived the currently viewed workspace, navigate to the workspaces list
       const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
       if (variables.id === currentId) {
-        navigate(`/projects/${selectedProjectSlug}/workspaces`);
+        void navigate(`/projects/${selectedProjectSlug}/workspaces`);
       }
     },
     onError: (error, variables) => {
@@ -463,9 +467,9 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
     [executeArchive]
   );
 
-  const workspacePendingArchive = workspaceToArchive
-    ? serverWorkspaces?.find((workspace) => workspace.id === workspaceToArchive)
-    : null;
+  const workspacePendingArchive = serverWorkspaces?.find(
+    (workspace) => workspace.id === workspaceToArchive
+  );
   const archiveHasUncommitted = workspacePendingArchive?.gitStats?.hasUncommitted === true;
 
   // Get current workspace ID from URL
@@ -501,16 +505,16 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const handleProjectChange = useCallback(
     (value: string) => {
       if (value === '__manage__') {
-        navigate('/projects');
+        void navigate('/projects');
         return;
       }
       if (value === '__create__') {
-        navigate('/projects/new');
+        void navigate('/projects/new');
         return;
       }
       setSelectedProjectSlug(value);
       localStorage.setItem(SELECTED_PROJECT_KEY, value);
-      navigate(`/projects/${value}/workspaces`);
+      void navigate(`/projects/${value}/workspaces`);
     },
     [navigate]
   );

@@ -12,6 +12,7 @@ import type { Workspace } from '@prisma-gen/browser';
 export function createOptimisticWorkspaceCacheData(workspace: Workspace) {
   return {
     ...workspace,
+    sessionSummaries: [],
     claudeSessions: [],
     terminalSessions: [],
     sidebarStatus: {

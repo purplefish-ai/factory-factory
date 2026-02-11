@@ -34,3 +34,18 @@ export { rateLimiter } from './rate-limiter.service';
 export { schedulerService } from './scheduler.service';
 // Server instance service
 export { serverInstanceService } from './server-instance.service';
+// Workspace snapshot store service
+export {
+  SNAPSHOT_CHANGED,
+  SNAPSHOT_REMOVED,
+  type SnapshotChangedEvent,
+  type SnapshotDerivationFns,
+  type SnapshotFieldGroup,
+  type SnapshotRemovedEvent,
+  type SnapshotUpdateInput,
+  type WorkspaceCiObservation,
+  type WorkspaceFlowPhase,
+  type WorkspaceSessionSummary,
+  type WorkspaceSnapshotEntry,
+  workspaceSnapshotStore,
+} from './workspace-snapshot-store.service';

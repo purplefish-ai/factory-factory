@@ -35,11 +35,11 @@ describe('ClaudeProtocol', () => {
   // ===========================================================================
 
   describe('sendUserMessage', () => {
-    it('should send message with string content', () => {
+    it('should send message with string content', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendUserMessage('Hello, Claude!');
+      await protocol.sendUserMessage('Hello, Claude!');
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
@@ -48,11 +48,11 @@ describe('ClaudeProtocol', () => {
       expect(parsed.message.content).toBe('Hello, Claude!');
     });
 
-    it('should send message with content array', () => {
+    it('should send message with content array', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendUserMessage([{ type: 'text', text: 'Hello!' }]);
+      await protocol.sendUserMessage([{ type: 'text', text: 'Hello!' }]);
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
@@ -61,11 +61,11 @@ describe('ClaudeProtocol', () => {
       expect(parsed.message.content).toEqual([{ type: 'text', text: 'Hello!' }]);
     });
 
-    it('should send message with multiple content items', () => {
+    it('should send message with multiple content items', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendUserMessage([
+      await protocol.sendUserMessage([
         { type: 'text', text: 'First part' },
         { type: 'text', text: 'Second part' },
       ]);
@@ -77,11 +77,11 @@ describe('ClaudeProtocol', () => {
       expect(parsed.message.content[1].text).toBe('Second part');
     });
 
-    it('should append newline to message for NDJSON format', () => {
+    it('should append newline to message for NDJSON format', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendUserMessage('Test');
+      await protocol.sendUserMessage('Test');
 
       const written = Buffer.concat(chunks).toString();
       expect(written.endsWith('\n')).toBe(true);
@@ -93,11 +93,11 @@ describe('ClaudeProtocol', () => {
   // ===========================================================================
 
   describe('sendSetPermissionMode', () => {
-    it('should send set_permission_mode request with bypassPermissions', () => {
+    it('should send set_permission_mode request with bypassPermissions', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendSetPermissionMode('bypassPermissions');
+      await protocol.sendSetPermissionMode('bypassPermissions');
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
@@ -106,44 +106,44 @@ describe('ClaudeProtocol', () => {
       expect(parsed.request.mode).toBe('bypassPermissions');
     });
 
-    it('should send set_permission_mode request with default mode', () => {
+    it('should send set_permission_mode request with default mode', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendSetPermissionMode('default');
+      await protocol.sendSetPermissionMode('default');
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
       expect(parsed.request.mode).toBe('default');
     });
 
-    it('should send set_permission_mode request with acceptEdits mode', () => {
+    it('should send set_permission_mode request with acceptEdits mode', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendSetPermissionMode('acceptEdits');
+      await protocol.sendSetPermissionMode('acceptEdits');
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
       expect(parsed.request.mode).toBe('acceptEdits');
     });
 
-    it('should send set_permission_mode request with plan mode', () => {
+    it('should send set_permission_mode request with plan mode', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendSetPermissionMode('plan');
+      await protocol.sendSetPermissionMode('plan');
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
       expect(parsed.request.mode).toBe('plan');
     });
 
-    it('should include a unique request_id', () => {
+    it('should include a unique request_id', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendSetPermissionMode('bypassPermissions');
+      await protocol.sendSetPermissionMode('bypassPermissions');
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
@@ -158,11 +158,11 @@ describe('ClaudeProtocol', () => {
   // ===========================================================================
 
   describe('sendInterrupt', () => {
-    it('should send interrupt request', () => {
+    it('should send interrupt request', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendInterrupt();
+      await protocol.sendInterrupt();
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
@@ -170,11 +170,11 @@ describe('ClaudeProtocol', () => {
       expect(parsed.request.subtype).toBe('interrupt');
     });
 
-    it('should include a unique request_id', () => {
+    it('should include a unique request_id', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendInterrupt();
+      await protocol.sendInterrupt();
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
@@ -182,12 +182,12 @@ describe('ClaudeProtocol', () => {
       expect(typeof parsed.request_id).toBe('string');
     });
 
-    it('should generate different request_ids for multiple interrupts', () => {
+    it('should generate different request_ids for multiple interrupts', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendInterrupt();
-      protocol.sendInterrupt();
+      await protocol.sendInterrupt();
+      await protocol.sendInterrupt();
 
       const written = Buffer.concat(chunks).toString();
       const lines = written.trim().split('\n');
@@ -203,11 +203,11 @@ describe('ClaudeProtocol', () => {
   // ===========================================================================
 
   describe('sendControlResponse', () => {
-    it('should send control response with request_id', () => {
+    it('should send control response with request_id', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendControlResponse('req-123', { behavior: 'allow', updatedInput: {} });
+      await protocol.sendControlResponse('req-123', { behavior: 'allow', updatedInput: {} });
 
       const written = Buffer.concat(chunks).toString();
       const parsed = JSON.parse(written.trim());
@@ -217,11 +217,11 @@ describe('ClaudeProtocol', () => {
       expect(parsed.response.response).toEqual({ behavior: 'allow', updatedInput: {} });
     });
 
-    it('should send deny response with message', () => {
+    it('should send deny response with message', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendControlResponse('req-456', {
+      await protocol.sendControlResponse('req-456', {
         behavior: 'deny',
         message: 'Not allowed',
       });
@@ -232,11 +232,11 @@ describe('ClaudeProtocol', () => {
       expect(parsed.response.response.message).toBe('Not allowed');
     });
 
-    it('should send allow response with updated input', () => {
+    it('should send allow response with updated input', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendControlResponse('req-789', {
+      await protocol.sendControlResponse('req-789', {
         behavior: 'allow',
         updatedInput: { file_path: '/modified/path.txt' },
       });
@@ -247,11 +247,11 @@ describe('ClaudeProtocol', () => {
       expect(parsed.response.response.updatedInput).toEqual({ file_path: '/modified/path.txt' });
     });
 
-    it('should send hook response data', () => {
+    it('should send hook response data', async () => {
       const chunks: Buffer[] = [];
       stdin.on('data', (chunk) => chunks.push(chunk));
 
-      protocol.sendControlResponse('req-hook', {
+      await protocol.sendControlResponse('req-hook', {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           permissionDecision: 'allow',
@@ -1108,6 +1108,81 @@ describe('ClaudeProtocol', () => {
       expect(result).toEqual(validResponse);
 
       protocol2.stop();
+    });
+  });
+
+  // ===========================================================================
+  // sendRaw Error Handling Tests
+  // ===========================================================================
+
+  describe('sendRaw error handling', () => {
+    it('should reject sendInitialize immediately if sendRaw fails', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      // Protocol is created but NOT started, so sendRaw will throw "Protocol stopped"
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      const initPromise = protocol2.sendInitialize();
+
+      // If the bug exists, this will NOT reject immediately because sendRaw's
+      // error is unhandled (due to 'void') and doesn't reach the promise executor.
+      // The test will time out after 5 seconds instead of rejecting immediately.
+      await expect(initPromise).rejects.toThrow('Protocol stopped');
+    });
+
+    it('should reject sendRewindFiles immediately if sendRaw fails', async () => {
+      const stdin2 = new PassThrough();
+      const stdout2 = new PassThrough();
+      // Protocol is created but NOT started, so sendRaw will throw "Protocol stopped"
+      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+      const rewindPromise = protocol2.sendRewindFiles('msg-123');
+
+      // If the bug exists, this will NOT reject immediately because sendRaw's
+      // error is unhandled (due to 'void') and doesn't reach the promise executor.
+      await expect(rewindPromise).rejects.toThrow('Protocol stopped');
+    });
+
+    it('should cleanup timeout when sendInitialize fails immediately', async () => {
+      vi.useFakeTimers();
+      try {
+        const stdin2 = new PassThrough();
+        const stdout2 = new PassThrough();
+        const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+        const initPromise = protocol2.sendInitialize();
+
+        // Should reject with the sendRaw error
+        await expect(initPromise).rejects.toThrow('Protocol stopped');
+
+        // If the timeout was NOT cleaned up, advancing timers would trigger a
+        // second rejection ("timed out") that goes unhandled. Since the catch
+        // handler clears the timeout, advancing has no effect.
+        vi.advanceTimersByTime(120_000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should cleanup timeout when sendRewindFiles fails immediately', async () => {
+      vi.useFakeTimers();
+      try {
+        const stdin2 = new PassThrough();
+        const stdout2 = new PassThrough();
+        const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+
+        const rewindPromise = protocol2.sendRewindFiles('msg-123');
+
+        // Should reject with the sendRaw error
+        await expect(rewindPromise).rejects.toThrow('Protocol stopped');
+
+        // If the timeout was NOT cleaned up, advancing timers would trigger a
+        // second rejection ("timed out") that goes unhandled. Since the catch
+        // handler clears the timeout, advancing has no effect.
+        vi.advanceTimersByTime(120_000);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

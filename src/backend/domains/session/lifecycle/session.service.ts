@@ -333,7 +333,7 @@ class SessionService {
       };
     }
 
-    if (this.processManager.getPendingClient(sessionId)) {
+    if (this.processManager.getPendingClient(sessionId) !== undefined) {
       return {
         phase: 'starting',
         processState: 'alive',

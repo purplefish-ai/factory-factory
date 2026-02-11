@@ -91,6 +91,11 @@ type WorkspaceWithProject = Prisma.WorkspaceGetPayload<{
   include: { project: true };
 }>;
 
+// Type for Workspace with sessions and project included (used by reconciliation)
+export type WorkspaceWithSessionsAndProject = Prisma.WorkspaceGetPayload<{
+  include: { claudeSessions: true; terminalSessions: true; project: true };
+}>;
+
 class WorkspaceAccessor {
   create(data: CreateWorkspaceInput): Promise<Workspace> {
     return prisma.workspace.create({
@@ -195,6 +200,22 @@ class WorkspaceAccessor {
         claudeSessions: true,
         terminalSessions: true,
       },
+    });
+  }
+
+  /**
+   * Find all non-archived workspaces with sessions and project included.
+   * Used by the reconciliation service for single-query fetch of all workspace data.
+   */
+  findAllNonArchivedWithSessionsAndProject(): Promise<WorkspaceWithSessionsAndProject[]> {
+    return prisma.workspace.findMany({
+      where: { status: { not: 'ARCHIVED' } },
+      include: {
+        claudeSessions: true,
+        terminalSessions: true,
+        project: true,
+      },
+      orderBy: { updatedAt: 'desc' },
     });
   }
 

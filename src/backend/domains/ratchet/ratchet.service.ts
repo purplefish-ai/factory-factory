@@ -7,6 +7,7 @@
  * - Dispatch only when workspace is idle (no active ratchet or other chat session)
  */
 
+import { EventEmitter } from 'node:events';
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
@@ -19,7 +20,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
+import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 
 const logger = createLogger('ratchet');
@@ -109,7 +110,15 @@ interface WorkspaceWithPR {
   prReviewLastCheckedAt: Date | null;
 }
 
-class RatchetService {
+export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
+
+export interface RatchetStateChangedEvent {
+  workspaceId: string;
+  fromState: RatchetState;
+  toState: RatchetState;
+}
+
+class RatchetService extends EventEmitter {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private sleepTimeout: NodeJS.Timeout | null = null;
@@ -121,10 +130,16 @@ class RatchetService {
 
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
+  private snapshotBridge: RatchetPRSnapshotBridge | null = null;
 
-  configure(bridges: { session: RatchetSessionBridge; github: RatchetGitHubBridge }): void {
+  configure(bridges: {
+    session: RatchetSessionBridge;
+    github: RatchetGitHubBridge;
+    snapshot: RatchetPRSnapshotBridge;
+  }): void {
     this.sessionBridge = bridges.session;
     this.githubBridge = bridges.github;
+    this.snapshotBridge = bridges.snapshot;
   }
 
   private get session(): RatchetSessionBridge {
@@ -145,8 +160,17 @@ class RatchetService {
     return this.githubBridge;
   }
 
+  private get snapshot(): RatchetPRSnapshotBridge {
+    if (!this.snapshotBridge) {
+      throw new Error(
+        'RatchetService not configured: snapshot bridge missing. Call configure() first.'
+      );
+    }
+    return this.snapshotBridge;
+  }
+
   start(): void {
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       return;
     }
 
@@ -160,7 +184,7 @@ class RatchetService {
     this.isShuttingDown = true;
     this.wakeSleep();
 
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       logger.debug('Waiting for ratchet monitor loop to complete');
       await this.monitorLoop;
       this.monitorLoop = null;
@@ -269,6 +293,44 @@ class RatchetService {
     return this.processWorkspace(workspace);
   }
 
+  /**
+   * Enable or disable ratcheting for a workspace.
+   * Ratchet domain owns ratchet state fields, so toggles flow through this service.
+   */
+  async setWorkspaceRatcheting(workspaceId: string, enabled: boolean): Promise<void> {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    if (enabled) {
+      await workspaceAccessor.update(workspaceId, {
+        ratchetEnabled: true,
+      });
+      return;
+    }
+
+    const activeSessionId = workspace.ratchetActiveSessionId;
+    if (activeSessionId && this.session.isSessionRunning(activeSessionId)) {
+      try {
+        await this.session.stopClaudeSession(activeSessionId);
+      } catch (error) {
+        logger.warn('Failed to stop active ratchet session while disabling ratchet', {
+          workspaceId,
+          sessionId: activeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    await workspaceAccessor.update(workspaceId, {
+      ratchetEnabled: false,
+      ratchetState: RatchetState.IDLE,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
+    });
+  }
+
   private async processWorkspace(workspace: WorkspaceWithPR): Promise<WorkspaceRatchetResult> {
     if (this.isShuttingDown) {
       return {
@@ -287,6 +349,13 @@ class RatchetService {
         ratchetState: newState,
         ratchetLastCheckedAt: new Date(),
       });
+      if (workspace.ratchetState !== newState) {
+        this.emit(RATCHET_STATE_CHANGED, {
+          workspaceId: workspace.id,
+          fromState: workspace.ratchetState,
+          toState: newState,
+        } satisfies RatchetStateChangedEvent);
+      }
       this.logWorkspaceRatchetingDecision(
         workspace,
         workspace.ratchetState,
@@ -326,48 +395,14 @@ class RatchetService {
       const decision = this.decideRatchetAction(decisionContext);
 
       if (decisionContext.isCleanPrWithNoNewReviewActivity) {
-        const pollResult = await this.handleReviewCommentPoll(
+        const pollDispatch = await this.processReviewCommentPoll(
           workspace,
           prStateInfo,
           authenticatedUsername,
-          decisionContext.hasStateChangedSinceLastDispatch
+          decisionContext
         );
-
-        if (pollResult.action === 'comments-found') {
-          const freshContext = await this.buildRatchetDecisionContext(
-            workspace,
-            pollResult.freshPrState
-          );
-          const freshDecision = this.decideRatchetAction(freshContext);
-          const freshAction = await this.applyRatchetDecision(freshContext, freshDecision);
-
-          await this.updateWorkspaceAfterCheck(
-            workspace,
-            pollResult.freshPrState,
-            freshAction,
-            freshContext.finalState
-          );
-          this.logWorkspaceRatchetingDecision(
-            workspace,
-            freshContext.previousState,
-            freshContext.finalState,
-            freshAction,
-            pollResult.freshPrState,
-            freshContext
-          );
-
-          return {
-            workspaceId: workspace.id,
-            previousState: freshContext.previousState,
-            newState: freshContext.finalState,
-            action: freshAction,
-          };
-        }
-
-        if (pollResult.action === 'exhausted') {
-          await workspaceAccessor.update(workspace.id, {
-            ratchetLastCiRunId: prStateInfo.snapshotKey,
-          });
+        if (pollDispatch) {
+          return pollDispatch;
         }
       } else {
         this.reviewPollTrackers.delete(workspace.id);
@@ -381,6 +416,13 @@ class RatchetService {
         action,
         decisionContext.finalState
       );
+      if (decisionContext.previousState !== decisionContext.finalState) {
+        this.emit(RATCHET_STATE_CHANGED, {
+          workspaceId: workspace.id,
+          fromState: decisionContext.previousState,
+          toState: decisionContext.finalState,
+        } satisfies RatchetStateChangedEvent);
+      }
       this.logWorkspaceRatchetingDecision(
         workspace,
         decisionContext.previousState,
@@ -782,6 +824,66 @@ class RatchetService {
     return prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime();
   }
 
+  private async processReviewCommentPoll(
+    workspace: WorkspaceWithPR,
+    prStateInfo: PRStateInfo,
+    authenticatedUsername: string | null,
+    decisionContext: RatchetDecisionContext
+  ): Promise<WorkspaceRatchetResult | null> {
+    const pollResult = await this.handleReviewCommentPoll(
+      workspace,
+      prStateInfo,
+      authenticatedUsername,
+      decisionContext.hasStateChangedSinceLastDispatch
+    );
+
+    if (pollResult.action === 'comments-found') {
+      const freshContext = await this.buildRatchetDecisionContext(
+        workspace,
+        pollResult.freshPrState
+      );
+      const freshDecision = this.decideRatchetAction(freshContext);
+      const freshAction = await this.applyRatchetDecision(freshContext, freshDecision);
+
+      await this.updateWorkspaceAfterCheck(
+        workspace,
+        pollResult.freshPrState,
+        freshAction,
+        freshContext.finalState
+      );
+      if (freshContext.previousState !== freshContext.finalState) {
+        this.emit(RATCHET_STATE_CHANGED, {
+          workspaceId: workspace.id,
+          fromState: freshContext.previousState,
+          toState: freshContext.finalState,
+        } satisfies RatchetStateChangedEvent);
+      }
+      this.logWorkspaceRatchetingDecision(
+        workspace,
+        freshContext.previousState,
+        freshContext.finalState,
+        freshAction,
+        pollResult.freshPrState,
+        freshContext
+      );
+
+      return {
+        workspaceId: workspace.id,
+        previousState: freshContext.previousState,
+        newState: freshContext.finalState,
+        action: freshAction,
+      };
+    }
+
+    if (pollResult.action === 'exhausted') {
+      await workspaceAccessor.update(workspace.id, {
+        ratchetLastCiRunId: prStateInfo.snapshotKey,
+      });
+    }
+
+    return null;
+  }
+
   private async handleReviewCommentPoll(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
@@ -895,10 +997,13 @@ class RatchetService {
       ...(dispatched
         ? {
             ratchetLastCiRunId: prStateInfo.snapshotKey,
-            prReviewLastCheckedAt: now,
           }
         : {}),
     });
+
+    if (dispatched) {
+      await this.snapshot.recordReviewCheck(workspace.id, now);
+    }
   }
 
   private async getActiveRatchetSession(workspace: WorkspaceWithPR): Promise<RatchetAction | null> {

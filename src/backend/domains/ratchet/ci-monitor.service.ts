@@ -12,7 +12,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
+import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { ciFixerService } from './ci-fixer.service';
 
 const logger = createLogger('ci-monitor');
@@ -25,10 +25,16 @@ class CIMonitorService {
 
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
+  private snapshotBridge: RatchetPRSnapshotBridge | null = null;
 
-  configure(bridges: { session: RatchetSessionBridge; github: RatchetGitHubBridge }): void {
+  configure(bridges: {
+    session: RatchetSessionBridge;
+    github: RatchetGitHubBridge;
+    snapshot: RatchetPRSnapshotBridge;
+  }): void {
     this.sessionBridge = bridges.session;
     this.githubBridge = bridges.github;
+    this.snapshotBridge = bridges.snapshot;
   }
 
   private get session(): RatchetSessionBridge {
@@ -49,11 +55,20 @@ class CIMonitorService {
     return this.githubBridge;
   }
 
+  private get snapshot(): RatchetPRSnapshotBridge {
+    if (!this.snapshotBridge) {
+      throw new Error(
+        'CIMonitorService not configured: snapshot bridge missing. Call configure() first.'
+      );
+    }
+    return this.snapshotBridge;
+  }
+
   /**
    * Start the CI monitor
    */
   start(): void {
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       return; // Already running
     }
 
@@ -72,7 +87,7 @@ class CIMonitorService {
   async stop(): Promise<void> {
     this.isShuttingDown = true;
 
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       logger.debug('Waiting for CI monitor loop to complete');
       await this.monitorLoop;
       this.monitorLoop = null;
@@ -244,24 +259,18 @@ class CIMonitorService {
     recovered: boolean,
     prNumber: number | undefined
   ): Promise<void> {
-    const updates: {
-      prCiStatus: CIStatus;
-      prCiFailedAt?: Date | null;
-      prUpdatedAt: Date;
-    } = {
-      prCiStatus: currentStatus,
-      prUpdatedAt: new Date(),
-    };
+    const observedAt = new Date();
+    let failedAt: Date | null | undefined;
 
     if (justFailed) {
-      updates.prCiFailedAt = new Date();
+      failedAt = observedAt;
       logger.warn('CI failure detected', {
         workspaceId: workspace.id,
         prUrl: workspace.prUrl,
         prNumber,
       });
     } else if (recovered) {
-      updates.prCiFailedAt = null;
+      failedAt = null;
       logger.info('CI recovered', {
         workspaceId: workspace.id,
         prUrl: workspace.prUrl,
@@ -270,7 +279,12 @@ class CIMonitorService {
       await ciFixerService.notifyCIPassed(workspace.id);
     }
 
-    await workspaceAccessor.update(workspace.id, updates);
+    await this.snapshot.recordCIObservation({
+      workspaceId: workspace.id,
+      ciStatus: currentStatus,
+      observedAt,
+      ...(failedAt !== undefined ? { failedAt } : {}),
+    });
   }
 
   /**
@@ -293,9 +307,7 @@ class CIMonitorService {
     if (shouldNotify) {
       notified = await this.notifyActiveSession(workspace.id, workspace.prUrl, prNumber);
       if (notified) {
-        await workspaceAccessor.update(workspace.id, {
-          prCiLastNotifiedAt: new Date(),
-        });
+        await this.snapshot.recordCINotification(workspace.id);
       }
     }
 

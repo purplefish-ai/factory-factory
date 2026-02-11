@@ -165,7 +165,11 @@ export class ClaudeProtocol extends EventEmitter {
       });
 
       // Fire-and-forget the send - backpressure handled internally
-      void this.sendRaw(message);
+      this.sendRaw(message).catch((error) => {
+        clearTimeout(timeoutId);
+        this.pendingRequests.delete(requestId);
+        reject(error);
+      });
     });
   }
 
@@ -327,7 +331,11 @@ export class ClaudeProtocol extends EventEmitter {
       });
 
       // Fire-and-forget the send - backpressure handled internally
-      void this.sendRaw(message);
+      this.sendRaw(message).catch((error) => {
+        clearTimeout(timeoutId);
+        this.pendingRequests.delete(requestId);
+        reject(error);
+      });
     });
   }
 
@@ -425,7 +433,7 @@ export class ClaudeProtocol extends EventEmitter {
    */
   private async sendRaw(message: unknown): Promise<void> {
     // Wait for any pending drain
-    if (this.drainPromise) {
+    if (this.drainPromise !== null) {
       await this.drainPromise;
     }
 

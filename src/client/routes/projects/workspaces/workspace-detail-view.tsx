@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { useChatWebSocket } from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/components/workspace';
+import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { Loading } from '@/frontend/components/loading';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
@@ -35,15 +35,13 @@ interface HeaderProps {
 interface SessionTabsProps {
   claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
   selectedDbSessionId: string | null;
-  runningSessionIds: ReadonlySet<string>;
+  sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
-  sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
-  processStatus: ReturnType<typeof useChatWebSocket>['processStatus'];
 }
 
 interface ArchiveDialogProps {
@@ -143,9 +141,7 @@ export function WorkspaceDetailView({
               workspaceId={workspaceState.workspaceId}
               claudeSessions={sessionTabs.claudeSessions}
               selectedSessionId={sessionTabs.selectedDbSessionId}
-              runningSessionIds={sessionTabs.runningSessionIds}
-              sessionStatus={sessionTabs.sessionStatus}
-              processStatus={sessionTabs.processStatus}
+              sessionSummariesById={sessionTabs.sessionSummariesById}
               isCreatingSession={header.isCreatingSession}
               isDeletingSession={sessionTabs.isDeletingSession}
               onSelectSession={sessionTabs.handleSelectSession}

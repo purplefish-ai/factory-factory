@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type { GitHubKanbanBridge } from './bridges';
@@ -28,7 +29,28 @@ export type AttachAndRefreshResult =
   | { success: true; snapshot: SnapshotData }
   | { success: false; reason: 'workspace_not_found' | 'fetch_failed' | 'error' };
 
-class PRSnapshotService {
+export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
+
+export interface PRSnapshotUpdatedEvent {
+  workspaceId: string;
+  prNumber: number;
+  prState: string;
+  prCiStatus: string;
+  prReviewState: string | null;
+}
+
+interface CIObservationInput {
+  ciStatus: SnapshotData['prCiStatus'];
+  failedAt?: Date | null;
+  observedAt?: Date;
+}
+
+interface ReviewCheckInput {
+  checkedAt?: Date;
+  latestCommentId?: string;
+}
+
+class PRSnapshotService extends EventEmitter {
   private kanbanBridge: GitHubKanbanBridge | null = null;
 
   configure(bridges: { kanban: GitHubKanbanBridge }): void {
@@ -42,6 +64,40 @@ class PRSnapshotService {
       );
     }
     return this.kanbanBridge;
+  }
+
+  /**
+   * Record CI status observation for a workspace.
+   * This is the canonical write path for CI tracking fields.
+   */
+  async recordCIObservation(workspaceId: string, input: CIObservationInput): Promise<void> {
+    await workspaceAccessor.update(workspaceId, {
+      prCiStatus: input.ciStatus,
+      prUpdatedAt: input.observedAt ?? new Date(),
+      ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
+    });
+    await this.kanban.updateCachedKanbanColumn(workspaceId);
+  }
+
+  /**
+   * Record that CI failure notification was sent.
+   */
+  async recordCINotification(workspaceId: string, notifiedAt = new Date()): Promise<void> {
+    await workspaceAccessor.update(workspaceId, {
+      prCiLastNotifiedAt: notifiedAt,
+    });
+  }
+
+  /**
+   * Record PR review polling checkpoint.
+   */
+  async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {
+    await workspaceAccessor.update(workspaceId, {
+      prReviewLastCheckedAt: input.checkedAt ?? new Date(),
+      ...(input.latestCommentId !== undefined
+        ? { prReviewLastCommentId: input.latestCommentId }
+        : {}),
+    });
   }
 
   /**
@@ -158,22 +214,24 @@ class PRSnapshotService {
   }
 
   async applySnapshot(workspaceId: string, snapshot: SnapshotData, prUrl?: string): Promise<void> {
-    const updateData: Parameters<typeof workspaceAccessor.update>[1] = {
+    await workspaceAccessor.update(workspaceId, {
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,
       prCiStatus: snapshot.prCiStatus,
       prUpdatedAt: new Date(),
-    };
-
-    // Include prUrl in the atomic update if provided
-    if (prUrl !== undefined) {
-      updateData.prUrl = prUrl;
-    }
-
-    await workspaceAccessor.update(workspaceId, updateData);
+      ...(prUrl !== undefined ? { prUrl } : {}),
+    });
 
     await this.kanban.updateCachedKanbanColumn(workspaceId);
+
+    this.emit(PR_SNAPSHOT_UPDATED, {
+      workspaceId,
+      prNumber: snapshot.prNumber,
+      prState: snapshot.prState,
+      prCiStatus: snapshot.prCiStatus,
+      prReviewState: snapshot.prReviewState,
+    } satisfies PRSnapshotUpdatedEvent);
   }
 }
 

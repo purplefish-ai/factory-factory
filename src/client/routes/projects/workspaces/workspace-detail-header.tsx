@@ -19,7 +19,6 @@ import {
 } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
-import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 
@@ -123,26 +122,19 @@ function WorkspacePrAction({
 
 function WorkspaceCiStatus({
   workspace,
-  running,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
-  running: boolean;
 }) {
   if (!workspace.prUrl) {
     return null;
   }
+  if (!workspace.sidebarStatus) {
+    return null;
+  }
 
-  const sidebarStatus =
-    workspace.sidebarStatus ??
-    deriveWorkspaceSidebarStatus({
-      isWorking: running,
-      prUrl: workspace.prUrl,
-      prState: workspace.prState,
-      prCiStatus: workspace.prCiStatus,
-      ratchetState: workspace.ratchetState,
-    });
-
-  return <CiStatusChip ciState={sidebarStatus.ciState} prState={workspace.prState} size="md" />;
+  return (
+    <CiStatusChip ciState={workspace.sidebarStatus.ciState} prState={workspace.prState} size="md" />
+  );
 }
 
 function RatchetingToggle({
@@ -215,7 +207,7 @@ export function WorkspaceHeader({
           isCreatingSession={isCreatingSession}
           handleQuickAction={handleQuickAction}
         />
-        <WorkspaceCiStatus workspace={workspace} running={running} />
+        <WorkspaceCiStatus workspace={workspace} />
       </div>
       <div className="flex items-center justify-end gap-0.5 md:gap-1 shrink-0">
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />

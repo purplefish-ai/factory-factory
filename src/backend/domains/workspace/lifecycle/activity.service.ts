@@ -64,6 +64,14 @@ class WorkspaceActivityService extends EventEmitter {
     state.runningSessions.add(sessionId);
     state.lastActivityAt = new Date();
 
+    this.emit('session_activity_changed', {
+      workspaceId,
+      sessionId,
+      isWorking: true,
+      runningSessionCount: state.runningSessions.size,
+      updatedAt: state.lastActivityAt,
+    });
+
     if (wasIdle) {
       logger.debug('Workspace became active', { workspaceId, sessionId });
       this.emit('workspace_active', { workspaceId });
@@ -83,6 +91,14 @@ class WorkspaceActivityService extends EventEmitter {
     const wasActive = state.runningSessions.size > 0;
     state.runningSessions.delete(sessionId);
     state.lastActivityAt = new Date();
+
+    this.emit('session_activity_changed', {
+      workspaceId,
+      sessionId,
+      isWorking: false,
+      runningSessionCount: state.runningSessions.size,
+      updatedAt: state.lastActivityAt,
+    });
 
     if (wasActive && state.runningSessions.size === 0) {
       logger.info('All sessions finished in workspace', { workspaceId });

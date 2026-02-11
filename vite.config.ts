@@ -36,6 +36,10 @@ export default defineConfig({
         target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },
+      '/snapshots': {
+        target: backendUrl.replace(/^http/, 'ws'),
+        ws: true,
+      },
     },
   },
 });

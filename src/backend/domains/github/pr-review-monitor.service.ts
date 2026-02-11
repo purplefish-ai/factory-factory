@@ -12,6 +12,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { githubCLIService } from './github-cli.service';
 import { prReviewFixerService, type ReviewCommentDetails } from './pr-review-fixer.service';
+import { prSnapshotService } from './pr-snapshot.service';
 
 const logger = createLogger('pr-review-monitor');
 
@@ -31,7 +32,7 @@ class PRReviewMonitorService {
    * Start the PR review monitor
    */
   start(): void {
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       return; // Already running
     }
 
@@ -52,7 +53,7 @@ class PRReviewMonitorService {
   async stop(): Promise<void> {
     this.isShuttingDown = true;
 
-    if (this.monitorLoop) {
+    if (this.monitorLoop !== null) {
       logger.debug('Waiting for PR review monitor loop to complete');
       await this.monitorLoop;
       this.monitorLoop = null;
@@ -249,10 +250,8 @@ class PRReviewMonitorService {
         changesRequestedReviews.length > 0 || allNewComments.length > 0;
 
       if (!hasNewActionableComments) {
-        // Update last checked timestamp even if no new comments
-        await workspaceAccessor.update(workspace.id, {
-          prReviewLastCheckedAt: new Date(),
-        });
+        // Update last checked timestamp even if no new comments.
+        await prSnapshotService.recordReviewCheck(workspace.id);
         return { hasNewComments: false, triggered: false };
       }
 
@@ -284,13 +283,11 @@ class PRReviewMonitorService {
         customPrompt: settings.customPrompt ?? undefined,
       });
 
-      // Update last checked timestamp and last comment ID
+      // Update last checked timestamp and last comment ID.
       const latestCommentId =
         allNewComments.length > 0 ? String(allNewComments[allNewComments.length - 1]?.id) : null;
-
-      await workspaceAccessor.update(workspace.id, {
-        prReviewLastCheckedAt: new Date(),
-        prReviewLastCommentId: latestCommentId ?? workspace.prReviewLastCommentId,
+      await prSnapshotService.recordReviewCheck(workspace.id, {
+        latestCommentId: latestCommentId ?? undefined,
       });
 
       if (result.status === 'started') {

@@ -14,7 +14,7 @@ export default function HomePage() {
 
     // On error, redirect to projects page where error can be shown properly
     if (error) {
-      navigate('/projects', { replace: true });
+      void navigate('/projects', { replace: true });
       return;
     }
 
@@ -25,9 +25,9 @@ export default function HomePage() {
       if (!slug) {
         return;
       }
-      navigate(`/projects/${slug}`, { replace: true });
+      void navigate(`/projects/${slug}`, { replace: true });
     } else {
-      navigate('/projects/new', { replace: true });
+      void navigate('/projects/new', { replace: true });
     }
   }, [isLoading, projects, error, navigate]);
 
