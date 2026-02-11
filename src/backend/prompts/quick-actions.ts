@@ -6,7 +6,7 @@
  */
 
 import { resolve } from 'node:path';
-import { createLogger } from '../services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import { createMarkdownLoader, parseFrontmatter } from './markdown-loader';
 
 const logger = createLogger('quick-actions');

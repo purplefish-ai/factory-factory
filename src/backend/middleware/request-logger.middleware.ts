@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { type AppContext, createAppContext } from '../app-context';
+import { type AppContext, createAppContext } from '@/backend/app-context';
 
 /**
  * Request logging middleware.

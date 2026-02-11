@@ -1,9 +1,12 @@
+import type {
+  ChatMessageHandler,
+  HandlerRegistryDependencies,
+} from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { getValidModel } from '@/backend/domains/session/chat/chat-message-handlers/utils';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { StartMessageInput } from '@/shared/websocket';
-import { sessionService } from '../../../lifecycle/session.service';
-import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
-import { getValidModel } from '../utils';
 
 const logger = createLogger('chat-message-handlers');
 

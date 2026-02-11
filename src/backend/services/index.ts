@@ -6,6 +6,12 @@
  * in src/backend/domains/{name}/index.ts.
  */
 
+export {
+  type ExportData,
+  type ExportDataV1,
+  type ExportDataV2,
+  exportDataSchema,
+} from '@/shared/schemas/export-data.schema';
 // CLI health service
 export { type CLIHealthStatus, cliHealthService } from './cli-health.service';
 // Configuration service
@@ -13,8 +19,6 @@ export { configService, type SessionProfile } from './config.service';
 // Data backup service
 export {
   dataBackupService,
-  type ExportData,
-  exportDataSchema,
   type ImportCounter,
   type ImportResults,
 } from './data-backup.service';

@@ -15,7 +15,7 @@ import type {
   PendingRequest,
   RewindPreviewState,
   SessionStatus,
-} from './chat-reducer';
+} from './reducer';
 import { useChatState } from './use-chat-state';
 
 const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;

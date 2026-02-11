@@ -1,10 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { TRPCError } from '@trpc/server';
-import { GitClientFactory } from '../clients/git.client';
-import { pathExists } from '../lib/file-helpers';
-import { getWorkspaceGitStats } from '../lib/git-helpers';
-import { gitCommand } from '../lib/shell';
+import { GitClientFactory } from '@/backend/clients/git.client';
+import { pathExists } from '@/backend/lib/file-helpers';
+import { getWorkspaceGitStats } from '@/backend/lib/git-helpers';
+import { gitCommand } from '@/backend/lib/shell';
 
 export type WorkspaceGitStats = Awaited<ReturnType<typeof getWorkspaceGitStats>>;
 

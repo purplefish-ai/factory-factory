@@ -1,8 +1,8 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { WORKSPACE_WORDS } from '../../shared/workspace-words';
-import { gitCommand, gitCommandC } from '../lib/shell';
+import { gitCommand, gitCommandC } from '@/backend/lib/shell';
+import { WORKSPACE_WORDS } from '@/shared/workspace-words';
 
 /**
  * Check if a branch name matches the auto-generated pattern.

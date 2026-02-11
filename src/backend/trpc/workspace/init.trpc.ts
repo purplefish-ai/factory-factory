@@ -8,8 +8,8 @@ import {
   worktreeLifecycleService,
 } from '@/backend/domains/workspace';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration';
-import { createLogger } from '../../services/logger.service';
-import { publicProcedure, router } from '../trpc';
+import { createLogger } from '@/backend/services/logger.service';
+import { publicProcedure, router } from '@/backend/trpc/trpc';
 
 const logger = createLogger('workspace-init-trpc');
 

@@ -2,7 +2,7 @@ import type { Project } from '@prisma-gen/client';
 import {
   type ProjectAccessorContext,
   projectAccessor,
-} from '../resource_accessors/project.accessor';
+} from '@/backend/resource_accessors/project.accessor';
 
 class ProjectManagementService {
   list(filters?: { isArchived?: boolean; limit?: number; offset?: number }) {

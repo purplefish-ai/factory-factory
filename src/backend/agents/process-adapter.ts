@@ -15,9 +15,9 @@ import {
   type StreamEventMessage,
   type ToolUseContent,
 } from '@/backend/domains/session';
-import { executeMcpTool } from '../routers/mcp/server';
-import type { McpToolResponse } from '../routers/mcp/types';
-import { createLogger } from '../services/logger.service';
+import { executeMcpTool } from '@/backend/routers/mcp/server';
+import type { McpToolResponse } from '@/backend/routers/mcp/types';
+import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('agent-process-adapter');
 

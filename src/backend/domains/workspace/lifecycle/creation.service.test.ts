@@ -1,5 +1,6 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as worktreeLifecycleServiceModule from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
 import * as claudeSessionAccessorModule from '@/backend/resource_accessors/claude-session.accessor';
 import * as projectAccessorModule from '@/backend/resource_accessors/project.accessor';
 import * as userSettingsAccessorModule from '@/backend/resource_accessors/user-settings.accessor';
@@ -8,7 +9,6 @@ import type { configService } from '@/backend/services/config.service';
 import * as gitOpsServiceModule from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import * as worktreeLifecycleServiceModule from '../worktree/worktree-lifecycle.service';
 import { WorkspaceCreationService, type WorkspaceCreationSource } from './creation.service';
 
 type ConfigService = typeof configService;

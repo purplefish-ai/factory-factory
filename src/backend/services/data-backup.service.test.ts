@@ -9,7 +9,8 @@ import {
   WorkspaceStatus,
 } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExportDataV1, ExportDataV2 } from './data-backup.service';
+import type { ExportDataV1, ExportDataV2 } from '@/shared/schemas/export-data.schema';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
 // Use vi.hoisted so mockTx is available when vi.mock factory runs (vi.mock is hoisted above imports)
 const mockTx = vi.hoisted(() => ({
@@ -66,8 +67,8 @@ vi.mock('../db', () => ({
   },
 }));
 
-import { prisma } from '../db';
-import { dataBackupService, exportDataSchema } from './data-backup.service';
+import { prisma } from '@/backend/db';
+import { dataBackupService } from './data-backup.service';
 
 describe('DataBackupService', () => {
   const mockProject: Project = {

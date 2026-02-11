@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { decisionLogQueryService } from '../../services/decision-log-query.service';
+import { decisionLogQueryService } from '@/backend/services/decision-log-query.service';
 import { createErrorResponse, createSuccessResponse, registerMcpTool } from './server';
 import type { McpToolContext, McpToolResponse } from './types';
 import { McpErrorCode } from './types';

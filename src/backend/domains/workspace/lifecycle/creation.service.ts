@@ -1,5 +1,6 @@
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
 import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
@@ -9,7 +10,6 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import type { configService } from '@/backend/services/config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
-import { worktreeLifecycleService } from '../worktree/worktree-lifecycle.service';
 
 type ConfigService = typeof configService;
 type Logger = ReturnType<typeof createLogger>;

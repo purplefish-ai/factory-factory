@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
+import type { ToolCallInfo } from '@/components/agent-activity/types';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { ClaudeMessage, PairedToolCall, ToolSequence } from '@/lib/claude-types';
@@ -18,7 +19,6 @@ import {
   isToolUseMessage,
 } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
-import type { ToolCallInfo } from '../types';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';
 

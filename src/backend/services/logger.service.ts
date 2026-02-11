@@ -11,7 +11,7 @@
 import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { expandEnvVars } from '../lib/env';
+import { expandEnvVars } from '@/backend/lib/env';
 
 type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 

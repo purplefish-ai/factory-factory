@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { type AppContext, createAppContext } from '../../app-context';
-import { HTTP_STATUS } from '../../constants';
-import { projectManagementService } from '../../services/project-management.service';
+import { type AppContext, createAppContext } from '@/backend/app-context';
+import { HTTP_STATUS } from '@/backend/constants';
+import { projectManagementService } from '@/backend/services/project-management.service';
 
 // ============================================================================
 // Input Schemas

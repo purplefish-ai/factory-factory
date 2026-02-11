@@ -1,15 +1,10 @@
-/**
- * Re-exports from modular message renderer components.
- * This file maintains backward compatibility with existing imports.
- */
-
 // Assistant message renderers
 export {
   AssistantMessageRenderer,
   LoadingIndicator,
   MessageWrapper,
   ToolCallRenderer,
-} from './message-renderers/assistant-message-renderer';
+} from './assistant-message-renderer';
 
 // Stream event and utility renderers
 export {
@@ -18,9 +13,10 @@ export {
   StreamDeltaRenderer,
   StreamEventRenderer,
   SystemMessageRenderer,
-} from './message-renderers/stream-event-renderer';
+} from './stream-event-renderer';
+
 // Thinking completion context
 export {
   ThinkingCompletionProvider,
   useIsThinkingInProgress,
-} from './message-renderers/thinking-completion-context';
+} from './thinking-completion-context';

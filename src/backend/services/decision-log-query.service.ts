@@ -1,5 +1,5 @@
 import type { DecisionLog } from '@prisma-gen/client';
-import { decisionLogAccessor } from '../resource_accessors/decision-log.accessor';
+import { decisionLogAccessor } from '@/backend/resource_accessors/decision-log.accessor';
 
 class DecisionLogQueryService {
   findByAgentId(agentId: string, limit?: number): Promise<DecisionLog[]> {

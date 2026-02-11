@@ -1,5 +1,5 @@
 import type { DecisionLog } from '@prisma-gen/client';
-import { prisma } from '../db';
+import { prisma } from '@/backend/db';
 
 interface CreateDecisionLogInput {
   agentId: string;

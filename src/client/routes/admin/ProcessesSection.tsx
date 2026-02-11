@@ -15,9 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import type { AppRouter } from '@/frontend/lib/trpc';
+import { trpc } from '@/frontend/lib/trpc';
 import { formatBytes, formatCpu, formatIdleTime } from '@/lib/formatters';
-import type { AppRouter } from '../../../frontend/lib/trpc';
-import { trpc } from '../../../frontend/lib/trpc';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 export type ProcessesData = RouterOutputs['admin']['getActiveProcesses'];

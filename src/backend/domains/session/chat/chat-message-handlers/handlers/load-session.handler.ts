@@ -1,10 +1,10 @@
+import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { SessionManager } from '@/backend/domains/session/claude/session';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { slashCommandCacheService } from '@/backend/services/slash-command-cache.service';
 import type { LoadSessionMessage } from '@/shared/websocket';
-import { SessionManager } from '../../../claude/session';
-import { sessionService } from '../../../lifecycle/session.service';
-import type { ChatMessageHandler } from '../types';
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {

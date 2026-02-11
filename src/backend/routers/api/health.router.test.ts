@@ -1,8 +1,8 @@
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { AppContext } from '../../app-context';
 
 // Mock dependencies before importing the router
 const mockQueryRaw = vi.fn();

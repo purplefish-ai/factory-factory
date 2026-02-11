@@ -24,7 +24,7 @@ import {
   createActionFromWebSocketMessage,
   createInitialChatState,
   createUserMessageAction,
-} from './chat-reducer';
+} from './reducer';
 
 // =============================================================================
 // Test Helpers

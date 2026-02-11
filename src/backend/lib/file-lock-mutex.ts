@@ -1,5 +1,5 @@
 import * as fs from 'node:fs/promises';
-import { createLogger } from '../services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('file-lock-mutex');
 

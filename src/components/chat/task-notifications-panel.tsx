@@ -2,7 +2,7 @@ import { Bell, X } from 'lucide-react';
 import { memo, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/utils';
-import type { TaskNotification } from './chat-reducer';
+import type { TaskNotification } from './reducer';
 
 // =============================================================================
 // Props

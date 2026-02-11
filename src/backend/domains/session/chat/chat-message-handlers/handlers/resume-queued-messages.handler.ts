@@ -1,5 +1,8 @@
+import type {
+  ChatMessageHandler,
+  HandlerRegistryDependencies,
+} from '@/backend/domains/session/chat/chat-message-handlers/types';
 import type { ResumeQueuedMessagesInput } from '@/shared/websocket';
-import type { ChatMessageHandler, HandlerRegistryDependencies } from '../types';
 
 export function createResumeQueuedMessagesHandler(
   deps: HandlerRegistryDependencies

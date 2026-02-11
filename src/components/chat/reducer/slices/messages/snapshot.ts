@@ -1,5 +1,5 @@
-import { convertPendingRequest } from '../../helpers';
-import type { ChatAction, ChatState, PendingMessageContent } from '../../types';
+import { convertPendingRequest } from '@/components/chat/reducer/helpers';
+import type { ChatAction, ChatState, PendingMessageContent } from '@/components/chat/reducer/types';
 
 export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
