@@ -21,6 +21,8 @@ export { workspaceDataService } from './lifecycle/data.service';
 export {
   type StartProvisioningOptions,
   type TransitionOptions,
+  WORKSPACE_STATE_CHANGED,
+  type WorkspaceStateChangedEvent,
   WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';

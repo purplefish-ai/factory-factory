@@ -15,6 +15,7 @@
  *   FAILED → ARCHIVED
  */
 
+import { EventEmitter } from 'node:events';
 import type { Prisma, Workspace, WorkspaceStatus } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
@@ -59,12 +60,23 @@ export interface TransitionOptions {
   errorMessage?: string;
 }
 
+export const WORKSPACE_STATE_CHANGED = 'workspace_state_changed' as const;
+
+export interface WorkspaceStateChangedEvent {
+  workspaceId: string;
+  fromStatus: WorkspaceStatus;
+  toStatus: WorkspaceStatus;
+}
+
 export interface StartProvisioningOptions {
   /** Maximum number of retries allowed (default 3) */
   maxRetries?: number;
 }
 
-class WorkspaceStateMachineService {
+class WorkspaceStateMachineService extends EventEmitter {
+  constructor() {
+    super();
+  }
   /**
    * Check if a state transition is valid.
    */
@@ -144,6 +156,12 @@ class WorkspaceStateMachineService {
     // Re-read workspace after successful CAS update
     const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
 
+    this.emit(WORKSPACE_STATE_CHANGED, {
+      workspaceId,
+      fromStatus: currentStatus,
+      toStatus: targetStatus,
+    } satisfies WorkspaceStateChangedEvent);
+
     logger.debug('Workspace status transitioned', {
       workspaceId,
       from: currentStatus,
@@ -197,6 +215,12 @@ class WorkspaceStateMachineService {
       }
 
       const updated = await workspaceAccessor.findRawById(workspaceId);
+
+      this.emit(WORKSPACE_STATE_CHANGED, {
+        workspaceId,
+        fromStatus: 'FAILED' as WorkspaceStatus,
+        toStatus: 'PROVISIONING' as WorkspaceStatus,
+      } satisfies WorkspaceStateChangedEvent);
 
       logger.debug('Workspace retry started', {
         workspaceId,
@@ -274,6 +298,12 @@ class WorkspaceStateMachineService {
     }
 
     const updated = await workspaceAccessor.findRawById(workspaceId);
+
+    this.emit(WORKSPACE_STATE_CHANGED, {
+      workspaceId,
+      fromStatus: 'FAILED' as WorkspaceStatus,
+      toStatus: 'NEW' as WorkspaceStatus,
+    } satisfies WorkspaceStateChangedEvent);
 
     logger.debug('Workspace reset to NEW for retry', {
       workspaceId,

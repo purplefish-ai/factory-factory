@@ -18,6 +18,7 @@
  *   FAILED -> IDLE (user acknowledgment or restart)
  */
 
+import { EventEmitter } from 'node:events';
 import type { Prisma, RunScriptStatus, Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
@@ -54,6 +55,14 @@ export class RunScriptStateMachineError extends Error {
   }
 }
 
+export const RUN_SCRIPT_STATUS_CHANGED = 'run_script_status_changed' as const;
+
+export interface RunScriptStatusChangedEvent {
+  workspaceId: string;
+  fromStatus: RunScriptStatus;
+  toStatus: RunScriptStatus;
+}
+
 export interface TransitionOptions {
   /** Process ID to set (for STARTING -> RUNNING transition) */
   pid?: number;
@@ -63,7 +72,10 @@ export interface TransitionOptions {
   startedAt?: Date;
 }
 
-class RunScriptStateMachineService {
+class RunScriptStateMachineService extends EventEmitter {
+  constructor() {
+    super();
+  }
   /**
    * Check if a state transition is valid.
    */
@@ -160,6 +172,12 @@ class RunScriptStateMachineService {
 
     // Fetch and return the updated workspace (updateMany doesn't return the record)
     const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
+
+    this.emit(RUN_SCRIPT_STATUS_CHANGED, {
+      workspaceId,
+      fromStatus: currentStatus,
+      toStatus: targetStatus,
+    } satisfies RunScriptStatusChangedEvent);
 
     return updated;
   }
