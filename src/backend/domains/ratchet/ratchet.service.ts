@@ -945,11 +945,12 @@ class RatchetService extends EventEmitter {
     }
 
     const freshPrState = await this.fetchPRState(workspace, authenticatedUsername);
-    existing.pollCount++;
 
     if (!freshPrState) {
       return { action: 'waiting' };
     }
+
+    existing.pollCount++;
 
     if (!this.shouldSkipCleanPR(workspace, freshPrState)) {
       this.reviewPollTrackers.delete(workspace.id);
