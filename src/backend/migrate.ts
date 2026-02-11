@@ -120,12 +120,22 @@ function applySingleMigration(
     db.exec(pragma);
   }
 
-  // Apply migration in transaction
-  applyMigration();
-
-  // Execute post-transaction PRAGMAs
-  for (const pragma of postPragmas) {
-    db.exec(pragma);
+  try {
+    // Apply migration in transaction
+    applyMigration();
+  } finally {
+    // Always execute post-transaction PRAGMAs to restore connection state
+    // This ensures PRAGMA settings are restored even if the migration fails
+    for (const pragma of postPragmas) {
+      try {
+        db.exec(pragma);
+      } catch (pragmaError) {
+        // Log but don't throw - we want to restore as much state as possible
+        log(
+          `[migrate] Warning: Failed to execute post-PRAGMA "${pragma}": ${pragmaError instanceof Error ? pragmaError.message : String(pragmaError)}`
+        );
+      }
+    }
   }
 
   log(`[migrate] Applied: ${migrationName}`);
