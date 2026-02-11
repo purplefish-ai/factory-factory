@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Snapshot Store** -- In-memory store with versioned per-workspace entries, cleanup contracts, and derived state ✓ 2026-02-11
 - [x] **Phase 12: Domain Event Emission** -- Add EventEmitter capability to workspace, GitHub, ratchet, run-script, and session domains ✓ 2026-02-11
 - [x] **Phase 13: Event Collector** -- Orchestration layer wiring domain events to snapshot store updates with coalescing ✓ 2026-02-11
-- [ ] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection
+- [x] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection ✓ 2026-02-11
 - [ ] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project
 - [ ] **Phase 16: Client Integration - Sidebar** -- Sidebar reads from WebSocket-driven snapshot with React Query cache integration
 - [ ] **Phase 17: Client Integration - Kanban and Workspace List** -- Remaining consumers migrate to snapshot with polling fallback
@@ -92,8 +92,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md -- Reconciliation service with drift detection, git stats, stale cleanup, and tests
-- [ ] 14-02-PLAN.md -- Server startup/shutdown wiring and full RCNL requirement verification
+- [x] 14-01-PLAN.md -- Reconciliation service with drift detection, git stats, stale cleanup, and tests
+- [x] 14-02-PLAN.md -- Server startup/shutdown wiring and full RCNL requirement verification
 
 ### Phase 15: WebSocket Transport
 **Goal**: Connected clients receive snapshot changes in real time via a project-scoped WebSocket endpoint, with full snapshot on connect and reconnect
@@ -162,7 +162,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 11. Snapshot Store | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 12. Domain Event Emission | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 13. Event Collector | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
-| 14. Safety-Net Reconciliation | v1.1 | 0/2 | Not started | - |
+| 14. Safety-Net Reconciliation | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 15. WebSocket Transport | v1.1 | 0/TBD | Not started | - |
 | 16. Client Integration - Sidebar | v1.1 | 0/TBD | Not started | - |
 | 17. Client Integration - Kanban and Workspace List | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 14 planned (2 plans, RCNL-01/02/03/04)*
+*Last updated: 2026-02-11 -- Phase 14 complete (2/2 plans, RCNL-01/02/03/04 verified)*
