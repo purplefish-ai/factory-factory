@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-11)
 
 **Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
-**Current focus:** Phase 16 - Client Integration - Sidebar
+**Current focus:** Phase 17 - Client Integration - Kanban and Workspace List
 
 ## Current Position
 
-Phase: 16 of 18 (Client Integration - Sidebar)
-Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-02-11 -- Phase 16 Plan 01 complete (sidebar WebSocket sync)
+Phase: 17 of 18 (Client Integration - Kanban and Workspace List)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-11 -- Phase 16 complete and verified (CLNT-01/CLNT-04)
 
-Progress: [███████░░░] 68%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
@@ -85,5 +85,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 16-01-PLAN.md -- Phase 16 complete
+Stopped at: Phase 16 complete and verified -- ready to plan Phase 17
 Resume file: None

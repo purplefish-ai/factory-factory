@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 13: Event Collector** -- Orchestration layer wiring domain events to snapshot store updates with coalescing ✓ 2026-02-11
 - [x] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection ✓ 2026-02-11
 - [x] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project ✓ 2026-02-11
-- [ ] **Phase 16: Client Integration - Sidebar** -- Sidebar reads from WebSocket-driven snapshot with React Query cache integration
+- [x] **Phase 16: Client Integration - Sidebar** -- Sidebar reads from WebSocket-driven snapshot with React Query cache integration ✓ 2026-02-11
 - [ ] **Phase 17: Client Integration - Kanban and Workspace List** -- Remaining consumers migrate to snapshot with polling fallback
 - [ ] **Phase 18: Architecture Validation** -- Dependency-cruiser passes, full test suite green, no regressions
 
@@ -121,7 +121,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 16-01-PLAN.md -- Snapshot-to-sidebar mapping, sync hook, AppSidebar wiring, Vite proxy
+- [x] 16-01-PLAN.md -- Snapshot-to-sidebar mapping, sync hook, AppSidebar wiring, Vite proxy
 
 ### Phase 17: Client Integration - Kanban and Workspace List
 **Goal**: Kanban board and workspace list both read from WebSocket-driven snapshots, and all three project-level surfaces show consistent state with a relaxed polling fallback
@@ -163,10 +163,10 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 13. Event Collector | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 14. Safety-Net Reconciliation | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 15. WebSocket Transport | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
-| 16. Client Integration - Sidebar | v1.1 | 0/TBD | Not started | - |
+| 16. Client Integration - Sidebar | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 17. Client Integration - Kanban and Workspace List | v1.1 | 0/TBD | Not started | - |
 | 18. Architecture Validation | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 15 complete (WSKT-01/02/03/04/05 verified)*
+*Last updated: 2026-02-11 -- Phase 16 complete (CLNT-01/CLNT-04 verified)*
