@@ -22,7 +22,7 @@ const meta = {
     workspaceId: 'workspace-1',
     claudeSessions: [],
     selectedSessionId: null,
-    runningSessionId: undefined,
+    runningSessionIds: new Set<string>(),
     isCreatingSession: false,
     isDeletingSession: false,
     onSelectSession: fn(),
