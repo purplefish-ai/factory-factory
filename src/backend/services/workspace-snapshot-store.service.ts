@@ -20,15 +20,8 @@ import type {
   PRState,
   RatchetState,
   RunScriptStatus,
-  SessionStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
-import type {
-  SessionRuntimeActivity,
-  SessionRuntimeLastExit,
-  SessionRuntimePhase,
-  SessionRuntimeProcessState,
-} from '@/shared/session-runtime';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { createLogger } from './logger.service';
 
@@ -73,18 +66,7 @@ export type WorkspaceCiObservation =
   | 'CHECKS_PASSED'
   | 'CHECKS_UNKNOWN';
 
-export interface WorkspaceSessionSummary {
-  sessionId: string;
-  name: string | null;
-  workflow: string | null;
-  model: string | null;
-  persistedStatus: SessionStatus;
-  runtimePhase: SessionRuntimePhase;
-  processState: SessionRuntimeProcessState;
-  activity: SessionRuntimeActivity;
-  updatedAt: string;
-  lastExit: SessionRuntimeLastExit | null;
-}
+export type { SessionSummary as WorkspaceSessionSummary } from '@/shared/session-runtime';
 
 /**
  * The full snapshot entry shape for a workspace.

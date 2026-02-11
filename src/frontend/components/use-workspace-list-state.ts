@@ -1,11 +1,6 @@
-import type {
-  CIStatus,
-  PRState,
-  RatchetState,
-  RunScriptStatus,
-  SessionStatus,
-} from '@prisma-gen/browser';
+import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@prisma-gen/browser';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 // =============================================================================
@@ -24,22 +19,7 @@ export interface ServerWorkspace {
   prState?: PRState | null;
   prCiStatus?: CIStatus | null;
   isWorking: boolean;
-  sessionSummaries?: Array<{
-    sessionId: string;
-    name: string | null;
-    workflow: string | null;
-    model: string | null;
-    persistedStatus: SessionStatus;
-    runtimePhase: 'loading' | 'starting' | 'running' | 'idle' | 'stopping' | 'error';
-    processState: 'unknown' | 'alive' | 'stopped';
-    activity: 'WORKING' | 'IDLE';
-    updatedAt: string;
-    lastExit: {
-      code: number | null;
-      timestamp: string;
-      unexpected: boolean;
-    } | null;
-  }>;
+  sessionSummaries?: SessionSummary[];
   gitStats: {
     total: number;
     additions: number;

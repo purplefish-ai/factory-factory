@@ -8,23 +8,9 @@ import {
   type LucideIcon,
   XCircle,
 } from 'lucide-react';
+import type { SessionSummary } from '@/shared/session-runtime';
 
-export interface WorkspaceSessionRuntimeSummary {
-  sessionId: string;
-  name: string | null;
-  workflow: string | null;
-  model: string | null;
-  persistedStatus: DbSessionStatus;
-  runtimePhase: 'loading' | 'starting' | 'running' | 'idle' | 'stopping' | 'error';
-  processState: 'unknown' | 'alive' | 'stopped';
-  activity: 'WORKING' | 'IDLE';
-  updatedAt: string;
-  lastExit: {
-    code: number | null;
-    timestamp: string;
-    unexpected: boolean;
-  } | null;
-}
+export type WorkspaceSessionRuntimeSummary = SessionSummary;
 
 export interface SessionTabRuntimeInfo {
   color: string;

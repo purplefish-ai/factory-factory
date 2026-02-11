@@ -1,3 +1,5 @@
+import type { SessionStatus } from '@prisma-gen/browser';
+
 export type SessionRuntimePhase =
   | 'loading'
   | 'starting'
@@ -14,6 +16,19 @@ export interface SessionRuntimeLastExit {
   code: number | null;
   timestamp: string;
   unexpected: boolean;
+}
+
+export interface SessionSummary {
+  sessionId: string;
+  name: string | null;
+  workflow: string | null;
+  model: string | null;
+  persistedStatus: SessionStatus;
+  runtimePhase: SessionRuntimePhase;
+  processState: SessionRuntimeProcessState;
+  activity: SessionRuntimeActivity;
+  updatedAt: string;
+  lastExit: SessionRuntimeLastExit | null;
 }
 
 export interface SessionRuntimeState {
