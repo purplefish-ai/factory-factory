@@ -1,6 +1,38 @@
 import type { ClaudeContentItem } from './content';
 import type { ClaudeMessage } from './messages';
 
+type ContentTypeLike = { type: string };
+
+export function isTextContent<T extends ContentTypeLike>(
+  item: T
+): item is Extract<T, { type: 'text' }> {
+  return item.type === 'text';
+}
+
+export function isThinkingContent<T extends ContentTypeLike>(
+  item: T
+): item is Extract<T, { type: 'thinking' }> {
+  return item.type === 'thinking';
+}
+
+export function isToolUseContent<T extends ContentTypeLike>(
+  item: T
+): item is Extract<T, { type: 'tool_use' }> {
+  return item.type === 'tool_use';
+}
+
+export function isToolResultContent<T extends ContentTypeLike>(
+  item: T
+): item is Extract<T, { type: 'tool_result' }> {
+  return item.type === 'tool_result';
+}
+
+export function isImageContent<T extends ContentTypeLike>(
+  item: T
+): item is Extract<T, { type: 'image' }> {
+  return item.type === 'image';
+}
+
 /**
  * Narrow shape used to evaluate whether assistant content blocks should be rendered/stored.
  * Shared across backend forwarding and frontend reducer filtering to prevent drift.

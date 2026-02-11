@@ -21,6 +21,36 @@ const UpdateProjectSchema = z.object({
   githubRepo: z.string().optional(),
 });
 
+interface ProjectDtoShape {
+  id: string;
+  name: string;
+  slug: string;
+  repoPath: string;
+  worktreeBasePath: string;
+  defaultBranch: string;
+  githubOwner: string | null;
+  githubRepo: string | null;
+  isArchived: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function serializeProject(project: ProjectDtoShape) {
+  return {
+    id: project.id,
+    name: project.name,
+    slug: project.slug,
+    repoPath: project.repoPath,
+    worktreeBasePath: project.worktreeBasePath,
+    defaultBranch: project.defaultBranch,
+    githubOwner: project.githubOwner,
+    githubRepo: project.githubRepo,
+    isArchived: project.isArchived,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  };
+}
+
 // ============================================================================
 // Routes
 // ============================================================================
@@ -105,19 +135,7 @@ export function createProjectRouter(appContext: AppContext): Router {
       return res.status(HTTP_STATUS.OK).json({
         success: true,
         data: {
-          projects: projects.map((p) => ({
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            repoPath: p.repoPath,
-            worktreeBasePath: p.worktreeBasePath,
-            defaultBranch: p.defaultBranch,
-            githubOwner: p.githubOwner,
-            githubRepo: p.githubRepo,
-            isArchived: p.isArchived,
-            createdAt: p.createdAt,
-            updatedAt: p.updatedAt,
-          })),
+          projects: projects.map((p) => serializeProject(p)),
         },
       });
     } catch (error) {
@@ -154,17 +172,7 @@ export function createProjectRouter(appContext: AppContext): Router {
       return res.status(HTTP_STATUS.OK).json({
         success: true,
         data: {
-          id: project.id,
-          name: project.name,
-          slug: project.slug,
-          repoPath: project.repoPath,
-          worktreeBasePath: project.worktreeBasePath,
-          defaultBranch: project.defaultBranch,
-          githubOwner: project.githubOwner,
-          githubRepo: project.githubRepo,
-          isArchived: project.isArchived,
-          createdAt: project.createdAt,
-          updatedAt: project.updatedAt,
+          ...serializeProject(project),
           workspaces: project.workspaces,
         },
       });
@@ -222,19 +230,7 @@ export function createProjectRouter(appContext: AppContext): Router {
 
       return res.status(HTTP_STATUS.OK).json({
         success: true,
-        data: {
-          id: project.id,
-          name: project.name,
-          slug: project.slug,
-          repoPath: project.repoPath,
-          worktreeBasePath: project.worktreeBasePath,
-          defaultBranch: project.defaultBranch,
-          githubOwner: project.githubOwner,
-          githubRepo: project.githubRepo,
-          isArchived: project.isArchived,
-          createdAt: project.createdAt,
-          updatedAt: project.updatedAt,
-        },
+        data: serializeProject(project),
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

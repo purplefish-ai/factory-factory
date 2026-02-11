@@ -5,6 +5,12 @@
  * Prevents duplicate concurrent review-fixing sessions per workspace.
  */
 
+import {
+  dispatchFixWorkflow,
+  isFixWorkflowInProgress,
+  notifyFixWorkflowSession,
+  runExclusiveWorkspaceOperation,
+} from '@/backend/services/fixer-workflow.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { GitHubFixerBridge, GitHubSessionBridge } from './bridges';
 
@@ -65,32 +71,7 @@ class PRReviewFixerService {
     return this.fixerBridge;
   }
 
-  async triggerReviewFix(params: {
-    workspaceId: string;
-    prUrl: string;
-    prNumber: number;
-    commentDetails: ReviewCommentDetails;
-    customPrompt?: string;
-  }): Promise<PRReviewFixResult> {
-    const { workspaceId } = params;
-
-    const pending = this.pendingFixes.get(workspaceId);
-    if (pending) {
-      logger.debug('PR review fix operation already in progress', { workspaceId });
-      return pending;
-    }
-
-    const promise = this.doTriggerReviewFix(params);
-    this.pendingFixes.set(workspaceId, promise);
-
-    try {
-      return await promise;
-    } finally {
-      this.pendingFixes.delete(workspaceId);
-    }
-  }
-
-  private async doTriggerReviewFix(params: {
+  triggerReviewFix(params: {
     workspaceId: string;
     prUrl: string;
     prNumber: number;
@@ -98,47 +79,36 @@ class PRReviewFixerService {
     customPrompt?: string;
   }): Promise<PRReviewFixResult> {
     const { workspaceId, prUrl, prNumber, commentDetails, customPrompt } = params;
-
-    try {
-      const result = await this.fixer.acquireAndDispatch({
-        workspaceId,
-        workflow: PR_REVIEW_FIX_WORKFLOW,
-        sessionName: 'PR Review Fixing',
-        runningIdleAction: 'send_message',
-        buildPrompt: () => this.buildInitialPrompt(prUrl, prNumber, commentDetails, customPrompt),
-      });
-
-      if (result.status === 'started') {
-        logger.info('PR review fixing session started', {
+    return runExclusiveWorkspaceOperation({
+      pendingMap: this.pendingFixes,
+      workspaceId,
+      logger,
+      duplicateOperationMessage: 'PR review fix operation already in progress',
+      operation: () =>
+        dispatchFixWorkflow({
           workspaceId,
-          sessionId: result.sessionId,
-          prNumber,
-        });
-        return { status: 'started', sessionId: result.sessionId };
-      }
-
-      if (result.status === 'already_active') {
-        return { status: 'already_fixing', sessionId: result.sessionId };
-      }
-
-      if (result.status === 'skipped') {
-        return { status: 'skipped', reason: result.reason };
-      }
-
-      return { status: 'error', error: result.error };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to trigger PR review fix', error as Error, { workspaceId, prUrl });
-      return { status: 'error', error: errorMessage };
-    }
+          workflow: PR_REVIEW_FIX_WORKFLOW,
+          sessionName: 'PR Review Fixing',
+          runningIdleAction: 'send_message',
+          acquireAndDispatch: this.fixer.acquireAndDispatch.bind(this.fixer),
+          buildPrompt: () => this.buildInitialPrompt(prUrl, prNumber, commentDetails, customPrompt),
+          logger,
+          startedLogMessage: 'PR review fixing session started',
+          failureLogMessage: 'Failed to trigger PR review fix',
+          startedLogMeta: { prNumber },
+          errorLogMeta: { prUrl },
+        }),
+    });
   }
 
-  async isFixingInProgress(workspaceId: string): Promise<boolean> {
-    const session = await this.getActiveReviewFixSession(workspaceId);
-    if (!session) {
-      return false;
-    }
-    return this.session.isSessionWorking(session.id);
+  isFixingInProgress(workspaceId: string): Promise<boolean> {
+    return isFixWorkflowInProgress({
+      workspaceId,
+      workflow: PR_REVIEW_FIX_WORKFLOW,
+      getActiveSession: (targetWorkspaceId, workflow) =>
+        this.fixer.getActiveSession(targetWorkspaceId, workflow),
+      isSessionWorking: (sessionId) => this.session.isSessionWorking(sessionId),
+    });
   }
 
   async getActiveReviewFixSession(
@@ -147,31 +117,19 @@ class PRReviewFixerService {
     return await this.fixer.getActiveSession(workspaceId, PR_REVIEW_FIX_WORKFLOW);
   }
 
-  async notifyReviewsAddressed(workspaceId: string): Promise<boolean> {
-    const session = await this.getActiveReviewFixSession(workspaceId);
-    if (!session) {
-      return false;
-    }
-
-    const client = this.session.getClient(session.id);
-    if (!client?.isRunning()) {
-      return false;
-    }
-
-    client
-      .sendMessage(
-        '✅ **Reviews Addressed** - The review comments have been addressed. You can wrap up your current work.'
-      )
-      .catch((error) => {
-        logger.warn('Failed to notify PR review session', { workspaceId, error });
-      });
-
-    logger.info('Notified PR review fixing session that reviews were addressed', {
+  notifyReviewsAddressed(workspaceId: string): Promise<boolean> {
+    return notifyFixWorkflowSession({
       workspaceId,
-      sessionId: session.id,
+      workflow: PR_REVIEW_FIX_WORKFLOW,
+      getActiveSession: (targetWorkspaceId, workflow) =>
+        this.fixer.getActiveSession(targetWorkspaceId, workflow),
+      getClient: (sessionId) => this.session.getClient(sessionId),
+      message:
+        '✅ **Reviews Addressed** - The review comments have been addressed. You can wrap up your current work.',
+      logger,
+      successLogMessage: 'Notified PR review fixing session that reviews were addressed',
+      failureLogMessage: 'Failed to notify PR review session',
     });
-
-    return true;
   }
 
   private formatReview(review: ReviewCommentDetails['reviews'][0]): string {

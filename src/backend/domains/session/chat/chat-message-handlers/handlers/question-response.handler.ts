@@ -1,9 +1,8 @@
-import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { QuestionResponseMessage } from '@/shared/websocket';
-import { sessionService } from '../../../lifecycle/session.service';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
+import { clearPendingInteractiveRequest, getClientOrSendError, sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -11,30 +10,26 @@ export function createQuestionResponseHandler(): ChatMessageHandler<QuestionResp
   return ({ ws, sessionId, message }) => {
     const { requestId, answers } = message;
 
-    const client = sessionService.getClient(sessionId);
+    const client = getClientOrSendError({ sessionId, ws, requestId });
     if (!client) {
-      sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
-      ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
       return;
     }
 
     try {
       client.answerQuestion(requestId, answers);
-      sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Answered question', { sessionId, requestId });
       }
     } catch (error) {
-      sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to answer question', {
         sessionId,
         requestId,
         error: errorMessage,
       });
-      ws.send(
-        JSON.stringify({ type: 'error', message: `Failed to answer question: ${errorMessage}` })
-      );
+      sendWebSocketError(ws, `Failed to answer question: ${errorMessage}`);
+    } finally {
+      clearPendingInteractiveRequest(sessionId, requestId);
     }
   };
 }

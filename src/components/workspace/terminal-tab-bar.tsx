@@ -1,4 +1,5 @@
 import { Plus, Terminal, X } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -6,7 +7,7 @@ import { cn } from '@/lib/utils';
 // Types
 // =============================================================================
 
-interface TerminalTab {
+export interface TerminalTab {
   id: string;
   label: string;
 }
@@ -18,6 +19,7 @@ interface TerminalTabBarProps {
   onCloseTab: (id: string) => void;
   onNewTab?: () => void;
   showNewButton?: boolean;
+  renderNewButton?: (onNewTab: () => void) => ReactNode;
   className?: string;
 }
 
@@ -32,6 +34,7 @@ export function TerminalTabBar({
   onCloseTab,
   onNewTab,
   showNewButton = true,
+  renderNewButton,
   className,
 }: TerminalTabBarProps) {
   return (
@@ -71,16 +74,20 @@ export function TerminalTabBar({
         ))}
       </div>
 
-      {showNewButton && onNewTab && (
-        <button
-          type="button"
-          onClick={onNewTab}
-          className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-          title="New terminal"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-      )}
+      {showNewButton &&
+        onNewTab &&
+        (renderNewButton ? (
+          renderNewButton(onNewTab)
+        ) : (
+          <button
+            type="button"
+            onClick={onNewTab}
+            className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            title="New terminal"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        ))}
     </div>
   );
 }

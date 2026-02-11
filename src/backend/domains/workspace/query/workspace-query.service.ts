@@ -11,8 +11,8 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceSessionBridge,
 } from '../bridges';
-import { deriveWorkspaceFlowStateFromWorkspace } from '../state/flow-state';
 import { computeKanbanColumn } from '../state/kanban-state';
+import { deriveWorkspaceRuntimeState } from '../state/workspace-runtime-state';
 
 const logger = createLogger('workspace-query');
 
@@ -110,18 +110,22 @@ class WorkspaceQueryService {
     const workingStatusByWorkspace = new Map<string, boolean>();
     const flowStateByWorkspace = new Map<
       string,
-      ReturnType<typeof deriveWorkspaceFlowStateFromWorkspace>
+      ReturnType<typeof deriveWorkspaceRuntimeState>['flowState']
     >();
     const pendingRequestByWorkspace = new Map<string, 'plan_approval' | 'user_question' | null>();
     for (const workspace of workspaces) {
-      const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+      const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
+        this.session.isAnySessionWorking(sessionIds)
+      );
+      const flowState = runtimeState.flowState;
       flowStateByWorkspace.set(workspace.id, flowState);
 
-      const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-      const isSessionWorking = this.session.isAnySessionWorking(sessionIds);
-      workingStatusByWorkspace.set(workspace.id, isSessionWorking || flowState.isWorking);
+      workingStatusByWorkspace.set(workspace.id, runtimeState.isWorking);
 
-      const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);
+      const pendingRequestType = computePendingRequestType(
+        runtimeState.sessionIds,
+        allPendingRequests
+      );
       pendingRequestByWorkspace.set(workspace.id, pendingRequestType);
     }
 
@@ -237,27 +241,29 @@ class WorkspaceQueryService {
 
     return workspaces
       .map((workspace) => {
-        const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-        const isSessionWorking = this.session.isAnySessionWorking(sessionIds);
-        const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-        const isWorking = isSessionWorking || flowState.isWorking;
+        const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
+          this.session.isAnySessionWorking(sessionIds)
+        );
 
         const kanbanColumn = computeKanbanColumn({
           lifecycle: workspace.status,
-          isWorking,
+          isWorking: runtimeState.isWorking,
           prState: workspace.prState,
           hasHadSessions: workspace.hasHadSessions,
         });
 
-        const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);
+        const pendingRequestType = computePendingRequestType(
+          runtimeState.sessionIds,
+          allPendingRequests
+        );
 
         return {
           ...workspace,
           kanbanColumn,
-          isWorking,
-          ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
-          flowPhase: flowState.phase,
-          ciObservation: flowState.ciObservation,
+          isWorking: runtimeState.isWorking,
+          ratchetButtonAnimated: runtimeState.flowState.shouldAnimateRatchetButton,
+          flowPhase: runtimeState.flowState.phase,
+          ciObservation: runtimeState.flowState.ciObservation,
           isArchived: false,
           pendingRequestType,
         };
