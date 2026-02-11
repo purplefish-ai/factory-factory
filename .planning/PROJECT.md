@@ -1,12 +1,24 @@
-# SRP Consolidation & Domain Module Refactor
+# Factory Factory
 
 ## What This Is
 
-A structural refactor of factory-factory's backend that established clear domain modules with single ownership, co-located tests, and straightforward data flow. Consolidated 45+ flat services from `src/backend/services/` into 6 domain modules under `src/backend/domains/`, with an orchestration layer for cross-domain coordination and 18 dependency-cruiser rules enforcing architectural boundaries.
+A developer tool that manages workspaces with AI agents, GitHub integration, CI monitoring, and auto-fix capabilities. The backend has 6 domain modules under `src/backend/domains/` with an orchestration layer for cross-domain coordination. Project-level UI surfaces (sidebar, Kanban, workspace list) display workspace state and agent activity.
 
 ## Core Value
 
 Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
+
+## Current Milestone: v1.1 Project Snapshot Service
+
+**Goal:** Replace multiple independent polling loops with a single in-memory materialized view of all workspace states, pushed to clients via WebSocket.
+
+**Target features:**
+- Backend in-memory snapshot store — one entry per workspace with git state, PR status, CI status, agent state
+- Event-driven delta updates — mutations update individual workspace entries as they happen
+- WebSocket push — changed workspace snapshots pushed to connected clients immediately
+- Safety-net reconciliation poll — periodic (once/minute) full recompute to catch missed events
+- Single snapshot query — sidebar, Kanban, and workspace list all read from one source
+- Debug metadata — version, computedAt, source of last update on each snapshot entry
 
 ## Requirements
 
@@ -26,19 +38,26 @@ Every domain object has exactly one owner module, and any operation touching tha
 
 ### Active
 
-(No active requirements — milestone complete)
+- [ ] In-memory snapshot store with per-workspace entries
+- [ ] Event-driven delta updates from mutations
+- [ ] WebSocket push of changed snapshots to clients
+- [ ] Safety-net reconciliation poll (~1 min cadence)
+- [ ] Sidebar, Kanban, and workspace list consume single snapshot query
+- [ ] Debug metadata on each snapshot entry (version, computedAt, source)
 
 ### Out of Scope
 
-- Frontend refactoring — this project was backend-only
-- New features — no new capabilities, purely structural
-- Database schema changes — Prisma models stayed as-is
-- Performance optimization — not a goal
-- Auth system — no auth changes
+- Frontend refactoring — this project was backend-only (v1.0)
+- Database schema changes — snapshot is in-memory, not persisted
+- Workspace detail/session-specific polling — different lifecycle, stays as-is
+- New UI surfaces — no dashboard or new views, just rewire existing three
+- Agent status detail — snapshot carries state only (idle/busy/waiting/needs-attention), not reasons
 
 ## Context
 
 **Current state:** The backend has 6 domain modules in `src/backend/domains/` (session, workspace, github, ratchet, terminal, run-script), each with barrel-file encapsulation. Cross-domain flows use bridge interfaces wired at startup via `src/backend/orchestration/domain-bridges.ts`. Infrastructure services (logger, config, scheduler, port, health, etc.) remain in `src/backend/services/`. All imports use domain barrel paths. 18 dependency-cruiser rules enforce boundaries.
+
+**Current polling problem:** Sidebar, Kanban, and workspace list each poll independently on different cadences. Adding new information requires touching multiple query paths. Debugging state inconsistencies across surfaces is difficult. The snapshot service consolidates this into a single materialized view.
 
 **Tech stack:** TypeScript, Express, tRPC, Prisma, Vitest, Biome, dependency-cruiser
 **Test suite:** 1609 tests across 90 files
@@ -56,6 +75,10 @@ Every domain object has exactly one owner module, and any operation touching tha
 | Bridge interfaces with fail-fast getters | configure() + private get session() pattern for cross-domain deps | ✓ Good — clean DI without constructor injection |
 | Instance-based state over static Maps (DOM-04) | Eliminates hidden global state, improves testability | ✓ Good — all tests use fresh instances |
 | Barrel bypass exceptions for circular deps | conversation-rename.interceptor.ts, workspace-init.orchestrator.ts retain direct paths | ⚠️ Revisit — documented exceptions, not ideal |
+| In-memory snapshot over DB denormalization | Avoid schema changes, faster reads, simpler invalidation | — Pending |
+| Event-driven + safety-net poll | Events for speed, poll for correctness — catch missed events | — Pending |
+| WebSocket push for snapshot delivery | Eliminates frontend polling for project-level surfaces | — Pending |
+| State-only agent status in snapshot | Keep snapshot lightweight; details via workspace detail view | — Pending |
 
 ## Constraints
 
@@ -64,4 +87,4 @@ Every domain object has exactly one owner module, and any operation touching tha
 - **AppContext**: `app-context.ts` references domain modules via barrel imports
 
 ---
-*Last updated: 2026-02-10 after v1.0 milestone*
+*Last updated: 2026-02-11 after v1.1 milestone initialization*
