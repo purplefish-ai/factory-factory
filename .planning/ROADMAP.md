@@ -61,11 +61,11 @@ Plans:
   3. Ratchet state transitions and run-script status changes each emit typed events
   4. Session activity events (workspace_active, workspace_idle) flow through WorkspaceActivityService to any subscriber
   5. All domain events are emitted after the mutation completes (not before), and domains have no imports related to snapshot service
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 12-01: TBD
-- [ ] 12-02: TBD
+- [ ] 12-01-PLAN.md -- Workspace state machine (EVNT-01) and run-script state machine (EVNT-04) event emission with tests
+- [ ] 12-02-PLAN.md -- PR snapshot (EVNT-02) and ratchet (EVNT-03) event emission with tests, EVNT-05 verification
 
 ### Phase 13: Event Collector
 **Goal**: A single orchestrator wires all domain events to snapshot store updates, translating domain-native events into store mutations with coalescing
@@ -160,7 +160,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Snapshot Store | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
-| 12. Domain Event Emission | v1.1 | 0/TBD | Not started | - |
+| 12. Domain Event Emission | v1.1 | 0/2 | Not started | - |
 | 13. Event Collector | v1.1 | 0/TBD | Not started | - |
 | 14. Safety-Net Reconciliation | v1.1 | 0/TBD | Not started | - |
 | 15. WebSocket Transport | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 11 complete (2/2 plans, verified)*
+*Last updated: 2026-02-11 -- Phase 12 planned (2 plans)*
