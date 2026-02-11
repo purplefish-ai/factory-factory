@@ -49,16 +49,12 @@ export function useWorkspaceInitStatus(
 
   const status = workspaceInitStatus?.status;
 
-  // Non-blocking: worktree exists but script still running
-  const isScriptRunning = status === 'PROVISIONING' && hasWorktreePath;
-
   // Script failed after worktree was created — non-blocking banner with retry
   const isScriptFailed = status === 'FAILED' && hasWorktreePath;
 
   return {
     workspaceInitStatus,
     isInitStatusPending,
-    isScriptRunning,
     isScriptFailed,
   };
 }
