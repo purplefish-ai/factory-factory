@@ -92,6 +92,8 @@ interface WorkspaceWithPR {
 class RatchetService {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
+  private sleepTimeout: NodeJS.Timeout | null = null;
+  private sleepResolve: (() => void) | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
   private readonly backoff = new RateLimitBackoff();
@@ -135,6 +137,7 @@ class RatchetService {
 
   async stop(): Promise<void> {
     this.isShuttingDown = true;
+    this.wakeSleep();
 
     if (this.monitorLoop) {
       logger.debug('Waiting for ratchet monitor loop to complete');
@@ -170,7 +173,37 @@ class RatchetService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (this.sleepTimeout) {
+          clearTimeout(this.sleepTimeout);
+          this.sleepTimeout = null;
+        }
+        if (this.sleepResolve === finish) {
+          this.sleepResolve = null;
+        }
+        resolve();
+      };
+
+      this.sleepResolve = finish;
+      this.sleepTimeout = setTimeout(finish, ms);
+
+      if (this.isShuttingDown) {
+        finish();
+      }
+    });
+  }
+
+  private wakeSleep(): void {
+    const resolveSleep = this.sleepResolve;
+    if (resolveSleep) {
+      resolveSleep();
+    }
   }
 
   async checkAllWorkspaces(): Promise<RatchetCheckResult> {
