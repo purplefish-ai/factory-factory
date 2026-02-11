@@ -1,8 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
-import { Button } from '@/components/ui/button';
 import type { AppRouter } from '@/frontend/lib/trpc';
 
 import { MainViewContent } from './main-view-content';
@@ -42,7 +40,7 @@ interface WorkspaceContentViewProps {
 
 /**
  * WorkspaceContentView handles the conditional rendering between:
- * - Start-session prompt (when no sessions exist yet)
+ * - Empty state prompt (when no sessions exist yet)
  * - Session tab bar + chat content (when sessions exist)
  *
  * This extraction reduces cognitive complexity in the main page component.
@@ -63,43 +61,9 @@ export function WorkspaceContentView({
   maxSessions,
   hasWorktreePath,
 }: WorkspaceContentViewProps) {
-  // Show a single start-session action when no sessions exist yet.
-  if (claudeSessions && claudeSessions.length === 0) {
-    return (
-      <MainViewContent workspaceId={workspaceId} className="flex-1">
-        <div className="flex flex-col items-center justify-center h-full p-8">
-          <div className="max-w-md w-full space-y-6 text-center">
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold">Start a Session</h2>
-              <p className="text-muted-foreground">Start a new chat session in this workspace.</p>
-            </div>
+  const hasNoSessions = claudeSessions && claudeSessions.length === 0;
 
-            {!hasWorktreePath && (
-              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md text-sm">
-                Workspace is initializing... Please wait for the worktree to be created.
-              </div>
-            )}
-
-            <div className="flex justify-center">
-              <Button
-                size="lg"
-                onClick={onCreateSession}
-                disabled={isCreatingSession || !hasWorktreePath}
-                className="gap-2"
-              >
-                <Play className="h-4 w-4" />
-                Start Session
-              </Button>
-            </div>
-          </div>
-        </div>
-      </MainViewContent>
-    );
-  }
-
-  // Show tab bar + chat content when sessions exist
-  // Wrap in a flex container with min-h-0 to enable proper overflow handling
-  // Without this, the ScrollArea in ChatContent cannot calculate its height correctly
+  // Always show tab bar (with "+" button), but render empty state content when no sessions exist
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Tab bar - flex-shrink-0 ensures it stays visible */}
@@ -113,14 +77,33 @@ export function WorkspaceContentView({
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
-          disabled={isCreatingSession || isDeletingSession}
+          disabled={isCreatingSession || isDeletingSession || !hasWorktreePath}
           maxSessions={maxSessions}
         />
       </div>
 
-      {/* Main View Content (children = ChatContent) */}
+      {/* Main View Content */}
       <MainViewContent workspaceId={workspaceId} className="flex-1 min-h-0">
-        {children}
+        {hasNoSessions ? (
+          <div className="flex flex-col items-center justify-center h-full p-8">
+            <div className="max-w-md w-full space-y-6 text-center">
+              <div className="space-y-2">
+                <h2 className="text-2xl font-semibold">Start a Session</h2>
+                <p className="text-muted-foreground">
+                  Click the + button above to start a new chat session in this workspace.
+                </p>
+              </div>
+
+              {!hasWorktreePath && (
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md text-sm">
+                  Workspace is initializing... Please wait for the worktree to be created.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          children
+        )}
       </MainViewContent>
     </div>
   );
