@@ -446,7 +446,10 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
 
 async function retryQueuedDispatchAfterWorkspaceReady(workspaceId: string): Promise<void> {
   try {
-    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, { limit: 1 });
+    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+      status: SessionStatus.IDLE,
+      limit: 1,
+    });
     const session = sessions[0];
     if (!session) {
       return;
