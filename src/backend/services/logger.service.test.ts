@@ -75,7 +75,7 @@ describe('LoggerService', () => {
       } finally {
         // Restore original LOG_LEVEL
         if (originalLogLevel === undefined) {
-          process.env.LOG_LEVEL = undefined;
+          Reflect.deleteProperty(process.env, 'LOG_LEVEL');
         } else {
           process.env.LOG_LEVEL = originalLogLevel;
         }
@@ -89,9 +89,23 @@ describe('LoggerService', () => {
       obj1.ref = obj2;
       obj2.ref = obj1;
 
-      expect(() => {
-        logger.info('Test cross-reference', { obj1, obj2 });
-      }).not.toThrow();
+      logger.info('Test cross-reference', { obj1, obj2 });
+
+      // Verify the data is preserved, not silently dropped
+      expect(mockWriteStream.write).toHaveBeenCalled();
+      const calls = mockWriteStream.write.mock.calls;
+      const lastCall = calls[calls.length - 1] as [string];
+      const logEntry = JSON.parse(lastCall[0].toString().trim());
+
+      // obj1 should have name and ref to obj2 (which has circular back-ref)
+      expect(logEntry.context.obj1.name).toBe('obj1');
+      expect(logEntry.context.obj1.ref.name).toBe('obj2');
+      expect(logEntry.context.obj1.ref.ref).toBe('[Circular]');
+
+      // obj2 should also have its full data preserved, not stale cache
+      expect(logEntry.context.obj2.name).toBe('obj2');
+      expect(logEntry.context.obj2.ref.name).toBe('obj1');
+      expect(logEntry.context.obj2.ref.ref).toBe('[Circular]');
     });
 
     it('should still log normal objects correctly', () => {

@@ -58,66 +58,42 @@ function getLogLevelPriority(level: LogLevel): number {
 function safeStringify(obj: unknown): string {
   try {
     const ancestors = new WeakSet<object>();
-    const seen = new WeakMap<object, unknown>();
 
-    // First pass: detect and replace circular references
     function preprocessValue(value: unknown): unknown {
       if (typeof value !== 'object' || value === null) {
         return value;
       }
 
-      // Check if already processed
-      if (seen.has(value)) {
-        return seen.get(value);
-      }
-
-      // Check for circular reference
+      // Check for circular reference (ancestor on current path)
       if (ancestors.has(value)) {
-        const placeholder = '[Circular]';
-        seen.set(value, placeholder);
-        return placeholder;
+        return '[Circular]';
       }
 
       // If object has toJSON, let JSON.stringify handle it (don't traverse)
-      if (
-        typeof value === 'object' &&
-        value !== null &&
-        'toJSON' in value &&
-        typeof (value as Record<string, unknown>).toJSON === 'function'
-      ) {
-        seen.set(value, value);
+      if ('toJSON' in value && typeof (value as Record<string, unknown>).toJSON === 'function') {
         return value;
       }
 
-      // Mark as ancestor for this path
       ancestors.add(value);
 
       try {
         if (Array.isArray(value)) {
-          const result = value.map((item) => preprocessValue(item));
-          seen.set(value, result);
-          return result;
+          return value.map((item) => preprocessValue(item));
         }
 
         const result: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(value)) {
           result[key] = preprocessValue(val);
         }
-        seen.set(value, result);
         return result;
       } finally {
-        // Remove from ancestors after processing
         ancestors.delete(value);
       }
     }
 
-    // Preprocess to handle circular references
     const processed = preprocessValue(obj);
-
-    // Second pass: use JSON.stringify to handle toJSON() and special objects
     return JSON.stringify(processed);
   } catch {
-    // Fallback for any other errors (e.g., BigInt serialization)
     return String(obj);
   }
 }
