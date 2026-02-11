@@ -26,7 +26,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 11: Snapshot Store** -- In-memory store with versioned per-workspace entries, cleanup contracts, and derived state ✓ 2026-02-11
 - [x] **Phase 12: Domain Event Emission** -- Add EventEmitter capability to workspace, GitHub, ratchet, run-script, and session domains ✓ 2026-02-11
-- [ ] **Phase 13: Event Collector** -- Orchestration layer wiring domain events to snapshot store updates with coalescing
+- [x] **Phase 13: Event Collector** -- Orchestration layer wiring domain events to snapshot store updates with coalescing ✓ 2026-02-11
 - [ ] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection
 - [ ] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project
 - [ ] **Phase 16: Client Integration - Sidebar** -- Sidebar reads from WebSocket-driven snapshot with React Query cache integration
@@ -78,7 +78,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 13-01-PLAN.md -- Event collector orchestrator with per-workspace coalescing, all 6 event subscriptions, server wiring, and tests
+- [x] 13-01-PLAN.md -- Event collector orchestrator with per-workspace coalescing, all 6 event subscriptions, server wiring, and tests
 
 ### Phase 14: Safety-Net Reconciliation
 **Goal**: A periodic poll recomputes snapshots from authoritative DB and git sources, catches any events that were missed, and logs observable drift metrics
@@ -161,7 +161,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 |-------|-----------|----------------|--------|-----------|
 | 11. Snapshot Store | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 12. Domain Event Emission | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
-| 13. Event Collector | v1.1 | 0/1 | Planning complete | - |
+| 13. Event Collector | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 14. Safety-Net Reconciliation | v1.1 | 0/TBD | Not started | - |
 | 15. WebSocket Transport | v1.1 | 0/TBD | Not started | - |
 | 16. Client Integration - Sidebar | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 13 planned (1 plan, EVNT-06/07/08)*
+*Last updated: 2026-02-11 -- Phase 13 complete (1/1 plans, EVNT-06/07/08 verified)*
