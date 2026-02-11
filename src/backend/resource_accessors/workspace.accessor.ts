@@ -217,6 +217,22 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Atomic compare-and-swap transition for workspace status.
+   * Returns count=1 only when current status matches fromStatus.
+   * Used to prevent race conditions in state transitions.
+   */
+  transitionWithCas(
+    id: string,
+    fromStatus: WorkspaceStatus,
+    data: Prisma.WorkspaceUpdateInput
+  ): Promise<{ count: number }> {
+    return prisma.workspace.updateMany({
+      where: { id, status: fromStatus },
+      data,
+    });
+  }
+
+  /**
    * Compare-and-swap update for run script status transitions.
    * Returns count=1 only when current status matches.
    */
