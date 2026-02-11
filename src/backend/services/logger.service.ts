@@ -93,8 +93,8 @@ function safeStringify(obj: unknown): string {
 
     const processed = preprocessValue(obj);
     return JSON.stringify(processed);
-  } catch {
-    return String(obj);
+  } catch (err) {
+    return JSON.stringify({ __serializationError: err instanceof Error ? err.message : 'unknown' });
   }
 }
 

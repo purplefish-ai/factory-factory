@@ -202,6 +202,22 @@ describe('LoggerService', () => {
       expect(logEntry.context.custom.data).toBe('value');
       expect(logEntry.context.custom.self).toBe('[Circular]');
     });
+
+    it('should emit valid JSON even when serialization fails unexpectedly', () => {
+      const logger = createLogger('test');
+      // BigInt cannot be serialized by JSON.stringify
+      const obj = { value: BigInt(123) };
+
+      logger.info('Test serialization error', obj as unknown as Record<string, unknown>);
+
+      expect(mockWriteStream.write).toHaveBeenCalled();
+      const calls = mockWriteStream.write.mock.calls;
+      const lastCall = calls[calls.length - 1] as [string];
+      const raw = lastCall[0].toString().trim();
+
+      // Fallback should still be valid JSON, not [object Object]
+      expect(() => JSON.parse(raw)).not.toThrow();
+    });
   });
 
   describe('agentEvent', () => {
