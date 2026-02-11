@@ -46,6 +46,7 @@ import { initializeMcpTools } from './routers/mcp/index';
 import {
   createChatUpgradeHandler,
   createDevLogsUpgradeHandler,
+  createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
 import { appRouter, createContext } from './trpc/index';
@@ -86,6 +87,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const chatUpgradeHandler = createChatUpgradeHandler(context);
   const terminalUpgradeHandler = createTerminalUpgradeHandler(context);
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
+  const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(context);
 
   // ============================================================================
   // WebSocket Heartbeat - Detect zombie connections
@@ -175,7 +177,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         req.path.startsWith('/health') ||
         req.path === '/chat' ||
         req.path === '/terminal' ||
-        req.path === '/dev-logs'
+        req.path === '/dev-logs' ||
+        req.path === '/snapshots'
       ) {
         return next();
       }
@@ -232,6 +235,11 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
     if (url.pathname === '/dev-logs') {
       devLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
+      return;
+    }
+
+    if (url.pathname === '/snapshots') {
+      snapshotsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 
@@ -322,6 +330,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
             trpc: `http://localhost:${actualPort}/api/trpc`,
             wsChat: `ws://localhost:${actualPort}/chat`,
             wsTerminal: `ws://localhost:${actualPort}/terminal`,
+            wsSnapshots: `ws://localhost:${actualPort}/snapshots`,
           });
 
           resolve(`http://localhost:${actualPort}`);
