@@ -66,6 +66,8 @@ function normalizeStatusContextConclusion(state: string): GitHubStatusCheck['con
       return 'CANCELLED';
     case 'SKIPPED':
       return 'SKIPPED';
+    case 'NEUTRAL':
+      return 'NEUTRAL';
     default:
       return null;
   }
