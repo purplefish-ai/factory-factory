@@ -280,12 +280,21 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
       ws.on('close', () => {
         logger.info('Chat WebSocket connection closed', { connectionId, dbSessionId });
-        if (dbSessionId) {
-          sessionFileLogger.log(dbSessionId, 'INFO', { event: 'connection_closed', connectionId });
-          sessionFileLogger.closeSession(dbSessionId);
-        }
 
-        chatConnectionService.unregister(connectionId);
+        // Only unregister if this connection is still the active one for this connectionId
+        // This prevents a race condition where a reconnected client gets unregistered
+        // when the old connection's close event fires
+        const current = chatConnectionService.get(connectionId);
+        if (current?.ws === ws) {
+          if (dbSessionId) {
+            sessionFileLogger.log(dbSessionId, 'INFO', {
+              event: 'connection_closed',
+              connectionId,
+            });
+            sessionFileLogger.closeSession(dbSessionId);
+          }
+          chatConnectionService.unregister(connectionId);
+        }
       });
 
       ws.on('error', (error) => {
