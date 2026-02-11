@@ -340,15 +340,19 @@ export class FileLockService {
     if (!initPromise) {
       // Start initialization
       initPromise = (async () => {
-        const locks = await this.loadFromDisk(context.worktreePath);
-        const newStore: WorkspaceLockStore = {
-          workspaceId: context.workspaceId,
-          worktreePath: context.worktreePath,
-          locks,
-        };
-        this.stores.set(context.workspaceId, newStore);
-        this.initializationPromises.delete(context.workspaceId);
-        return newStore;
+        try {
+          const locks = await this.loadFromDisk(context.worktreePath);
+          const newStore: WorkspaceLockStore = {
+            workspaceId: context.workspaceId,
+            worktreePath: context.worktreePath,
+            locks,
+          };
+          this.stores.set(context.workspaceId, newStore);
+          return newStore;
+        } finally {
+          // Always clean up the promise, even on error, to allow retry
+          this.initializationPromises.delete(context.workspaceId);
+        }
       })();
       this.initializationPromises.set(context.workspaceId, initPromise);
     }

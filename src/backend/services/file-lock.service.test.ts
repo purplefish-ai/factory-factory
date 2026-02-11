@@ -832,11 +832,17 @@ describe('FileLockService', () => {
       }));
 
       // Mock slow disk read to trigger race condition window
+      // Use a promise we control instead of setTimeout to avoid fake timer issues
       let readCallCount = 0;
+      let resolveRead: (() => void) | undefined;
+      const readPromise = new Promise<void>((resolve) => {
+        resolveRead = resolve;
+      });
+
       vi.mocked(fs.readFile).mockImplementation(async () => {
         readCallCount++;
-        // Delay to ensure concurrent calls overlap
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        // Wait for our controlled promise to ensure both calls are in flight
+        await readPromise;
         throw { code: 'ENOENT' }; // Simulate no existing locks
       });
 
@@ -844,8 +850,11 @@ describe('FileLockService', () => {
       const promise1 = service.acquireLock('agent-1', { filePath: 'test.txt' });
       const promise2 = service.acquireLock('agent-2', { filePath: 'test.txt' });
 
-      // Advance timers to allow the delayed reads to complete
-      await vi.advanceTimersByTimeAsync(100);
+      // Give both calls time to reach the readFile call
+      await Promise.resolve();
+
+      // Now resolve the read to let both continue
+      resolveRead?.();
 
       const [result1, result2] = await Promise.all([promise1, promise2]);
 
@@ -884,8 +893,14 @@ describe('FileLockService', () => {
         workspace: { worktreePath },
       });
 
+      // Use controlled promise instead of setTimeout
+      let resolveRead: (() => void) | undefined;
+      const readPromise = new Promise<void>((resolve) => {
+        resolveRead = resolve;
+      });
+
       vi.mocked(fs.readFile).mockImplementation(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await readPromise;
         throw { code: 'ENOENT' };
       });
 
@@ -893,7 +908,8 @@ describe('FileLockService', () => {
       const promise1 = service.acquireLock('agent-1', { filePath: 'file1.txt' });
       const promise2 = service.acquireLock('agent-2', { filePath: 'file2.txt' });
 
-      await vi.advanceTimersByTimeAsync(100);
+      await Promise.resolve();
+      resolveRead?.();
 
       const [result1, result2] = await Promise.all([promise1, promise2]);
 
