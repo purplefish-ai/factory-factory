@@ -8,6 +8,7 @@ import {
 } from '@/backend/domains/session';
 import { workspaceStateMachine } from '@/backend/domains/workspace/lifecycle/state-machine.service';
 import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
+import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
@@ -345,6 +346,9 @@ Update TodoWrite with any additional fix tasks discovered.
    - [ ] Manual testing: [How to verify this change works]
 
    Closes #${issue.number}
+
+   ---
+   ${FACTORY_SIGNATURE}
    \`\`\`
 
 3. **Create the PR:**

@@ -43,11 +43,26 @@ You are fixing a bug. Follow this workflow to ensure the fix is correct and does
 ### 7. Create Pull Request
 - Commit with a descriptive message referencing the bug
 - Push your branch: `git push -u origin HEAD`
-- Create the PR using the GitHub CLI:
+- Create the PR using the GitHub CLI with a body file to preserve formatting:
   ```bash
-  gh pr create --title "Fix: Brief description" --body "Description with reproduction steps and fix explanation"
+  cat > /tmp/pr-body.md << 'EOF'
+  ## Bug Fix
+  [Description of the bug and how it was fixed]
+
+  ## Reproduction Steps
+  1. [Steps to reproduce the original bug]
+
+  ## Fix Explanation
+  [Technical explanation of the fix]
+
+  ## Testing
+  - [How to verify the fix works]
+
+  ---
+  🏭 Forged in [Factory Factory](https://factoryfactory.ai)
+  EOF
+  gh pr create --title "Fix: Brief description" --body-file /tmp/pr-body.md
   ```
-- Include reproduction steps and fix explanation in the PR body
 
 ## Guidelines
 
