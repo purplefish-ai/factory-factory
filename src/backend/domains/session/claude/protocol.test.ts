@@ -1143,35 +1143,46 @@ describe('ClaudeProtocol', () => {
       await expect(rewindPromise).rejects.toThrow('Protocol stopped');
     });
 
-    it('should cleanup pending request when sendInitialize fails immediately', async () => {
-      const stdin2 = new PassThrough();
-      const stdout2 = new PassThrough();
-      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+    it('should cleanup timeout when sendInitialize fails immediately', async () => {
+      vi.useFakeTimers();
+      try {
+        const stdin2 = new PassThrough();
+        const stdout2 = new PassThrough();
+        const protocol2 = new ClaudeProtocol(stdin2, stdout2);
 
-      const initPromise = protocol2.sendInitialize();
+        const initPromise = protocol2.sendInitialize();
 
-      // Should reject with error
-      await expect(initPromise).rejects.toThrow('Protocol stopped');
+        // Should reject with the sendRaw error
+        await expect(initPromise).rejects.toThrow('Protocol stopped');
 
-      // After rejection, the pending request should not remain in the map
-      // (we can't directly access pendingRequests, but we can verify via starting the protocol)
-      protocol2.start();
-      protocol2.stop();
+        // If the timeout was NOT cleaned up, advancing timers would trigger a
+        // second rejection ("timed out") that goes unhandled. Since the catch
+        // handler clears the timeout, advancing has no effect.
+        vi.advanceTimersByTime(120_000);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
-    it('should cleanup pending request when sendRewindFiles fails immediately', async () => {
-      const stdin2 = new PassThrough();
-      const stdout2 = new PassThrough();
-      const protocol2 = new ClaudeProtocol(stdin2, stdout2);
+    it('should cleanup timeout when sendRewindFiles fails immediately', async () => {
+      vi.useFakeTimers();
+      try {
+        const stdin2 = new PassThrough();
+        const stdout2 = new PassThrough();
+        const protocol2 = new ClaudeProtocol(stdin2, stdout2);
 
-      const rewindPromise = protocol2.sendRewindFiles('msg-123');
+        const rewindPromise = protocol2.sendRewindFiles('msg-123');
 
-      // Should reject with error
-      await expect(rewindPromise).rejects.toThrow('Protocol stopped');
+        // Should reject with the sendRaw error
+        await expect(rewindPromise).rejects.toThrow('Protocol stopped');
 
-      // After rejection, the pending request should not remain in the map
-      protocol2.start();
-      protocol2.stop();
+        // If the timeout was NOT cleaned up, advancing timers would trigger a
+        // second rejection ("timed out") that goes unhandled. Since the catch
+        // handler clears the timeout, advancing has no effect.
+        vi.advanceTimersByTime(120_000);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
