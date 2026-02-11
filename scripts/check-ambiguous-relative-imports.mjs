@@ -5,6 +5,7 @@ import ts from 'typescript';
 
 const ROOT_DIR = process.cwd();
 const SRC_DIR = path.join(ROOT_DIR, 'src');
+const VITEST_MOCK_METHODS = new Set(['mock', 'doMock', 'unmock']);
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
 const RESOLVABLE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'];
@@ -51,6 +52,20 @@ function getScriptKind(filePath) {
   return ts.ScriptKind.TS;
 }
 
+function isVitestModuleMockCall(node) {
+  if (!ts.isCallExpression(node) || node.arguments.length === 0) {
+    return false;
+  }
+
+  if (!ts.isPropertyAccessExpression(node.expression)) {
+    return false;
+  }
+
+  const expression = node.expression.expression;
+  const methodName = node.expression.name.text;
+  return ts.isIdentifier(expression) && expression.text === 'vi' && VITEST_MOCK_METHODS.has(methodName);
+}
+
 function findImportViolations(filePath) {
   const source = readFileSync(filePath, 'utf8');
   const sourceFile = ts.createSourceFile(
@@ -80,6 +95,8 @@ function findImportViolations(filePath) {
       addSpecifier(node.moduleSpecifier);
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
       addSpecifier(node.moduleSpecifier);
+    } else if (isVitestModuleMockCall(node)) {
+      addSpecifier(node.arguments[0]);
     } else if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&

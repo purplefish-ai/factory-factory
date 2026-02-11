@@ -37,7 +37,7 @@ const mockTx = vi.hoisted(() => ({
 }));
 
 // vi.mock is hoisted above imports, so static imports below will receive the mocked module
-vi.mock('../db', () => ({
+vi.mock('@/backend/db', () => ({
   prisma: {
     project: {
       findMany: vi.fn(),

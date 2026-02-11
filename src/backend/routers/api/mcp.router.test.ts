@@ -6,7 +6,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 // Mock dependencies before importing the router
 const mockExecuteMcpTool = vi.fn();
 
-vi.mock('../mcp/index', () => ({
+vi.mock('@/backend/routers/mcp/index', () => ({
   executeMcpTool: (...args: unknown[]) => mockExecuteMcpTool(...args),
 }));
 

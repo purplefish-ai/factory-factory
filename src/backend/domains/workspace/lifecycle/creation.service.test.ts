@@ -20,7 +20,7 @@ vi.mock('@/backend/resource_accessors/project.accessor');
 vi.mock('@/backend/resource_accessors/user-settings.accessor');
 vi.mock('@/backend/resource_accessors/claude-session.accessor');
 vi.mock('@/backend/services/git-ops.service');
-vi.mock('../worktree/worktree-lifecycle.service');
+vi.mock('@/backend/domains/workspace/worktree/worktree-lifecycle.service');
 vi.mock('@/backend/orchestration', () => ({
   initializeWorkspaceWorktree: vi.fn().mockResolvedValue(undefined),
 }));

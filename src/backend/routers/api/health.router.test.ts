@@ -10,7 +10,7 @@ const mockGetEnvironment = vi.fn();
 const mockGetAppVersion = vi.fn();
 const mockGetApiUsageStats = vi.fn();
 
-vi.mock('../../resource_accessors/health.accessor', () => ({
+vi.mock('@/backend/resource_accessors/health.accessor', () => ({
   healthAccessor: {
     checkDatabaseConnection: () => mockQueryRaw(),
   },

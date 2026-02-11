@@ -7,7 +7,7 @@ const mockFindPRForBranch = vi.fn();
 const mockRefreshWorkspace = vi.fn();
 const mockAttachAndRefreshPR = vi.fn();
 
-vi.mock('../resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findNeedingPRSync: () => mockFindNeedingPRSync(),
     findNeedingPRDiscovery: () => mockFindNeedingPRDiscovery(),
