@@ -1,4 +1,4 @@
-import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
+import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import { z } from 'zod';
 import { ratchetService } from '@/backend/domains/ratchet';
 import { sessionService } from '@/backend/domains/session';
@@ -129,27 +129,6 @@ export const workspaceRouter = router({
     return workspace;
   }),
 
-  // Update a workspace
-  // Note: status changes should go through dedicated endpoints (archive, retryInit, etc.)
-  // to ensure state machine validation
-  update: publicProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        name: z.string().min(1).optional(),
-        description: z.string().optional(),
-        worktreePath: z.string().optional(),
-        branchName: z.string().optional(),
-        prUrl: z.string().optional(),
-        githubIssueNumber: z.number().optional(),
-        githubIssueUrl: z.string().optional(),
-      })
-    )
-    .mutation(({ input }) => {
-      const { id, ...updates } = input;
-      return workspaceDataService.update(id, updates);
-    }),
-
   // Toggle workspace-level ratcheting
   toggleRatcheting: publicProcedure
     .input(
@@ -159,21 +138,13 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const updatedWorkspace = await workspaceDataService.update(
-        input.workspaceId,
-        input.enabled
-          ? {
-              ratchetEnabled: true,
-            }
-          : {
-              ratchetEnabled: false,
-              ratchetState: RatchetState.IDLE,
-              ratchetActiveSessionId: null,
-              ratchetLastCiRunId: null,
-            }
-      );
+      await ratchetService.setWorkspaceRatcheting(input.workspaceId, input.enabled);
       if (input.enabled) {
         await ratchetService.checkWorkspaceById(input.workspaceId);
+      }
+      const updatedWorkspace = await workspaceDataService.findById(input.workspaceId);
+      if (!updatedWorkspace) {
+        throw new Error(`Workspace not found: ${input.workspaceId}`);
       }
       return updatedWorkspace;
     }),

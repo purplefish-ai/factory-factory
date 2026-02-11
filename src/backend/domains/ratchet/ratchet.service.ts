@@ -257,6 +257,44 @@ class RatchetService extends EventEmitter {
     return this.processWorkspace(workspace);
   }
 
+  /**
+   * Enable or disable ratcheting for a workspace.
+   * Ratchet domain owns ratchet state fields, so toggles flow through this service.
+   */
+  async setWorkspaceRatcheting(workspaceId: string, enabled: boolean): Promise<void> {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    if (enabled) {
+      await workspaceAccessor.update(workspaceId, {
+        ratchetEnabled: true,
+      });
+      return;
+    }
+
+    const activeSessionId = workspace.ratchetActiveSessionId;
+    if (activeSessionId && this.session.isSessionRunning(activeSessionId)) {
+      try {
+        await this.session.stopClaudeSession(activeSessionId);
+      } catch (error) {
+        logger.warn('Failed to stop active ratchet session while disabling ratchet', {
+          workspaceId,
+          sessionId: activeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    await workspaceAccessor.update(workspaceId, {
+      ratchetEnabled: false,
+      ratchetState: RatchetState.IDLE,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
+    });
+  }
+
   private async processWorkspace(workspace: WorkspaceWithPR): Promise<WorkspaceRatchetResult> {
     if (this.isShuttingDown) {
       return {
@@ -757,7 +795,6 @@ class RatchetService extends EventEmitter {
       ...(dispatched
         ? {
             ratchetLastCiRunId: prStateInfo.snapshotKey,
-            prReviewLastCheckedAt: now,
           }
         : {}),
     });

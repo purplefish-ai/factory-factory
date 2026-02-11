@@ -69,7 +69,20 @@ export function configureDomainBridges(): void {
   ratchetService.configure({ session: ratchetSessionBridge, github: ratchetGithubBridge });
   fixerSessionService.configure({ session: ratchetSessionBridge });
   ciFixerService.configure({ session: ratchetSessionBridge });
-  ciMonitorService.configure({ session: ratchetSessionBridge, github: ratchetGithubBridge });
+  ciMonitorService.configure({
+    session: ratchetSessionBridge,
+    github: ratchetGithubBridge,
+    snapshot: {
+      recordCIObservation: ({ workspaceId, ciStatus, failedAt, observedAt }) =>
+        prSnapshotService.recordCIObservation(workspaceId, {
+          ciStatus,
+          failedAt,
+          observedAt,
+        }),
+      recordCINotification: (workspaceId, notifiedAt) =>
+        prSnapshotService.recordCINotification(workspaceId, notifiedAt),
+    },
+  });
   reconciliationService.configure({
     workspace: {
       markFailed: async (id, reason) => {

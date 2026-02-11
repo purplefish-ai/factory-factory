@@ -196,8 +196,6 @@ export const sessionRouter = router({
       z.object({
         id: z.string(),
         name: z.string().optional(),
-        status: z.nativeEnum(SessionStatus).optional(),
-        pid: z.number().optional(),
       })
     )
     .mutation(({ input }) => {

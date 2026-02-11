@@ -234,7 +234,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       unknown
     >;
     expect(finalUpdatePayload.ratchetLastCiRunId).toBe('2026-01-02T00:00:00Z');
-    expect(finalUpdatePayload).toHaveProperty('prReviewLastCheckedAt');
+    expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
   });
 
   it('does dispatch when session is running but idle', async () => {

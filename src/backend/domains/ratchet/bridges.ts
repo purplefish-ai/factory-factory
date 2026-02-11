@@ -59,6 +59,17 @@ export interface RatchetPRStateSnapshot {
   prCiStatus: CIStatus;
 }
 
+/** PR snapshot capabilities needed by ratchet domain services */
+export interface RatchetPRSnapshotBridge {
+  recordCIObservation(input: {
+    workspaceId: string;
+    ciStatus: CIStatus;
+    failedAt?: Date | null;
+    observedAt?: Date;
+  }): Promise<void>;
+  recordCINotification(workspaceId: string, notifiedAt?: Date): Promise<void>;
+}
+
 // --- Workspace bridge ---
 
 /** Workspace capabilities needed by ratchet domain */
