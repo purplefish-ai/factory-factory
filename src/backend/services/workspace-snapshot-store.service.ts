@@ -390,11 +390,10 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       ratchetState: entry.ratchetState,
     });
 
-    const hasWorkingSession = entry.sessionSummaries.some(
-      (summary) => summary.activity === 'WORKING' || summary.runtimePhase === 'running'
-    );
-    // Effective isWorking: session activity OR flow-state working
-    const effectiveIsWorking = entry.isWorking || hasWorkingSession || flowState.isWorking;
+    // Effective isWorking comes from authoritative session-domain state plus
+    // flow-state working. sessionSummaries can be temporarily stale when
+    // activity and summary updates are split across events.
+    const effectiveIsWorking = entry.isWorking || flowState.isWorking;
 
     entry.flowPhase = flowState.phase;
     entry.ciObservation = flowState.ciObservation;

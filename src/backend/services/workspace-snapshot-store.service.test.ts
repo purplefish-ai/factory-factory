@@ -424,6 +424,39 @@ describe('WorkspaceSnapshotStore', () => {
       // sidebarStatus should reflect effective isWorking=true
       expect(entry!.sidebarStatus.activityState).toBe('WORKING');
     });
+
+    it('authoritative isWorking=false is not overridden by stale session summaries', () => {
+      store.upsert(
+        'ws-1',
+        makeUpdate({
+          isWorking: true,
+          sessionSummaries: [
+            {
+              sessionId: 's-1',
+              name: 'Chat 1',
+              workflow: 'followup',
+              model: 'claude-sonnet',
+              persistedStatus: 'RUNNING',
+              runtimePhase: 'running',
+              processState: 'alive',
+              activity: 'WORKING',
+              updatedAt: '2026-01-01T00:00:00Z',
+              lastExit: null,
+            },
+          ],
+        }),
+        'test',
+        100
+      );
+
+      // Simulate workspace_idle arriving before refreshed session summaries.
+      store.upsert('ws-1', { isWorking: false }, 'test', 200);
+
+      const entry = store.getByWorkspaceId('ws-1');
+      expect(entry!.isWorking).toBe(false);
+      expect(entry!.sidebarStatus.activityState).toBe('IDLE');
+      expect(entry!.kanbanColumn).toBe('WAITING');
+    });
   });
 
   // -------------------------------------------------------------------------
