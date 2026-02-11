@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 SRP Consolidation** -- Phases 1-10 (shipped 2026-02-10) -- [Archive](milestones/v1.0-ROADMAP.md)
-- 🚧 **v1.1 Project Snapshot Service** -- Phases 11-18 (in progress)
+- ✅ **v1.1 Project Snapshot Service** -- Phases 11-18 (shipped 2026-02-11)
 
 ## Phases
 
@@ -14,7 +14,7 @@ See [v1.0 Roadmap Archive](milestones/v1.0-ROADMAP.md) for full phase details.
 
 </details>
 
-### v1.1 Project Snapshot Service (In Progress)
+### v1.1 Project Snapshot Service (SHIPPED 2026-02-11)
 
 **Milestone Goal:** Replace multiple independent polling loops with a single in-memory materialized view of all workspace states, pushed to clients via WebSocket.
 
@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project ✓ 2026-02-11
 - [x] **Phase 16: Client Integration - Sidebar** -- Sidebar reads from WebSocket-driven snapshot with React Query cache integration ✓ 2026-02-11
 - [x] **Phase 17: Client Integration - Kanban and Workspace List** -- Remaining consumers migrate to snapshot with polling fallback ✓ 2026-02-11
-- [ ] **Phase 18: Architecture Validation** -- Dependency-cruiser passes, full test suite green, no regressions
+- [x] **Phase 18: Architecture Validation** -- Dependency-cruiser passes, full test suite green, no regressions ✓ 2026-02-11
 
 ## Phase Details
 
@@ -148,7 +148,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 18-01-PLAN.md -- Fix imports, full CI validation, milestone documentation
+- [x] 18-01-PLAN.md -- Fix imports, full CI validation, milestone documentation
 
 ## Progress
 
@@ -165,8 +165,8 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 15. WebSocket Transport | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 16. Client Integration - Sidebar | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 17. Client Integration - Kanban and Workspace List | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
-| 18. Architecture Validation | v1.1 | 0/1 | Not started | - |
+| 18. Architecture Validation | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 18 planned (1 plan, ARCH-03/ARCH-04)*
+*Last updated: 2026-02-11 -- Phase 18 complete, v1.1 milestone shipped*
