@@ -51,11 +51,13 @@ You are implementing a new feature. Follow this workflow to deliver high-quality
 
   ## Testing
   - [How to test the changes]
-
-  ---
-  🏭 Forged in [Factory Factory](https://factoryfactory.ai)
   EOF
   gh pr create --title "Your PR title" --body-file /tmp/pr-body.md
+  ```
+- **IMPORTANT**: Always append the following signature as the very last lines of the PR body, after a horizontal rule:
+  ```
+  ---
+  🏭 Forged in [Factory Factory](https://factoryfactory.ai)
   ```
 
 ## Guidelines

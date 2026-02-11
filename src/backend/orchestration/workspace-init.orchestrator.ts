@@ -346,12 +346,15 @@ Update TodoWrite with any additional fix tasks discovered.
    - [ ] Manual testing: [How to verify this change works]
 
    Closes #${issue.number}
+   \`\`\`
 
+3. **IMPORTANT**: Always append the following signature as the very last lines of the PR body, after a horizontal rule:
+   \`\`\`
    ---
    ${FACTORY_SIGNATURE}
    \`\`\`
 
-3. **Create the PR:**
+4. **Create the PR:**
    \`\`\`bash
    gh pr create --title "Fix #${issue.number}: [concise description]" --body-file /tmp/pr-body.md
    \`\`\`
