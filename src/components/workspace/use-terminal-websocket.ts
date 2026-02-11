@@ -106,6 +106,7 @@ export function useTerminalWebSocket({
   const { connected, send } = useWebSocketTransport({
     url,
     onMessage: handleMessage,
+    queuePolicy: 'drop',
   });
 
   const create = useCallback(

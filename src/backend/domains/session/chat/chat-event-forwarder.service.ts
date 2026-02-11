@@ -322,74 +322,168 @@ class ChatEventForwarderService {
       this.forwardClaudeMessage(dbSessionId, event as ClaudeMessage);
     });
 
-    // SDK message types - forwarded as dedicated event types
-    on('tool_progress', (event) => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Received tool_progress event', { dbSessionId });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
-        eventType: 'tool_progress',
-        data: event,
-      });
-      sessionDomainService.emitDelta(dbSessionId, event);
-    });
+    const registerLoggedDeltaEvent = (
+      eventName: string,
+      options: {
+        debugMessage?: string;
+        debugData?: (event: unknown) => Record<string, unknown>;
+        mapDelta?: (event: unknown) => unknown;
+      } = {}
+    ): void => {
+      on(eventName, (event) => {
+        if (DEBUG_CHAT_WS) {
+          logger.info(options.debugMessage ?? `[Chat WS] Received ${eventName} event`, {
+            dbSessionId,
+            ...(options.debugData?.(event) ?? {}),
+          });
+        }
 
-    on('tool_use_summary', (event) => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Received tool_use_summary event', { dbSessionId });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
-        eventType: 'tool_use_summary',
-        data: event,
-      });
-      sessionDomainService.emitDelta(dbSessionId, event);
-    });
-
-    // System subtype event handlers
-    on('system_init', (event) => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Received system_init event', {
-          dbSessionId,
-          tools: event.tools?.length ?? 0,
-          model: event.model,
+        sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
+          eventType: eventName,
+          data: event,
         });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
-        eventType: 'system_init',
-        data: event,
+
+        sessionDomainService.emitDelta(dbSessionId, options.mapDelta?.(event) ?? event);
       });
-      const msg = {
-        type: 'system_init',
-        data: {
-          tools: event.tools,
-          model: event.model,
-          cwd: event.cwd,
-          apiKeySource: event.apiKeySource,
-          slashCommands: event.slash_commands,
-          plugins: event.plugins,
+    };
+
+    const mappedDeltaEvents: Array<{
+      eventName: string;
+      debugMessage: string;
+      debugData?: (event: unknown) => Record<string, unknown>;
+      mapDelta?: (event: unknown) => unknown;
+    }> = [
+      {
+        eventName: 'tool_progress',
+        debugMessage: '[Chat WS] Received tool_progress event',
+      },
+      {
+        eventName: 'tool_use_summary',
+        debugMessage: '[Chat WS] Received tool_use_summary event',
+      },
+      {
+        eventName: 'system_init',
+        debugMessage: '[Chat WS] Received system_init event',
+        debugData: (rawEvent) => {
+          const event = rawEvent as { tools?: unknown[]; model?: string };
+          return {
+            tools: event.tools?.length ?? 0,
+            model: event.model,
+          };
         },
-      } as const;
-      sessionDomainService.emitDelta(dbSessionId, msg);
-    });
+        mapDelta: (rawEvent) => {
+          const event = rawEvent as {
+            tools?: unknown[];
+            model?: string;
+            cwd?: string;
+            apiKeySource?: string;
+            slash_commands?: unknown[];
+            plugins?: unknown[];
+          };
+          return {
+            type: 'system_init',
+            data: {
+              tools: event.tools,
+              model: event.model,
+              cwd: event.cwd,
+              apiKeySource: event.apiKeySource,
+              slashCommands: event.slash_commands,
+              plugins: event.plugins,
+            },
+          } as const;
+        },
+      },
+      {
+        eventName: 'system_status',
+        debugMessage: '[Chat WS] Received system_status event',
+        debugData: (rawEvent) => {
+          const event = rawEvent as { status?: string; permission_mode?: string };
+          return {
+            status: event.status,
+            permission_mode: event.permission_mode,
+          };
+        },
+        mapDelta: (rawEvent) => {
+          const event = rawEvent as { permission_mode?: string };
+          return {
+            type: 'status_update',
+            permissionMode: event.permission_mode,
+          } as const;
+        },
+      },
+      {
+        eventName: 'hook_started',
+        debugMessage: '[Chat WS] Received hook_started event',
+        debugData: (rawEvent) => {
+          const event = rawEvent as {
+            hook_id?: string;
+            hook_name?: string;
+            hook_event?: string;
+          };
+          return {
+            hookId: event.hook_id,
+            hookName: event.hook_name,
+            hookEvent: event.hook_event,
+          };
+        },
+        mapDelta: (rawEvent) => {
+          const event = rawEvent as {
+            hook_id?: string;
+            hook_name?: string;
+            hook_event?: string;
+          };
+          return {
+            type: 'hook_started',
+            data: {
+              hookId: event.hook_id,
+              hookName: event.hook_name,
+              hookEvent: event.hook_event,
+            },
+          } as const;
+        },
+      },
+      {
+        eventName: 'hook_response',
+        debugMessage: '[Chat WS] Received hook_response event',
+        debugData: (rawEvent) => {
+          const event = rawEvent as { hook_id?: string; exit_code?: number; outcome?: string };
+          return {
+            hookId: event.hook_id,
+            exitCode: event.exit_code,
+            outcome: event.outcome,
+          };
+        },
+        mapDelta: (rawEvent) => {
+          const event = rawEvent as {
+            hook_id?: string;
+            output?: string;
+            stdout?: string;
+            stderr?: string;
+            exit_code?: number;
+            outcome?: string;
+          };
+          return {
+            type: 'hook_response',
+            data: {
+              hookId: event.hook_id,
+              output: event.output,
+              stdout: event.stdout,
+              stderr: event.stderr,
+              exitCode: event.exit_code,
+              outcome: event.outcome,
+            },
+          } as const;
+        },
+      },
+    ];
 
-    on('system_status', (event) => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Received system_status event', {
-          dbSessionId,
-          status: event.status,
-          permission_mode: event.permission_mode,
-        });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
-        eventType: 'system_status',
-        data: event,
+    for (const eventConfig of mappedDeltaEvents) {
+      registerLoggedDeltaEvent(eventConfig.eventName, {
+        debugMessage: eventConfig.debugMessage,
+        debugData: eventConfig.debugData,
+        mapDelta: eventConfig.mapDelta,
       });
-      const msg = {
-        type: 'status_update',
-        permissionMode: event.permission_mode,
-      } as const;
-      sessionDomainService.emitDelta(dbSessionId, msg);
-    });
+    }
 
     on('compact_boundary', (event) => {
       if (DEBUG_CHAT_WS) {
@@ -409,75 +503,20 @@ class ChatEventForwarderService {
       sessionDomainService.emitDelta(dbSessionId, boundaryMsg);
     });
 
-    on('hook_started', (event) => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Received hook_started event', {
-          dbSessionId,
-          hookId: event.hook_id,
-          hookName: event.hook_name,
-          hookEvent: event.hook_event,
-        });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
-        eventType: 'hook_started',
-        data: event,
+    for (const compactEventName of ['compacting_start', 'compacting_end'] as const) {
+      on(compactEventName, () => {
+        if (DEBUG_CHAT_WS) {
+          logger.info(
+            compactEventName === 'compacting_start'
+              ? '[Chat WS] Context compaction started'
+              : '[Chat WS] Context compaction ended',
+            { dbSessionId }
+          );
+        }
+        sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: compactEventName });
+        sessionDomainService.emitDelta(dbSessionId, { type: compactEventName } as const);
       });
-      const msg = {
-        type: 'hook_started',
-        data: {
-          hookId: event.hook_id,
-          hookName: event.hook_name,
-          hookEvent: event.hook_event,
-        },
-      } as const;
-      sessionDomainService.emitDelta(dbSessionId, msg);
-    });
-
-    on('hook_response', (event) => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Received hook_response event', {
-          dbSessionId,
-          hookId: event.hook_id,
-          exitCode: event.exit_code,
-          outcome: event.outcome,
-        });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', {
-        eventType: 'hook_response',
-        data: event,
-      });
-      const msg = {
-        type: 'hook_response',
-        data: {
-          hookId: event.hook_id,
-          output: event.output,
-          stdout: event.stdout,
-          stderr: event.stderr,
-          exitCode: event.exit_code,
-          outcome: event.outcome,
-        },
-      } as const;
-      sessionDomainService.emitDelta(dbSessionId, msg);
-    });
-
-    // Context compaction events
-    on('compacting_start', () => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Context compaction started', { dbSessionId });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_start' });
-      const event = { type: 'compacting_start' } as const;
-      sessionDomainService.emitDelta(dbSessionId, event);
-    });
-
-    on('compacting_end', () => {
-      if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Context compaction ended', { dbSessionId });
-      }
-      sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'compacting_end' });
-      const event = { type: 'compacting_end' } as const;
-      sessionDomainService.emitDelta(dbSessionId, event);
-    });
+    }
 
     on('message', (msg) => {
       sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', { eventType: 'message', data: msg });

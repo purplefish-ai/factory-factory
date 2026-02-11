@@ -16,16 +16,13 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
+import { WS_READY_STATE } from '@/backend/constants';
 import type { ClaudeClient, ConnectionInfo } from '@/backend/domains/session';
 import { sessionDataService } from '@/backend/domains/session';
 import { type AppContext, createAppContext } from '../../app-context';
 import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
 import { toMessageString } from './message-utils';
-
-function sendBadRequest(socket: Duplex, message: string): void {
-  socket.write(`HTTP/1.1 400 Bad Request\r\n\r\n${message}`);
-  socket.destroy();
-}
+import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
 // Chat Upgrade Handler Factory
@@ -182,7 +179,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     if (dbSessionId) {
       sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
     }
-    ws.send(JSON.stringify(errorResponse));
+    if (ws.readyState === WS_READY_STATE.OPEN) {
+      ws.send(JSON.stringify(errorResponse));
+    }
   }
 
   // ==========================================================================
@@ -218,8 +217,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       // Set up workspace notification forwarding (idempotent)
       chatEventForwarderService.setupWorkspaceNotifications();
 
-      wsAliveMap.set(ws, true);
-      ws.on('pong', () => wsAliveMap.set(ws, true));
+      markWebSocketAlive(ws, wsAliveMap);
 
       // Only initialize file logging if we have a session
       if (dbSessionId) {

@@ -7,7 +7,9 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
+import { WS_READY_STATE } from '@/backend/constants';
 import { type AppContext, createAppContext } from '../../app-context';
+import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
 // Types
@@ -46,21 +48,16 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
 
     if (!workspaceId) {
       logger.warn('Dev logs WebSocket missing workspaceId');
-      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-      socket.destroy();
+      sendBadRequest(socket);
       return;
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
       logger.info('Dev logs WebSocket connection established', { workspaceId });
 
-      wsAliveMap.set(ws, true);
-      ws.on('pong', () => wsAliveMap.set(ws, true));
+      markWebSocketAlive(ws, wsAliveMap);
 
-      if (!devLogsConnections.has(workspaceId)) {
-        devLogsConnections.set(workspaceId, new Set());
-      }
-      devLogsConnections.get(workspaceId)?.add(ws);
+      getOrCreateConnectionSet(devLogsConnections, workspaceId).add(ws);
 
       logger.debug('Dev logs WebSocket connected', { workspaceId });
 
@@ -78,7 +75,7 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
 
       // Subscribe to new output
       const unsubscribe = runScriptService.subscribeToOutput(workspaceId, (data) => {
-        if (ws.readyState === 1) {
+        if (ws.readyState === WS_READY_STATE.OPEN) {
           ws.send(JSON.stringify({ type: 'output', data }));
         }
       });
