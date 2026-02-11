@@ -444,6 +444,23 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
   }
 }
 
+async function retryQueuedDispatchAfterWorkspaceReady(workspaceId: string): Promise<void> {
+  try {
+    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, { limit: 1 });
+    const session = sessions[0];
+    if (!session) {
+      return;
+    }
+
+    await chatMessageHandlerService.tryDispatchNextMessage(session.id);
+  } catch (error) {
+    logger.warn('Failed to retry queued dispatch after workspace became ready', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /**
  * Initialize a workspace worktree: creates the git worktree, runs setup/startup
  * scripts, and starts the default Claude session.
@@ -515,6 +532,9 @@ export async function initializeWorkspaceWorktree(
     );
     if (factorySetupResult.ran) {
       await claudeSessionPromise;
+      if (factorySetupResult.success) {
+        await retryQueuedDispatchAfterWorkspaceReady(workspaceId);
+      }
       return;
     }
 
@@ -525,12 +545,16 @@ export async function initializeWorkspaceWorktree(
     );
     if (projectSetupResult.ran) {
       await claudeSessionPromise;
+      if (projectSetupResult.success) {
+        await retryQueuedDispatchAfterWorkspaceReady(workspaceId);
+      }
       return;
     }
 
     // No setup scripts ran, mark ready
     await workspaceStateMachine.markReady(workspaceId);
     await claudeSessionPromise;
+    await retryQueuedDispatchAfterWorkspaceReady(workspaceId);
   } catch (error) {
     await handleWorkspaceInitFailure(workspaceId, error as Error);
   } finally {

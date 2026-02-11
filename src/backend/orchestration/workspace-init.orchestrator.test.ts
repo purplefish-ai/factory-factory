@@ -584,6 +584,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 
@@ -863,6 +864,44 @@ describe('initializeWorkspaceWorktree', () => {
         expect.anything(),
         expect.objectContaining({ startupScriptCommand: './factory-setup.sh' })
       );
+    });
+  });
+
+  describe('dispatch retry when workspace becomes ready', () => {
+    it('retries queue dispatch after successful factory setup', async () => {
+      setupHappyPath();
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
+        success: true,
+      } as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    });
+
+    it('does not retry ready dispatch when factory setup fails', async () => {
+      setupHappyPath();
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
+        success: false,
+      } as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(1);
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
   });
 });
