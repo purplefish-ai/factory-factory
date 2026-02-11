@@ -686,6 +686,7 @@ export class FileLockService {
    */
   clearStores(): void {
     this.stores.clear();
+    this.initializationPromises.clear();
   }
 }
 
