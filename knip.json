@@ -3,7 +3,9 @@
   "entry": [
     "src/client/main.tsx",
     "src/backend/server.ts",
+    "src/backend/index.ts",
     "src/backend/migrate.ts",
+    "src/cli/index.ts",
     "electron/main/index.ts",
     "electron/preload/index.ts"
   ],

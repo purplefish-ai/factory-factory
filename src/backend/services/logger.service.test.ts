@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from './logger.service';
 
+// Helper type for testing circular references - allows dynamic property assignment
+type CircularTestObject = Record<string, unknown>;
+
 describe('LoggerService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -9,8 +12,7 @@ describe('LoggerService', () => {
   describe('circular reference handling', () => {
     it('should not crash when logging a simple circular reference', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const circular: any = { foo: 'bar' };
+      const circular: CircularTestObject = { foo: 'bar' };
       circular.self = circular;
 
       expect(() => {
@@ -20,9 +22,9 @@ describe('LoggerService', () => {
 
     it('should not crash when logging nested circular references', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const obj: any = { a: { b: { c: {} } } };
-      obj.a.b.c.circular = obj;
+      const obj: CircularTestObject = { a: { b: { c: {} } } };
+      (((obj.a as CircularTestObject).b as CircularTestObject).c as CircularTestObject).circular =
+        obj;
 
       expect(() => {
         logger.warn('Test nested circular', obj);
@@ -31,8 +33,7 @@ describe('LoggerService', () => {
 
     it('should not crash when logging an error with circular references', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const circular: any = { message: 'error context' };
+      const circular: CircularTestObject = { message: 'error context' };
       circular.self = circular;
 
       expect(() => {
@@ -42,8 +43,7 @@ describe('LoggerService', () => {
 
     it('should not crash when logging arrays with circular references', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const arr: any[] = [1, 2, 3];
+      const arr: unknown[] = [1, 2, 3];
       arr.push(arr);
 
       expect(() => {
@@ -53,10 +53,8 @@ describe('LoggerService', () => {
 
     it('should not crash when logging cross-referenced objects', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const obj1: any = { name: 'obj1' };
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const obj2: any = { name: 'obj2' };
+      const obj1: CircularTestObject = { name: 'obj1' };
+      const obj2: CircularTestObject = { name: 'obj2' };
       obj1.ref = obj2;
       obj2.ref = obj1;
 
@@ -94,8 +92,7 @@ describe('LoggerService', () => {
   describe('agentEvent', () => {
     it('should not crash with circular references in context', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const circular: any = { data: 'test' };
+      const circular: CircularTestObject = { data: 'test' };
       circular.self = circular;
 
       expect(() => {
@@ -107,8 +104,7 @@ describe('LoggerService', () => {
   describe('taskEvent', () => {
     it('should not crash with circular references in context', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const circular: any = { data: 'test' };
+      const circular: CircularTestObject = { data: 'test' };
       circular.self = circular;
 
       expect(() => {
@@ -120,8 +116,7 @@ describe('LoggerService', () => {
   describe('apiCall', () => {
     it('should not crash with circular references in context', () => {
       const logger = createLogger('test');
-      // biome-ignore lint/suspicious/noExplicitAny: circular references require dynamic assignment
-      const circular: any = { request: 'data' };
+      const circular: CircularTestObject = { request: 'data' };
       circular.self = circular;
 
       expect(() => {
