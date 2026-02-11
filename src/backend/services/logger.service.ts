@@ -50,6 +50,22 @@ function getLogLevelPriority(level: LogLevel): number {
 }
 
 /**
+ * Safely stringify an object, handling circular references.
+ * Returns a string representation or a placeholder if circular structures are detected.
+ */
+function safeStringify(obj: unknown): string {
+  try {
+    return JSON.stringify(obj);
+  } catch (err) {
+    if (err instanceof TypeError && err.message.includes('circular')) {
+      return '[Circular Structure]';
+    }
+    // For other errors, attempt a basic string conversion
+    return String(obj);
+  }
+}
+
+/**
  * Log file support.
  * Logs are always written to a file. In production, the file is the primary
  * output (only errors also go to stderr). In development, logs go to both
@@ -183,7 +199,7 @@ class Logger {
   private writeToLogFile(entry: LogEntry): void {
     const stream = getLogFileStream();
     if (stream) {
-      stream.write(`${JSON.stringify(entry)}\n`);
+      stream.write(`${safeStringify(entry)}\n`);
     }
   }
 
@@ -196,7 +212,7 @@ class Logger {
 
     // In production, only surface errors in the terminal
     if (entry.level === 'error') {
-      console.error(JSON.stringify(entry));
+      console.error(safeStringify(entry));
     }
   }
 
@@ -226,7 +242,7 @@ class Logger {
       // More than just service and component - extract additional context
       const { service: _service, component: _component, ...rest } = entry.context;
       if (Object.keys(rest).length > 0) {
-        output += ` ${JSON.stringify(rest)}`;
+        output += ` ${safeStringify(rest)}`;
       }
     }
 
