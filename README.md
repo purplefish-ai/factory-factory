@@ -252,7 +252,7 @@ Real-time visual project management with automatic column placement.
   - **Waiting:** Idle workspaces that have completed at least one session
   - **Done:** Workspaces with merged PRs
 - **Live updates:** Real-time workspace status and PR state changes
-- **Mobile responsive:** Full touch support for drag-and-drop on mobile devices
+- **Mobile responsive:** Optimized layout for mobile devices
 
 ### ⚡ Quick Actions
 
@@ -316,7 +316,7 @@ claude --version        # Verify installation
 ff db:migrate
 
 # Reset database (⚠️ destroys all data)
-pnpm exec prisma migrate reset
+ff db:reset
 
 # View database in Prisma Studio
 ff db:studio
