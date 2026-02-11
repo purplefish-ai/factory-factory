@@ -239,6 +239,7 @@ export function configureEventCollector(): void {
     coalescer.enqueue(
       event.workspaceId,
       {
+        prUrl: event.prUrl,
         prNumber: event.prNumber,
         prState: event.prState as PRState,
         prCiStatus: event.prCiStatus as CIStatus,

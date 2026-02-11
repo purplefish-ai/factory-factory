@@ -33,6 +33,7 @@ export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
 
 export interface PRSnapshotUpdatedEvent {
   workspaceId: string;
+  prUrl: string | null;
   prNumber: number;
   prState: string;
   prCiStatus: string;
@@ -225,8 +226,13 @@ class PRSnapshotService extends EventEmitter {
 
     await this.kanban.updateCachedKanbanColumn(workspaceId);
 
+    // Fetch workspace to get the current prUrl value (either the one we just set or existing)
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    const currentPrUrl = workspace?.prUrl ?? null;
+
     this.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId,
+      prUrl: currentPrUrl,
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prCiStatus: snapshot.prCiStatus,

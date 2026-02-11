@@ -259,6 +259,8 @@ describe('PRSnapshotService', () => {
     });
 
     it('emits pr_snapshot_updated after successful applySnapshot', async () => {
+      mockFindById.mockResolvedValue({ id: 'ws-1', prUrl: 'https://github.com/org/repo/pull/42' });
+
       const events: PRSnapshotUpdatedEvent[] = [];
       prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
         events.push(event);
@@ -274,6 +276,7 @@ describe('PRSnapshotService', () => {
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({
         workspaceId: 'ws-1',
+        prUrl: 'https://github.com/org/repo/pull/42',
         prNumber: 42,
         prState: 'OPEN',
         prCiStatus: 'SUCCESS',
@@ -282,10 +285,15 @@ describe('PRSnapshotService', () => {
     });
 
     it('emits pr_snapshot_updated on refreshWorkspace when snapshot succeeds', async () => {
-      mockFindById.mockResolvedValue({
-        id: 'ws-2',
-        prUrl: 'https://github.com/org/repo/pull/10',
-      });
+      mockFindById
+        .mockResolvedValueOnce({
+          id: 'ws-2',
+          prUrl: 'https://github.com/org/repo/pull/10',
+        })
+        .mockResolvedValueOnce({
+          id: 'ws-2',
+          prUrl: 'https://github.com/org/repo/pull/10',
+        });
       mockFetchAndComputePRState.mockResolvedValue({
         prNumber: 10,
         prState: 'OPEN',
@@ -312,6 +320,7 @@ describe('PRSnapshotService', () => {
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({
         workspaceId: 'ws-2',
+        prUrl: 'https://github.com/org/repo/pull/10',
         prNumber: 10,
         prState: 'OPEN',
         prCiStatus: 'FAILURE',
@@ -347,7 +356,9 @@ describe('PRSnapshotService', () => {
     });
 
     it('emits event on attachAndRefreshPR', async () => {
-      mockFindById.mockResolvedValue({ id: 'ws-attach', prUrl: null });
+      mockFindById
+        .mockResolvedValueOnce({ id: 'ws-attach', prUrl: null })
+        .mockResolvedValueOnce({ id: 'ws-attach', prUrl: 'https://github.com/org/repo/pull/77' });
       mockFetchAndComputePRState.mockResolvedValue({
         prNumber: 77,
         prState: 'OPEN',
@@ -377,6 +388,7 @@ describe('PRSnapshotService', () => {
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({
         workspaceId: 'ws-attach',
+        prUrl: 'https://github.com/org/repo/pull/77',
         prNumber: 77,
         prState: 'OPEN',
         prCiStatus: 'PENDING',
