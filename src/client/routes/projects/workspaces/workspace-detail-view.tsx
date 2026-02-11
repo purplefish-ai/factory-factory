@@ -9,14 +9,13 @@ import type { useSessionManagement, useWorkspaceData } from './use-workspace-det
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
-import { ArchivingOverlay, ScriptFailedBanner, ScriptRunningBanner } from './workspace-overlays';
+import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 export interface WorkspaceDetailViewProps {
   workspaceLoading: boolean;
   workspace: ReturnType<typeof useWorkspaceData>['workspace'];
   workspaceId: string;
   handleBackToWorkspaces: () => void;
-  isScriptRunning: boolean;
   isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
   archivePending: boolean;
@@ -83,23 +82,13 @@ export interface WorkspaceDetailViewProps {
 
 function ScriptBanner({
   workspaceId,
-  isScriptRunning,
   isScriptFailed,
   workspaceInitStatus,
 }: {
   workspaceId: string;
-  isScriptRunning: boolean;
   isScriptFailed: boolean;
   workspaceInitStatus: WorkspaceDetailViewProps['workspaceInitStatus'];
 }) {
-  if (isScriptRunning) {
-    return (
-      <ScriptRunningBanner
-        initOutput={workspaceInitStatus?.initOutput ?? null}
-        hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
-      />
-    );
-  }
   if (isScriptFailed) {
     return (
       <ScriptFailedBanner
@@ -118,7 +107,6 @@ export function WorkspaceDetailView({
   workspace,
   workspaceId,
   handleBackToWorkspaces,
-  isScriptRunning,
   isScriptFailed,
   workspaceInitStatus,
   archivePending,
@@ -217,7 +205,6 @@ export function WorkspaceDetailView({
 
       <ScriptBanner
         workspaceId={workspaceId}
-        isScriptRunning={isScriptRunning}
         isScriptFailed={isScriptFailed}
         workspaceInitStatus={workspaceInitStatus}
       />

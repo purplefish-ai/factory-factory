@@ -36,7 +36,7 @@ export function WorkspaceDetailContainer() {
     { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
   );
 
-  const { workspaceInitStatus, isScriptRunning, isScriptFailed } = useWorkspaceInitStatus(
+  const { workspaceInitStatus, isScriptFailed } = useWorkspaceInitStatus(
     workspaceId,
     workspace,
     utils
@@ -244,7 +244,6 @@ export function WorkspaceDetailContainer() {
       workspace={workspace}
       workspaceId={workspaceId}
       handleBackToWorkspaces={handleBackToWorkspaces}
-      isScriptRunning={isScriptRunning}
       isScriptFailed={isScriptFailed}
       workspaceInitStatus={workspaceInitStatus}
       archivePending={archiveWorkspace.isPending}
