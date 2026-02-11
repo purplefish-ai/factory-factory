@@ -42,6 +42,10 @@ export function deriveRunningSessionIds(
     processStatus.state !== 'stopped'
   ) {
     next.add(selectedDbSessionId);
+  } else if (selectedDbSessionId) {
+    // Selected session runtime comes from WebSocket and should immediately
+    // override stale polled working state when it is no longer running.
+    next.delete(selectedDbSessionId);
   }
 
   return setsEqual(previous, next) ? previous : next;

@@ -40,11 +40,23 @@ describe('deriveRunningSessionIds', () => {
     expect(result.size).toBe(0);
   });
 
-  it('uses polled status as source of truth when selected session is ready', () => {
+  it('clears selected session immediately when websocket says not running', () => {
     const previous = new Set<string>();
     const result = deriveRunningSessionIds(previous, {
       sessions: [{ id: 'session-a', isWorking: true }],
       selectedDbSessionId: 'session-a',
+      sessionStatus: { phase: 'ready' },
+      processStatus: { state: 'alive' },
+    });
+
+    expect(result.size).toBe(0);
+  });
+
+  it('keeps polling as source of truth for non-selected sessions', () => {
+    const previous = new Set<string>();
+    const result = deriveRunningSessionIds(previous, {
+      sessions: [{ id: 'session-a', isWorking: true }],
+      selectedDbSessionId: 'session-b',
       sessionStatus: { phase: 'ready' },
       processStatus: { state: 'alive' },
     });
