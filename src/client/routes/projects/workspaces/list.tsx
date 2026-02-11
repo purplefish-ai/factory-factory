@@ -95,7 +95,7 @@ export default function WorkspacesListPage() {
       utils.workspace.list.invalidate({ projectId: project.id });
       utils.workspace.getProjectSummaryState.invalidate({ projectId: project.id });
       setResumeOpen(false);
-      await navigate(`/projects/${slug}/workspaces/${workspace.id}`);
+      void navigate(`/projects/${slug}/workspaces/${workspace.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       toast.error(`Failed to resume branch: ${message}`);
