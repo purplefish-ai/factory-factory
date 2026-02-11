@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection ✓ 2026-02-11
 - [x] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project ✓ 2026-02-11
 - [x] **Phase 16: Client Integration - Sidebar** -- Sidebar reads from WebSocket-driven snapshot with React Query cache integration ✓ 2026-02-11
-- [ ] **Phase 17: Client Integration - Kanban and Workspace List** -- Remaining consumers migrate to snapshot with polling fallback
+- [x] **Phase 17: Client Integration - Kanban and Workspace List** -- Remaining consumers migrate to snapshot with polling fallback ✓ 2026-02-11
 - [ ] **Phase 18: Architecture Validation** -- Dependency-cruiser passes, full test suite green, no regressions
 
 ## Phase Details
@@ -135,7 +135,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 17-01-PLAN.md -- Snapshot-to-kanban mapping, sync hook extension, reduced polling cadences
+- [x] 17-01-PLAN.md -- Snapshot-to-kanban mapping, sync hook extension, reduced polling cadences
 
 ### Phase 18: Architecture Validation
 **Goal**: The complete snapshot service integration passes all architecture rules and causes zero test regressions
@@ -164,9 +164,9 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 14. Safety-Net Reconciliation | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 15. WebSocket Transport | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 16. Client Integration - Sidebar | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
-| 17. Client Integration - Kanban and Workspace List | v1.1 | 0/TBD | Not started | - |
+| 17. Client Integration - Kanban and Workspace List | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 18. Architecture Validation | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 16 complete (CLNT-01/CLNT-04 verified)*
+*Last updated: 2026-02-11 -- Phase 17 complete (CLNT-02/CLNT-03/CLNT-05 verified)*
