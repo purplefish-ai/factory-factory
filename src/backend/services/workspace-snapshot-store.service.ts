@@ -66,7 +66,8 @@ export type WorkspaceCiObservation =
   | 'CHECKS_PASSED'
   | 'CHECKS_UNKNOWN';
 
-export type { SessionSummary as WorkspaceSessionSummary } from '@/shared/session-runtime';
+import type { SessionSummary } from '@/shared/session-runtime';
+export type WorkspaceSessionSummary = SessionSummary;
 
 /**
  * The full snapshot entry shape for a workspace.
