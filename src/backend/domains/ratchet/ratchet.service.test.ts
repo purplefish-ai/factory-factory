@@ -1,7 +1,7 @@
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
+import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -60,11 +60,21 @@ const mockGitHubBridge: RatchetGitHubBridge = {
   fetchAndComputePRState: vi.fn(),
 };
 
+const mockSnapshotBridge: RatchetPRSnapshotBridge = {
+  recordCIObservation: vi.fn(),
+  recordCINotification: vi.fn(),
+  recordReviewCheck: vi.fn(),
+};
+
 describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
-    ratchetService.configure({ session: mockSessionBridge, github: mockGitHubBridge });
+    ratchetService.configure({
+      session: mockSessionBridge,
+      github: mockGitHubBridge,
+      snapshot: mockSnapshotBridge,
+    });
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
   });
@@ -234,7 +244,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       unknown
     >;
     expect(finalUpdatePayload.ratchetLastCiRunId).toBe('2026-01-02T00:00:00Z');
-    expect(finalUpdatePayload).toHaveProperty('prReviewLastCheckedAt');
+    expect(finalUpdatePayload).not.toHaveProperty('prReviewLastCheckedAt');
+    expect(mockSnapshotBridge.recordReviewCheck).toHaveBeenCalledWith(
+      'ws-change',
+      expect.any(Date)
+    );
   });
 
   it('does dispatch when session is running but idle', async () => {
@@ -331,6 +345,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       },
     });
     expect(claudeSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
+    expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
   });
 
   it('does not dispatch repeatedly for unchanged CHANGES_REQUESTED state', async () => {

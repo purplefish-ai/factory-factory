@@ -20,7 +20,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
+import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 
 const logger = createLogger('ratchet');
@@ -109,10 +109,16 @@ class RatchetService extends EventEmitter {
 
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
+  private snapshotBridge: RatchetPRSnapshotBridge | null = null;
 
-  configure(bridges: { session: RatchetSessionBridge; github: RatchetGitHubBridge }): void {
+  configure(bridges: {
+    session: RatchetSessionBridge;
+    github: RatchetGitHubBridge;
+    snapshot: RatchetPRSnapshotBridge;
+  }): void {
     this.sessionBridge = bridges.session;
     this.githubBridge = bridges.github;
+    this.snapshotBridge = bridges.snapshot;
   }
 
   private get session(): RatchetSessionBridge {
@@ -131,6 +137,15 @@ class RatchetService extends EventEmitter {
       );
     }
     return this.githubBridge;
+  }
+
+  private get snapshot(): RatchetPRSnapshotBridge {
+    if (!this.snapshotBridge) {
+      throw new Error(
+        'RatchetService not configured: snapshot bridge missing. Call configure() first.'
+      );
+    }
+    return this.snapshotBridge;
   }
 
   start(): void {
@@ -255,6 +270,44 @@ class RatchetService extends EventEmitter {
     }
 
     return this.processWorkspace(workspace);
+  }
+
+  /**
+   * Enable or disable ratcheting for a workspace.
+   * Ratchet domain owns ratchet state fields, so toggles flow through this service.
+   */
+  async setWorkspaceRatcheting(workspaceId: string, enabled: boolean): Promise<void> {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    if (enabled) {
+      await workspaceAccessor.update(workspaceId, {
+        ratchetEnabled: true,
+      });
+      return;
+    }
+
+    const activeSessionId = workspace.ratchetActiveSessionId;
+    if (activeSessionId && this.session.isSessionRunning(activeSessionId)) {
+      try {
+        await this.session.stopClaudeSession(activeSessionId);
+      } catch (error) {
+        logger.warn('Failed to stop active ratchet session while disabling ratchet', {
+          workspaceId,
+          sessionId: activeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    await workspaceAccessor.update(workspaceId, {
+      ratchetEnabled: false,
+      ratchetState: RatchetState.IDLE,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
+    });
   }
 
   private async processWorkspace(workspace: WorkspaceWithPR): Promise<WorkspaceRatchetResult> {
@@ -757,10 +810,13 @@ class RatchetService extends EventEmitter {
       ...(dispatched
         ? {
             ratchetLastCiRunId: prStateInfo.snapshotKey,
-            prReviewLastCheckedAt: now,
           }
         : {}),
     });
+
+    if (dispatched) {
+      await this.snapshot.recordReviewCheck(workspace.id, now);
+    }
   }
 
   private async getActiveRatchetSession(workspace: WorkspaceWithPR): Promise<RatchetAction | null> {

@@ -6,6 +6,7 @@
 export type {
   RatchetGitHubBridge,
   RatchetPRFullDetails,
+  RatchetPRSnapshotBridge,
   RatchetPRStateSnapshot,
   RatchetReviewComment,
   RatchetSessionBridge,
