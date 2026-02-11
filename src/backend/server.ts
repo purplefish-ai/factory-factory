@@ -31,6 +31,10 @@ import {
   securityMiddleware,
 } from './middleware';
 import { configureDomainBridges } from './orchestration/domain-bridges.orchestrator';
+import {
+  configureEventCollector,
+  stopEventCollector,
+} from './orchestration/event-collector.orchestrator';
 import { createHealthRouter } from './routers/api/health.router';
 import { createMcpRouter } from './routers/api/mcp.router';
 import { createProjectRouter } from './routers/api/project.router';
@@ -253,6 +257,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     await rateLimiter.stop();
 
     await schedulerService.stop();
+    stopEventCollector();
     await ratchetService.stop();
     await reconciliationService.stopPeriodicCleanup();
     await prisma.$disconnect();
@@ -282,6 +287,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
 
           configureDomainBridges();
+          configureEventCollector();
 
           try {
             await reconciliationService.cleanupOrphans();
