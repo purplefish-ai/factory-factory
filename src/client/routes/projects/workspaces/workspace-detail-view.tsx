@@ -30,7 +30,7 @@ export interface WorkspaceDetailViewProps {
   hasChanges: boolean | undefined;
   claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
   selectedDbSessionId: string | null;
-  runningSessionId: string | undefined;
+  runningSessionIds: ReadonlySet<string>;
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
@@ -132,7 +132,7 @@ export function WorkspaceDetailView({
   hasChanges,
   claudeSessions,
   selectedDbSessionId,
-  runningSessionId,
+  runningSessionIds,
   isDeletingSession,
   handleSelectSession,
   handleNewChat,
@@ -234,7 +234,7 @@ export function WorkspaceDetailView({
               workspaceId={workspaceId}
               claudeSessions={claudeSessions}
               selectedSessionId={selectedDbSessionId}
-              runningSessionId={runningSessionId}
+              runningSessionIds={runningSessionIds}
               sessionStatus={sessionStatus}
               processStatus={processStatus}
               isCreatingSession={isCreatingSession}

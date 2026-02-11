@@ -19,7 +19,7 @@ interface WorkspaceContentViewProps {
   workspaceId: string;
   claudeSessions: ClaudeSession[] | undefined;
   selectedSessionId: string | null;
-  runningSessionId: string | undefined;
+  runningSessionIds: ReadonlySet<string>;
   /** Session status for the currently selected session */
   sessionStatus?: SessionStatus;
   /** Process status for the currently selected session */
@@ -51,7 +51,7 @@ export function WorkspaceContentView({
   workspaceId,
   claudeSessions,
   selectedSessionId,
-  runningSessionId,
+  runningSessionIds,
   sessionStatus,
   processStatus,
   isCreatingSession,
@@ -107,7 +107,7 @@ export function WorkspaceContentView({
         <MainViewTabBar
           sessions={claudeSessions}
           currentSessionId={selectedSessionId}
-          runningSessionId={runningSessionId}
+          runningSessionIds={runningSessionIds}
           sessionStatus={sessionStatus}
           processStatus={processStatus}
           onSelectSession={onSelectSession}

@@ -6,6 +6,7 @@ import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
+import { deriveRunningSessionIds } from './session-tab-status';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
@@ -95,7 +96,7 @@ export function WorkspaceDetailContainer() {
     dbSessionId: selectedDbSessionId,
   });
 
-  const running = sessionStatus.phase === 'running';
+  const selectedSessionRunning = sessionStatus.phase === 'running';
   const loadingSession = sessionStatus.phase === 'loading';
   const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
   const isIssueAutoStartPending =
@@ -108,11 +109,25 @@ export function WorkspaceDetailContainer() {
 
   const wasRunningRef = useRef(false);
   useEffect(() => {
-    if (wasRunningRef.current && !running) {
+    if (wasRunningRef.current && !selectedSessionRunning) {
       invalidateWorkspace();
     }
-    wasRunningRef.current = running;
-  }, [running, invalidateWorkspace]);
+    wasRunningRef.current = selectedSessionRunning;
+  }, [selectedSessionRunning, invalidateWorkspace]);
+
+  const [runningSessionIds, setRunningSessionIds] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    setRunningSessionIds((previous) =>
+      deriveRunningSessionIds(previous, {
+        sessions: claudeSessions,
+        selectedDbSessionId,
+        sessionStatus,
+        processStatus,
+      })
+    );
+  }, [claudeSessions, selectedDbSessionId, sessionStatus, processStatus]);
+
+  const workspaceRunning = runningSessionIds.size > 0;
 
   const {
     createSession,
@@ -223,8 +238,6 @@ export function WorkspaceDetailContainer() {
     inputRef,
   });
 
-  const runningSessionId = getRunningSessionId(running, selectedDbSessionId);
-
   return (
     <WorkspaceDetailView
       workspaceLoading={workspaceLoading}
@@ -240,12 +253,12 @@ export function WorkspaceDetailContainer() {
       openInIde={openInIde}
       handleArchiveRequest={handleArchiveRequest}
       handleQuickAction={handleQuickAction}
-      running={running}
+      running={workspaceRunning}
       isCreatingSession={createSession.isPending}
       hasChanges={hasChanges}
       claudeSessions={claudeSessions}
       selectedDbSessionId={selectedDbSessionId}
-      runningSessionId={runningSessionId}
+      runningSessionIds={runningSessionIds}
       isDeletingSession={deleteSession.isPending}
       handleSelectSession={handleSelectSession}
       handleNewChat={handleNewChat}
@@ -296,11 +309,4 @@ export function WorkspaceDetailContainer() {
       handleArchive={handleArchive}
     />
   );
-}
-
-function getRunningSessionId(running: boolean, selectedDbSessionId: string | null) {
-  if (!(running && selectedDbSessionId)) {
-    return undefined;
-  }
-  return selectedDbSessionId;
 }

@@ -123,7 +123,7 @@ function getSelectedSessionStatusInfo(
 ): StatusInfo {
   const phase = sessionStatus.phase;
 
-  if (phase === 'loading' || processStatus.state === 'unknown') {
+  if (phase === 'loading') {
     return {
       color: 'text-muted-foreground',
       pulse: false,
@@ -353,7 +353,7 @@ interface MainViewTabBarProps {
   className?: string;
   sessions?: Session[];
   currentSessionId?: string | null;
-  runningSessionId?: string;
+  runningSessionIds?: ReadonlySet<string>;
   /** Session status for the currently selected session */
   sessionStatus?: SessionStatus;
   /** Process status for the currently selected session */
@@ -370,7 +370,7 @@ export function MainViewTabBar({
   className,
   sessions,
   currentSessionId,
-  runningSessionId,
+  runningSessionIds,
   sessionStatus,
   processStatus,
   onSelectSession,
@@ -403,7 +403,7 @@ export function MainViewTabBar({
             key={session.id}
             label={session.name ?? `Chat ${index + 1}`}
             isActive={isSelected && activeTabId === 'chat'}
-            isRunning={session.isWorking || session.id === runningSessionId}
+            isRunning={runningSessionIds?.has(session.id)}
             isCIFix={session.workflow === 'ci-fix'}
             sessionStatus={isSelected ? sessionStatus : undefined}
             processStatus={isSelected ? processStatus : undefined}
