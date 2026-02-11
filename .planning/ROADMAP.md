@@ -89,11 +89,11 @@ Plans:
   2. Git stats (diff size, uncommitted changes) appear in snapshots but are only computed during reconciliation, never on event-driven updates
   3. Reconciliation does not overwrite event-driven updates that arrived after the poll started (field-level timestamp comparison)
   4. When reconciliation detects drift between event-driven state and authoritative sources, the correction and its cause are logged
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 14-01: TBD
-- [ ] 14-02: TBD
+- [ ] 14-01-PLAN.md -- Reconciliation service with drift detection, git stats, stale cleanup, and tests
+- [ ] 14-02-PLAN.md -- Server startup/shutdown wiring and full RCNL requirement verification
 
 ### Phase 15: WebSocket Transport
 **Goal**: Connected clients receive snapshot changes in real time via a project-scoped WebSocket endpoint, with full snapshot on connect and reconnect
@@ -162,7 +162,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 11. Snapshot Store | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 12. Domain Event Emission | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 13. Event Collector | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
-| 14. Safety-Net Reconciliation | v1.1 | 0/TBD | Not started | - |
+| 14. Safety-Net Reconciliation | v1.1 | 0/2 | Not started | - |
 | 15. WebSocket Transport | v1.1 | 0/TBD | Not started | - |
 | 16. Client Integration - Sidebar | v1.1 | 0/TBD | Not started | - |
 | 17. Client Integration - Kanban and Workspace List | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 13 complete (1/1 plans, EVNT-06/07/08 verified)*
+*Last updated: 2026-02-11 -- Phase 14 planned (2 plans, RCNL-01/02/03/04)*
