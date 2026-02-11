@@ -224,7 +224,7 @@ class WorkspaceAccessor {
   transitionWithCas(
     id: string,
     fromStatus: WorkspaceStatus,
-    data: Prisma.WorkspaceUpdateInput
+    data: Prisma.WorkspaceUpdateManyMutationInput
   ): Promise<{ count: number }> {
     return prisma.workspace.updateMany({
       where: { id, status: fromStatus },

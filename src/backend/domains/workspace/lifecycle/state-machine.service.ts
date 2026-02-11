@@ -96,7 +96,7 @@ class WorkspaceStateMachineService {
     }
 
     const now = new Date();
-    const updateData: Prisma.WorkspaceUpdateInput = {
+    const updateData: Prisma.WorkspaceUpdateManyMutationInput = {
       status: targetStatus,
     };
 
