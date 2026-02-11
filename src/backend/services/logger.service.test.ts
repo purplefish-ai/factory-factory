@@ -57,13 +57,29 @@ describe('LoggerService', () => {
     });
 
     it('should not crash when logging arrays with circular references', () => {
-      const logger = createLogger('test');
-      const arr: unknown[] = [1, 2, 3];
-      arr.push(arr);
+      // Set LOG_LEVEL to debug to ensure debug() actually logs
+      const originalLogLevel = process.env.LOG_LEVEL;
+      process.env.LOG_LEVEL = 'debug';
 
-      expect(() => {
-        logger.debug('Test circular array', { items: arr });
-      }).not.toThrow();
+      try {
+        const logger = createLogger('test');
+        const arr: unknown[] = [1, 2, 3];
+        arr.push(arr);
+
+        expect(() => {
+          logger.debug('Test circular array', { items: arr });
+        }).not.toThrow();
+
+        // Verify debug was actually called and logged
+        expect(mockWriteStream.write).toHaveBeenCalled();
+      } finally {
+        // Restore original LOG_LEVEL
+        if (originalLogLevel === undefined) {
+          process.env.LOG_LEVEL = undefined;
+        } else {
+          process.env.LOG_LEVEL = originalLogLevel;
+        }
+      }
     });
 
     it('should not crash when logging cross-referenced objects', () => {
@@ -126,6 +142,26 @@ describe('LoggerService', () => {
       expect(() => {
         logger.info('Test null', { value: null });
       }).not.toThrow();
+    });
+
+    it('should preserve toJSON() methods on objects like Date', () => {
+      const logger = createLogger('test');
+      const date = new Date('2024-01-01T00:00:00.000Z');
+      const obj = {
+        timestamp: date,
+        nested: { createdAt: date },
+      };
+
+      logger.info('Test Date objects', obj);
+
+      expect(mockWriteStream.write).toHaveBeenCalled();
+      const calls = mockWriteStream.write.mock.calls;
+      const lastCall = calls[calls.length - 1] as [string];
+      const logEntry = JSON.parse(lastCall[0].toString().trim());
+
+      // Dates should be serialized as ISO strings, not empty objects
+      expect(logEntry.context.timestamp).toBe('2024-01-01T00:00:00.000Z');
+      expect(logEntry.context.nested.createdAt).toBe('2024-01-01T00:00:00.000Z');
     });
   });
 

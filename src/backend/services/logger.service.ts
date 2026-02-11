@@ -51,44 +51,71 @@ function getLogLevelPriority(level: LogLevel): number {
 
 /**
  * Safely stringify an object, handling circular references.
- * Tracks only ancestors on the current path to correctly identify circular
- * references while preserving shared non-circular references.
+ * Uses a two-pass approach: first pass pre-processes with ancestor tracking
+ * to replace circular references, second pass uses JSON.stringify to respect
+ * toJSON() methods and handle special objects correctly.
  */
 function safeStringify(obj: unknown): string {
   try {
-    const ancestors = new WeakSet();
+    const ancestors = new WeakSet<object>();
+    const seen = new WeakMap<object, unknown>();
 
-    const helper = (value: unknown): unknown => {
-      // Handle non-object values and null
+    // First pass: detect and replace circular references
+    function preprocessValue(value: unknown): unknown {
       if (typeof value !== 'object' || value === null) {
         return value;
       }
 
-      // Check if this object is an ancestor (circular reference)
-      if (ancestors.has(value)) {
-        return '[Circular]';
+      // Check if already processed
+      if (seen.has(value)) {
+        return seen.get(value);
       }
 
-      // Add to ancestor set for this path
+      // Check for circular reference
+      if (ancestors.has(value)) {
+        const placeholder = '[Circular]';
+        seen.set(value, placeholder);
+        return placeholder;
+      }
+
+      // If object has toJSON, let JSON.stringify handle it (don't traverse)
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        'toJSON' in value &&
+        typeof (value as Record<string, unknown>).toJSON === 'function'
+      ) {
+        seen.set(value, value);
+        return value;
+      }
+
+      // Mark as ancestor for this path
       ancestors.add(value);
 
       try {
         if (Array.isArray(value)) {
-          return value.map((item) => helper(item));
+          const result = value.map((item) => preprocessValue(item));
+          seen.set(value, result);
+          return result;
         }
 
         const result: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(value)) {
-          result[key] = helper(val);
+          result[key] = preprocessValue(val);
         }
+        seen.set(value, result);
         return result;
       } finally {
-        // Remove from ancestors after processing children
+        // Remove from ancestors after processing
         ancestors.delete(value);
       }
-    };
+    }
 
-    return JSON.stringify(helper(obj));
+    // Preprocess to handle circular references
+    const processed = preprocessValue(obj);
+
+    // Second pass: use JSON.stringify to handle toJSON() and special objects
+    return JSON.stringify(processed);
   } catch {
     // Fallback for any other errors (e.g., BigInt serialization)
     return String(obj);
