@@ -53,7 +53,7 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     refetch: refetchWorkspaces,
   } = trpc.workspace.listWithKanbanState.useQuery(
     { projectId },
-    { refetchInterval: 15_000, staleTime: 10_000 }
+    { refetchInterval: 30_000, staleTime: 25_000 }
   );
 
   const {

@@ -31,10 +31,19 @@ import {
   securityMiddleware,
 } from './middleware';
 import { configureDomainBridges } from './orchestration/domain-bridges.orchestrator';
+import {
+  configureEventCollector,
+  stopEventCollector,
+} from './orchestration/event-collector.orchestrator';
+import {
+  configureSnapshotReconciliation,
+  snapshotReconciliationService,
+} from './orchestration/snapshot-reconciliation.orchestrator';
 import { createHealthRouter } from './routers/health.router';
 import {
   createChatUpgradeHandler,
   createDevLogsUpgradeHandler,
+  createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
 import { appRouter, createContext } from './trpc/index';
@@ -75,6 +84,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const chatUpgradeHandler = createChatUpgradeHandler(context);
   const terminalUpgradeHandler = createTerminalUpgradeHandler(context);
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
+  const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(context);
 
   // ============================================================================
   // WebSocket Heartbeat - Detect zombie connections
@@ -160,7 +170,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         req.path.startsWith('/health') ||
         req.path === '/chat' ||
         req.path === '/terminal' ||
-        req.path === '/dev-logs'
+        req.path === '/dev-logs' ||
+        req.path === '/snapshots'
       ) {
         return next();
       }
@@ -220,6 +231,11 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       return;
     }
 
+    if (url.pathname === '/snapshots') {
+      snapshotsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
+      return;
+    }
+
     socket.destroy();
   });
 
@@ -246,6 +262,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     await rateLimiter.stop();
 
     await schedulerService.stop();
+    stopEventCollector();
+    await snapshotReconciliationService.stop();
     await ratchetService.stop();
     await reconciliationService.stopPeriodicCleanup();
     await prisma.$disconnect();
@@ -275,6 +293,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
 
           configureDomainBridges();
+          configureEventCollector();
+          configureSnapshotReconciliation();
 
           try {
             await reconciliationService.cleanupOrphans();
@@ -303,6 +323,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
             trpc: `http://localhost:${actualPort}/api/trpc`,
             wsChat: `ws://localhost:${actualPort}/chat`,
             wsTerminal: `ws://localhost:${actualPort}/terminal`,
+            wsSnapshots: `ws://localhost:${actualPort}/snapshots`,
           });
 
           resolve(`http://localhost:${actualPort}`);

@@ -31,6 +31,8 @@ export { prReviewMonitorService } from './pr-review-monitor.service';
 // --- PR snapshot ---
 export {
   type AttachAndRefreshResult,
+  PR_SNAPSHOT_UPDATED,
   type PRSnapshotRefreshResult,
+  type PRSnapshotUpdatedEvent,
   prSnapshotService,
 } from './pr-snapshot.service';

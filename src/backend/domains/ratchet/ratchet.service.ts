@@ -7,6 +7,7 @@
  * - Dispatch only when workspace is idle (no active ratchet or other chat session)
  */
 
+import { EventEmitter } from 'node:events';
 import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
@@ -89,7 +90,15 @@ interface WorkspaceWithPR {
   prReviewLastCheckedAt: Date | null;
 }
 
-class RatchetService {
+export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
+
+export interface RatchetStateChangedEvent {
+  workspaceId: string;
+  fromState: RatchetState;
+  toState: RatchetState;
+}
+
+class RatchetService extends EventEmitter {
   private isShuttingDown = false;
   private monitorLoop: Promise<void> | null = null;
   private sleepTimeout: NodeJS.Timeout | null = null;
@@ -266,6 +275,13 @@ class RatchetService {
         ratchetState: newState,
         ratchetLastCheckedAt: new Date(),
       });
+      if (workspace.ratchetState !== newState) {
+        this.emit(RATCHET_STATE_CHANGED, {
+          workspaceId: workspace.id,
+          fromState: workspace.ratchetState,
+          toState: newState,
+        } satisfies RatchetStateChangedEvent);
+      }
       this.logWorkspaceRatchetingDecision(
         workspace,
         workspace.ratchetState,
@@ -311,6 +327,13 @@ class RatchetService {
         action,
         decisionContext.finalState
       );
+      if (decisionContext.previousState !== decisionContext.finalState) {
+        this.emit(RATCHET_STATE_CHANGED, {
+          workspaceId: workspace.id,
+          fromState: decisionContext.previousState,
+          toState: decisionContext.finalState,
+        } satisfies RatchetStateChangedEvent);
+      }
       this.logWorkspaceRatchetingDecision(
         workspace,
         decisionContext.previousState,
