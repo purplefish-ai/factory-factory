@@ -319,7 +319,7 @@ describe('requestLoggerMiddleware', () => {
   it('should log request details on response finish', () => {
     const mockReq = createMockReq({
       method: 'POST',
-      path: '/api/projects',
+      path: '/api/trpc/project.list',
     });
     mockRes.statusCode = 201;
 

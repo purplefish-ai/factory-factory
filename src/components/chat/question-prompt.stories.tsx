@@ -178,16 +178,16 @@ export const ManyOptions: Story = {
         question: 'How should the API endpoint be structured?',
         options: [
           {
-            label: 'REST API',
-            description: 'Traditional REST endpoints with GET, POST, PUT, DELETE methods',
+            label: 'tRPC',
+            description: 'End-to-end typesafe procedures for TypeScript clients',
           },
           {
             label: 'GraphQL',
             description: 'Single endpoint with flexible queries',
           },
           {
-            label: 'tRPC',
-            description: 'End-to-end typesafe APIs for TypeScript projects',
+            label: 'JSON-RPC',
+            description: 'Procedure-style messaging over HTTP',
           },
           {
             label: 'Server Actions',

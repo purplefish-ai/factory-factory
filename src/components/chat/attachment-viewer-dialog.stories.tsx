@@ -28,105 +28,52 @@ export function UserCard({ name, age }: Props) {
 
 export default UserCard;`;
 
-const SAMPLE_LONG_TEXT = `# API Documentation
+const SAMPLE_LONG_TEXT = `# Backend Integration Guide
 
 ## Overview
-This document describes the REST API endpoints for the application.
+This document describes how the frontend communicates with the backend.
+The app uses tRPC for product features and keeps /health for operational checks.
 
 ## Authentication
-All API requests require authentication using a Bearer token:
+Session access is scoped by workspace and handled by the app runtime.
+Use workspace/session IDs from application state when calling procedures.
 
-\`\`\`
-Authorization: Bearer YOUR_TOKEN_HERE
-\`\`\`
+## tRPC Procedures
 
-## Endpoints
+### project.list
+Returns projects visible to the user.
 
-### GET /api/users
-Retrieve a list of all users.
+### project.create
+Creates a project from a local repository path.
 
-**Query Parameters:**
-- \`page\` (number): Page number for pagination (default: 1)
-- \`limit\` (number): Number of items per page (default: 20)
-- \`sort\` (string): Sort field (default: 'createdAt')
+### workspace.create
+Creates a workspace for manual work or GitHub issue intake.
 
-**Response:**
+### workspace.getDiffVsMain
+Returns categorized file changes compared to the default branch.
+
+## Operational Endpoints
+
+### GET /health
+Basic service status, version, and environment.
+
+### GET /health/all
+Aggregated health checks (database + rate limiter).
+
+## Error Shape
+tRPC errors expose structured data:
+
 \`\`\`json
 {
-  "users": [
-    {
-      "id": "123",
-      "name": "John Doe",
-      "email": "john@example.com",
-      "createdAt": "2024-01-01T00:00:00Z"
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 20,
-    "total": 100
+  "code": "BAD_REQUEST",
+  "message": "Human readable error message",
+  "data": {
+    "path": "workspace.create"
   }
 }
 \`\`\`
 
-### POST /api/users
-Create a new user.
-
-**Request Body:**
-\`\`\`json
-{
-  "name": "Jane Smith",
-  "email": "jane@example.com",
-  "password": "securepassword123"
-}
-\`\`\`
-
-**Response:**
-\`\`\`json
-{
-  "id": "124",
-  "name": "Jane Smith",
-  "email": "jane@example.com",
-  "createdAt": "2024-01-02T00:00:00Z"
-}
-\`\`\`
-
-### GET /api/users/:id
-Retrieve a specific user by ID.
-
-**Response:**
-\`\`\`json
-{
-  "id": "123",
-  "name": "John Doe",
-  "email": "john@example.com",
-  "createdAt": "2024-01-01T00:00:00Z"
-}
-\`\`\`
-
-### PUT /api/users/:id
-Update a user.
-
-### DELETE /api/users/:id
-Delete a user.
-
-## Error Handling
-All errors follow this format:
-
-\`\`\`json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable error message"
-  }
-}
-\`\`\`
-
-Common error codes:
-- \`UNAUTHORIZED\`: Missing or invalid authentication
-- \`NOT_FOUND\`: Resource not found
-- \`VALIDATION_ERROR\`: Invalid request data
-- \`INTERNAL_ERROR\`: Server error`;
+`;
 
 // Sample attachments
 const imageAttachment: MessageAttachment = {
@@ -149,7 +96,7 @@ const textAttachment: MessageAttachment = {
 
 const longTextAttachment: MessageAttachment = {
   id: 'txt-2',
-  name: 'api-documentation.md',
+  name: 'backend-integration-guide.md',
   type: 'text/plain',
   size: SAMPLE_LONG_TEXT.length,
   data: SAMPLE_LONG_TEXT,

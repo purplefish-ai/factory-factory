@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { type AppContext, createAppContext } from '@/backend/app-context';
+import type { AppContext } from '@/backend/app-context';
 import { HTTP_STATUS } from '@/backend/constants';
 import { healthService } from '@/backend/services/health.service';
 
@@ -9,7 +9,7 @@ import { healthService } from '@/backend/services/health.service';
 
 export function createHealthRouter(appContext: AppContext): Router {
   const router = Router();
-  const logger = appContext.services.createLogger('api:health');
+  const logger = appContext.services.createLogger('health-route');
 
   /**
    * GET /health
@@ -91,5 +91,3 @@ export function createHealthRouter(appContext: AppContext): Router {
 
   return router;
 }
-
-export const healthRouter = createHealthRouter(createAppContext());
