@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-11)
 
 **Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
-**Current focus:** Phase 15 - WebSocket Transport
+**Current focus:** Phase 16 - Client Integration - Sidebar
 
 ## Current Position
 
-Phase: 15 of 18 (WebSocket Transport)
-Plan: 1 of 1 in current phase
-Status: Plan 15-01 complete
-Last activity: 2026-02-11 -- Phase 15 Plan 01 complete (/snapshots WebSocket endpoint)
+Phase: 16 of 18 (Client Integration - Sidebar)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-11 -- Phase 15 complete and verified (5/5 must-haves, WSKT-01/02/03/04/05)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 63%
 
 ## Performance Metrics
 
@@ -81,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 15-01-PLAN.md -- /snapshots WebSocket endpoint with tests and server wiring
+Stopped at: Phase 15 complete and verified -- ready to plan Phase 16
 Resume file: None

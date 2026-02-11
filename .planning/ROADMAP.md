@@ -28,7 +28,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 12: Domain Event Emission** -- Add EventEmitter capability to workspace, GitHub, ratchet, run-script, and session domains ✓ 2026-02-11
 - [x] **Phase 13: Event Collector** -- Orchestration layer wiring domain events to snapshot store updates with coalescing ✓ 2026-02-11
 - [x] **Phase 14: Safety-Net Reconciliation** -- Periodic full recompute from authoritative sources with drift detection ✓ 2026-02-11
-- [ ] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project
+- [x] **Phase 15: WebSocket Transport** -- Real-time push of snapshot changes to connected clients scoped by project ✓ 2026-02-11
 - [ ] **Phase 16: Client Integration - Sidebar** -- Sidebar reads from WebSocket-driven snapshot with React Query cache integration
 - [ ] **Phase 17: Client Integration - Kanban and Workspace List** -- Remaining consumers migrate to snapshot with polling fallback
 - [ ] **Phase 18: Architecture Validation** -- Dependency-cruiser passes, full test suite green, no regressions
@@ -108,7 +108,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 15-01-PLAN.md -- Snapshot WebSocket handler with project-scoped fan-out, server wiring, and tests
+- [x] 15-01-PLAN.md -- Snapshot WebSocket handler with project-scoped fan-out, server wiring, and tests
 
 ### Phase 16: Client Integration - Sidebar
 **Goal**: The sidebar displays workspace state from WebSocket-pushed snapshots instead of its 2-second tRPC polling loop
@@ -162,11 +162,11 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 12. Domain Event Emission | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 13. Event Collector | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 14. Safety-Net Reconciliation | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
-| 15. WebSocket Transport | v1.1 | 0/1 | Planning complete | - |
+| 15. WebSocket Transport | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 16. Client Integration - Sidebar | v1.1 | 0/TBD | Not started | - |
 | 17. Client Integration - Kanban and Workspace List | v1.1 | 0/TBD | Not started | - |
 | 18. Architecture Validation | v1.1 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 15 planned (1 plan, WSKT-01/02/03/04/05)*
+*Last updated: 2026-02-11 -- Phase 15 complete (WSKT-01/02/03/04/05 verified)*
