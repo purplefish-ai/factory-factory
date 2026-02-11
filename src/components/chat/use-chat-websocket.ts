@@ -182,15 +182,14 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           (data as { type?: string }).type === 'session_snapshot')
       ) {
         const batch = data as { loadRequestId?: string; type?: string };
-        if (
-          currentLoadRequestIdRef.current &&
-          batch.loadRequestId &&
-          batch.loadRequestId !== currentLoadRequestIdRef.current
-        ) {
-          return;
+        if (currentLoadRequestIdRef.current && batch.loadRequestId) {
+          if (batch.loadRequestId !== currentLoadRequestIdRef.current) {
+            return;
+          }
+          // Only clear when we have a matching ID
+          currentLoadRequestIdRef.current = null;
+          clearLoadTimeout();
         }
-        currentLoadRequestIdRef.current = null;
-        clearLoadTimeout();
       }
       chat.handleMessage(data);
     },
