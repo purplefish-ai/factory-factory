@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type { GitHubKanbanBridge } from './bridges';
@@ -28,8 +29,22 @@ export type AttachAndRefreshResult =
   | { success: true; snapshot: SnapshotData }
   | { success: false; reason: 'workspace_not_found' | 'fetch_failed' | 'error' };
 
-class PRSnapshotService {
+export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
+
+export interface PRSnapshotUpdatedEvent {
+  workspaceId: string;
+  prNumber: number;
+  prState: string;
+  prCiStatus: string;
+  prReviewState: string | null;
+}
+
+class PRSnapshotService extends EventEmitter {
   private kanbanBridge: GitHubKanbanBridge | null = null;
+
+  constructor() {
+    super();
+  }
 
   configure(bridges: { kanban: GitHubKanbanBridge }): void {
     this.kanbanBridge = bridges.kanban;
@@ -174,6 +189,14 @@ class PRSnapshotService {
     await workspaceAccessor.update(workspaceId, updateData);
 
     await this.kanban.updateCachedKanbanColumn(workspaceId);
+
+    this.emit(PR_SNAPSHOT_UPDATED, {
+      workspaceId,
+      prNumber: snapshot.prNumber,
+      prState: snapshot.prState,
+      prCiStatus: snapshot.prCiStatus,
+      prReviewState: snapshot.prReviewState,
+    } satisfies PRSnapshotUpdatedEvent);
   }
 }
 

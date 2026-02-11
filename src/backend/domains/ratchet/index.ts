@@ -29,10 +29,11 @@ export { fixerSessionService } from './fixer-session.service';
 export type {
   RatchetAction,
   RatchetCheckResult,
+  RatchetStateChangedEvent,
   WorkspaceRatchetResult,
 } from './ratchet.service';
 // Core ratchet polling and dispatch
-export { ratchetService } from './ratchet.service';
+export { RATCHET_STATE_CHANGED, ratchetService } from './ratchet.service';
 
 // Reconciliation (workspace/session cleanup)
 export { reconciliationService } from './reconciliation.service';
