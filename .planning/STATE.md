@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 ## Current Position
 
 Phase: 13 of 18 (Event Collector)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-11 -- Phase 12 complete (verified, 6/6 must-haves)
+Plan: 1 of 1 in current phase
+Status: Phase 13 complete
+Last activity: 2026-02-11 -- Phase 13-01 executed (event collector orchestrator)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 8min
-- Total execution time: 0.55 hours
+- Total plans completed: 5
+- Average duration: 7min
+- Total execution time: 0.63 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [██░░░░░░░░] 25%
 |-------|-------|-------|----------|
 | 11-snapshot-store | 2 | 21min | 10min |
 | 12-domain-event-emission | 2 | 12min | 6min |
+| 13-event-collector | 1 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 12min, 9min, 3min, 9min
-- Trend: stable
+- Last 5 plans: 12min, 9min, 3min, 9min, 5min
+- Trend: improving
 
 *Updated after each plan completion*
 
@@ -57,6 +58,10 @@ Recent decisions affecting current work:
 - [12-01]: EventEmitter pattern (Node.js native) over custom pub/sub for simplicity
 - [12-02]: PR snapshot always emits (no dedup) -- Phase 13 coalescer handles dedup
 - [12-02]: Ratchet emits only on actual state change (guard check before emit)
+- [13-01]: 150ms trailing-edge debounce for coalescing (midpoint of 100-200ms requirement)
+- [13-01]: ARCHIVED events bypass coalescer for immediate store.remove()
+- [13-01]: Unknown workspaces silently skipped -- reconciliation seeds them
+- [13-01]: Event collector NOT re-exported from orchestration/index.ts (circular dep avoidance)
 
 ### Pending Todos
 
@@ -69,5 +74,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 12 complete and verified -- ready to plan Phase 13
+Stopped at: Completed 13-01-PLAN.md -- Phase 13 complete, ready for Phase 14
 Resume file: None
