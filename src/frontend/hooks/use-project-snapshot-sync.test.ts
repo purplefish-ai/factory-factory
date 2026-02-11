@@ -27,6 +27,7 @@ vi.mock('@/hooks/use-websocket-transport', () => ({
 }));
 
 const mockSetData = vi.fn();
+const mockKanbanSetData = vi.fn();
 
 vi.mock('@/frontend/lib/trpc', () => ({
   trpc: {
@@ -34,6 +35,9 @@ vi.mock('@/frontend/lib/trpc', () => ({
       workspace: {
         getProjectSummaryState: {
           setData: mockSetData,
+        },
+        listWithKanbanState: {
+          setData: mockKanbanSetData,
         },
       },
     }),
@@ -93,6 +97,7 @@ describe('useProjectSnapshotSync', () => {
   beforeEach(() => {
     capturedOptions = null;
     mockSetData.mockReset();
+    mockKanbanSetData.mockReset();
   });
 
   it('sets URL to null when projectId is undefined', () => {
@@ -111,7 +116,11 @@ describe('useProjectSnapshotSync', () => {
     expect(capturedOptions?.queuePolicy).toBe('drop');
   });
 
-  describe('snapshot_full message', () => {
+  // ===========================================================================
+  // Sidebar cache tests (getProjectSummaryState)
+  // ===========================================================================
+
+  describe('snapshot_full message (sidebar)', () => {
     it('calls setData with mapped entries and preserves reviewCount from prev', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
@@ -152,7 +161,7 @@ describe('useProjectSnapshotSync', () => {
     });
   });
 
-  describe('snapshot_changed message', () => {
+  describe('snapshot_changed message (sidebar)', () => {
     it('replaces an existing workspace (upsert)', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
@@ -222,7 +231,7 @@ describe('useProjectSnapshotSync', () => {
     });
   });
 
-  describe('snapshot_removed message', () => {
+  describe('snapshot_removed message (sidebar)', () => {
     it('filters out the removed workspace', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
@@ -259,6 +268,207 @@ describe('useProjectSnapshotSync', () => {
       });
 
       const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater(undefined);
+      expect(result).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // Kanban cache tests (listWithKanbanState)
+  // ===========================================================================
+
+  describe('snapshot_full message (kanban)', () => {
+    it('calls kanban setData and filters out entries with null kanbanColumn', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entryWithColumn = makeEntry({ workspaceId: 'ws-1', kanbanColumn: 'WORKING' });
+      const entryWithoutColumn = makeEntry({ workspaceId: 'ws-2', kanbanColumn: null });
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [entryWithColumn, entryWithoutColumn],
+      });
+
+      expect(mockKanbanSetData).toHaveBeenCalledTimes(1);
+      const [inputKey, updater] = mockKanbanSetData.mock.calls[0]!;
+      expect(inputKey).toEqual({ projectId: 'proj-1' });
+
+      const result = updater(undefined);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('ws-1');
+      expect(result[0].kanbanColumn).toBe('WORKING');
+    });
+
+    it('merges existing cache entries for non-snapshot fields', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1', kanbanColumn: 'WORKING' });
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [entry],
+      });
+
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
+      const prev = [{ id: 'ws-1', description: 'cached description', githubIssueNumber: 42 }];
+      const result = updater(prev);
+      expect(result).toHaveLength(1);
+      expect(result[0].description).toBe('cached description');
+      expect(result[0].githubIssueNumber).toBe(42);
+    });
+  });
+
+  describe('snapshot_changed message (kanban)', () => {
+    it('upserts into kanban cache (replaces existing)', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1', name: 'updated', kanbanColumn: 'DONE' });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry,
+      });
+
+      expect(mockKanbanSetData).toHaveBeenCalledTimes(1);
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
+      const prev = [
+        { id: 'ws-1', name: 'old' },
+        { id: 'ws-2', name: 'other' },
+      ];
+      const result = updater(prev);
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('updated');
+      expect(result[0].kanbanColumn).toBe('DONE');
+      expect(result[1].name).toBe('other');
+    });
+
+    it('appends new workspace to kanban cache', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-new', kanbanColumn: 'WORKING' });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-new',
+        entry,
+      });
+
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
+      const prev = [{ id: 'ws-1', name: 'existing' }];
+      const result = updater(prev);
+      expect(result).toHaveLength(2);
+      expect(result[1].id).toBe('ws-new');
+    });
+
+    it('removes from kanban cache when kanbanColumn is null', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1', kanbanColumn: null });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry,
+      });
+
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
+      const prev = [
+        { id: 'ws-1', name: 'to-remove' },
+        { id: 'ws-2', name: 'stays' },
+      ];
+      const result = updater(prev);
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('stays');
+    });
+
+    it('returns prev unchanged when kanbanColumn is null and no prev', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1', kanbanColumn: null });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry,
+      });
+
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
+      const result = updater(undefined);
+      expect(result).toBeUndefined();
+    });
+
+    it('merges existing cache entry fields (description, githubIssueNumber)', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1', kanbanColumn: 'WORKING' });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry,
+      });
+
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
+      const prev = [{ id: 'ws-1', description: 'my desc', githubIssueNumber: 7 }];
+      const result = updater(prev);
+      expect(result[0].description).toBe('my desc');
+      expect(result[0].githubIssueNumber).toBe(7);
+    });
+
+    it('creates single-item list when prev is null', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1', kanbanColumn: 'WORKING' });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry,
+      });
+
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
+      const result = updater(undefined);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('ws-1');
+    });
+  });
+
+  describe('snapshot_removed message (kanban)', () => {
+    it('removes from kanban cache', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+      });
+
+      expect(mockKanbanSetData).toHaveBeenCalledTimes(1);
+      const [inputKey, updater] = mockKanbanSetData.mock.calls[0]!;
+      expect(inputKey).toEqual({ projectId: 'proj-1' });
+
+      const prev = [
+        { id: 'ws-1', name: 'gone' },
+        { id: 'ws-2', name: 'stays' },
+      ];
+      const result = updater(prev);
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('stays');
+    });
+
+    it('returns prev unchanged when prev is null', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+      });
+
+      const [, updater] = mockKanbanSetData.mock.calls[0]!;
       const result = updater(undefined);
       expect(result).toBeUndefined();
     });

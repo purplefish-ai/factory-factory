@@ -1,21 +1,24 @@
 /**
- * React hook that syncs /snapshots WebSocket messages into the
- * getProjectSummaryState React Query cache entry.
+ * React hook that syncs /snapshots WebSocket messages into both the
+ * getProjectSummaryState (sidebar) and listWithKanbanState (kanban)
+ * React Query cache entries.
  *
  * Follows the use-dev-logs.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
  */
 
 import { useCallback } from 'react';
+import { mapSnapshotEntryToKanbanWorkspace } from '@/frontend/lib/snapshot-to-kanban';
 import {
   mapSnapshotEntryToServerWorkspace,
   type SnapshotServerMessage,
+  type WorkspaceSnapshotEntry,
 } from '@/frontend/lib/snapshot-to-sidebar';
 import { trpc } from '@/frontend/lib/trpc';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 
-// Type alias for the cache data shape (matches tRPC-inferred getProjectSummaryState output).
+// Type alias for the sidebar cache data shape (matches tRPC-inferred getProjectSummaryState output).
 // We use a local type so the updater callbacks can be properly typed without
 // running into ServerWorkspace's `createdAt: string | Date` vs the tRPC-inferred `Date`.
 type CacheData = {
@@ -23,13 +26,82 @@ type CacheData = {
   reviewCount: number;
 };
 
+// Type alias for the kanban cache data shape (matches tRPC-inferred listWithKanbanState output).
+type KanbanCacheData = Record<string, unknown>[] | undefined;
+
+// =============================================================================
+// Kanban cache update helpers (extracted to keep handleMessage under complexity limit)
+// =============================================================================
+
+/** Build a kanban cache from a snapshot_full message, merging existing entries. */
+function buildKanbanCacheFromFull(
+  entries: WorkspaceSnapshotEntry[],
+  prev: KanbanCacheData
+): Record<string, unknown>[] {
+  const existingById = new Map<string, Record<string, unknown>>();
+  if (prev) {
+    for (const w of prev) {
+      const id = (w as { id: string }).id;
+      existingById.set(id, w);
+    }
+  }
+  return entries
+    .filter((e) => e.kanbanColumn !== null)
+    .map((e) => mapSnapshotEntryToKanbanWorkspace(e, existingById.get(e.workspaceId)));
+}
+
+/** Upsert or remove a single entry in the kanban cache from a snapshot_changed message. */
+function upsertKanbanCacheEntry(
+  entry: WorkspaceSnapshotEntry,
+  prev: KanbanCacheData
+): KanbanCacheData {
+  // If kanbanColumn is null, workspace doesn't belong on the kanban board -- remove it
+  if (entry.kanbanColumn === null) {
+    if (!prev) {
+      return prev;
+    }
+    return prev.filter((w) => (w as { id: string }).id !== entry.workspaceId);
+  }
+
+  // Find existing cache entry to merge non-snapshot fields
+  const existingEntry = prev?.find((w) => (w as { id: string }).id === entry.workspaceId);
+  const mapped = mapSnapshotEntryToKanbanWorkspace(entry, existingEntry);
+
+  if (!prev) {
+    return [mapped];
+  }
+
+  const existingIndex = prev.findIndex((w) => (w as { id: string }).id === entry.workspaceId);
+  const items = [...prev];
+
+  if (existingIndex >= 0) {
+    items[existingIndex] = mapped;
+  } else {
+    items.push(mapped);
+  }
+
+  return items;
+}
+
+/** Remove a workspace from the kanban cache. */
+function removeFromKanbanCache(workspaceId: string, prev: KanbanCacheData): KanbanCacheData {
+  if (!prev) {
+    return prev;
+  }
+  return prev.filter((w) => (w as { id: string }).id !== workspaceId);
+}
+
+// =============================================================================
+// Hook
+// =============================================================================
+
 /**
  * Subscribes to the /snapshots WebSocket endpoint for a given project
- * and updates the React Query cache for `workspace.getProjectSummaryState`
- * whenever snapshot_full, snapshot_changed, or snapshot_removed messages
- * arrive.
+ * and updates the React Query caches for `workspace.getProjectSummaryState`
+ * (sidebar) and `workspace.listWithKanbanState` (kanban board) whenever
+ * snapshot_full, snapshot_changed, or snapshot_removed messages arrive.
  *
- * Returns void -- the hook's side effect is updating the cache.
+ * Returns void -- the hook's side effect is updating the caches.
  */
 export function useProjectSnapshotSync(projectId: string | undefined): void {
   const utils = trpc.useUtils();
@@ -44,13 +116,20 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       // functionally identical to the tRPC-inferred shape, but TypeScript cannot
       // prove this because ServerWorkspace declares createdAt as `string | Date`.
       const { setData } = utils.workspace.getProjectSummaryState;
+      const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
 
       switch (message.type) {
         case 'snapshot_full': {
+          // Update sidebar cache
           setData({ projectId: message.projectId }, ((prev: CacheData | undefined) => ({
             workspaces: message.entries.map(mapSnapshotEntryToServerWorkspace),
             reviewCount: prev?.reviewCount ?? 0,
           })) as never);
+
+          // Update kanban cache -- filter out entries with null kanbanColumn
+          // (matches server behavior: READY workspaces with no sessions are hidden)
+          setKanbanData({ projectId: message.projectId }, ((prev: KanbanCacheData) =>
+            buildKanbanCacheFromFull(message.entries, prev)) as never);
           break;
         }
 
@@ -58,6 +137,8 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           if (!projectId) {
             break;
           }
+
+          // Update sidebar cache
           setData({ projectId }, ((prev: CacheData | undefined) => {
             if (!prev) {
               return {
@@ -80,6 +161,10 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
 
             return { workspaces, reviewCount: prev.reviewCount };
           }) as never);
+
+          // Update kanban cache
+          setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
+            upsertKanbanCacheEntry(message.entry, prev)) as never);
           break;
         }
 
@@ -87,6 +172,8 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           if (!projectId) {
             break;
           }
+
+          // Update sidebar cache
           setData({ projectId }, ((prev: CacheData | undefined) => {
             if (!prev) {
               return prev;
@@ -98,6 +185,10 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
               reviewCount: prev.reviewCount,
             };
           }) as never);
+
+          // Update kanban cache
+          setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
+            removeFromKanbanCache(message.workspaceId, prev)) as never);
           break;
         }
       }
