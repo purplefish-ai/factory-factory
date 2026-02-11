@@ -35,6 +35,10 @@ import {
   configureEventCollector,
   stopEventCollector,
 } from './orchestration/event-collector.orchestrator';
+import {
+  configureSnapshotReconciliation,
+  snapshotReconciliationService,
+} from './orchestration/snapshot-reconciliation.orchestrator';
 import { createHealthRouter } from './routers/api/health.router';
 import { createMcpRouter } from './routers/api/mcp.router';
 import { createProjectRouter } from './routers/api/project.router';
@@ -258,6 +262,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
     await schedulerService.stop();
     stopEventCollector();
+    await snapshotReconciliationService.stop();
     await ratchetService.stop();
     await reconciliationService.stopPeriodicCleanup();
     await prisma.$disconnect();
@@ -288,6 +293,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
           configureDomainBridges();
           configureEventCollector();
+          configureSnapshotReconciliation();
 
           try {
             await reconciliationService.cleanupOrphans();
