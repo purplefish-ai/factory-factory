@@ -29,6 +29,19 @@ function writeStderr(message: string): void {
 /**
  * Parse migration SQL to separate PRAGMAs from DDL/DML statements.
  * PRAGMAs must execute outside a transaction in SQLite.
+ *
+ * IMPORTANT: This parser is designed for Prisma-generated DDL migrations,
+ * which never contain multi-line string literals. It uses a simple line-based
+ * approach that:
+ * - Strips comment lines (starting with --)
+ * - Separates PRAGMA statements from DDL/DML
+ * - Preserves order (pre-pragmas, DDL, post-pragmas)
+ *
+ * LIMITATION: This parser does NOT handle multi-line string literals correctly.
+ * If a custom migration contains a multi-line string with "--" or "PRAGMA" in it,
+ * the parser will incorrectly strip or extract those lines. This is acceptable
+ * because Prisma DDL migrations never have this pattern. For custom migrations
+ * with data, avoid multi-line strings or use db.exec() directly.
  */
 function parseMigrationSql(migrationSql: string): {
   prePragmas: string[];
