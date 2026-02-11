@@ -90,17 +90,16 @@ export function runMigrations(options: MigrationOptions): void {
         continue;
       }
 
-      log(`[migrate] Applying: ${migrationName}`);
       const sql = readFileSync(sqlPath, 'utf-8');
       const checksum = createHash('sha256').update(sql).digest('hex');
 
-      // Record migration start
-      const id = crypto.randomUUID();
-      db.prepare(
-        'INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
-      ).run(id, checksum, migrationName);
+      // Define an atomic transaction for the migration
+      const applyMigration = db.transaction(() => {
+        const id = crypto.randomUUID();
+        db.prepare(
+          'INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
+        ).run(id, checksum, migrationName);
 
-      try {
         // Execute the migration
         db.exec(sql);
 
@@ -108,11 +107,15 @@ export function runMigrations(options: MigrationOptions): void {
         db.prepare(
           'UPDATE _prisma_migrations SET finished_at = CURRENT_TIMESTAMP, applied_steps_count = 1 WHERE id = ?'
         ).run(id);
+      });
 
+      try {
+        log(`[migrate] Applying: ${migrationName}`);
+        applyMigration();
         log(`[migrate] Applied: ${migrationName}`);
       } catch (err) {
-        // Remove the incomplete migration record so it can be retried
-        db.prepare('DELETE FROM _prisma_migrations WHERE id = ?').run(id);
+        const message = err instanceof Error ? err.message : String(err);
+        log(`[migrate] Failed to apply migration ${migrationName}: ${message}`);
         throw err;
       }
     }
