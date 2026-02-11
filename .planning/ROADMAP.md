@@ -75,10 +75,10 @@ Plans:
   1. When any domain emits a state change event, the corresponding workspace snapshot entry is updated within the coalescing window
   2. Rapid-fire events (multiple events within 100-200ms) for the same workspace produce a single snapshot update and push, not multiple
   3. The event collector lives in src/backend/orchestration/ and uses bridge pattern -- domains emit events without importing or knowing about the snapshot service
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 13-01: TBD
+- [ ] 13-01-PLAN.md -- Event collector orchestrator with per-workspace coalescing, all 6 event subscriptions, server wiring, and tests
 
 ### Phase 14: Safety-Net Reconciliation
 **Goal**: A periodic poll recomputes snapshots from authoritative DB and git sources, catches any events that were missed, and logs observable drift metrics
@@ -161,7 +161,7 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 |-------|-----------|----------------|--------|-----------|
 | 11. Snapshot Store | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
 | 12. Domain Event Emission | v1.1 | 2/2 | ✓ Complete | 2026-02-11 |
-| 13. Event Collector | v1.1 | 0/TBD | Not started | - |
+| 13. Event Collector | v1.1 | 0/1 | Planning complete | - |
 | 14. Safety-Net Reconciliation | v1.1 | 0/TBD | Not started | - |
 | 15. WebSocket Transport | v1.1 | 0/TBD | Not started | - |
 | 16. Client Integration - Sidebar | v1.1 | 0/TBD | Not started | - |
@@ -170,4 +170,4 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 12 complete (2/2 plans, all EVNT requirements satisfied)*
+*Last updated: 2026-02-11 -- Phase 13 planned (1 plan, EVNT-06/07/08)*
