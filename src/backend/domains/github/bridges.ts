@@ -4,6 +4,14 @@
  * The GitHub domain never imports from other domains directly.
  */
 
+import type {
+  AcquireAndDispatchRequest,
+  AcquireAndDispatchResponse,
+} from '@/backend/services/fixer-workflow.service';
+
+export type GitHubFixerAcquireInput = AcquireAndDispatchRequest;
+export type GitHubFixerAcquireResult = AcquireAndDispatchResponse;
+
 /** Session capabilities needed by GitHub domain */
 export interface GitHubSessionBridge {
   isSessionWorking(sessionId: string): boolean;
@@ -11,22 +19,6 @@ export interface GitHubSessionBridge {
     sessionId: string
   ): { isRunning(): boolean; sendMessage(msg: string): Promise<void> } | null;
 }
-
-/** Input for acquireAndDispatch (duplicated locally to avoid cross-domain dep on ratchet) */
-export interface GitHubFixerAcquireInput {
-  workspaceId: string;
-  workflow: string;
-  sessionName: string;
-  buildPrompt: () => string | Promise<string>;
-  runningIdleAction: 'send_message' | 'restart' | 'already_active';
-}
-
-/** Result from acquireAndDispatch (duplicated locally to avoid cross-domain dep on ratchet) */
-export type GitHubFixerAcquireResult =
-  | { status: 'started'; sessionId: string; promptSent?: boolean }
-  | { status: 'already_active'; sessionId: string; reason: 'working' | 'message_dispatched' }
-  | { status: 'skipped'; reason: string }
-  | { status: 'error'; error: string };
 
 /** Fixer session capability needed by GitHub domain */
 export interface GitHubFixerBridge {

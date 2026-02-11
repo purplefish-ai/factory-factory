@@ -6,6 +6,12 @@
  */
 
 import type { SessionStatus } from '@prisma-gen/client';
+import {
+  dispatchFixWorkflow,
+  isFixWorkflowInProgress,
+  notifyFixWorkflowSession,
+  runExclusiveWorkspaceOperation,
+} from '@/backend/services/fixer-workflow.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
@@ -46,31 +52,7 @@ class CIFixerService {
     return this.sessionBridge;
   }
 
-  async triggerCIFix(params: {
-    workspaceId: string;
-    prUrl: string;
-    prNumber: number;
-    failureDetails?: CIFailureDetails;
-  }): Promise<CIFixResult> {
-    const { workspaceId } = params;
-
-    const pending = this.pendingFixes.get(workspaceId);
-    if (pending) {
-      logger.debug('CI fix operation already in progress', { workspaceId });
-      return pending;
-    }
-
-    const promise = this.doTriggerCIFix(params);
-    this.pendingFixes.set(workspaceId, promise);
-
-    try {
-      return await promise;
-    } finally {
-      this.pendingFixes.delete(workspaceId);
-    }
-  }
-
-  private async doTriggerCIFix(params: {
+  triggerCIFix(params: {
     workspaceId: string;
     prUrl: string;
     prNumber: number;
@@ -78,46 +60,36 @@ class CIFixerService {
   }): Promise<CIFixResult> {
     const { workspaceId, prUrl, prNumber, failureDetails } = params;
 
-    try {
-      const result = await fixerSessionService.acquireAndDispatch({
-        workspaceId,
-        workflow: CI_FIX_WORKFLOW,
-        sessionName: 'CI Fixing',
-        runningIdleAction: 'send_message',
-        buildPrompt: () => this.buildInitialPrompt(prUrl, prNumber, failureDetails),
-      });
-
-      if (result.status === 'started') {
-        logger.info('CI fixing session started', {
+    return runExclusiveWorkspaceOperation({
+      pendingMap: this.pendingFixes,
+      workspaceId,
+      logger,
+      duplicateOperationMessage: 'CI fix operation already in progress',
+      operation: () =>
+        dispatchFixWorkflow({
           workspaceId,
-          sessionId: result.sessionId,
-          prNumber,
-        });
-        return { status: 'started', sessionId: result.sessionId };
-      }
-
-      if (result.status === 'already_active') {
-        return { status: 'already_fixing', sessionId: result.sessionId };
-      }
-
-      if (result.status === 'skipped') {
-        return { status: 'skipped', reason: result.reason };
-      }
-
-      return { status: 'error', error: result.error };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to trigger CI fix', error as Error, { workspaceId, prUrl });
-      return { status: 'error', error: errorMessage };
-    }
+          workflow: CI_FIX_WORKFLOW,
+          sessionName: 'CI Fixing',
+          runningIdleAction: 'send_message',
+          acquireAndDispatch: fixerSessionService.acquireAndDispatch.bind(fixerSessionService),
+          buildPrompt: () => this.buildInitialPrompt(prUrl, prNumber, failureDetails),
+          logger,
+          startedLogMessage: 'CI fixing session started',
+          failureLogMessage: 'Failed to trigger CI fix',
+          startedLogMeta: { prNumber },
+          errorLogMeta: { prUrl },
+        }),
+    });
   }
 
-  async isFixingInProgress(workspaceId: string): Promise<boolean> {
-    const session = await this.getActiveCIFixSession(workspaceId);
-    if (!session) {
-      return false;
-    }
-    return this.session.isSessionWorking(session.id);
+  isFixingInProgress(workspaceId: string): Promise<boolean> {
+    return isFixWorkflowInProgress({
+      workspaceId,
+      workflow: CI_FIX_WORKFLOW,
+      getActiveSession: (targetWorkspaceId, workflow) =>
+        fixerSessionService.getActiveSession(targetWorkspaceId, workflow),
+      isSessionWorking: (sessionId) => this.session.isSessionWorking(sessionId),
+    });
   }
 
   async getActiveCIFixSession(
@@ -126,31 +98,19 @@ class CIFixerService {
     return await fixerSessionService.getActiveSession(workspaceId, CI_FIX_WORKFLOW);
   }
 
-  async notifyCIPassed(workspaceId: string): Promise<boolean> {
-    const session = await this.getActiveCIFixSession(workspaceId);
-    if (!session) {
-      return false;
-    }
-
-    const client = this.session.getClient(session.id);
-    if (!client?.isRunning()) {
-      return false;
-    }
-
-    client
-      .sendMessage(
-        '✅ **CI Passed** - The CI checks are now passing. You can wrap up your current work.'
-      )
-      .catch((error) => {
-        logger.warn('Failed to notify CI fixer session', { workspaceId, error });
-      });
-
-    logger.info('Notified CI fixing session that CI passed', {
+  notifyCIPassed(workspaceId: string): Promise<boolean> {
+    return notifyFixWorkflowSession({
       workspaceId,
-      sessionId: session.id,
+      workflow: CI_FIX_WORKFLOW,
+      getActiveSession: (targetWorkspaceId, workflow) =>
+        fixerSessionService.getActiveSession(targetWorkspaceId, workflow),
+      getClient: (sessionId) => this.session.getClient(sessionId),
+      message:
+        '✅ **CI Passed** - The CI checks are now passing. You can wrap up your current work.',
+      logger,
+      successLogMessage: 'Notified CI fixing session that CI passed',
+      failureLogMessage: 'Failed to notify CI fixer session',
     });
-
-    return true;
   }
 
   private buildInitialPrompt(

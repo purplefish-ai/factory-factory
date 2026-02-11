@@ -1,4 +1,4 @@
-import { FileQuestion, Files, GitCompare, ListTodo, Play, Plus, Terminal, X } from 'lucide-react';
+import { FileQuestion, Files, GitCompare, ListTodo, Play, Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
@@ -13,6 +13,7 @@ import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
+import { TerminalTabBar } from './terminal-tab-bar';
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
 import { useDevLogs } from './use-dev-logs';
@@ -295,44 +296,14 @@ function TerminalTabsInline({ terminalTabState }: TerminalTabsInlineProps) {
   const { tabs, activeTabId, onSelectTab, onCloseTab, onNewTab } = terminalTabState;
 
   return (
-    <>
-      {/* Terminal tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={cn(
-              'flex items-center rounded-md transition-colors group flex-shrink-0',
-              activeTabId === tab.id
-                ? 'bg-zinc-800 text-zinc-100'
-                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-            )}
-          >
-            <button
-              type="button"
-              className="flex items-center gap-1 px-2 py-1 text-xs cursor-pointer whitespace-nowrap"
-              onClick={() => onSelectTab(tab.id)}
-            >
-              <Terminal className="h-3 w-3 flex-shrink-0" />
-              <span>{tab.label}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onCloseTab(tab.id)}
-              className={cn(
-                'mr-1 p-0.5 rounded hover:bg-zinc-600/50 transition-colors',
-                'opacity-0 group-hover:opacity-100',
-                activeTabId === tab.id && 'opacity-100'
-              )}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* New terminal button with tooltip */}
-      <NewTerminalButton onNewTab={onNewTab} />
-    </>
+    <TerminalTabBar
+      tabs={tabs}
+      activeTabId={activeTabId}
+      onSelectTab={onSelectTab}
+      onCloseTab={onCloseTab}
+      onNewTab={onNewTab}
+      className="min-w-0 flex-1"
+      renderNewButton={(handleNewTab) => <NewTerminalButton onNewTab={handleNewTab} />}
+    />
   );
 }

@@ -69,6 +69,7 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
     onMessage: handleMessage,
     onConnected: handleConnected,
     onDisconnected: handleDisconnected,
+    queuePolicy: 'drop',
   });
 
   return { connected, output, outputEndRef };

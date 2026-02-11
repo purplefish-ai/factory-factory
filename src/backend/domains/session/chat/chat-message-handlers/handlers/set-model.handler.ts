@@ -1,16 +1,15 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { SetModelMessage } from '@/shared/websocket';
-import { sessionService } from '../../../lifecycle/session.service';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
+import { getClientOrSendError, sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
 export function createSetModelHandler(): ChatMessageHandler<SetModelMessage> {
   return async ({ ws, sessionId, message }) => {
-    const client = sessionService.getClient(sessionId);
+    const client = getClientOrSendError({ sessionId, ws });
     if (!client) {
-      ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
       return;
     }
 
@@ -26,7 +25,7 @@ export function createSetModelHandler(): ChatMessageHandler<SetModelMessage> {
         model: message.model,
         error: errorMessage,
       });
-      ws.send(JSON.stringify({ type: 'error', message: `Failed to set model: ${errorMessage}` }));
+      sendWebSocketError(ws, `Failed to set model: ${errorMessage}`);
     }
   };
 }

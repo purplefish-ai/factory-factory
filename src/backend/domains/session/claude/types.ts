@@ -57,6 +57,14 @@ export type {
   ToolUseContent,
 };
 
+export {
+  isImageContent,
+  isTextContent,
+  isThinkingContent,
+  isToolResultContent,
+  isToolUseContent,
+} from '@/shared/claude';
+
 // =============================================================================
 // Enums and Constants
 // =============================================================================
@@ -769,34 +777,6 @@ export function isControlResponse(msg: ClaudeJson): msg is ControlResponse {
  */
 export function isControlCancelRequest(msg: ClaudeJson): msg is ControlCancelRequest {
   return msg.type === 'control_cancel_request';
-}
-
-/**
- * Type guard to check if a content item is TextContent.
- */
-export function isTextContent(item: ClaudeContentItem): item is TextContent {
-  return item.type === 'text';
-}
-
-/**
- * Type guard to check if a content item is ThinkingContent.
- */
-export function isThinkingContent(item: ClaudeContentItem): item is ThinkingContent {
-  return item.type === 'thinking';
-}
-
-/**
- * Type guard to check if a content item is ToolUseContent.
- */
-export function isToolUseContent(item: ClaudeContentItem): item is ToolUseContent {
-  return item.type === 'tool_use';
-}
-
-/**
- * Type guard to check if a content item is ToolResultContent.
- */
-export function isToolResultContent(item: ClaudeContentItem): item is ToolResultContent {
-  return item.type === 'tool_result';
 }
 
 /**

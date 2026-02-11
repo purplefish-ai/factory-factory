@@ -1,6 +1,5 @@
 import { AlertTriangle, ArrowDown, Loader2, Play, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo } from 'react';
-import { toast } from 'sonner';
 import type { useChatWebSocket } from '@/components/chat';
 import {
   AgentLiveDock,
@@ -11,13 +10,12 @@ import {
   VirtualizedMessageList,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
-import { trpc } from '@/frontend/lib/trpc';
 import type { CommandInfo, TokenStats } from '@/lib/claude-types';
 import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
-import { isResumeWorkspace } from './resume-workspace-storage';
+import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
-interface ChatContentProps {
+export interface ChatContentProps {
   workspaceId: string;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
@@ -205,15 +203,7 @@ export const ChatContent = memo(function ChatContent({
   autoStartPending = false,
   initBanner,
 }: ChatContentProps) {
-  const utils = trpc.useUtils();
-  const retryInit = trpc.workspace.retryInit.useMutation({
-    onSuccess: () => {
-      utils.workspace.getInitStatus.invalidate({ id: workspaceId });
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
+  const { retry, retryInit } = useRetryWorkspaceInit(workspaceId);
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
   const latestToolSequence = useMemo(() => {
     for (let i = groupedMessages.length - 1; i >= 0; i -= 1) {
@@ -280,12 +270,7 @@ export const ChatContent = memo(function ChatContent({
           <InitStatusBanner
             banner={initBanner}
             retryPending={retryInit.isPending}
-            onRetry={() =>
-              retryInit.mutate({
-                id: workspaceId,
-                useExistingBranch: isResumeWorkspace(workspaceId) || undefined,
-              })
-            }
+            onRetry={retry}
             onPlay={resumeQueuedMessages}
           />
         )}

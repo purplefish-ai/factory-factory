@@ -1,16 +1,15 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { SetThinkingBudgetMessage } from '@/shared/websocket';
-import { sessionService } from '../../../lifecycle/session.service';
 import { DEBUG_CHAT_WS } from '../constants';
 import type { ChatMessageHandler } from '../types';
+import { getClientOrSendError, sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
 export function createSetThinkingBudgetHandler(): ChatMessageHandler<SetThinkingBudgetMessage> {
   return async ({ ws, sessionId, message }) => {
-    const client = sessionService.getClient(sessionId);
+    const client = getClientOrSendError({ sessionId, ws });
     if (!client) {
-      ws.send(JSON.stringify({ type: 'error', message: 'No active client for session' }));
       return;
     }
 
@@ -29,9 +28,7 @@ export function createSetThinkingBudgetHandler(): ChatMessageHandler<SetThinking
         maxTokens: message.max_tokens,
         error: errorMessage,
       });
-      ws.send(
-        JSON.stringify({ type: 'error', message: `Failed to set thinking budget: ${errorMessage}` })
-      );
+      sendWebSocketError(ws, `Failed to set thinking budget: ${errorMessage}`);
     }
   };
 }

@@ -3,6 +3,7 @@ import {
   type ChatMessage,
   type ClaudeContentItem,
   hasRenderableAssistantContent,
+  isImageContent,
   isRenderableAssistantContentItem,
   shouldPersistClaudeMessage,
   shouldSuppressDuplicateResultMessage,
@@ -67,6 +68,37 @@ describe('assistant renderability guards', () => {
         },
       })
     ).toBe(true);
+  });
+});
+
+describe('image guard', () => {
+  it('accepts valid base64 image content', () => {
+    expect(
+      isImageContent({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/png',
+          data: 'Zm9v',
+        },
+      } as ClaudeContentItem)
+    ).toBe(true);
+  });
+
+  it('rejects image content missing required source fields', () => {
+    expect(isImageContent({ type: 'image' } as ClaudeContentItem)).toBe(false);
+    expect(
+      isImageContent({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/png' },
+      } as ClaudeContentItem)
+    ).toBe(false);
+    expect(
+      isImageContent({
+        type: 'image',
+        source: { media_type: 'image/png', data: 'Zm9v' },
+      } as ClaudeContentItem)
+    ).toBe(false);
   });
 });
 

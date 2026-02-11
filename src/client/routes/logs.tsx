@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -34,6 +33,7 @@ import {
 } from '@/components/ui/table';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
 import { cn } from '@/lib/utils';
 import { trpc } from '../../frontend/lib/trpc';
 
@@ -145,7 +145,6 @@ export default function LogsPage() {
   const [sinceDate, setSinceDate] = useState<Date | undefined>();
   const [untilDate, setUntilDate] = useState<Date | undefined>();
   const [offset, setOffset] = useState(0);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Debounce search input
@@ -204,28 +203,7 @@ export default function LogsPage() {
     { refetchInterval: 10_000, placeholderData: keepPreviousData }
   );
 
-  const utils = trpc.useUtils();
-
-  const handleDownload = async () => {
-    setIsDownloading(true);
-    try {
-      const content = await utils.admin.downloadLogFile.fetch();
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `server-${new Date().toISOString().split('T')[0]}.log`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('Log file downloaded');
-    } catch (error) {
-      toast.error(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+  const { download, isDownloading } = useDownloadServerLog();
 
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
@@ -295,7 +273,7 @@ export default function LogsPage() {
               <SelectItem value="custom">Custom Range</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={handleDownload} disabled={isDownloading}>
+          <Button variant="outline" size="sm" onClick={download} disabled={isDownloading}>
             <Download className="w-4 h-4 mr-1" />
             {isDownloading ? 'Downloading...' : 'Download'}
           </Button>

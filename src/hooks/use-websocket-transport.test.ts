@@ -271,6 +271,48 @@ describe('WebSocket transport patterns', () => {
       ws.simulateOpen();
       expect(send({ type: 'test' })).toBe(true);
     });
+
+    it('should drop disconnected messages when queue policy is drop', () => {
+      const queue: unknown[] = [];
+      const send = (
+        message: unknown,
+        readyState: number,
+        queuePolicy: 'replay' | 'drop'
+      ): boolean => {
+        if (readyState === WS_OPEN) {
+          return true;
+        }
+        if (queuePolicy !== 'replay') {
+          return false;
+        }
+        queue.push(message);
+        return false;
+      };
+
+      expect(send({ type: 'input', data: 'ls' }, WS_CLOSED, 'drop')).toBe(false);
+      expect(queue).toHaveLength(0);
+    });
+
+    it('should queue disconnected messages when queue policy is replay', () => {
+      const queue: unknown[] = [];
+      const send = (
+        message: unknown,
+        readyState: number,
+        queuePolicy: 'replay' | 'drop'
+      ): boolean => {
+        if (readyState === WS_OPEN) {
+          return true;
+        }
+        if (queuePolicy !== 'replay') {
+          return false;
+        }
+        queue.push(message);
+        return false;
+      };
+
+      expect(send({ type: 'queue_message', text: 'hello' }, WS_CLOSED, 'replay')).toBe(false);
+      expect(queue).toEqual([{ type: 'queue_message', text: 'hello' }]);
+    });
   });
 
   describe('message receiving', () => {

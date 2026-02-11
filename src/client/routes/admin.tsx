@@ -21,6 +21,8 @@ import { Switch } from '@/components/ui/switch';
 import { RatchetWrenchIcon } from '@/components/workspace';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
+import { downloadFile } from '@/frontend/lib/download-file';
 import { trpc } from '../../frontend/lib/trpc';
 import { ApiUsageSection, ProcessesSection, ProcessesSectionSkeleton } from './admin/index';
 
@@ -472,15 +474,11 @@ function DataBackupSection() {
     try {
       const data = await utils.admin.exportData.fetch();
       const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `factory-factory-backup-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadFile({
+        data: json,
+        mimeType: 'application/json',
+        fileName: `factory-factory-backup-${new Date().toISOString().split('T')[0]}.json`,
+      });
       toast.success('Export completed');
     } catch (error) {
       toast.error(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -518,29 +516,7 @@ function DataBackupSection() {
 }
 
 function ServerLogsSection() {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const utils = trpc.useUtils();
-
-  const handleDownload = async () => {
-    setIsDownloading(true);
-    try {
-      const content = await utils.admin.downloadLogFile.fetch();
-      const blob = new Blob([content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `server-${new Date().toISOString().split('T')[0]}.log`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('Log file downloaded');
-    } catch (error) {
-      toast.error(`Download failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+  const { download, isDownloading } = useDownloadServerLog();
 
   return (
     <Card>
@@ -555,7 +531,7 @@ function ServerLogsSection() {
         <Link to="/logs">
           <Button variant="outline">View Logs</Button>
         </Link>
-        <Button variant="outline" onClick={handleDownload} disabled={isDownloading}>
+        <Button variant="outline" onClick={download} disabled={isDownloading}>
           <Download className="w-4 h-4 mr-2" />
           {isDownloading ? 'Downloading...' : 'Download Log File'}
         </Button>
