@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-11)
 ## Current Position
 
 Phase: 17 of 18 (Client Integration - Kanban and Workspace List)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-11 -- Phase 16 complete and verified (CLNT-01/CLNT-04)
+Plan: 1 of 1 in current phase
+Status: Phase 17 complete
+Last activity: 2026-02-11 -- Phase 17 plan 01 complete (kanban cache sync + polling reduction)
 
-Progress: [███████░░░] 75%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 6min
-- Total execution time: 1.02 hours
+- Total execution time: 1.10 hours
 
 **By Phase:**
 
@@ -33,10 +33,11 @@ Progress: [███████░░░] 75%
 | 14-safety-net-reconciliation | 2 | 9min | 4min |
 | 15-websocket-transport | 1 | 4min | 4min |
 | 16-client-integration-sidebar | 1 | 10min | 10min |
+| 17-client-integration-kanban-and-workspace-list | 1 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 5min, 6min, 3min, 4min, 10min
-- Trend: stable (10min outlier due to type compatibility fixes)
+- Last 5 plans: 6min, 3min, 4min, 10min, 5min
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -73,6 +74,9 @@ Recent decisions affecting current work:
 - [16-01]: Client-side WorkspaceSnapshotEntry type defined locally (not imported from backend build boundary)
 - [16-01]: Type assertion (as never) for tRPC setData updaters due to createdAt string|Date vs Date mismatch
 - [16-01]: createdAt converted to Date in mapping function to match tRPC-inferred cache type
+- [17-01]: Extracted kanban cache helper functions to satisfy Biome cognitive complexity limit
+- [17-01]: Entries with null kanbanColumn filtered from kanban cache (matches server behavior)
+- [17-01]: Non-snapshot fields (description, initErrorMessage, githubIssueNumber) merged from existing cache
 
 ### Pending Todos
 
@@ -85,5 +89,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Phase 16 complete and verified -- ready to plan Phase 17
+Stopped at: Phase 17 complete -- ready to plan Phase 18
 Resume file: None
