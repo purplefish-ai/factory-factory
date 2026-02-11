@@ -50,6 +50,63 @@ function getLogLevelPriority(level: LogLevel): number {
 }
 
 /**
+ * Safely stringify an object, handling circular references.
+ * Pre-processes with ancestor tracking to replace circular references,
+ * invokes toJSON() on objects that define it, then uses JSON.stringify
+ * on the safe result.
+ */
+function safeStringify(obj: unknown): string {
+  const ancestors = new WeakSet<object>();
+
+  function tryToJSON(value: object): { ok: true; result: unknown } | { ok: false } {
+    if (!('toJSON' in value) || typeof (value as Record<string, unknown>).toJSON !== 'function') {
+      return { ok: false };
+    }
+    try {
+      return { ok: true, result: (value as { toJSON: () => unknown }).toJSON() };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  function traverseObject(value: object): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = preprocessValue(val);
+    }
+    return result;
+  }
+
+  function preprocessValue(value: unknown): unknown {
+    if (typeof value === 'function' || typeof value !== 'object' || value === null) {
+      return typeof value === 'function' ? undefined : value;
+    }
+    if (ancestors.has(value)) {
+      return '[Circular]';
+    }
+
+    ancestors.add(value);
+    try {
+      const toJson = tryToJSON(value);
+      if (toJson.ok) {
+        return preprocessValue(toJson.result);
+      }
+      return Array.isArray(value)
+        ? value.map((item) => preprocessValue(item))
+        : traverseObject(value);
+    } finally {
+      ancestors.delete(value);
+    }
+  }
+
+  try {
+    return JSON.stringify(preprocessValue(obj));
+  } catch (err) {
+    return JSON.stringify({ __serializationError: err instanceof Error ? err.message : 'unknown' });
+  }
+}
+
+/**
  * Log file support.
  * Logs are always written to a file. In production, the file is the primary
  * output (only errors also go to stderr). In development, logs go to both
@@ -183,7 +240,7 @@ class Logger {
   private writeToLogFile(entry: LogEntry): void {
     const stream = getLogFileStream();
     if (stream) {
-      stream.write(`${JSON.stringify(entry)}\n`);
+      stream.write(`${safeStringify(entry)}\n`);
     }
   }
 
@@ -196,7 +253,7 @@ class Logger {
 
     // In production, only surface errors in the terminal
     if (entry.level === 'error') {
-      console.error(JSON.stringify(entry));
+      console.error(safeStringify(entry));
     }
   }
 
@@ -226,7 +283,7 @@ class Logger {
       // More than just service and component - extract additional context
       const { service: _service, component: _component, ...rest } = entry.context;
       if (Object.keys(rest).length > 0) {
-        output += ` ${JSON.stringify(rest)}`;
+        output += ` ${safeStringify(rest)}`;
       }
     }
 
