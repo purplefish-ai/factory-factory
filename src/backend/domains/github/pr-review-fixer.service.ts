@@ -90,7 +90,7 @@ class PRReviewFixerService {
           workflow: PR_REVIEW_FIX_WORKFLOW,
           sessionName: 'PR Review Fixing',
           runningIdleAction: 'send_message',
-          acquireAndDispatch: this.fixer.acquireAndDispatch.bind(this.fixer),
+          acquireAndDispatch: (input) => this.fixer.acquireAndDispatch(input),
           buildPrompt: () => this.buildInitialPrompt(prUrl, prNumber, commentDetails, customPrompt),
           logger,
           startedLogMessage: 'PR review fixing session started',

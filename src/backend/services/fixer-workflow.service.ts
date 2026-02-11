@@ -44,7 +44,9 @@ export async function runExclusiveWorkspaceOperation<T>(params: {
     return pending;
   }
 
-  const promise = operation();
+  // Run operation in an async boundary so synchronous throws become promise
+  // rejections and are handled uniformly by callers.
+  const promise = (async () => operation())();
   pendingMap.set(workspaceId, promise);
   try {
     return await promise;
