@@ -145,10 +145,10 @@ Plans:
   1. dependency-cruiser runs with zero new violations after all snapshot service changes
   2. The full existing test suite (1609+ tests) passes with no regressions
   3. Production build succeeds (pnpm build completes without errors)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 18-01: TBD
+- [ ] 18-01-PLAN.md -- Fix imports, full CI validation, milestone documentation
 
 ## Progress
 
@@ -165,8 +165,8 @@ Phases execute in numeric order: 11 -> 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 15. WebSocket Transport | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 16. Client Integration - Sidebar | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
 | 17. Client Integration - Kanban and Workspace List | v1.1 | 1/1 | ✓ Complete | 2026-02-11 |
-| 18. Architecture Validation | v1.1 | 0/TBD | Not started | - |
+| 18. Architecture Validation | v1.1 | 0/1 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-11 -- Phase 17 complete (CLNT-02/CLNT-03/CLNT-05 verified)*
+*Last updated: 2026-02-11 -- Phase 18 planned (1 plan, ARCH-03/ARCH-04)*
