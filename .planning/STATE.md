@@ -1,48 +1,62 @@
 # Project State
 
-**Project:** Factory Factory
-**Status:** v1.1 milestone — defining requirements
-**Current Phase:** Not started
-**Last Updated:** 2026-02-11
-
-## Progress
-
-| Phase | Name | Status | Notes |
-|-------|------|--------|-------|
-| (phases pending roadmap creation) | | | |
-
-## Key Decisions
-
-| Decision | Date | Context |
-|----------|------|---------|
-| In-memory snapshot over DB denormalization | 2026-02-11 | Avoid schema changes, faster reads, simpler invalidation |
-| Event-driven + safety-net poll | 2026-02-11 | Events for speed, poll for correctness |
-| WebSocket push for snapshot delivery | 2026-02-11 | Eliminates frontend polling for project-level surfaces |
-| State-only agent status in snapshot | 2026-02-11 | Keep snapshot lightweight; details via workspace detail view |
-| ~1 minute reconciliation cadence | 2026-02-11 | Safety net, not primary update path |
-
-## Blockers
-
-None.
-
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-02-11)
 
 **Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
-**Current focus:** v1.1 Project Snapshot Service — single materialized view for project-level UI surfaces.
+**Current focus:** Phase 11 - Snapshot Store
 
-## Context for Next Session
+## Current Position
 
-v1.1 milestone started. Building a project snapshot service to replace multiple independent polling loops with an in-memory materialized view pushed via WebSocket. Sidebar, Kanban, and workspace list will all read from one snapshot query. Workspace detail/session polling stays as-is.
+Phase: 11 of 18 (Snapshot Store)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-02-11 -- v1.1 roadmap created (8 phases, 32 requirements)
 
-## Accumulated Context (from v1.0)
+Progress: [░░░░░░░░░░] 0%
 
-- 6 domain modules with barrel encapsulation established
-- Orchestration layer with bridge interfaces for cross-domain coordination
-- 18 dependency-cruiser rules enforcing architecture boundaries
-- Move-and-shim pattern validated for incremental migration
+## Performance Metrics
 
----
-*State initialized: 2026-02-10*
-*Last updated: 2026-02-11 — Milestone v1.1 started*
+**Velocity:**
+- Total plans completed: 0
+- Average duration: --
+- Total execution time: 0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+**Recent Trend:**
+- Last 5 plans: --
+- Trend: --
+
+*Updated after each plan completion*
+
+## Accumulated Context
+
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- [v1.1 init]: In-memory snapshot over DB denormalization
+- [v1.1 init]: Event-driven + safety-net poll (events for speed, poll for correctness)
+- [v1.1 init]: WebSocket push for snapshot delivery
+- [v1.1 init]: State-only agent status in snapshot (lightweight)
+
+### Pending Todos
+
+None yet.
+
+### Blockers/Concerns
+
+None yet.
+
+## Session Continuity
+
+Last session: 2026-02-11
+Stopped at: v1.1 roadmap created, ready to plan Phase 11
+Resume file: None

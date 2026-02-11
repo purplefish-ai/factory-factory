@@ -91,44 +91,44 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STORE-01 | — | Pending |
-| STORE-02 | — | Pending |
-| STORE-03 | — | Pending |
-| STORE-04 | — | Pending |
-| STORE-05 | — | Pending |
-| STORE-06 | — | Pending |
-| EVNT-01 | — | Pending |
-| EVNT-02 | — | Pending |
-| EVNT-03 | — | Pending |
-| EVNT-04 | — | Pending |
-| EVNT-05 | — | Pending |
-| EVNT-06 | — | Pending |
-| EVNT-07 | — | Pending |
-| EVNT-08 | — | Pending |
-| RCNL-01 | — | Pending |
-| RCNL-02 | — | Pending |
-| RCNL-03 | — | Pending |
-| RCNL-04 | — | Pending |
-| WSKT-01 | — | Pending |
-| WSKT-02 | — | Pending |
-| WSKT-03 | — | Pending |
-| WSKT-04 | — | Pending |
-| WSKT-05 | — | Pending |
-| CLNT-01 | — | Pending |
-| CLNT-02 | — | Pending |
-| CLNT-03 | — | Pending |
-| CLNT-04 | — | Pending |
-| CLNT-05 | — | Pending |
-| ARCH-01 | — | Pending |
-| ARCH-02 | — | Pending |
-| ARCH-03 | — | Pending |
-| ARCH-04 | — | Pending |
+| STORE-01 | Phase 11 | Pending |
+| STORE-02 | Phase 11 | Pending |
+| STORE-03 | Phase 11 | Pending |
+| STORE-04 | Phase 11 | Pending |
+| STORE-05 | Phase 11 | Pending |
+| STORE-06 | Phase 11 | Pending |
+| EVNT-01 | Phase 12 | Pending |
+| EVNT-02 | Phase 12 | Pending |
+| EVNT-03 | Phase 12 | Pending |
+| EVNT-04 | Phase 12 | Pending |
+| EVNT-05 | Phase 12 | Pending |
+| EVNT-06 | Phase 13 | Pending |
+| EVNT-07 | Phase 13 | Pending |
+| EVNT-08 | Phase 13 | Pending |
+| RCNL-01 | Phase 14 | Pending |
+| RCNL-02 | Phase 14 | Pending |
+| RCNL-03 | Phase 14 | Pending |
+| RCNL-04 | Phase 14 | Pending |
+| WSKT-01 | Phase 15 | Pending |
+| WSKT-02 | Phase 15 | Pending |
+| WSKT-03 | Phase 15 | Pending |
+| WSKT-04 | Phase 15 | Pending |
+| WSKT-05 | Phase 15 | Pending |
+| CLNT-01 | Phase 16 | Pending |
+| CLNT-04 | Phase 16 | Pending |
+| CLNT-02 | Phase 17 | Pending |
+| CLNT-03 | Phase 17 | Pending |
+| CLNT-05 | Phase 17 | Pending |
+| ARCH-01 | Phase 11 | Pending |
+| ARCH-02 | Phase 11 | Pending |
+| ARCH-03 | Phase 18 | Pending |
+| ARCH-04 | Phase 18 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 32 total
-- Mapped to phases: 0
-- Unmapped: 32 ⚠️
+- Mapped to phases: 32
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-11*
-*Last updated: 2026-02-11 after initial definition*
+*Last updated: 2026-02-11 -- traceability updated with phase mappings*
