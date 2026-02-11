@@ -9,7 +9,6 @@ export type { ConnectionInfo } from './chat/chat-connection.service';
 export { chatConnectionService } from './chat/chat-connection.service';
 export type { EventForwarderContext } from './chat/chat-event-forwarder.service';
 export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
-export type { ChatMessage } from './chat/chat-message-handlers.service';
 export { chatMessageHandlerService } from './chat/chat-message-handlers.service';
 // Claude client (primary type for consumers)
 // Protocol types (commonly used by consumers)

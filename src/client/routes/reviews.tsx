@@ -2,10 +2,10 @@ import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PRDetailPanel } from '@/frontend/components/pr-detail-panel';
+import { PRInboxItem } from '@/frontend/components/pr-inbox-item';
+import { trpc } from '@/frontend/lib/trpc';
 import type { PRWithFullDetails } from '@/shared/github-types';
-import { PRDetailPanel } from '../../frontend/components/pr-detail-panel';
-import { PRInboxItem } from '../../frontend/components/pr-inbox-item';
-import { trpc } from '../../frontend/lib/trpc';
 
 export default function ReviewsPage() {
   return (

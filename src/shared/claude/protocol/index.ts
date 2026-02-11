@@ -1,4 +1,4 @@
-export type { PendingInteractiveRequest } from '../../pending-request-types';
+export type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 
 export * from './agent';
 export * from './constants';

@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { middleware, publicProcedure } from '../trpc';
+import { middleware, publicProcedure } from '@/backend/trpc/trpc';
 
 /**
  * Middleware that validates project context is present.

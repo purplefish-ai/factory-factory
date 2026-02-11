@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { SessionManager, sessionDataService } from '@/backend/domains/session';
 import { workspaceDataService } from '@/backend/domains/workspace';
-import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
+import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({

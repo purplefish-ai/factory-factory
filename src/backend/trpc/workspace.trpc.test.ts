@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGitStatusOutput } from './workspace.trpc';
+import { parseGitStatusOutput } from '@/backend/lib/git-helpers';
 
 // =============================================================================
 // parseGitStatusOutput Tests

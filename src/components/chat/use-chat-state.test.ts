@@ -14,8 +14,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatSettings, QueuedMessage } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS, DEFAULT_THINKING_BUDGET } from '@/lib/claude-types';
-import type { ChatState } from './chat-reducer';
-import { chatReducer, createInitialChatState } from './chat-reducer';
+import type { ChatState } from './reducer';
+import { chatReducer, createInitialChatState } from './reducer';
 
 // =============================================================================
 // Mock Storage

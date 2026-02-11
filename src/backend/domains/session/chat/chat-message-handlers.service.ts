@@ -9,6 +9,10 @@
  */
 
 import type { WebSocket } from 'ws';
+import type { SessionInitPolicyBridge } from '@/backend/domains/session/bridges';
+import type { ClaudeClient } from '@/backend/domains/session/claude/index';
+import { sessionDataService } from '@/backend/domains/session/data/session-data.service';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
 import {
@@ -19,10 +23,6 @@ import {
   resolveSelectedModel,
 } from '@/shared/claude';
 import type { ChatMessageInput } from '@/shared/websocket';
-import type { SessionInitPolicyBridge } from '../bridges';
-import type { ClaudeClient } from '../claude/index';
-import { sessionDataService } from '../data/session-data.service';
-import { sessionService } from '../lifecycle/session.service';
 import { processAttachmentsAndBuildContent } from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
@@ -34,8 +34,6 @@ const logger = createLogger('chat-message-handlers');
 // Types
 // ============================================================================
 
-/** Re-export ChatMessageInput as ChatMessage for backward compatibility */
-export type ChatMessage = ChatMessageInput;
 export type { ClientCreator } from './chat-message-handlers/types';
 
 // ============================================================================
@@ -175,14 +173,14 @@ class ChatMessageHandlerService {
     ws: WebSocket,
     dbSessionId: string | null,
     workingDir: string,
-    message: ChatMessage
+    message: ChatMessageInput
   ): Promise<void> {
     const handler = this.handlerRegistry[message.type] as
       | ((context: {
           ws: WebSocket;
           sessionId: string;
           workingDir: string;
-          message: ChatMessage;
+          message: ChatMessageInput;
         }) => Promise<void> | void)
       | undefined;
 

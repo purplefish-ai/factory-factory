@@ -1,4 +1,4 @@
-import { createLogger } from '../../services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import { registerLockTools } from './lock.mcp';
 import { registerSystemTools } from './system.mcp';
 import { registerTerminalTools } from './terminal.mcp';

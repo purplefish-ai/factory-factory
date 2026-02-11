@@ -1,7 +1,7 @@
+import { chatEventForwarderService } from '@/backend/domains/session/chat/chat-event-forwarder.service';
+import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import type { StopMessage } from '@/shared/websocket';
-import { sessionService } from '../../../lifecycle/session.service';
-import { chatEventForwarderService } from '../../chat-event-forwarder.service';
-import type { ChatMessageHandler } from '../types';
 
 export function createStopHandler(): ChatMessageHandler<StopMessage> {
   return async ({ sessionId }) => {

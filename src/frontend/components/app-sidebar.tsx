@@ -43,12 +43,12 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
+import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
+import { useProjectSnapshotSync } from '@/frontend/hooks/use-project-snapshot-sync';
+import { useWorkspaceAttention } from '@/frontend/hooks/use-workspace-attention';
+import { useProjectContext } from '@/frontend/lib/providers';
+import { trpc } from '@/frontend/lib/trpc';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
-import { useCreateWorkspace } from '../hooks/use-create-workspace';
-import { useProjectSnapshotSync } from '../hooks/use-project-snapshot-sync';
-import { useWorkspaceAttention } from '../hooks/use-workspace-attention';
-import { useProjectContext } from '../lib/providers';
-import { trpc } from '../lib/trpc';
 import { Logo, LogoIcon } from './logo';
 import { ThemeToggle } from './theme-toggle';
 import {

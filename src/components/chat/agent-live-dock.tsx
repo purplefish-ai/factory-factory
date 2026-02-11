@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { ToolSequenceGroup } from '@/components/agent-activity/tool-renderers';
 import { Badge } from '@/components/ui/badge';
 import type { ToolSequence } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
-import { ToolSequenceGroup } from '../agent-activity/tool-renderers';
 import { LatestThinking } from './latest-thinking';
 
 interface AgentLiveDockProps {

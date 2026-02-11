@@ -1,7 +1,7 @@
+import { DEBUG_CHAT_WS } from '@/backend/domains/session/chat/chat-message-handlers/constants';
+import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SetModelMessage } from '@/shared/websocket';
-import { DEBUG_CHAT_WS } from '../constants';
-import type { ChatMessageHandler } from '../types';
 import { getClientOrSendError, sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');

@@ -9,8 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { Logo } from '../../../frontend/components/logo';
-import { trpc } from '../../../frontend/lib/trpc';
+import { Logo } from '@/frontend/components/logo';
+import { trpc } from '@/frontend/lib/trpc';
 
 interface ProjectRepoFormProps {
   error: string;

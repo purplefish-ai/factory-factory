@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { fn } from 'storybook/test';
 
 import type { MessageAttachment } from '@/lib/claude-types';
-import { ChatInput } from './chat-input';
+import { ChatInput } from './chat-input/chat-input';
 
 // Action handler for Storybook
 const onSendAction = fn();

@@ -23,7 +23,7 @@ import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
 import { downloadFile } from '@/frontend/lib/download-file';
-import { trpc } from '../../frontend/lib/trpc';
+import { trpc } from '@/frontend/lib/trpc';
 import { ApiUsageSection, ProcessesSection, ProcessesSectionSkeleton } from './admin/index';
 
 function getEnabledFeatures(features?: Record<string, boolean>): string {

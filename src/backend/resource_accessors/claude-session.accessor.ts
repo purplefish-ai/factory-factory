@@ -1,5 +1,5 @@
 import { type ClaudeSession, type Prisma, SessionStatus } from '@prisma-gen/client';
-import { prisma } from '../db';
+import { prisma } from '@/backend/db';
 
 interface CreateClaudeSessionInput {
   workspaceId: string;

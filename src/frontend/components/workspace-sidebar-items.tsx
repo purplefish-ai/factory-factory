@@ -13,6 +13,7 @@ import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton } from '@/components/workspace';
+import { trpc } from '@/frontend/lib/trpc';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import {
   deriveWorkspaceSidebarStatus,
@@ -20,7 +21,6 @@ import {
   getWorkspacePrTooltipSuffix,
   type WorkspaceSidebarStatus,
 } from '@/shared/workspace-sidebar-status';
-import { trpc } from '../lib/trpc';
 import type { WorkspaceListItem } from './use-workspace-list-state';
 
 // =============================================================================

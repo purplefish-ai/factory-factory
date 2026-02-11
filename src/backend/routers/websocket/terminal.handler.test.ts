@@ -3,8 +3,8 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
+import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants';
-import type { AppContext } from '../../app-context';
 import { createTerminalUpgradeHandler, terminalConnections } from './terminal.handler';
 
 const mockClearTerminalPid = vi.fn();

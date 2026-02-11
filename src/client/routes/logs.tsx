@@ -34,8 +34,8 @@ import {
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
+import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
-import { trpc } from '../../frontend/lib/trpc';
 
 const PAGE_SIZE = 200;
 

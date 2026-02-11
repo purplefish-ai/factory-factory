@@ -1,6 +1,6 @@
+import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { SessionManager } from '@/backend/domains/session/claude/index';
 import type { ListSessionsMessage } from '@/shared/websocket';
-import { SessionManager } from '../../../claude/index';
-import type { ChatMessageHandler } from '../types';
 
 export function createListSessionsHandler(): ChatMessageHandler<ListSessionsMessage> {
   return async ({ ws, workingDir }) => {

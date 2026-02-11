@@ -1,4 +1,4 @@
-import type { ChatAction, ChatState, TaskNotification } from '../types';
+import type { ChatAction, ChatState, TaskNotification } from '@/components/chat/reducer/types';
 
 export function reduceSystemSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

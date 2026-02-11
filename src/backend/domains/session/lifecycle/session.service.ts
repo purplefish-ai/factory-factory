@@ -1,14 +1,14 @@
 import { type ClaudeSession, SessionStatus } from '@prisma-gen/client';
+import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
+import type { ResourceUsage } from '@/backend/domains/session/claude/process';
+import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
+import { SessionManager } from '@/backend/domains/session/claude/session';
+import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
-import type { ClaudeClient, ClaudeClientOptions } from '../claude/client';
-import type { ResourceUsage } from '../claude/process';
-import type { RegisteredProcess } from '../claude/registry';
-import { SessionManager } from '../claude/session';
-import { sessionDomainService } from '../session-domain.service';
 import type {
   ClientCreatedCallback as ProcessClientCreatedCallback,
   SessionProcessManager,

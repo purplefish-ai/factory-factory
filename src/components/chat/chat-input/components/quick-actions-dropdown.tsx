@@ -1,5 +1,5 @@
 import { Zap } from 'lucide-react';
-
+import { QUICK_ACTIONS } from '@/components/chat/chat-input/constants';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -8,8 +8,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
-import { QUICK_ACTIONS } from '../constants';
 
 interface QuickActionsDropdownProps {
   onAction: (message: string) => void;

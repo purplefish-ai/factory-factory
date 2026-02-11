@@ -18,10 +18,6 @@ import { workspaceInitRouter } from './workspace/init.trpc';
 import { workspaceRunScriptRouter } from './workspace/run-script.trpc';
 import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
 
-// Re-export types for backward compatibility
-export type { GitFileStatus, GitStatusFile } from '../lib/git-helpers';
-export { parseGitStatusOutput } from '../lib/git-helpers';
-
 const loggerName = 'workspace-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 

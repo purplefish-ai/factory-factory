@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { type AppContext, createAppContext } from '../../app-context';
-import { HTTP_STATUS } from '../../constants';
-import { healthService } from '../../services/health.service';
+import { type AppContext, createAppContext } from '@/backend/app-context';
+import { HTTP_STATUS } from '@/backend/constants';
+import { healthService } from '@/backend/services/health.service';
 
 // ============================================================================
 // Health Check Routes

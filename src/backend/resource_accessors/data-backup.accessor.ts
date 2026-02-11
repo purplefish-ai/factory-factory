@@ -6,7 +6,7 @@ import type {
   UserSettings,
   Workspace,
 } from '@prisma-gen/client';
-import { prisma } from '../db';
+import { prisma } from '@/backend/db';
 
 export type DataBackupTransactionClient = Prisma.TransactionClient;
 

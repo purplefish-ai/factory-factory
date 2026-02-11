@@ -1,8 +1,8 @@
 import pLimit from 'p-limit';
+import { ClaudeClient, type ClaudeClientOptions } from '@/backend/domains/session/claude/client';
+import type { ResourceUsage } from '@/backend/domains/session/claude/process';
+import { processRegistry, type RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { createLogger } from '@/backend/services/logger.service';
-import { ClaudeClient, type ClaudeClientOptions } from '../claude/client';
-import type { ResourceUsage } from '../claude/process';
-import { processRegistry, type RegisteredProcess } from '../claude/registry';
 
 const logger = createLogger('session-process');
 

@@ -1,5 +1,5 @@
+import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 import type { ChatMessage, ClaudeMessage } from '@/lib/claude-types';
-import type { ChatAction, ChatState } from '../../types';
 
 export function reduceMessageCompactSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

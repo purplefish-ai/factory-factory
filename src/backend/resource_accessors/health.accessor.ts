@@ -1,4 +1,4 @@
-import { prisma } from '../db';
+import { prisma } from '@/backend/db';
 
 class HealthAccessor {
   async checkDatabaseConnection(): Promise<void> {

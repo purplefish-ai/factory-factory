@@ -1,5 +1,5 @@
-import type { PendingInteractiveRequest } from '../../pending-request-types';
-import type { SessionRuntimeState } from '../../session-runtime';
+import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AgentMetadata } from './agent';
 import type { PluginInfo, ToolDefinition } from './content';
 import type { AskUserQuestion } from './interaction';

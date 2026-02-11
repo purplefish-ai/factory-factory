@@ -17,7 +17,7 @@ import { useEffect, useRef } from 'react';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import { loadAllSessionData } from './chat-persistence';
-import type { ChatAction } from './chat-reducer';
+import type { ChatAction } from './reducer';
 import { clearToolInputAccumulator, type ToolInputAccumulatorState } from './streaming-utils';
 
 const DEBUG_SESSION = false;

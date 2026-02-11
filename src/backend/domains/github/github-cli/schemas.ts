@@ -62,6 +62,7 @@ export const prListItemSchema = z.object({
   number: z.number(),
   url: z.string(),
   state: z.string(),
+  createdAt: z.string(),
 });
 
 const fullPRCheckRunSchema = z.object({

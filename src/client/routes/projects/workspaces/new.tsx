@@ -11,8 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { Loading } from '@/frontend/components/loading';
+import { trpc } from '@/frontend/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
-import { trpc } from '../../../../frontend/lib/trpc';
 
 export default function NewWorkspacePage() {
   const { slug = '' } = useParams<{ slug: string }>();

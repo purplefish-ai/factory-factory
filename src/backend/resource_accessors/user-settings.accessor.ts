@@ -1,5 +1,5 @@
 import type { Prisma, UserSettings } from '@prisma-gen/client';
-import { prisma } from '../db';
+import { prisma } from '@/backend/db';
 
 interface UpdateUserSettingsInput {
   preferredIde?: string;

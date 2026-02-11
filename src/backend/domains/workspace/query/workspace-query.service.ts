@@ -1,18 +1,18 @@
 import { type KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
 import pLimit from 'p-limit';
+import type {
+  WorkspaceGitHubBridge,
+  WorkspacePRSnapshotBridge,
+  WorkspaceSessionBridge,
+} from '@/backend/domains/workspace/bridges';
+import { computeKanbanColumn } from '@/backend/domains/workspace/state/kanban-state';
+import { deriveWorkspaceRuntimeState } from '@/backend/domains/workspace/state/workspace-runtime-state';
 import { projectAccessor } from '@/backend/resource_accessors/project.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import type {
-  WorkspaceGitHubBridge,
-  WorkspacePRSnapshotBridge,
-  WorkspaceSessionBridge,
-} from '../bridges';
-import { computeKanbanColumn } from '../state/kanban-state';
-import { deriveWorkspaceRuntimeState } from '../state/workspace-runtime-state';
 
 const logger = createLogger('workspace-query');
 

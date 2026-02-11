@@ -1,5 +1,5 @@
 import type { UserSettings } from '@prisma-gen/client';
-import { userSettingsAccessor } from '../resource_accessors/user-settings.accessor';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 
 class UserSettingsQueryService {
   get(): Promise<UserSettings> {

@@ -17,9 +17,9 @@ import {
   RunScriptPortBadge,
   useWorkspacePanel,
 } from '@/components/workspace';
+import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { trpc } from '../../../../frontend/lib/trpc';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 

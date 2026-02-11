@@ -1,6 +1,9 @@
+import {
+  createBaseResetState,
+  createSessionSwitchResetState,
+} from '@/components/chat/reducer/state';
+import type { ChatAction, ChatState, SessionStatus } from '@/components/chat/reducer/types';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
-import { createBaseResetState, createSessionSwitchResetState } from '../../state';
-import type { ChatAction, ChatState, SessionStatus } from '../../types';
 
 export function reduceMessageResetSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

@@ -1,12 +1,12 @@
 import type { NextFunction, Request, Response } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AppContext } from '@/backend/app-context';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import type { AppContext } from '../../app-context';
 
 // Mock dependencies before importing the router
 const mockExecuteMcpTool = vi.fn();
 
-vi.mock('../mcp/index', () => ({
+vi.mock('@/backend/routers/mcp/index', () => ({
   executeMcpTool: (...args: unknown[]) => mockExecuteMcpTool(...args),
 }));
 

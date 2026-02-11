@@ -1,9 +1,10 @@
 import type { ChangeEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
+import type {
+  SlashCommandPaletteHandle,
+  SlashKeyResult,
+} from '@/components/chat/slash-command-palette';
 import type { CommandInfo } from '@/lib/claude-types';
-
-import type { SlashCommandPaletteHandle, SlashKeyResult } from '../../slash-command-palette';
 
 interface UseSlashCommandsOptions {
   slashCommands: CommandInfo[];
