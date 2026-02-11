@@ -502,7 +502,7 @@ describe('GitHubCLIService', () => {
           {
             number: 123,
             url: 'https://github.com/owner/repo/pull/123',
-            // missing state field
+            // missing state and createdAt fields
           },
         ];
 
@@ -771,32 +771,59 @@ describe('GitHubCLIService', () => {
   });
 
   describe('findPRForBranch', () => {
-    it('should return open PR when both open and merged PRs exist', async () => {
+    it('should return open PR when created after workspace', async () => {
+      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
       const prs = [
-        { number: 10, url: 'https://github.com/o/r/pull/10', state: 'MERGED' },
-        { number: 11, url: 'https://github.com/o/r/pull/11', state: 'OPEN' },
+        {
+          number: 11,
+          url: 'https://github.com/o/r/pull/11',
+          state: 'OPEN',
+          createdAt: '2024-01-02T00:00:00Z',
+        },
       ];
 
       mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
 
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
+      const result = await githubCLIService.findPRForBranch(
+        'o',
+        'r',
+        'feature',
+        workspaceCreatedAt
+      );
       expect(result).toEqual({ url: 'https://github.com/o/r/pull/11', number: 11 });
     });
 
-    it('should fall back to merged PR when no open PR exists', async () => {
+    it('should filter out PRs created before workspace', async () => {
+      const workspaceCreatedAt = new Date('2024-01-15T00:00:00Z');
       const prs = [
-        { number: 10, url: 'https://github.com/o/r/pull/10', state: 'MERGED' },
-        { number: 12, url: 'https://github.com/o/r/pull/12', state: 'CLOSED' },
+        {
+          number: 10,
+          url: 'https://github.com/o/r/pull/10',
+          state: 'OPEN',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
       ];
 
       mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
 
-      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
-      expect(result).toEqual({ url: 'https://github.com/o/r/pull/10', number: 10 });
+      const result = await githubCLIService.findPRForBranch(
+        'o',
+        'r',
+        'feature',
+        workspaceCreatedAt
+      );
+      expect(result).toBeNull();
     });
 
     it('should return null when only closed PRs exist', async () => {
-      const prs = [{ number: 12, url: 'https://github.com/o/r/pull/12', state: 'CLOSED' }];
+      const prs = [
+        {
+          number: 12,
+          url: 'https://github.com/o/r/pull/12',
+          state: 'CLOSED',
+          createdAt: '2024-01-01T00:00:00Z',
+        },
+      ];
 
       mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
 
@@ -816,6 +843,22 @@ describe('GitHubCLIService', () => {
 
       const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
       expect(result).toBeNull();
+    });
+
+    it('should work without workspace createdAt parameter', async () => {
+      const prs = [
+        {
+          number: 11,
+          url: 'https://github.com/o/r/pull/11',
+          state: 'OPEN',
+          createdAt: '2024-01-02T00:00:00Z',
+        },
+      ];
+
+      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(prs), stderr: '' });
+
+      const result = await githubCLIService.findPRForBranch('o', 'r', 'feature');
+      expect(result).toEqual({ url: 'https://github.com/o/r/pull/11', number: 11 });
     });
   });
 

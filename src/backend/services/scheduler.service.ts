@@ -138,13 +138,14 @@ class SchedulerService {
   private async discoverPRForWorkspace(workspace: {
     id: string;
     branchName: string | null;
+    createdAt: Date;
     project: { githubOwner: string | null; githubRepo: string | null };
   }): Promise<{ found: boolean }> {
     if (this.isShuttingDown) {
       return { found: false };
     }
 
-    const { branchName, project } = workspace;
+    const { branchName, project, createdAt } = workspace;
     if (!(branchName && project.githubOwner && project.githubRepo)) {
       return { found: false };
     }
@@ -153,7 +154,8 @@ class SchedulerService {
       const pr = await githubCLIService.findPRForBranch(
         project.githubOwner,
         project.githubRepo,
-        branchName
+        branchName,
+        createdAt
       );
 
       if (pr) {

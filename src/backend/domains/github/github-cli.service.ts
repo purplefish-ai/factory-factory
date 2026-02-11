@@ -233,13 +233,14 @@ class GitHubCLIService {
 
   /**
    * Find a PR for a given branch in a repository.
-   * Checks both open and merged PRs to handle workspaces where the PR was merged.
+   * Only returns open PRs created after the workspace was created.
    * Returns the PR URL if found, null otherwise.
    */
   async findPRForBranch(
     owner: string,
     repo: string,
-    branchName: string
+    branchName: string,
+    workspaceCreatedAt?: Date
   ): Promise<{ url: string; number: number } | null> {
     try {
       const { stdout } = await execFileAsync(
@@ -252,9 +253,9 @@ class GitHubCLIService {
           '--repo',
           `${owner}/${repo}`,
           '--state',
-          'all',
+          'open',
           '--json',
-          'number,url,state',
+          'number,url,state,createdAt',
           '--limit',
           '10',
         ],
@@ -266,17 +267,26 @@ class GitHubCLIService {
         return null;
       }
 
-      const openPr = prs.find((pr) => pr.state === 'OPEN');
-      if (openPr) {
-        return { url: openPr.url, number: openPr.number };
+      // Filter PRs created after workspace creation
+      let filteredPRs = prs.filter((pr) => pr.state === 'OPEN');
+
+      if (workspaceCreatedAt) {
+        filteredPRs = filteredPRs.filter((pr) => {
+          const prCreatedAt = new Date(pr.createdAt);
+          return prCreatedAt >= workspaceCreatedAt;
+        });
       }
 
-      const mergedPr = prs.find((pr) => pr.state === 'MERGED');
-      if (mergedPr) {
-        return { url: mergedPr.url, number: mergedPr.number };
+      if (filteredPRs.length === 0) {
+        return null;
       }
 
-      return null;
+      // Return the first matching PR (most recent due to gh CLI default sorting)
+      const pr = filteredPRs[0];
+      if (!pr) {
+        return null;
+      }
+      return { url: pr.url, number: pr.number };
     } catch (error) {
       const errorType = classifyError(error);
       if (errorType !== 'cli_not_installed' && errorType !== 'auth_required') {

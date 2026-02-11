@@ -89,10 +89,12 @@ describe('SchedulerService', () => {
 
   describe('discoverNewPRs', () => {
     it('updates workspace prUrl and refreshes PR snapshot when PR is discovered', async () => {
+      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
       mockFindNeedingPRDiscovery.mockResolvedValue([
         {
           id: 'ws-1',
           branchName: 'feature',
+          createdAt: workspaceCreatedAt,
           project: { githubOwner: 'org', githubRepo: 'repo' },
         },
       ]);
@@ -115,6 +117,12 @@ describe('SchedulerService', () => {
       const result = await schedulerService.discoverNewPRs();
 
       expect(result).toEqual({ discovered: 1, checked: 1 });
+      expect(mockFindPRForBranch).toHaveBeenCalledWith(
+        'org',
+        'repo',
+        'feature',
+        workspaceCreatedAt
+      );
       expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
         'ws-1',
         'https://github.com/org/repo/pull/101'
@@ -122,10 +130,12 @@ describe('SchedulerService', () => {
     });
 
     it('counts PR as discovered when attachment succeeds but snapshot fetch fails', async () => {
+      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
       mockFindNeedingPRDiscovery.mockResolvedValue([
         {
           id: 'ws-1',
           branchName: 'feature',
+          createdAt: workspaceCreatedAt,
           project: { githubOwner: 'org', githubRepo: 'repo' },
         },
       ]);
@@ -146,10 +156,12 @@ describe('SchedulerService', () => {
     });
 
     it('does not count PR as discovered when attachment fails entirely', async () => {
+      const workspaceCreatedAt = new Date('2024-01-01T00:00:00Z');
       mockFindNeedingPRDiscovery.mockResolvedValue([
         {
           id: 'ws-1',
           branchName: 'feature',
+          createdAt: workspaceCreatedAt,
           project: { githubOwner: 'org', githubRepo: 'repo' },
         },
       ]);
