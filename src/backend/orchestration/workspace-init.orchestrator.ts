@@ -371,7 +371,7 @@ Start with Phase 1: Planning.`;
   }
 }
 
-async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
+async function startDefaultClaudeSession(workspaceId: string): Promise<string | null> {
   try {
     const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
@@ -379,7 +379,7 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
     });
     const session = sessions[0];
     if (!session) {
-      return;
+      return null;
     }
 
     // Build the initial prompt - use GitHub issue content if available
@@ -436,8 +436,49 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<void> {
       sessionId: session.id,
       hasGitHubIssuePrompt: !!issuePrompt,
     });
+    return session.id;
   } catch (error) {
     logger.warn('Failed to auto-start default Claude session for workspace', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function retryQueuedDispatchAfterWorkspaceReady(
+  workspaceId: string,
+  startedSessionId: string | null
+): Promise<void> {
+  try {
+    // Prefer the specific session we just started; it may now be RUNNING.
+    if (startedSessionId) {
+      await chatMessageHandlerService.tryDispatchNextMessage(startedSessionId);
+      return;
+    }
+
+    const runningSessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+      status: SessionStatus.RUNNING,
+      limit: 1,
+    });
+    const runningSession = runningSessions[0];
+    if (runningSession) {
+      await chatMessageHandlerService.tryDispatchNextMessage(runningSession.id);
+      return;
+    }
+
+    const idleSessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+      status: SessionStatus.IDLE,
+      limit: 1,
+    });
+    const idleSession = idleSessions[0];
+    if (!idleSession) {
+      return;
+    }
+
+    await chatMessageHandlerService.tryDispatchNextMessage(idleSession.id);
+  } catch (error) {
+    logger.warn('Failed to retry queued dispatch after workspace became ready', {
       workspaceId,
       error: error instanceof Error ? error.message : String(error),
     });
@@ -505,6 +546,7 @@ export async function initializeWorkspaceWorktree(
         workspaceId,
         error: error instanceof Error ? error.message : String(error),
       });
+      return null;
     });
 
     const factorySetupResult = await runFactorySetupScriptIfConfigured(
@@ -514,7 +556,10 @@ export async function initializeWorkspaceWorktree(
       factoryConfig
     );
     if (factorySetupResult.ran) {
-      await claudeSessionPromise;
+      const startedSessionId = await claudeSessionPromise;
+      if (factorySetupResult.success) {
+        await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
+      }
       return;
     }
 
@@ -524,13 +569,17 @@ export async function initializeWorkspaceWorktree(
       worktreeInfo.worktreePath
     );
     if (projectSetupResult.ran) {
-      await claudeSessionPromise;
+      const startedSessionId = await claudeSessionPromise;
+      if (projectSetupResult.success) {
+        await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
+      }
       return;
     }
 
     // No setup scripts ran, mark ready
     await workspaceStateMachine.markReady(workspaceId);
-    await claudeSessionPromise;
+    const startedSessionId = await claudeSessionPromise;
+    await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
   } catch (error) {
     await handleWorkspaceInitFailure(workspaceId, error as Error);
   } finally {

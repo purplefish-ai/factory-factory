@@ -584,6 +584,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 
@@ -862,6 +863,72 @@ describe('initializeWorkspaceWorktree', () => {
       expect(startupScriptService.runStartupScript).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ startupScriptCommand: './factory-setup.sh' })
+      );
+    });
+  });
+
+  describe('dispatch retry when workspace becomes ready', () => {
+    it('retries queue dispatch after successful factory setup', async () => {
+      setupHappyPath();
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
+        success: true,
+      } as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    });
+
+    it('does not retry ready dispatch when factory setup fails', async () => {
+      setupHappyPath();
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
+        success: false,
+      } as never);
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(1);
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+    });
+
+    it('retries dispatch using the started session id without re-querying session status', async () => {
+      setupHappyPath();
+      vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({
+          id: 'session-idle',
+          status: SessionStatus.IDLE,
+          model: 'claude-sonnet',
+        }),
+      ]);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(claudeSessionAccessor.findByWorkspaceId).toHaveBeenCalledTimes(1);
+      expect(claudeSessionAccessor.findByWorkspaceId).toHaveBeenCalledWith(WORKSPACE_ID, {
+        status: SessionStatus.IDLE,
+        limit: 1,
+      });
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenNthCalledWith(
+        1,
+        'session-idle'
+      );
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenNthCalledWith(
+        2,
+        'session-idle'
       );
     });
   });
