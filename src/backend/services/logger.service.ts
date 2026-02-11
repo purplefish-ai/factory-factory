@@ -51,28 +51,44 @@ function getLogLevelPriority(level: LogLevel): number {
 
 /**
  * Safely stringify an object, handling circular references.
- * Uses a WeakSet to track seen objects and replaces circular references
- * with a placeholder, preserving all non-circular data.
+ * Tracks only ancestors on the current path to correctly identify circular
+ * references while preserving shared non-circular references.
  */
 function safeStringify(obj: unknown): string {
-  const seen = new WeakSet();
-
   try {
-    return JSON.stringify(obj, (_key, value) => {
+    const ancestors = new WeakSet();
+
+    const helper = (value: unknown): unknown => {
       // Handle non-object values and null
       if (typeof value !== 'object' || value === null) {
         return value;
       }
 
-      // Check for circular reference
-      if (seen.has(value)) {
+      // Check if this object is an ancestor (circular reference)
+      if (ancestors.has(value)) {
         return '[Circular]';
       }
 
-      // Track this object
-      seen.add(value);
-      return value;
-    });
+      // Add to ancestor set for this path
+      ancestors.add(value);
+
+      try {
+        if (Array.isArray(value)) {
+          return value.map((item) => helper(item));
+        }
+
+        const result: Record<string, unknown> = {};
+        for (const [key, val] of Object.entries(value)) {
+          result[key] = helper(val);
+        }
+        return result;
+      } finally {
+        // Remove from ancestors after processing children
+        ancestors.delete(value);
+      }
+    };
+
+    return JSON.stringify(helper(obj));
   } catch {
     // Fallback for any other errors (e.g., BigInt serialization)
     return String(obj);

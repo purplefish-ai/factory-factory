@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from './logger.service';
 
+// Mock write stream that we can access in tests
+const mockWriteStream = {
+  write: vi.fn(),
+  on: vi.fn(),
+};
+
 // Mock node:fs to prevent real file I/O during tests
 vi.mock('node:fs', () => {
-  const mockWriteStream = {
-    write: vi.fn(),
-    on: vi.fn(),
-  };
   return {
     existsSync: vi.fn(() => true),
     mkdirSync: vi.fn(),
@@ -87,6 +89,32 @@ describe('LoggerService', () => {
       expect(() => {
         logger.info('Test normal object', normalObj);
       }).not.toThrow();
+    });
+
+    it('should handle shared non-circular references correctly', () => {
+      const logger = createLogger('test');
+      const shared = { id: 1, name: 'shared' };
+      const obj = {
+        a: shared,
+        b: shared, // Same object referenced twice - NOT circular
+        c: { nested: shared }, // Same object in nested structure
+      };
+
+      logger.info('Test shared references', obj);
+
+      // Verify the shared object appears correctly, not as [Circular]
+      expect(mockWriteStream.write).toHaveBeenCalled();
+      const lastCall =
+        mockWriteStream.write.mock.calls[mockWriteStream.write.mock.calls.length - 1];
+      expect(lastCall).toBeDefined();
+
+      // biome-ignore lint/style/noNonNullAssertion: we just verified lastCall is defined
+      const logEntry = JSON.parse(lastCall![0].toString().trim());
+
+      // All three references should contain the actual data, not [Circular]
+      expect(logEntry.context.a).toEqual({ id: 1, name: 'shared' });
+      expect(logEntry.context.b).toEqual({ id: 1, name: 'shared' });
+      expect(logEntry.context.c.nested).toEqual({ id: 1, name: 'shared' });
     });
 
     it('should handle undefined and null in context', () => {
