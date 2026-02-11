@@ -285,7 +285,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           sessionFileLogger.closeSession(dbSessionId);
         }
 
-        chatConnectionService.unregister(connectionId);
+        // Only unregister if this connection is still the active one for this connectionId
+        // This prevents a race condition where a reconnected client gets unregistered
+        // when the old connection's close event fires
+        const current = chatConnectionService.get(connectionId);
+        if (current?.ws === ws) {
+          chatConnectionService.unregister(connectionId);
+        }
       });
 
       ws.on('error', (error) => {

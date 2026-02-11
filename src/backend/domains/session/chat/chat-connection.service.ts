@@ -31,7 +31,7 @@ export interface ConnectionInfo {
 // Service
 // ============================================================================
 
-class ChatConnectionService {
+export class ChatConnectionService {
   private connections = new Map<string, ConnectionInfo>();
 
   /** DOM-04: Message counter moved from module scope into class instance. */
