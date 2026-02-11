@@ -5,6 +5,84 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2026-02-10
+
+### Added
+
+- Add app running play indicator to sidebar and Kanban cards (#763)
+- Add searchable server logs page with filtering and download (#848)
+- Add expandable rows with formatted JSON to logs page (#858)
+- Add session management UI with increased p-limit concurrency to 20 (#856)
+- Add re-review request step to ratchet dispatch prompt (#876)
+
+### Changed
+
+- Change default theme from system to dark (#864)
+- Improve workspace init UX with chat-first queueing (#878)
+- Start Claude session eagerly during workspace init (#874)
+- Show factory config for all projects in admin panel (#882)
+- Open Dev Logs panel when starting workspace run script (#884)
+- Replace init banner with inline spinner (#886)
+- Make kanban board and list view mobile responsive (#901)
+- Add mobile-responsive layout with hamburger menu sidebar (#896)
+
+### Fixed
+
+- Fix ratchet to check for any working session, not just non-ratchet ones (#838)
+- Fix session process manager race condition (#865)
+- Fix sessions stuck in loading state (#867)
+- Fix cross-process race condition in resume mode file lock (#866)
+- Fix PR comment updatedAt validation error (#871)
+- Fix dev server child processes not killed on shutdown (#875)
+- Fix session loading stuck on cold start (#872)
+- Fix workspace reorder triggering page refresh (#885)
+- Fix non-selected session tab status icons (#891)
+- Fix intra-domain import: use worktreeLifecycleService.setInitMode directly (#889)
+- Fix run script STOPPING leak on process exit (#897)
+- Fix queued messages disappearing when switching workspaces (#868)
+- Fix queued messages disappearing on page refresh (#855)
+- Fix GitHub CLI bot comment validation error (#857)
+- Fix infinite loading when session loads from history (#861)
+- Fix session stuck in loading phase after creation (#863)
+- Fix centered terminal text alignment (#859)
+- Show actual error message when Mermaid diagram fails to render (#851)
+- Fix resume modes file write race condition with atomic rename (#853)
+
+### Refactored
+
+- Enforce architecture boundaries and isolate DB access (#840)
+- Enforce layer boundaries: tRPC/routers must use services, not accessors (#839)
+- Add session domain single-writer boundary (#842)
+- Refactor Claude session runtime lifecycle ownership (#843)
+- Centralize backend runtime constants and lock safety warnings (#845)
+- Tighten TS typing and ban z.any usage (#847)
+- Refactor session store into focused modules (#849)
+- Remove inline Biome ignores and enforce zero policy (#850)
+- Refactor PR detail panel to reduce cognitive complexity (#571) (#862)
+- Extract file lock mutex and atomic write utilities (#873)
+- SRP refactor: Phase 1 — Foundation & Domain Scaffolding (#879)
+- SRP refactor: Phase 2 — Session Domain Consolidation (#883)
+- SRP refactor: Phase 3 — Workspace Domain Consolidation (#887)
+- SRP refactor: Phase 4 — GitHub Domain Consolidation (#890)
+- SRP refactor: Phase 5 — Ratchet Domain Consolidation (#894)
+- SRP refactor: Phase 6 — Terminal Domain Consolidation (#893)
+- SRP refactor: Phase 7 — Run Script Domain Consolidation (#895)
+- SRP refactor: Phase 8 — Orchestration Layer (#898)
+- SRP refactor: Phase 9 — AppContext & Import Rewiring (#899)
+- SRP refactor: Phase 10 — Validation & Stabilization (#900)
+- Improve test coverage for domain services with edge case tests (#902)
+
+### Documentation
+
+- Write server logs to file instead of terminal (#844)
+- Ratchet should @ mention reviewers when responding to comments (#881)
+- Clean up ratchet sessions when work is finished (#877)
+- Skip merged and disabled workspaces in ratchet poll loop (#852)
+- Enable parallel workspace archiving by removing global isPending check (#870)
+- Enable parallel workspace archiving and skip confirmation for merged PRs (#854)
+- Reduce GitHub API polling and add rate limit backoff (#860)
+- Archive v1.0 SRP Consolidation milestone (#904)
+
 ## [0.2.6] - 2026-02-08
 
 ### Fixed
