@@ -17,8 +17,13 @@
  * - NOT re-exported from orchestration/index.ts (circular dep avoidance)
  */
 
+import { isDeepStrictEqual } from 'node:util';
 import pLimit from 'p-limit';
 import { chatEventForwarderService, sessionService } from '@/backend/domains/session';
+import {
+  buildWorkspaceSessionSummaries,
+  hasWorkingSessionSummary,
+} from '@/backend/lib/session-summaries';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
   createLogger,
@@ -47,7 +52,7 @@ const logger = createLogger('snapshot-reconciliation');
 
 export interface ReconciliationBridges {
   session: {
-    isAnySessionWorking(sessionIds: string[]): boolean;
+    getRuntimeSnapshot(sessionId: string): ReturnType<typeof sessionService.getRuntimeSnapshot>;
     getAllPendingRequests(): Map<string, { toolName: string }>;
   };
 }
@@ -76,7 +81,7 @@ const DRIFT_FIELD_GROUPS: { group: string; fields: string[] }[] = [
   { group: 'pr', fields: ['prState', 'prCiStatus', 'prNumber'] },
   { group: 'ratchet', fields: ['ratchetEnabled', 'ratchetState'] },
   { group: 'runScript', fields: ['runScriptStatus'] },
-  { group: 'session', fields: ['isWorking', 'pendingRequestType'] },
+  { group: 'session', fields: ['isWorking', 'pendingRequestType', 'sessionSummaries'] },
 ];
 
 /**
@@ -96,7 +101,7 @@ export function detectDrift(
         continue;
       }
       const snapValue = (existing as unknown as Record<string, unknown>)[field];
-      if (authValue !== snapValue) {
+      if (!isDeepStrictEqual(authValue, snapValue)) {
         drifts.push({
           field,
           group,
@@ -223,7 +228,10 @@ export class SnapshotReconciliationService {
     >
   ): SnapshotUpdateInput {
     const sessionIds = [...(ws.claudeSessions?.map((s) => s.id) ?? [])];
-    const isWorking = this.bridges.session.isAnySessionWorking(sessionIds);
+    const sessionSummaries = buildWorkspaceSessionSummaries(ws.claudeSessions ?? [], (sessionId) =>
+      this.bridges.session.getRuntimeSnapshot(sessionId)
+    );
+    const isWorking = hasWorkingSessionSummary(sessionSummaries);
     const pendingRequestType = computePendingRequestType(sessionIds, allPendingRequests);
 
     // Compute lastActivityAt from session timestamps
@@ -254,6 +262,7 @@ export class SnapshotReconciliationService {
       runScriptStatus: ws.runScriptStatus,
       isWorking,
       pendingRequestType,
+      sessionSummaries,
       gitStats: gitStatsMap.get(ws.id) ?? null,
       lastActivityAt,
     };
@@ -385,7 +394,7 @@ export const snapshotReconciliationService = new SnapshotReconciliationService()
 export function configureSnapshotReconciliation(): void {
   snapshotReconciliationService.configure({
     session: {
-      isAnySessionWorking: (ids) => sessionService.isAnySessionWorking(ids),
+      getRuntimeSnapshot: (sessionId) => sessionService.getRuntimeSnapshot(sessionId),
       getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
     },
   });

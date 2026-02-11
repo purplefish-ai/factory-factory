@@ -8,6 +8,10 @@ import {
   workspaceDataService,
   workspaceQueryService,
 } from '@/backend/domains/workspace';
+import {
+  buildWorkspaceSessionSummaries,
+  hasWorkingSessionSummary,
+} from '@/backend/lib/session-summaries';
 import { archiveWorkspace } from '@/backend/orchestration';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
@@ -95,11 +99,14 @@ export const workspaceRouter = router({
       throw new Error(`Workspace not found: ${input.id}`);
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-    const sessionIds = workspace.claudeSessions?.map((s) => s.id) ?? [];
-    const isSessionWorking = sessionService.isAnySessionWorking(sessionIds);
+    const sessionSummaries = buildWorkspaceSessionSummaries(workspace.claudeSessions ?? [], (id) =>
+      sessionService.getRuntimeSnapshot(id)
+    );
+    const isSessionWorking = hasWorkingSessionSummary(sessionSummaries);
     const isWorking = isSessionWorking || flowState.isWorking;
     return {
       ...workspace,
+      sessionSummaries,
       sidebarStatus: deriveWorkspaceSidebarStatus({
         isWorking,
         prUrl: workspace.prUrl,

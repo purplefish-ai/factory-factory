@@ -30,6 +30,7 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     hasHadSessions: true,
     isWorking: true,
     pendingRequestType: 'plan_approval',
+    sessionSummaries: [],
     gitStats: { total: 10, additions: 7, deletions: 3, hasUncommitted: false },
     lastActivityAt: '2026-01-15T09:55:00Z',
     sidebarStatus: { activityState: 'WORKING', ciState: 'PASSING' },
@@ -99,6 +100,28 @@ describe('mapSnapshotEntryToServerWorkspace', () => {
     expect(result.ciObservation).toBe('CHECKS_PASSED');
     expect(result.runScriptStatus).toBe('IDLE');
     expect(result.pendingRequestType).toBe('plan_approval');
+  });
+
+  it('passes through sessionSummaries', () => {
+    const entry = makeEntry({
+      sessionSummaries: [
+        {
+          sessionId: 's-1',
+          name: 'Chat 1',
+          workflow: 'followup',
+          model: 'claude-sonnet',
+          persistedStatus: 'IDLE',
+          runtimePhase: 'idle',
+          processState: 'alive',
+          activity: 'IDLE',
+          updatedAt: '2026-01-15T09:55:00Z',
+          lastExit: null,
+        },
+      ],
+    });
+    const result = mapSnapshotEntryToServerWorkspace(entry);
+
+    expect(result.sessionSummaries).toEqual(entry.sessionSummaries);
   });
 
   it('does not include store-internal fields', () => {

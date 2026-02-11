@@ -20,8 +20,15 @@ import type {
   PRState,
   RatchetState,
   RunScriptStatus,
+  SessionStatus,
   WorkspaceStatus,
 } from '@prisma-gen/client';
+import type {
+  SessionRuntimeActivity,
+  SessionRuntimeLastExit,
+  SessionRuntimePhase,
+  SessionRuntimeProcessState,
+} from '@/shared/session-runtime';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { createLogger } from './logger.service';
 
@@ -66,6 +73,19 @@ export type WorkspaceCiObservation =
   | 'CHECKS_PASSED'
   | 'CHECKS_UNKNOWN';
 
+export interface WorkspaceSessionSummary {
+  sessionId: string;
+  name: string | null;
+  workflow: string | null;
+  model: string | null;
+  persistedStatus: SessionStatus;
+  runtimePhase: SessionRuntimePhase;
+  processState: SessionRuntimeProcessState;
+  activity: SessionRuntimeActivity;
+  updatedAt: string;
+  lastExit: SessionRuntimeLastExit | null;
+}
+
 /**
  * The full snapshot entry shape for a workspace.
  * Matches the output of getProjectSummaryState() with additional versioning,
@@ -101,6 +121,7 @@ export interface WorkspaceSnapshotEntry {
   // In-memory state (from session domain)
   isWorking: boolean;
   pendingRequestType: 'plan_approval' | 'user_question' | null;
+  sessionSummaries: WorkspaceSessionSummary[];
 
   // Reconciliation-only state
   gitStats: {
@@ -147,6 +168,7 @@ export interface SnapshotUpdateInput {
   // Session fields (group: 'session')
   isWorking?: boolean;
   pendingRequestType?: 'plan_approval' | 'user_question' | null;
+  sessionSummaries?: WorkspaceSessionSummary[];
 
   // Ratchet fields (group: 'ratchet')
   ratchetEnabled?: boolean;
@@ -223,7 +245,7 @@ export interface SnapshotRemovedEvent {
 
 const WORKSPACE_FIELDS = ['name', 'status', 'createdAt', 'branchName', 'hasHadSessions'] as const;
 const PR_FIELDS = ['prUrl', 'prNumber', 'prState', 'prCiStatus', 'prUpdatedAt'] as const;
-const SESSION_FIELDS = ['isWorking', 'pendingRequestType'] as const;
+const SESSION_FIELDS = ['isWorking', 'pendingRequestType', 'sessionSummaries'] as const;
 const RATCHET_FIELDS = ['ratchetEnabled', 'ratchetState'] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
@@ -316,6 +338,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       hasHadSessions: false,
       isWorking: false,
       pendingRequestType: null,
+      sessionSummaries: [],
       gitStats: null,
       lastActivityAt: null,
       sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
@@ -367,8 +390,11 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       ratchetState: entry.ratchetState,
     });
 
+    const hasWorkingSession = entry.sessionSummaries.some(
+      (summary) => summary.activity === 'WORKING' || summary.runtimePhase === 'running'
+    );
     // Effective isWorking: session activity OR flow-state working
-    const effectiveIsWorking = entry.isWorking || flowState.isWorking;
+    const effectiveIsWorking = entry.isWorking || hasWorkingSession || flowState.isWorking;
 
     entry.flowPhase = flowState.phase;
     entry.ciObservation = flowState.ciObservation;

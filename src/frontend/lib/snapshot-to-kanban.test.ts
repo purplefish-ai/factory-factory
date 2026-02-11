@@ -28,6 +28,7 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     hasHadSessions: true,
     isWorking: true,
     pendingRequestType: 'plan_approval',
+    sessionSummaries: [],
     gitStats: { total: 10, additions: 7, deletions: 3, hasUncommitted: false },
     lastActivityAt: '2026-01-15T09:55:00Z',
     sidebarStatus: { activityState: 'WORKING', ciState: 'PASSING' },
