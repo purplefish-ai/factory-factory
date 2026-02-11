@@ -326,4 +326,58 @@ describe('runMigrations', () => {
       db2.close();
     }
   });
+
+  it('handles PRAGMA statements outside transaction', () => {
+    createMigrationDir('001_pragma_test');
+    // Migration with PRAGMA statements (similar to Prisma-generated migrations)
+    setupMigration(
+      '001_pragma_test',
+      `-- Test PRAGMA handling
+PRAGMA defer_foreign_keys=ON;
+PRAGMA foreign_keys=OFF;
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE posts (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+PRAGMA foreign_keys=ON;
+PRAGMA defer_foreign_keys=OFF;`
+    );
+
+    // Enable foreign key enforcement to test that PRAGMAs work
+    const db = new Database(databasePath);
+    db.pragma('foreign_keys = ON');
+    db.close();
+
+    runMigrations({
+      databasePath,
+      migrationsPath,
+      log: () => {
+        /* no-op */
+      },
+    });
+
+    const db2 = new Database(databasePath);
+    try {
+      // Verify migration was applied
+      const appliedMigrations = getAppliedMigrations(db2);
+      expect(appliedMigrations).toEqual(['001_pragma_test']);
+
+      // Verify tables were created
+      const tables = db2
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users', 'posts')")
+        .all() as Array<{ name: string }>;
+      expect(tables).toHaveLength(2);
+
+      // Verify foreign key constraint exists
+      const fks = db2.prepare('PRAGMA foreign_key_list(posts)').all() as Array<{
+        table: string;
+      }>;
+      expect(fks).toHaveLength(1);
+      expect(fks[0]?.table).toBe('users');
+    } finally {
+      db2.close();
+    }
+  });
 });

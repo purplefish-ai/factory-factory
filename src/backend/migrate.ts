@@ -27,6 +27,98 @@ function writeStderr(message: string): void {
 }
 
 /**
+ * Parse migration SQL to separate PRAGMAs from DDL/DML statements.
+ * PRAGMAs must execute outside a transaction in SQLite.
+ */
+function parseMigrationSql(migrationSql: string): {
+  prePragmas: string[];
+  ddlDml: string;
+  postPragmas: string[];
+} {
+  const lines = migrationSql.split('\n');
+  const prePragmas: string[] = [];
+  const postPragmas: string[] = [];
+  const ddlDml: string[] = [];
+  let foundNonPragma = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('--')) {
+      // Skip empty lines and comments
+      continue;
+    }
+
+    if (trimmed.toUpperCase().startsWith('PRAGMA ')) {
+      // Collect PRAGMAs before first non-PRAGMA as "pre"
+      // Collect PRAGMAs after non-PRAGMAs as "post"
+      if (foundNonPragma) {
+        postPragmas.push(trimmed);
+      } else {
+        prePragmas.push(trimmed);
+      }
+    } else {
+      foundNonPragma = true;
+      ddlDml.push(line);
+    }
+  }
+
+  return {
+    prePragmas,
+    ddlDml: ddlDml.join('\n'),
+    postPragmas,
+  };
+}
+
+/**
+ * Apply a single migration file to the database.
+ */
+function applySingleMigration(
+  db: Database.Database,
+  migrationName: string,
+  sql: string,
+  checksum: string,
+  log: (msg: string) => void
+): void {
+  const { prePragmas, ddlDml, postPragmas } = parseMigrationSql(sql);
+
+  // Define an atomic transaction for the migration
+  // This includes only DDL/DML statements, not PRAGMAs
+  const applyMigration = db.transaction(() => {
+    const id = crypto.randomUUID();
+    db.prepare(
+      'INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
+    ).run(id, checksum, migrationName);
+
+    // Execute DDL/DML statements
+    if (ddlDml.trim()) {
+      db.exec(ddlDml);
+    }
+
+    // Record migration completion
+    db.prepare(
+      'UPDATE _prisma_migrations SET finished_at = CURRENT_TIMESTAMP, applied_steps_count = 1 WHERE id = ?'
+    ).run(id);
+  });
+
+  log(`[migrate] Applying: ${migrationName}`);
+
+  // Execute pre-transaction PRAGMAs
+  for (const pragma of prePragmas) {
+    db.exec(pragma);
+  }
+
+  // Apply migration in transaction
+  applyMigration();
+
+  // Execute post-transaction PRAGMAs
+  for (const pragma of postPragmas) {
+    db.exec(pragma);
+  }
+
+  log(`[migrate] Applied: ${migrationName}`);
+}
+
+/**
  * Run database migrations.
  * @param options - Migration configuration
  * @throws Error if migrations fail
@@ -93,26 +185,8 @@ export function runMigrations(options: MigrationOptions): void {
       const sql = readFileSync(sqlPath, 'utf-8');
       const checksum = createHash('sha256').update(sql).digest('hex');
 
-      // Define an atomic transaction for the migration
-      const applyMigration = db.transaction(() => {
-        const id = crypto.randomUUID();
-        db.prepare(
-          'INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)'
-        ).run(id, checksum, migrationName);
-
-        // Execute the migration
-        db.exec(sql);
-
-        // Record migration completion
-        db.prepare(
-          'UPDATE _prisma_migrations SET finished_at = CURRENT_TIMESTAMP, applied_steps_count = 1 WHERE id = ?'
-        ).run(id);
-      });
-
       try {
-        log(`[migrate] Applying: ${migrationName}`);
-        applyMigration();
-        log(`[migrate] Applied: ${migrationName}`);
+        applySingleMigration(db, migrationName, sql, checksum, log);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log(`[migrate] Failed to apply migration ${migrationName}: ${message}`);
