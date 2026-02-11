@@ -56,43 +56,51 @@ function getLogLevelPriority(level: LogLevel): number {
  * on the safe result.
  */
 function safeStringify(obj: unknown): string {
-  try {
-    const ancestors = new WeakSet<object>();
+  const ancestors = new WeakSet<object>();
 
-    function preprocessValue(value: unknown): unknown {
-      if (typeof value !== 'object' || value === null) {
-        return value;
-      }
+  function tryToJSON(value: object): { ok: true; result: unknown } | { ok: false } {
+    if (!('toJSON' in value) || typeof (value as Record<string, unknown>).toJSON !== 'function') {
+      return { ok: false };
+    }
+    try {
+      return { ok: true, result: (value as { toJSON: () => unknown }).toJSON() };
+    } catch {
+      return { ok: false };
+    }
+  }
 
-      // Check for circular reference (ancestor on current path)
-      if (ancestors.has(value)) {
-        return '[Circular]';
-      }
+  function traverseObject(value: object): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = preprocessValue(val);
+    }
+    return result;
+  }
 
-      // If object has toJSON, preprocess its result instead of skipping traversal
-      if ('toJSON' in value && typeof (value as Record<string, unknown>).toJSON === 'function') {
-        return preprocessValue((value as { toJSON: () => unknown }).toJSON());
-      }
-
-      ancestors.add(value);
-
-      try {
-        if (Array.isArray(value)) {
-          return value.map((item) => preprocessValue(item));
-        }
-
-        const result: Record<string, unknown> = {};
-        for (const [key, val] of Object.entries(value)) {
-          result[key] = preprocessValue(val);
-        }
-        return result;
-      } finally {
-        ancestors.delete(value);
-      }
+  function preprocessValue(value: unknown): unknown {
+    if (typeof value === 'function' || typeof value !== 'object' || value === null) {
+      return typeof value === 'function' ? undefined : value;
+    }
+    if (ancestors.has(value)) {
+      return '[Circular]';
     }
 
-    const processed = preprocessValue(obj);
-    return JSON.stringify(processed);
+    ancestors.add(value);
+    try {
+      const toJson = tryToJSON(value);
+      if (toJson.ok) {
+        return preprocessValue(toJson.result);
+      }
+      return Array.isArray(value)
+        ? value.map((item) => preprocessValue(item))
+        : traverseObject(value);
+    } finally {
+      ancestors.delete(value);
+    }
+  }
+
+  try {
+    return JSON.stringify(preprocessValue(obj));
   } catch (err) {
     return JSON.stringify({ __serializationError: err instanceof Error ? err.message : 'unknown' });
   }

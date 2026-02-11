@@ -203,6 +203,46 @@ describe('LoggerService', () => {
       expect(logEntry.context.custom.self).toBe('[Circular]');
     });
 
+    it('should handle toJSON() returning this without stack overflow', () => {
+      const logger = createLogger('test');
+      const obj = {
+        name: 'self-returning',
+        toJSON() {
+          return this;
+        },
+      };
+
+      logger.info('Test self-returning toJSON', { custom: obj });
+
+      expect(mockWriteStream.write).toHaveBeenCalled();
+      const calls = mockWriteStream.write.mock.calls;
+      const lastCall = calls[calls.length - 1] as [string];
+      const logEntry = JSON.parse(lastCall[0].toString().trim());
+
+      // toJSON returns this -> detected as circular, replaced with placeholder
+      expect(logEntry.context.custom).toBe('[Circular]');
+    });
+
+    it('should fall back to property traversal when toJSON() throws', () => {
+      const logger = createLogger('test');
+      const obj = {
+        name: 'bad-toJSON',
+        toJSON() {
+          throw new Error('toJSON failed');
+        },
+      };
+
+      logger.info('Test throwing toJSON', { custom: obj });
+
+      expect(mockWriteStream.write).toHaveBeenCalled();
+      const calls = mockWriteStream.write.mock.calls;
+      const lastCall = calls[calls.length - 1] as [string];
+      const logEntry = JSON.parse(lastCall[0].toString().trim());
+
+      // Should fall back to property traversal, preserving the name field
+      expect(logEntry.context.custom.name).toBe('bad-toJSON');
+    });
+
     it('should emit valid JSON even when serialization fails unexpectedly', () => {
       const logger = createLogger('test');
       // BigInt cannot be serialized by JSON.stringify
