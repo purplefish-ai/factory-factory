@@ -104,12 +104,11 @@ describe('LoggerService', () => {
 
       // Verify the shared object appears correctly, not as [Circular]
       expect(mockWriteStream.write).toHaveBeenCalled();
-      const lastCall =
-        mockWriteStream.write.mock.calls[mockWriteStream.write.mock.calls.length - 1];
-      expect(lastCall).toBeDefined();
+      const calls = mockWriteStream.write.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
 
-      // biome-ignore lint/style/noNonNullAssertion: we just verified lastCall is defined
-      const logEntry = JSON.parse(lastCall![0].toString().trim());
+      const lastCall = calls[calls.length - 1] as [string];
+      const logEntry = JSON.parse(lastCall[0].toString().trim());
 
       // All three references should contain the actual data, not [Circular]
       expect(logEntry.context.a).toEqual({ id: 1, name: 'shared' });
