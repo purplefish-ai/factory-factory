@@ -403,7 +403,7 @@ export function MainViewTabBar({
             key={session.id}
             label={session.name ?? `Chat ${index + 1}`}
             isActive={isSelected && activeTabId === 'chat'}
-            isRunning={session.isWorking || runningSessionIds?.has(session.id)}
+            isRunning={runningSessionIds?.has(session.id)}
             isCIFix={session.workflow === 'ci-fix'}
             sessionStatus={isSelected ? sessionStatus : undefined}
             processStatus={isSelected ? processStatus : undefined}
