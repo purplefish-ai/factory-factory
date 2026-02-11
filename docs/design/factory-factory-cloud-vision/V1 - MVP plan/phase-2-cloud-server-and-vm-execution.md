@@ -1,6 +1,6 @@
 # Phase 2: FF Cloud Server + VM Execution
 
-**Goal:** Stand up the cloud server and get workspaces executing in Docker containers.
+**Goal:** Stand up the cloud server and get workspaces executing in Docker containers. No auth or user management yet — this phase proves the execution model works.
 
 ## 2.1 New Private Repo
 
@@ -11,37 +11,27 @@ factory-factory-cloud/
   src/
     server.ts                   # Express server
     services/
-      auth.service.ts           # JWT, accounts, API keys
-      user.service.ts           # User management
       vm.service.ts             # Docker container orchestration
-      workspace.service.ts      # Multi-tenant workspace management (uses @factory-factory/core)
+      workspace.service.ts      # Workspace management (uses @factory-factory/core)
     db/
-      schema.prisma             # PostgreSQL, multi-tenant
+      schema.prisma             # PostgreSQL
   package.json
     dependencies:
       "@factory-factory/core": "^1.0.0"
 ```
 
-## 2.2 Auth & User Management
+## 2.2 PostgreSQL Schema
 
-- JWT-based authentication
-- User accounts (email/password, OAuth with GitHub)
-- API keys for programmatic access
-- Session management (refresh tokens)
-
-## 2.3 PostgreSQL Schema
-
-Multi-tenant schema mapping users to workspaces and VMs:
+Schema mapping workspaces to VMs (single-user for now, multi-tenant later):
 
 ```
-users          — id, email, name, plan, created_at
-workspaces     — id, user_id, vm_id, status, location, github_issue_url, pr_url, ratchet state fields
-vms            — id, user_id, workspace_id, container_id, status, created_at, last_health_check
+workspaces     — id, vm_id, status, location, github_issue_url, pr_url, ratchet state fields
+vms            — id, workspace_id, container_id, status, created_at, last_health_check
 ```
 
 Each VM also has its own SQLite (managed by FF Core inside the container) for workspace execution state.
 
-## 2.4 Docker Container Orchestration
+## 2.3 Docker Container Orchestration
 
 - **Container image:** FF Core + Claude CLI + Node.js runtime pre-installed
 - **Provisioning:** 1 container per workspace, spin up on workspace creation
@@ -49,7 +39,7 @@ Each VM also has its own SQLite (managed by FF Core inside the container) for wo
 - **Warm pool:** Pre-warmed containers for fast startup (~500ms target). Pool size configurable.
 - **Resource limits:** CPU/memory caps per container
 
-## 2.5 Desktop Integration
+## 2.4 Desktop Integration
 
 **"Send to Cloud" flow:**
 1. Desktop uploads workspace state (metadata, ratchet state, PR info) to FF Cloud API
@@ -65,4 +55,4 @@ Each VM also has its own SQLite (managed by FF Core inside the container) for wo
 
 ## Done when
 
-A workspace can be created in a cloud container, execute Claude sessions, and be sent to/pulled from cloud via the desktop app. Execution works end-to-end, but there's no real-time streaming to a web UI yet — results are visible when pulling back to desktop.
+A workspace can be created in a cloud container, execute Claude sessions, and be sent to/pulled from cloud via the desktop app. Execution works end-to-end, but there's no real-time streaming to a web UI yet — results are visible when pulling back to desktop. Auth is hardcoded/API-key-only for internal testing.

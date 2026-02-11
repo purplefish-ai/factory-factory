@@ -1,6 +1,6 @@
-# Phase 4: Ratchet Handoff + Billing
+# Phase 4: Ratchet Handoff
 
-**Goal:** Make ratchet (auto-fix) work seamlessly across desktop and cloud, and add billing so the product can ship.
+**Goal:** Make ratchet (auto-fix) work seamlessly across desktop and cloud.
 
 ## 4.1 Location-Aware Ratchet
 
@@ -27,14 +27,6 @@ enum WorkspaceLocation {
 
 **Handoff timing:** Cloud ratchet picks up a newly-sent workspace within 1 poll interval (currently 30 seconds). At most a brief gap — no duplicate checks, no missed events.
 
-## 4.2 Billing
-
-- **Usage tracking:** Compute minutes per workspace, API call counts
-- **Subscription tiers:** Free (limited), Pro (standard limits), Team (higher limits + team features later)
-- **Quota enforcement:** Check quota before provisioning containers. Reject with clear error if exceeded.
-- **Payment integration:** Stripe for subscriptions and metered billing
-- **Usage dashboard:** Users can see their usage and billing status in the web app
-
 ## Done when
 
-Ratchet works seamlessly whether a workspace is on desktop or cloud — no duplicate fixes, no missed events during handoff. Users can sign up, choose a plan, pay, and use the product within their plan limits. The Cloud MVP is shippable.
+Ratchet works seamlessly whether a workspace is on desktop or cloud — no duplicate fixes, no missed events during handoff.
