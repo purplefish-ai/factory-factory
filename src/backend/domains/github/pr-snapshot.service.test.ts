@@ -203,6 +203,56 @@ describe('PRSnapshotService', () => {
     });
   });
 
+  describe('recordCIObservation', () => {
+    it('does not clear failure timestamp when failedAt is omitted', async () => {
+      const observedAt = new Date('2026-02-11T00:00:00Z');
+
+      await prSnapshotService.recordCIObservation('w-ci-1', {
+        ciStatus: 'SUCCESS',
+        observedAt,
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith('w-ci-1', {
+        prCiStatus: 'SUCCESS',
+        prUpdatedAt: observedAt,
+      });
+      expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('w-ci-1');
+    });
+
+    it('does not clear failure timestamp when failedAt is undefined', async () => {
+      const observedAt = new Date('2026-02-11T01:00:00Z');
+
+      await prSnapshotService.recordCIObservation('w-ci-2', {
+        ciStatus: 'SUCCESS',
+        failedAt: undefined,
+        observedAt,
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith('w-ci-2', {
+        prCiStatus: 'SUCCESS',
+        prUpdatedAt: observedAt,
+      });
+      expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('w-ci-2');
+    });
+
+    it('clears failure timestamp when failedAt is null', async () => {
+      const observedAt = new Date('2026-02-11T02:00:00Z');
+
+      await prSnapshotService.recordCIObservation('w-ci-3', {
+        ciStatus: 'SUCCESS',
+        failedAt: null,
+        observedAt,
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith('w-ci-3', {
+        prCiStatus: 'SUCCESS',
+        prCiFailedAt: null,
+        prUpdatedAt: observedAt,
+      });
+      expect(mockUpdateCachedKanbanColumn).toHaveBeenCalledWith('w-ci-3');
+    });
+  });
+
   describe('event emission', () => {
     afterEach(() => {
       prSnapshotService.removeAllListeners();

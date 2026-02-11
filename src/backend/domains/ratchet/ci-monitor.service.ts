@@ -282,8 +282,8 @@ class CIMonitorService {
     await this.snapshot.recordCIObservation({
       workspaceId: workspace.id,
       ciStatus: currentStatus,
-      failedAt,
       observedAt,
+      ...(failedAt !== undefined ? { failedAt } : {}),
     });
   }
 

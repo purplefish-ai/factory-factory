@@ -18,6 +18,7 @@ import {
   ciMonitorService,
   fixerSessionService,
   type RatchetGitHubBridge,
+  type RatchetPRSnapshotBridge,
   type RatchetSessionBridge,
   ratchetService,
   reconciliationService,
@@ -66,22 +67,30 @@ export function configureDomainBridges(): void {
     fetchAndComputePRState: (prUrl) => githubCLIService.fetchAndComputePRState(prUrl),
   };
 
-  ratchetService.configure({ session: ratchetSessionBridge, github: ratchetGithubBridge });
+  const ratchetSnapshotBridge: RatchetPRSnapshotBridge = {
+    recordCIObservation: ({ workspaceId, ciStatus, failedAt, observedAt }) =>
+      prSnapshotService.recordCIObservation(workspaceId, {
+        ciStatus,
+        failedAt,
+        observedAt,
+      }),
+    recordCINotification: (workspaceId, notifiedAt) =>
+      prSnapshotService.recordCINotification(workspaceId, notifiedAt),
+    recordReviewCheck: (workspaceId, checkedAt) =>
+      prSnapshotService.recordReviewCheck(workspaceId, { checkedAt }),
+  };
+
+  ratchetService.configure({
+    session: ratchetSessionBridge,
+    github: ratchetGithubBridge,
+    snapshot: ratchetSnapshotBridge,
+  });
   fixerSessionService.configure({ session: ratchetSessionBridge });
   ciFixerService.configure({ session: ratchetSessionBridge });
   ciMonitorService.configure({
     session: ratchetSessionBridge,
     github: ratchetGithubBridge,
-    snapshot: {
-      recordCIObservation: ({ workspaceId, ciStatus, failedAt, observedAt }) =>
-        prSnapshotService.recordCIObservation(workspaceId, {
-          ciStatus,
-          failedAt,
-          observedAt,
-        }),
-      recordCINotification: (workspaceId, notifiedAt) =>
-        prSnapshotService.recordCINotification(workspaceId, notifiedAt),
-    },
+    snapshot: ratchetSnapshotBridge,
   });
   reconciliationService.configure({
     workspace: {

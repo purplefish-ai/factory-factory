@@ -20,7 +20,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import type { RatchetGitHubBridge, RatchetSessionBridge } from './bridges';
+import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 
 const logger = createLogger('ratchet');
@@ -109,10 +109,16 @@ class RatchetService extends EventEmitter {
 
   private sessionBridge: RatchetSessionBridge | null = null;
   private githubBridge: RatchetGitHubBridge | null = null;
+  private snapshotBridge: RatchetPRSnapshotBridge | null = null;
 
-  configure(bridges: { session: RatchetSessionBridge; github: RatchetGitHubBridge }): void {
+  configure(bridges: {
+    session: RatchetSessionBridge;
+    github: RatchetGitHubBridge;
+    snapshot: RatchetPRSnapshotBridge;
+  }): void {
     this.sessionBridge = bridges.session;
     this.githubBridge = bridges.github;
+    this.snapshotBridge = bridges.snapshot;
   }
 
   private get session(): RatchetSessionBridge {
@@ -131,6 +137,15 @@ class RatchetService extends EventEmitter {
       );
     }
     return this.githubBridge;
+  }
+
+  private get snapshot(): RatchetPRSnapshotBridge {
+    if (!this.snapshotBridge) {
+      throw new Error(
+        'RatchetService not configured: snapshot bridge missing. Call configure() first.'
+      );
+    }
+    return this.snapshotBridge;
   }
 
   start(): void {
@@ -798,6 +813,10 @@ class RatchetService extends EventEmitter {
           }
         : {}),
     });
+
+    if (dispatched) {
+      await this.snapshot.recordReviewCheck(workspace.id, now);
+    }
   }
 
   private async getActiveRatchetSession(workspace: WorkspaceWithPR): Promise<RatchetAction | null> {

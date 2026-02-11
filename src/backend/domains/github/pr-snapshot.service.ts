@@ -74,7 +74,7 @@ class PRSnapshotService extends EventEmitter {
     await workspaceAccessor.update(workspaceId, {
       prCiStatus: input.ciStatus,
       prUpdatedAt: input.observedAt ?? new Date(),
-      ...(Object.hasOwn(input, 'failedAt') ? { prCiFailedAt: input.failedAt ?? null } : {}),
+      ...(input.failedAt !== undefined ? { prCiFailedAt: input.failedAt ?? null } : {}),
     });
     await this.kanban.updateCachedKanbanColumn(workspaceId);
   }
