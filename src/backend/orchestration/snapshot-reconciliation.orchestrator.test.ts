@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnapshotUpdateInput, WorkspaceSnapshotEntry } from '@/backend/services';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -46,7 +47,7 @@ vi.mock('@/backend/services', () => ({
 }));
 
 vi.mock('@/backend/domains/session', () => ({
-  sessionService: { isAnySessionWorking: vi.fn() },
+  sessionService: { getRuntimeSnapshot: vi.fn() },
   chatEventForwarderService: { getAllPendingRequests: vi.fn() },
 }));
 
@@ -83,8 +84,22 @@ function createMockWorkspace(overrides: Record<string, unknown> = {}): Record<st
     ratchetState: 'IDLE',
     runScriptStatus: 'IDLE',
     claudeSessions: [
-      { id: 'cs-1', updatedAt: new Date('2026-01-03T10:00:00Z') },
-      { id: 'cs-2', updatedAt: new Date('2026-01-03T12:00:00Z') },
+      {
+        id: 'cs-1',
+        name: 'Chat 1',
+        workflow: 'followup',
+        model: 'claude-sonnet',
+        status: 'IDLE',
+        updatedAt: new Date('2026-01-03T10:00:00Z'),
+      },
+      {
+        id: 'cs-2',
+        name: 'Chat 2',
+        workflow: 'followup',
+        model: 'claude-sonnet',
+        status: 'IDLE',
+        updatedAt: new Date('2026-01-03T12:00:00Z'),
+      },
     ],
     terminalSessions: [{ id: 'ts-1', updatedAt: new Date('2026-01-03T11:00:00Z') }],
     project: { defaultBranch: 'main' },
@@ -93,9 +108,15 @@ function createMockWorkspace(overrides: Record<string, unknown> = {}): Record<st
 }
 
 function createMockBridges(): ReconciliationBridges {
+  const runtime: SessionRuntimeState = {
+    phase: 'idle',
+    processState: 'alive',
+    activity: 'IDLE',
+    updatedAt: '2026-01-03T12:00:00.000Z',
+  };
   return {
     session: {
-      isAnySessionWorking: vi.fn().mockReturnValue(false),
+      getRuntimeSnapshot: vi.fn().mockReturnValue(runtime),
       getAllPendingRequests: vi.fn().mockReturnValue(new Map()),
     },
   };
@@ -125,6 +146,7 @@ function createSnapshotEntry(
     hasHadSessions: true,
     isWorking: false,
     pendingRequestType: null,
+    sessionSummaries: [],
     gitStats: null,
     lastActivityAt: null,
     sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
@@ -446,8 +468,22 @@ describe('SnapshotReconciliationService', () => {
         id: 'ws-1',
         worktreePath: null,
         claudeSessions: [
-          { id: 'cs-1', updatedAt: new Date('2026-01-03T10:00:00Z') },
-          { id: 'cs-2', updatedAt: new Date('2026-01-03T14:00:00Z') },
+          {
+            id: 'cs-1',
+            name: 'Chat 1',
+            workflow: 'followup',
+            model: 'claude-sonnet',
+            status: 'IDLE',
+            updatedAt: new Date('2026-01-03T10:00:00Z'),
+          },
+          {
+            id: 'cs-2',
+            name: 'Chat 2',
+            workflow: 'followup',
+            model: 'claude-sonnet',
+            status: 'IDLE',
+            updatedAt: new Date('2026-01-03T14:00:00Z'),
+          },
         ],
         terminalSessions: [{ id: 'ts-1', updatedAt: new Date('2026-01-03T12:00:00Z') }],
       });
@@ -464,7 +500,16 @@ describe('SnapshotReconciliationService', () => {
       const ws = createMockWorkspace({
         id: 'ws-1',
         worktreePath: null,
-        claudeSessions: [{ id: 'cs-1', updatedAt: new Date() }],
+        claudeSessions: [
+          {
+            id: 'cs-1',
+            name: 'Chat 1',
+            workflow: 'followup',
+            model: 'claude-sonnet',
+            status: 'IDLE',
+            updatedAt: new Date(),
+          },
+        ],
       });
       mockFindAllNonArchived.mockResolvedValue([ws]);
 
@@ -476,6 +521,34 @@ describe('SnapshotReconciliationService', () => {
 
       const upsertFields = mockUpsert.mock.calls[0]![1] as SnapshotUpdateInput;
       expect(upsertFields.pendingRequestType).toBe('plan_approval');
+    });
+
+    it('includes sessionSummaries derived from runtime snapshots', async () => {
+      const ws = createMockWorkspace({
+        id: 'ws-1',
+        worktreePath: null,
+      });
+      mockFindAllNonArchived.mockResolvedValue([ws]);
+      vi.mocked(bridges.session.getRuntimeSnapshot).mockReturnValue({
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+        updatedAt: '2026-01-03T15:00:00.000Z',
+      });
+
+      await service.reconcile();
+
+      const upsertFields = mockUpsert.mock.calls[0]![1] as SnapshotUpdateInput;
+      expect(upsertFields.sessionSummaries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            sessionId: 'cs-1',
+            runtimePhase: 'running',
+            activity: 'WORKING',
+          }),
+        ])
+      );
+      expect(upsertFields.isWorking).toBe(true);
     });
 
     it('returns ReconciliationResult with correct counts', async () => {

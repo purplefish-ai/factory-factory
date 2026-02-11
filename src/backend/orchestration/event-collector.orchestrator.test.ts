@@ -46,10 +46,25 @@ vi.mock('@/backend/domains/run-script', () => ({
   runScriptStateMachine: { on: vi.fn() },
 }));
 
+vi.mock('@/backend/domains/session', () => ({
+  sessionDataService: {
+    findClaudeSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
+  },
+  sessionService: {
+    getRuntimeSnapshot: vi.fn().mockReturnValue({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }),
+  },
+}));
+
 vi.mock('@/backend/services', () => ({
   workspaceSnapshotStore: {
     upsert: vi.fn(),
     getByWorkspaceId: vi.fn(),
+    getAllWorkspaceIds: vi.fn().mockReturnValue([]),
     remove: vi.fn(),
   },
   createLogger: () => ({
@@ -63,6 +78,7 @@ vi.mock('@/backend/services', () => ({
 import { prSnapshotService } from '@/backend/domains/github';
 import { ratchetService } from '@/backend/domains/ratchet';
 import { runScriptStateMachine } from '@/backend/domains/run-script';
+import { sessionDataService } from '@/backend/domains/session';
 import { workspaceActivityService, workspaceStateMachine } from '@/backend/domains/workspace';
 import { workspaceSnapshotStore } from '@/backend/services';
 
@@ -359,7 +375,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 6 event listeners on domain singletons', () => {
+  it('registers 7 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -380,13 +396,17 @@ describe('configureEventCollector', () => {
       expect.any(Function)
     );
 
-    // workspaceActivityService: 2 listeners (workspace_active, workspace_idle)
+    // workspaceActivityService: 3 listeners (workspace_active, workspace_idle, session_activity_changed)
     expect(workspaceActivityService.on).toHaveBeenCalledWith(
       'workspace_active',
       expect.any(Function)
     );
     expect(workspaceActivityService.on).toHaveBeenCalledWith(
       'workspace_idle',
+      expect.any(Function)
+    );
+    expect(workspaceActivityService.on).toHaveBeenCalledWith(
+      'session_activity_changed',
       expect.any(Function)
     );
   });
@@ -463,6 +483,98 @@ describe('configureEventCollector', () => {
       'ws-1',
       { isWorking: true },
       'event:workspace_active'
+    );
+  });
+
+  it('workspace_active only enqueues isWorking and does not refresh session summaries', () => {
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_active');
+    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+
+    handler({ workspaceId: 'ws-1' });
+
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).not.toHaveBeenCalled();
+  });
+
+  it('workspace_idle only enqueues isWorking and does not refresh session summaries', () => {
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_idle');
+    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+
+    handler({ workspaceId: 'ws-1' });
+
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).not.toHaveBeenCalled();
+  });
+
+  it('workspace active transition performs one session summary query', () => {
+    configureEventCollector();
+
+    const sessionActivityCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'session_activity_changed');
+    const sessionActivityHandler = sessionActivityCall![1] as (event: {
+      workspaceId: string;
+      sessionId: string;
+      isWorking: boolean;
+    }) => void;
+
+    const activeCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'workspace_active');
+    const activeHandler = activeCall![1] as (event: { workspaceId: string }) => void;
+
+    sessionActivityHandler({ workspaceId: 'ws-1', sessionId: 's-1', isWorking: true });
+    activeHandler({ workspaceId: 'ws-1' });
+
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
+    expect(sessionDataService.findClaudeSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('session_activity_changed refreshes session summaries', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(sessionDataService.findClaudeSessionsByWorkspaceId).mockResolvedValue([
+      {
+        id: 's-1',
+        name: 'Chat 1',
+        workflow: 'followup',
+        model: 'claude-sonnet',
+        status: 'IDLE',
+      } as Awaited<ReturnType<typeof sessionDataService.findClaudeSessionsByWorkspaceId>>[number],
+    ]);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(workspaceActivityService.on)
+      .mock.calls.find((call) => call[0] === 'session_activity_changed');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      sessionId: string;
+      isWorking: boolean;
+    }) => void;
+
+    handler({ workspaceId: 'ws-1', sessionId: 's-1', isWorking: true });
+    await Promise.resolve();
+    vi.advanceTimersByTime(150);
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      expect.objectContaining({
+        sessionSummaries: expect.arrayContaining([
+          expect.objectContaining({
+            sessionId: 's-1',
+          }),
+        ]),
+      }),
+      expect.stringContaining('event:session_activity_changed')
     );
   });
 });

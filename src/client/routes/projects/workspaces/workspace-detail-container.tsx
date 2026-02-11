@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useChatWebSocket } from '@/components/chat';
@@ -6,7 +6,6 @@ import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
-import { deriveRunningSessionIds } from './session-tab-status';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
@@ -21,14 +20,8 @@ export function WorkspaceDetailContainer() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const {
-    workspace,
-    workspaceLoading,
-    claudeSessions,
-    initialDbSessionId,
-    maxSessions,
-    invalidateWorkspace,
-  } = useWorkspaceData({ workspaceId: workspaceId });
+  const { workspace, workspaceLoading, claudeSessions, initialDbSessionId, maxSessions } =
+    useWorkspaceData({ workspaceId: workspaceId });
 
   const { rightPanelVisible, activeTabId, clearScrollState } = useWorkspacePanel();
 
@@ -97,7 +90,6 @@ export function WorkspaceDetailContainer() {
     dbSessionId: selectedDbSessionId,
   });
 
-  const selectedSessionRunning = sessionStatus.phase === 'running';
   const loadingSession = sessionStatus.phase === 'loading';
   const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
   const isIssueAutoStartPending =
@@ -108,27 +100,18 @@ export function WorkspaceDetailContainer() {
     messages.some((message) => message.source === 'user') &&
     !messages.some((message) => message.source === 'claude');
 
-  const wasRunningRef = useRef(false);
-  useEffect(() => {
-    if (wasRunningRef.current && !selectedSessionRunning) {
-      invalidateWorkspace();
-    }
-    wasRunningRef.current = selectedSessionRunning;
-  }, [selectedSessionRunning, invalidateWorkspace]);
-
-  const [runningSessionIds, setRunningSessionIds] = useState<ReadonlySet<string>>(new Set());
-  useEffect(() => {
-    setRunningSessionIds((previous) =>
-      deriveRunningSessionIds(previous, {
-        sessions: claudeSessions,
-        selectedDbSessionId,
-        sessionStatus,
-        processStatus,
-      })
-    );
-  }, [claudeSessions, selectedDbSessionId, sessionStatus, processStatus]);
-
-  const workspaceRunning = runningSessionIds.size > 0;
+  const sessionSummariesById = useMemo(
+    () =>
+      new Map((workspace?.sessionSummaries ?? []).map((summary) => [summary.sessionId, summary])),
+    [workspace?.sessionSummaries]
+  );
+  const workspaceRunning = useMemo(
+    () =>
+      Array.from(sessionSummariesById.values()).some(
+        (summary) => summary.activity === 'WORKING' || summary.runtimePhase === 'running'
+      ),
+    [sessionSummariesById]
+  );
 
   const {
     createSession,
@@ -304,15 +287,13 @@ export function WorkspaceDetailContainer() {
       sessionTabs={{
         claudeSessions,
         selectedDbSessionId,
-        runningSessionIds,
+        sessionSummariesById,
         isDeletingSession: deleteSession.isPending,
         handleSelectSession,
         handleNewChat,
         handleCloseChatSession,
         maxSessions,
         hasWorktreePath: !!workspace?.worktreePath,
-        sessionStatus,
-        processStatus,
       }}
       chat={chatViewModel}
       rightPanelVisible={rightPanelVisible}

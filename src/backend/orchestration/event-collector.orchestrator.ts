@@ -32,12 +32,17 @@ import {
   type RunScriptStatusChangedEvent,
   runScriptStateMachine,
 } from '@/backend/domains/run-script';
+import { sessionDataService, sessionService } from '@/backend/domains/session';
 import {
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
   workspaceStateMachine,
 } from '@/backend/domains/workspace';
+import {
+  buildWorkspaceSessionSummaries,
+  hasWorkingSessionSummary,
+} from '@/backend/lib/session-summaries';
 import { createLogger, type SnapshotUpdateInput, workspaceSnapshotStore } from '@/backend/services';
 
 // ---------------------------------------------------------------------------
@@ -166,6 +171,41 @@ export class EventCoalescer {
 
 let activeCoalescer: EventCoalescer | null = null;
 
+async function refreshWorkspaceSessionSummaries(
+  coalescer: EventCoalescer,
+  workspaceId: string,
+  source: string,
+  options?: { includeWorking?: boolean }
+): Promise<void> {
+  try {
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+    const sessions = await sessionDataService.findClaudeSessionsByWorkspaceId(workspaceId);
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+    const sessionSummaries = buildWorkspaceSessionSummaries(sessions, (sessionId) =>
+      sessionService.getRuntimeSnapshot(sessionId)
+    );
+    coalescer.enqueue(
+      workspaceId,
+      {
+        sessionSummaries,
+        ...(options?.includeWorking
+          ? { isWorking: hasWorkingSessionSummary(sessionSummaries) }
+          : {}),
+      },
+      source
+    );
+  } catch (error) {
+    logger.warn('Failed to refresh workspace session summaries', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // configureEventCollector
 // ---------------------------------------------------------------------------
@@ -235,7 +275,28 @@ export function configureEventCollector(): void {
     coalescer.enqueue(workspaceId, { isWorking: false }, 'event:workspace_idle');
   });
 
-  logger.info('Event collector configured with 6 event subscriptions');
+  // 7. Session-level activity changes (running/idle transitions)
+  workspaceActivityService.on(
+    'session_activity_changed',
+    ({ workspaceId }: { workspaceId: string; sessionId: string; isWorking: boolean }) => {
+      void refreshWorkspaceSessionSummaries(
+        coalescer,
+        workspaceId,
+        'event:session_activity_changed',
+        { includeWorking: true }
+      );
+    }
+  );
+
+  // 8. Prime session summaries on startup so fresh clients have tab runtime
+  // state before the first activity transition or reconciliation tick.
+  for (const workspaceId of workspaceSnapshotStore.getAllWorkspaceIds()) {
+    void refreshWorkspaceSessionSummaries(coalescer, workspaceId, 'event:collector_startup', {
+      includeWorking: true,
+    });
+  }
+
+  logger.info('Event collector configured with 7 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------

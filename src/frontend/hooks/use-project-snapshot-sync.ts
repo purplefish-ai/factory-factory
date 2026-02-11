@@ -1,8 +1,9 @@
 /**
  * React hook that syncs /snapshots WebSocket messages into both the
- * getProjectSummaryState (sidebar) and listWithKanbanState (kanban)
- * React Query cache entries. Also invalidates the workspace.list cache
- * so the table view refetches with fresh data on every snapshot event.
+ * getProjectSummaryState (sidebar), listWithKanbanState (kanban), and
+ * workspace.get (detail header/session runtime) React Query cache entries.
+ * Also invalidates the workspace.list cache so the table view refetches
+ * with fresh data on every snapshot event.
  *
  * Follows the use-dev-logs.ts pattern: receive-only WebSocket hook with
  * drop queue policy (no outbound messages, reconnect discards stale data).
@@ -29,6 +30,7 @@ type CacheData = {
 
 // Type alias for the kanban cache data shape (matches tRPC-inferred listWithKanbanState output).
 type KanbanCacheData = Record<string, unknown>[] | undefined;
+type WorkspaceDetailCache = Record<string, unknown> | undefined;
 
 // =============================================================================
 // Kanban cache update helpers (extracted to keep handleMessage under complexity limit)
@@ -92,6 +94,33 @@ function removeFromKanbanCache(workspaceId: string, prev: KanbanCacheData): Kanb
   return prev.filter((w) => (w as { id: string }).id !== workspaceId);
 }
 
+function mergeWorkspaceDetailFromSnapshot(
+  prev: WorkspaceDetailCache,
+  entry: WorkspaceSnapshotEntry
+): WorkspaceDetailCache {
+  if (!prev) {
+    return prev;
+  }
+
+  return {
+    ...prev,
+    prUrl: entry.prUrl,
+    prNumber: entry.prNumber,
+    prState: entry.prState,
+    prCiStatus: entry.prCiStatus,
+    ratchetEnabled: entry.ratchetEnabled,
+    ratchetState: entry.ratchetState,
+    runScriptStatus: entry.runScriptStatus,
+    isWorking: entry.isWorking,
+    pendingRequestType: entry.pendingRequestType,
+    sessionSummaries: entry.sessionSummaries,
+    sidebarStatus: entry.sidebarStatus,
+    ratchetButtonAnimated: entry.ratchetButtonAnimated,
+    flowPhase: entry.flowPhase,
+    ciObservation: entry.ciObservation,
+  };
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -99,8 +128,9 @@ function removeFromKanbanCache(workspaceId: string, prev: KanbanCacheData): Kanb
 /**
  * Subscribes to the /snapshots WebSocket endpoint for a given project
  * and updates the React Query caches for `workspace.getProjectSummaryState`
- * (sidebar) and `workspace.listWithKanbanState` (kanban board) whenever
- * snapshot_full, snapshot_changed, or snapshot_removed messages arrive.
+ * (sidebar), `workspace.listWithKanbanState` (kanban board), and
+ * `workspace.get` (detail view) whenever snapshot_full, snapshot_changed,
+ * or snapshot_removed messages arrive.
  *
  * Returns void -- the hook's side effect is updating the caches.
  */
@@ -118,6 +148,7 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       // prove this because ServerWorkspace declares createdAt as `string | Date`.
       const { setData } = utils.workspace.getProjectSummaryState;
       const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
+      const { setData: setWorkspaceDetailData } = utils.workspace.get;
 
       switch (message.type) {
         case 'snapshot_full': {
@@ -131,6 +162,11 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           // (matches server behavior: READY workspaces with no sessions are hidden)
           setKanbanData({ projectId: message.projectId }, ((prev: KanbanCacheData) =>
             buildKanbanCacheFromFull(message.entries, prev)) as never);
+
+          for (const entry of message.entries) {
+            setWorkspaceDetailData({ id: entry.workspaceId }, ((prev: WorkspaceDetailCache) =>
+              mergeWorkspaceDetailFromSnapshot(prev, entry)) as never);
+          }
 
           // Invalidate workspace.list cache so table view refetches with fresh data
           utils.workspace.list.invalidate({ projectId: message.projectId });
@@ -169,6 +205,9 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
           // Update kanban cache
           setKanbanData({ projectId }, ((prev: KanbanCacheData) =>
             upsertKanbanCacheEntry(message.entry, prev)) as never);
+
+          setWorkspaceDetailData({ id: message.entry.workspaceId }, ((prev: WorkspaceDetailCache) =>
+            mergeWorkspaceDetailFromSnapshot(prev, message.entry)) as never);
 
           // Invalidate workspace.list cache so table view refetches with fresh data
           utils.workspace.list.invalidate({ projectId });

@@ -28,6 +28,7 @@ vi.mock('@/hooks/use-websocket-transport', () => ({
 
 const mockSetData = vi.fn();
 const mockKanbanSetData = vi.fn();
+const mockWorkspaceGetSetData = vi.fn();
 const mockListInvalidate = vi.fn();
 
 vi.mock('@/frontend/lib/trpc', () => ({
@@ -39,6 +40,9 @@ vi.mock('@/frontend/lib/trpc', () => ({
         },
         listWithKanbanState: {
           setData: mockKanbanSetData,
+        },
+        get: {
+          setData: mockWorkspaceGetSetData,
         },
         list: {
           invalidate: mockListInvalidate,
@@ -74,6 +78,7 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     hasHadSessions: false,
     isWorking: false,
     pendingRequestType: null,
+    sessionSummaries: [],
     gitStats: null,
     lastActivityAt: null,
     sidebarStatus: { activityState: 'IDLE', ciState: 'NONE' },
@@ -102,6 +107,7 @@ describe('useProjectSnapshotSync', () => {
     capturedOptions = null;
     mockSetData.mockReset();
     mockKanbanSetData.mockReset();
+    mockWorkspaceGetSetData.mockReset();
     mockListInvalidate.mockClear();
   });
 
@@ -476,6 +482,49 @@ describe('useProjectSnapshotSync', () => {
       const [, updater] = mockKanbanSetData.mock.calls[0]!;
       const result = updater(undefined);
       expect(result).toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // Workspace detail cache tests (workspace.get)
+  // ===========================================================================
+
+  describe('workspace.get cache updates', () => {
+    it('snapshot_full updates workspace.get cache entries', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-1' }), makeEntry({ workspaceId: 'ws-2' })],
+      });
+
+      expect(mockWorkspaceGetSetData).toHaveBeenCalledTimes(2);
+      expect(mockWorkspaceGetSetData).toHaveBeenNthCalledWith(
+        1,
+        { id: 'ws-1' },
+        expect.any(Function)
+      );
+      expect(mockWorkspaceGetSetData).toHaveBeenNthCalledWith(
+        2,
+        { id: 'ws-2' },
+        expect.any(Function)
+      );
+    });
+
+    it('snapshot_changed updates the workspace.get cache entry', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry({ workspaceId: 'ws-1', prCiStatus: 'PENDING' }),
+      });
+
+      expect(mockWorkspaceGetSetData).toHaveBeenCalledTimes(1);
+      expect(mockWorkspaceGetSetData).toHaveBeenCalledWith({ id: 'ws-1' }, expect.any(Function));
     });
   });
 

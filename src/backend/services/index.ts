@@ -45,6 +45,7 @@ export {
   type SnapshotUpdateInput,
   type WorkspaceCiObservation,
   type WorkspaceFlowPhase,
+  type WorkspaceSessionSummary,
   type WorkspaceSnapshotEntry,
   workspaceSnapshotStore,
 } from './workspace-snapshot-store.service';

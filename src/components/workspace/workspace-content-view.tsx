@@ -1,10 +1,10 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { ReactNode } from 'react';
-import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
 import type { AppRouter } from '@/frontend/lib/trpc';
 
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
+import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 
 // =============================================================================
 // Types
@@ -17,11 +17,7 @@ interface WorkspaceContentViewProps {
   workspaceId: string;
   claudeSessions: ClaudeSession[] | undefined;
   selectedSessionId: string | null;
-  runningSessionIds: ReadonlySet<string>;
-  /** Session status for the currently selected session */
-  sessionStatus?: SessionStatus;
-  /** Process status for the currently selected session */
-  processStatus?: ProcessStatus;
+  sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
   onSelectSession: (sessionId: string) => void;
@@ -49,9 +45,7 @@ export function WorkspaceContentView({
   workspaceId,
   claudeSessions,
   selectedSessionId,
-  runningSessionIds,
-  sessionStatus,
-  processStatus,
+  sessionSummariesById,
   isCreatingSession,
   isDeletingSession,
   onSelectSession,
@@ -71,9 +65,7 @@ export function WorkspaceContentView({
         <MainViewTabBar
           sessions={claudeSessions}
           currentSessionId={selectedSessionId}
-          runningSessionIds={runningSessionIds}
-          sessionStatus={sessionStatus}
-          processStatus={processStatus}
+          sessionSummariesById={sessionSummariesById}
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
