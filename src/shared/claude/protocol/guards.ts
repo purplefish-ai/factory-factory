@@ -30,7 +30,26 @@ export function isToolResultContent<T extends ContentTypeLike>(
 export function isImageContent<T extends ContentTypeLike>(
   item: T
 ): item is Extract<T, { type: 'image' }> {
-  return item.type === 'image';
+  if (item.type !== 'image') {
+    return false;
+  }
+
+  const source = (item as { source?: unknown }).source;
+  if (typeof source !== 'object' || source === null) {
+    return false;
+  }
+
+  const imageSource = source as {
+    type?: unknown;
+    media_type?: unknown;
+    data?: unknown;
+  };
+
+  return (
+    imageSource.type === 'base64' &&
+    typeof imageSource.media_type === 'string' &&
+    typeof imageSource.data === 'string'
+  );
 }
 
 /**
