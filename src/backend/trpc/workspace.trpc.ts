@@ -145,9 +145,9 @@ export const workspaceRouter = router({
       branchName,
       useExistingBranch,
     }).catch((error) => {
-      logger.error('Unexpected error during background workspace initialization', {
+      const initError = error instanceof Error ? error : new Error(String(error));
+      logger.error('Unexpected error during background workspace initialization', initError, {
         workspaceId: workspace.id,
-        error: error instanceof Error ? error.message : String(error),
       });
     });
 
