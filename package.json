@@ -46,6 +46,8 @@
     "test": "node scripts/ensure-native-modules.mjs node && vitest run",
     "test:watch": "node scripts/ensure-native-modules.mjs node && vitest",
     "test:coverage": "node scripts/ensure-native-modules.mjs node && vitest run --coverage",
+    "test:integration": "node scripts/ensure-native-modules.mjs node && vitest run \"src/backend/**/*.integration.test.ts\"",
+    "check:coverage:critical": "node scripts/check-critical-coverage.mjs",
     "check": "biome check . && pnpm check:ownership",
     "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",
     "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
