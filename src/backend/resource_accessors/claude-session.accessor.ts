@@ -1,10 +1,5 @@
 import { SessionStatus } from '@factory-factory/core';
-import {
-  type AgentSession,
-  Prisma,
-  SessionProvider,
-  type Workspace,
-} from '@prisma-gen/client';
+import { type AgentSession, Prisma, SessionProvider, type Workspace } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 
 export type ClaudeSession = Omit<

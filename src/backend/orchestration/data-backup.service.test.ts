@@ -8,11 +8,11 @@ import {
   WorkspaceStatus,
 } from '@factory-factory/core';
 import {
-  SessionProvider,
-  WorkspaceProviderSelection,
   type Project,
+  SessionProvider,
   type UserSettings,
   type Workspace,
+  WorkspaceProviderSelection,
 } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExportDataV1, ExportDataV2, ExportDataV3 } from '@/shared/schemas/export-data.schema';

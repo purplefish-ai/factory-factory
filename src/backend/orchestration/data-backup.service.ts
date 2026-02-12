@@ -6,11 +6,7 @@
  */
 
 import { RatchetState, RunScriptStatus } from '@factory-factory/core';
-import {
-  type Prisma,
-  SessionProvider,
-  WorkspaceProviderSelection,
-} from '@prisma-gen/client';
+import { type Prisma, SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import type { z } from 'zod';
 import {
   type DataBackupTransactionClient,
