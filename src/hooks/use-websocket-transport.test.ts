@@ -332,11 +332,11 @@ describe('WebSocket transport patterns', () => {
 
       ws.simulateOpen();
       ws.simulateMessage({ type: 'output', data: 'hello' });
-      ws.simulateMessage({ type: 'claude_message', data: 'hello' });
+      ws.simulateMessage({ type: 'agent_message', data: 'hello' });
 
       expect(messages).toHaveLength(2);
       expect(messages[0]).toEqual({ type: 'output', data: 'hello' });
-      expect(messages[1]).toEqual({ type: 'claude_message', data: 'hello' });
+      expect(messages[1]).toEqual({ type: 'agent_message', data: 'hello' });
     });
 
     it('should handle malformed JSON gracefully', () => {

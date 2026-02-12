@@ -20,7 +20,7 @@ const meta = {
   tags: ['autodocs'],
   args: {
     workspaceId: 'workspace-1',
-    claudeSessions: [],
+    sessions: [],
     selectedSessionId: null,
     sessionSummariesById: new Map(),
     isCreatingSession: false,
@@ -37,10 +37,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const NoSessions: Story = {};
+export const NoSessions: Story = {
+  args: {},
+};
 
 export const NoSessionsInitializing: Story = {
   args: {
+    sessions: [],
     hasWorktreePath: false,
   },
 };

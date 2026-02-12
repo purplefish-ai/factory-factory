@@ -86,8 +86,8 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
     );
   }
 
-  // claude_message must include a minimally shaped Claude payload to avoid runtime crashes.
-  if (obj.type === 'claude_message') {
+  // agent_message must include a minimally shaped Claude payload to avoid runtime crashes.
+  if (obj.type === 'agent_message') {
     if (typeof obj.data !== 'object' || obj.data === null) {
       return false;
     }
@@ -99,12 +99,12 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
 }
 
 /**
- * Type guard for claude_message WebSocket messages.
+ * Type guard for agent_message WebSocket messages.
  */
-export function isWsClaudeMessage(
+export function isWsAgentMessage(
   msg: WebSocketMessage
-): msg is Extract<WebSocketMessage, { type: 'claude_message' }> {
-  return msg.type === 'claude_message' && typeof msg.data === 'object' && msg.data !== null;
+): msg is Extract<WebSocketMessage, { type: 'agent_message' }> {
+  return msg.type === 'agent_message' && typeof msg.data === 'object' && msg.data !== null;
 }
 
 /**

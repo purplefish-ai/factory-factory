@@ -22,6 +22,7 @@ interface Session {
   name: string | null;
   workflow?: string | null;
   status: DbSessionStatus;
+  provider?: 'CLAUDE' | 'CODEX';
 }
 
 // =============================================================================
@@ -165,6 +166,10 @@ function SessionTabItem({
   );
 }
 
+function getSessionProviderLabel(provider?: Session['provider']): string {
+  return provider === 'CODEX' ? 'Codex' : 'Claude';
+}
+
 // =============================================================================
 // Main Component
 // =============================================================================
@@ -212,10 +217,12 @@ export function MainViewTabBar({
       {/* Session tabs (Chat 1, Chat 2, etc.) */}
       {sessions?.map((session, index) => {
         const isSelected = session.id === currentSessionId;
+        const baseLabel = session.name ?? `Chat ${index + 1}`;
+        const providerLabel = getSessionProviderLabel(session.provider);
         return (
           <SessionTabItem
             key={session.id}
-            label={session.name ?? `Chat ${index + 1}`}
+            label={`${baseLabel} (${providerLabel})`}
             isActive={isSelected && activeTabId === 'chat'}
             sessionSummary={sessionSummariesById?.get(session.id)}
             isCIFix={session.workflow === 'ci-fix'}

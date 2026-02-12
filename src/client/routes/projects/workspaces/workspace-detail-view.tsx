@@ -4,8 +4,11 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { Loading } from '@/frontend/components/loading';
-
-import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
+import type {
+  NewSessionProviderSelection,
+  useSessionManagement,
+  useWorkspaceData,
+} from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
@@ -27,13 +30,15 @@ interface HeaderProps {
   openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
   handleArchiveRequest: () => void;
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
+  selectedProvider: NewSessionProviderSelection;
+  setSelectedProvider: Dispatch<SetStateAction<NewSessionProviderSelection>>;
   running: boolean;
   isCreatingSession: boolean;
   hasChanges: boolean | undefined;
 }
 
 interface SessionTabsProps {
-  claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
+  sessions: ReturnType<typeof useWorkspaceData>['sessions'];
   selectedDbSessionId: string | null;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isDeletingSession: boolean;
@@ -118,6 +123,8 @@ export function WorkspaceDetailView({
         archivePending={header.archivePending}
         onArchiveRequest={header.handleArchiveRequest}
         handleQuickAction={header.handleQuickAction}
+        selectedProvider={header.selectedProvider}
+        setSelectedProvider={header.setSelectedProvider}
         running={header.running}
         isCreatingSession={header.isCreatingSession}
         hasChanges={header.hasChanges}
@@ -139,7 +146,7 @@ export function WorkspaceDetailView({
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
               workspaceId={workspaceState.workspaceId}
-              claudeSessions={sessionTabs.claudeSessions}
+              sessions={sessionTabs.sessions}
               selectedSessionId={sessionTabs.selectedDbSessionId}
               sessionSummariesById={sessionTabs.sessionSummariesById}
               isCreatingSession={header.isCreatingSession}

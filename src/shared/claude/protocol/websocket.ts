@@ -78,9 +78,9 @@ interface WebSocketMessagePayloadByType {
   session_runtime_updated: {
     sessionRuntime: SessionRuntimeState;
   };
-  claude_message: {
+  agent_message: {
     data: import('./messages').ClaudeMessage;
-    /** Backend-assigned order for claude_message and message_used_as_response events */
+    /** Backend-assigned order for agent_message and message_used_as_response events */
     order?: number;
   };
   error: {
@@ -235,7 +235,7 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   session_delta: true,
   session_runtime_snapshot: true,
   session_runtime_updated: true,
-  claude_message: true,
+  agent_message: true,
   error: true,
   sessions: true,
   agent_metadata: true,

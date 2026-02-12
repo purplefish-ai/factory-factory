@@ -52,7 +52,7 @@ function buildRuntimeUpdate(
 
 function buildProviderEventMessage(method: string, params: unknown): SessionDeltaEvent {
   return {
-    type: 'claude_message',
+    type: 'agent_message',
     data: {
       type: 'system',
       subtype: 'status',
@@ -71,7 +71,7 @@ function translateTurnLifecycle(method: string, params: unknown): SessionDeltaEv
     return [
       buildRuntimeUpdate('idle', 'alive', 'IDLE'),
       {
-        type: 'claude_message',
+        type: 'agent_message',
         data: {
           type: 'result',
           result: asRecord(params),
@@ -114,7 +114,7 @@ export class CodexEventTranslator {
 
       return [
         {
-          type: 'claude_message',
+          type: 'agent_message',
           data: {
             type: 'assistant',
             message: {
@@ -137,7 +137,7 @@ export class CodexEventTranslator {
         asString(record.toolUseId) ?? asString(asRecord(record.item).toolUseId) ?? 'codex-tool';
       return [
         {
-          type: 'claude_message',
+          type: 'agent_message',
           data: {
             type: 'user',
             message: {
@@ -163,7 +163,7 @@ export class CodexEventTranslator {
         asString(record.toolName) ?? asString(asRecord(record.item).name) ?? 'codex_tool';
       return [
         {
-          type: 'claude_message',
+          type: 'agent_message',
           data: {
             type: 'stream_event',
             event: {
@@ -185,7 +185,7 @@ export class CodexEventTranslator {
     if (text) {
       return [
         {
-          type: 'claude_message',
+          type: 'agent_message',
           data: {
             type: 'assistant',
             message: {

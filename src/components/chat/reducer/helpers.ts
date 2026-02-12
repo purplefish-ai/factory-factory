@@ -197,7 +197,7 @@ function upsertClaudeMessageAtOrder(
 }
 
 /**
- * Handle WS_CLAUDE_MESSAGE action - processes Claude messages and stores them.
+ * Handle WS_AGENT_MESSAGE action - processes Claude messages and stores them.
  */
 export function handleClaudeMessage(
   state: ChatState,

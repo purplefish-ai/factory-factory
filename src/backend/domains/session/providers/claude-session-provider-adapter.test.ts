@@ -3,7 +3,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { ClaudeSessionProviderAdapter } from './claude-session-provider-adapter';
 
 describe('ClaudeSessionProviderAdapter', () => {
-  it('maps assistant events to canonical agent_message and public claude_message delta', () => {
+  it('maps assistant events to canonical agent_message and public agent_message delta', () => {
     const adapter = new ClaudeSessionProviderAdapter(unsafeCoerce({}));
 
     const canonical = adapter.toCanonicalAgentMessage(
@@ -26,7 +26,7 @@ describe('ClaudeSessionProviderAdapter', () => {
 
     const delta = adapter.toPublicDeltaEvent(canonical);
     expect(delta).toEqual({
-      type: 'claude_message',
+      type: 'agent_message',
       data: canonical.data,
       order: 7,
     });

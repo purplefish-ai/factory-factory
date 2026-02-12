@@ -12,7 +12,7 @@ describe('CodexEventTranslator', () => {
 
     expect(events).toEqual([
       expect.objectContaining({
-        type: 'claude_message',
+        type: 'agent_message',
         data: expect.objectContaining({
           type: 'assistant',
         }),
@@ -48,7 +48,7 @@ describe('CodexEventTranslator', () => {
       type: 'session_runtime_updated',
       sessionRuntime: expect.objectContaining({ phase: 'idle', activity: 'IDLE' }),
     });
-    expect(completed[1]).toMatchObject({ type: 'claude_message' });
+    expect(completed[1]).toMatchObject({ type: 'agent_message' });
 
     expect(cancelled[0]).toMatchObject({
       type: 'session_runtime_updated',

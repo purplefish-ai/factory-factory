@@ -213,7 +213,7 @@ export function appendClaudeEvent(
   if (!shouldPersist || isDuplicateResult) {
     options.onParityTrace({
       path: 'live_stream_filtered',
-      reason: !shouldPersist ? 'non_renderable_claude_message' : 'duplicate_result_suppressed',
+      reason: !shouldPersist ? 'non_renderable_agent_message' : 'duplicate_result_suppressed',
       order,
       claudeMessage,
     });

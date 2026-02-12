@@ -308,7 +308,7 @@ export class CodexSessionProviderAdapter
   ): SessionDeltaEvent {
     return this.addOrder(
       {
-        type: 'claude_message',
+        type: 'agent_message',
         data: {
           type: 'assistant',
           message: {
@@ -328,7 +328,7 @@ export class CodexSessionProviderAdapter
   ): SessionDeltaEvent {
     return this.addOrder(
       {
-        type: 'claude_message',
+        type: 'agent_message',
         data: {
           type: 'stream_event',
           event: {
@@ -353,7 +353,7 @@ export class CodexSessionProviderAdapter
   ): SessionDeltaEvent {
     return this.addOrder(
       {
-        type: 'claude_message',
+        type: 'agent_message',
         data: {
           type: 'user',
           message: {
@@ -378,7 +378,7 @@ export class CodexSessionProviderAdapter
   ): SessionDeltaEvent {
     return this.addOrder(
       {
-        type: 'claude_message',
+        type: 'agent_message',
         data: {
           type: 'result',
           result: event.data.payload ?? {},
@@ -394,7 +394,7 @@ export class CodexSessionProviderAdapter
   ): SessionDeltaEvent {
     return this.addOrder(
       {
-        type: 'claude_message',
+        type: 'agent_message',
         data: {
           type: 'system',
           subtype: 'status',

@@ -77,8 +77,8 @@ vi.mock('@/backend/domains/session/providers', () => ({
     })),
     toPublicDeltaEvent: vi.fn((event) =>
       event.order === undefined
-        ? ({ type: 'claude_message', data: event.data } as const)
-        : ({ type: 'claude_message', data: event.data, order: event.order } as const)
+        ? ({ type: 'agent_message', data: event.data } as const)
+        : ({ type: 'agent_message', data: event.data, order: event.order } as const)
     ),
     getSessionProcess: vi.fn(),
     isSessionRunning: vi.fn(),
@@ -931,7 +931,7 @@ describe('SessionService', () => {
       } as never,
     });
     vi.mocked(claudeSessionProviderAdapter.toPublicDeltaEvent).mockReturnValue({
-      type: 'claude_message',
+      type: 'agent_message',
       order: 3,
       data: {
         type: 'result',
@@ -950,6 +950,6 @@ describe('SessionService', () => {
       3
     );
     expect(claudeSessionProviderAdapter.toPublicDeltaEvent).toHaveBeenCalled();
-    expect(delta).toMatchObject({ type: 'claude_message', order: 3 });
+    expect(delta).toMatchObject({ type: 'agent_message', order: 3 });
   });
 });

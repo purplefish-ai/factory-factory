@@ -118,7 +118,7 @@ describe('SessionDomainService', () => {
           userMessage: expect.objectContaining({ text: 'hello' }),
         }),
         expect.objectContaining({
-          type: 'claude_message',
+          type: 'agent_message',
           data: expect.objectContaining({
             type: 'assistant',
           }),
@@ -195,7 +195,7 @@ describe('SessionDomainService', () => {
     const replayEvents = getLatestReplayBatch().replayEvents ?? [];
     const claudeEvent = replayEvents.find(
       (event) =>
-        event.type === 'claude_message' &&
+        event.type === 'agent_message' &&
         (event.data as { type?: string } | undefined)?.type === 'user'
     ) as
       | {
@@ -246,7 +246,7 @@ describe('SessionDomainService', () => {
     const replayEvents = getLatestReplayBatch().replayEvents ?? [];
     const claudeEvent = replayEvents.find(
       (event) =>
-        event.type === 'claude_message' &&
+        event.type === 'agent_message' &&
         (event.data as { type?: string } | undefined)?.type === 'user'
     ) as
       | {

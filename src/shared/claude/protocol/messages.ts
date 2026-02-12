@@ -51,7 +51,7 @@ const CLAUDE_MESSAGE_TYPE_MAP: Record<ClaudeMessage['type'], true> = {
 };
 
 /**
- * Canonical list of valid Claude payload types nested in claude_message events.
+ * Canonical list of valid Claude payload types nested in agent_message events.
  */
 export const CLAUDE_MESSAGE_TYPES = Object.keys(CLAUDE_MESSAGE_TYPE_MAP) as ClaudeMessage['type'][];
 

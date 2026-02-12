@@ -11,7 +11,7 @@
  */
 
 import type { ChatMessage, WebSocketMessage } from '@/lib/claude-types';
-import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
+import { isWebSocketMessage, isWsAgentMessage } from '@/lib/claude-types';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
@@ -152,8 +152,8 @@ function handleSessionRuntimeUpdatedMessage(data: WebSocketMessage): ChatAction 
 }
 
 function handleClaudeMessageAction(data: WebSocketMessage): ChatAction | null {
-  if (isWsClaudeMessage(data) && data.order !== undefined) {
-    return { type: 'WS_CLAUDE_MESSAGE', payload: { message: data.data, order: data.order } };
+  if (isWsAgentMessage(data) && data.order !== undefined) {
+    return { type: 'WS_AGENT_MESSAGE', payload: { message: data.data, order: data.order } };
   }
   return null;
 }
@@ -410,7 +410,7 @@ type MessageHandlerMap = {
 const messageHandlers: MessageHandlerMap = {
   session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
   session_runtime_updated: handleSessionRuntimeUpdatedMessage,
-  claude_message: handleClaudeMessageAction,
+  agent_message: handleClaudeMessageAction,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,
   agent_metadata: null,

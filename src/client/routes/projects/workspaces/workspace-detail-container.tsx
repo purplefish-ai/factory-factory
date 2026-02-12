@@ -6,7 +6,11 @@ import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
-import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
+import {
+  type NewSessionProviderSelection,
+  useSessionManagement,
+  useWorkspaceData,
+} from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
   useSelectedSessionId,
@@ -20,7 +24,7 @@ export function WorkspaceDetailContainer() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const { workspace, workspaceLoading, claudeSessions, initialDbSessionId, maxSessions } =
+  const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
     useWorkspaceData({ workspaceId: workspaceId });
 
   const { rightPanelVisible, activeTabId, clearScrollState } = useWorkspacePanel();
@@ -46,6 +50,8 @@ export function WorkspaceDetailContainer() {
     initialDbSessionId ?? null
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] =
+    useState<NewSessionProviderSelection>('WORKSPACE_DEFAULT');
 
   const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
@@ -127,12 +133,13 @@ export function WorkspaceDetailContainer() {
   } = useSessionManagement({
     workspaceId: workspaceId,
     slug: slug,
-    claudeSessions,
+    sessions,
     sendMessage,
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
     selectedModel: chatSettings.selectedModel,
+    selectedProvider,
     isSessionReady,
   });
 
@@ -280,12 +287,14 @@ export function WorkspaceDetailContainer() {
         openInIde,
         handleArchiveRequest,
         handleQuickAction,
+        selectedProvider,
+        setSelectedProvider,
         running: workspaceRunning,
         isCreatingSession: createSession.isPending,
         hasChanges,
       }}
       sessionTabs={{
-        claudeSessions,
+        sessions,
         selectedDbSessionId,
         sessionSummariesById,
         isDeletingSession: deleteSession.isPending,

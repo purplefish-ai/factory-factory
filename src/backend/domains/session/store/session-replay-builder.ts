@@ -62,7 +62,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
 
     if (message.message) {
       replayEvents.push({
-        type: 'claude_message',
+        type: 'agent_message',
         data: message.message,
         order: message.order,
       });
