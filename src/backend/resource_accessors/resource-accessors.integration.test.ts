@@ -38,8 +38,9 @@ beforeAll(async () => {
   db = await createIntegrationDatabase();
   prisma = db.prisma;
 
-  // biome-ignore lint: dynamic import is required after integration DB bootstrap.
-  const accessorModule = await import('@/backend/resource_accessors');
+  const accessorModule = await vi.importActual<typeof import('@/backend/resource_accessors')>(
+    '@/backend/resource_accessors'
+  );
   ({
     workspaceAccessor,
     projectAccessor,
@@ -49,8 +50,9 @@ beforeAll(async () => {
     decisionLogAccessor,
   } = accessorModule);
 
-  // biome-ignore lint: dynamic import is required after integration DB bootstrap.
-  const gitClientModule = await import('@/backend/clients/git.client');
+  const gitClientModule = await vi.importActual<typeof import('@/backend/clients/git.client')>(
+    '@/backend/clients/git.client'
+  );
   ({ GitClientFactory } = gitClientModule);
 });
 

@@ -50,16 +50,16 @@ beforeAll(async () => {
   prisma = db.prisma;
   tempRootDir = mkdtempSync(join(tmpdir(), 'ff-ws-integration-'));
 
-  // biome-ignore lint: dynamic imports are required after per-suite DB bootstrap.
-  ({ createTerminalUpgradeHandler, terminalConnections } = await import('./terminal.handler'));
-  // biome-ignore lint: dynamic imports are required after per-suite DB bootstrap.
-  ({ createDevLogsUpgradeHandler } = await import('./dev-logs.handler'));
-  // biome-ignore lint: dynamic imports are required after per-suite DB bootstrap.
-  ({ createSnapshotsUpgradeHandler, snapshotConnections } = await import('./snapshots.handler'));
-  // biome-ignore lint: dynamic imports are required after per-suite DB bootstrap.
-  ({ createChatUpgradeHandler } = await import('./chat.handler'));
-  // biome-ignore lint: dynamic imports are required after per-suite DB bootstrap.
-  ({ workspaceSnapshotStore } = await import('@/backend/services'));
+  ({ createTerminalUpgradeHandler, terminalConnections } =
+    await vi.importActual<typeof import('./terminal.handler')>('./terminal.handler'));
+  ({ createDevLogsUpgradeHandler } =
+    await vi.importActual<typeof import('./dev-logs.handler')>('./dev-logs.handler'));
+  ({ createSnapshotsUpgradeHandler, snapshotConnections } =
+    await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
+  ({ createChatUpgradeHandler } =
+    await vi.importActual<typeof import('./chat.handler')>('./chat.handler'));
+  ({ workspaceSnapshotStore } =
+    await vi.importActual<typeof import('@/backend/services')>('@/backend/services'));
 });
 
 afterEach(async () => {
