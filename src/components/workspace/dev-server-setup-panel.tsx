@@ -1,30 +1,26 @@
 import { FileJson, Loader2, Play } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { trpc } from '@/frontend/lib/trpc';
 
-interface DevServerSetupDialogProps {
+interface DevServerSetupPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaceId: string;
 }
 
-export function DevServerSetupDialog({
-  open,
-  onOpenChange,
-  workspaceId,
-}: DevServerSetupDialogProps) {
+export function DevServerSetupPanel({ open, onOpenChange, workspaceId }: DevServerSetupPanelProps) {
   const [runCommand, setRunCommand] = useState('npm run dev');
   const [setupCommand, setSetupCommand] = useState('');
   const [cleanupCommand, setCleanupCommand] = useState('');
@@ -53,21 +49,21 @@ export function DevServerSetupDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
             <Play className="h-5 w-5 text-green-600" />
             Setup Dev Server
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             Configure your dev server to enable the play button. This will create a{' '}
             <code className="bg-muted px-1 rounded text-xs">factory-factory.json</code> file in your
             project root.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-6 py-6">
           {/* Run Command (Required) */}
           <div className="space-y-2">
             <Label htmlFor="run-command" className="text-sm font-medium">
@@ -121,6 +117,61 @@ export function DevServerSetupDialog({
             </p>
           </div>
 
+          {/* Common Examples */}
+          <div className="space-y-2 border-t pt-4">
+            <Label className="text-sm font-medium">Common Examples</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start font-mono text-xs"
+                onClick={() => {
+                  setRunCommand('npm run dev');
+                  setSetupCommand('npm install');
+                  setCleanupCommand('');
+                }}
+              >
+                Node.js / npm
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start font-mono text-xs"
+                onClick={() => {
+                  setRunCommand('pnpm dev');
+                  setSetupCommand('pnpm install');
+                  setCleanupCommand('');
+                }}
+              >
+                pnpm
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start font-mono text-xs"
+                onClick={() => {
+                  setRunCommand('cargo run');
+                  setSetupCommand('cargo build');
+                  setCleanupCommand('');
+                }}
+              >
+                Rust / Cargo
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start font-mono text-xs"
+                onClick={() => {
+                  setRunCommand('python -m flask run --port {port}');
+                  setSetupCommand('pip install -r requirements.txt');
+                  setCleanupCommand('');
+                }}
+              >
+                Python / Flask
+              </Button>
+            </div>
+          </div>
+
           {/* Preview */}
           <div className="space-y-2 border-t pt-4">
             <Label className="text-sm font-medium flex items-center gap-2">
@@ -143,68 +194,17 @@ export function DevServerSetupDialog({
               className="font-mono text-xs h-32 resize-none bg-muted"
             />
           </div>
-
-          {/* Common Examples */}
-          <div className="space-y-2 border-t pt-4">
-            <Label className="text-sm font-medium">Common Examples</Label>
-            <div className="space-y-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start font-mono text-xs"
-                onClick={() => {
-                  setRunCommand('npm run dev');
-                  setSetupCommand('npm install');
-                  setCleanupCommand('');
-                }}
-              >
-                Node.js / npm
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start font-mono text-xs"
-                onClick={() => {
-                  setRunCommand('pnpm dev');
-                  setSetupCommand('pnpm install');
-                  setCleanupCommand('');
-                }}
-              >
-                pnpm
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start font-mono text-xs"
-                onClick={() => {
-                  setRunCommand('cargo run');
-                  setSetupCommand('cargo build');
-                  setCleanupCommand('');
-                }}
-              >
-                Rust / Cargo
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start font-mono text-xs"
-                onClick={() => {
-                  setRunCommand('python -m flask run --port {port}');
-                  setSetupCommand('pip install -r requirements.txt');
-                  setCleanupCommand('');
-                }}
-              >
-                Python / Flask
-              </Button>
-            </div>
-          </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <SheetFooter className="flex flex-row gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={!runCommand.trim() || createConfig.isPending}>
+          <Button
+            onClick={handleCreate}
+            disabled={!runCommand.trim() || createConfig.isPending}
+            className="flex-1"
+          >
             {createConfig.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -217,14 +217,14 @@ export function DevServerSetupDialog({
               </>
             )}
           </Button>
-        </DialogFooter>
+        </SheetFooter>
 
         {createConfig.error && (
           <div className="text-sm text-destructive px-6 pb-4">
             Error: {createConfig.error.message}
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

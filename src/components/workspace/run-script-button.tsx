@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/frontend/lib/trpc';
-import { DevServerSetupDialog } from './dev-server-setup-dialog';
+import { DevServerSetupPanel } from './dev-server-setup-panel';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 interface RunScriptButtonProps {
@@ -44,7 +44,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   if (!status?.hasRunScript) {
     return (
       <>
-        <DevServerSetupDialog
+        <DevServerSetupPanel
           open={setupDialogOpen}
           onOpenChange={setSetupDialogOpen}
           workspaceId={workspaceId}
