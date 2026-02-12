@@ -37,7 +37,19 @@ You are implementing a new feature. Follow this workflow to deliver high-quality
 - Run `pnpm check:fix` to fix linting issues
 - Ensure the build passes (`pnpm build:all`)
 
-### 6. Create Pull Request
+### 6. Capture UI Screenshots (if applicable)
+
+If your changes affect the UI:
+
+1. Read `factory-factory.json` for the `scripts.run` command, pick a free port, replace `{port}`, and start it in the background.
+2. Use `browser_navigate` to visit the dev server URL
+3. Determine the most relevant screen showing your changes and capture a screenshot
+4. Save screenshots to `.factory-factory/screenshots/` with descriptive names
+5. Commit the screenshots
+6. Reference them in the PR body using raw GitHub URLs:
+   `![Description](https://raw.githubusercontent.com/{owner}/{repo}/{branch}/.factory-factory/screenshots/filename.png)`
+
+### 7. Create Pull Request
 - Commit all changes with descriptive messages
 - Push your branch: `git push -u origin HEAD`
 - Create the PR using the GitHub CLI with a body file to preserve formatting:

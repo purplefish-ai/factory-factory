@@ -167,7 +167,16 @@ export function WorkspaceDetailView({
             <ResizableHandle />
             <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
               <div className="h-full border-l">
-                <RightPanel workspaceId={workspaceState.workspaceId} messages={chat.messages} />
+                <RightPanel
+                  workspaceId={workspaceState.workspaceId}
+                  messages={chat.messages}
+                  onTakeScreenshots={() =>
+                    header.handleQuickAction(
+                      'Take Screenshots',
+                      'Take a screenshot of the workspace dev app using Playwright MCP tools. Read factory-factory.json for the scripts.run command, pick a free port, replace {port}, and start the dev server in the background. Once ready, determine the most relevant screen and save a screenshot to .factory-factory/screenshots/ with a descriptive filename.'
+                    )
+                  }
+                />
               </div>
             </ResizablePanel>
           </>

@@ -1,5 +1,5 @@
 import type { SessionStatus as DbSessionStatus } from '@factory-factory/core';
-import { FileCode, FileDiff, Plus } from 'lucide-react';
+import { Camera, FileCode, FileDiff, Plus } from 'lucide-react';
 
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -36,6 +36,8 @@ function getTabIcon(type: MainViewTab['type']) {
       return FileCode;
     case 'diff':
       return FileDiff;
+    case 'screenshot':
+      return Camera;
   }
 }
 

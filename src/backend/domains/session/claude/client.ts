@@ -62,6 +62,8 @@ export interface ClaudeClientOptions {
   permissionHandler?: PermissionHandler;
   /** Hook configuration for PreToolUse and Stop hooks */
   hooks?: HooksConfig;
+  /** MCP server configuration JSON string (passed via --mcp-config) */
+  mcpConfig?: string;
   /** Tools to disallow */
   disallowedTools?: string[];
   /** Initial prompt to send via -p flag */
@@ -159,6 +161,7 @@ export class ClaudeClient extends EventEmitter {
       systemPrompt: options.systemPrompt,
       permissionMode: options.permissionMode,
       hooks: options.hooks,
+      mcpConfig: options.mcpConfig,
       disallowedTools: options.disallowedTools,
       initialPrompt: options.initialPrompt,
       includePartialMessages: options.includePartialMessages,

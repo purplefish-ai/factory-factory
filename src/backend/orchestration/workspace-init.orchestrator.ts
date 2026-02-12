@@ -312,6 +312,22 @@ Update TodoWrite with any additional fix tasks discovered.
    git status  # should show clean working directory
    \`\`\`
 
+## Phase 4.5: Capture UI Screenshots (if applicable)
+
+If your changes affect the UI:
+
+1. Read \`factory-factory.json\` for the \`scripts.run\` command, pick a free port, replace \`{port}\`, and start it in the background.
+2. Use \`browser_navigate\` to visit the dev server URL
+3. Determine the most relevant screen showing your changes and capture a screenshot
+4. Save screenshots:
+   \`\`\`bash
+   mkdir -p .factory-factory/screenshots
+   \`\`\`
+   Save with descriptive names (e.g., \`dashboard-new-widget.png\`)
+5. Commit the screenshots with your changes
+6. Reference them in the PR body using raw GitHub URLs:
+   \`![Description](https://raw.githubusercontent.com/${project.githubOwner}/${project.githubRepo}/\${branch}/.factory-factory/screenshots/filename.png)\`
+
 ## Phase 5: Create Pull Request [REQUIRED - DO NOT SKIP]
 
 **Pre-flight checklist before creating PR:**
