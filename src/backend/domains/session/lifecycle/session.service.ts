@@ -686,7 +686,31 @@ class SessionService {
    * @param timeoutMs - Timeout for each client stop operation
    */
   async stopAllClients(timeoutMs = 5000): Promise<void> {
-    await this.providerAdapter.stopAllClients(timeoutMs);
+    let firstError: unknown = null;
+
+    try {
+      await this.providerAdapter.stopAllClients(timeoutMs);
+    } catch (error) {
+      firstError = error;
+      logger.error('Failed to stop Claude provider clients during shutdown', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      await this.codexAdapter.stopAllClients();
+    } catch (error) {
+      if (!firstError) {
+        firstError = error;
+      }
+      logger.error('Failed to stop Codex provider clients during shutdown', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    if (firstError) {
+      throw firstError instanceof Error ? firstError : new Error(String(firstError));
+    }
   }
 
   private shouldStopWorkspaceSession(session: { id: string; status: SessionStatus }): {

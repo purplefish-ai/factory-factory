@@ -183,6 +183,16 @@ export class CodexSessionProviderAdapter
     );
 
     const turnId = parseTurnId(result);
+    if (!turnId) {
+      throw new SessionOperationError('Codex turn/start did not return turnId', {
+        code: 'CODEX_TURN_ID_MISSING',
+        metadata: {
+          sessionId,
+          threadId: client.threadId,
+        },
+        retryable: true,
+      });
+    }
     this.manager.getRegistry().setActiveTurnId(sessionId, turnId);
   }
 

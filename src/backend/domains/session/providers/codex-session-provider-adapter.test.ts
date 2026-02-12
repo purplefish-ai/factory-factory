@@ -174,6 +174,46 @@ describe('CodexSessionProviderAdapter', () => {
     expect(request).toHaveBeenCalledTimes(4);
   });
 
+  it('fails fast when turn/start does not return turnId', async () => {
+    const registry = new CodexSessionRegistry();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ threadId: 'thread-1' }) // start
+      .mockResolvedValueOnce({}); // send without turnId
+
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request,
+      stop: vi.fn().mockResolvedValue(undefined),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    await expect(adapter.sendMessage('session-1', 'Hello from Codex')).rejects.toMatchObject({
+      code: 'CODEX_TURN_ID_MISSING',
+      retryable: true,
+    });
+
+    expect(adapter.isSessionWorking('session-1')).toBe(false);
+  });
+
   it('returns canonical unsupported operation errors for thinking budget and rewind', async () => {
     const adapter = new CodexSessionProviderAdapter({
       ensureStarted: vi.fn(),

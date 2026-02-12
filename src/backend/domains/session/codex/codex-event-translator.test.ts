@@ -30,6 +30,14 @@ describe('CodexEventTranslator', () => {
       threadId: 'thread-1',
       turnId: 'turn-1',
     });
+    const cancelled = translator.translateNotification('turn/cancelled', {
+      threadId: 'thread-1',
+      turnId: 'turn-2',
+    });
+    const failed = translator.translateNotification('turn/failed', {
+      threadId: 'thread-1',
+      turnId: 'turn-3',
+    });
 
     expect(running[0]).toMatchObject({
       type: 'session_runtime_updated',
@@ -41,6 +49,16 @@ describe('CodexEventTranslator', () => {
       sessionRuntime: expect.objectContaining({ phase: 'idle', activity: 'IDLE' }),
     });
     expect(completed[1]).toMatchObject({ type: 'claude_message' });
+
+    expect(cancelled[0]).toMatchObject({
+      type: 'session_runtime_updated',
+      sessionRuntime: expect.objectContaining({ phase: 'idle', activity: 'IDLE' }),
+    });
+
+    expect(failed[0]).toMatchObject({
+      type: 'session_runtime_updated',
+      sessionRuntime: expect.objectContaining({ phase: 'idle', activity: 'IDLE' }),
+    });
   });
 
   it('maps approval requests to permission_request events', () => {

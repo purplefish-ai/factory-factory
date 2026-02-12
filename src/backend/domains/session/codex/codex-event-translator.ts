@@ -62,35 +62,48 @@ function buildProviderEventMessage(method: string, params: unknown): SessionDelt
   };
 }
 
+function translateTurnLifecycle(method: string, params: unknown): SessionDeltaEvent[] | null {
+  if (method.startsWith('turn/started') || method.startsWith('turn/running')) {
+    return [buildRuntimeUpdate('running', 'alive', 'WORKING')];
+  }
+
+  if (method.startsWith('turn/completed') || method.startsWith('turn/finished')) {
+    return [
+      buildRuntimeUpdate('idle', 'alive', 'IDLE'),
+      {
+        type: 'claude_message',
+        data: {
+          type: 'result',
+          result: asRecord(params),
+        },
+      },
+    ];
+  }
+
+  if (method.startsWith('turn/interrupted')) {
+    return [
+      buildRuntimeUpdate('idle', 'alive', 'IDLE'),
+      {
+        type: 'status_update',
+        permissionMode: 'interrupted',
+      },
+    ];
+  }
+
+  if (method.startsWith('turn/cancelled') || method.startsWith('turn/failed')) {
+    return [buildRuntimeUpdate('idle', 'alive', 'IDLE'), buildProviderEventMessage(method, params)];
+  }
+
+  return null;
+}
+
 export class CodexEventTranslator {
   constructor(private readonly options?: { userInputEnabled?: boolean }) {}
 
   translateNotification(method: string, params: unknown): SessionDeltaEvent[] {
-    if (method.startsWith('turn/started') || method.startsWith('turn/running')) {
-      return [buildRuntimeUpdate('running', 'alive', 'WORKING')];
-    }
-
-    if (method.startsWith('turn/completed') || method.startsWith('turn/finished')) {
-      return [
-        buildRuntimeUpdate('idle', 'alive', 'IDLE'),
-        {
-          type: 'claude_message',
-          data: {
-            type: 'result',
-            result: asRecord(params),
-          },
-        },
-      ];
-    }
-
-    if (method.startsWith('turn/interrupted')) {
-      return [
-        buildRuntimeUpdate('idle', 'alive', 'IDLE'),
-        {
-          type: 'status_update',
-          permissionMode: 'interrupted',
-        },
-      ];
+    const turnLifecycleEvents = translateTurnLifecycle(method, params);
+    if (turnLifecycleEvents) {
+      return turnLifecycleEvents;
     }
 
     if (method.includes('thinking')) {

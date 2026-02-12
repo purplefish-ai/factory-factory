@@ -105,6 +105,7 @@ vi.mock('@/backend/domains/session/providers', () => ({
     rejectInteractiveRequest: vi.fn(),
     getAllClients: vi.fn(() => new Map().entries()),
     getAllActiveProcesses: vi.fn(() => []),
+    stopAllClients: vi.fn(),
   },
 }));
 
@@ -840,6 +841,26 @@ describe('SessionService', () => {
       'req-2',
       { q: 'a' }
     );
+  });
+
+  it('stops both Claude and Codex providers during shutdown', async () => {
+    vi.mocked(claudeSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
+    vi.mocked(codexSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
+
+    await sessionService.stopAllClients(4321);
+
+    expect(claudeSessionProviderAdapter.stopAllClients).toHaveBeenCalledWith(4321);
+    expect(codexSessionProviderAdapter.stopAllClients).toHaveBeenCalledTimes(1);
+  });
+
+  it('still attempts Codex shutdown when Claude shutdown fails', async () => {
+    vi.mocked(claudeSessionProviderAdapter.stopAllClients).mockRejectedValueOnce(
+      new Error('claude shutdown failed')
+    );
+    vi.mocked(codexSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
+
+    await expect(sessionService.stopAllClients()).rejects.toThrow('claude shutdown failed');
+    expect(codexSessionProviderAdapter.stopAllClients).toHaveBeenCalledTimes(1);
   });
 
   it('clears active turn tracking for terminal Codex notifications', () => {
