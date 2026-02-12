@@ -139,12 +139,19 @@ export class CodexSessionProviderAdapter
 
   async stopClient(sessionId: string): Promise<void> {
     this.stopping.add(sessionId);
+    let clearSessionError: unknown = null;
     try {
       await this.manager.getRegistry().clearSession(sessionId);
+    } catch (error) {
+      clearSessionError = error;
+    } finally {
       this.clients.delete(sessionId);
       this.preferredModels.delete(sessionId);
-    } finally {
       this.stopping.delete(sessionId);
+    }
+
+    if (clearSessionError) {
+      throw clearSessionError;
     }
   }
 

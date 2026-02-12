@@ -62,6 +62,60 @@ describe('CodexSessionProviderAdapter', () => {
     );
   });
 
+  it('clears local client and model state when stopClient clearSession fails', async () => {
+    const registry = new CodexSessionRegistry();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ threadId: 'thread-1' })
+      .mockResolvedValueOnce({ threadId: 'thread-2' })
+      .mockResolvedValueOnce({ turnId: 'turn-1' });
+
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request,
+      stop: vi.fn().mockResolvedValue(undefined),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+    await adapter.setModel('session-1', 'gpt-5');
+
+    vi.spyOn(registry, 'clearSession').mockRejectedValueOnce(
+      new Error('mapping store unavailable')
+    );
+
+    await expect(adapter.stopClient('session-1')).rejects.toThrow('mapping store unavailable');
+    expect(adapter.getClient('session-1')).toBeUndefined();
+    expect(adapter.isStopInProgress('session-1')).toBe(false);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+    await adapter.sendMessage('session-1', 'Hello from Codex');
+
+    const turnParams = request.mock.calls[2]?.[1] as Record<string, unknown>;
+    expect(turnParams).not.toHaveProperty('model');
+  });
+
   it('applies initial model preference from client options on first turn', async () => {
     const registry = new CodexSessionRegistry();
     const request = vi
