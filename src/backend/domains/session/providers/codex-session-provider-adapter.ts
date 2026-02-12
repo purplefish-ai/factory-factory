@@ -137,16 +137,22 @@ export class CodexSessionProviderAdapter
     return this.pending.get(sessionId);
   }
 
-  stopClient(sessionId: string): Promise<void> {
+  async stopClient(sessionId: string): Promise<void> {
     this.stopping.add(sessionId);
+    let clearSessionError: unknown = null;
     try {
-      this.manager.getRegistry().clearSession(sessionId);
+      await this.manager.getRegistry().clearSession(sessionId);
+    } catch (error) {
+      clearSessionError = error;
+    } finally {
       this.clients.delete(sessionId);
       this.preferredModels.delete(sessionId);
-    } finally {
       this.stopping.delete(sessionId);
     }
-    return Promise.resolve();
+
+    if (clearSessionError) {
+      throw clearSessionError;
+    }
   }
 
   async sendMessage(sessionId: string, content: string): Promise<void> {
@@ -436,12 +442,41 @@ export class CodexSessionProviderAdapter
   }
 
   async stopAllClients(): Promise<void> {
-    for (const [sessionId] of this.clients) {
-      this.manager.getRegistry().clearSession(sessionId);
+    let firstCleanupError: unknown = null;
+    let stopError: unknown = null;
+    try {
+      for (const [sessionId] of this.clients) {
+        try {
+          await this.manager.getRegistry().clearSession(sessionId);
+        } catch (error) {
+          if (!firstCleanupError) {
+            firstCleanupError = error;
+          }
+        }
+      }
+    } finally {
+      this.clients.clear();
+      this.preferredModels.clear();
+      try {
+        await this.manager.stop();
+      } catch (error) {
+        stopError = error;
+      }
     }
-    this.clients.clear();
-    this.preferredModels.clear();
-    await this.manager.stop();
+
+    if (firstCleanupError) {
+      if (stopError) {
+        throw new AggregateError(
+          [firstCleanupError, stopError],
+          'Codex stopAllClients failed during cleanup and manager shutdown'
+        );
+      }
+      throw firstCleanupError;
+    }
+
+    if (stopError) {
+      throw stopError;
+    }
   }
 
   async interruptTurn(sessionId: string): Promise<void> {
