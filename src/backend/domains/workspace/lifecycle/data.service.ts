@@ -44,7 +44,10 @@ class WorkspaceDataService {
       ratchetSessionProvider?: WorkspaceProviderSelection;
     }
   ) {
-    return workspaceAccessor.update(id, data);
+    return workspaceAccessor.update(id, {
+      defaultSessionProvider: data.defaultSessionProvider,
+      ratchetSessionProvider: data.ratchetSessionProvider,
+    });
   }
 
   delete(id: string): Promise<Workspace> {
