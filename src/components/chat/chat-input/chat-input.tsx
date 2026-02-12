@@ -2,6 +2,7 @@ import { Brain, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
+import { FileMentionPalette } from '@/components/chat/file-mention-palette';
 import { SlashCommandPalette } from '@/components/chat/slash-command-palette';
 import { ContextWindowIndicator } from '@/components/chat/usage-stats';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import { ModelSelector } from './components/model-selector';
 import { QuickActionsDropdown } from './components/quick-actions-dropdown';
 import { SettingsToggle } from './components/settings-toggle';
 import { useChatInputActions } from './hooks/use-chat-input-actions';
+import { useFileMentions } from './hooks/use-file-mentions';
 import { usePasteDropHandler } from './hooks/use-paste-drop-handler';
 import { useSlashCommands } from './hooks/use-slash-commands';
 import { useTextareaResize } from './hooks/use-textarea-resize';
@@ -56,6 +58,8 @@ export interface ChatInputProps {
   slashCommandsLoaded?: boolean;
   // Token usage stats for context window indicator
   tokenStats?: TokenStats;
+  // Workspace ID for file mentions
+  workspaceId?: string;
 }
 
 // =============================================================================
@@ -318,6 +322,7 @@ export const ChatInput = memo(function ChatInput({
   slashCommands = [],
   slashCommandsLoaded = false,
   tokenStats,
+  workspaceId,
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
@@ -353,6 +358,25 @@ export const ChatInput = memo(function ChatInput({
     onChange,
   });
 
+  // File mentions hook
+  const fileMentions = useFileMentions({
+    workspaceId,
+    inputRef: resolvedInputRef,
+    onChange,
+  });
+
+  // Combined input change handler for both slash commands and file mentions
+  const handleInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newValue = event.target.value;
+      // Call slash command detection
+      slash.handleInputChange(event);
+      // Call file mention detection
+      fileMentions.detectFileMention(newValue);
+    },
+    [slash, fileMentions]
+  );
+
   // Actions hook
   const actions = useChatInputActions({
     onSend,
@@ -368,6 +392,8 @@ export const ChatInput = memo(function ChatInput({
     attachments,
     setAttachments,
     delegateToSlashMenu: slash.delegateToSlashMenu,
+    delegateToFileMentionMenu: fileMentions.delegateToFileMentionMenu,
+    onCloseFileMentionMenu: fileMentions.handleFileMentionMenuClose,
   });
 
   // Textarea resize hook
@@ -440,6 +466,18 @@ export const ChatInput = memo(function ChatInput({
         paletteRef={slash.paletteRef}
       />
 
+      {/* File mention palette */}
+      <FileMentionPalette
+        files={fileMentions.files}
+        isOpen={fileMentions.fileMentionMenuOpen}
+        isLoading={fileMentions.filesLoading}
+        onClose={fileMentions.handleFileMentionMenuClose}
+        onSelect={fileMentions.handleFileMentionSelect}
+        filter={fileMentions.fileMentionFilter}
+        anchorRef={resolvedInputRef as React.RefObject<HTMLElement | null>}
+        paletteRef={fileMentions.paletteRef}
+      />
+
       <InputGroup className="flex-col">
         {/* Attachment preview (above text input) */}
         <AttachmentSection attachments={attachments} onRemove={actions.handleRemoveAttachment} />
@@ -448,7 +486,7 @@ export const ChatInput = memo(function ChatInput({
         <InputGroupTextarea
           ref={resolvedInputRef}
           onKeyDown={actions.handleKeyDown}
-          onChange={slash.handleInputChange}
+          onChange={handleInputChange}
           onPaste={pasteDropHandler.handlePaste}
           onDrop={pasteDropHandler.handleDrop}
           onDragOver={pasteDropHandler.handleDragOver}
