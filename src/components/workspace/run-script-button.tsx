@@ -20,6 +20,8 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanel();
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
 
+  const utils = trpc.useUtils();
+
   // Query run script status (React Query automatically deduplicates with same key)
   const { data: status, refetch } = trpc.workspace.getRunScriptStatus.useQuery(
     { workspaceId },
@@ -46,15 +48,28 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     },
   });
 
+  const createConfig = trpc.workspace.createFactoryConfig.useMutation({
+    onSuccess: () => {
+      utils.workspace.getRunScriptStatus.invalidate({ workspaceId });
+      setSetupPanelOpen(false);
+    },
+  });
+
+  const panelProps = {
+    open: setupPanelOpen,
+    onOpenChange: setSetupPanelOpen,
+    onSave: (config: Parameters<typeof createConfig.mutate>[0]['config']) => {
+      createConfig.mutate({ workspaceId, config });
+    },
+    isPending: createConfig.isPending,
+    error: createConfig.error,
+  };
+
   // Show setup button if no run script configured
   if (!status?.hasRunScript) {
     return (
       <>
-        <DevServerSetupPanel
-          open={setupPanelOpen}
-          onOpenChange={setSetupPanelOpen}
-          workspaceId={workspaceId}
-        />
+        <DevServerSetupPanel {...panelProps} />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -98,11 +113,11 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   return (
     <>
       <DevServerSetupPanel
-        open={setupPanelOpen}
-        onOpenChange={setSetupPanelOpen}
-        workspaceId={workspaceId}
-        currentRunCommand={status.runScriptCommand}
-        currentCleanupCommand={status.runScriptCleanupCommand}
+        {...panelProps}
+        currentConfig={{
+          run: status.runScriptCommand,
+          cleanup: status.runScriptCleanupCommand,
+        }}
       />
       <ContextMenu>
         <ContextMenuTrigger asChild>

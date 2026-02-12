@@ -12,24 +12,30 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
-import { trpc } from '@/frontend/lib/trpc';
+import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
 
 interface DevServerSetupPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  workspaceId: string;
-  currentRunCommand?: string | null;
-  currentCleanupCommand?: string | null;
+  currentConfig?: {
+    run?: string | null;
+    setup?: string | null;
+    cleanup?: string | null;
+  };
+  onSave: (config: FactoryConfig) => void;
+  isPending?: boolean;
+  error?: { message: string } | null;
 }
 
 export function DevServerSetupPanel({
   open,
   onOpenChange,
-  workspaceId,
-  currentRunCommand,
-  currentCleanupCommand,
+  currentConfig,
+  onSave,
+  isPending,
+  error,
 }: DevServerSetupPanelProps) {
-  const isEditing = !!currentRunCommand;
+  const isEditing = !!currentConfig?.run;
 
   const [runCommand, setRunCommand] = useState('');
   const [setupCommand, setSetupCommand] = useState('');
@@ -38,38 +44,25 @@ export function DevServerSetupPanel({
   // Reset form fields when panel opens
   useEffect(() => {
     if (open) {
-      setRunCommand(currentRunCommand ?? 'npm run dev');
-      setSetupCommand('');
-      setCleanupCommand(currentCleanupCommand ?? '');
+      setRunCommand(currentConfig?.run ?? 'npm run dev');
+      setSetupCommand(currentConfig?.setup ?? '');
+      setCleanupCommand(currentConfig?.cleanup ?? '');
     }
-  }, [open, currentRunCommand, currentCleanupCommand]);
+  }, [open, currentConfig]);
 
-  const utils = trpc.useUtils();
-
-  // Mutation to create the factory-factory.json file
-  const createConfig = trpc.workspace.createFactoryConfig.useMutation({
-    onSuccess: () => {
-      utils.workspace.getRunScriptStatus.invalidate({ workspaceId });
-      onOpenChange(false);
-    },
-  });
-
-  const handleCreate = () => {
-    createConfig.mutate({
-      workspaceId,
-      config: {
-        scripts: {
-          ...(setupCommand && { setup: setupCommand }),
-          run: runCommand,
-          ...(cleanupCommand && { cleanup: cleanupCommand }),
-        },
+  const handleSave = () => {
+    onSave({
+      scripts: {
+        ...(setupCommand && { setup: setupCommand }),
+        run: runCommand,
+        ...(cleanupCommand && { cleanup: cleanupCommand }),
       },
     });
   };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-2xl flex flex-col overflow-hidden">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Play className="h-5 w-5 text-green-600" />
@@ -82,7 +75,7 @@ export function DevServerSetupPanel({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-6 py-6">
+        <div className="flex-1 overflow-y-auto space-y-6 py-6">
           {/* Run Command (Required) */}
           <div className="space-y-2">
             <Label htmlFor="run-command" className="text-sm font-medium">
@@ -215,34 +208,31 @@ export function DevServerSetupPanel({
           </div>
         </div>
 
-        <SheetFooter className="flex flex-row gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreate}
-            disabled={!runCommand.trim() || createConfig.isPending}
-            className="flex-1"
-          >
-            {createConfig.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <FileJson className="mr-2 h-4 w-4" />
-                {isEditing ? 'Save Configuration' : 'Create Configuration'}
-              </>
-            )}
-          </Button>
-        </SheetFooter>
-
-        {createConfig.error && (
-          <div className="text-sm text-destructive px-6 pb-4">
-            Error: {createConfig.error.message}
-          </div>
-        )}
+        <div className="border-t pt-4 space-y-3">
+          {error && <div className="text-sm text-destructive">Error: {error.message}</div>}
+          <SheetFooter className="flex flex-row gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!runCommand.trim() || isPending}
+              className="flex-1"
+            >
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <FileJson className="mr-2 h-4 w-4" />
+                  {isEditing ? 'Save Configuration' : 'Create Configuration'}
+                </>
+              )}
+            </Button>
+          </SheetFooter>
+        </div>
       </SheetContent>
     </Sheet>
   );

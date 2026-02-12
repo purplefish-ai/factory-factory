@@ -4,7 +4,6 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { FactoryConfigScripts } from '@/components/factory-config-scripts';
-import { ProjectFactoryConfigPanel } from '@/components/project/project-factory-config-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { RatchetWrenchIcon } from '@/components/workspace';
+import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
@@ -48,6 +48,13 @@ function ProjectFactoryConfigCard({
   const utils = trpc.useUtils();
   const { data: factoryConfig } = trpc.workspace.getFactoryConfig.useQuery({ projectId });
 
+  const saveConfig = trpc.project.saveFactoryConfig.useMutation({
+    onSuccess: () => {
+      utils.workspace.getFactoryConfig.invalidate({ projectId });
+      setEditPanelOpen(false);
+    },
+  });
+
   const refreshConfigs = trpc.workspace.refreshFactoryConfigs.useMutation({
     onSuccess: (result) => {
       if (result.errors.length > 0) {
@@ -69,14 +76,15 @@ function ProjectFactoryConfigCard({
 
   return (
     <div className="rounded-lg border bg-card">
-      <ProjectFactoryConfigPanel
+      <DevServerSetupPanel
         open={editPanelOpen}
         onOpenChange={setEditPanelOpen}
-        projectId={projectId}
-        currentConfig={factoryConfig ?? undefined}
-        onSaved={() => {
-          utils.workspace.getFactoryConfig.invalidate({ projectId });
+        currentConfig={factoryConfig ? factoryConfig.scripts : undefined}
+        onSave={(config) => {
+          saveConfig.mutate({ projectId, config });
         }}
+        isPending={saveConfig.isPending}
+        error={saveConfig.error}
       />
       <div className="border-b bg-muted/50 px-4 py-3">
         <div className="flex items-center justify-between">
