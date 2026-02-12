@@ -6,7 +6,7 @@ import {
   CodexManagerUnavailableError,
   SessionOperationError,
 } from '@/backend/domains/session/codex/errors';
-import { asRecord } from '@/backend/domains/session/codex/payload-utils';
+import { asRecord, parseThreadId } from '@/backend/domains/session/codex/payload-utils';
 import type {
   CodexManagerHandlers,
   CodexManagerServerRequestEvent,
@@ -72,20 +72,6 @@ function parseError(error: unknown): CodexTransportError {
     message: typeof typed.message === 'string' ? typed.message : 'Unknown Codex app-server error',
     ...(Object.hasOwn(typed, 'data') ? { data: typed.data } : {}),
   };
-}
-
-function getThreadId(params: unknown): string | null {
-  const record = asRecord(params);
-  if (typeof record.threadId === 'string') {
-    return record.threadId;
-  }
-
-  const thread = asRecord(record.thread);
-  if (typeof thread.id === 'string') {
-    return thread.id;
-  }
-
-  return null;
 }
 
 function getCanonicalRequestId(serverRequestId: CodexRequestId, params: unknown): string {
@@ -403,7 +389,7 @@ export class CodexAppServerManager {
       return;
     }
 
-    const threadId = getThreadId(record.params);
+    const threadId = parseThreadId(record.params);
     if (!threadId) {
       logger.debug('Dropping Codex notification without threadId', {
         method: record.method,
@@ -466,11 +452,18 @@ export class CodexAppServerManager {
   }
 
   private handleServerRequest(message: CodexTransportRequest): void {
-    const threadId = getThreadId(message.params);
+    const threadId = parseThreadId(message.params);
     if (!threadId) {
       logger.warn('Dropping Codex server request without threadId', {
         requestId: message.id,
         method: message.method,
+      });
+      this.rejectServerRequest(message, {
+        code: -32_602,
+        message: 'Codex server request missing threadId',
+        data: {
+          method: message.method,
+        },
       });
       return;
     }
@@ -481,6 +474,14 @@ export class CodexAppServerManager {
         requestId: message.id,
         method: message.method,
         threadId,
+      });
+      this.rejectServerRequest(message, {
+        code: -32_602,
+        message: `No active session mapped for threadId: ${threadId}`,
+        data: {
+          method: message.method,
+          threadId,
+        },
       });
       return;
     }
@@ -504,6 +505,21 @@ export class CodexAppServerManager {
       canonicalRequestId: requestId,
     };
     this.handlers.onServerRequest?.(requestEvent);
+  }
+
+  private rejectServerRequest(
+    message: CodexTransportRequest,
+    error: { code: number; message: string; data?: unknown }
+  ): void {
+    try {
+      this.respond(message.id, error, true);
+    } catch (responseError) {
+      logger.warn('Failed to respond to dropped Codex server request', {
+        requestId: message.id,
+        method: message.method,
+        error: responseError instanceof Error ? responseError.message : String(responseError),
+      });
+    }
   }
 
   private markUnavailable(reason: CodexUnavailableReason): void {

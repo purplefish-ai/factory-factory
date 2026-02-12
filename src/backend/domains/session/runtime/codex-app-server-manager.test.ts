@@ -50,6 +50,16 @@ function parseRpcLine(line: string): z.infer<typeof RpcLineSchema> {
   return RpcLineSchema.parse(JSON.parse(line));
 }
 
+function findRpcLineById(
+  fake: FakeChildProcess,
+  id: number
+): z.infer<typeof RpcLineSchema> | undefined {
+  return fake.stdin
+    .getLines()
+    .map((line) => parseRpcLine(line))
+    .find((line) => line.id === id);
+}
+
 function respondToInitialize(fake: FakeChildProcess): void {
   const initLine = fake.stdin
     .getLines()
@@ -263,6 +273,99 @@ describe('CodexAppServerManager', () => {
         serverRequestId: 'req-77',
       })
     );
+  });
+
+  it('responds with JSON-RPC error when server request is missing threadId', async () => {
+    const fake = new FakeChildProcess();
+    const onServerRequest = vi.fn();
+
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+      handlers: {
+        onServerRequest,
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    fake.stdout.write(
+      `${JSON.stringify({
+        id: 88,
+        method: 'item/commandExecution/requestApproval',
+        params: {
+          requestId: 'approval-1',
+        },
+      })}\n`
+    );
+
+    await vi.waitFor(() => {
+      const response = findRpcLineById(fake, 88);
+      expect(response).toBeDefined();
+      expect(response).toMatchObject({
+        id: 88,
+        error: expect.objectContaining({
+          code: -32_602,
+          message: 'Codex server request missing threadId',
+        }),
+      });
+    });
+    expect(onServerRequest).not.toHaveBeenCalled();
+  });
+
+  it('responds with JSON-RPC error when server request thread is not mapped', async () => {
+    const fake = new FakeChildProcess();
+    const onServerRequest = vi.fn();
+
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+      handlers: {
+        onServerRequest,
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    fake.stdout.write(
+      `${JSON.stringify({
+        id: 89,
+        method: 'item/fileChange/requestApproval',
+        params: {
+          threadId: 'thread-unknown',
+          itemId: 'item-1',
+        },
+      })}\n`
+    );
+
+    await vi.waitFor(() => {
+      const response = findRpcLineById(fake, 89);
+      expect(response).toBeDefined();
+      expect(response).toMatchObject({
+        id: 89,
+        error: expect.objectContaining({
+          code: -32_602,
+          message: 'No active session mapped for threadId: thread-unknown',
+        }),
+      });
+    });
+    expect(onServerRequest).not.toHaveBeenCalled();
   });
 
   it('times out requests and returns retryable error classification', async () => {

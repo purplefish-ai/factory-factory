@@ -2,7 +2,11 @@ import {
   createUnsupportedOperationError,
   SessionOperationError,
 } from '@/backend/domains/session/codex/errors';
-import { asRecord } from '@/backend/domains/session/codex/payload-utils';
+import {
+  asRecord,
+  parseThreadId,
+  parseTurnId,
+} from '@/backend/domains/session/codex/payload-utils';
 import type {
   CodexPendingInteractiveRequest,
   CodexRequestOptions,
@@ -53,30 +57,6 @@ export interface CodexActiveProcessSummary {
   status: string;
   isRunning: boolean;
   idleTimeMs: number;
-}
-
-function parseThreadId(result: unknown): string | null {
-  const record = asRecord(result);
-  if (typeof record.threadId === 'string') {
-    return record.threadId;
-  }
-  const thread = asRecord(record.thread);
-  if (typeof thread.id === 'string') {
-    return thread.id;
-  }
-  return null;
-}
-
-function parseTurnId(result: unknown): string | null {
-  const record = asRecord(result);
-  if (typeof record.turnId === 'string') {
-    return record.turnId;
-  }
-  const turn = asRecord(record.turn);
-  if (typeof turn.id === 'string') {
-    return turn.id;
-  }
-  return null;
 }
 
 export class CodexSessionProviderAdapter
