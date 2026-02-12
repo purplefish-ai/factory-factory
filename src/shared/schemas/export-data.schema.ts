@@ -8,32 +8,31 @@
  * Prisma client into the browser bundle.
  */
 
+import {
+  CIStatus as CoreCIStatus,
+  KanbanColumn as CoreKanbanColumn,
+  PRState as CorePRState,
+  RatchetState as CoreRatchetState,
+  RunScriptStatus as CoreRunScriptStatus,
+  SessionStatus as CoreSessionStatus,
+  WorkspaceCreationSource as CoreWorkspaceCreationSource,
+  WorkspaceStatus as CoreWorkspaceStatus,
+} from '@factory-factory/core';
 import { z } from 'zod';
 
-// Enum values copied from Prisma schema to avoid Prisma client dependency
-const WorkspaceStatus = z.enum(['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED']);
-const WorkspaceCreationSource = z.enum(['MANUAL', 'RESUME_BRANCH', 'GITHUB_ISSUE']);
-const RunScriptStatus = z.enum(['IDLE', 'STARTING', 'RUNNING', 'STOPPING', 'COMPLETED', 'FAILED']);
-const PRState = z.enum([
-  'NONE',
-  'DRAFT',
-  'OPEN',
-  'CHANGES_REQUESTED',
-  'APPROVED',
-  'MERGED',
-  'CLOSED',
-]);
-const CIStatus = z.enum(['UNKNOWN', 'PENDING', 'SUCCESS', 'FAILURE']);
-const KanbanColumn = z.enum(['WORKING', 'WAITING', 'DONE']);
-const RatchetState = z.enum([
-  'IDLE',
-  'CI_RUNNING',
-  'CI_FAILED',
-  'REVIEW_PENDING',
-  'READY',
-  'MERGED',
-]);
-const SessionStatus = z.enum(['IDLE', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']);
+function enumValues<const T extends Record<string, string>>(enumObject: T) {
+  return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];
+}
+
+// Use core as the single enum source-of-truth (browser-safe, no Prisma dependency).
+const WorkspaceStatus = z.enum(enumValues(CoreWorkspaceStatus));
+const WorkspaceCreationSource = z.enum(enumValues(CoreWorkspaceCreationSource));
+const RunScriptStatus = z.enum(enumValues(CoreRunScriptStatus));
+const PRState = z.enum(enumValues(CorePRState));
+const CIStatus = z.enum(enumValues(CoreCIStatus));
+const KanbanColumn = z.enum(enumValues(CoreKanbanColumn));
+const RatchetState = z.enum(enumValues(CoreRatchetState));
+const SessionStatus = z.enum(enumValues(CoreSessionStatus));
 const SessionProvider = z.enum(['CLAUDE', 'CODEX']);
 const WorkspaceProviderSelection = z.enum(['WORKSPACE_DEFAULT', 'CLAUDE', 'CODEX']);
 
