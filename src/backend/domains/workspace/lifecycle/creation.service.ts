@@ -216,9 +216,8 @@ export class WorkspaceCreationService {
     return settings.ratchetEnabled;
   }
 
-  private async resolveDefaultSessionProvider(): Promise<'CLAUDE' | 'CODEX'> {
-    const settings = await userSettingsAccessor.get();
-    return settings.defaultSessionProvider;
+  private resolveDefaultSessionProvider(): Promise<'CLAUDE' | 'CODEX'> {
+    return userSettingsAccessor.getDefaultSessionProvider();
   }
 
   /**

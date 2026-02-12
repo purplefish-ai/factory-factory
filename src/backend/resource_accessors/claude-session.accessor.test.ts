@@ -125,6 +125,10 @@ describe('claudeSessionAccessor', () => {
     expect(result?.claudeProjectPath).toBe('/tmp/project');
     expect(result?.claudeProcessPid).toBe(4242);
     expect(result?.workspace.id).toBe('workspace-1');
+    const runtimeResult = result as unknown as Record<string, unknown>;
+    expect('providerSessionId' in runtimeResult).toBe(false);
+    expect('providerProjectPath' in runtimeResult).toBe(false);
+    expect('providerProcessPid' in runtimeResult).toBe(false);
   });
 
   it('findByWorkspaceId applies filters and ordering', async () => {

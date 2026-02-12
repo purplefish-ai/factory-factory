@@ -23,8 +23,7 @@ class SessionProviderResolverService {
       return workspaceProvider;
     }
 
-    const settings = await userSettingsAccessor.get();
-    return settings.defaultSessionProvider;
+    return userSettingsAccessor.getDefaultSessionProvider();
   }
 }
 

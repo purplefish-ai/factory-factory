@@ -43,6 +43,11 @@ class UserSettingsAccessor {
     return settings;
   }
 
+  async getDefaultSessionProvider(): Promise<SessionProvider> {
+    const settings = await this.get();
+    return settings.defaultSessionProvider;
+  }
+
   /**
    * Update user settings for the default user.
    * Uses upsert to avoid race conditions.

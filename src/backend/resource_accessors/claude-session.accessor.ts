@@ -61,11 +61,13 @@ type AgentSessionWithWorkspace = Prisma.AgentSessionGetPayload<{
 }>;
 
 function toLegacySession(session: AgentSession): ClaudeSession {
+  const { providerSessionId, providerProjectPath, providerProcessPid, ...legacySession } = session;
+
   return {
-    ...session,
-    claudeSessionId: session.providerSessionId,
-    claudeProjectPath: session.providerProjectPath,
-    claudeProcessPid: session.providerProcessPid,
+    ...legacySession,
+    claudeSessionId: providerSessionId,
+    claudeProjectPath: providerProjectPath,
+    claudeProcessPid: providerProcessPid,
   };
 }
 

@@ -78,6 +78,7 @@ describe('sessionProviderResolverService', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
+    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('uses explicit provider over workspace and user defaults', async () => {
@@ -88,7 +89,7 @@ describe('sessionProviderResolverService', () => {
 
     expect(provider).toBe('CODEX');
     expect(workspaceAccessor.findRawById).not.toHaveBeenCalled();
-    expect(userSettingsAccessor.get).not.toHaveBeenCalled();
+    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('uses workspace default when configured', async () => {
@@ -101,7 +102,7 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CODEX');
-    expect(userSettingsAccessor.get).not.toHaveBeenCalled();
+    expect(userSettingsAccessor.getDefaultSessionProvider).not.toHaveBeenCalled();
   });
 
   it('falls back to user default when workspace is WORKSPACE_DEFAULT', async () => {
@@ -110,6 +111,6 @@ describe('sessionProviderResolverService', () => {
     });
 
     expect(provider).toBe('CLAUDE');
-    expect(userSettingsAccessor.get).toHaveBeenCalledTimes(1);
+    expect(userSettingsAccessor.getDefaultSessionProvider).toHaveBeenCalledTimes(1);
   });
 });

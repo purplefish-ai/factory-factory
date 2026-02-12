@@ -24,8 +24,7 @@ class RatchetProviderResolverService {
       return selectedProvider;
     }
 
-    const settings = await userSettingsAccessor.get();
-    return settings.defaultSessionProvider;
+    return userSettingsAccessor.getDefaultSessionProvider();
   }
 }
 

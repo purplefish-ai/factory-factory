@@ -132,6 +132,10 @@ describe('WorkspaceCreationService', () => {
     vi.spyOn(userSettingsAccessorModule.userSettingsAccessor, 'get').mockResolvedValue(
       mockUserSettings
     );
+    vi.spyOn(
+      userSettingsAccessorModule.userSettingsAccessor,
+      'getDefaultSessionProvider'
+    ).mockResolvedValue('CLAUDE');
 
     vi.spyOn(workspaceAccessorModule.workspaceAccessor, 'create').mockResolvedValue(mockWorkspace);
 
@@ -408,20 +412,10 @@ describe('WorkspaceCreationService', () => {
       });
 
       it('uses user default provider when creating the default session', async () => {
-        vi.spyOn(userSettingsAccessorModule.userSettingsAccessor, 'get').mockResolvedValue({
-          id: '1',
-          userId: 'default',
-          preferredIde: 'cursor',
-          customIdeCommand: '',
-          playSoundOnComplete: true,
-          notificationSoundPath: null,
-          workspaceOrder: null,
-          cachedSlashCommands: null,
-          ratchetEnabled: true,
-          defaultSessionProvider: 'CODEX',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
+        vi.spyOn(
+          userSettingsAccessorModule.userSettingsAccessor,
+          'getDefaultSessionProvider'
+        ).mockResolvedValue('CODEX');
 
         await service.create({
           type: 'MANUAL',
