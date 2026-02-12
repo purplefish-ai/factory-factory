@@ -1,7 +1,15 @@
-import { Loader2, Play, Square } from 'lucide-react';
+import { Loader2, Pencil, Play, Square } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/frontend/lib/trpc';
+import { DevServerSetupPanel } from './dev-server-setup-panel';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 interface RunScriptButtonProps {
@@ -10,6 +18,9 @@ interface RunScriptButtonProps {
 
 export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanel();
+  const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+
+  const utils = trpc.useUtils();
 
   // Query run script status (React Query automatically deduplicates with same key)
   const { data: status, refetch } = trpc.workspace.getRunScriptStatus.useQuery(
@@ -37,9 +48,43 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     },
   });
 
-  // Don't show button if no run script configured
+  const createConfig = trpc.workspace.createFactoryConfig.useMutation({
+    onSuccess: () => {
+      utils.workspace.getRunScriptStatus.invalidate({ workspaceId });
+      setSetupPanelOpen(false);
+    },
+  });
+
+  const panelProps = {
+    open: setupPanelOpen,
+    onOpenChange: setSetupPanelOpen,
+    onSave: (config: Parameters<typeof createConfig.mutate>[0]['config']) => {
+      createConfig.mutate({ workspaceId, config });
+    },
+    isPending: createConfig.isPending,
+    error: createConfig.error,
+  };
+
+  // Show setup button if no run script configured
   if (!status?.hasRunScript) {
-    return null;
+    return (
+      <>
+        <DevServerSetupPanel {...panelProps} />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setSetupPanelOpen(true)}
+            >
+              <Play className="h-4 w-4 text-green-600 fill-green-600" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Setup dev server</TooltipContent>
+        </Tooltip>
+      </>
+    );
   }
 
   const isRunning = status.status === 'RUNNING';
@@ -60,29 +105,52 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     if (isRunning) {
       return status.port ? `Stop dev server (port ${status.port})` : 'Stop dev server';
     }
-    return 'Start dev server';
+    return status.runScriptCommand
+      ? `Start dev server: ${status.runScriptCommand}`
+      : 'Start dev server';
   })();
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={handleClick}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : isRunning ? (
-            <Square className="h-4 w-4 text-destructive fill-destructive" />
-          ) : (
-            <Play className="h-4 w-4 text-green-600 fill-green-600" />
-          )}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{tooltipText}</TooltipContent>
-    </Tooltip>
+    <>
+      <DevServerSetupPanel
+        {...panelProps}
+        currentConfig={{
+          run: status.runScriptCommand,
+          cleanup: status.runScriptCleanupCommand,
+        }}
+      />
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleClick}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isRunning ? (
+                    <Square className="h-4 w-4 text-destructive fill-destructive" />
+                  ) : (
+                    <Play className="h-4 w-4 text-green-600 fill-green-600" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{tooltipText}</TooltipContent>
+            </Tooltip>
+          </span>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => setSetupPanelOpen(true)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit dev server configuration
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    </>
   );
 }

@@ -1,4 +1,5 @@
 export * from './archive-workspace-dialog';
+export * from './dev-server-setup-panel';
 export * from './diff-viewer';
 export * from './file-browser-panel';
 export * from './file-tree';

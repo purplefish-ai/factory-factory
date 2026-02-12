@@ -1,7 +1,10 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { projectManagementService } from '@/backend/domains/workspace';
 import { gitCommandC } from '@/backend/lib/shell';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
@@ -231,5 +234,25 @@ export const projectRouter = router({
       } catch {
         return { exists: false };
       }
+    }),
+
+  // Save factory-factory.json to the project repo
+  saveFactoryConfig: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        config: FactoryConfigSchema,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const project = await projectManagementService.findById(input.projectId);
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
+      const configContent = JSON.stringify(input.config, null, 2);
+      await writeFile(join(project.repoPath, 'factory-factory.json'), configContent, 'utf-8');
+
+      return { success: true };
     }),
 });
