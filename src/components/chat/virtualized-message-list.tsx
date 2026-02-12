@@ -5,6 +5,7 @@ import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent
 import { ThinkingCompletionProvider } from '@/components/agent-activity/message-renderers';
 import type { GroupedMessageItem } from '@/lib/claude-types';
 import { isStreamEventMessage, isToolSequence } from '@/lib/claude-types';
+import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { CompactingIndicator } from './compacting-indicator';
 
 // =============================================================================
@@ -16,6 +17,7 @@ interface VirtualizedMessageListProps {
   running: boolean;
   startingSession: boolean;
   loadingSession: boolean;
+  startingLabel?: string;
   /** Ref to the scroll container (viewport) */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /** Called when user scrolls */
@@ -34,6 +36,8 @@ interface VirtualizedMessageListProps {
   getUuidForMessageId?: (messageId: string) => string | undefined;
   /** Callback when user initiates rewind to a message */
   onRewindToMessage?: (uuid: string) => void;
+  /** Init banner for showing workspace initialization status */
+  initBanner?: WorkspaceInitBanner | null;
 }
 
 // =============================================================================
@@ -44,8 +48,8 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
       <div className="text-muted-foreground space-y-2">
-        <p className="text-lg font-medium">No messages yet</p>
-        <p className="text-sm">Start a conversation by typing a message below.</p>
+        <p className="text-lg font-medium">Ready to start</p>
+        <p className="text-sm">Send a message to start the agent and begin your conversation.</p>
       </div>
     </div>
   );
@@ -98,6 +102,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   running,
   startingSession,
   loadingSession,
+  startingLabel = 'Starting agent...',
   scrollContainerRef,
   onScroll,
   messagesEndRef,
@@ -107,6 +112,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   isCompacting = false,
   getUuidForMessageId,
   onRewindToMessage,
+  initBanner,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
   const isAutoScrollingRef = useRef(false);
@@ -117,6 +123,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const lastThinkingMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const item = messages[i];
+      if (!item) {
+        continue;
+      }
       if (isToolSequence(item)) {
         continue;
       }
@@ -138,7 +147,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => 80, // Estimated average height
     overscan: running ? 3 : 5, // Fewer items when streaming for better performance
-    getItemKey: (index) => messages[index].id,
+    getItemKey: (index) => {
+      const message = messages[index];
+      return message ? message.id : `missing-message-${index}`;
+    },
   });
 
   const virtualItems = virtualizer.getVirtualItems();
@@ -186,21 +198,29 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [scrollContainerRef, handleScroll]);
 
-  // Show empty/loading states
-  if (messages.length === 0) {
-    if (loadingSession) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-center p-8">
+  // Show loading state while session is loading (prevents flicker during event replay)
+  // If there's also an init banner, show both spinners
+  const showingInitSpinner = initBanner && initBanner.kind === 'info';
+  if (loadingSession) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
+        {showingInitSpinner && (
           <div className="flex items-center gap-2 text-muted-foreground">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <span className="text-sm">Loading session...</span>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">{initBanner.message}</span>
           </div>
+        )}
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-sm">Loading session...</span>
         </div>
-      );
-    }
-    if (!(running || startingSession)) {
-      return <EmptyState />;
-    }
+      </div>
+    );
+  }
+
+  // Show empty state if no messages and not starting/initializing
+  if (messages.length === 0 && !(running || startingSession || showingInitSpinner)) {
+    return <EmptyState />;
   }
 
   return (
@@ -216,6 +236,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         >
           {virtualItems.map((virtualRow) => {
             const item = messages[virtualRow.index];
+            if (!item) {
+              return null;
+            }
             const isQueued = queuedMessageIds?.has(item.id) ?? false;
             // Get UUID for user messages to enable rewind functionality
             // Use message ID (stable identifier) instead of array index to avoid issues
@@ -256,15 +279,24 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />
 
-        {/* Loading indicators after messages */}
-        {running && <LoadingIndicator className="py-4" />}
+        {/* Workspace initialization spinner (e.g., creating worktree, running init script) */}
+        {initBanner && initBanner.kind === 'info' && (
+          <div className="flex items-center gap-2 text-muted-foreground py-4">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">{initBanner.message}</span>
+          </div>
+        )}
 
+        {/* Agent starting spinner */}
         {startingSession && !running && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Starting agent...</span>
+            <span className="text-sm">{startingLabel}</span>
           </div>
         )}
+
+        {/* Loading indicators after messages */}
+        {running && <LoadingIndicator className="py-4" />}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} className="h-px" />

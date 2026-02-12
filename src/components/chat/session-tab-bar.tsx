@@ -1,4 +1,4 @@
-import type { SessionStatus } from '@prisma-gen/client';
+import type { SessionStatus } from '@factory-factory/core';
 import {
   Activity,
   CheckCircle2,
@@ -10,7 +10,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -210,12 +210,20 @@ export function SessionTabBar({
   }, []);
 
   // Update arrows on mount and when sessions change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: We intentionally trigger on sessions.length changes to detect overflow
   useEffect(() => {
     updateScrollArrows();
     window.addEventListener('resize', updateScrollArrows);
     return () => window.removeEventListener('resize', updateScrollArrows);
-  }, [updateScrollArrows, sessions.length]);
+  }, [updateScrollArrows]);
+
+  useLayoutEffect(() => {
+    if (sortedSessions.length === 0) {
+      setShowLeftArrow(false);
+      setShowRightArrow(false);
+      return;
+    }
+    updateScrollArrows();
+  }, [sortedSessions.length, updateScrollArrows]);
 
   // Scroll handlers
   const scrollLeft = useCallback(() => {

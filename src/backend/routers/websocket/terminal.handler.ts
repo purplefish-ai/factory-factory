@@ -8,12 +8,13 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
-import { type AppContext, createAppContext } from '../../app-context';
-import { WS_READY_STATE } from '../../constants';
-import { terminalSessionAccessor } from '../../resource_accessors/terminal-session.accessor';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
-import { type TerminalMessageInput, TerminalMessageSchema } from '../../schemas/websocket';
+import { type AppContext, createAppContext } from '@/backend/app-context';
+import { WS_READY_STATE } from '@/backend/constants';
+import { sessionDataService } from '@/backend/domains/session';
+import { workspaceDataService } from '@/backend/domains/workspace';
+import { type TerminalMessageInput, TerminalMessageSchema } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
+import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
 // Types
@@ -56,26 +57,17 @@ function cleanupTerminalListeners(
   cleanupMap.clear();
 }
 
-function ensureWorkspaceConnections(workspaceId: string): Set<WebSocket> {
-  if (!terminalConnections.has(workspaceId)) {
-    terminalConnections.set(workspaceId, new Set());
-  }
-  return terminalConnections.get(workspaceId) as Set<WebSocket>;
-}
-
 function addTerminalCleanupMap(ws: WebSocket): Map<string, TerminalUnsubscribers> {
   const cleanupMap = new Map<string, TerminalUnsubscribers>();
   terminalListenerCleanup.set(ws, cleanupMap);
   return cleanupMap;
 }
 
-function sendInitialStatus(
-  ws: WebSocket,
+function logConnectionEstablished(
   workspaceId: string,
   logger: ReturnType<AppContext['services']['createLogger']>
 ): void {
-  logger.debug('Sending initial status message', { workspaceId });
-  ws.send(JSON.stringify({ type: 'status', connected: true }));
+  logger.debug('Terminal WebSocket connected', { workspaceId });
 }
 
 function sendExistingTerminals(
@@ -105,44 +97,9 @@ function sendExistingTerminals(
     })
   );
 
-  const existingConnections = terminalConnections.get(workspaceId);
-  if (existingConnections) {
-    for (const existingWs of existingConnections) {
-      if (existingWs !== ws) {
-        logger.debug('Cleaning up listeners from existing connection', { workspaceId });
-        cleanupTerminalListeners(existingWs, logger);
-      }
-    }
-  }
-
   const cleanupMap = terminalListenerCleanup.get(ws);
   for (const terminal of existingTerminals) {
-    const unsubscribers: TerminalUnsubscribers = [];
-    if (cleanupMap) {
-      cleanupMap.set(terminal.id, unsubscribers);
-    }
-
-    const unsubOutput = terminalService.onOutput(terminal.id, (output) => {
-      if (ws.readyState === WS_READY_STATE.OPEN) {
-        ws.send(JSON.stringify({ type: 'output', terminalId: terminal.id, data: output }));
-      }
-    });
-    unsubscribers.push(unsubOutput);
-
-    const unsubExit = terminalService.onExit(terminal.id, (exitCode) => {
-      logger.info('Terminal process exited', { terminalId: terminal.id, exitCode });
-      if (ws.readyState === WS_READY_STATE.OPEN) {
-        ws.send(JSON.stringify({ type: 'exit', terminalId: terminal.id, exitCode }));
-      }
-      const exitCleanupMap = terminalListenerCleanup.get(ws);
-      if (exitCleanupMap) {
-        exitCleanupMap.delete(terminal.id);
-      }
-      terminalSessionAccessor.clearPid(terminal.id).catch((err) => {
-        logger.warn('Failed to clear terminal PID', { terminalId: terminal.id, error: err });
-      });
-    });
-    unsubscribers.push(unsubExit);
+    attachTerminalListeners(ws, terminal.id, terminalService, logger, cleanupMap);
   }
 }
 
@@ -183,7 +140,7 @@ async function handleCreateMessage(
     cols: message.cols,
     rows: message.rows,
   });
-  const workspace = await workspaceAccessor.findById(workspaceId);
+  const workspace = await workspaceDataService.findById(workspaceId);
   if (!workspace?.worktreePath) {
     logger.warn('Workspace not found or has no worktree', { workspaceId });
     sendSocketError(ws, 'Workspace not found or has no worktree');
@@ -201,31 +158,32 @@ async function handleCreateMessage(
     rows: message.rows ?? 24,
   });
 
-  await terminalSessionAccessor.create({
+  await sessionDataService.createTerminalSession({
     workspaceId,
     name: terminalId,
     pid,
   });
 
   const cleanupMap = terminalListenerCleanup.get(ws);
-  const unsubscribers: TerminalUnsubscribers = [];
-  if (cleanupMap) {
-    cleanupMap.set(terminalId, unsubscribers);
-  }
+  attachTerminalListeners(ws, terminalId, terminalService, logger, cleanupMap);
 
-  logger.debug('Setting up output forwarding', { terminalId });
+  logger.info('Sending created message to client', { terminalId });
+  ws.send(JSON.stringify({ type: 'created', terminalId }));
+}
+
+function attachTerminalListeners(
+  ws: WebSocket,
+  terminalId: string,
+  terminalService: AppContext['services']['terminalService'],
+  logger: ReturnType<AppContext['services']['createLogger']>,
+  cleanupMap: Map<string, TerminalUnsubscribers> | undefined
+): void {
+  const unsubscribers: TerminalUnsubscribers = [];
+  cleanupMap?.set(terminalId, unsubscribers);
+
   const unsubOutput = terminalService.onOutput(terminalId, (output) => {
     if (ws.readyState === WS_READY_STATE.OPEN) {
-      logger.debug('Forwarding output to client', {
-        terminalId,
-        outputLen: output.length,
-      });
       ws.send(JSON.stringify({ type: 'output', terminalId, data: output }));
-    } else {
-      logger.warn('Cannot forward output - WebSocket not open', {
-        terminalId,
-        readyState: ws.readyState,
-      });
     }
   });
   unsubscribers.push(unsubOutput);
@@ -235,18 +193,12 @@ async function handleCreateMessage(
     if (ws.readyState === WS_READY_STATE.OPEN) {
       ws.send(JSON.stringify({ type: 'exit', terminalId, exitCode }));
     }
-    const exitCleanupMap = terminalListenerCleanup.get(ws);
-    if (exitCleanupMap) {
-      exitCleanupMap.delete(terminalId);
-    }
-    terminalSessionAccessor.clearPid(terminalId).catch((err) => {
+    terminalListenerCleanup.get(ws)?.delete(terminalId);
+    sessionDataService.clearTerminalPid(terminalId).catch((err) => {
       logger.warn('Failed to clear terminal PID', { terminalId, error: err });
     });
   });
   unsubscribers.push(unsubExit);
-
-  logger.info('Sending created message to client', { terminalId });
-  ws.send(JSON.stringify({ type: 'created', terminalId }));
 }
 
 function handleInputMessage(
@@ -393,20 +345,18 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
 
     if (!workspaceId) {
       logger.warn('Terminal WebSocket missing workspaceId');
-      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-      socket.destroy();
+      sendBadRequest(socket);
       return;
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
       logger.info('Terminal WebSocket connection established', { workspaceId });
 
-      wsAliveMap.set(ws, true);
-      ws.on('pong', () => wsAliveMap.set(ws, true));
+      markWebSocketAlive(ws, wsAliveMap);
 
-      ensureWorkspaceConnections(workspaceId).add(ws);
+      getOrCreateConnectionSet(terminalConnections, workspaceId).add(ws);
       addTerminalCleanupMap(ws);
-      sendInitialStatus(ws, workspaceId, logger);
+      logConnectionEstablished(workspaceId, logger);
       sendExistingTerminals(ws, workspaceId, terminalService, logger);
 
       ws.on('message', async (data) => {

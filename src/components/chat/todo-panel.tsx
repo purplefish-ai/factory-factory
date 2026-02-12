@@ -48,7 +48,7 @@ export const TodoPanel = memo(function TodoPanel({ todoState }: TodoPanelProps) 
         </div>
 
         {/* Todo List */}
-        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+        <div className="space-y-1.5 overflow-y-auto">
           {todos.map((todo, index) => (
             <TodoItem key={`${todo.content}-${index}`} todo={todo} />
           ))}

@@ -42,19 +42,21 @@ function MermaidDiagram({ chart }: { chart: string }) {
           if (ref.current) {
             ref.current.innerHTML = svg;
           }
-        } catch {
-          // Safely handle error without innerHTML injection
-          setError('Error rendering diagram');
+        } catch (err) {
+          // Capture the actual error message for debugging
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          setError(errorMessage);
         }
       };
-      renderDiagram();
+      void renderDiagram();
     }
   }, [chart]);
 
   if (error) {
     return (
       <div className="my-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
-        <pre className="text-destructive text-xs">{error}</pre>
+        <div className="text-destructive text-sm font-medium mb-2">Error rendering diagram:</div>
+        <pre className="text-destructive text-xs overflow-x-auto whitespace-pre-wrap">{error}</pre>
       </div>
     );
   }

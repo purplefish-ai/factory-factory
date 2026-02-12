@@ -11,7 +11,7 @@
  */
 
 import type { ChatMessage, WebSocketMessage } from '@/lib/claude-types';
-import { isWsClaudeMessage } from '@/lib/claude-types';
+import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
@@ -26,7 +26,7 @@ import { reduceSessionSlice } from './slices/session';
 import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
-import { createInitialChatState } from './state';
+import { createBaseResetState, createInitialChatState } from './state';
 import type { ChatAction, ChatState } from './types';
 
 export { createInitialChatState };
@@ -69,15 +69,60 @@ const chatReducerSlices: ReducerSlice[] = [
   reduceRewindExecutionSlice,
 ];
 
-export function chatReducer(state: ChatState, action: ChatAction): ChatState {
-  let nextState = state;
+function reduceSingleAction(currentState: ChatState, currentAction: ChatAction): ChatState {
+  let nextState = currentState;
   for (const reduce of chatReducerSlices) {
-    const updated = reduce(nextState, action);
+    const updated = reduce(nextState, currentAction);
     if (updated !== nextState) {
       nextState = updated;
     }
   }
   return nextState;
+}
+
+function createReplayBaseState(state: ChatState): ChatState {
+  return {
+    ...state,
+    ...createBaseResetState(),
+    // Preserve optimistic pending sends that are not yet reflected in replayed events.
+    pendingMessages: state.pendingMessages,
+    // Preserve queued messages - they will be reconstructed from replay events,
+    // but preserving them ensures they remain visible during replay processing.
+    queuedMessages: state.queuedMessages,
+    sessionStatus: { phase: 'loading' },
+    processStatus: { state: 'unknown' },
+    sessionRuntime: {
+      ...state.sessionRuntime,
+      phase: 'loading',
+      processState: 'unknown',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export function chatReducer(state: ChatState, action: ChatAction): ChatState {
+  if (action.type === 'SESSION_REPLAY_BATCH') {
+    let nextState = createReplayBaseState(state);
+    for (const event of action.payload.replayEvents) {
+      if (event.type === 'session_replay_batch') {
+        continue;
+      }
+      const replayAction = createActionFromWebSocketMessage(event);
+      if (!replayAction || replayAction.type === 'SESSION_REPLAY_BATCH') {
+        continue;
+      }
+      nextState = reduceSingleAction(nextState, replayAction);
+    }
+    // Clear loading state after replay completes
+    // Only clear if still in loading phase (runtime updates during replay may have already changed it)
+    if (nextState.sessionStatus.phase === 'loading') {
+      nextState = reduceSingleAction(nextState, { type: 'SESSION_LOADING_END' });
+    }
+    return nextState;
+  }
+
+  return reduceSingleAction(state, action);
 }
 
 // =============================================================================
@@ -86,10 +131,23 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
 // Individual message type handlers for createActionFromWebSocketMessage
 
-function handleStatusMessage(data: WebSocketMessage): ChatAction {
+function handleSessionRuntimeSnapshotMessage(data: WebSocketMessage): ChatAction | null {
+  if (!data.sessionRuntime) {
+    return null;
+  }
   return {
-    type: 'WS_STATUS',
-    payload: { running: data.running ?? false, processAlive: data.processAlive },
+    type: 'SESSION_RUNTIME_SNAPSHOT',
+    payload: { sessionRuntime: data.sessionRuntime },
+  };
+}
+
+function handleSessionRuntimeUpdatedMessage(data: WebSocketMessage): ChatAction | null {
+  if (!data.sessionRuntime) {
+    return null;
+  }
+  return {
+    type: 'SESSION_RUNTIME_UPDATED',
+    payload: { sessionRuntime: data.sessionRuntime },
   };
 }
 
@@ -145,16 +203,29 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
   return null;
 }
 
-function handleMessagesSnapshot(data: WebSocketMessage): ChatAction | null {
-  if (!data.messages) {
+function handleSessionSnapshot(data: WebSocketMessage): ChatAction | null {
+  if (!(data.messages && data.queuedMessages && data.sessionRuntime)) {
     return null;
   }
   return {
-    type: 'MESSAGES_SNAPSHOT',
+    type: 'SESSION_SNAPSHOT',
     payload: {
       messages: data.messages,
-      sessionStatus: data.sessionStatus ?? { phase: 'ready' },
+      queuedMessages: data.queuedMessages,
+      sessionRuntime: data.sessionRuntime,
       pendingInteractiveRequest: data.pendingInteractiveRequest ?? null,
+    },
+  };
+}
+
+function handleSessionReplayBatch(data: WebSocketMessage): ChatAction | null {
+  if (!Array.isArray(data.replayEvents)) {
+    return null;
+  }
+  return {
+    type: 'SESSION_REPLAY_BATCH',
+    payload: {
+      replayEvents: data.replayEvents.filter(isWebSocketMessage),
     },
   };
 }
@@ -163,11 +234,8 @@ function handleMessageStateChanged(data: WebSocketMessage): ChatAction | null {
   if (!(data.id && data.newState)) {
     return null;
   }
-  // If userMessage exists, order is required
-  const userMessage =
-    data.userMessage && data.userMessage.order !== undefined
-      ? { ...data.userMessage, order: data.userMessage.order }
-      : undefined;
+  // Pass userMessage as-is; order may be undefined for ACCEPTED messages
+  const userMessage = data.userMessage ? { ...data.userMessage } : undefined;
   return {
     type: 'MESSAGE_STATE_CHANGED',
     payload: {
@@ -268,12 +336,11 @@ function handleHookResponseMessage(data: WebSocketMessage): ChatAction | null {
   return { type: 'HOOK_RESPONSE', payload: { hookId: hookRespData.hookId } };
 }
 
-function handlePermissionCancelledMessage(data: WebSocketMessage): ChatAction {
+function handlePermissionCancelledMessage(data: WebSocketMessage): ChatAction | null {
   if (!data.requestId) {
-    // biome-ignore lint/suspicious/noConsole: Error logging for debugging malformed WebSocket messages
-    console.error('[Chat Reducer] Received permission_cancelled without requestId', data);
+    return null;
   }
-  return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId ?? '' } };
+  return { type: 'WS_PERMISSION_CANCELLED', payload: { requestId: data.requestId } };
 }
 
 function handleMessageUsedAsResponseMessage(data: WebSocketMessage): ChatAction | null {
@@ -336,20 +403,24 @@ function handleRewindFilesErrorMessage(data: WebSocketMessage): ChatAction | nul
 // Handler map for WebSocket message types
 type MessageHandler = (data: WebSocketMessage) => ChatAction | null;
 
-const messageHandlers: Record<string, MessageHandler> = {
-  status: handleStatusMessage,
-  starting: () => ({ type: 'WS_STARTING' }),
-  started: () => ({ type: 'WS_STARTED' }),
-  stopped: () => ({ type: 'WS_STOPPED' }),
-  process_exit: (data) => ({ type: 'WS_PROCESS_EXIT', payload: { code: data.code ?? null } }),
+type MessageHandlerMap = {
+  [K in WebSocketMessage['type']]: MessageHandler | null;
+};
+
+const messageHandlers: MessageHandlerMap = {
+  session_runtime_snapshot: handleSessionRuntimeSnapshotMessage,
+  session_runtime_updated: handleSessionRuntimeUpdatedMessage,
   claude_message: handleClaudeMessageAction,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,
+  agent_metadata: null,
   permission_request: handlePermissionRequestMessage,
   user_question: handleUserQuestionMessage,
   permission_cancelled: handlePermissionCancelledMessage,
   message_used_as_response: handleMessageUsedAsResponseMessage,
-  messages_snapshot: handleMessagesSnapshot,
+  session_snapshot: handleSessionSnapshot,
+  session_delta: null,
+  session_replay_batch: handleSessionReplayBatch,
   message_state_changed: handleMessageStateChanged,
   tool_progress: handleToolProgressMessage,
   tool_use_summary: handleToolUseSummaryMessage,
@@ -361,6 +432,7 @@ const messageHandlers: Record<string, MessageHandler> = {
   hook_response: handleHookResponseMessage,
   compacting_start: () => ({ type: 'SDK_COMPACTING_START' }),
   compacting_end: () => ({ type: 'SDK_COMPACTING_END' }),
+  workspace_notification_request: null,
   slash_commands: handleSlashCommandsMessage,
   user_message_uuid: handleUserMessageUuidMessage,
   rewind_files_preview: handleRewindFilesPreviewMessage,

@@ -1,11 +1,11 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, FileCode, FileMinus, FilePlus, FileQuestion, Loader2 } from 'lucide-react';
-import { memo, useCallback, useRef } from 'react';
+import { AlertCircle, FileCode, Loader2 } from 'lucide-react';
+import { useCallback, useRef } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
-import { cn } from '@/lib/utils';
 
+import { FileChangeItem, fileChangeKindFromGitStatus } from './file-change-item';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -23,80 +23,6 @@ interface GitStatusFile {
 interface UnstagedChangesPanelProps {
   workspaceId: string;
 }
-
-// =============================================================================
-// Helper Components
-// =============================================================================
-
-function getStatusIcon(status: GitFileStatus) {
-  switch (status) {
-    case 'M':
-      return <FileCode className="h-4 w-4" />;
-    case 'A':
-      return <FilePlus className="h-4 w-4" />;
-    case 'D':
-      return <FileMinus className="h-4 w-4" />;
-    case '?':
-      return <FileQuestion className="h-4 w-4" />;
-  }
-}
-
-function getStatusColor(status: GitFileStatus): string {
-  switch (status) {
-    case 'M':
-      return 'text-yellow-500';
-    case 'A':
-      return 'text-green-500';
-    case 'D':
-      return 'text-red-500';
-    case '?':
-      return 'text-muted-foreground';
-  }
-}
-
-function getStatusLabel(status: GitFileStatus): string {
-  switch (status) {
-    case 'M':
-      return 'Modified';
-    case 'A':
-      return 'Added';
-    case 'D':
-      return 'Deleted';
-    case '?':
-      return 'Untracked';
-  }
-}
-
-interface FileItemProps {
-  file: GitStatusFile;
-  onClick: () => void;
-}
-
-const FileItem = memo(function FileItem({ file, onClick }: FileItemProps) {
-  const statusColor = getStatusColor(file.status);
-  const fileName = file.path.split('/').pop() ?? file.path;
-  const dirPath = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
-        'hover:bg-muted/50 rounded-md transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-      )}
-      title={`${getStatusLabel(file.status)}: ${file.path}`}
-    >
-      <span className={statusColor}>{getStatusIcon(file.status)}</span>
-      <span className="flex-1 truncate">
-        <span className="font-medium">{fileName}</span>
-        {dirPath && <span className="text-muted-foreground ml-1 text-xs">{dirPath}</span>}
-      </span>
-      <span className={cn('text-xs font-mono', statusColor)}>{file.status}</span>
-    </button>
-  );
-});
 
 // =============================================================================
 // Main Component
@@ -169,6 +95,9 @@ export function UnstagedChangesPanel({ workspaceId }: UnstagedChangesPanelProps)
         >
           {virtualizer.getVirtualItems().map((virtualItem) => {
             const file = files[virtualItem.index];
+            if (!file) {
+              return null;
+            }
             return (
               <div
                 key={virtualItem.key}
@@ -180,7 +109,12 @@ export function UnstagedChangesPanel({ workspaceId }: UnstagedChangesPanelProps)
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
               >
-                <FileItem file={file} onClick={() => handleFileClick(file)} />
+                <FileChangeItem
+                  path={file.path}
+                  kind={fileChangeKindFromGitStatus(file.status)}
+                  statusCode={file.status}
+                  onClick={() => handleFileClick(file)}
+                />
               </div>
             );
           })}
@@ -194,7 +128,13 @@ export function UnstagedChangesPanel({ workspaceId }: UnstagedChangesPanelProps)
     <ScrollArea className="h-full">
       <div className="p-2 space-y-0.5">
         {files.map((file) => (
-          <FileItem key={file.path} file={file} onClick={() => handleFileClick(file)} />
+          <FileChangeItem
+            key={file.path}
+            path={file.path}
+            kind={fileChangeKindFromGitStatus(file.status)}
+            statusCode={file.status}
+            onClick={() => handleFileClick(file)}
+          />
         ))}
       </div>
     </ScrollArea>

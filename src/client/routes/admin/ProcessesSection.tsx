@@ -1,7 +1,10 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Bot, Terminal } from 'lucide-react';
+import { Bot, Terminal, XCircle } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -12,8 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import type { AppRouter } from '@/frontend/lib/trpc';
+import { trpc } from '@/frontend/lib/trpc';
 import { formatBytes, formatCpu, formatIdleTime } from '@/lib/formatters';
-import type { AppRouter } from '../../../frontend/lib/trpc';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 export type ProcessesData = RouterOutputs['admin']['getActiveProcesses'];
@@ -66,6 +70,54 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
   const hasClaudeProcesses = processes?.claude && processes.claude.length > 0;
   const hasTerminalProcesses = processes?.terminal && processes.terminal.length > 0;
   const hasNoProcesses = !(hasClaudeProcesses || hasTerminalProcesses);
+  const [stoppingSessionIds, setStoppingSessionIds] = useState<Set<string>>(new Set());
+
+  const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
+  const utils = trpc.useUtils();
+
+  const stopSession = trpc.admin.stopClaudeSession.useMutation();
+
+  const handleStopSession = useCallback(
+    async (sessionId: string) => {
+      setStoppingSessionIds((prev) => new Set(prev).add(sessionId));
+      try {
+        const result = await stopSession.mutateAsync({ sessionId });
+        if (result.wasRunning) {
+          toast.success('Session stopped');
+        } else {
+          toast.info('Session was already stopped');
+        }
+        utils.admin.getActiveProcesses.invalidate();
+      } catch (error) {
+        toast.error(
+          `Failed to stop session: ${error instanceof Error ? error.message : String(error)}`
+        );
+      } finally {
+        setStoppingSessionIds((prev) => {
+          const next = new Set(prev);
+          next.delete(sessionId);
+          return next;
+        });
+      }
+    },
+    [stopSession, utils]
+  );
+
+  // Calculate the highest session count per workspace
+  const maxSessionsPerWorkspace =
+    processes?.claude && processes.claude.length > 0
+      ? Math.max(
+          ...Object.values(
+            processes.claude.reduce(
+              (acc, process) => {
+                acc[process.workspaceId] = (acc[process.workspaceId] || 0) + 1;
+                return acc;
+              },
+              {} as Record<string, number>
+            )
+          )
+        )
+      : 0;
 
   return (
     <Card>
@@ -73,9 +125,19 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
         <CardTitle className="flex items-center gap-2">
           Active Processes
           {processes?.summary && (
-            <Badge variant="secondary" className="ml-2">
-              {processes.summary.total} total
-            </Badge>
+            <>
+              <Badge variant="secondary" className="ml-2">
+                {processes.summary.totalClaude} Claude sessions
+              </Badge>
+              {maxSessions !== undefined && maxSessionsPerWorkspace > 0 && (
+                <Badge
+                  variant={maxSessionsPerWorkspace >= maxSessions * 0.8 ? 'destructive' : 'outline'}
+                  title={`Highest session count across all workspaces. Limit is ${maxSessions} per workspace.`}
+                >
+                  Max per workspace: {maxSessionsPerWorkspace}/{maxSessions}
+                </Badge>
+              )}
+            </>
           )}
         </CardTitle>
         <CardDescription>Claude and Terminal processes currently running</CardDescription>
@@ -99,6 +161,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                     <TableHead>PID</TableHead>
                     <TableHead>Resources</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -156,6 +219,21 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                               </span>
                             )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleStopSession(process.sessionId)}
+                          disabled={
+                            stoppingSessionIds.has(process.sessionId) ||
+                            process.status === 'COMPLETED' ||
+                            process.status === 'FAILED'
+                          }
+                          title="Stop session"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}

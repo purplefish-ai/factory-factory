@@ -17,7 +17,8 @@ import { useEffect, useRef } from 'react';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import { loadAllSessionData } from './chat-persistence';
-import type { ChatAction } from './chat-reducer';
+import type { ChatAction } from './reducer';
+import { clearToolInputAccumulator, type ToolInputAccumulatorState } from './streaming-utils';
 
 const DEBUG_SESSION = false;
 const debug = createDebugLogger(DEBUG_SESSION);
@@ -28,7 +29,9 @@ export interface UseChatSessionOptions {
   /** Dispatch function from reducer */
   dispatch: React.Dispatch<ChatAction>;
   /** Tool input accumulator ref to clear on session switch */
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>;
+  /** Session runtime phase from state - used to clear loading timeout */
+  sessionRuntimePhase: string;
 }
 
 export interface UseChatSessionReturn {
@@ -40,10 +43,11 @@ export interface UseChatSessionReturn {
  * Hook for managing chat session switching and settings loading.
  */
 export function useChatSession(options: UseChatSessionOptions): UseChatSessionReturn {
-  const { dbSessionId, dispatch, toolInputAccumulatorRef } = options;
+  const { dbSessionId, dispatch, toolInputAccumulatorRef, sessionRuntimePhase } = options;
 
   const prevDbSessionIdRef = useRef<string | null>(null);
   const loadedDraftRef = useRef<string>('');
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const prevDbSessionId = prevDbSessionIdRef.current;
@@ -56,14 +60,20 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
     if (prevDbSessionId !== null && prevDbSessionId !== newDbSessionId) {
       debug.log('Session switch detected', { from: prevDbSessionId, to: newDbSessionId });
 
+      // Clear any existing loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+
       // Dispatch session switch to reset reducer state
       dispatch({ type: 'SESSION_SWITCH_START' });
 
       // Clear tool input accumulator
-      toolInputAccumulatorRef.current.clear();
+      clearToolInputAccumulator(toolInputAccumulatorRef.current);
     }
 
-    // Load persisted data for the new session (queue comes from backend via messages_snapshot)
+    // Load persisted data for the new session (queue comes from backend via session_snapshot)
     if (newDbSessionId) {
       const persistedData = loadAllSessionData(newDbSessionId);
       loadedDraftRef.current = persistedData.draft;
@@ -74,12 +84,42 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
       // For session switches, SESSION_SWITCH_START already set loadingSession: true
       if (prevDbSessionId === null) {
         dispatch({ type: 'SESSION_LOADING_START' });
+
+        // Safety timeout: if loading takes more than 10 seconds, clear the loading state
+        // This prevents sessions from getting stuck in loading state forever
+        loadingTimeoutRef.current = setTimeout(() => {
+          debug.log('Loading timeout reached, clearing loading state');
+          dispatch({ type: 'SESSION_LOADING_END' });
+          loadingTimeoutRef.current = null;
+        }, 10_000);
       }
     } else {
       loadedDraftRef.current = '';
       dispatch({ type: 'SET_SETTINGS', payload: DEFAULT_CHAT_SETTINGS });
     }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
   }, [dbSessionId, dispatch, toolInputAccumulatorRef]);
+
+  // Clear loading timeout when session runtime phase transitions away from loading.
+  // We track the previous phase to avoid clearing the timeout on mount when the
+  // initial phase is 'idle' (before SESSION_LOADING_START has re-rendered).
+  const prevRuntimePhaseRef = useRef(sessionRuntimePhase);
+  useEffect(() => {
+    const prevPhase = prevRuntimePhaseRef.current;
+    prevRuntimePhaseRef.current = sessionRuntimePhase;
+
+    if (prevPhase === 'loading' && sessionRuntimePhase !== 'loading' && loadingTimeoutRef.current) {
+      debug.log('Session runtime phase changed from loading, clearing loading timeout');
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  }, [sessionRuntimePhase]);
 
   return {
     loadedDraft: loadedDraftRef.current,

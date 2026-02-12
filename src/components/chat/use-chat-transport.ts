@@ -1,10 +1,14 @@
 import { useCallback } from 'react';
-import type { ClaudeMessage, WebSocketMessage } from '@/lib/claude-types';
+import type { WebSocketMessage } from '@/lib/claude-types';
 import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
-import type { ChatAction, ChatState } from './chat-reducer';
-import { createActionFromWebSocketMessage } from './chat-reducer';
-import { handleThinkingStreaming, handleToolInputStreaming } from './streaming-utils';
+import type { ChatAction, ChatState } from './reducer';
+import { createActionFromWebSocketMessage } from './reducer';
+import {
+  clearToolInputAccumulator,
+  handleToolInputStreaming,
+  type ToolInputAccumulatorState,
+} from './streaming-utils';
 
 // =============================================================================
 // Debug Logging
@@ -20,7 +24,7 @@ const debug = createDebugLogger(DEBUG_CHAT_TRANSPORT);
 export interface UseChatTransportOptions {
   dispatch: React.Dispatch<ChatAction>;
   stateRef: React.MutableRefObject<ChatState>;
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>;
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>;
   rewindTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
 }
 
@@ -33,8 +37,8 @@ export interface UseChatTransportReturn {
  * Expects a validated claude_message WebSocket message.
  */
 function handleClaudeMessageWithStreaming(
-  wsMessage: WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage },
-  toolInputAccumulatorRef: React.MutableRefObject<Map<string, string>>,
+  wsMessage: Extract<WebSocketMessage, { type: 'claude_message' }>,
+  toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>,
   dispatch: React.Dispatch<ChatAction>
 ): void {
   const claudeMsg = wsMessage.data;
@@ -44,13 +48,6 @@ function handleClaudeMessageWithStreaming(
   if (toolInputAction) {
     dispatch(toolInputAction);
     // Don't return - still need to dispatch the main action for content_block_start
-  }
-
-  // Handle thinking streaming (extended thinking mode)
-  const thinkingAction = handleThinkingStreaming(claudeMsg);
-  if (thinkingAction) {
-    dispatch(thinkingAction);
-    // Don't return - THINKING_CLEAR also needs the main action to process
   }
 }
 
@@ -92,6 +89,16 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
         return;
       }
       const wsMessage = data;
+
+      // session_delta wraps an inner websocket event from the SessionStore stream
+      if (wsMessage.type === 'session_delta' && isWebSocketMessage(wsMessage.data)) {
+        handleMessage(wsMessage.data);
+        return;
+      }
+
+      if (wsMessage.type === 'session_snapshot' || wsMessage.type === 'session_replay_batch') {
+        clearToolInputAccumulator(toolInputAccumulatorRef.current);
+      }
 
       // Handle workspace notification requests
       if (wsMessage.type === 'workspace_notification_request') {

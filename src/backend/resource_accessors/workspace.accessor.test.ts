@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 const mockCreate = vi.fn();
 
-vi.mock('../db', () => ({
+vi.mock('@/backend/db', () => ({
   prisma: {
     workspace: {
       create: (...args: unknown[]) => mockCreate(...args),

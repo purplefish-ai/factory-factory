@@ -9,14 +9,10 @@ const config: StorybookConfig = {
   stories: [
     '../src/components/**/*.stories.@(js|jsx|ts|tsx)',
     '../src/frontend/components/**/*.stories.@(js|jsx|ts|tsx)',
+    '../src/client/**/*.stories.@(js|jsx|ts|tsx)',
   ],
 
-  addons: [
-    '@storybook/addon-themes',
-    '@storybook/addon-a11y',
-    '@storybook/addon-mcp',
-    '@storybook/addon-docs',
-  ],
+  addons: ['@storybook/addon-themes', '@storybook/addon-a11y', '@storybook/addon-docs'],
 
   framework: {
     name: '@storybook/react-vite',

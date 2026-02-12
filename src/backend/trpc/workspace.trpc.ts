@@ -1,11 +1,19 @@
-import { KanbanColumn, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
+import { KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
 import { z } from 'zod';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
-import { ratchetService } from '../services/ratchet.service';
-import { WorkspaceCreationService } from '../services/workspace-creation.service';
-import { deriveWorkspaceFlowStateFromWorkspace } from '../services/workspace-flow-state.service';
-import { workspaceQueryService } from '../services/workspace-query.service';
-import { worktreeLifecycleService } from '../services/worktree-lifecycle.service';
+import { ratchetService } from '@/backend/domains/ratchet';
+import { sessionService } from '@/backend/domains/session';
+import {
+  deriveWorkspaceFlowStateFromWorkspace,
+  WorkspaceCreationService,
+  workspaceDataService,
+  workspaceQueryService,
+} from '@/backend/domains/workspace';
+import {
+  buildWorkspaceSessionSummaries,
+  hasWorkingSessionSummary,
+} from '@/backend/lib/session-summaries';
+import { archiveWorkspace, initializeWorkspaceWorktree } from '@/backend/orchestration';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
 import { workspaceGitRouter } from './workspace/git.trpc';
@@ -13,10 +21,6 @@ import { workspaceIdeRouter } from './workspace/ide.trpc';
 import { workspaceInitRouter } from './workspace/init.trpc';
 import { workspaceRunScriptRouter } from './workspace/run-script.trpc';
 import { getWorkspaceWithProjectOrThrow } from './workspace/workspace-helpers';
-
-// Re-export types for backward compatibility
-export type { GitFileStatus, GitStatusFile } from '../lib/git-helpers';
-export { parseGitStatusOutput } from '../lib/git-helpers';
 
 const loggerName = 'workspace-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
@@ -67,7 +71,7 @@ export const workspaceRouter = router({
     )
     .query(({ input }) => {
       const { projectId, ...filters } = input;
-      return workspaceAccessor.findByProjectId(projectId, filters);
+      return workspaceDataService.findByProjectId(projectId, filters);
     }),
 
   // Get unified project summary state for sidebar (workspaces + working status + git stats + review count)
@@ -90,13 +94,26 @@ export const workspaceRouter = router({
 
   // Get workspace by ID
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const workspace = await workspaceAccessor.findById(input.id);
+    const workspace = await workspaceDataService.findById(input.id);
     if (!workspace) {
       throw new Error(`Workspace not found: ${input.id}`);
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
+    const sessionSummaries = buildWorkspaceSessionSummaries(workspace.claudeSessions ?? [], (id) =>
+      sessionService.getRuntimeSnapshot(id)
+    );
+    const isSessionWorking = hasWorkingSessionSummary(sessionSummaries);
+    const isWorking = isSessionWorking || flowState.isWorking;
     return {
       ...workspace,
+      sessionSummaries,
+      sidebarStatus: deriveWorkspaceSidebarStatus({
+        isWorking,
+        prUrl: workspace.prUrl,
+        prState: workspace.prState,
+        prCiStatus: workspace.prCiStatus,
+        ratchetState: workspace.ratchetState,
+      }),
       ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
       flowPhase: flowState.phase,
       ciObservation: flowState.ciObservation,
@@ -116,29 +133,26 @@ export const workspaceRouter = router({
 
     const { workspace } = await workspaceCreationService.create(input);
 
+    const branchName =
+      input.type === 'MANUAL'
+        ? input.branchName
+        : input.type === 'RESUME_BRANCH'
+          ? input.branchName
+          : undefined;
+    const useExistingBranch = input.type === 'RESUME_BRANCH';
+
+    void initializeWorkspaceWorktree(workspace.id, {
+      branchName,
+      useExistingBranch,
+    }).catch((error) => {
+      const initError = error instanceof Error ? error : new Error(String(error));
+      logger.error('Unexpected error during background workspace initialization', initError, {
+        workspaceId: workspace.id,
+      });
+    });
+
     return workspace;
   }),
-
-  // Update a workspace
-  // Note: status changes should go through dedicated endpoints (archive, retryInit, etc.)
-  // to ensure state machine validation
-  update: publicProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        name: z.string().min(1).optional(),
-        description: z.string().optional(),
-        worktreePath: z.string().optional(),
-        branchName: z.string().optional(),
-        prUrl: z.string().optional(),
-        githubIssueNumber: z.number().optional(),
-        githubIssueUrl: z.string().optional(),
-      })
-    )
-    .mutation(({ input }) => {
-      const { id, ...updates } = input;
-      return workspaceAccessor.update(id, updates);
-    }),
 
   // Toggle workspace-level ratcheting
   toggleRatcheting: publicProcedure
@@ -149,21 +163,13 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const updatedWorkspace = await workspaceAccessor.update(
-        input.workspaceId,
-        input.enabled
-          ? {
-              ratchetEnabled: true,
-            }
-          : {
-              ratchetEnabled: false,
-              ratchetState: RatchetState.IDLE,
-              ratchetActiveSessionId: null,
-              ratchetLastNotifiedState: null,
-            }
-      );
+      await ratchetService.setWorkspaceRatcheting(input.workspaceId, input.enabled);
       if (input.enabled) {
         await ratchetService.checkWorkspaceById(input.workspaceId);
+      }
+      const updatedWorkspace = await workspaceDataService.findById(input.workspaceId);
+      if (!updatedWorkspace) {
+        throw new Error(`Workspace not found: ${input.workspaceId}`);
       }
       return updatedWorkspace;
     }),
@@ -173,7 +179,7 @@ export const workspaceRouter = router({
     .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))
     .mutation(async ({ input }) => {
       const workspace = await getWorkspaceWithProjectOrThrow(input.id);
-      return worktreeLifecycleService.archiveWorkspace(workspace, {
+      return archiveWorkspace(workspace, {
         commitUncommitted: input.commitUncommitted ?? true,
       });
     }),
@@ -193,7 +199,7 @@ export const workspaceRouter = router({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return workspaceAccessor.delete(input.id);
+    return workspaceDataService.delete(input.id);
   }),
 
   // Refresh factory-factory.json configuration for all workspaces

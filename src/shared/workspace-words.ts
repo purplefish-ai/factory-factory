@@ -63,7 +63,8 @@ export const WORKSPACE_WORDS = [
  * Pick a random word from the list
  */
 export function pickRandomWord(): string {
-  return WORKSPACE_WORDS[Math.floor(Math.random() * WORKSPACE_WORDS.length)];
+  const selected = WORKSPACE_WORDS[Math.floor(Math.random() * WORKSPACE_WORDS.length)];
+  return selected ?? 'workspace';
 }
 
 /**

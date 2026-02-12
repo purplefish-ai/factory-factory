@@ -4,20 +4,66 @@
  * Provides admin operations for managing system health.
  */
 
-import { type DecisionLog, SessionStatus } from '@prisma-gen/client';
+import { createReadStream } from 'node:fs';
+import { open, stat } from 'node:fs/promises';
+import { createInterface } from 'node:readline';
+import { SessionStatus } from '@factory-factory/core';
+import type { DecisionLog } from '@prisma-gen/client';
 import { z } from 'zod';
-import {
-  claudeSessionAccessor,
-  decisionLogAccessor,
-  terminalSessionAccessor,
-  workspaceAccessor,
-} from '../resource_accessors/index';
-import { dataBackupService, exportDataSchema } from '../services';
+import { sessionDataService } from '@/backend/domains/session';
+import { workspaceDataService } from '@/backend/domains/workspace';
+import { dataBackupService } from '@/backend/orchestration/data-backup.service';
+import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
+import { getLogFilePath } from '@/backend/services/logger.service';
+import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { type Context, publicProcedure, router } from './trpc';
 
 const loggerName = 'admin-trpc';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
+
+export interface ParsedLogEntry {
+  level: string;
+  timestamp: string;
+  message: string;
+  component: string;
+  context: Record<string, unknown>;
+}
+
+interface LogFilter {
+  level?: string;
+  search?: string;
+  sinceMs?: number | null;
+  untilMs?: number | null;
+}
+
+function matchesTimestamp(timestamp: string | undefined, filter: LogFilter): boolean {
+  if (!(timestamp && (filter.sinceMs || filter.untilMs))) {
+    return true;
+  }
+  const ts = new Date(timestamp).getTime();
+  if (filter.sinceMs && ts < filter.sinceMs) {
+    return false;
+  }
+  return !(filter.untilMs && ts > filter.untilMs);
+}
+
+function matchesLogFilter(entry: Record<string, unknown>, filter: LogFilter): boolean {
+  if (filter.level && entry.level !== filter.level) {
+    return false;
+  }
+  if (!matchesTimestamp(entry.timestamp as string | undefined, filter)) {
+    return false;
+  }
+  if (filter.search) {
+    const msg = (entry.message as string)?.toLowerCase() ?? '';
+    const comp = (entry.context as Record<string, unknown>)?.component as string | undefined;
+    if (!(msg.includes(filter.search) || comp?.toLowerCase().includes(filter.search))) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export const adminRouter = router({
   /**
@@ -62,7 +108,7 @@ export const adminRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const logs = await decisionLogAccessor.list({
+      const logs = await decisionLogQueryService.list({
         agentId: input.agentId,
         limit: input.limit,
       });
@@ -145,22 +191,24 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get all active processes (Claude and Terminal)
+   * Get all active processes (Claude, Codex app-server, and Terminal)
    */
   getActiveProcesses: publicProcedure.query(async ({ ctx }) => {
     const { sessionService, terminalService } = ctx.appContext.services;
     const logger = getLogger(ctx);
     // Get active Claude processes from in-memory map
     const activeClaudeProcesses = sessionService.getAllActiveProcesses();
+    const codexManager = sessionService.getCodexManagerStatus();
+    const codexProcesses = sessionService.getAllCodexActiveProcesses();
 
     // Get active terminals from in-memory map
     const activeTerminals = terminalService.getAllTerminals();
 
     // Get Claude sessions with PIDs from database for enriched info
-    const claudeSessionsWithPid = await claudeSessionAccessor.findWithPid();
+    const claudeSessionsWithPid = await sessionDataService.findClaudeSessionsWithPid();
 
     // Get terminal sessions with PIDs from database
-    const terminalSessionsWithPid = await terminalSessionAccessor.findWithPid();
+    const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([
@@ -168,7 +216,7 @@ export const adminRouter = router({
       ...terminalSessionsWithPid.map((s) => s.workspaceId),
       ...activeTerminals.map((t) => t.workspaceId),
     ]);
-    const workspaces = await workspaceAccessor.findByIdsWithProject(Array.from(workspaceIds));
+    const workspaces = await workspaceDataService.findByIdsWithProject(Array.from(workspaceIds));
     const workspaceMap = new Map(workspaces.map((w) => [w.id, w]));
 
     // Build enriched Claude process list from DB sessions
@@ -260,11 +308,16 @@ export const adminRouter = router({
 
     return {
       claude: claudeProcesses,
+      codex: {
+        manager: codexManager,
+        sessions: codexProcesses,
+      },
       terminal: terminalProcesses,
       summary: {
         totalClaude: claudeProcesses.length,
+        totalCodexSessions: codexProcesses.length,
         totalTerminal: terminalProcesses.length,
-        total: claudeProcesses.length + terminalProcesses.length,
+        total: claudeProcesses.length + codexProcesses.length + terminalProcesses.length,
       },
     };
   }),
@@ -309,4 +362,119 @@ export const adminRouter = router({
       results,
     };
   }),
+
+  /**
+   * Get parsed log entries from server.log with filtering and pagination.
+   */
+  getLogs: publicProcedure
+    .input(
+      z.object({
+        search: z.string().optional(),
+        level: z.enum(['error', 'warn', 'info', 'debug']).optional(),
+        since: z.string().optional(), // ISO date string
+        until: z.string().optional(), // ISO date string
+        limit: z.number().min(1).max(1000).default(200),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const filePath = getLogFilePath();
+
+      // Stream the log file line-by-line to avoid loading the entire file into memory
+      const filter: LogFilter = {
+        level: input.level,
+        search: input.search?.toLowerCase(),
+        sinceMs: input.since ? new Date(input.since).getTime() : null,
+        untilMs: input.until ? new Date(input.until).getTime() : null,
+      };
+      const filtered: ParsedLogEntry[] = [];
+      try {
+        const rl = createInterface({
+          input: createReadStream(filePath, 'utf-8'),
+          crlfDelay: Number.POSITIVE_INFINITY,
+        });
+        for await (const line of rl) {
+          if (!line) {
+            continue;
+          }
+          try {
+            const entry = JSON.parse(line);
+            if (!matchesLogFilter(entry, filter)) {
+              continue;
+            }
+            filtered.push({
+              level: entry.level,
+              timestamp: entry.timestamp,
+              message: entry.message,
+              component: entry.context?.component ?? '',
+              context: entry.context ?? {},
+            });
+          } catch {
+            // skip malformed lines
+          }
+        }
+      } catch {
+        return { entries: [], total: 0, filePath };
+      }
+
+      // Reverse so newest entries come first, then paginate
+      filtered.reverse();
+      const page = filtered.slice(input.offset, input.offset + input.limit);
+
+      return { entries: page, total: filtered.length, filePath };
+    }),
+
+  /**
+   * Download the raw log file content.
+   */
+  downloadLogFile: publicProcedure.query(async () => {
+    const filePath = getLogFilePath();
+    const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+    try {
+      const fileStats = await stat(filePath);
+      const startByte = Math.max(0, fileStats.size - MAX_DOWNLOAD_BYTES);
+      const fh = await open(filePath, 'r');
+      try {
+        const buf = Buffer.alloc(fileStats.size - startByte);
+        await fh.read(buf, 0, buf.length, startByte);
+        let content = buf.toString('utf-8');
+        // If we skipped the beginning, trim to the first complete line
+        if (startByte > 0) {
+          const firstNewline = content.indexOf('\n');
+          if (firstNewline !== -1) {
+            content = content.slice(firstNewline + 1);
+          }
+        }
+        return content;
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return '';
+    }
+  }),
+
+  /**
+   * Stop a Claude session by ID (admin override).
+   * This allows admins to forcefully stop sessions that may be stuck or consuming resources.
+   */
+  stopClaudeSession: publicProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { sessionService } = ctx.appContext.services;
+      const logger = getLogger(ctx);
+
+      const wasRunning = sessionService.isSessionRunning(input.sessionId);
+
+      logger.info('Admin stopping Claude session', {
+        sessionId: input.sessionId,
+        wasRunning,
+      });
+
+      await sessionService.stopClaudeSession(input.sessionId);
+
+      return {
+        wasRunning,
+      };
+    }),
 });

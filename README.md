@@ -3,17 +3,18 @@
 </p>
 
 <p align="center">
-  <strong>Workspace-based coding environment for running multiple Claude Code sessions in parallel.</strong>
+  <strong>Run multiple Claude Code sessions in parallel with isolated git worktrees.</strong>
 </p>
 
 <p align="center">
-  Each workspace gets its own isolated git worktree, enabling true parallel development.
+  Work on multiple features simultaneously, each in its own branch. Let AI agents progress PRs automatically.
 </p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/factory-factory"><img src="https://img.shields.io/npm/v/factory-factory" alt="npm"></a>
   <a href="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml"><img src="https://github.com/purplefish-ai/factory-factory/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/purplefish-ai/factory-factory/blob/main/LICENSE"><img src="https://img.shields.io/github/license/purplefish-ai/factory-factory" alt="License"></a>
+  <a href="https://factoryfactory.ai"><img src="https://img.shields.io/badge/website-factoryfactory.ai-blue" alt="Website"></a>
 </p>
 
 <p align="center">
@@ -22,25 +23,55 @@
 
 ---
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Running](#running)
+- [Quick Start](#quick-start)
+- [CLI Reference](#cli-reference)
+- [Architecture](#architecture)
+- [Feature Highlights](#feature-highlights)
+  - [Ratchet (Automatic PR Progression)](#-ratchet-automatic-pr-progression)
+  - [GitHub Integration](#-github-integration)
+  - [Kanban Board](#-kanban-board)
+  - [Quick Actions](#-quick-actions)
+- [Development](#development)
+- [Desktop App (Electron)](#desktop-app-electron)
+- [Security Considerations](#security-considerations)
+- [Troubleshooting](#troubleshooting)
+- [Acknowledgements](#acknowledgements)
+
+---
+
 ## Installation
 
 **Prerequisites:**
 - Node.js 18+
-- pnpm
 - GitHub CLI (`gh`) - authenticated
 - Claude Code - authenticated via `claude login`
 
+### Option 1: Run with npx (Recommended)
+
+No installation needed! Run Factory Factory directly:
+
 ```bash
-# Clone and install
+npx factory-factory@latest serve
+```
+
+### Option 2: Install globally
+
+```bash
+npm install -g factory-factory
+ff serve
+```
+
+### Option 3: Install from source (for development)
+
+```bash
 git clone https://github.com/purplefish-ai/factory-factory.git
 cd factory-factory
 pnpm install
-
-# Option A: Install CLI globally from source
 pnpm link --global
-
-# Option B: Install from npm (when published)
-npm install -g factory-factory
 ```
 
 ## Running
@@ -48,11 +79,16 @@ npm install -g factory-factory
 ### Web App
 
 ```bash
-# Using pnpm (recommended for development)
-pnpm dev
+# Using npx (no install required)
+npx factory-factory@latest serve
 
-# Or using the CLI directly (if installed globally)
+# Using installed CLI
+ff serve
+
+# Development mode with hot reload
 ff serve --dev
+# or with pnpm (for local development)
+pnpm dev
 ```
 
 The server automatically:
@@ -79,8 +115,11 @@ The Electron app stores data in the standard location for your OS:
 
 ## CLI Reference
 
-```
-Usage: ff serve [options]
+```bash
+# Start the server
+ff serve [options]
+# or
+npx factory-factory@latest serve [options]
 
 Options:
   -p, --port <port>           Frontend port (default: 3000)
@@ -99,29 +138,71 @@ ff db:migrate   # Run database migrations
 ff db:studio    # Open Prisma Studio
 ```
 
-## Development Commands
+**Examples:**
+```bash
+# Quick start with npx
+npx factory-factory@latest serve
+
+# Development mode with custom port
+ff serve --dev --port 8080
+
+# Production mode without auto-opening browser
+ff serve --no-open
+
+# Custom database location
+ff serve --database-path /path/to/data.db
+```
+
+## Quick Start
+
+1. **Authenticate required tools:**
+   ```bash
+   gh auth login        # GitHub CLI
+   claude login         # Claude Code
+   ```
+
+2. **Run Factory Factory:**
+   ```bash
+   npx factory-factory@latest serve
+   ```
+
+3. **Create your first workspace:**
+   - Open the web UI (automatically opens at http://localhost:3000)
+   - Configure your project with a local git repository
+   - Click "New Workspace" to create your first isolated worktree
+   - Start chatting with Claude Code!
+
+## Development
+
+### Development Commands
 
 ```bash
 # Server
-pnpm dev              # Start dev server
-pnpm dev -- --no-open    # Without browser auto-open
-pnpm dev -- --verbose    # With detailed logging
-pnpm build            # Build for production
-pnpm start            # Start production server
+pnpm dev                     # Start dev server with hot reload
+pnpm dev -- --no-open        # Without browser auto-open
+pnpm dev -- --verbose        # With detailed logging
+pnpm build                   # Build for production
+pnpm start                   # Start production server
 
 # Electron
-pnpm dev:electron     # Start Electron with hot reload
-pnpm build:electron   # Build distributable package
+pnpm dev:electron            # Start Electron with hot reload
+pnpm build:electron          # Build distributable package
 
 # Quality
-pnpm test             # Run tests
-pnpm typecheck        # TypeScript checking
-pnpm check:fix        # Lint + format
+pnpm test                    # Run tests
+pnpm test:watch              # Run tests in watch mode
+pnpm test:coverage           # Run tests with coverage
+pnpm typecheck               # TypeScript checking
+pnpm check:fix               # Lint + format with Biome
 
 # Database
-pnpm db:migrate       # Run migrations
-pnpm db:studio        # Prisma Studio
-pnpm db:generate      # Regenerate Prisma client
+pnpm db:migrate              # Run migrations
+pnpm db:studio               # Open Prisma Studio
+pnpm db:generate             # Regenerate Prisma client
+
+# Other
+pnpm storybook               # Start Storybook for UI components
+pnpm deps:check              # Check dependency rules
 ```
 
 ## Architecture
@@ -129,72 +210,76 @@ pnpm db:generate      # Regenerate Prisma client
 ```
 Project (repository configuration)
     └── Workspace (isolated git worktree)
-            ├── ClaudeSession (chat with Claude Code)
-            └── TerminalSession (PTY terminal)
+            ├── Session (Claude Code chat session)
+            └── Terminal (PTY terminal)
 ```
 
-**Key features:**
-- **Isolated workspaces:** Each workspace gets its own git worktree and branch
-- **Real-time chat:** WebSocket-based streaming from Claude Code CLI
-- **Terminal access:** Full PTY terminals per workspace
-- **Session persistence:** Resume previous Claude sessions
+**Key capabilities:**
+- **Isolated workspaces:** Each workspace gets its own git worktree and branch for true parallel development
+- **Real-time streaming:** WebSocket-based communication with Claude Code CLI
+- **Persistent sessions:** Resume and review previous conversations
+- **Terminal access:** Full PTY terminal per workspace
+- **GitHub integration:** Import issues, track PR state, automatic PR progression via Ratchet
+- **Kanban board:** Visual project management with GitHub issue intake
 
 ## Feature Highlights
 
-### Ratchet (automatic PR progression)
+### 🔄 Ratchet (Automatic PR Progression)
 
-Ratchet is a background monitor that continuously moves open PR workspaces toward merge.
+Ratchet automatically moves pull requests toward merge by monitoring and fixing issues.
 
-- Runs every minute against READY workspaces with PRs
-- Pulls fresh PR state from GitHub (`gh`) and classifies it into: `CI_RUNNING`, `CI_FAILED`, `MERGE_CONFLICT`, `REVIEW_PENDING`, `READY`, or `MERGED`
-- Triggers (or reuses) a dedicated **ratchet** Claude session to fix CI failures, resolve merge conflicts, or address requested review changes
-- Prevents duplicate fixer sessions per workspace and can notify an active fixer if a priority state changes
-- Configurable in **Admin → Ratchet** with toggles for CI fixes, conflict fixes, review fixes, allowed reviewers, and auto-merge behavior
+- **Automatic monitoring:** Checks READY workspaces with open PRs every minute
+- **Smart PR classification:** Tracks PR state as `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`, `READY`, or `MERGED`
+- **Auto-fix agents:** Creates Claude sessions to automatically fix CI failures and address review comments
+- **Conflict resolution:** Agents sync with main branch before applying fixes
+- **Configurable behavior:** Control CI fixes, review fixes, allowed reviewers, and auto-merge in Admin → Ratchet
 
-### GitHub integration (issues + PR state)
+### 🔗 GitHub Integration
 
-Factory Factory integrates with GitHub through the local authenticated `gh` CLI.
+Seamless integration with GitHub via the authenticated `gh` CLI.
 
-- Project-level GitHub linkage (`githubOwner` + `githubRepo`) enables issue/PR workflows
-- Workspace session start supports **Import from GitHub Issues** (picker with filtering/search)
-- Selected issues are converted into an initial prompt and auto-sent when the session is ready
-- Kanban’s **GitHub Issues** column pulls issues assigned to `@me`
-- One-click **Start** on an issue card creates a linked workspace (`githubIssueNumber`/`githubIssueUrl`) and opens it
+- **Issue import:** Start workspaces directly from GitHub issues with one-click import
+- **PR tracking:** Automatic PR state monitoring and status updates
+- **Linked workspaces:** Issues are automatically linked to their workspaces (prevents duplicates)
+- **Kanban intake:** GitHub Issues column shows issues assigned to `@me` for easy triage
 
-### Kanban view (status + intake)
+### 📋 Kanban Board
 
-The board is a real-time operational view of work and intake.
+Real-time visual project management with automatic column placement.
 
-- UI columns: **GitHub Issues**, **Working**, **Waiting**, **Done**
-- Workspace column derivation is automatic:
-  - `WORKING`: provisioning/new/failed, or actively running
-  - `WAITING`: idle workspaces that have had at least one session
-  - `DONE`: merged PRs
-- READY workspaces with no prior sessions are hidden from the board
-- Issue cards are filtered to avoid duplicates once an issue is already linked to a workspace
-- Refresh syncs PR state and re-fetches board + issues
+- **Smart columns:** GitHub Issues → Working → Waiting → Done
+- **Auto-categorization:**
+  - **Working:** Provisioning, new, failed, or actively running sessions
+  - **Waiting:** Idle workspaces that have completed at least one session
+  - **Done:** Workspaces with merged PRs
+- **Live updates:** Real-time workspace status and PR state changes
+- **Mobile responsive:** Optimized layout for mobile devices
 
-### Quick Actions
+### ⚡ Quick Actions
 
-Quick actions provide one-click prompts for common flows.
+One-click prompts for common workflows, fully customizable via markdown.
 
-- Workspace header quick actions are loaded from `prompts/quick-actions/*.md` (frontmatter + prompt body)
-- Executing an agent quick action creates a follow-up session and auto-sends the predefined prompt
-- Current built-ins include flows like review, simplify, fetch/rebase, and branch rename
+- **Agent-driven:** Each action creates a new Claude session with a predefined prompt
+- **Extensible:** Add custom actions by creating markdown files in `prompts/quick-actions/`
+- **Built-in actions:** Review code, simplify implementations, sync with main, rename branches, and more
 
 ## Security Considerations
 
-> **Warning:** Factory Factory runs Claude Code in **bypass permissions mode** by default. This means Claude can execute bash commands, write and modify files, and perform other operations without asking for confirmation.
+> **⚠️ Important:** Factory Factory runs Claude Code with automatic command execution enabled by default. Claude can execute bash commands, write and modify files, and perform operations without manual confirmation.
 
-This design choice enables uninterrupted parallel workflows, but you should be aware that:
-- Claude has full access to your filesystem within each workspace
-- Commands are executed automatically without manual approval
-- The isolation is at the git worktree level, not the system level
+This design enables seamless parallel workflows, but you should understand:
 
-**Recommendations:**
-- Only use Factory Factory with repositories you trust
-- Review Claude's changes before merging branches
-- Consider running in a containerized environment for sensitive projects
+- **Workspace isolation:** Each workspace operates in its own git worktree with a dedicated branch
+- **Filesystem access:** Claude has full access to files within each workspace
+- **Automatic execution:** Commands run without approval prompts for uninterrupted operation
+- **System-level access:** Isolation is at the git worktree level, not containerized
+
+**Best practices:**
+- ✅ Only use with repositories you trust
+- ✅ Review changes carefully before merging PRs
+- ✅ Keep your GitHub authentication secure
+- ✅ Monitor Ratchet auto-fix behavior in Admin settings
+- ✅ Consider running in a VM or container for untrusted code
 
 ## Brand
 
@@ -210,20 +295,67 @@ This design choice enables uninterrupted parallel workflows, but you should be a
 
 ## Troubleshooting
 
-**GitHub CLI:**
+### Authentication Issues
+
+**GitHub CLI not authenticated:**
 ```bash
-gh auth status
-gh auth login
+gh auth status          # Check authentication status
+gh auth login           # Login to GitHub
 ```
 
-**Database issues:**
+**Claude Code not authenticated:**
 ```bash
-pnpm db:migrate                  # Run migrations
-pnpm exec prisma migrate reset   # Reset database (destroys data)
+claude login            # Authenticate Claude Code CLI
+claude --version        # Verify installation
 ```
 
-**Port conflicts:**
-The server automatically finds available ports. Use `--verbose` to see which ports are used.
+### Database Issues
+
+**Migration failures or corrupt database:**
+```bash
+# Run migrations manually
+ff db:migrate
+
+# Reset database (⚠️ destroys all data)
+ff db:reset
+
+# View database in Prisma Studio
+ff db:studio
+```
+
+### Port Conflicts
+
+The server automatically finds available ports if defaults are in use. Use `--verbose` to see which ports are selected:
+
+```bash
+ff serve --verbose
+```
+
+Or specify custom ports:
+```bash
+ff serve --port 8080 --backend-port 8081
+```
+
+### Common Issues
+
+**"Command not found: ff"**
+- Install globally: `npm install -g factory-factory`
+- Or use npx: `npx factory-factory@latest serve`
+
+**Workspace stuck in "Provisioning" state:**
+- Check logs in the Terminal tab
+- Ensure git worktree creation succeeded
+- Verify repository has no uncommitted changes
+
+**Claude not responding:**
+- Verify Claude Code is installed and authenticated
+- Check that `claude` command works in your terminal
+- Review session logs for error messages
+
+**PR state not updating:**
+- Ensure GitHub CLI is authenticated: `gh auth status`
+- Manually refresh using the Refresh button in Kanban view
+- Check that repository has correct GitHub remote configured
 
 ## Acknowledgements
 

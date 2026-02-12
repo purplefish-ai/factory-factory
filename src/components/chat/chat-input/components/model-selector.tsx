@@ -21,7 +21,7 @@ interface ModelSelectorProps {
  */
 export function ModelSelector({ selectedModel, onChange, disabled }: ModelSelectorProps) {
   const currentModel = AVAILABLE_MODELS.find((m) => m.value === selectedModel);
-  const displayName = currentModel?.displayName ?? AVAILABLE_MODELS[0].displayName;
+  const displayName = currentModel?.displayName ?? AVAILABLE_MODELS[0]?.displayName;
 
   return (
     <DropdownMenu>

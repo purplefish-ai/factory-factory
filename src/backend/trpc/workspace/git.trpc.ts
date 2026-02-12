@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { isPathSafe } from '../../lib/file-helpers';
-import { getMergeBase, parseGitStatusOutput } from '../../lib/git-helpers';
-import { gitCommand } from '../../lib/shell';
-import { workspaceAccessor } from '../../resource_accessors/workspace.accessor';
-import { type Context, publicProcedure, router } from '../trpc';
+import { workspaceDataService } from '@/backend/domains/workspace';
+import { isPathSafe } from '@/backend/lib/file-helpers';
+import { getMergeBase, parseGitStatusOutput } from '@/backend/lib/git-helpers';
+import { gitCommand } from '@/backend/lib/shell';
+import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import {
   getWorkspaceWithProjectAndWorktreeOrThrow,
   getWorkspaceWithWorktree,
@@ -59,7 +59,7 @@ export const workspaceGitRouter = router({
     .query(async ({ ctx, input }) => {
       const logger = getLogger(ctx);
       // Use findByIdWithProject directly since we need project info
-      const workspace = await workspaceAccessor.findByIdWithProject(input.workspaceId);
+      const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
       if (!workspace) {
         throw new Error(`Workspace not found: ${input.workspaceId}`);
       }

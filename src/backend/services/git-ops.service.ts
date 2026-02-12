@@ -1,10 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { TRPCError } from '@trpc/server';
-import { GitClientFactory } from '../clients/git.client';
-import { pathExists } from '../lib/file-helpers';
-import { getWorkspaceGitStats } from '../lib/git-helpers';
-import { gitCommand } from '../lib/shell';
+import { GitClientFactory } from '@/backend/clients/git.client';
+import { pathExists } from '@/backend/lib/file-helpers';
+import { getWorkspaceGitStats } from '@/backend/lib/git-helpers';
+import { gitCommand } from '@/backend/lib/shell';
 
 export type WorkspaceGitStats = Awaited<ReturnType<typeof getWorkspaceGitStats>>;
 
@@ -77,7 +77,10 @@ class GitOpsService {
     }
 
     const commitMessage = `Archive workspace ${workspaceName}`;
-    const commitResult = await gitCommand(['commit', '-m', commitMessage], worktreePath);
+    const commitResult = await gitCommand(
+      ['commit', '-m', commitMessage, '--no-verify'],
+      worktreePath
+    );
     if (commitResult.code !== 0) {
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',

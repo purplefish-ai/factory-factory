@@ -1,7 +1,10 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
-import { prisma } from '../db';
-import { gitCommandC } from '../lib/shell';
-import { projectAccessor } from '../resource_accessors/project.accessor';
+import { projectManagementService } from '@/backend/domains/workspace';
+import { gitCommandC } from '@/backend/lib/shell';
+import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
@@ -69,12 +72,12 @@ export const projectRouter = router({
         .optional()
     )
     .query(({ input }) => {
-      return projectAccessor.list(input);
+      return projectManagementService.list(input);
     }),
 
   // Get project by ID
   getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const project = await projectAccessor.findById(input.id);
+    const project = await projectManagementService.findById(input.id);
     if (!project) {
       throw new Error(`Project not found: ${input.id}`);
     }
@@ -83,7 +86,7 @@ export const projectRouter = router({
 
   // Get project by slug
   getBySlug: publicProcedure.input(z.object({ slug: z.string() })).query(async ({ input }) => {
-    const project = await projectAccessor.findBySlug(input.slug);
+    const project = await projectManagementService.findBySlug(input.slug);
     if (!project) {
       throw new Error(`Project not found: ${input.slug}`);
     }
@@ -94,7 +97,7 @@ export const projectRouter = router({
   listBranches: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ input }) => {
-      const project = await projectAccessor.findById(input.projectId);
+      const project = await projectManagementService.findById(input.projectId);
       if (!project) {
         throw new Error(`Project not found: ${input.projectId}`);
       }
@@ -130,8 +133,7 @@ export const projectRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { configService } = ctx.appContext.services;
-      const { startupScriptCommand, startupScriptPath, startupScriptTimeout, ...createInput } =
-        input;
+      const { startupScriptCommand, startupScriptPath, startupScriptTimeout } = input;
 
       // Validate only one of command or path is set
       if (startupScriptCommand && startupScriptPath) {
@@ -139,32 +141,22 @@ export const projectRouter = router({
       }
 
       // Validate repo path
-      const repoValidation = await projectAccessor.validateRepoPath(input.repoPath);
+      const repoValidation = await projectManagementService.validateRepoPath(input.repoPath);
       if (!repoValidation.valid) {
         throw new Error(`Invalid repository path: ${repoValidation.error}`);
       }
 
-      // Use transaction to ensure atomic creation with startup script config
-      return prisma.$transaction(async (tx) => {
-        // Create the project
-        const project = await projectAccessor.create(createInput, {
+      return projectManagementService.create(
+        {
+          repoPath: input.repoPath,
+          startupScriptCommand,
+          startupScriptPath,
+          startupScriptTimeout,
+        },
+        {
           worktreeBaseDir: configService.getWorktreeBaseDir(),
-        });
-
-        // If startup script config was provided, update the project within the transaction
-        if (startupScriptCommand || startupScriptPath || startupScriptTimeout) {
-          return tx.project.update({
-            where: { id: project.id },
-            data: {
-              startupScriptCommand: startupScriptCommand ?? null,
-              startupScriptPath: startupScriptPath ?? null,
-              startupScriptTimeout: startupScriptTimeout ?? 300,
-            },
-          });
         }
-
-        return project;
-      });
+      );
     }),
 
   // Update a project
@@ -188,7 +180,7 @@ export const projectRouter = router({
 
       // Validate new repo path if provided
       if (updates.repoPath) {
-        const repoValidation = await projectAccessor.validateRepoPath(updates.repoPath);
+        const repoValidation = await projectManagementService.validateRepoPath(updates.repoPath);
         if (!repoValidation.valid) {
           throw new Error(`Invalid repository path: ${repoValidation.error}`);
         }
@@ -196,10 +188,7 @@ export const projectRouter = router({
 
       // Validate only one of command or path is set (check final state, not just request)
       if (updates.startupScriptCommand !== undefined || updates.startupScriptPath !== undefined) {
-        const currentProject = await prisma.project.findUnique({
-          where: { id },
-          select: { startupScriptCommand: true, startupScriptPath: true },
-        });
+        const currentProject = await projectManagementService.findById(id);
 
         if (!currentProject) {
           throw new Error(`Project not found: ${id}`);
@@ -222,16 +211,48 @@ export const projectRouter = router({
         }
       }
 
-      return projectAccessor.update(id, updates);
+      return projectManagementService.update(id, updates);
     }),
 
   // Archive a project (soft delete)
   archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
-    return projectAccessor.archive(input.id);
+    return projectManagementService.archive(input.id);
   }),
 
   // Validate repo path
   validateRepoPath: publicProcedure.input(z.object({ repoPath: z.string() })).query(({ input }) => {
-    return projectAccessor.validateRepoPath(input.repoPath);
+    return projectManagementService.validateRepoPath(input.repoPath);
   }),
+
+  // Check if factory-factory.json exists in the repository
+  checkFactoryConfig: publicProcedure
+    .input(z.object({ repoPath: z.string() }))
+    .query(async ({ input }) => {
+      try {
+        const config = await FactoryConfigService.readConfig(input.repoPath);
+        return { exists: config !== null };
+      } catch {
+        return { exists: false };
+      }
+    }),
+
+  // Save factory-factory.json to the project repo
+  saveFactoryConfig: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        config: FactoryConfigSchema,
+      })
+    )
+    .mutation(async ({ input }) => {
+      const project = await projectManagementService.findById(input.projectId);
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
+      const configContent = JSON.stringify(input.config, null, 2);
+      await writeFile(join(project.repoPath, 'factory-factory.json'), configContent, 'utf-8');
+
+      return { success: true };
+    }),
 });

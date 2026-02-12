@@ -46,10 +46,19 @@ export function getReconnectDelay(attempt: number): number {
  * @param endpoint - The WebSocket endpoint path (e.g., '/chat', '/agent-activity')
  * @param params - Query parameters to append to the URL
  */
-export function buildWebSocketUrl(endpoint: string, params: Record<string, string>): string {
+export function buildWebSocketUrl(
+  endpoint: string,
+  params: Record<string, string | undefined>
+): string {
   const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
   const protocol =
     typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const queryString = new URLSearchParams(params).toString();
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      query.set(key, value);
+    }
+  }
+  const queryString = query.toString();
   return `${protocol}//${host}${endpoint}?${queryString}`;
 }

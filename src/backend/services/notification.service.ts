@@ -5,7 +5,7 @@
  * Supports macOS, Linux, and Windows.
  */
 
-import { execCommand, sendLinuxNotification, sendMacNotification } from '../lib/shell';
+import { execCommand, sendLinuxNotification, sendMacNotification } from '@/backend/lib/shell';
 import { configService, type NotificationConfig } from './config.service';
 import { createLogger } from './logger.service';
 

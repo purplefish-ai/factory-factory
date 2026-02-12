@@ -1,11 +1,9 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { getQuickAction, listQuickActions } from '../prompts/quick-actions';
-import { DEFAULT_FIRST_SESSION, DEFAULT_FOLLOWUP, listWorkflows } from '../prompts/workflows';
-import { claudeSessionAccessor } from '../resource_accessors/claude-session.accessor';
-import { terminalSessionAccessor } from '../resource_accessors/terminal-session.accessor';
-import { workspaceAccessor } from '../resource_accessors/workspace.accessor';
+import { SessionManager, sessionDataService } from '@/backend/domains/session';
+import { workspaceDataService } from '@/backend/domains/workspace';
+import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({
@@ -15,19 +13,6 @@ export const sessionRouter = router({
   getMaxSessionsPerWorkspace: publicProcedure.query(({ ctx }) => {
     return ctx.appContext.services.configService.getMaxSessionsPerWorkspace();
   }),
-
-  // Workflows
-
-  // List all available workflows
-  listWorkflows: publicProcedure.query(() => listWorkflows()),
-
-  // Get recommended workflow for a workspace (feature for first session, followup otherwise)
-  getRecommendedWorkflow: publicProcedure
-    .input(z.object({ workspaceId: z.string() }))
-    .query(async ({ input }) => {
-      const workspace = await workspaceAccessor.findById(input.workspaceId);
-      return workspace?.hasHadSessions ? DEFAULT_FOLLOWUP : DEFAULT_FIRST_SESSION;
-    }),
 
   // Quick Actions
 
@@ -53,7 +38,10 @@ export const sessionRouter = router({
     .query(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
-      const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
+      const sessions = await sessionDataService.findClaudeSessionsByWorkspaceId(
+        workspaceId,
+        filters
+      );
       // Augment sessions with real-time working status from in-memory process state
       return sessions.map((session) => ({
         ...session,
@@ -63,7 +51,7 @@ export const sessionRouter = router({
 
   // Get claude session by ID
   getClaudeSession: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const session = await claudeSessionAccessor.findById(input.id);
+    const session = await sessionDataService.findClaudeSessionById(input.id);
     if (!session) {
       throw new Error(`Claude session not found: ${input.id}`);
     }
@@ -84,7 +72,9 @@ export const sessionRouter = router({
       const { configService } = ctx.appContext.services;
       // Check per-workspace session limit
       const maxSessions = configService.getMaxSessionsPerWorkspace();
-      const existingSessions = await claudeSessionAccessor.findByWorkspaceId(input.workspaceId);
+      const existingSessions = await sessionDataService.findClaudeSessionsByWorkspaceId(
+        input.workspaceId
+      );
 
       if (existingSessions.length >= maxSessions) {
         throw new TRPCError({
@@ -93,7 +83,14 @@ export const sessionRouter = router({
         });
       }
 
-      const session = await claudeSessionAccessor.create(input);
+      const workspace = await workspaceDataService.findById(input.workspaceId);
+      const claudeProjectPath = workspace?.worktreePath
+        ? SessionManager.getProjectPath(workspace.worktreePath)
+        : null;
+      const session = await sessionDataService.createClaudeSession({
+        ...input,
+        claudeProjectPath,
+      });
       return session;
     }),
 
@@ -110,7 +107,7 @@ export const sessionRouter = router({
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
-      return claudeSessionAccessor.update(id, updates);
+      return sessionDataService.updateClaudeSession(id, updates);
     }),
 
   // Start a claude session (spawns the Claude process)
@@ -126,7 +123,7 @@ export const sessionRouter = router({
       await sessionService.startClaudeSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
-      return claudeSessionAccessor.findById(input.id);
+      return sessionDataService.findClaudeSessionById(input.id);
     }),
 
   // Stop a claude session (gracefully stops the process)
@@ -134,20 +131,24 @@ export const sessionRouter = router({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
-      await sessionService.stopClaudeSession(input.id);
-      return claudeSessionAccessor.findById(input.id);
+      await sessionService.stopClaudeSession(input.id, {
+        cleanupTransientRatchetSession: false,
+      });
+      return sessionDataService.findClaudeSessionById(input.id);
     }),
 
   // Delete a claude session
   deleteClaudeSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { messageQueueService, sessionService } = ctx.appContext.services;
+      const { sessionService, sessionDomainService } = ctx.appContext.services;
       // Stop process first to prevent orphaned Claude processes
-      await sessionService.stopClaudeSession(input.id);
-      // Clear any queued messages to prevent memory leak
-      messageQueueService.clear(input.id);
-      return claudeSessionAccessor.delete(input.id);
+      await sessionService.stopClaudeSession(input.id, {
+        cleanupTransientRatchetSession: false,
+      });
+      // Clear any in-memory session store state
+      sessionDomainService.clearSession(input.id);
+      return sessionDataService.deleteClaudeSession(input.id);
     }),
 
   // Terminal Sessions
@@ -163,14 +164,14 @@ export const sessionRouter = router({
     )
     .query(({ input }) => {
       const { workspaceId, ...filters } = input;
-      return terminalSessionAccessor.findByWorkspaceId(workspaceId, filters);
+      return sessionDataService.findTerminalSessionsByWorkspaceId(workspaceId, filters);
     }),
 
   // Get terminal session by ID
   getTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
-      const session = await terminalSessionAccessor.findById(input.id);
+      const session = await sessionDataService.findTerminalSessionById(input.id);
       if (!session) {
         throw new Error(`Terminal session not found: ${input.id}`);
       }
@@ -186,7 +187,7 @@ export const sessionRouter = router({
       })
     )
     .mutation(({ input }) => {
-      return terminalSessionAccessor.create(input);
+      return sessionDataService.createTerminalSession(input);
     }),
 
   // Update a terminal session
@@ -195,19 +196,17 @@ export const sessionRouter = router({
       z.object({
         id: z.string(),
         name: z.string().optional(),
-        status: z.nativeEnum(SessionStatus).optional(),
-        pid: z.number().optional(),
       })
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
-      return terminalSessionAccessor.update(id, updates);
+      return sessionDataService.updateTerminalSession(id, updates);
     }),
 
   // Delete a terminal session
   deleteTerminalSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ input }) => {
-      return terminalSessionAccessor.delete(input.id);
+      return sessionDataService.deleteTerminalSession(input.id);
     }),
 });

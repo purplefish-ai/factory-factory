@@ -40,11 +40,25 @@ You are implementing a new feature. Follow this workflow to deliver high-quality
 ### 6. Create Pull Request
 - Commit all changes with descriptive messages
 - Push your branch: `git push -u origin HEAD`
-- Create the PR using the GitHub CLI:
+- Create the PR using the GitHub CLI with a body file to preserve formatting:
   ```bash
-  gh pr create --title "Your PR title" --body "Description of changes"
+  cat > /tmp/pr-body.md << 'EOF'
+  ## Summary
+  [Clear description of what this PR accomplishes]
+
+  ## Changes
+  - [List of key changes]
+
+  ## Testing
+  - [How to test the changes]
+  EOF
+  gh pr create --title "Your PR title" --body-file /tmp/pr-body.md
   ```
-- Include a clear summary, what changed, and how to test it in the PR body
+- **IMPORTANT**: Always append the following signature as the very last lines of the PR body, after a horizontal rule:
+  ```
+  ---
+  🏭 Forged in [Factory Factory](https://factoryfactory.ai)
+  ```
 
 ## Guidelines
 

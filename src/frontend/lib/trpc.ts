@@ -2,7 +2,7 @@ import type { TRPCClient } from '@trpc/client';
 import type { CreateTRPCReact } from '@trpc/react-query';
 import { createTRPCReact, httpBatchLink } from '@trpc/react-query';
 import superjson from 'superjson';
-import type { AppRouter } from '../../backend/trpc';
+import type { AppRouter } from '@/backend/trpc';
 
 // Re-export AppRouter type for use in frontend components
 export type { AppRouter };

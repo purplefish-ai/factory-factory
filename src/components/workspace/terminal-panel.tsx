@@ -162,10 +162,11 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           }));
 
           // Set the first tab as active
-          if (restoredTabs.length > 0 && restoredTabs[0].terminalId) {
-            const firstTerminalId = restoredTabs[0].terminalId;
+          if (restoredTabs.length > 0 && restoredTabs[0]?.terminalId) {
+            const firstTerminalId = restoredTabs[0]?.terminalId;
+            const firstTabId = restoredTabs[0]?.id;
             setTimeout(() => {
-              setActiveTabId(restoredTabs[0].id);
+              setActiveTabId(firstTabId ?? null);
               // Notify backend of active terminal
               setActiveRef.current(firstTerminalId);
             }, 0);
@@ -237,6 +238,9 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
             const closedIndex = prev.findIndex((t) => t.id === id);
             // Prefer the tab before the closed one, or the first remaining tab
             const newActiveTab = filtered[closedIndex - 1] ?? filtered[0];
+            if (!newActiveTab) {
+              return filtered;
+            }
             setTimeout(() => {
               setActiveTabId(newActiveTab.id);
               // Notify backend of new active terminal

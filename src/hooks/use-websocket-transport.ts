@@ -17,6 +17,8 @@ const MAX_FLUSH_BATCH_SIZE = 10;
  */
 const STALE_MESSAGE_TYPES = new Set(['stop', 'interrupt']);
 
+export type WebSocketQueuePolicy = 'replay' | 'drop';
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -30,6 +32,14 @@ export interface UseWebSocketTransportOptions {
   onConnected?: () => void;
   /** Called when connection is lost. */
   onDisconnected?: () => void;
+  /**
+   * How to handle outbound messages while disconnected.
+   * - replay: queue and replay on reconnect
+   * - drop: drop immediately and return false from send
+   *
+   * @default 'replay'
+   */
+  queuePolicy?: WebSocketQueuePolicy;
 }
 
 export interface UseWebSocketTransportReturn {
@@ -70,7 +80,7 @@ export interface UseWebSocketTransportReturn {
 export function useWebSocketTransport(
   options: UseWebSocketTransportOptions
 ): UseWebSocketTransportReturn {
-  const { url, onMessage, onConnected, onDisconnected } = options;
+  const { url, onMessage, onConnected, onDisconnected, queuePolicy = 'replay' } = options;
 
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -126,6 +136,12 @@ export function useWebSocketTransport(
     ws.onopen = () => {
       setConnected(true);
       reconnectAttemptsRef.current = 0;
+
+      if (queuePolicy !== 'replay') {
+        messageQueueRef.current = [];
+        onConnectedRef.current?.();
+        return;
+      }
 
       // Flush queued messages, filtering out stale time-sensitive ones
       const queue = messageQueueRef.current;
@@ -190,7 +206,7 @@ export function useWebSocketTransport(
     ws.onerror = () => {
       // WebSocket errors are handled by onclose
     };
-  }, [url]);
+  }, [queuePolicy, url]);
 
   // Connect when URL becomes available, disconnect when it becomes null
   useEffect(() => {
@@ -222,19 +238,26 @@ export function useWebSocketTransport(
   }, [url, connect]);
 
   // Send a message (JSON stringified), queuing if disconnected
-  const send = useCallback((message: unknown): boolean => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
-      return true;
-    }
+  const send = useCallback(
+    (message: unknown): boolean => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify(message));
+        return true;
+      }
 
-    // Queue message for later delivery when reconnected
-    if (messageQueueRef.current.length < MAX_QUEUE_SIZE) {
-      messageQueueRef.current.push(message);
-    }
-    // Returns false to indicate message was queued, not sent immediately
-    return false;
-  }, []);
+      if (queuePolicy !== 'replay') {
+        return false;
+      }
+
+      // Queue message for later delivery when reconnected
+      if (messageQueueRef.current.length < MAX_QUEUE_SIZE) {
+        messageQueueRef.current.push(message);
+      }
+      // Returns false to indicate message was queued, not sent immediately
+      return false;
+    },
+    [queuePolicy]
+  );
 
   // Manual reconnect
   const reconnect = useCallback(() => {

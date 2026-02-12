@@ -2,9 +2,9 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Prisma, Project } from '@prisma-gen/client';
-import { GitClientFactory } from '../clients/git.client';
-import { prisma } from '../db';
-import { gitCommandC } from '../lib/shell';
+import { GitClientFactory } from '@/backend/clients/git.client';
+import { prisma } from '@/backend/db';
+import { gitCommandC } from '@/backend/lib/shell';
 
 /**
  * Execute a command with proper argument separation (no shell injection).
@@ -43,6 +43,9 @@ type ProjectWithWorkspaces = Prisma.ProjectGetPayload<{
 // Simplified input - only repoPath is required
 interface CreateProjectInput {
   repoPath: string;
+  startupScriptCommand?: string;
+  startupScriptPath?: string;
+  startupScriptTimeout?: number;
 }
 
 interface UpdateProjectInput {
@@ -100,14 +103,14 @@ export function parseGitHubRemoteUrl(remoteUrl: string): { owner: string; repo: 
   // Repo name: alphanumeric, hyphens, underscores, dots (no slashes)
   const sshMatch = remoteUrl.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (sshMatch) {
-    return { owner: sshMatch[1], repo: sshMatch[2] };
+    return { owner: sshMatch[1] as string, repo: sshMatch[2] as string };
   }
 
   // HTTPS format: https://github.com/owner/repo.git or https://github.com/owner/repo
   // Repo name: alphanumeric, hyphens, underscores, dots (no slashes)
   const httpsMatch = remoteUrl.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (httpsMatch) {
-    return { owner: httpsMatch[1], repo: httpsMatch[2] };
+    return { owner: httpsMatch[1] as string, repo: httpsMatch[2] as string };
   }
 
   return null;
@@ -182,6 +185,9 @@ class ProjectAccessor {
             defaultBranch: 'main',
             githubOwner: githubInfo?.owner ?? null,
             githubRepo: githubInfo?.repo ?? null,
+            startupScriptCommand: data.startupScriptCommand ?? null,
+            startupScriptPath: data.startupScriptPath ?? null,
+            startupScriptTimeout: data.startupScriptTimeout ?? 300,
           },
         });
       } catch (error) {

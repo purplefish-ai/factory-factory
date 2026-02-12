@@ -6,7 +6,7 @@
  * - Input drafts (preserved across tab switches)
  *
  * Note: Message queue is now managed on the backend. Queue state is restored
- * via messages_snapshot WebSocket event, not frontend persistence.
+ * via session_snapshot WebSocket event, not frontend persistence.
  *
  * Settings use sessionStorage (per-tab persistence).
  * Drafts use sessionStorage keyed by session ID.

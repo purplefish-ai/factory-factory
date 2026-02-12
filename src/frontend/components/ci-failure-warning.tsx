@@ -1,4 +1,4 @@
-import type { CIStatus } from '@prisma-gen/browser';
+import type { CIStatus } from '@factory-factory/core';
 import { AlertTriangle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 

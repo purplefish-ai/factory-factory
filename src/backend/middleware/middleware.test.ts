@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppContext } from '../app-context';
+import type { AppContext } from '@/backend/app-context';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 // Mock configService CORS config
 const mockGetCorsConfig = vi.fn();
@@ -42,6 +43,9 @@ function createMockRes() {
 }
 
 type MockRes = ReturnType<typeof createMockRes>;
+const toResponse = (res: MockRes): Response => unsafeCoerce<Response>(res);
+const toNext = (): NextFunction => unsafeCoerce<NextFunction>(vi.fn());
+const toAppContext = (value: unknown): AppContext => unsafeCoerce<AppContext>(value);
 
 describe('securityMiddleware', () => {
   let mockReq: Request;
@@ -51,32 +55,32 @@ describe('securityMiddleware', () => {
   beforeEach(() => {
     mockReq = createMockReq();
     mockRes = createMockRes();
-    mockNext = vi.fn() as unknown as NextFunction;
+    mockNext = toNext();
   });
 
   it('should set X-Content-Type-Options header to nosniff', () => {
-    securityMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    securityMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockRes.header).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
     expect(mockRes.headers['X-Content-Type-Options']).toBe('nosniff');
   });
 
   it('should set X-Frame-Options header to DENY', () => {
-    securityMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    securityMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockRes.header).toHaveBeenCalledWith('X-Frame-Options', 'DENY');
     expect(mockRes.headers['X-Frame-Options']).toBe('DENY');
   });
 
   it('should set X-XSS-Protection header', () => {
-    securityMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    securityMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockRes.header).toHaveBeenCalledWith('X-XSS-Protection', '1; mode=block');
     expect(mockRes.headers['X-XSS-Protection']).toBe('1; mode=block');
   });
 
   it('should set Referrer-Policy header', () => {
-    securityMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    securityMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockRes.header).toHaveBeenCalledWith(
       'Referrer-Policy',
@@ -86,13 +90,13 @@ describe('securityMiddleware', () => {
   });
 
   it('should call next()', () => {
-    securityMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    securityMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockNext).toHaveBeenCalledTimes(1);
   });
 
   it('should set all security headers in a single call', () => {
-    securityMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    securityMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockRes.header).toHaveBeenCalledTimes(4);
     expect(mockRes.headers).toEqual({
@@ -111,18 +115,18 @@ describe('corsMiddleware', () => {
 
   beforeEach(() => {
     mockRes = createMockRes();
-    mockNext = vi.fn() as unknown as NextFunction;
+    mockNext = toNext();
     // Reset the mock to default allowed origins
     mockGetCorsConfig.mockReturnValue({
       allowedOrigins: ['http://localhost:3000', 'http://localhost:3001'],
     });
-    const appContext = {
+    const appContext = toAppContext({
       services: {
         configService: {
           getCorsConfig: () => mockGetCorsConfig(),
         },
       },
-    } as unknown as AppContext;
+    });
     corsMiddleware = createCorsMiddleware(appContext);
   });
 
@@ -136,7 +140,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://localhost:3000' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('http://localhost:3000');
     });
@@ -146,7 +150,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://localhost:3001' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('http://localhost:3001');
     });
@@ -156,7 +160,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://evil.com' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBeUndefined();
     });
@@ -164,7 +168,7 @@ describe('corsMiddleware', () => {
     it('should not set Access-Control-Allow-Origin when no origin header is present', () => {
       const mockReq = createMockReq({ headers: {} });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBeUndefined();
     });
@@ -178,7 +182,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'https://example.com' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBe('https://example.com');
     });
@@ -192,7 +196,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://localhost:3000' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Origin']).toBeUndefined();
     });
@@ -202,7 +206,7 @@ describe('corsMiddleware', () => {
     it('should set Access-Control-Allow-Methods header', () => {
       const mockReq = createMockReq();
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Methods']).toBe(
         'GET, POST, PUT, DELETE, OPTIONS'
@@ -212,7 +216,7 @@ describe('corsMiddleware', () => {
     it('should set Access-Control-Allow-Headers header', () => {
       const mockReq = createMockReq();
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Headers']).toBe(
         'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Project-Id, X-Top-Level-Task-Id'
@@ -222,7 +226,7 @@ describe('corsMiddleware', () => {
     it('should set Access-Control-Allow-Credentials header to true', () => {
       const mockReq = createMockReq();
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.headers['Access-Control-Allow-Credentials']).toBe('true');
     });
@@ -235,7 +239,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://localhost:3000' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockRes.sendStatus).toHaveBeenCalledWith(200);
     });
@@ -246,7 +250,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://localhost:3000' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockNext).not.toHaveBeenCalled();
     });
@@ -257,7 +261,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://localhost:3000' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockNext).toHaveBeenCalledTimes(1);
     });
@@ -268,7 +272,7 @@ describe('corsMiddleware', () => {
         headers: { origin: 'http://localhost:3000' },
       });
 
-      corsMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+      corsMiddleware(mockReq, toResponse(mockRes), mockNext);
 
       expect(mockNext).toHaveBeenCalledTimes(1);
     });
@@ -282,8 +286,8 @@ describe('requestLoggerMiddleware', () => {
 
   beforeEach(() => {
     mockRes = createMockRes();
-    mockNext = vi.fn() as unknown as NextFunction;
-    const appContext = {
+    mockNext = toNext();
+    const appContext = toAppContext({
       services: {
         createLogger: () => ({
           info: vi.fn(),
@@ -292,14 +296,14 @@ describe('requestLoggerMiddleware', () => {
           error: vi.fn(),
         }),
       },
-    } as unknown as AppContext;
+    });
     requestLoggerMiddleware = createRequestLoggerMiddleware(appContext);
   });
 
   it('should call next() immediately', () => {
     const mockReq = createMockReq();
 
-    requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    requestLoggerMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockNext).toHaveBeenCalledTimes(1);
   });
@@ -307,7 +311,7 @@ describe('requestLoggerMiddleware', () => {
   it('should register a finish event listener on the response', () => {
     const mockReq = createMockReq();
 
-    requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    requestLoggerMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     expect(mockRes.on).toHaveBeenCalledWith('finish', expect.any(Function));
   });
@@ -315,15 +319,15 @@ describe('requestLoggerMiddleware', () => {
   it('should log request details on response finish', () => {
     const mockReq = createMockReq({
       method: 'POST',
-      path: '/api/projects',
+      path: '/api/trpc/project.list',
     });
     mockRes.statusCode = 201;
 
-    requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    requestLoggerMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     // Trigger the finish event
     expect(mockRes.finishCallbacks.length).toBe(1);
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     // The logger.debug should have been called
     // We can't easily verify the exact call since the logger is mocked,
@@ -336,10 +340,10 @@ describe('requestLoggerMiddleware', () => {
       path: '/health',
     });
 
-    requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    requestLoggerMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     // Trigger the finish event
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     // The middleware should have registered the callback but skipped logging
     // We verify this by ensuring the callback completes without error
@@ -352,10 +356,10 @@ describe('requestLoggerMiddleware', () => {
       path: '/health/ready',
     });
 
-    requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    requestLoggerMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     // Trigger the finish event
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     // The middleware should have registered the callback but skipped logging
     expect(mockNext).toHaveBeenCalled();
@@ -367,10 +371,10 @@ describe('requestLoggerMiddleware', () => {
       path: '/health/db/status',
     });
 
-    requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    requestLoggerMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     // Trigger the finish event
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     expect(mockNext).toHaveBeenCalled();
   });
@@ -381,10 +385,10 @@ describe('requestLoggerMiddleware', () => {
       path: '/api/health-check',
     });
 
-    requestLoggerMiddleware(mockReq, mockRes as unknown as Response, mockNext);
+    requestLoggerMiddleware(mockReq, toResponse(mockRes), mockNext);
 
     // Trigger the finish event - this should log (not skip)
-    mockRes.finishCallbacks[0]();
+    mockRes.finishCallbacks[0]!();
 
     expect(mockNext).toHaveBeenCalled();
   });
@@ -395,9 +399,9 @@ describe('requestLoggerMiddleware', () => {
     for (const method of methods) {
       const mockReq = createMockReq({ method, path: '/api/test' });
       const res = createMockRes();
-      const next = vi.fn() as unknown as NextFunction;
+      const next = toNext();
 
-      requestLoggerMiddleware(mockReq, res as unknown as Response, next);
+      requestLoggerMiddleware(mockReq, toResponse(res), next);
 
       expect(next).toHaveBeenCalled();
       expect(res.on).toHaveBeenCalledWith('finish', expect.any(Function));
@@ -411,12 +415,12 @@ describe('requestLoggerMiddleware', () => {
       const mockReq = createMockReq({ path: '/api/test' });
       const res = createMockRes();
       res.statusCode = statusCode;
-      const next = vi.fn() as unknown as NextFunction;
+      const next = toNext();
 
-      requestLoggerMiddleware(mockReq, res as unknown as Response, next);
+      requestLoggerMiddleware(mockReq, toResponse(res), next);
 
       // Trigger finish callback
-      res.finishCallbacks[0]();
+      res.finishCallbacks[0]!();
 
       expect(next).toHaveBeenCalled();
     }

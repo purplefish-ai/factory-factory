@@ -1,4 +1,7 @@
+import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@factory-factory/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SessionSummary } from '@/shared/session-runtime';
+import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 // =============================================================================
 // Types
@@ -13,9 +16,10 @@ export interface ServerWorkspace {
   branchName?: string | null;
   prUrl?: string | null;
   prNumber?: number | null;
-  prState?: string | null;
-  prCiStatus?: string | null;
+  prState?: PRState | null;
+  prCiStatus?: CIStatus | null;
   isWorking: boolean;
+  sessionSummaries?: SessionSummary[];
   gitStats: {
     total: number;
     additions: number;
@@ -24,12 +28,15 @@ export interface ServerWorkspace {
   } | null;
   lastActivityAt?: string | null;
   ratchetEnabled?: boolean;
-  ratchetState?: string | null;
+  ratchetState?: RatchetState | null;
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   ciObservation?: string | null;
+  runScriptStatus?: RunScriptStatus | null;
   cachedKanbanColumn?: string | null;
   stateComputedAt?: string | null;
+  sidebarStatus?: WorkspaceSidebarStatus;
+  pendingRequestType?: 'plan_approval' | 'user_question' | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {
@@ -120,12 +127,17 @@ export function useWorkspaceListState(
   // Track workspace being created (before it has an ID)
   const [creatingWorkspace, setCreatingWorkspace] = useState<{ name: string } | null>(null);
 
-  // Track workspace being archived (ID + cached data for display)
-  const [archivingWorkspace, setArchivingWorkspace] = useState<{
-    id: string;
-    name: string;
-    branchName?: string | null;
-  } | null>(null);
+  // Track workspaces being archived (ID + cached data for display)
+  const [archivingWorkspaces, setArchivingWorkspaces] = useState<
+    Map<
+      string,
+      {
+        id: string;
+        name: string;
+        branchName?: string | null;
+      }
+    >
+  >(new Map());
 
   // Check if creating workspace has appeared in the server list
   const creatingWorkspaceInList = creatingWorkspace
@@ -161,7 +173,7 @@ export function useWorkspaceListState(
       const sortedWorkspaces = sortWorkspaces(serverWorkspaces, customOrder);
 
       for (const workspace of sortedWorkspaces) {
-        const isArchiving = archivingWorkspace?.id === workspace.id;
+        const isArchiving = archivingWorkspaces.has(workspace.id);
         items.push({
           ...workspace,
           uiState: isArchiving ? 'archiving' : 'normal',
@@ -169,16 +181,16 @@ export function useWorkspaceListState(
       }
     }
 
-    // If archiving workspace is no longer in server list but still in archiving state,
-    // we DON'T add it back - it's been successfully archived and removed.
-    // The archivingWorkspace state will be cleared after a brief delay for visual feedback.
+    // If archiving workspaces are no longer in server list but still in archiving state,
+    // we DON'T add them back - they've been successfully archived and removed.
+    // The archivingWorkspaces state will be cleared after a brief delay for visual feedback.
 
     return items;
   }, [
     serverWorkspaces,
     creatingWorkspace,
     creatingWorkspaceInList,
-    archivingWorkspace,
+    archivingWorkspaces,
     customOrder,
   ]);
 
@@ -189,22 +201,36 @@ export function useWorkspaceListState(
     }
   }, [creatingWorkspace, creatingWorkspaceInList]);
 
-  // Check if archiving workspace has been removed from server list
-  const archivingWorkspaceInList = archivingWorkspace
-    ? serverWorkspaces?.some((w) => w.id === archivingWorkspace.id)
-    : false;
-
-  // Clear archiving state after workspace is removed and a brief delay
+  // Clear archiving state after workspaces are removed and a brief delay
   useEffect(() => {
-    if (!archivingWorkspace || archivingWorkspaceInList) {
+    if (archivingWorkspaces.size === 0) {
       return;
     }
+
+    const workspacesToClear: string[] = [];
+    for (const [id] of archivingWorkspaces) {
+      const stillInList = serverWorkspaces?.some((w) => w.id === id);
+      if (!stillInList) {
+        workspacesToClear.push(id);
+      }
+    }
+
+    if (workspacesToClear.length === 0) {
+      return;
+    }
+
     // Small delay for visual feedback before clearing
     const timer = setTimeout(() => {
-      setArchivingWorkspace(null);
+      setArchivingWorkspaces((prev) => {
+        const next = new Map(prev);
+        for (const id of workspacesToClear) {
+          next.delete(id);
+        }
+        return next;
+      });
     }, 300);
     return () => clearTimeout(timer);
-  }, [archivingWorkspace, archivingWorkspaceInList]);
+  }, [archivingWorkspaces, serverWorkspaces]);
 
   // Get existing workspace names (including creating workspace to prevent duplicates)
   const existingNames = useMemo(() => {
@@ -227,27 +253,35 @@ export function useWorkspaceListState(
     (id: string) => {
       const workspace = serverWorkspaces?.find((w) => w.id === id);
       if (workspace) {
-        setArchivingWorkspace({
-          id: workspace.id,
-          name: workspace.name,
-          branchName: workspace.branchName,
+        setArchivingWorkspaces((prev) => {
+          const next = new Map(prev);
+          next.set(id, {
+            id: workspace.id,
+            name: workspace.name,
+            branchName: workspace.branchName,
+          });
+          return next;
         });
       }
     },
     [serverWorkspaces]
   );
 
-  const cancelArchiving = useCallback(
-    (id?: string) => {
-      if (!archivingWorkspace) {
-        return;
+  const cancelArchiving = useCallback((id?: string) => {
+    if (!id) {
+      // If no ID provided, clear all
+      setArchivingWorkspaces(new Map());
+      return;
+    }
+    setArchivingWorkspaces((prev) => {
+      if (!prev.has(id)) {
+        return prev;
       }
-      if (!id || archivingWorkspace.id === id) {
-        setArchivingWorkspace(null);
-      }
-    },
-    [archivingWorkspace]
-  );
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
 
   return {
     workspaceList,

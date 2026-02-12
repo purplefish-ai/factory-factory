@@ -32,10 +32,12 @@ function getAssistantCopyText(message: ChatMessage['message']): string | null {
   if (
     message.message &&
     Array.isArray(message.message.content) &&
-    message.message.content.length === 1 &&
-    isThinkingContent(message.message.content[0])
+    message.message.content.length === 1
   ) {
-    return message.message.content[0].thinking;
+    const firstContent = message.message.content[0];
+    if (firstContent && isThinkingContent(firstContent)) {
+      return firstContent.thinking;
+    }
   }
 
   return null;

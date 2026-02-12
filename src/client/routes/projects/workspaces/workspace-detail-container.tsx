@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
-
+import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
   useSelectedSessionId,
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
+import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
 export function WorkspaceDetailContainer() {
@@ -19,16 +20,8 @@ export function WorkspaceDetailContainer() {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
 
-  const {
-    workspace,
-    workspaceLoading,
-    claudeSessions,
-    workflows,
-    recommendedWorkflow,
-    initialDbSessionId,
-    maxSessions,
-    invalidateWorkspace,
-  } = useWorkspaceData({ workspaceId: workspaceId });
+  const { workspace, workspaceLoading, claudeSessions, initialDbSessionId, maxSessions } =
+    useWorkspaceData({ workspaceId: workspaceId });
 
   const { rightPanelVisible, activeTabId, clearScrollState } = useWorkspacePanel();
 
@@ -37,11 +30,17 @@ export function WorkspaceDetailContainer() {
     { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
   );
 
-  const { workspaceInitStatus, isInitializing } = useWorkspaceInitStatus(
+  const { workspaceInitStatus, isScriptFailed } = useWorkspaceInitStatus(
     workspaceId,
     workspace,
     utils
   );
+  useEffect(() => {
+    const phase = workspaceInitStatus?.phase;
+    if (phase === 'READY' || phase === 'ARCHIVED') {
+      forgetResumeWorkspace(workspaceId);
+    }
+  }, [workspaceId, workspaceInitStatus?.phase]);
 
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
     initialDbSessionId ?? null
@@ -65,6 +64,7 @@ export function WorkspaceDetailContainer() {
     inputAttachments,
     queuedMessages,
     removeQueuedMessage,
+    resumeQueuedMessages,
     latestThinking,
     pendingMessages,
     isCompacting,
@@ -87,21 +87,31 @@ export function WorkspaceDetailContainer() {
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
-    workingDir: workspace?.worktreePath ?? undefined,
     dbSessionId: selectedDbSessionId,
   });
 
-  const running = sessionStatus.phase === 'running';
   const loadingSession = sessionStatus.phase === 'loading';
   const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
+  const isIssueAutoStartPending =
+    workspace?.creationSource === 'GITHUB_ISSUE' &&
+    selectedDbSessionId !== null &&
+    (sessionStatus.phase === 'loading' || sessionStatus.phase === 'ready') &&
+    processStatus.state === 'unknown' &&
+    messages.some((message) => message.source === 'user') &&
+    !messages.some((message) => message.source === 'claude');
 
-  const wasRunningRef = useRef(false);
-  useEffect(() => {
-    if (wasRunningRef.current && !running) {
-      invalidateWorkspace();
-    }
-    wasRunningRef.current = running;
-  }, [running, invalidateWorkspace]);
+  const sessionSummariesById = useMemo(
+    () =>
+      new Map((workspace?.sessionSummaries ?? []).map((summary) => [summary.sessionId, summary])),
+    [workspace?.sessionSummaries]
+  );
+  const workspaceRunning = useMemo(
+    () =>
+      Array.from(sessionSummariesById.values()).some(
+        (summary) => summary.activity === 'WORKING' || summary.runtimePhase === 'running'
+      ),
+    [sessionSummariesById]
+  );
 
   const {
     createSession,
@@ -112,7 +122,6 @@ export function WorkspaceDetailContainer() {
     preferredIde,
     handleSelectSession,
     handleCloseSession,
-    handleWorkflowSelect,
     handleNewChat,
     handleQuickAction,
   } = useSessionManagement({
@@ -149,8 +158,16 @@ export function WorkspaceDetailContainer() {
   );
 
   const handleArchiveRequest = useCallback(() => {
+    // If PR is merged, skip confirmation and archive immediately.
+    // Default commitUncommitted to true so we never lose work if git status hasn't loaded yet.
+    if (workspace?.prState === 'MERGED') {
+      handleArchive(true);
+      return;
+    }
+
+    // Otherwise show confirmation dialog
     setArchiveDialogOpen(true);
-  }, []);
+  }, [workspace?.prState, handleArchive]);
 
   const handleBackToWorkspaces = useCallback(
     () => navigate(`/projects/${slug}/workspaces`),
@@ -205,84 +222,87 @@ export function WorkspaceDetailContainer() {
     inputRef,
   });
 
-  const runningSessionId = getRunningSessionId(running, selectedDbSessionId);
+  const chatViewModel: ChatContentProps = {
+    workspaceId,
+    messages,
+    sessionStatus,
+    messagesEndRef,
+    viewportRef,
+    isNearBottom,
+    scrollToBottom,
+    onScroll: handleChatScroll,
+    pendingRequest,
+    approvePermission,
+    answerQuestion,
+    connected,
+    sendMessage,
+    stopChat,
+    inputRef,
+    chatSettings,
+    updateSettings,
+    inputDraft,
+    setInputDraft,
+    inputAttachments,
+    setInputAttachments,
+    queuedMessages,
+    removeQueuedMessage,
+    resumeQueuedMessages,
+    latestThinking,
+    pendingMessages,
+    isCompacting,
+    permissionMode,
+    slashCommands,
+    slashCommandsLoaded,
+    tokenStats,
+    rewindPreview,
+    startRewindPreview,
+    confirmRewind,
+    cancelRewind,
+    getUuidForMessageId,
+    autoStartPending: isIssueAutoStartPending,
+    initBanner: workspaceInitStatus?.chatBanner ?? null,
+  };
 
   return (
     <WorkspaceDetailView
-      workspaceLoading={workspaceLoading}
-      workspace={workspace}
-      workspaceId={workspaceId}
-      handleBackToWorkspaces={handleBackToWorkspaces}
-      isInitializing={isInitializing}
-      workspaceInitStatus={workspaceInitStatus}
-      archivePending={archiveWorkspace.isPending}
-      availableIdes={availableIdes}
-      preferredIde={preferredIde}
-      openInIde={openInIde}
-      handleArchiveRequest={handleArchiveRequest}
-      handleQuickAction={handleQuickAction}
-      running={running}
-      isCreatingSession={createSession.isPending}
-      hasChanges={hasChanges}
-      claudeSessions={claudeSessions}
-      workflows={workflows}
-      recommendedWorkflow={recommendedWorkflow}
-      selectedDbSessionId={selectedDbSessionId}
-      runningSessionId={runningSessionId}
-      isDeletingSession={deleteSession.isPending}
-      handleWorkflowSelect={handleWorkflowSelect}
-      handleSelectSession={handleSelectSession}
-      handleNewChat={handleNewChat}
-      handleCloseChatSession={handleCloseChatSession}
-      maxSessions={maxSessions}
-      hasWorktreePath={!!workspace?.worktreePath}
-      messages={messages}
-      sessionStatus={sessionStatus}
-      processStatus={processStatus}
-      messagesEndRef={messagesEndRef}
-      viewportRef={viewportRef}
-      isNearBottom={isNearBottom}
-      scrollToBottom={scrollToBottom}
-      handleChatScroll={handleChatScroll}
-      pendingRequest={pendingRequest}
-      approvePermission={approvePermission}
-      answerQuestion={answerQuestion}
-      connected={connected}
-      sendMessage={sendMessage}
-      stopChat={stopChat}
-      inputRef={inputRef}
-      chatSettings={chatSettings}
-      updateSettings={updateSettings}
-      inputDraft={inputDraft}
-      setInputDraft={setInputDraft}
-      inputAttachments={inputAttachments}
-      setInputAttachments={setInputAttachments}
-      queuedMessages={queuedMessages}
-      removeQueuedMessage={removeQueuedMessage}
-      latestThinking={latestThinking}
-      pendingMessages={pendingMessages}
-      isCompacting={isCompacting}
-      permissionMode={permissionMode}
-      slashCommands={slashCommands}
-      slashCommandsLoaded={slashCommandsLoaded}
-      tokenStats={tokenStats}
-      rewindPreview={rewindPreview}
-      startRewindPreview={startRewindPreview}
-      confirmRewind={confirmRewind}
-      cancelRewind={cancelRewind}
-      getUuidForMessageId={getUuidForMessageId}
+      workspaceState={{
+        workspaceLoading,
+        workspace,
+        workspaceId,
+        handleBackToWorkspaces,
+        isScriptFailed,
+        workspaceInitStatus,
+      }}
+      header={{
+        archivePending: archiveWorkspace.isPending,
+        availableIdes,
+        preferredIde,
+        openInIde,
+        handleArchiveRequest,
+        handleQuickAction,
+        running: workspaceRunning,
+        isCreatingSession: createSession.isPending,
+        hasChanges,
+      }}
+      sessionTabs={{
+        claudeSessions,
+        selectedDbSessionId,
+        sessionSummariesById,
+        isDeletingSession: deleteSession.isPending,
+        handleSelectSession,
+        handleNewChat,
+        handleCloseChatSession,
+        maxSessions,
+        hasWorktreePath: !!workspace?.worktreePath,
+      }}
+      chat={chatViewModel}
       rightPanelVisible={rightPanelVisible}
-      archiveDialogOpen={archiveDialogOpen}
-      setArchiveDialogOpen={setArchiveDialogOpen}
-      hasUncommitted={hasUncommitted}
-      handleArchive={handleArchive}
+      archiveDialog={{
+        open: archiveDialogOpen,
+        setOpen: setArchiveDialogOpen,
+        hasUncommitted,
+        onConfirm: handleArchive,
+      }}
     />
   );
-}
-
-function getRunningSessionId(running: boolean, selectedDbSessionId: string | null) {
-  if (!(running && selectedDbSessionId)) {
-    return undefined;
-  }
-  return selectedDbSessionId;
 }

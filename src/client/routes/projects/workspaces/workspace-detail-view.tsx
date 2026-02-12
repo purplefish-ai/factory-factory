@@ -1,23 +1,26 @@
-import type { Dispatch, RefObject, SetStateAction } from 'react';
-import type { useChatWebSocket } from '@/components/chat';
+import type { Dispatch, SetStateAction } from 'react';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/components/workspace';
+import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { Loading } from '@/frontend/components/loading';
 
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
-import { ChatContent } from './workspace-detail-chat-content';
+import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
-import { ArchivingOverlay, InitializationOverlay } from './workspace-overlays';
+import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
-export interface WorkspaceDetailViewProps {
+interface WorkspaceStateProps {
   workspaceLoading: boolean;
   workspace: ReturnType<typeof useWorkspaceData>['workspace'];
   workspaceId: string;
   handleBackToWorkspaces: () => void;
-  isInitializing: boolean;
+  isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
+}
+
+interface HeaderProps {
   archivePending: boolean;
   availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
   preferredIde: string;
@@ -27,138 +30,75 @@ export interface WorkspaceDetailViewProps {
   running: boolean;
   isCreatingSession: boolean;
   hasChanges: boolean | undefined;
+}
+
+interface SessionTabsProps {
   claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
-  workflows: ReturnType<typeof useWorkspaceData>['workflows'];
-  recommendedWorkflow: ReturnType<typeof useWorkspaceData>['recommendedWorkflow'];
   selectedDbSessionId: string | null;
-  runningSessionId: string | undefined;
+  sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isDeletingSession: boolean;
-  handleWorkflowSelect: ReturnType<typeof useSessionManagement>['handleWorkflowSelect'];
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
-  messages: ReturnType<typeof useChatWebSocket>['messages'];
-  sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
-  processStatus: ReturnType<typeof useChatWebSocket>['processStatus'];
-  messagesEndRef: ReturnType<typeof useChatWebSocket>['messagesEndRef'];
-  viewportRef: RefObject<HTMLDivElement | null>;
-  isNearBottom: boolean;
-  scrollToBottom: () => void;
-  handleChatScroll: () => void;
-  pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
-  approvePermission: ReturnType<typeof useChatWebSocket>['approvePermission'];
-  answerQuestion: ReturnType<typeof useChatWebSocket>['answerQuestion'];
-  connected: boolean;
-  sendMessage: ReturnType<typeof useChatWebSocket>['sendMessage'];
-  stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
-  inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
-  chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
-  updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
-  inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
-  setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
-  inputAttachments: ReturnType<typeof useChatWebSocket>['inputAttachments'];
-  setInputAttachments: ReturnType<typeof useChatWebSocket>['setInputAttachments'];
-  queuedMessages: ReturnType<typeof useChatWebSocket>['queuedMessages'];
-  removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
-  latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
-  pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
-  isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
-  permissionMode: ReturnType<typeof useChatWebSocket>['permissionMode'];
-  slashCommands: ReturnType<typeof useChatWebSocket>['slashCommands'];
-  slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
-  tokenStats: ReturnType<typeof useChatWebSocket>['tokenStats'];
-  rewindPreview: ReturnType<typeof useChatWebSocket>['rewindPreview'];
-  startRewindPreview: ReturnType<typeof useChatWebSocket>['startRewindPreview'];
-  confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
-  cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
-  getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
-  rightPanelVisible: boolean;
-  archiveDialogOpen: boolean;
-  setArchiveDialogOpen: Dispatch<SetStateAction<boolean>>;
+}
+
+interface ArchiveDialogProps {
+  open: boolean;
+  setOpen: Dispatch<SetStateAction<boolean>>;
   hasUncommitted: boolean;
-  handleArchive: (commitUncommitted: boolean) => void;
+  onConfirm: (commitUncommitted: boolean) => void;
+}
+
+export interface WorkspaceDetailViewProps {
+  workspaceState: WorkspaceStateProps;
+  header: HeaderProps;
+  sessionTabs: SessionTabsProps;
+  chat: ChatContentProps;
+  rightPanelVisible: boolean;
+  archiveDialog: ArchiveDialogProps;
+}
+
+function ScriptBanner({
+  workspaceId,
+  isScriptFailed,
+  workspaceInitStatus,
+}: {
+  workspaceId: string;
+  isScriptFailed: boolean;
+  workspaceInitStatus: WorkspaceStateProps['workspaceInitStatus'];
+}) {
+  if (isScriptFailed) {
+    return (
+      <ScriptFailedBanner
+        workspaceId={workspaceId}
+        initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
+        initOutput={workspaceInitStatus?.initOutput ?? null}
+        hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+      />
+    );
+  }
+  return null;
 }
 
 export function WorkspaceDetailView({
-  workspaceLoading,
-  workspace,
-  workspaceId,
-  handleBackToWorkspaces,
-  isInitializing,
-  workspaceInitStatus,
-  archivePending,
-  availableIdes,
-  preferredIde,
-  openInIde,
-  handleArchiveRequest,
-  handleQuickAction,
-  running,
-  isCreatingSession,
-  hasChanges,
-  claudeSessions,
-  workflows,
-  recommendedWorkflow,
-  selectedDbSessionId,
-  runningSessionId,
-  isDeletingSession,
-  handleWorkflowSelect,
-  handleSelectSession,
-  handleNewChat,
-  handleCloseChatSession,
-  maxSessions,
-  hasWorktreePath,
-  messages,
-  sessionStatus,
-  processStatus,
-  messagesEndRef,
-  viewportRef,
-  isNearBottom,
-  scrollToBottom,
-  handleChatScroll,
-  pendingRequest,
-  approvePermission,
-  answerQuestion,
-  connected,
-  sendMessage,
-  stopChat,
-  inputRef,
-  chatSettings,
-  updateSettings,
-  inputDraft,
-  setInputDraft,
-  inputAttachments,
-  setInputAttachments,
-  queuedMessages,
-  removeQueuedMessage,
-  latestThinking,
-  pendingMessages,
-  isCompacting,
-  permissionMode,
-  slashCommands,
-  slashCommandsLoaded,
-  tokenStats,
-  rewindPreview,
-  startRewindPreview,
-  confirmRewind,
-  cancelRewind,
-  getUuidForMessageId,
+  workspaceState,
+  header,
+  sessionTabs,
+  chat,
   rightPanelVisible,
-  archiveDialogOpen,
-  setArchiveDialogOpen,
-  hasUncommitted,
-  handleArchive,
+  archiveDialog,
 }: WorkspaceDetailViewProps) {
-  if (workspaceLoading) {
+  if (workspaceState.workspaceLoading) {
     return <Loading message="Loading workspace..." />;
   }
 
-  if (!workspace) {
+  if (!workspaceState.workspace) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <p className="text-destructive">Workspace not found</p>
-        <Button variant="outline" onClick={handleBackToWorkspaces}>
+        <Button variant="outline" onClick={workspaceState.handleBackToWorkspaces}>
           Back to workspaces
         </Button>
       </div>
@@ -167,30 +107,26 @@ export function WorkspaceDetailView({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      {isInitializing && (
-        <InitializationOverlay
-          workspaceId={workspaceId}
-          status={workspaceInitStatus?.status ?? 'PROVISIONING'}
-          initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
-          initOutput={workspaceInitStatus?.initOutput ?? null}
-          hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
-        />
-      )}
-
-      {archivePending && <ArchivingOverlay />}
+      {header.archivePending && <ArchivingOverlay />}
 
       <WorkspaceHeader
-        workspace={workspace}
-        workspaceId={workspaceId}
-        availableIdes={availableIdes}
-        preferredIde={preferredIde}
-        openInIde={openInIde}
-        archivePending={archivePending}
-        onArchiveRequest={handleArchiveRequest}
-        handleQuickAction={handleQuickAction}
-        running={running}
-        isCreatingSession={isCreatingSession}
-        hasChanges={hasChanges}
+        workspace={workspaceState.workspace}
+        workspaceId={workspaceState.workspaceId}
+        availableIdes={header.availableIdes}
+        preferredIde={header.preferredIde}
+        openInIde={header.openInIde}
+        archivePending={header.archivePending}
+        onArchiveRequest={header.handleArchiveRequest}
+        handleQuickAction={header.handleQuickAction}
+        running={header.running}
+        isCreatingSession={header.isCreatingSession}
+        hasChanges={header.hasChanges}
+      />
+
+      <ScriptBanner
+        workspaceId={workspaceState.workspaceId}
+        isScriptFailed={workspaceState.isScriptFailed}
+        workspaceInitStatus={workspaceState.workspaceInitStatus}
       />
 
       <ResizablePanelGroup
@@ -202,60 +138,19 @@ export function WorkspaceDetailView({
         <ResizablePanel defaultSize="70%" minSize="30%">
           <div className="h-full flex flex-col min-w-0">
             <WorkspaceContentView
-              workspaceId={workspaceId}
-              claudeSessions={claudeSessions}
-              workflows={workflows}
-              recommendedWorkflow={recommendedWorkflow}
-              selectedSessionId={selectedDbSessionId}
-              runningSessionId={runningSessionId}
-              sessionStatus={sessionStatus}
-              processStatus={processStatus}
-              isCreatingSession={isCreatingSession}
-              isDeletingSession={isDeletingSession}
-              onWorkflowSelect={handleWorkflowSelect}
-              onSelectSession={handleSelectSession}
-              onCreateSession={handleNewChat}
-              onCloseSession={handleCloseChatSession}
-              maxSessions={maxSessions}
-              hasWorktreePath={hasWorktreePath}
+              workspaceId={workspaceState.workspaceId}
+              claudeSessions={sessionTabs.claudeSessions}
+              selectedSessionId={sessionTabs.selectedDbSessionId}
+              sessionSummariesById={sessionTabs.sessionSummariesById}
+              isCreatingSession={header.isCreatingSession}
+              isDeletingSession={sessionTabs.isDeletingSession}
+              onSelectSession={sessionTabs.handleSelectSession}
+              onCreateSession={sessionTabs.handleNewChat}
+              onCloseSession={sessionTabs.handleCloseChatSession}
+              maxSessions={sessionTabs.maxSessions}
+              hasWorktreePath={sessionTabs.hasWorktreePath}
             >
-              <ChatContent
-                workspaceId={workspaceId}
-                messages={messages}
-                sessionStatus={sessionStatus}
-                messagesEndRef={messagesEndRef}
-                viewportRef={viewportRef}
-                isNearBottom={isNearBottom}
-                scrollToBottom={scrollToBottom}
-                onScroll={handleChatScroll}
-                pendingRequest={pendingRequest}
-                approvePermission={approvePermission}
-                answerQuestion={answerQuestion}
-                connected={connected}
-                sendMessage={sendMessage}
-                stopChat={stopChat}
-                inputRef={inputRef}
-                chatSettings={chatSettings}
-                updateSettings={updateSettings}
-                inputDraft={inputDraft}
-                setInputDraft={setInputDraft}
-                inputAttachments={inputAttachments}
-                setInputAttachments={setInputAttachments}
-                queuedMessages={queuedMessages}
-                removeQueuedMessage={removeQueuedMessage}
-                latestThinking={latestThinking}
-                pendingMessages={pendingMessages}
-                isCompacting={isCompacting}
-                permissionMode={permissionMode}
-                slashCommands={slashCommands}
-                slashCommandsLoaded={slashCommandsLoaded}
-                tokenStats={tokenStats}
-                rewindPreview={rewindPreview}
-                startRewindPreview={startRewindPreview}
-                confirmRewind={confirmRewind}
-                cancelRewind={cancelRewind}
-                getUuidForMessageId={getUuidForMessageId}
-              />
+              <ChatContent {...chat} />
             </WorkspaceContentView>
           </div>
         </ResizablePanel>
@@ -265,7 +160,7 @@ export function WorkspaceDetailView({
             <ResizableHandle />
             <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
               <div className="h-full border-l">
-                <RightPanel workspaceId={workspaceId} messages={messages} />
+                <RightPanel workspaceId={workspaceState.workspaceId} messages={chat.messages} />
               </div>
             </ResizablePanel>
           </>
@@ -273,11 +168,10 @@ export function WorkspaceDetailView({
       </ResizablePanelGroup>
 
       <ArchiveWorkspaceDialog
-        open={archiveDialogOpen}
-        onOpenChange={setArchiveDialogOpen}
-        hasUncommitted={hasUncommitted}
-        isPending={archivePending}
-        onConfirm={handleArchive}
+        open={archiveDialog.open}
+        onOpenChange={archiveDialog.setOpen}
+        hasUncommitted={archiveDialog.hasUncommitted}
+        onConfirm={archiveDialog.onConfirm}
       />
     </div>
   );

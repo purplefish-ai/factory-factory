@@ -100,8 +100,8 @@ describe('workflows', () => {
     it('should strip frontmatter from content', () => {
       const workflow = getWorkflow('feature');
 
-      // Content should not contain the frontmatter delimiters or metadata
-      expect(workflow?.content).not.toContain('---');
+      // Content should not start with frontmatter delimiters or contain metadata keys
+      expect(workflow?.content).not.toMatch(/^---/);
       expect(workflow?.content).not.toContain('expectsPR:');
     });
   });
@@ -128,7 +128,8 @@ describe('workflows', () => {
       const content = getWorkflowContent('bugfix');
 
       expect(content).toContain('Bug Fix Workflow');
-      expect(content).not.toContain('---');
+      expect(content).not.toMatch(/^---/);
+      expect(content).not.toContain('expectsPR:');
     });
   });
 
@@ -195,7 +196,7 @@ describe('workflows', () => {
 
       for (const workflow of workflows) {
         // Name should be capitalized (first letter uppercase)
-        expect(workflow.name[0]).toBe(workflow.name[0].toUpperCase());
+        expect(workflow.name[0]!).toBe(workflow.name[0]!.toUpperCase());
       }
     });
   });

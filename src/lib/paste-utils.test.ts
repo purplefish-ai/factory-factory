@@ -15,9 +15,12 @@ vi.mock('./image-utils', async () => {
 import { fileToBase64, MAX_IMAGE_SIZE } from './image-utils';
 
 function createClipboardEvent(items?: DataTransferItem[]): ClipboardEvent {
-  return {
-    clipboardData: items ? ({ items } as unknown as DataTransfer) : undefined,
-  } as ClipboardEvent;
+  const event = new Event('paste') as ClipboardEvent;
+  Object.defineProperty(event, 'clipboardData', {
+    value: items ? { items } : undefined,
+    configurable: true,
+  });
+  return event;
 }
 
 function createClipboardItem(options: { type: string; file?: File | null }): DataTransferItem {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { decisionLogAccessor } from '../resource_accessors/decision-log.accessor';
+import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import { publicProcedure, router } from './trpc';
 
 export const decisionLogRouter = router({
@@ -12,7 +12,7 @@ export const decisionLogRouter = router({
       })
     )
     .query(({ input }) => {
-      return decisionLogAccessor.findByAgentId(input.agentId, input.limit ?? 50);
+      return decisionLogQueryService.findByAgentId(input.agentId, input.limit ?? 50);
     }),
 
   // List recent decision logs across all agents
@@ -25,12 +25,12 @@ export const decisionLogRouter = router({
         .optional()
     )
     .query(({ input }) => {
-      return decisionLogAccessor.findRecent(input?.limit ?? 100);
+      return decisionLogQueryService.findRecent(input?.limit ?? 100);
     }),
 
   // Get decision log by ID
   getById: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const log = await decisionLogAccessor.findById(input.id);
+    const log = await decisionLogQueryService.findById(input.id);
     if (!log) {
       throw new Error(`Decision log not found: ${input.id}`);
     }

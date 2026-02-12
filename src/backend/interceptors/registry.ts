@@ -7,7 +7,7 @@
  * - Selective: Interceptors declare which tools they care about
  */
 
-import { createLogger } from '../services/logger.service';
+import { createLogger } from '@/backend/services/logger.service';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('interceptor-registry');

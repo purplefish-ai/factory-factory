@@ -1,0 +1,11 @@
+language js
+
+or {
+  `z.any()` as $call,
+  `zod.any()` as $call
+} where {
+  register_diagnostic(
+    span=$call,
+    message="Do not use z.any(). Use a specific Zod schema, or z.unknown() with explicit narrowing/validation."
+  )
+}

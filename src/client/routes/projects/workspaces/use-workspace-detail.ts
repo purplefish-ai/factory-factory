@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
-import type { GitHubIssue } from '@/backend/services/github-cli.service';
 import { trpc } from '@/frontend/lib/trpc';
 
 // Re-export useAutoScroll from shared hooks location
@@ -11,22 +10,6 @@ export { useAutoScroll } from '@/hooks/use-auto-scroll';
 // =============================================================================
 // Helpers
 // =============================================================================
-
-/**
- * Generate a prompt from a GitHub issue to send as the first message.
- */
-function generateIssuePrompt(issue: GitHubIssue): string {
-  return `I want to work on the following GitHub issue:
-
-## Issue #${issue.number}: ${issue.title}
-
-${issue.body || 'No description provided.'}
-
----
-Issue URL: ${issue.url}
-
-Please analyze this issue and help me implement a solution.`;
-}
 
 // =============================================================================
 // useWorkspaceData - Fetches workspace and session data
@@ -83,15 +66,6 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
 
-  const { data: workflows } = trpc.session.listWorkflows.useQuery(undefined, {
-    enabled: claudeSessions !== undefined && claudeSessions.length === 0,
-  });
-
-  const { data: recommendedWorkflow } = trpc.session.getRecommendedWorkflow.useQuery(
-    { workspaceId },
-    { enabled: claudeSessions !== undefined && claudeSessions.length === 0 }
-  );
-
   const firstSession = claudeSessions?.[0];
   // Database record ID for the first session
   const initialDbSessionId = firstSession?.id;
@@ -101,8 +75,6 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     workspaceLoading,
     claudeSessions,
     sessionsLoading,
-    workflows,
-    recommendedWorkflow,
     initialDbSessionId,
     maxSessions,
     invalidateWorkspace,
@@ -154,7 +126,6 @@ export interface UseSessionManagementReturn {
   preferredIde: string;
   handleSelectSession: (dbSessionId: string) => void;
   handleCloseSession: (dbSessionId: string) => void;
-  handleWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
   handleNewChat: () => void;
   handleQuickAction: (name: string, prompt: string) => void;
 }
@@ -228,7 +199,7 @@ export function useSessionManagement({
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: () => {
-      navigate(`/projects/${slug}/workspaces`);
+      void navigate(`/projects/${slug}/workspaces`);
     },
   });
 
@@ -285,34 +256,12 @@ export function useSessionManagement({
     const existingNumbers = (claudeSessions ?? [])
       .map((s) => {
         const match = s.name?.match(/^Chat (\d+)$/);
-        return match ? Number.parseInt(match[1], 10) : 0;
+        return match ? Number.parseInt(match[1] as string, 10) : 0;
       })
       .filter((n) => n > 0);
     const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
     return `Chat ${nextNumber}`;
   }, [claudeSessions]);
-
-  const handleWorkflowSelect = useCallback(
-    (workflowId: string, linkedIssue?: GitHubIssue) => {
-      const chatName = getNextChatName();
-      createSession.mutate(
-        { workspaceId, workflow: workflowId, model: selectedModel || undefined, name: chatName },
-        {
-          onSuccess: (session) => {
-            // If there's a linked issue, queue the prompt to auto-send once session is ready
-            if (linkedIssue) {
-              const issuePrompt = generateIssuePrompt(linkedIssue);
-              pendingQuickActionRef.current = { dbSessionId: session.id, prompt: issuePrompt };
-            }
-            // Setting the new session ID triggers WebSocket reconnection automatically
-            setSelectedDbSessionId(session.id);
-            setTimeout(() => inputRef.current?.focus(), 0);
-          },
-        }
-      );
-    },
-    [createSession, workspaceId, getNextChatName, setSelectedDbSessionId, inputRef, selectedModel]
-  );
 
   const handleNewChat = useCallback(() => {
     const name = getNextChatName();
@@ -362,7 +311,6 @@ export function useSessionManagement({
     preferredIde,
     handleSelectSession,
     handleCloseSession,
-    handleWorkflowSelect,
     handleNewChat,
     handleQuickAction,
   };

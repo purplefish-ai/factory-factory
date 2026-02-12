@@ -1,21 +1,15 @@
-import {
-  Activity,
-  Circle,
-  CircleSlash,
-  FileCode,
-  FileDiff,
-  Loader2,
-  type LucideIcon,
-  Plus,
-  XCircle,
-} from 'lucide-react';
+import type { SessionStatus as DbSessionStatus } from '@factory-factory/core';
+import { FileCode, FileDiff, Plus } from 'lucide-react';
 
-import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
+import {
+  deriveSessionTabRuntime,
+  type WorkspaceSessionRuntimeSummary,
+} from './session-tab-runtime';
 import type { MainViewTab } from './workspace-panel-context';
 import { useWorkspacePanel } from './workspace-panel-context';
 
@@ -26,8 +20,8 @@ import { useWorkspacePanel } from './workspace-panel-context';
 interface Session {
   id: string;
   name: string | null;
-  workflow?: string;
-  isWorking?: boolean;
+  workflow?: string | null;
+  status: DbSessionStatus;
 }
 
 // =============================================================================
@@ -48,130 +42,14 @@ function getTabIcon(type: MainViewTab['type']) {
 // Status Dot Component
 // =============================================================================
 
-interface StatusInfo {
-  color: string;
-  pulse: boolean;
-  spin: boolean;
-  label: string;
-  description: string;
-  icon: LucideIcon;
-}
-
-function getStatusInfo(
-  sessionStatus: SessionStatus | undefined,
-  processStatus: ProcessStatus | undefined,
-  isRunning: boolean
-): StatusInfo {
-  // For non-selected sessions, we only know if they're running
-  if (!(sessionStatus && processStatus)) {
-    if (isRunning) {
-      return {
-        color: 'text-brand',
-        pulse: true,
-        spin: false,
-        label: 'Running',
-        description: 'Processing a request',
-        icon: Activity,
-      };
-    }
-    return {
-      color: 'text-emerald-500',
-      pulse: false,
-      spin: false,
-      label: 'Idle',
-      description: 'Ready for input',
-      icon: Circle,
-    };
-  }
-
-  // For selected session, use detailed status
-  const phase = sessionStatus.phase;
-
-  if (phase === 'loading' || processStatus.state === 'unknown') {
-    return {
-      color: 'text-muted-foreground',
-      pulse: false,
-      spin: true,
-      label: 'Loading',
-      description: 'Loading session...',
-      icon: Loader2,
-    };
-  }
-
-  if (phase === 'starting') {
-    return {
-      color: 'text-muted-foreground',
-      pulse: false,
-      spin: true,
-      label: 'Starting',
-      description: 'Launching Claude...',
-      icon: Loader2,
-    };
-  }
-
-  if (phase === 'stopping') {
-    return {
-      color: 'text-brand',
-      pulse: false,
-      spin: true,
-      label: 'Stopping',
-      description: 'Finishing current request...',
-      icon: Loader2,
-    };
-  }
-
-  if (processStatus.state === 'stopped') {
-    if (processStatus.lastExit?.unexpected) {
-      return {
-        color: 'text-destructive',
-        pulse: false,
-        spin: false,
-        label: 'Error',
-        description: `Exited unexpectedly${processStatus.lastExit.code !== null ? ` (code ${processStatus.lastExit.code})` : ''}`,
-        icon: XCircle,
-      };
-    }
-    return {
-      color: 'text-muted-foreground',
-      pulse: false,
-      spin: false,
-      label: 'Stopped',
-      description: 'Send a message to start',
-      icon: CircleSlash,
-    };
-  }
-
-  if (phase === 'running') {
-    return {
-      color: 'text-brand',
-      pulse: true,
-      spin: false,
-      label: 'Running',
-      description: 'Processing your request',
-      icon: Activity,
-    };
-  }
-
-  // idle or ready
-  return {
-    color: 'text-emerald-500',
-    pulse: false,
-    spin: false,
-    label: 'Idle',
-    description: 'Ready for input',
-    icon: Circle,
-  };
-}
-
 interface StatusDotProps {
-  sessionStatus?: SessionStatus;
-  processStatus?: ProcessStatus;
-  isRunning: boolean;
+  sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
+  persistedStatus?: DbSessionStatus;
 }
 
-function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusDotProps) {
-  const status = getStatusInfo(sessionStatus, processStatus, isRunning);
+function StatusDot({ sessionSummary, isCIFix, persistedStatus }: StatusDotProps) {
+  const status = deriveSessionTabRuntime(sessionSummary, persistedStatus);
   const StatusIcon = status.icon;
 
   // CI fix sessions show wrench icon instead of dot
@@ -182,11 +60,11 @@ function StatusDot({ sessionStatus, processStatus, isRunning, isCIFix }: StatusD
           <span className="flex items-center justify-center">
             <RatchetWrenchIcon
               enabled
-              animated={isRunning}
+              animated={status.isRunning}
               className="h-3.5 w-3.5 rounded-[4px] shrink-0"
               iconClassName={cn(
-                isRunning && 'animate-pulse text-brand',
-                !isRunning && 'text-warning'
+                status.isRunning && 'animate-pulse text-brand',
+                !status.isRunning && 'text-warning'
               )}
             />
           </span>
@@ -253,10 +131,9 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
 interface SessionTabItemProps {
   label: string;
   isActive: boolean;
-  isRunning?: boolean;
+  sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
-  sessionStatus?: SessionStatus;
-  processStatus?: ProcessStatus;
+  persistedStatus?: DbSessionStatus;
   onSelect: () => void;
   onClose?: () => void;
 }
@@ -264,10 +141,9 @@ interface SessionTabItemProps {
 function SessionTabItem({
   label,
   isActive,
-  isRunning,
+  sessionSummary,
   isCIFix,
-  sessionStatus,
-  processStatus,
+  persistedStatus,
   onSelect,
   onClose,
 }: SessionTabItemProps) {
@@ -275,10 +151,9 @@ function SessionTabItem({
     <TabButton
       icon={
         <StatusDot
-          sessionStatus={sessionStatus}
-          processStatus={processStatus}
-          isRunning={isRunning ?? false}
+          sessionSummary={sessionSummary}
           isCIFix={isCIFix}
+          persistedStatus={persistedStatus}
         />
       }
       label={label}
@@ -298,11 +173,7 @@ interface MainViewTabBarProps {
   className?: string;
   sessions?: Session[];
   currentSessionId?: string | null;
-  runningSessionId?: string;
-  /** Session status for the currently selected session */
-  sessionStatus?: SessionStatus;
-  /** Process status for the currently selected session */
-  processStatus?: ProcessStatus;
+  sessionSummariesById?: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: () => void;
   onCloseSession?: (sessionId: string) => void;
@@ -315,9 +186,7 @@ export function MainViewTabBar({
   className,
   sessions,
   currentSessionId,
-  runningSessionId,
-  sessionStatus,
-  processStatus,
+  sessionSummariesById,
   onSelectSession,
   onCreateSession,
   onCloseSession,
@@ -348,10 +217,9 @@ export function MainViewTabBar({
             key={session.id}
             label={session.name ?? `Chat ${index + 1}`}
             isActive={isSelected && activeTabId === 'chat'}
-            isRunning={session.isWorking || session.id === runningSessionId}
+            sessionSummary={sessionSummariesById?.get(session.id)}
             isCIFix={session.workflow === 'ci-fix'}
-            sessionStatus={isSelected ? sessionStatus : undefined}
-            processStatus={isSelected ? processStatus : undefined}
+            persistedStatus={session.status}
             onSelect={() => {
               onSelectSession?.(session.id);
               selectTab('chat');

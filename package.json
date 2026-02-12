@@ -1,6 +1,6 @@
 {
   "name": "factory-factory",
-  "version": "0.2.1",
+  "version": "0.2.8",
   "description": "Workspace-based coding environment for running multiple Claude Code sessions in parallel",
   "private": false,
   "license": "MIT",
@@ -11,7 +11,7 @@
   "bugs": {
     "url": "https://github.com/purplefish-ai/factory-factory/issues"
   },
-  "homepage": "https://github.com/purplefish-ai/factory-factory#readme",
+  "homepage": "https://factoryfactory.ai",
   "keywords": [
     "claude",
     "claude-code",
@@ -40,13 +40,18 @@
   ],
   "scripts": {
     "dev": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
-    "build": "tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && cp -r prompts dist/ && vite build",
+    "build": "node scripts/check-ambiguous-relative-imports.mjs && rm -rf dist && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && cp -r prompts dist/ && vite build",
     "build:storybook": "storybook build",
     "start": "node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "check": "biome check .",
+    "test": "node scripts/ensure-native-modules.mjs node && vitest run",
+    "test:watch": "node scripts/ensure-native-modules.mjs node && vitest",
+    "test:coverage": "node scripts/ensure-native-modules.mjs node && vitest run --coverage",
+    "test:integration": "node scripts/ensure-native-modules.mjs node && vitest run \"src/backend/**/*.integration.test.ts\"",
+    "check:coverage:critical": "node scripts/check-critical-coverage.mjs",
+    "check": "biome check . && pnpm check:ownership",
+    "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",
+    "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
+    "check:ownership": "node scripts/check-single-writer.mjs",
     "check:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
@@ -61,7 +66,7 @@
     "start:electron": "electron .",
     "postinstall": "node scripts/postinstall.mjs",
     "prepare": "husky",
-    "deps:check": "depcruise src --config .dependency-cruiser.cjs",
+    "deps:check": "depcruise src electron --config .dependency-cruiser.cjs",
     "knip": "knip --include files,dependencies,unlisted"
   },
   "dependencies": {
@@ -141,10 +146,12 @@
     "superjson": "^2.2.6",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "tree-kill": "^1.2.2",
     "tw-animate-css": "^1.4.0",
     "vaul": "^1.1.2",
     "ws": "^8.19.0",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@factory-factory/core": "workspace:*"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css}": [
@@ -183,7 +190,6 @@
     "@electron/rebuild": "^4.0.3",
     "@storybook/addon-a11y": "10.2.4",
     "@storybook/addon-docs": "10.2.4",
-    "@storybook/addon-mcp": "^0.2.2",
     "@storybook/addon-themes": "10.2.4",
     "@storybook/react": "10.2.4",
     "@storybook/react-vite": "10.2.4",
@@ -205,6 +211,7 @@
     "electron": "^40.1.0",
     "electron-builder": "^26.7.0",
     "husky": "^9.1.7",
+    "jsdom": "^28.0.0",
     "knip": "^5.83.0",
     "lint-staged": "^16.2.7",
     "next-themes": "^0.4.6",

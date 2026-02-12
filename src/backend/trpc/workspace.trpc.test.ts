@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseGitStatusOutput } from './workspace.trpc';
+import { parseGitStatusOutput } from '@/backend/lib/git-helpers';
 
 // =============================================================================
 // parseGitStatusOutput Tests
@@ -125,7 +125,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('src/components/Button.tsx');
+      expect(result[0]!.path).toBe('src/components/Button.tsx');
     });
 
     it('should handle deeply nested paths', () => {
@@ -133,7 +133,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('src/app/projects/[slug]/workspaces/[id]/page.tsx');
+      expect(result[0]!.path).toBe('src/app/projects/[slug]/workspaces/[id]/page.tsx');
     });
 
     it('should handle files with spaces in name', () => {
@@ -142,7 +142,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('"file with spaces.txt"');
+      expect(result[0]!.path).toBe('"file with spaces.txt"');
     });
 
     it('should handle dotfiles', () => {
@@ -150,7 +150,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('.gitignore');
+      expect(result[0]!.path).toBe('.gitignore');
     });
   });
 
@@ -170,7 +170,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('README.md');
+      expect(result[0]!.path).toBe('README.md');
     });
 
     it('should skip lines that are too short', () => {
@@ -178,7 +178,7 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('README.md');
+      expect(result[0]!.path).toBe('README.md');
     });
 
     it('should preserve leading space in filename parsing (regression test for first-letter bug)', () => {
@@ -188,9 +188,9 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('README.md');
-      expect(result[0].path).not.toBe('EADME.md'); // The bug caused this
-      expect(result[0].staged).toBe(false); // Leading space means not staged
+      expect(result[0]!.path).toBe('README.md');
+      expect(result[0]!.path).not.toBe('EADME.md'); // The bug caused this
+      expect(result[0]!.staged).toBe(false); // Leading space means not staged
     });
 
     it('should correctly identify staged vs unstaged when output starts with space', () => {
@@ -201,8 +201,8 @@ describe('parseGitStatusOutput', () => {
       const unstagedResult = parseGitStatusOutput(unstagedOutput);
       const stagedResult = parseGitStatusOutput(stagedOutput);
 
-      expect(unstagedResult[0].staged).toBe(false);
-      expect(stagedResult[0].staged).toBe(true);
+      expect(unstagedResult[0]!.staged).toBe(false);
+      expect(stagedResult[0]!.staged).toBe(true);
     });
   });
 
@@ -210,25 +210,25 @@ describe('parseGitStatusOutput', () => {
     it('should prioritize untracked status', () => {
       const output = '?? file.txt\n';
       const result = parseGitStatusOutput(output);
-      expect(result[0].status).toBe('?');
+      expect(result[0]!.status).toBe('?');
     });
 
     it('should prioritize added status over modified', () => {
       const output = 'A  file.txt\n';
       const result = parseGitStatusOutput(output);
-      expect(result[0].status).toBe('A');
+      expect(result[0]!.status).toBe('A');
     });
 
     it('should prioritize deleted status', () => {
       const output = 'D  file.txt\n';
       const result = parseGitStatusOutput(output);
-      expect(result[0].status).toBe('D');
+      expect(result[0]!.status).toBe('D');
     });
 
     it('should fall back to modified status', () => {
       const output = 'M  file.txt\n';
       const result = parseGitStatusOutput(output);
-      expect(result[0].status).toBe('M');
+      expect(result[0]!.status).toBe('M');
     });
   });
 
@@ -240,8 +240,8 @@ describe('parseGitStatusOutput', () => {
 
       expect(result).toHaveLength(1);
       // The current implementation treats R as modified (falls through to else)
-      expect(result[0].path).toBe('old.txt -> new.txt');
-      expect(result[0].staged).toBe(true);
+      expect(result[0]!.path).toBe('old.txt -> new.txt');
+      expect(result[0]!.staged).toBe(true);
     });
   });
 
@@ -251,8 +251,8 @@ describe('parseGitStatusOutput', () => {
       const result = parseGitStatusOutput(output);
 
       expect(result).toHaveLength(1);
-      expect(result[0].path).toBe('source.txt -> dest.txt');
-      expect(result[0].staged).toBe(true);
+      expect(result[0]!.path).toBe('source.txt -> dest.txt');
+      expect(result[0]!.staged).toBe(true);
     });
   });
 });

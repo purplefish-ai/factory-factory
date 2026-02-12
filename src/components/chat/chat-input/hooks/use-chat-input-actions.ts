@@ -1,17 +1,17 @@
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
-
+import type { FileMentionKeyResult } from '@/components/chat/file-mention-palette';
+import type { SlashKeyResult } from '@/components/chat/slash-command-palette';
 import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
 import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
-
-import type { SlashKeyResult } from '../../slash-command-palette';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
   onStop?: () => void;
   onOpenQuickActions?: () => void;
   onCloseSlashMenu?: () => void;
+  onCloseFileMentionMenu?: () => void;
   onChange?: (value: string) => void;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   disabled: boolean;
@@ -23,6 +23,7 @@ interface UseChatInputActionsOptions {
     updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])
   ) => void;
   delegateToSlashMenu: (key: string) => SlashKeyResult;
+  delegateToFileMentionMenu: (key: string) => FileMentionKeyResult;
 }
 
 interface UseChatInputActionsReturn {
@@ -111,6 +112,7 @@ export function useChatInputActions({
   onStop,
   onOpenQuickActions,
   onCloseSlashMenu,
+  onCloseFileMentionMenu,
   onChange,
   onSettingsChange,
   disabled,
@@ -120,6 +122,7 @@ export function useChatInputActions({
   attachments,
   setAttachments,
   delegateToSlashMenu,
+  delegateToFileMentionMenu,
 }: UseChatInputActionsOptions): UseChatInputActionsReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -156,6 +159,7 @@ export function useChatInputActions({
         alt: false,
         action: (event) => {
           onCloseSlashMenu?.();
+          onCloseFileMentionMenu?.();
           sendFromInput(event.currentTarget);
         },
       },
@@ -218,6 +222,7 @@ export function useChatInputActions({
     [
       disabled,
       onCloseSlashMenu,
+      onCloseFileMentionMenu,
       onOpenQuickActions,
       onSettingsChange,
       onStop,
@@ -253,8 +258,16 @@ export function useChatInputActions({
       }
 
       // If slash menu is open, delegate to palette for key handling
-      const result = delegateToSlashMenu(event.key);
-      if (result === 'handled') {
+      const slashResult = delegateToSlashMenu(event.key);
+      if (slashResult === 'handled') {
+        event.preventDefault();
+        return;
+      }
+      // 'close-and-passthrough' falls through to normal handling
+
+      // If file mention menu is open, delegate to palette for key handling
+      const fileMentionResult = delegateToFileMentionMenu(event.key);
+      if (fileMentionResult === 'handled') {
         event.preventDefault();
         return;
       }
@@ -263,7 +276,7 @@ export function useChatInputActions({
       // Post-slash shortcuts (e.g., Enter send)
       runShortcuts(event, postSlashShortcuts);
     },
-    [preSlashShortcuts, delegateToSlashMenu, postSlashShortcuts]
+    [preSlashShortcuts, delegateToSlashMenu, delegateToFileMentionMenu, postSlashShortcuts]
   );
 
   // Handle send button click
@@ -276,7 +289,6 @@ export function useChatInputActions({
 
   // Handle file selection
   const handleFileSelect = useCallback(
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: File handling requires multiple checks
     async (event: ChangeEvent<HTMLInputElement>) => {
       const files = event.target.files;
       if (!files || files.length === 0) {

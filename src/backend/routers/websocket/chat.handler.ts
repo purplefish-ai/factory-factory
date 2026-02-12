@@ -16,18 +16,13 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
-import { type AppContext, createAppContext } from '../../app-context';
-import type { ClaudeClient } from '../../claude/index';
-import { claudeSessionAccessor } from '../../resource_accessors/claude-session.accessor';
-import { type ChatMessageInput, ChatMessageSchema } from '../../schemas/websocket';
-import type { ConnectionInfo } from '../../services/chat-connection.service';
-import { chatTransportAdapterService } from '../../services/chat-transport-adapter.service';
+import { type AppContext, createAppContext } from '@/backend/app-context';
+import { WS_READY_STATE } from '@/backend/constants';
+import type { ClaudeClient, ConnectionInfo } from '@/backend/domains/session';
+import { sessionDataService } from '@/backend/domains/session';
+import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
-
-function sendBadRequest(socket: Duplex, message: string): void {
-  socket.write(`HTTP/1.1 400 Bad Request\r\n\r\n${message}`);
-  socket.destroy();
-}
+import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
 // Chat Upgrade Handler Factory
@@ -40,7 +35,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     chatMessageHandlerService,
     configService,
     createLogger,
-    messageStateService,
     sessionFileLogger,
     sessionService,
   } = appContext.services;
@@ -70,14 +64,14 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     }
 
     // Delegate client lifecycle to sessionService
-    const client = await sessionService.getOrCreateClient(dbSessionId, {
+    const client = await sessionService.getOrCreateSessionClient(dbSessionId, {
       thinkingEnabled: options.thinkingEnabled,
       permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,
     });
 
     // Set up event forwarding (idempotent - safe to call multiple times)
-    const session = await claudeSessionAccessor.findById(dbSessionId);
+    const session = await sessionDataService.findClaudeSessionById(dbSessionId);
     const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
     chatEventForwarderService.setupClientEvents(
       dbSessionId,
@@ -165,45 +159,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return viewingCount;
   }
 
-  function getInitialStatus(dbSessionId: string | null): {
-    type: 'status';
-    dbSessionId: string | null;
-    running: boolean;
-    processAlive: boolean;
-  } {
-    const client = dbSessionId ? sessionService.getClient(dbSessionId) : null;
-    const isRunning = client?.isWorking() ?? false;
-    const processAlive = client?.isRunning() ?? false;
-
-    return {
-      type: 'status',
-      dbSessionId,
-      running: isRunning,
-      processAlive,
-    };
-  }
-
-  function sendInitialStatus(
-    ws: WebSocket,
-    dbSessionId: string | null
-  ): { type: 'status'; dbSessionId: string | null; running: boolean; processAlive: boolean } {
-    const initialStatus = getInitialStatus(dbSessionId);
-    if (dbSessionId) {
-      sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', initialStatus);
-    }
-    ws.send(JSON.stringify(initialStatus));
-    return initialStatus;
-  }
-
-  function sendSnapshotIfNeeded(dbSessionId: string | null, isRunning: boolean): void {
-    if (!dbSessionId) {
-      return;
-    }
-    const pendingRequest = chatEventForwarderService.getPendingRequest(dbSessionId);
-    const sessionStatus = messageStateService.computeSessionStatus(dbSessionId, isRunning);
-    messageStateService.sendSnapshot(dbSessionId, sessionStatus, pendingRequest);
-  }
-
   function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
     const rawMessage: unknown = JSON.parse(toMessageString(data));
     const parseResult = ChatMessageSchema.safeParse(rawMessage);
@@ -224,7 +179,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     if (dbSessionId) {
       sessionFileLogger.log(dbSessionId, 'OUT_TO_CLIENT', errorResponse);
     }
-    ws.send(JSON.stringify(errorResponse));
+    if (ws.readyState === WS_READY_STATE.OPEN) {
+      ws.send(JSON.stringify(errorResponse));
+    }
   }
 
   // ==========================================================================
@@ -241,20 +198,11 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    // Ensure message state events are forwarded over WebSocket transport.
-    chatTransportAdapterService.setup();
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
     const dbSessionId = url.searchParams.get('sessionId') || null;
     const rawWorkingDir = url.searchParams.get('workingDir');
-
-    if (!rawWorkingDir) {
-      logger.warn('Missing workingDir parameter', { connectionId });
-      sendBadRequest(socket, 'Missing workingDir parameter');
-      return;
-    }
-
-    const workingDir = validateWorkingDir(rawWorkingDir);
-    if (!workingDir) {
+    const workingDir = rawWorkingDir ? validateWorkingDir(rawWorkingDir) : null;
+    if (rawWorkingDir && !workingDir) {
       logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
       sendBadRequest(socket, 'Invalid workingDir');
       return;
@@ -269,8 +217,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       // Set up workspace notification forwarding (idempotent)
       chatEventForwarderService.setupWorkspaceNotifications();
 
-      wsAliveMap.set(ws, true);
-      ws.on('pong', () => wsAliveMap.set(ws, true));
+      markWebSocketAlive(ws, wsAliveMap);
 
       // Only initialize file logging if we have a session
       if (dbSessionId) {
@@ -310,8 +257,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         });
       }
 
-      const initialStatus = sendInitialStatus(ws, dbSessionId);
-      sendSnapshotIfNeeded(dbSessionId, initialStatus.running);
+      // Session hydration is handled by explicit load_session from the client.
 
       ws.on('message', async (data) => {
         try {
@@ -323,7 +269,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           if (dbSessionId) {
             sessionFileLogger.log(dbSessionId, 'IN_FROM_CLIENT', message);
           }
-          await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir, message);
+          await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir ?? '', message);
         } catch (error) {
           logger.error('Error handling chat message', error as Error);
           sendChatError(ws, dbSessionId, 'Invalid message format');
@@ -332,12 +278,21 @@ export function createChatUpgradeHandler(appContext: AppContext) {
 
       ws.on('close', () => {
         logger.info('Chat WebSocket connection closed', { connectionId, dbSessionId });
-        if (dbSessionId) {
-          sessionFileLogger.log(dbSessionId, 'INFO', { event: 'connection_closed', connectionId });
-          sessionFileLogger.closeSession(dbSessionId);
-        }
 
-        chatConnectionService.unregister(connectionId);
+        // Only unregister if this connection is still the active one for this connectionId
+        // This prevents a race condition where a reconnected client gets unregistered
+        // when the old connection's close event fires
+        const current = chatConnectionService.get(connectionId);
+        if (current?.ws === ws) {
+          if (dbSessionId) {
+            sessionFileLogger.log(dbSessionId, 'INFO', {
+              event: 'connection_closed',
+              connectionId,
+            });
+            sessionFileLogger.closeSession(dbSessionId);
+          }
+          chatConnectionService.unregister(connectionId);
+        }
       });
 
       ws.on('error', (error) => {
@@ -360,5 +315,5 @@ export const handleChatUpgrade = createChatUpgradeHandler(createAppContext());
 // Re-exports for external usage
 // ============================================================================
 
-export type { ChatMessageInput } from '../../schemas/websocket';
-export type { ConnectionInfo } from '../../services/chat-connection.service';
+export type { ConnectionInfo } from '@/backend/domains/session';
+export type { ChatMessageInput } from '@/backend/schemas/websocket';

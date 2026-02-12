@@ -2,10 +2,10 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "src/client/main.tsx",
-    "src/cli/index.ts",
-    "src/backend/index.ts",
     "src/backend/server.ts",
+    "src/backend/index.ts",
     "src/backend/migrate.ts",
+    "src/cli/index.ts",
     "electron/main/index.ts",
     "electron/preload/index.ts"
   ],
@@ -21,7 +21,11 @@
     "src/backend/resource_accessors/index.ts",
     "src/backend/clients/index.ts",
     "src/backend/trpc/index.ts",
-    "src/backend/trpc/procedures/index.ts"
+    "src/backend/trpc/procedures/index.ts",
+    "src/backend/domains/*/index.ts",
+    "src/backend/domains/**/*/index.ts",
+    "src/backend/domains/**/*.service.ts",
+    "src/backend/orchestration/*.ts"
   ],
   "ignoreDependencies": [
     "autoprefixer",
@@ -36,10 +40,8 @@
     "@radix-ui/react-menubar",
     "@radix-ui/react-navigation-menu",
     "@radix-ui/react-slider",
-    "date-fns",
     "embla-carousel-react",
     "input-otp",
-    "react-day-picker",
     "react-hook-form",
     "recharts",
     "tailwindcss-animate",
@@ -48,6 +50,9 @@
     "geist"
   ],
   "vitest": {
-    "entry": ["src/**/*.test.ts", "vitest.config.ts"]
+    "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]
+  },
+  "storybook": {
+    "entry": ["src/**/*.stories.tsx", ".storybook/**/*.{ts,tsx}"]
   }
 }

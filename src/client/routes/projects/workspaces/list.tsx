@@ -1,11 +1,11 @@
-import type { WorkspaceStatus } from '@prisma-gen/browser';
+import type { WorkspaceStatus } from '@factory-factory/core';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { Loading } from '@/frontend/components/loading';
 import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
+import { trpc } from '@/frontend/lib/trpc';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
-import { trpc } from '../../../../frontend/lib/trpc';
 import {
   ResumeBranchDialog,
   type ViewMode,
@@ -67,7 +67,7 @@ export default function WorkspacesListPage() {
       projectId: project?.id ?? '',
       status: statusFilter !== 'all' ? (statusFilter as WorkspaceStatus) : undefined,
     },
-    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 15_000, staleTime: 10_000 }
+    { enabled: !!project?.id && viewMode === 'list', refetchInterval: 60_000, staleTime: 50_000 }
   );
 
   if (!project) {
@@ -95,7 +95,7 @@ export default function WorkspacesListPage() {
       utils.workspace.list.invalidate({ projectId: project.id });
       utils.workspace.getProjectSummaryState.invalidate({ projectId: project.id });
       setResumeOpen(false);
-      navigate(`/projects/${slug}/workspaces/${workspace.id}`);
+      void navigate(`/projects/${slug}/workspaces/${workspace.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       toast.error(`Failed to resume branch: ${message}`);

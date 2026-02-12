@@ -7,7 +7,8 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { expandEnvVars } from '../lib/env';
+import { expandEnvVars } from '@/backend/lib/env';
+import { SERVICE_TIMEOUT_MS } from './constants';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('config');
@@ -67,6 +68,17 @@ export interface NotificationConfig {
  */
 export interface ClaudeProcessConfig {
   hungTimeoutMs: number;
+}
+
+/**
+ * Codex app-server process configuration
+ */
+export interface CodexAppServerConfig {
+  command: string;
+  args: string[];
+  requestTimeoutMs: number;
+  handshakeTimeoutMs: number;
+  requestUserInputEnabled: boolean;
 }
 
 /**
@@ -135,6 +147,9 @@ interface SystemConfig {
 
   // Claude process settings
   claudeProcess: ClaudeProcessConfig;
+
+  // Codex app-server settings
+  codexAppServer: CodexAppServerConfig;
 
   // CORS settings
   cors: CorsConfig;
@@ -277,20 +292,53 @@ function buildCorsConfig(): CorsConfig {
  * Build Claude process configuration from environment with validation
  */
 function buildClaudeProcessConfig(): ClaudeProcessConfig {
-  const DEFAULT_HUNG_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
   const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
 
   if (!envValue) {
-    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+    return { hungTimeoutMs: SERVICE_TIMEOUT_MS.configDefaultClaudeHung };
   }
 
   const parsed = Number.parseInt(envValue, 10);
   if (Number.isNaN(parsed) || parsed <= 0) {
     logger.warn(`Invalid CLAUDE_HUNG_TIMEOUT_MS value: ${envValue}, using default (60 minutes)`);
-    return { hungTimeoutMs: DEFAULT_HUNG_TIMEOUT_MS };
+    return { hungTimeoutMs: SERVICE_TIMEOUT_MS.configDefaultClaudeHung };
   }
 
   return { hungTimeoutMs: parsed };
+}
+
+/**
+ * Build Codex app-server configuration from environment with validation.
+ */
+function buildCodexAppServerConfig(): CodexAppServerConfig {
+  const command = process.env.CODEX_APP_SERVER_COMMAND || 'codex';
+  const argsEnv = process.env.CODEX_APP_SERVER_ARGS?.trim();
+  const args = argsEnv && argsEnv.length > 0 ? argsEnv.split(/\s+/) : ['app-server'];
+
+  const requestTimeoutMs = Number.parseInt(
+    process.env.CODEX_APP_SERVER_REQUEST_TIMEOUT_MS ||
+      String(SERVICE_TIMEOUT_MS.codexAppServerRequest),
+    10
+  );
+  const handshakeTimeoutMs = Number.parseInt(
+    process.env.CODEX_APP_SERVER_HANDSHAKE_TIMEOUT_MS ||
+      String(SERVICE_TIMEOUT_MS.codexAppServerHandshake),
+    10
+  );
+
+  return {
+    command,
+    args,
+    requestTimeoutMs:
+      Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0
+        ? requestTimeoutMs
+        : SERVICE_TIMEOUT_MS.codexAppServerRequest,
+    handshakeTimeoutMs:
+      Number.isFinite(handshakeTimeoutMs) && handshakeTimeoutMs > 0
+        ? handshakeTimeoutMs
+        : SERVICE_TIMEOUT_MS.codexAppServerHandshake,
+    requestUserInputEnabled: process.env.CODEX_REQUEST_USER_INPUT_ENABLED === 'true',
+  };
 }
 
 /**
@@ -358,6 +406,9 @@ function loadSystemConfig(): SystemConfig {
 
     // Claude process settings
     claudeProcess: buildClaudeProcessConfig(),
+
+    // Codex app-server settings
+    codexAppServer: buildCodexAppServerConfig(),
 
     // CORS settings
     cors: buildCorsConfig(),
@@ -534,6 +585,16 @@ class ConfigService {
    */
   getClaudeProcessConfig(): ClaudeProcessConfig {
     return { ...this.config.claudeProcess };
+  }
+
+  /**
+   * Get Codex app-server configuration
+   */
+  getCodexAppServerConfig(): CodexAppServerConfig {
+    return {
+      ...this.config.codexAppServer,
+      args: [...this.config.codexAppServer.args],
+    };
   }
 
   /**

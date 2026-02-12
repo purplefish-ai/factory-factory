@@ -2,9 +2,10 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import { ErrorBoundary } from './error-boundary';
 import { ProjectLayout } from './layouts/project-layout';
 import { Root } from './root';
-import AdminPage from './routes/admin';
+import AdminPage from './routes/admin-page';
 // Route components
 import HomePage from './routes/home';
+import LogsPage from './routes/logs';
 import ProjectsListPage from './routes/projects/list';
 import NewProjectPage from './routes/projects/new';
 import ProjectRedirectPage from './routes/projects/redirect';
@@ -73,6 +74,10 @@ export const router = createBrowserRouter([
       {
         path: 'admin',
         element: <AdminPage />,
+      },
+      {
+        path: 'logs',
+        element: <LogsPage />,
       },
     ],
   },

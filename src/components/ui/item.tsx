@@ -4,11 +4,9 @@ import type * as React from 'react';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
-function ItemGroup({ className, ...props }: React.ComponentProps<'div'>) {
+function ItemGroup({ className, ...props }: React.ComponentProps<'ul'>) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: Using div with role="list" for styled item group pattern
-    <div
-      role="list"
+    <ul
       data-slot="item-group"
       className={cn('group/item-group flex flex-col', className)}
       {...props}

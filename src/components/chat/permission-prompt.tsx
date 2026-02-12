@@ -42,7 +42,11 @@ function getInputPreview(input: Record<string, unknown>): string {
     return 'No parameters';
   }
 
-  const firstValue = input[keys[0]];
+  const firstKey = keys[0];
+  if (!firstKey) {
+    return 'No parameters';
+  }
+  const firstValue = input[firstKey];
   if (typeof firstValue === 'string' && firstValue.length < 100) {
     return firstValue;
   }
@@ -239,7 +243,7 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
   return (
     <PromptCard
       icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
-      aria-label={`Permission request for ${toolName}`}
+      label={`Permission request for ${toolName}`}
       actions={
         <>
           <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">
@@ -297,7 +301,7 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
   return (
     <PromptCard
       icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
-      aria-label={`Permission request for ${toolName}`}
+      label={`Permission request for ${toolName}`}
       actions={
         <>
           <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">

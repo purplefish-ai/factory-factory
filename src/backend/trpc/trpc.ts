@@ -1,7 +1,7 @@
 import { initTRPC } from '@trpc/server';
 import type { Request } from 'express';
 import superjson from 'superjson';
-import type { AppContext } from '../app-context';
+import type { AppContext } from '@/backend/app-context';
 
 /**
  * Context for tRPC procedures.

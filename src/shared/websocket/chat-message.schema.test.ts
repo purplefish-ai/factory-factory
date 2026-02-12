@@ -65,4 +65,21 @@ describe('ChatMessageSchema', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('accepts load_session with optional loadRequestId', () => {
+    const result = ChatMessageSchema.safeParse({
+      type: 'load_session',
+      loadRequestId: 'load-123',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts resume_queued_messages', () => {
+    const result = ChatMessageSchema.safeParse({
+      type: 'resume_queued_messages',
+    });
+
+    expect(result.success).toBe(true);
+  });
 });

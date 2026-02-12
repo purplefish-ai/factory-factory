@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { memo } from 'react';
+import type { ToolCallInfo } from '@/components/agent-activity/types';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { ClaudeMessage, PairedToolCall, ToolSequence } from '@/lib/claude-types';
@@ -18,7 +19,6 @@ import {
   isToolUseMessage,
 } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
-import type { ToolCallInfo } from '../types';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';
 
@@ -35,7 +35,6 @@ export interface ToolInfoRendererProps {
 /**
  * Renders tool use or tool result information.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: complex but readable conditional rendering
 export const ToolInfoRenderer = memo(function ToolInfoRenderer({
   message,
   defaultOpen = false,
@@ -149,6 +148,8 @@ export interface ToolSequenceGroupProps {
   summaryOrder?: 'oldest-first' | 'latest-first';
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  toolDetailsClassName?: string;
+  toolDetailsMaxHeight?: number;
 }
 
 /**
@@ -163,6 +164,8 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   summaryOrder = 'oldest-first',
   open,
   onOpenChange,
+  toolDetailsClassName,
+  toolDetailsMaxHeight,
 }: ToolSequenceGroupProps) {
   const isControlled = open !== undefined;
   const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
@@ -181,12 +184,18 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
 
   // Single tool call - render inline without grouping wrapper
   if (pairedCalls.length === 1) {
+    const firstCall = summaryCalls[0];
+    if (!firstCall) {
+      return null;
+    }
     return (
       <PairedToolCallRenderer
-        call={summaryCalls[0]}
+        call={firstCall}
         defaultOpen={isControlled ? undefined : defaultOpen}
         open={isOpen}
         onOpenChange={setIsOpen}
+        detailsClassName={toolDetailsClassName}
+        detailsMaxHeight={toolDetailsMaxHeight}
       />
     );
   }
@@ -298,7 +307,12 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
           <div className="border-t space-y-1 p-1.5 overflow-x-auto">
             {expandedCalls.map((call) => (
               <div key={call.id} className="pl-2">
-                <PairedToolCallRenderer call={call} defaultOpen={false} />
+                <PairedToolCallRenderer
+                  call={call}
+                  defaultOpen={false}
+                  detailsClassName={toolDetailsClassName}
+                  detailsMaxHeight={toolDetailsMaxHeight}
+                />
               </div>
             ))}
           </div>
@@ -317,6 +331,8 @@ interface PairedToolCallRendererProps {
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  detailsClassName?: string;
+  detailsMaxHeight?: number;
 }
 
 /**
@@ -328,6 +344,8 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
   defaultOpen = false,
   open,
   onOpenChange,
+  detailsClassName,
+  detailsMaxHeight,
 }: PairedToolCallRendererProps) {
   const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
   const isOpen = open ?? internalOpen;
@@ -374,7 +392,10 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="border-t px-2 py-1.5 space-y-2 overflow-x-auto">
+          <div
+            className={cn('border-t px-2 py-1.5 space-y-2 overflow-x-auto', detailsClassName)}
+            style={detailsMaxHeight ? { maxHeight: `${detailsMaxHeight}px` } : undefined}
+          >
             {/* Tool Input */}
             <div className="min-w-0">
               <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Input</div>

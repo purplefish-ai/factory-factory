@@ -34,6 +34,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Build core library
+        run: pnpm --filter @factory-factory/core build
+
       - name: Check Prisma migrations are committed
         run: |
           pnpm exec prisma migrate diff \
@@ -43,6 +46,12 @@ jobs:
 
       - name: Run Biome check
         run: pnpm check
+
+      - name: Check ambiguous relative imports
+        run: pnpm check:imports
+
+      - name: Enforce Biome ignore budget
+        run: pnpm check:biome-ignores
 
       - name: Check dependency architecture
         run: pnpm deps:check
@@ -78,6 +87,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Build core library
+        run: pnpm --filter @factory-factory/core build
+
       - name: Build
         run: pnpm build
 
@@ -105,6 +117,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
+
+      - name: Build core library
+        run: pnpm --filter @factory-factory/core build
 
       - name: Build Storybook
         run: pnpm build:storybook
@@ -135,8 +150,14 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Build core library
+        run: pnpm --filter @factory-factory/core build
+
       - name: Run tests with coverage
         run: pnpm test:coverage
+
+      - name: Enforce critical backend coverage
+        run: pnpm check:coverage:critical
 
       - name: Report Coverage
         if: always() && github.event_name == 'pull_request'

@@ -1,5 +1,6 @@
-import type { Prisma, SessionStatus, TerminalSession } from '@prisma-gen/client';
-import { prisma } from '../db';
+import type { SessionStatus } from '@factory-factory/core';
+import type { Prisma, TerminalSession } from '@prisma-gen/client';
+import { prisma } from '@/backend/db';
 
 interface CreateTerminalSessionInput {
   workspaceId: string;

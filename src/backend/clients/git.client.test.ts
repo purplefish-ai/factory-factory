@@ -41,13 +41,13 @@ describe('GitClient', () => {
 
     it('should throw if baseRepoPath is undefined', () => {
       expect(
-        () => new GitClient({ baseRepoPath: undefined as unknown as string, worktreeBase: '/test' })
+        () => new GitClient({ baseRepoPath: undefined as never, worktreeBase: '/test' })
       ).toThrow('baseRepoPath is required');
     });
 
     it('should throw if worktreeBase is undefined', () => {
       expect(
-        () => new GitClient({ baseRepoPath: '/test', worktreeBase: undefined as unknown as string })
+        () => new GitClient({ baseRepoPath: '/test', worktreeBase: undefined as never })
       ).toThrow('worktreeBase is required');
     });
   });

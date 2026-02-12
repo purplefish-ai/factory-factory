@@ -1,5 +1,6 @@
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { LIB_LIMITS } from './constants';
 
 /**
  * Represents a file or directory entry in a workspace.
@@ -22,7 +23,7 @@ export async function pathExists(targetPath: string): Promise<boolean> {
 /**
  * Maximum file size to read (1MB).
  */
-export const MAX_FILE_SIZE = 1024 * 1024;
+export const MAX_FILE_SIZE = LIB_LIMITS.maxFileReadBytes;
 
 /**
  * Validate that a file path doesn't escape the worktree directory.

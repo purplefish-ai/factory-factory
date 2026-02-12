@@ -1,31 +1,20 @@
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import {
+  type CiVisualState,
+  deriveCiVisualStateFromChecks,
+  getCiVisualLabel,
+} from '@/shared/ci-status';
 import type { GitHubStatusCheck, ReviewDecision } from '@/shared/github-types';
 
-export type CIStatus = 'pass' | 'fail' | 'pending' | 'none';
+export type CIStatus = CiVisualState;
 
-export function getCIStatus(
-  checks: { conclusion: string | null; status: string }[] | null
-): CIStatus {
-  if (!checks || checks.length === 0) {
-    return 'none';
-  }
-
-  const failed = checks.some((c) => c.conclusion === 'FAILURE');
-  if (failed) {
-    return 'fail';
-  }
-
-  const pending = checks.some((c) => c.status !== 'COMPLETED' || c.conclusion === null);
-  if (pending) {
-    return 'pending';
-  }
-
-  return 'pass';
+export function getCIStatus(checks: GitHubStatusCheck[] | null): CIStatus {
+  return deriveCiVisualStateFromChecks(checks);
 }
 
 interface CIStatusDotProps {
-  checks: { conclusion: string | null; status: string }[] | null;
+  checks: GitHubStatusCheck[] | null;
   size?: 'sm' | 'md';
 }
 
@@ -35,17 +24,19 @@ export function CIStatusDot({ checks, size = 'sm' }: CIStatusDotProps) {
   const sizeClasses = size === 'sm' ? 'w-2 h-2' : 'w-2.5 h-2.5';
 
   const dotStyles: Record<CIStatus, string> = {
-    pass: 'bg-green-500',
-    fail: 'bg-red-500',
-    pending: 'bg-yellow-500 animate-pulse',
-    none: 'bg-gray-400',
+    PASSING: 'bg-green-500',
+    FAILING: 'bg-red-500',
+    RUNNING: 'bg-yellow-500 animate-pulse',
+    UNKNOWN: 'bg-gray-400',
+    NONE: 'bg-gray-400',
   };
 
   const titles: Record<CIStatus, string> = {
-    pass: 'CI passed',
-    fail: 'CI failed',
-    pending: 'Checks running...',
-    none: 'No checks',
+    PASSING: 'CI passed',
+    FAILING: 'CI failed',
+    RUNNING: 'Checks running...',
+    UNKNOWN: 'CI unknown',
+    NONE: 'No checks',
   };
 
   return (
@@ -91,7 +82,7 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
   if (!checks || checks.length === 0) {
     return (
       <Badge variant="outline" className="text-xs">
-        No checks
+        {getCiVisualLabel('NONE')}
       </Badge>
     );
   }

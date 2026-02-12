@@ -2,6 +2,9 @@
 
 ## Project Structure & Module Organization
 - `src/backend/`: Express + tRPC server, WebSocket handlers, and resource accessors
+- `src/backend/domains/`: Domain modules (session, workspace, github, ratchet, terminal, run-script)
+- `src/backend/orchestration/`: Cross-domain coordination layer (bridges, workspace init/archive)
+- `src/backend/services/`: Infrastructure-only services (logger, config, scheduler, port, health, etc.)
 - `src/client/`: React UI (routes in `src/client/routes/`, router in `src/client/router.tsx`)
 - `src/cli/`: CLI entrypoint and commands
 - `src/components/`: Shared UI components (shadcn/ui)
@@ -25,6 +28,16 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - TypeScript project with strict type checking.
 - Formatting and linting are enforced by Biome (`pnpm check:fix`).
 - Prefer existing patterns and directory conventions; keep backend logic in `src/backend/` and UI in `src/client/`.
+
+## Backend Domain Module Pattern
+- **6 domains:** session, workspace, github, ratchet, terminal, run-script (all in `src/backend/domains/`)
+- Each domain has an `index.ts` barrel file as the sole public API
+- Consumers must import from barrel (`@/backend/domains/session`), never from internal paths
+- Domains never import from sibling domains (enforced by dependency-cruiser `no-cross-domain-imports` rule)
+- Cross-domain coordination uses bridge interfaces + orchestration layer in `src/backend/orchestration/`
+- `src/backend/services/` contains ONLY infrastructure/cross-cutting services (logger, config, scheduler, etc.)
+- New domain logic goes in `domains/{name}/`, new infrastructure goes in `services/`
+- Tests are co-located within each domain module
 
 ## Testing Guidelines
 - Tests are run with Vitest (`pnpm test`, `pnpm test:watch`, `pnpm test:coverage`).
@@ -56,7 +69,7 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - The app can run commands without manual approval in some modes; review changes carefully before merging.
 
 ## Feature Notes (Keep Docs Current)
-- **Ratchet:** Central PR progression loop (1-minute cadence) that checks READY workspaces with PRs and moves through `CI_RUNNING` / `CI_FAILED` / `MERGE_CONFLICT` / `REVIEW_PENDING` / `READY` / `MERGED`. Fixer sessions use workflow `ratchet` and respect Admin ratchet toggles + allowed reviewers.
+- **Auto-Fix (Ratchet):** Automatically watches pull requests and dispatches agents to fix issues (1-minute check cadence). When a PR has failing CI or review comments, creates a fixer session to address them. PR states: `IDLE` / `CI_RUNNING` / `CI_FAILED` / `REVIEW_PENDING` / `READY` / `MERGED`. Workspace-level toggle controls whether auto-fix is active. Admin setting controls default for new workspaces created from GitHub issues.
 - **GitHub integration:** Uses local `gh` auth; issue fetch supports workspace issue picker (`listIssuesForWorkspace`) and Kanban intake column (`listIssuesForProject`, assigned to `@me`). Starting from an issue should create a linked workspace (`githubIssueNumber`, `githubIssueUrl`).
 - **Kanban model:** UI has `ISSUES` + DB columns `WORKING`, `WAITING`, `DONE`. Column state is derived, not manually set; READY workspaces with no prior sessions are intentionally hidden, and archived workspaces preserve cached pre-archive column.
 - **Quick actions:** Workspace quick actions are markdown-driven from `prompts/quick-actions/` (frontmatter metadata + prompt body). Agent quick actions create follow-up sessions and auto-send prompt content when session is ready.

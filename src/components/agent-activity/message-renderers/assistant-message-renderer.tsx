@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { memo } from 'react';
+import { ToolInfoRenderer } from '@/components/agent-activity/tool-renderers';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ClaudeMessage } from '@/lib/claude-types';
 import {
@@ -9,7 +10,6 @@ import {
   isToolUseMessage,
 } from '@/lib/claude-types';
 import { cn } from '@/lib/utils';
-import { ToolInfoRenderer } from '../tool-renderers';
 import {
   ErrorRenderer,
   ResultRenderer,
@@ -61,10 +61,11 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
 
   if (message.message && Array.isArray(message.message.content)) {
     const contentItems = message.message.content;
-    if (contentItems.length === 1 && isThinkingContent(contentItems[0])) {
+    const firstContent = contentItems[0];
+    if (contentItems.length === 1 && firstContent && isThinkingContent(firstContent)) {
       return (
         <ThinkingRenderer
-          text={contentItems[0].thinking}
+          text={firstContent.thinking}
           messageId={messageId}
           className={className}
         />

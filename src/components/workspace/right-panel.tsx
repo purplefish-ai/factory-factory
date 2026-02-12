@@ -1,33 +1,35 @@
-import { FileQuestion, Files, GitCompare, ListTodo, Plus, Terminal, X } from 'lucide-react';
+import { FileQuestion, Files, GitCompare, ListTodo, Play, Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
 import { DevLogsPanel } from './dev-logs-panel';
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
+import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
+import { TerminalTabBar } from './terminal-tab-bar';
 import { TodoPanelContainer } from './todo-panel-container';
 import { UnstagedChangesPanel } from './unstaged-changes-panel';
 import { useDevLogs } from './use-dev-logs';
+import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
 // Constants
 // =============================================================================
 
 const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
-const STORAGE_KEY_BOTTOM_TAB_PREFIX = 'workspace-right-panel-bottom-tab-';
 
 // =============================================================================
 // Types
 // =============================================================================
 
 type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
-type BottomPanelTab = 'terminal' | 'dev-logs';
 
 // =============================================================================
 // Main Component
@@ -43,7 +45,7 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
-  const [activeBottomTab, setActiveBottomTab] = useState<BottomPanelTab>('terminal');
+  const { activeBottomTab, setActiveBottomTab } = useWorkspacePanel();
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
   // Single shared dev logs connection for both tab indicator and panel content
@@ -56,6 +58,29 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     setTerminalTabState(state);
   }, []);
 
+  // Auto-switch to Setup Logs during provisioning, back to terminal when done
+  const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
+    { id: workspaceId },
+    {
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
+      },
+    }
+  );
+  const prevInitStatusRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const status = initStatus?.status;
+    const prev = prevInitStatusRef.current;
+    prevInitStatusRef.current = status;
+
+    // On first load or workspace change: if provisioning, switch to setup logs
+    if (prev === undefined && (status === 'NEW' || status === 'PROVISIONING')) {
+      setActiveBottomTab('setup-logs');
+    }
+  }, [initStatus?.status, setActiveBottomTab]);
+
   // Load persisted tabs from localStorage on mount or workspaceId change
   useEffect(() => {
     if (loadedForWorkspaceRef.current === workspaceId) {
@@ -66,6 +91,10 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     // Reset terminal tab state when workspace changes
     setTerminalTabState(null);
 
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     try {
       const storedTop = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
       if (
@@ -75,11 +104,6 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
         storedTop === 'tasks'
       ) {
         setActiveTopTab(storedTop);
-      }
-
-      const storedBottom = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
-      if (storedBottom === 'terminal' || storedBottom === 'dev-logs') {
-        setActiveBottomTab(storedBottom);
       }
     } catch {
       // Ignore storage errors
@@ -96,19 +120,17 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     }
   };
 
-  const handleBottomTabChange = (tab: BottomPanelTab) => {
-    setActiveBottomTab(tab);
-    // Reset terminal tab state when switching away from terminal
-    // to avoid stale state when TerminalPanel remounts
-    if (tab !== 'terminal') {
-      setTerminalTabState(null);
-    }
-    try {
-      localStorage.setItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`, tab);
-    } catch {
-      // Ignore storage errors
-    }
-  };
+  const handleBottomTabChange = useCallback(
+    (tab: BottomPanelTab) => {
+      setActiveBottomTab(tab);
+      // Reset terminal tab state when switching away from terminal
+      // to avoid stale state when TerminalPanel remounts
+      if (tab !== 'terminal') {
+        setTerminalTabState(null);
+      }
+    },
+    [setActiveBottomTab]
+  );
 
   return (
     <ResizablePanelGroup
@@ -164,6 +186,25 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
         <div className="flex flex-col h-full min-h-0">
           {/* Unified tab bar with terminal tabs inline */}
           <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
+            <TabButton
+              label="Setup Logs"
+              icon={<Play className="h-3.5 w-3.5" />}
+              isActive={activeBottomTab === 'setup-logs'}
+              onSelect={() => handleBottomTabChange('setup-logs')}
+            />
+            <TabButton
+              label="Dev Logs"
+              icon={
+                <span
+                  className={cn(
+                    'w-1.5 h-1.5 rounded-full',
+                    devLogs.connected ? 'bg-green-500' : 'bg-red-500'
+                  )}
+                />
+              }
+              isActive={activeBottomTab === 'dev-logs'}
+              onSelect={() => handleBottomTabChange('dev-logs')}
+            />
             {/* Show Terminal tab only if no terminals are open, otherwise show inline terminal tabs */}
             {activeBottomTab === 'terminal' &&
             terminalTabState &&
@@ -188,23 +229,20 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 )}
               </>
             )}
-            <TabButton
-              label="Dev Logs"
-              icon={
-                <span
-                  className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    devLogs.connected ? 'bg-green-500' : 'bg-red-500'
-                  )}
-                />
-              }
-              isActive={activeBottomTab === 'dev-logs'}
-              onSelect={() => handleBottomTabChange('dev-logs')}
-            />
           </div>
 
           {/* Content */}
           <div className="flex-1 overflow-hidden">
+            {activeBottomTab === 'setup-logs' && (
+              <SetupLogsPanel workspaceId={workspaceId} className="h-full" />
+            )}
+            {activeBottomTab === 'dev-logs' && (
+              <DevLogsPanel
+                output={devLogs.output}
+                outputEndRef={devLogs.outputEndRef}
+                className="h-full"
+              />
+            )}
             {activeBottomTab === 'terminal' && (
               <TerminalPanel
                 ref={terminalPanelRef}
@@ -212,13 +250,6 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
                 className="h-full"
                 hideHeader
                 onStateChange={handleTerminalStateChange}
-              />
-            )}
-            {activeBottomTab === 'dev-logs' && (
-              <DevLogsPanel
-                output={devLogs.output}
-                outputEndRef={devLogs.outputEndRef}
-                className="h-full"
               />
             )}
           </div>
@@ -265,44 +296,14 @@ function TerminalTabsInline({ terminalTabState }: TerminalTabsInlineProps) {
   const { tabs, activeTabId, onSelectTab, onCloseTab, onNewTab } = terminalTabState;
 
   return (
-    <>
-      {/* Terminal tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={cn(
-              'flex items-center rounded-md transition-colors group flex-shrink-0',
-              activeTabId === tab.id
-                ? 'bg-zinc-800 text-zinc-100'
-                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-            )}
-          >
-            <button
-              type="button"
-              className="flex items-center gap-1 px-2 py-1 text-xs cursor-pointer whitespace-nowrap"
-              onClick={() => onSelectTab(tab.id)}
-            >
-              <Terminal className="h-3 w-3 flex-shrink-0" />
-              <span>{tab.label}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onCloseTab(tab.id)}
-              className={cn(
-                'mr-1 p-0.5 rounded hover:bg-zinc-600/50 transition-colors',
-                'opacity-0 group-hover:opacity-100',
-                activeTabId === tab.id && 'opacity-100'
-              )}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* New terminal button with tooltip */}
-      <NewTerminalButton onNewTab={onNewTab} />
-    </>
+    <TerminalTabBar
+      tabs={tabs}
+      activeTabId={activeTabId}
+      onSelectTab={onSelectTab}
+      onCloseTab={onCloseTab}
+      onNewTab={onNewTab}
+      className="min-w-0 flex-1"
+      renderNewButton={(handleNewTab) => <NewTerminalButton onNewTab={handleNewTab} />}
+    />
   );
 }

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { trpc } from '@/frontend/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
-import { trpc } from '../lib/trpc';
 
 /**
  * Shared hook for creating workspaces with consistent behavior across the app.
@@ -43,10 +44,21 @@ export function useCreateWorkspace(
         name,
       });
 
+      // Optimistically populate the workspace detail query cache so the status
+      // is immediately visible when navigating to the detail page
+      utils.workspace.get.setData({ id: workspace.id }, (old) => {
+        // If there's already data (shouldn't happen for a new workspace), keep it
+        if (old) {
+          return old;
+        }
+
+        return createOptimisticWorkspaceCacheData(workspace);
+      });
+
       utils.workspace.list.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
       setIsCreating(false);
-      navigate(`/projects/${projectSlug}/workspaces/${workspace.id}`);
+      void navigate(`/projects/${projectSlug}/workspaces/${workspace.id}`);
     } catch (error) {
       setIsCreating(false);
       const message = error instanceof Error ? error.message : 'Unknown error';

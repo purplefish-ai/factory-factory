@@ -1,4 +1,4 @@
-import type { ChatAction, ChatState } from '../types';
+import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 
 export function reduceRequestSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

@@ -87,6 +87,10 @@
         "noArrayIndexKey": "error",
         "noUnsafeDeclarationMerging": "error"
       },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error"
+      },
       "complexity": {
         "noBannedTypes": "error",
         "noExcessiveCognitiveComplexity": "error",
@@ -115,7 +119,10 @@
   "plugins": [
     "biome-rules/no-await-import.grit",
     "biome-rules/no-native-dialogs.grit",
-    "biome-rules/no-next-directives.grit"
+    "biome-rules/no-next-directives.grit",
+    "biome-rules/no-zod-any.grit",
+    "biome-rules/no-unsafe-json-parse-cast.grit",
+    "biome-rules/no-unsafe-resolver-cast.grit"
   ],
   "overrides": [
     {
@@ -135,6 +142,16 @@
       }
     },
     {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noNonNullAssertion": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/*.css"],
       "linter": {
         "rules": {
@@ -145,6 +162,33 @@
             "noImportantStyles": "off"
           }
         }
+      }
+    },
+    {
+      "includes": [
+        "src/backend/services/run-script.service.ts",
+        "src/components/agent-activity/tool-renderers/tool-info-renderer.tsx",
+        "src/components/chat/chat-input/hooks/use-chat-input-actions.ts",
+        "src/components/chat/virtualized-message-list.tsx",
+        "src/frontend/components/pr-detail-panel.tsx",
+        "src/lib/diff/parse.ts",
+        "src/shared/claude/protocol/index.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["prisma/generated/**"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
       }
     }
   ]

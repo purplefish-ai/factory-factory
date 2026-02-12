@@ -1,24 +1,31 @@
-import { chatConnectionService } from './services/chat-connection.service';
-import { chatEventForwarderService } from './services/chat-event-forwarder.service';
-import { chatMessageHandlerService } from './services/chat-message-handlers.service';
-import { cliHealthService } from './services/cli-health.service';
+// Domain imports (from barrel files)
+import { githubCLIService } from './domains/github';
+import { ratchetService } from './domains/ratchet';
+import {
+  type RunScriptService,
+  runScriptService,
+  runScriptStateMachine,
+  startupScriptService,
+} from './domains/run-script';
+import {
+  chatConnectionService,
+  chatEventForwarderService,
+  chatMessageHandlerService,
+  type SessionFileLogger,
+  sessionDomainService,
+  sessionFileLogger,
+  sessionService,
+} from './domains/session';
+import { terminalService } from './domains/terminal';
+import { kanbanStateService, workspaceStateMachine } from './domains/workspace';
+// Orchestration and infrastructure imports
+import { cliHealthService } from './orchestration/cli-health.service';
+import { schedulerService } from './orchestration/scheduler.service';
 import { configService } from './services/config.service';
-import { githubCLIService } from './services/github-cli.service';
-import { kanbanStateService } from './services/kanban-state.service';
 import { createLogger } from './services/logger.service';
-import { messageQueueService } from './services/message-queue.service';
-import { messageStateService } from './services/message-state.service';
 import { findAvailablePort } from './services/port.service';
-import { ratchetService } from './services/ratchet.service';
 import { rateLimiter } from './services/rate-limiter.service';
-import { RunScriptService } from './services/run-script.service';
-import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
-import { sessionService } from './services/session.service';
-import { type SessionFileLogger, sessionFileLogger } from './services/session-file-logger.service';
-import { startupScriptService } from './services/startup-script.service';
-import { terminalService } from './services/terminal.service';
-import { workspaceStateMachine } from './services/workspace-state-machine.service';
 
 export type AppServices = {
   chatConnectionService: typeof chatConnectionService;
@@ -30,15 +37,15 @@ export type AppServices = {
   findAvailablePort: typeof findAvailablePort;
   githubCLIService: typeof githubCLIService;
   kanbanStateService: typeof kanbanStateService;
-  messageQueueService: typeof messageQueueService;
-  messageStateService: typeof messageStateService;
   ratchetService: typeof ratchetService;
   rateLimiter: typeof rateLimiter;
-  runScriptService: typeof RunScriptService;
+  runScriptService: RunScriptService;
+  runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
   serverInstanceService: typeof serverInstanceService;
   sessionFileLogger: SessionFileLogger;
   sessionService: typeof sessionService;
+  sessionDomainService: typeof sessionDomainService;
   startupScriptService: typeof startupScriptService;
   terminalService: typeof terminalService;
   workspaceStateMachine: typeof workspaceStateMachine;
@@ -62,15 +69,15 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     findAvailablePort,
     githubCLIService,
     kanbanStateService,
-    messageQueueService,
-    messageStateService,
     ratchetService,
     rateLimiter,
-    runScriptService: RunScriptService,
+    runScriptService: runScriptService,
+    runScriptStateMachine,
     schedulerService,
     serverInstanceService,
     sessionFileLogger,
     sessionService,
+    sessionDomainService,
     startupScriptService,
     terminalService,
     workspaceStateMachine,

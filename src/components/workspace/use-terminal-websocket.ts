@@ -7,7 +7,7 @@ import { buildWebSocketUrl } from '@/lib/websocket-config';
 // =============================================================================
 
 interface TerminalMessage {
-  type: 'output' | 'created' | 'exit' | 'error' | 'status' | 'terminal_list';
+  type: 'output' | 'created' | 'exit' | 'error' | 'terminal_list';
   data?: string;
   terminalId?: string;
   exitCode?: number;
@@ -106,6 +106,7 @@ export function useTerminalWebSocket({
   const { connected, send } = useWebSocketTransport({
     url,
     onMessage: handleMessage,
+    queuePolicy: 'drop',
   });
 
   const create = useCallback(

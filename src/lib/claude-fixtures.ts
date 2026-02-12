@@ -1101,8 +1101,12 @@ export function createCompleteConversation(): ChatMessage[] {
     createAssistantMessage("I'll list the files in the src directory."),
     createBashToolUse('ls -la src/', 'List files in src directory'),
   ];
+  const exchange1ToolUse = exchange1[2];
+  if (!exchange1ToolUse) {
+    throw new Error('Expected exchange1 tool use message');
+  }
   const toolResult1 = createToolResultMessage(
-    getToolUseId(exchange1[2]),
+    getToolUseId(exchange1ToolUse),
     `total 24
 drwxr-xr-x   5 developer  staff   160 Jan 15 10:30 .
 drwxr-xr-x  12 developer  staff   384 Jan 15 10:30 ..
@@ -1119,8 +1123,12 @@ drwxr-xr-x   3 developer  staff    96 Jan 15 10:30 utils
     createAssistantMessage("I'll read the index.ts file."),
     createReadToolUse('/Users/developer/project/src/index.ts'),
   ];
+  const exchange2ToolUse = exchange2[3];
+  if (!exchange2ToolUse) {
+    throw new Error('Expected exchange2 tool use message');
+  }
   const toolResult2 = createToolResultMessage(
-    getToolUseId(exchange2[3]),
+    getToolUseId(exchange2ToolUse),
     `export { Button } from './components/Button';
 export { IconButton } from './components/IconButton';
 export * from './utils/helpers';`

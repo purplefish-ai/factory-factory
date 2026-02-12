@@ -4,14 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 import type { GitHubIssue } from './kanban-context';
 
 interface IssueCardProps {
   issue: GitHubIssue;
   projectId: string;
+  onClick?: () => void;
 }
 
-export function IssueCard({ issue, projectId }: IssueCardProps) {
+export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
@@ -34,7 +36,18 @@ export function IssueCard({ issue, projectId }: IssueCardProps) {
   }, [ratchetPreferenceKey, userSettings?.ratchetEnabled]);
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (workspace) => {
+      // Optimistically populate the workspace detail query cache so the status
+      // is immediately visible when navigating to the detail page
+      utils.workspace.get.setData({ id: workspace.id }, (old) => {
+        // If there's already data (shouldn't happen for a new workspace), keep it
+        if (old) {
+          return old;
+        }
+
+        return createOptimisticWorkspaceCacheData(workspace);
+      });
+
       // Invalidate workspace queries to refresh the board
       utils.workspace.listWithKanbanState.invalidate({ projectId });
     },
@@ -60,8 +73,15 @@ export function IssueCard({ issue, projectId }: IssueCardProps) {
     window.open(issue.url, '_blank', 'noopener,noreferrer');
   };
 
+  const handleCardClick = () => {
+    onClick?.();
+  };
+
   return (
-    <Card className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden border-dashed">
+    <Card
+      className="cursor-pointer hover:border-primary/50 transition-colors overflow-hidden border-dashed"
+      onClick={handleCardClick}
+    >
       <CardHeader className="pb-3">
         <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
           {issue.title}

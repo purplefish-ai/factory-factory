@@ -13,7 +13,7 @@ Goals:
 - `prState`: high-level PR state (`NONE`, `DRAFT`, `OPEN`, `CHANGES_REQUESTED`, `APPROVED`, `MERGED`, `CLOSED`)
 - `prCiStatus`: CI snapshot (`UNKNOWN`, `PENDING`, `SUCCESS`, `FAILURE`)
 - `ratchetEnabled`: workspace-level toggle for automated PR progression
-- `ratchetState`: ratchet machine output (`IDLE`, `CI_RUNNING`, `CI_FAILED`, `MERGE_CONFLICT`, `REVIEW_PENDING`, `READY`, `MERGED`)
+- `ratchetState`: ratchet machine output (`IDLE`, `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`, `READY`, `MERGED`)
 - `flowPhase`: derived workspace flow phase used by UI and kanban logic
 - `ciObservation`: derived CI observation
   - `NOT_FETCHED`: PR exists but no CI snapshot has been fetched yet

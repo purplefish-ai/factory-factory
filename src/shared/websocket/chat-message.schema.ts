@@ -70,14 +70,11 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   // Stop the session
   z.object({ type: z.literal('stop') }),
 
-  // Get session history
-  z.object({ type: z.literal('get_history') }),
-
   // Load session data
-  z.object({ type: z.literal('load_session') }),
-
-  // Get queued messages (lightweight alternative to load_session)
-  z.object({ type: z.literal('get_queue') }),
+  z.object({
+    type: z.literal('load_session'),
+    loadRequestId: z.string().min(1).optional(),
+  }),
 
   // Answer a question from AskUserQuestion tool
   z.object({
@@ -111,6 +108,11 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     userMessageId: z.string().min(1),
     dryRun: z.boolean().optional(),
   }),
+
+  // Resume dispatching queued messages after a manual pause.
+  z.object({
+    type: z.literal('resume_queued_messages'),
+  }),
 ]);
 
 // ============================================================================
@@ -120,13 +122,19 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
 export type ChatMessageInput = z.infer<typeof ChatMessageSchema>;
 
 // Narrow types for specific message types
-export type QuestionResponseMessage = Extract<ChatMessageInput, { type: 'question_response' }>;
-export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permission_response' }>;
-export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message' }>;
+export type ListSessionsMessage = Extract<ChatMessageInput, { type: 'list_sessions' }>;
 export type StartMessageInput = Extract<ChatMessageInput, { type: 'start' }>;
 export type UserInputMessage = Extract<ChatMessageInput, { type: 'user_input' }>;
+export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message' }>;
 export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove_queued_message' }>;
+export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;
+export type LoadSessionMessage = Extract<ChatMessageInput, { type: 'load_session' }>;
+export type QuestionResponseMessage = Extract<ChatMessageInput, { type: 'question_response' }>;
+export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permission_response' }>;
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
 export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;
 export type RewindFilesMessage = Extract<ChatMessageInput, { type: 'rewind_files' }>;
-export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;
+export type ResumeQueuedMessagesInput = Extract<
+  ChatMessageInput,
+  { type: 'resume_queued_messages' }
+>;

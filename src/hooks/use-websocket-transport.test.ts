@@ -242,7 +242,7 @@ describe('WebSocket transport patterns', () => {
       ws.send(JSON.stringify(message));
 
       expect(ws.sentMessages).toHaveLength(1);
-      expect(JSON.parse(ws.sentMessages[0])).toEqual(message);
+      expect(JSON.parse(ws.sentMessages[0]!)).toEqual(message);
     });
 
     it('should throw error when sending on closed connection', () => {
@@ -271,6 +271,48 @@ describe('WebSocket transport patterns', () => {
       ws.simulateOpen();
       expect(send({ type: 'test' })).toBe(true);
     });
+
+    it('should drop disconnected messages when queue policy is drop', () => {
+      const queue: unknown[] = [];
+      const send = (
+        message: unknown,
+        readyState: number,
+        queuePolicy: 'replay' | 'drop'
+      ): boolean => {
+        if (readyState === WS_OPEN) {
+          return true;
+        }
+        if (queuePolicy !== 'replay') {
+          return false;
+        }
+        queue.push(message);
+        return false;
+      };
+
+      expect(send({ type: 'input', data: 'ls' }, WS_CLOSED, 'drop')).toBe(false);
+      expect(queue).toHaveLength(0);
+    });
+
+    it('should queue disconnected messages when queue policy is replay', () => {
+      const queue: unknown[] = [];
+      const send = (
+        message: unknown,
+        readyState: number,
+        queuePolicy: 'replay' | 'drop'
+      ): boolean => {
+        if (readyState === WS_OPEN) {
+          return true;
+        }
+        if (queuePolicy !== 'replay') {
+          return false;
+        }
+        queue.push(message);
+        return false;
+      };
+
+      expect(send({ type: 'queue_message', text: 'hello' }, WS_CLOSED, 'replay')).toBe(false);
+      expect(queue).toEqual([{ type: 'queue_message', text: 'hello' }]);
+    });
   });
 
   describe('message receiving', () => {
@@ -289,11 +331,11 @@ describe('WebSocket transport patterns', () => {
       };
 
       ws.simulateOpen();
-      ws.simulateMessage({ type: 'status', running: true });
+      ws.simulateMessage({ type: 'output', data: 'hello' });
       ws.simulateMessage({ type: 'claude_message', data: 'hello' });
 
       expect(messages).toHaveLength(2);
-      expect(messages[0]).toEqual({ type: 'status', running: true });
+      expect(messages[0]).toEqual({ type: 'output', data: 'hello' });
       expect(messages[1]).toEqual({ type: 'claude_message', data: 'hello' });
     });
 
@@ -612,7 +654,7 @@ describe('URL change handling', () => {
     ws.simulateOpen();
 
     expect(createdWebSockets).toHaveLength(1);
-    expect(createdWebSockets[0].url).toBe('ws://localhost:3000/chat?sessionId=1');
+    expect(createdWebSockets[0]!.url).toBe('ws://localhost:3000/chat?sessionId=1');
 
     // URL changes to different session
     url = 'ws://localhost:3000/chat?sessionId=2';
@@ -626,6 +668,6 @@ describe('URL change handling', () => {
     ws.simulateOpen();
 
     expect(createdWebSockets).toHaveLength(2);
-    expect(createdWebSockets[1].url).toBe('ws://localhost:3000/chat?sessionId=2');
+    expect(createdWebSockets[1]!.url).toBe('ws://localhost:3000/chat?sessionId=2');
   });
 });

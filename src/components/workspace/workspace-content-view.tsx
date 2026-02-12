@@ -1,13 +1,10 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { ReactNode } from 'react';
-
-import type { GitHubIssue } from '@/backend/services/github-cli.service';
-import type { ProcessStatus, SessionStatus } from '@/components/chat/reducer';
 import type { AppRouter } from '@/frontend/lib/trpc';
 
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
-import { WorkflowSelector } from './workflow-selector';
+import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 
 // =============================================================================
 // Types
@@ -15,22 +12,14 @@ import { WorkflowSelector } from './workflow-selector';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type ClaudeSession = RouterOutputs['session']['listClaudeSessions'][number];
-type Workflow = RouterOutputs['session']['listWorkflows'][number];
 
 interface WorkspaceContentViewProps {
   workspaceId: string;
   claudeSessions: ClaudeSession[] | undefined;
-  workflows: Workflow[] | undefined;
-  recommendedWorkflow: string | undefined;
   selectedSessionId: string | null;
-  runningSessionId: string | undefined;
-  /** Session status for the currently selected session */
-  sessionStatus?: SessionStatus;
-  /** Process status for the currently selected session */
-  processStatus?: ProcessStatus;
+  sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
-  onWorkflowSelect: (workflowId: string, linkedIssue?: GitHubIssue) => void;
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
@@ -47,7 +36,7 @@ interface WorkspaceContentViewProps {
 
 /**
  * WorkspaceContentView handles the conditional rendering between:
- * - Workflow selector (when no sessions exist yet)
+ * - Empty state prompt (when no sessions exist yet)
  * - Session tab bar + chat content (when sessions exist)
  *
  * This extraction reduces cognitive complexity in the main page component.
@@ -55,15 +44,10 @@ interface WorkspaceContentViewProps {
 export function WorkspaceContentView({
   workspaceId,
   claudeSessions,
-  workflows,
-  recommendedWorkflow,
   selectedSessionId,
-  runningSessionId,
-  sessionStatus,
-  processStatus,
+  sessionSummariesById,
   isCreatingSession,
   isDeletingSession,
-  onWorkflowSelect,
   onSelectSession,
   onCreateSession,
   onCloseSession,
@@ -71,35 +55,9 @@ export function WorkspaceContentView({
   maxSessions,
   hasWorktreePath,
 }: WorkspaceContentViewProps) {
-  // Show workflow selector when no sessions exist
-  if (claudeSessions && claudeSessions.length === 0) {
-    return (
-      <MainViewContent workspaceId={workspaceId} className="flex-1">
-        {workflows && recommendedWorkflow ? (
-          <WorkflowSelector
-            workflows={workflows}
-            recommendedWorkflow={recommendedWorkflow}
-            onSelect={onWorkflowSelect}
-            disabled={isCreatingSession || !hasWorktreePath}
-            warningMessage={
-              !hasWorktreePath
-                ? 'Workspace is initializing... Please wait for the worktree to be created.'
-                : undefined
-            }
-            workspaceId={workspaceId}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
-        )}
-      </MainViewContent>
-    );
-  }
+  const hasNoSessions = claudeSessions && claudeSessions.length === 0;
 
-  // Show tab bar + chat content when sessions exist
-  // Wrap in a flex container with min-h-0 to enable proper overflow handling
-  // Without this, the ScrollArea in ChatContent cannot calculate its height correctly
+  // Always show tab bar (with "+" button), but render empty state content when no sessions exist
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Tab bar - flex-shrink-0 ensures it stays visible */}
@@ -107,20 +65,37 @@ export function WorkspaceContentView({
         <MainViewTabBar
           sessions={claudeSessions}
           currentSessionId={selectedSessionId}
-          runningSessionId={runningSessionId}
-          sessionStatus={sessionStatus}
-          processStatus={processStatus}
+          sessionSummariesById={sessionSummariesById}
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
-          disabled={isCreatingSession || isDeletingSession}
+          disabled={isCreatingSession || isDeletingSession || !hasWorktreePath}
           maxSessions={maxSessions}
         />
       </div>
 
-      {/* Main View Content (children = ChatContent) */}
+      {/* Main View Content */}
       <MainViewContent workspaceId={workspaceId} className="flex-1 min-h-0">
-        {children}
+        {hasNoSessions ? (
+          <div className="flex flex-col items-center justify-center h-full p-8">
+            <div className="max-w-md w-full space-y-6 text-center">
+              <div className="space-y-2">
+                <h2 className="text-2xl font-semibold">Start a Session</h2>
+                <p className="text-muted-foreground">
+                  Click the + button above to start a new chat session in this workspace.
+                </p>
+              </div>
+
+              {!hasWorktreePath && (
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md text-sm">
+                  Workspace is initializing... Please wait for the worktree to be created.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          children
+        )}
       </MainViewContent>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { trpc } from '../../frontend/lib/trpc';
+import { trpc } from '@/frontend/lib/trpc';
 
 // Redirect root to project-scoped page
 export default function HomePage() {
@@ -14,17 +14,20 @@ export default function HomePage() {
 
     // On error, redirect to projects page where error can be shown properly
     if (error) {
-      navigate('/projects', { replace: true });
+      void navigate('/projects', { replace: true });
       return;
     }
 
     if (projects && projects.length > 0) {
       // Get stored project or use first one
       const stored = localStorage.getItem('factoryfactory_selected_project_slug');
-      const slug = stored || projects[0].slug;
-      navigate(`/projects/${slug}`, { replace: true });
+      const slug = stored || projects[0]?.slug;
+      if (!slug) {
+        return;
+      }
+      void navigate(`/projects/${slug}`, { replace: true });
     } else {
-      navigate('/projects/new', { replace: true });
+      void navigate('/projects/new', { replace: true });
     }
   }, [isLoading, projects, error, navigate]);
 

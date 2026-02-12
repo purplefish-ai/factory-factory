@@ -1,4 +1,5 @@
 import { createEmptyTokenStats, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import type { ChatState } from './types';
 
 function createBaseResetState(): Pick<
@@ -25,7 +26,7 @@ function createBaseResetState(): Pick<
 > {
   // Note: slashCommands is intentionally NOT reset here.
   // - For CLEAR_CHAT: Commands persist because we're clearing messages in the same session.
-  // - For session switches: MESSAGES_SNAPSHOT handles clearing slashCommands separately,
+  // - For session switches: SESSION_SNAPSHOT handles clearing slashCommands separately,
   //   and the backend will replay the stored slash_commands event for the new session.
   return {
     messages: [],
@@ -51,8 +52,10 @@ function createBaseResetState(): Pick<
 }
 
 /**
- * Creates extended reset state for session switches, which also clears
- * queue, session status, and slashCommands (since different sessions may have different commands).
+ * Creates extended reset state for session switches.
+ * Note: queuedMessages is included in the type but cleared in this function.
+ * The SESSION_SWITCH_START reducer preserves queuedMessages from the previous state
+ * to avoid visual disappearance until the replay batch replaces them.
  */
 function createSessionSwitchResetState(): Pick<
   ChatState,
@@ -80,12 +83,17 @@ function createSessionSwitchResetState(): Pick<
   | 'localUserMessageIds'
   | 'rewindPreview'
   | 'processStatus'
+  | 'sessionRuntime'
 > {
   return {
     ...createBaseResetState(),
     queuedMessages: new Map(),
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
+    sessionRuntime: {
+      ...createInitialSessionRuntimeState(),
+      phase: 'loading', // Override to 'loading' for session switch
+    },
     slashCommands: [], // Clear for new session - will be sent when Claude starts
     slashCommandsLoaded: false,
   };
@@ -96,6 +104,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     messages: [],
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
+    sessionRuntime: createInitialSessionRuntimeState(),
     gitBranch: null,
     availableSessions: [],
     pendingRequest: { type: 'none' },

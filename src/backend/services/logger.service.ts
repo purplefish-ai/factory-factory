@@ -3,7 +3,15 @@
  *
  * Provides structured logging with different levels for production readiness.
  * Uses a simple but effective logging format compatible with log aggregation tools.
+ *
+ * In production mode, logs are written to a file (~/factory-factory/logs/server.log)
+ * instead of the console. Only errors are also written to stderr for visibility.
  */
+
+import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { expandEnvVars } from '@/backend/lib/env';
 
 type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -40,6 +48,110 @@ function getLogLevelPriority(level: LogLevel): number {
     debug: 3,
   };
   return priorities[level];
+}
+
+/**
+ * Safely stringify an object, handling circular references.
+ * Pre-processes with ancestor tracking to replace circular references,
+ * invokes toJSON() on objects that define it, then uses JSON.stringify
+ * on the safe result.
+ */
+function safeStringify(obj: unknown): string {
+  const ancestors = new WeakSet<object>();
+
+  function tryToJSON(value: object): { ok: true; result: unknown } | { ok: false } {
+    if (!('toJSON' in value) || typeof (value as Record<string, unknown>).toJSON !== 'function') {
+      return { ok: false };
+    }
+    try {
+      return { ok: true, result: (value as { toJSON: () => unknown }).toJSON() };
+    } catch {
+      return { ok: false };
+    }
+  }
+
+  function traverseObject(value: object): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = preprocessValue(val);
+    }
+    return result;
+  }
+
+  function preprocessValue(value: unknown): unknown {
+    if (typeof value === 'function' || typeof value !== 'object' || value === null) {
+      return typeof value === 'function' ? undefined : value;
+    }
+    if (ancestors.has(value)) {
+      return '[Circular]';
+    }
+
+    ancestors.add(value);
+    try {
+      const toJson = tryToJSON(value);
+      if (toJson.ok) {
+        return preprocessValue(toJson.result);
+      }
+      return Array.isArray(value)
+        ? value.map((item) => preprocessValue(item))
+        : traverseObject(value);
+    } finally {
+      ancestors.delete(value);
+    }
+  }
+
+  try {
+    return JSON.stringify(preprocessValue(obj));
+  } catch (err) {
+    return JSON.stringify({ __serializationError: err instanceof Error ? err.message : 'unknown' });
+  }
+}
+
+/**
+ * Log file support.
+ * Logs are always written to a file. In production, the file is the primary
+ * output (only errors also go to stderr). In development, logs go to both
+ * the console and the file.
+ */
+let _logFileStream: WriteStream | null = null;
+let _logFilePath: string | null = null;
+
+function initLogFileStream(): WriteStream | null {
+  try {
+    const rawBaseDir = process.env.BASE_DIR;
+    const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), 'factory-factory');
+    const logsDir = join(baseDir, 'logs');
+    if (!existsSync(logsDir)) {
+      mkdirSync(logsDir, { recursive: true });
+    }
+    _logFilePath = join(logsDir, 'server.log');
+    const stream = createWriteStream(_logFilePath, { flags: 'a' });
+    stream.on('error', () => {
+      _logFileStream = null;
+    });
+    return stream;
+  } catch {
+    return null;
+  }
+}
+
+function getLogFileStream(): WriteStream | null {
+  if (!_logFileStream) {
+    _logFileStream = initLogFileStream();
+  }
+  return _logFileStream;
+}
+
+/**
+ * Get the path of the log file (for display in startup messages).
+ */
+export function getLogFilePath(): string {
+  if (_logFilePath) {
+    return _logFilePath;
+  }
+  const rawBaseDir = process.env.BASE_DIR;
+  const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), 'factory-factory');
+  return join(baseDir, 'logs', 'server.log');
 }
 
 /**
@@ -126,23 +238,35 @@ class Logger {
   }
 
   /**
-   * Output in JSON format (for production log aggregation)
+   * Write an entry to the log file as JSON (used by both output modes).
    */
-  private jsonOutput(entry: LogEntry): void {
-    const output = JSON.stringify(entry);
-    if (entry.level === 'error') {
-      console.error(output);
-    } else if (entry.level === 'warn') {
-      console.warn(output);
-    } else {
-      console.log(output);
+  private writeToLogFile(entry: LogEntry): void {
+    const stream = getLogFileStream();
+    if (stream) {
+      stream.write(`${safeStringify(entry)}\n`);
     }
   }
 
   /**
-   * Output in pretty format (for development)
+   * Output in JSON format (for production).
+   * Writes to the log file, with only errors echoed to stderr.
+   */
+  private jsonOutput(entry: LogEntry): void {
+    this.writeToLogFile(entry);
+
+    // In production, only surface errors in the terminal
+    if (entry.level === 'error') {
+      console.error(safeStringify(entry));
+    }
+  }
+
+  /**
+   * Output in pretty format (for development).
+   * Writes to both the console and the log file.
    */
   private prettyOutput(entry: LogEntry): void {
+    this.writeToLogFile(entry);
+
     const levelColors: Record<LogLevel, string> = {
       error: '\x1b[31m', // Red
       warn: '\x1b[33m', // Yellow
@@ -162,7 +286,7 @@ class Logger {
       // More than just service and component - extract additional context
       const { service: _service, component: _component, ...rest } = entry.context;
       if (Object.keys(rest).length > 0) {
-        output += ` ${JSON.stringify(rest)}`;
+        output += ` ${safeStringify(rest)}`;
       }
     }
 

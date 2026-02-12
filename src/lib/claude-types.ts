@@ -1,7 +1,7 @@
 /**
  * Frontend helper utilities and UI-specific types for the Claude chat protocol.
  *
- * Core protocol types/constants are defined in src/shared/claude/protocol.ts
+ * Core protocol types/constants are defined in src/shared/claude/protocol/
  * and re-exported here for convenience.
  */
 
@@ -13,14 +13,20 @@ import type {
   ClaudeMessage,
   ClaudeStreamEvent,
   ContentBlockDelta,
-  ImageContent,
   ModelUsage,
-  TextContent,
-  ThinkingContent,
   ToolResultContent,
   ToolResultContentValue,
   ToolUseContent,
   WebSocketMessage,
+} from '@/shared/claude';
+import {
+  CLAUDE_MESSAGE_TYPES,
+  isTextContent,
+  isThinkingContent,
+  isToolResultContent,
+  isToolUseContent,
+  SESSION_DELTA_EXCLUDED_MESSAGE_TYPES,
+  WEBSOCKET_MESSAGE_TYPES,
 } from '@/shared/claude';
 
 // =============================================================================
@@ -50,44 +56,9 @@ export interface MessageGroup {
  */
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
-// =============================================================================
-// Type Guards
-// =============================================================================
-
-/**
- * Type guard to check if a content item is TextContent.
- */
-export function isTextContent(item: ClaudeContentItem): item is TextContent {
-  return item.type === 'text';
-}
-
-/**
- * Type guard to check if a content item is ThinkingContent.
- */
-export function isThinkingContent(item: ClaudeContentItem): item is ThinkingContent {
-  return item.type === 'thinking';
-}
-
-/**
- * Type guard to check if a content item is ToolUseContent.
- */
-export function isToolUseContent(item: ClaudeContentItem): item is ToolUseContent {
-  return item.type === 'tool_use';
-}
-
-/**
- * Type guard to check if a content item is ToolResultContent.
- */
-export function isToolResultContent(item: ClaudeContentItem): item is ToolResultContent {
-  return item.type === 'tool_result';
-}
-
-/**
- * Type guard to check if a content item is ImageContent.
- */
-export function isImageContent(item: ClaudeContentItem): item is ImageContent {
-  return item.type === 'image' && 'source' in item;
-}
+const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
+const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
+const claudeMessageTypes = new Set<string>(CLAUDE_MESSAGE_TYPES);
 
 /**
  * Type guard to validate unknown data is a WebSocketMessage.
@@ -97,8 +68,34 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
   if (typeof data !== 'object' || data === null) {
     return false;
   }
-  const obj = data as { type?: unknown };
-  return typeof obj.type === 'string';
+  const obj = data as { type?: unknown; data?: unknown };
+  if (typeof obj.type !== 'string' || !wsMessageTypes.has(obj.type)) {
+    return false;
+  }
+
+  // session_delta must wrap another websocket event object.
+  if (obj.type === 'session_delta') {
+    if (typeof obj.data !== 'object' || obj.data === null) {
+      return false;
+    }
+    const nested = obj.data as { type?: unknown };
+    return (
+      typeof nested.type === 'string' &&
+      wsMessageTypes.has(nested.type) &&
+      !sessionDeltaExcludedMessageTypes.has(nested.type)
+    );
+  }
+
+  // claude_message must include a minimally shaped Claude payload to avoid runtime crashes.
+  if (obj.type === 'claude_message') {
+    if (typeof obj.data !== 'object' || obj.data === null) {
+      return false;
+    }
+    const nested = obj.data as { type?: unknown };
+    return typeof nested.type === 'string' && claudeMessageTypes.has(nested.type);
+  }
+
+  return true;
 }
 
 /**
@@ -106,8 +103,8 @@ export function isWebSocketMessage(data: unknown): data is WebSocketMessage {
  */
 export function isWsClaudeMessage(
   msg: WebSocketMessage
-): msg is WebSocketMessage & { type: 'claude_message'; data: ClaudeMessage } {
-  return msg.type === 'claude_message' && 'data' in msg && msg.data != null;
+): msg is Extract<WebSocketMessage, { type: 'claude_message' }> {
+  return msg.type === 'claude_message' && typeof msg.data === 'object' && msg.data !== null;
 }
 
 /**
@@ -279,6 +276,12 @@ export function extractTextFromMessage(msg: ClaudeMessage): string {
 export function extractToolInfo(
   msg: ClaudeMessage
 ): { name: string; id: string; input: Record<string, unknown> } | null {
+  const normalizeToolInput = (input: unknown): Record<string, unknown> => {
+    return typeof input === 'object' && input !== null && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  };
+
   // Check stream events for tool use
   if (msg.type === 'stream_event' && msg.event) {
     if (msg.event.type === 'content_block_start') {
@@ -287,7 +290,7 @@ export function extractToolInfo(
         return {
           name: block.name,
           id: block.id,
-          input: block.input,
+          input: normalizeToolInput(block.input),
         };
       }
     }
@@ -301,7 +304,7 @@ export function extractToolInfo(
         return {
           name: item.name,
           id: item.id,
-          input: item.input,
+          input: normalizeToolInput(item.input),
         };
       }
     }
@@ -475,8 +478,12 @@ function applyToolResultToCall(
   if (callIndex === undefined) {
     return;
   }
-  pairedCalls[callIndex].status = resultInfo.isError ? 'error' : 'success';
-  pairedCalls[callIndex].result = {
+  const call = pairedCalls[callIndex];
+  if (!call) {
+    return;
+  }
+  call.status = resultInfo.isError ? 'error' : 'success';
+  call.result = {
     content: resultInfo.content,
     isError: resultInfo.isError,
   };
@@ -520,13 +527,17 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
     if (currentToolSequence.length === 0) {
       return;
     }
+    const firstToolMessage = currentToolSequence[0];
+    if (!firstToolMessage) {
+      return;
+    }
 
     const pairedCalls = extractPairedToolCalls(currentToolSequence);
 
     // Always create a sequence, even for single tools (so they're paired with results)
     const sequence: ToolSequence = {
       type: 'tool_sequence',
-      id: `tool-seq-${currentToolSequence[0].id}`,
+      id: `tool-seq-${firstToolMessage.id}`,
       pairedCalls,
     };
     result.push(sequence);
@@ -626,7 +637,7 @@ function extractFirstModelUsage(
     return null;
   }
   const models = Object.values(modelUsage);
-  return models.length > 0 ? models[0] : null;
+  return models.length > 0 ? (models[0] ?? null) : null;
 }
 
 /**

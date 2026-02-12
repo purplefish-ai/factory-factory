@@ -1,11 +1,11 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, FileCode, FileMinus, FilePlus, Loader2 } from 'lucide-react';
+import { AlertCircle, FileCode, Loader2 } from 'lucide-react';
 import { memo, useCallback, useRef } from 'react';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { trpc } from '@/frontend/lib/trpc';
-import { cn } from '@/lib/utils';
 
+import { FileChangeItem, fileChangeKindFromDiffStatus } from './file-change-item';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -22,74 +22,6 @@ interface DiffFile {
 interface DiffVsMainPanelProps {
   workspaceId: string;
 }
-
-// =============================================================================
-// Helper Components
-// =============================================================================
-
-function getStatusIcon(status: DiffFileStatus) {
-  switch (status) {
-    case 'added':
-      return <FilePlus className="h-4 w-4" />;
-    case 'modified':
-      return <FileCode className="h-4 w-4" />;
-    case 'deleted':
-      return <FileMinus className="h-4 w-4" />;
-  }
-}
-
-function getStatusColor(status: DiffFileStatus): string {
-  switch (status) {
-    case 'added':
-      return 'text-green-500';
-    case 'modified':
-      return 'text-yellow-500';
-    case 'deleted':
-      return 'text-red-500';
-  }
-}
-
-function getStatusLabel(status: DiffFileStatus): string {
-  switch (status) {
-    case 'added':
-      return 'Added';
-    case 'modified':
-      return 'Modified';
-    case 'deleted':
-      return 'Deleted';
-  }
-}
-
-interface FileItemProps {
-  file: DiffFile;
-  onClick: () => void;
-}
-
-const FileItem = memo(function FileItem({ file, onClick }: FileItemProps) {
-  const statusColor = getStatusColor(file.status);
-  const fileName = file.path.split('/').pop() ?? file.path;
-  const dirPath = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
-        'hover:bg-muted/50 rounded-md transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-      )}
-      title={`${getStatusLabel(file.status)}: ${file.path}`}
-    >
-      <span className={statusColor}>{getStatusIcon(file.status)}</span>
-      <span className="flex-1 truncate">
-        <span className="font-medium">{fileName}</span>
-        {dirPath && <span className="text-muted-foreground ml-1 text-xs">{dirPath}</span>}
-      </span>
-      <span className={cn('text-xs uppercase', statusColor)}>{file.status[0]}</span>
-    </button>
-  );
-});
 
 // =============================================================================
 // Main Component
@@ -124,6 +56,9 @@ const VirtualizedFileList = memo(function VirtualizedFileList({
       >
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const file = files[virtualItem.index];
+          if (!file) {
+            return null;
+          }
           return (
             <div
               key={virtualItem.key}
@@ -135,7 +70,12 @@ const VirtualizedFileList = memo(function VirtualizedFileList({
                 transform: `translateY(${virtualItem.start}px)`,
               }}
             >
-              <FileItem file={file} onClick={() => onFileClick(file)} />
+              <FileChangeItem
+                path={file.path}
+                kind={fileChangeKindFromDiffStatus(file.status)}
+                statusCode={file.status[0]}
+                onClick={() => onFileClick(file)}
+              />
             </div>
           );
         })}
@@ -168,7 +108,13 @@ const CategorizedFiles = memo(function CategorizedFiles({
             </h3>
             <div className="space-y-0.5">
               {added.map((file) => (
-                <FileItem key={file.path} file={file} onClick={() => onFileClick(file)} />
+                <FileChangeItem
+                  key={file.path}
+                  path={file.path}
+                  kind={fileChangeKindFromDiffStatus(file.status)}
+                  statusCode={file.status[0]}
+                  onClick={() => onFileClick(file)}
+                />
               ))}
             </div>
           </div>
@@ -181,7 +127,13 @@ const CategorizedFiles = memo(function CategorizedFiles({
             </h3>
             <div className="space-y-0.5">
               {modified.map((file) => (
-                <FileItem key={file.path} file={file} onClick={() => onFileClick(file)} />
+                <FileChangeItem
+                  key={file.path}
+                  path={file.path}
+                  kind={fileChangeKindFromDiffStatus(file.status)}
+                  statusCode={file.status[0]}
+                  onClick={() => onFileClick(file)}
+                />
               ))}
             </div>
           </div>
@@ -194,7 +146,13 @@ const CategorizedFiles = memo(function CategorizedFiles({
             </h3>
             <div className="space-y-0.5">
               {deleted.map((file) => (
-                <FileItem key={file.path} file={file} onClick={() => onFileClick(file)} />
+                <FileChangeItem
+                  key={file.path}
+                  path={file.path}
+                  kind={fileChangeKindFromDiffStatus(file.status)}
+                  statusCode={file.status[0]}
+                  onClick={() => onFileClick(file)}
+                />
               ))}
             </div>
           </div>

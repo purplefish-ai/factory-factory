@@ -16,7 +16,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist/client',
-    chunkSizeWarningLimit: 3000,
+    chunkSizeWarningLimit: 5000,
   },
   server: {
     proxy: {
@@ -33,6 +33,10 @@ export default defineConfig({
         ws: true,
       },
       '/dev-logs': {
+        target: backendUrl.replace(/^http/, 'ws'),
+        ws: true,
+      },
+      '/snapshots': {
         target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import type {
   ChatMessage,
@@ -15,16 +15,16 @@ import type {
   PendingRequest,
   RewindPreviewState,
   SessionStatus,
-} from './chat-reducer';
+} from './reducer';
 import { useChatState } from './use-chat-state';
+
+const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface UseChatWebSocketOptions {
-  /** Working directory for Claude CLI (workspace worktree path) */
-  workingDir?: string;
   /**
    * Database session ID (required).
    * This is the primary key for the ClaudeSession record.
@@ -81,6 +81,7 @@ export interface UseChatWebSocketReturn {
   setInputDraft: (draft: string) => void;
   setInputAttachments: (attachments: MessageAttachment[]) => void;
   removeQueuedMessage: (id: string) => void;
+  resumeQueuedMessages: () => void;
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
@@ -108,7 +109,7 @@ export interface UseChatWebSocketReturn {
  * 3. Wires them together with the appropriate callbacks
  */
 export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSocketReturn {
-  const { workingDir, dbSessionId } = options;
+  const { dbSessionId } = options;
 
   // Unique connection ID for this browser window (stable across reconnects)
   const connectionIdRef = useRef<string>(
@@ -116,14 +117,12 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   );
 
   // Build WebSocket URL - null if no dbSessionId (transport won't connect)
-  const url =
-    dbSessionId && workingDir
-      ? buildWebSocketUrl('/chat', {
-          sessionId: dbSessionId,
-          connectionId: connectionIdRef.current,
-          workingDir,
-        })
-      : null;
+  const url = dbSessionId
+    ? buildWebSocketUrl('/chat', {
+        sessionId: dbSessionId,
+        connectionId: connectionIdRef.current,
+      })
+    : null;
 
   // Ref-wiring pattern to break circular dependency:
   // - useChatState needs a `send` function to send WebSocket messages
@@ -134,6 +133,37 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // 1. sendRef.current is updated synchronously after useWebSocketTransport returns
   // 2. The callback wrapper ((msg) => sendRef.current(msg)) always uses the latest ref value
   const sendRef = useRef<(message: unknown) => boolean>(() => false);
+  const currentLoadRequestIdRef = useRef<string | null>(null);
+  const currentLoadGenerationRef = useRef(0);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearLoadTimeout = useCallback(() => {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scheduleLoadRetry = useCallback(
+    (loadGeneration: number, loadRequestId: string) => {
+      clearLoadTimeout();
+      loadTimeoutRef.current = setTimeout(() => {
+        if (
+          currentLoadGenerationRef.current !== loadGeneration ||
+          currentLoadRequestIdRef.current !== loadRequestId
+        ) {
+          loadTimeoutRef.current = null;
+          return;
+        }
+
+        const nextLoadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        currentLoadRequestIdRef.current = nextLoadRequestId;
+        sendRef.current({ type: 'load_session', loadRequestId: nextLoadRequestId });
+        scheduleLoadRetry(loadGeneration, nextLoadRequestId);
+      }, LOAD_SESSION_RETRY_TIMEOUT_MS);
+    },
+    [clearLoadTimeout]
+  );
 
   const chat = useChatState({
     dbSessionId,
@@ -144,22 +174,64 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle incoming messages - delegate to chat state
   const handleMessage = useCallback(
     (data: unknown) => {
+      if (
+        typeof data === 'object' &&
+        data !== null &&
+        'type' in data &&
+        ((data as { type?: string }).type === 'session_replay_batch' ||
+          (data as { type?: string }).type === 'session_snapshot')
+      ) {
+        const batch = data as { loadRequestId?: string; type?: string };
+        if (currentLoadRequestIdRef.current && batch.loadRequestId) {
+          if (batch.loadRequestId !== currentLoadRequestIdRef.current) {
+            return;
+          }
+          // Only clear when we have a matching ID
+          currentLoadRequestIdRef.current = null;
+          clearLoadTimeout();
+        }
+      }
       chat.handleMessage(data);
     },
-    [chat.handleMessage]
+    [chat.handleMessage, clearLoadTimeout]
   );
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
+    // Dispatch loading state to prevent flicker while replaying events
+    chat.dispatch({ type: 'SESSION_LOADING_START' });
+    const loadGeneration = currentLoadGenerationRef.current + 1;
+    currentLoadGenerationRef.current = loadGeneration;
+    const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    currentLoadRequestIdRef.current = loadRequestId;
+    scheduleLoadRetry(loadGeneration, loadRequestId);
     sendRef.current({ type: 'list_sessions' });
-    sendRef.current({ type: 'load_session' }); // Loads history and sends messages_snapshot
-  }, []);
+    sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
+  }, [chat.dispatch, scheduleLoadRetry]);
+
+  // Handle disconnection - clear loading state to avoid stuck spinner
+  const handleDisconnected = useCallback(() => {
+    currentLoadRequestIdRef.current = null;
+    currentLoadGenerationRef.current += 1;
+    clearLoadTimeout();
+    chat.dispatch({ type: 'SESSION_LOADING_END' });
+  }, [chat.dispatch, clearLoadTimeout]);
+
+  // Ensure pending load timers cannot fire after unmount.
+  useEffect(() => {
+    return () => {
+      currentLoadRequestIdRef.current = null;
+      currentLoadGenerationRef.current += 1;
+      clearLoadTimeout();
+    };
+  }, [clearLoadTimeout]);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
     url,
     onMessage: handleMessage,
     onConnected: handleConnected,
+    onDisconnected: handleDisconnected,
   });
 
   // Wire up the send function to the transport
@@ -197,6 +269,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     setInputDraft: chat.setInputDraft,
     setInputAttachments: chat.setInputAttachments,
     removeQueuedMessage: chat.removeQueuedMessage,
+    resumeQueuedMessages: chat.resumeQueuedMessages,
     dismissTaskNotification: chat.dismissTaskNotification,
     clearTaskNotifications: chat.clearTaskNotifications,
     // Rewind files actions

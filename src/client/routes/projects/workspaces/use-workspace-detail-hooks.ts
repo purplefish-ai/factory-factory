@@ -21,9 +21,19 @@ export function useWorkspaceInitStatus(
     );
 
   const prevInitStatusRef = useRef<string | undefined>(undefined);
+  const prevHasWorktreePathRef = useRef(false);
+  const hasWorktreePath = workspaceInitStatus?.hasWorktreePath ?? false;
+
   useEffect(() => {
     const currentStatus = workspaceInitStatus?.status;
     const prevStatus = prevInitStatusRef.current;
+
+    // Invalidate workspace data when worktree becomes available so worktreePath,
+    // claudeSessions, etc. refresh immediately and the chat UI can connect.
+    if (hasWorktreePath && !prevHasWorktreePathRef.current) {
+      utils.workspace.get.invalidate({ id: workspaceId });
+    }
+    prevHasWorktreePathRef.current = hasWorktreePath;
 
     if (currentStatus === 'READY') {
       const isTransitionToReady = prevStatus !== undefined && prevStatus !== 'READY';
@@ -35,13 +45,18 @@ export function useWorkspaceInitStatus(
     }
 
     prevInitStatusRef.current = currentStatus;
-  }, [workspaceInitStatus?.status, workspaceId, utils, workspace?.worktreePath]);
+  }, [workspaceInitStatus?.status, hasWorktreePath, workspaceId, utils, workspace?.worktreePath]);
 
   const status = workspaceInitStatus?.status;
-  const isInitializing =
-    isInitStatusPending || status === 'NEW' || status === 'PROVISIONING' || status === 'FAILED';
 
-  return { workspaceInitStatus, isInitStatusPending, isInitializing };
+  // Script failed after worktree was created — non-blocking banner with retry
+  const isScriptFailed = status === 'FAILED' && hasWorktreePath;
+
+  return {
+    workspaceInitStatus,
+    isInitStatusPending,
+    isScriptFailed,
+  };
 }
 
 export function useSelectedSessionId(initialDbSessionId: string | null) {

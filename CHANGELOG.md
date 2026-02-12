@@ -5,6 +5,266 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-02-11
+
+### Added
+
+- Add v1.1 Project Snapshot Service for improved workspace state management (#944)
+- Add Factory Factory signature to agent-created PRs (#938)
+- Always show session tab bar with + button for easier session management (#948)
+
+### Fixed
+
+- Fix snapshot_removed not clearing workspace.get cache (#952)
+- Fix #912: Catch unhandled sendRaw rejection in sendInitialize and sendRewindFiles (#946)
+- Fix CI status computation to handle NEUTRAL conclusion (#947)
+- Fix #935: Prevent workspace from tagging old merged PRs (#939)
+- Fix #914: LoggerService crash on circular references (#925)
+- Fix logger service to expand environment variables in BASE_DIR (#934)
+- Fix workspace tab status drift and stuck loading state (#931)
+
+### Changed
+
+- Unify workspace status with snapshot single writer (#949)
+- Dedupe workspace, chat, and fixer flows across stack (#941)
+- Unify workspace init script messaging (#906)
+- Refresh README with npx instructions and comprehensive updates (#933)
+
+### Refactored
+
+- Enforce single-writer ownership and fix test ABI setup (#951)
+- Enforce safer promise handling with Biome rules (#950)
+- Enforce @ imports and remove compatibility barrels (#942)
+- Refactor websocket handlers and queue policies (#940)
+- Remove unused REST and MCP routing surfaces (#943)
+- Remove redundant init script banner, keep inline chat message (#932)
+
+## [0.2.7] - 2026-02-10
+
+### Added
+
+- Add app running play indicator to sidebar and Kanban cards (#763)
+- Add searchable server logs page with filtering and download (#848)
+- Add expandable rows with formatted JSON to logs page (#858)
+- Add session management UI with increased p-limit concurrency to 20 (#856)
+- Add re-review request step to ratchet dispatch prompt (#876)
+
+### Changed
+
+- Change default theme from system to dark (#864)
+- Improve workspace init UX with chat-first queueing (#878)
+- Start Claude session eagerly during workspace init (#874)
+- Show factory config for all projects in admin panel (#882)
+- Open Dev Logs panel when starting workspace run script (#884)
+- Replace init banner with inline spinner (#886)
+- Make kanban board and list view mobile responsive (#901)
+- Add mobile-responsive layout with hamburger menu sidebar (#896)
+
+### Fixed
+
+- Fix ratchet to check for any working session, not just non-ratchet ones (#838)
+- Fix session process manager race condition (#865)
+- Fix sessions stuck in loading state (#867)
+- Fix cross-process race condition in resume mode file lock (#866)
+- Fix PR comment updatedAt validation error (#871)
+- Fix dev server child processes not killed on shutdown (#875)
+- Fix session loading stuck on cold start (#872)
+- Fix workspace reorder triggering page refresh (#885)
+- Fix non-selected session tab status icons (#891)
+- Fix intra-domain import: use worktreeLifecycleService.setInitMode directly (#889)
+- Fix run script STOPPING leak on process exit (#897)
+- Fix queued messages disappearing when switching workspaces (#868)
+- Fix queued messages disappearing on page refresh (#855)
+- Fix GitHub CLI bot comment validation error (#857)
+- Fix infinite loading when session loads from history (#861)
+- Fix session stuck in loading phase after creation (#863)
+- Fix centered terminal text alignment (#859)
+- Show actual error message when Mermaid diagram fails to render (#851)
+- Fix resume modes file write race condition with atomic rename (#853)
+
+### Refactored
+
+- Enforce architecture boundaries and isolate DB access (#840)
+- Enforce layer boundaries: tRPC/routers must use services, not accessors (#839)
+- Add session domain single-writer boundary (#842)
+- Refactor Claude session runtime lifecycle ownership (#843)
+- Centralize backend runtime constants and lock safety warnings (#845)
+- Tighten TS typing and ban z.any usage (#847)
+- Refactor session store into focused modules (#849)
+- Remove inline Biome ignores and enforce zero policy (#850)
+- Refactor PR detail panel to reduce cognitive complexity (#571) (#862)
+- Extract file lock mutex and atomic write utilities (#873)
+- SRP refactor: Phase 1 — Foundation & Domain Scaffolding (#879)
+- SRP refactor: Phase 2 — Session Domain Consolidation (#883)
+- SRP refactor: Phase 3 — Workspace Domain Consolidation (#887)
+- SRP refactor: Phase 4 — GitHub Domain Consolidation (#890)
+- SRP refactor: Phase 5 — Ratchet Domain Consolidation (#894)
+- SRP refactor: Phase 6 — Terminal Domain Consolidation (#893)
+- SRP refactor: Phase 7 — Run Script Domain Consolidation (#895)
+- SRP refactor: Phase 8 — Orchestration Layer (#898)
+- SRP refactor: Phase 9 — AppContext & Import Rewiring (#899)
+- SRP refactor: Phase 10 — Validation & Stabilization (#900)
+- Improve test coverage for domain services with edge case tests (#902)
+
+### Documentation
+
+- Write server logs to file instead of terminal (#844)
+- Ratchet should @ mention reviewers when responding to comments (#881)
+- Clean up ratchet sessions when work is finished (#877)
+- Skip merged and disabled workspaces in ratchet poll loop (#852)
+- Enable parallel workspace archiving by removing global isPending check (#870)
+- Enable parallel workspace archiving and skip confirmation for merged PRs (#854)
+- Reduce GitHub API polling and add rate limit backoff (#860)
+- Archive v1.0 SRP Consolidation milestone (#904)
+
+## [0.2.6] - 2026-02-08
+
+### Fixed
+
+- Fix #824: Skip branch rename for additional Claude sessions (#832)
+- Fix tool call message rendering (#834)
+- Fix session hydration and live message parity (#818)
+- Fix tool preview height clipping in live activity box (#817)
+- Fix #810: Adjust tool preview height in resizable live activity box (#813)
+- Fix #802: Indicate factory-factory.json detection during project import (#814)
+
+### Changed
+
+- Harden transcript hydration, lineage guards, and streaming consistency (#836)
+- Show workspace initialization status immediately after creation (#833)
+- Unify chat state with a single SessionStoreService (#827)
+- Simplify and clarify ratcheting UI and documentation (#821)
+- Disable partial assistant message streaming (#829)
+
+### Refactored
+
+- Remove legacy message state bypass APIs and protocol artifacts (#830)
+- Skip pre-commit hooks when archiving workspaces (#828)
+- Fix ratchet to only dispatch when CI is in terminal state (#823)
+- Treat idle non-ratchet sessions as idle for ratchet (#816)
+- Refactor ratchet decision flow and diagnostics (#811)
+
+### Added
+
+- Add visual indicators for pending plan approval and user questions (#771) (#815)
+
+## [0.2.5] - 2026-02-07
+
+### Added
+
+- Centralize sidebar status and add CI chip (#799)
+- Enable concurrent multi-workspace archiving (#787)
+- Enhance GitHub issue prompt with orchestrated workflow (#783)
+
+### Changed
+
+- Unify session runtime status model and transport (#807)
+- Unify CI status icons across workspace views (#806)
+- Simplify ratchet to a single idle-gated dispatch loop (#798)
+- Batch session hydration to eliminate tab-switch replay flicker (#797)
+- Move live activity drag handle from bottom to top (#796)
+- Improve archiving workspace overlay with multi-ring animation (#791)
+- Enable noImplicitOverride TypeScript compiler option (#795)
+- Increase Vite chunk size warning limit to 5MB
+- Update homepage URL to https://factoryfactory.ai
+
+### Fixed
+
+- Fix sidebar width localStorage persistence (#808)
+- Fix #800: Unify the Markdown loading logic (#804)
+- Fix #727: Introduce guarded run-script runtime state machine (#792)
+- Fix #750: Add lint guardrails for unsafe JSON.parse casts and unknown resolver casts (#794)
+- Fix #747: Validate persisted JSON stores with Zod schemas (#793)
+- Fix #748: Use shared schema for frontend backup import parsing (#789)
+- Fix #746: Schema-validate GitHub CLI JSON responses (#788)
+- Fix task list clipping and blank state during TodoWrite (#784, #786)
+- Fix queued message ordering to use dispatch time instead of queue time (#782)
+
+### Refactored
+
+- Validate Claude stream JSON and session JSONL inputs at parse boundaries (#745, #790)
+- Refactor chat handler registry to eliminate message payload casts (#785)
+
+## [0.2.4] - 2026-02-06
+
+### Added
+
+- Show GitHub issue details in side panel (#777)
+
+### Changed
+
+- Improve session status indicators during workspace startup (#774)
+- Format statuses in status dropdown (#776)
+- Lighten secondary text color in dark mode (#769)
+- Unify session start semantics across WebSocket and tRPC (#773)
+
+### Fixed
+
+- Fix workspace WAITING flicker during GitHub issue dispatch (#772)
+- Clear workspace notification glow on selection (#775)
+- Harden Claude protocol control responses with schema validation (#755)
+
+### Refactored
+
+- Refactor attachment validation to reduce complexity (#778)
+- Enforce PRSnapshotService as single writer for workspace PR fields (#770)
+- Phase 4: Backup/Import v2 and Compatibility Hardening (#722)
+
+### Documentation
+
+- Ratchet reliability: design doc + stale CI guard + agent branch sync (#762)
+
+## [0.2.3] - 2026-02-06
+
+### Added
+
+- Add draggable height resize to live activity feed (#757)
+- Show starting state for issue workspace auto-start (#758)
+
+### Changed
+
+- Stabilize live activity dock with internal tool scrolling (#754)
+- Clear ratchetActiveSessionId on session exit (#760)
+
+### Fixed
+
+- Fix chat replay flicker by showing loading state during reconnect (#756)
+- Fix agent messages lost when Claude process is replaced (#752)
+- Fix kanban column scrolling when items overflow (#753)
+- Fix crash when argumentHint is non-string in slash command cache (#743)
+
+## [0.2.2] - 2026-02-06
+
+### Added
+
+- Show factory-factory.json preview on new workspace page (#709)
+- Add missing workspace attention glow animation (#731)
+
+### Changed
+
+- Enable noUncheckedIndexedAccess for safer array/object indexing (#741)
+- Simplify ratchet flow and unify working-state derivation (#711)
+- Improve attachments (#701, #714)
+- Extract workspace list page subcomponents + shared create hook (#703)
+- Stay on kanban view when starting workspace from GitHub issue (#653)
+- Consolidate fixer sessions and PR snapshot writes (#691, #697)
+- Enable text selection in toast notifications (#718)
+
+### Fixed
+
+- Fix ratchet missing repeated CI failures (#736)
+- Fix Claude process timeout during workspace initialization (#729)
+- Fix unhandled promise rejection from ClaudeClient error events (#717, #721)
+- Fix Claude keepalive activity timeout (#712)
+- Fix unhandled promise rejection from stdin stream errors (#702)
+
+### Refactored
+
+- Phase 3: Schema cleanup and legacy surface removal (#693, #719)
+- Phase 2: Unify workspace creation orchestration (#692, #706)
+- Remove workflow/session selectors and default session startup (#720)
+- Remove adaptLegacyCreateInput compatibility path (#713, #715)
+
 ## [0.2.1] - 2026-02-05
 
 ### Added
