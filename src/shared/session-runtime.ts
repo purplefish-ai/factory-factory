@@ -23,6 +23,7 @@ export interface SessionSummary {
   name: string | null;
   workflow: string | null;
   model: string | null;
+  provider?: 'CLAUDE' | 'CODEX';
   persistedStatus: SessionStatus;
   runtimePhase: SessionRuntimePhase;
   processState: SessionRuntimeProcessState;

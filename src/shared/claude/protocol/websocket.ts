@@ -1,3 +1,4 @@
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type { AgentMetadata } from './agent';
@@ -59,6 +60,7 @@ interface WebSocketMessageCommon {
   workspaceName?: string;
   sessionCount?: number;
   finishedAt?: string;
+  capabilities?: ChatBarCapabilities;
 }
 
 interface WebSocketMessagePayloadByType {
@@ -197,6 +199,9 @@ interface WebSocketMessagePayloadByType {
     userMessageId?: string;
     rewindError?: string;
   };
+  chat_capabilities: {
+    capabilities: ChatBarCapabilities;
+  };
 }
 
 /**
@@ -260,6 +265,7 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   user_message_uuid: true,
   rewind_files_preview: true,
   rewind_files_error: true,
+  chat_capabilities: true,
 };
 
 export const WEBSOCKET_MESSAGE_TYPES = Object.keys(

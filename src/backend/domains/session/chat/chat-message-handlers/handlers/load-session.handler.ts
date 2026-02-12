@@ -43,12 +43,21 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       loadRequestId: message.loadRequestId,
     });
 
-    await sendCachedSlashCommandsIfNeeded(sessionId);
+    const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'chat_capabilities',
+      capabilities: chatCapabilities,
+    });
+
+    await sendCachedSlashCommandsIfNeeded(sessionId, dbSession.provider);
   };
 }
 
-async function sendCachedSlashCommandsIfNeeded(sessionId: string): Promise<void> {
-  const cached = await slashCommandCacheService.getCachedCommands();
+async function sendCachedSlashCommandsIfNeeded(
+  sessionId: string,
+  provider: 'CLAUDE' | 'CODEX'
+): Promise<void> {
+  const cached = await slashCommandCacheService.getCachedCommands(provider);
   if (!cached || cached.length === 0) {
     return;
   }

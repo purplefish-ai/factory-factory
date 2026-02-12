@@ -1,4 +1,5 @@
 import { createEmptyTokenStats, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import type { ChatState } from './types';
 
@@ -84,6 +85,7 @@ function createSessionSwitchResetState(): Pick<
   | 'rewindPreview'
   | 'processStatus'
   | 'sessionRuntime'
+  | 'chatCapabilities'
 > {
   return {
     ...createBaseResetState(),
@@ -96,6 +98,7 @@ function createSessionSwitchResetState(): Pick<
     },
     slashCommands: [], // Clear for new session - will be sent when Claude starts
     slashCommandsLoaded: false,
+    chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
   };
 }
 
@@ -109,6 +112,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     availableSessions: [],
     pendingRequest: { type: 'none' },
     chatSettings: DEFAULT_CHAT_SETTINGS,
+    chatCapabilities: EMPTY_CHAT_BAR_CAPABILITIES,
     queuedMessages: new Map(),
     toolUseIdToIndex: new Map(),
     latestThinking: null,

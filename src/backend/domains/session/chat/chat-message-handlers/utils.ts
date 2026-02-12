@@ -1,10 +1,10 @@
 import type { QueuedMessage } from '@/shared/claude';
 import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
-import { isValidModel } from './constants';
+import { normalizeRequestedModel } from './constants';
 
 export function getValidModel(message: StartMessageInput): string | undefined {
   const requestedModel = message.selectedModel || message.model;
-  return isValidModel(requestedModel) ? requestedModel : undefined;
+  return normalizeRequestedModel(requestedModel);
 }
 
 export function buildQueuedMessage(
@@ -12,16 +12,15 @@ export function buildQueuedMessage(
   message: QueueMessageInput,
   text: string
 ): QueuedMessage {
-  const rawModel = message.settings?.selectedModel ?? null;
-  const validModel = isValidModel(rawModel) ? rawModel : null;
+  const selectedModel = normalizeRequestedModel(message.settings?.selectedModel) ?? null;
 
   return {
     id,
     text,
     attachments: message.attachments,
     settings: message.settings
-      ? { ...message.settings, selectedModel: validModel }
-      : { selectedModel: validModel, thinkingEnabled: false, planModeEnabled: false },
+      ? { ...message.settings, selectedModel }
+      : { selectedModel, thinkingEnabled: false, planModeEnabled: false },
     timestamp: new Date().toISOString(),
   };
 }

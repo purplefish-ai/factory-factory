@@ -32,6 +32,7 @@ export interface ChatContentProps {
   stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
+  chatCapabilities: ReturnType<typeof useChatWebSocket>['chatCapabilities'];
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
@@ -180,6 +181,7 @@ export const ChatContent = memo(function ChatContent({
   stopChat,
   inputRef,
   chatSettings,
+  chatCapabilities,
   updateSettings,
   inputDraft,
   setInputDraft,
@@ -236,6 +238,7 @@ export const ChatContent = memo(function ChatContent({
   const stopping = sessionStatus.phase === 'stopping';
   const displayStartingState = shouldShowStartingState(sessionStatus.phase, autoStartPending);
   const loadingSession = sessionStatus.phase === 'loading';
+  const rewindEnabled = chatCapabilities.rewind.enabled;
 
   const permissionRequestId =
     pendingRequest.type === 'permission' ? pendingRequest.request.requestId : null;
@@ -287,7 +290,7 @@ export const ChatContent = memo(function ChatContent({
           onRemoveQueuedMessage={removeQueuedMessage}
           isCompacting={isCompacting}
           getUuidForMessageId={getUuidForMessageId}
-          onRewindToMessage={startRewindPreview}
+          onRewindToMessage={rewindEnabled ? startRewindPreview : undefined}
           initBanner={initBanner}
         />
       </div>
@@ -334,6 +337,7 @@ export const ChatContent = memo(function ChatContent({
           inputRef={inputRef}
           placeholder={placeholder}
           settings={chatSettings}
+          capabilities={chatCapabilities}
           onSettingsChange={updateSettings}
           value={inputDraft}
           onChange={setInputDraft}

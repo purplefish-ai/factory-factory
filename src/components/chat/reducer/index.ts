@@ -172,6 +172,16 @@ function handleSessionsMessage(data: WebSocketMessage): ChatAction | null {
   return null;
 }
 
+function handleChatCapabilitiesMessage(data: WebSocketMessage): ChatAction | null {
+  if (!data.capabilities) {
+    return null;
+  }
+  return {
+    type: 'WS_CHAT_CAPABILITIES',
+    payload: { capabilities: data.capabilities },
+  };
+}
+
 function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | null {
   if (data.requestId && data.toolName) {
     return {
@@ -413,6 +423,7 @@ const messageHandlers: MessageHandlerMap = {
   agent_message: handleClaudeMessageAction,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,
+  chat_capabilities: handleChatCapabilitiesMessage,
   agent_metadata: null,
   permission_request: handlePermissionRequestMessage,
   user_question: handleUserQuestionMessage,

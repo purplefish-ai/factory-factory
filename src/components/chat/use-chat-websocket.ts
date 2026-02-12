@@ -10,6 +10,7 @@ import type {
   TokenStats,
 } from '@/lib/claude-types';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
   PendingMessageContent,
   PendingRequest,
@@ -47,6 +48,7 @@ export interface UseChatWebSocketReturn {
   pendingRequest: PendingRequest;
   // Chat settings
   chatSettings: ChatSettings;
+  chatCapabilities: ChatBarCapabilities;
   // Input draft (preserved across tab switches)
   inputDraft: string;
   // Input attachments (for recovery on rejection)
@@ -247,6 +249,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     availableSessions: chat.availableSessions,
     pendingRequest: chat.pendingRequest,
     chatSettings: chat.chatSettings,
+    chatCapabilities: chat.chatCapabilities,
     inputDraft: chat.inputDraft,
     inputAttachments: chat.inputAttachments,
     queuedMessages: chat.queuedMessages,

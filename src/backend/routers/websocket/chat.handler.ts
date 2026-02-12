@@ -47,6 +47,17 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   // Client Creation
   // ==========================================================================
 
+  function isClaudeClient(client: unknown): client is ClaudeClient {
+    if (!client || typeof client !== 'object') {
+      return false;
+    }
+    const candidate = client as Partial<ClaudeClient>;
+    return (
+      typeof candidate.sendMessage === 'function' &&
+      typeof candidate.getInitializeResponse === 'function'
+    );
+  }
+
   /**
    * Get or create a ClaudeClient by delegating to sessionService.
    * Sets up event forwarding for WebSocket connections.
@@ -58,7 +69,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       planModeEnabled?: boolean;
       model?: string;
     }
-  ): Promise<ClaudeClient> {
+  ): Promise<unknown> {
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Getting or creating client via sessionService', { dbSessionId });
     }
@@ -73,15 +84,17 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     // Set up event forwarding (idempotent - safe to call multiple times)
     const session = await sessionDataService.findClaudeSessionById(dbSessionId);
     const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
-    chatEventForwarderService.setupClientEvents(
-      dbSessionId,
-      client,
-      {
-        workspaceId: session?.workspaceId ?? 'unknown',
-        workingDir: sessionOpts?.workingDir ?? '',
-      },
-      () => chatMessageHandlerService.tryDispatchNextMessage(dbSessionId)
-    );
+    if (session?.provider === 'CLAUDE' && isClaudeClient(client)) {
+      chatEventForwarderService.setupClientEvents(
+        dbSessionId,
+        client,
+        {
+          workspaceId: session?.workspaceId ?? 'unknown',
+          workingDir: sessionOpts?.workingDir ?? '',
+        },
+        () => chatMessageHandlerService.tryDispatchNextMessage(dbSessionId)
+      );
+    }
 
     return client;
   }

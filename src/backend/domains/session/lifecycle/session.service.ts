@@ -7,10 +7,9 @@ import { SessionManager } from '@/backend/domains/session/claude/session';
 import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
 import { parseTurnId } from '@/backend/domains/session/codex/payload-utils';
 import {
-  type ClaudeActiveProcessSummary,
   claudeSessionProviderAdapter,
   codexSessionProviderAdapter,
-  type SessionProviderAdapter,
+  type SessionProvider,
 } from '@/backend/domains/session/providers';
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
@@ -18,6 +17,7 @@ import { sessionDomainService } from '@/backend/domains/session/session-domain.s
 import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
 import {
   createInitialSessionRuntimeState,
@@ -30,18 +30,6 @@ import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
-
-type ActiveSessionProviderAdapter = SessionProviderAdapter<
-  ClaudeClient,
-  ClaudeClientOptions,
-  ClaudeRuntimeEventHandlers,
-  ClaudeMessage,
-  SessionDeltaEvent,
-  string | ClaudeContentItem[],
-  RewindFilesResponse,
-  RegisteredProcess,
-  ClaudeActiveProcessSummary
->;
 
 /**
  * Callback type for client creation hook.
@@ -57,15 +45,12 @@ export type ClientCreatedCallback = (
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
-  private readonly providerAdapter: ActiveSessionProviderAdapter;
+  private readonly claudeAdapter = claudeSessionProviderAdapter;
   private readonly codexAdapter = codexSessionProviderAdapter;
+  private readonly sessionProviderCache = new Map<string, SessionProvider>();
   private readonly codexEventTranslator = new CodexEventTranslator({
     userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
   });
-
-  private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
-    return typeof client.isWorking === 'function' ? client.isWorking() : false;
-  }
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
     if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
@@ -80,22 +65,68 @@ class SessionService {
     return Date.now() - updatedAtMs > STALE_LOADING_RUNTIME_MAX_AGE_MS;
   }
 
+  private cacheSessionProvider(sessionId: string, provider: SessionProvider): void {
+    this.sessionProviderCache.set(sessionId, provider);
+  }
+
+  private resolveAdapterForProvider(provider: SessionProvider) {
+    return provider === 'CODEX' ? this.codexAdapter : this.claudeAdapter;
+  }
+
+  private resolveAdapterForSessionSync(sessionId: string) {
+    const cached = this.sessionProviderCache.get(sessionId);
+    if (cached) {
+      return this.resolveAdapterForProvider(cached);
+    }
+
+    if (
+      this.codexAdapter.getClient(sessionId) ||
+      this.codexAdapter.getPendingClient(sessionId) !== undefined ||
+      this.codexAdapter.isStopInProgress(sessionId)
+    ) {
+      return this.codexAdapter;
+    }
+
+    if (
+      this.claudeAdapter.getClient(sessionId) ||
+      this.claudeAdapter.getPendingClient(sessionId) !== undefined ||
+      this.claudeAdapter.isStopInProgress(sessionId)
+    ) {
+      return this.claudeAdapter;
+    }
+
+    return this.claudeAdapter;
+  }
+
+  private async loadSessionWithAdapter(sessionId: string): Promise<{
+    session: ClaudeSession;
+    adapter: typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter;
+  }> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    this.cacheSessionProvider(sessionId, session.provider);
+    return {
+      session,
+      adapter: this.resolveAdapterForProvider(session.provider),
+    };
+  }
+
   /**
    * Register a callback to be called when a client is created.
    * Used by chat handler to set up event forwarding without circular dependencies.
    */
   setOnClientCreated(callback: ClientCreatedCallback): void {
-    this.providerAdapter.setOnClientCreated(callback);
+    this.claudeAdapter.setOnClientCreated(callback);
   }
 
   constructor(options?: {
     repository?: SessionRepository;
     promptBuilder?: SessionPromptBuilder;
-    providerAdapter?: ActiveSessionProviderAdapter;
   }) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
-    this.providerAdapter = options?.providerAdapter ?? claudeSessionProviderAdapter;
     this.initializeCodexManagerHandlers();
   }
 
@@ -188,16 +219,13 @@ class SessionService {
    * Uses getOrCreateClient() internally for unified lifecycle management with race protection.
    */
   async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    if (this.providerAdapter.isStopInProgress(sessionId)) {
+    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    if (adapter.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
     // Check if session is already running to prevent duplicate message sends
-    const existingClient = this.providerAdapter.getClient(sessionId);
+    const existingClient = adapter.getClient(sessionId);
     if (existingClient) {
       throw new Error('Session is already running');
     }
@@ -211,10 +239,10 @@ class SessionService {
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
     if (initialPrompt) {
-      await this.providerAdapter.sendMessage(sessionId, initialPrompt);
+      await this.sendSessionMessage(sessionId, initialPrompt);
     }
 
-    logger.info('Session started', { sessionId, provider: 'CLAUDE' });
+    logger.info('Session started', { sessionId, provider: session.provider });
   }
 
   /**
@@ -232,11 +260,14 @@ class SessionService {
     sessionId: string,
     options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
-    if (this.providerAdapter.isStopInProgress(sessionId)) {
+    const session = await this.loadSessionForStop(sessionId);
+    const provider = session?.provider ?? this.sessionProviderCache.get(sessionId) ?? 'CLAUDE';
+    const adapter = this.resolveAdapterForProvider(provider);
+
+    if (adapter.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
-    const session = await this.loadSessionForStop(sessionId);
 
     const current = this.getRuntimeSnapshot(sessionId);
     sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -246,7 +277,7 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    await this.providerAdapter.stopClient(sessionId);
+    await adapter.stopClient(sessionId);
     await this.updateStoppedSessionState(sessionId);
 
     sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
@@ -266,7 +297,7 @@ class SessionService {
       shouldCleanupTransientRatchetSession
     );
 
-    logger.info('Session stopped', { sessionId, provider: 'CLAUDE' });
+    logger.info('Session stopped', { sessionId, provider });
   }
 
   /**
@@ -281,7 +312,11 @@ class SessionService {
 
   private async loadSessionForStop(sessionId: string): Promise<ClaudeSession | null> {
     try {
-      return await this.repository.getSessionById(sessionId);
+      const session = await this.repository.getSessionById(sessionId);
+      if (session) {
+        this.cacheSessionProvider(sessionId, session.provider);
+      }
+      return session;
     } catch (error) {
       logger.warn('Failed to load session before stop; continuing with process shutdown', {
         sessionId,
@@ -349,7 +384,10 @@ class SessionService {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
 
     for (const session of sessions) {
-      await this.stopWorkspaceSession(session, workspaceId);
+      await this.stopWorkspaceSession(
+        { id: session.id, status: session.status, provider: session.provider },
+        workspaceId
+      );
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
@@ -370,11 +408,13 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
     }
-  ): Promise<ClaudeClient> {
+  ): Promise<unknown> {
+    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+
     // Check for existing client first - fast path
-    const existing = this.providerAdapter.getClient(sessionId);
+    const existing = adapter.getClient(sessionId);
     if (existing) {
-      const isWorking = this.getClientWorkingState(existing);
+      const isWorking = adapter.isSessionWorking(sessionId);
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -392,27 +432,22 @@ class SessionService {
     });
 
     try {
-      const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-        thinkingEnabled: options?.thinkingEnabled,
-        permissionMode: options?.permissionMode,
-        model: options?.model,
-      });
-
-      const client = await this.providerAdapter.getOrCreateClient(
-        sessionId,
-        clientOptions,
-        handlers,
-        context
-      );
+      const client =
+        session.provider === 'CODEX'
+          ? await this.createCodexClient(sessionId, options?.model)
+          : await this.createClaudeClient(sessionId, options);
 
       // Update DB with running status and PID
       // This is idempotent and safe even if called by concurrent callers
       await this.repository.updateSession(sessionId, {
         status: SessionStatus.RUNNING,
-        claudeProcessPid: client.getPid() ?? null,
+        claudeProcessPid:
+          session.provider === 'CODEX'
+            ? (this.codexAdapter.getManager().getStatus().pid ?? null)
+            : ((client as ClaudeClient).getPid?.() ?? null),
       });
 
-      const isWorking = this.getClientWorkingState(client);
+      const isWorking = adapter.isSessionWorking(sessionId);
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -442,7 +477,7 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
     }
-  ): Promise<ClaudeClient> {
+  ): Promise<unknown> {
     return await this.getOrCreateSessionClient(sessionId, options);
   }
 
@@ -453,21 +488,40 @@ class SessionService {
    * @returns The ClaudeClient if it exists and is running, undefined otherwise
    */
   getClient(sessionId: string): ClaudeClient | undefined {
-    return this.providerAdapter.getClient(sessionId);
+    return this.claudeAdapter.getClient(sessionId);
+  }
+
+  getSessionClient(sessionId: string): unknown | undefined {
+    return this.resolveAdapterForSessionSync(sessionId).getClient(sessionId);
   }
 
   toPublicMessageDelta(message: ClaudeMessage, order?: number): SessionDeltaEvent {
-    return this.providerAdapter.toPublicDeltaEvent(
-      this.providerAdapter.toCanonicalAgentMessage(message, order)
+    return this.claudeAdapter.toPublicDeltaEvent(
+      this.claudeAdapter.toCanonicalAgentMessage(message, order)
     );
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    await this.providerAdapter.setModel(sessionId, model);
+    const { adapter } = await this.loadSessionWithAdapter(sessionId);
+    await adapter.setModel(sessionId, model);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    await this.providerAdapter.setThinkingBudget(sessionId, maxTokens);
+    const { adapter } = await this.loadSessionWithAdapter(sessionId);
+    await adapter.setThinkingBudget(sessionId, maxTokens);
+  }
+
+  async sendSessionMessage(
+    sessionId: string,
+    content: string | ClaudeContentItem[]
+  ): Promise<void> {
+    const { session } = await this.loadSessionWithAdapter(sessionId);
+    if (session.provider === 'CODEX') {
+      const normalizedText = this.toCodexTextContent(content);
+      await this.codexAdapter.sendMessage(sessionId, normalizedText);
+      return;
+    }
+    await this.claudeAdapter.sendMessage(sessionId, content);
   }
 
   async rewindSessionFiles(
@@ -475,11 +529,12 @@ class SessionService {
     userMessageId: string,
     dryRun?: boolean
   ): Promise<RewindFilesResponse> {
-    return await this.providerAdapter.rewindFiles(sessionId, userMessageId, dryRun);
+    const { adapter } = await this.loadSessionWithAdapter(sessionId);
+    return (await adapter.rewindFiles(sessionId, userMessageId, dryRun)) as RewindFilesResponse;
   }
 
   respondToPermissionRequest(sessionId: string, requestId: string, allow: boolean): void {
-    this.providerAdapter.respondToPermission(sessionId, requestId, allow);
+    this.resolveAdapterForSessionSync(sessionId).respondToPermission(sessionId, requestId, allow);
   }
 
   respondToQuestionRequest(
@@ -487,17 +542,18 @@ class SessionService {
     requestId: string,
     answers: Record<string, string | string[]>
   ): void {
-    this.providerAdapter.respondToQuestion(sessionId, requestId, answers);
+    this.resolveAdapterForSessionSync(sessionId).respondToQuestion(sessionId, requestId, answers);
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
     const fallback = createInitialSessionRuntimeState();
     const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
     const base = persisted ?? fallback;
+    const adapter = this.resolveAdapterForSessionSync(sessionId);
 
-    const client = this.providerAdapter.getClient(sessionId);
+    const client = adapter.getClient(sessionId);
     if (client) {
-      const isWorking = this.getClientWorkingState(client);
+      const isWorking = adapter.isSessionWorking(sessionId);
       return {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -506,7 +562,7 @@ class SessionService {
       };
     }
 
-    if (this.providerAdapter.getPendingClient(sessionId) !== undefined) {
+    if (adapter.getPendingClient(sessionId) !== undefined) {
       return {
         phase: 'starting',
         processState: 'alive',
@@ -515,7 +571,7 @@ class SessionService {
       };
     }
 
-    if (this.providerAdapter.isStopInProgress(sessionId)) {
+    if (adapter.isStopInProgress(sessionId)) {
       return {
         ...base,
         phase: 'stopping',
@@ -536,6 +592,88 @@ class SessionService {
     }
 
     return base;
+  }
+
+  private async createClaudeClient(
+    sessionId: string,
+    options?: {
+      thinkingEnabled?: boolean;
+      permissionMode?: 'bypassPermissions' | 'plan';
+      model?: string;
+    }
+  ): Promise<ClaudeClient> {
+    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
+      thinkingEnabled: options?.thinkingEnabled,
+      permissionMode: options?.permissionMode,
+      model: options?.model,
+    });
+
+    return await this.claudeAdapter.getOrCreateClient(sessionId, clientOptions, handlers, context);
+  }
+
+  private async createCodexClient(sessionId: string, model?: string): Promise<unknown> {
+    const context = await this.loadCodexSessionContext(sessionId);
+    const clientOptions = {
+      workingDir: context.workingDir,
+      sessionId,
+      model: model ?? context.model,
+    };
+    return await this.codexAdapter.getOrCreateClient(sessionId, clientOptions, {}, context);
+  }
+
+  private async loadCodexSessionContext(sessionId: string): Promise<{
+    workspaceId: string;
+    workingDir: string;
+    model: string;
+  }> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const workspace = await this.repository.getWorkspaceById(session.workspaceId);
+    if (!workspace?.worktreePath) {
+      throw new Error(`Workspace or worktree not found for session: ${sessionId}`);
+    }
+
+    await this.repository.markWorkspaceHasHadSessions(session.workspaceId);
+    return {
+      workspaceId: session.workspaceId,
+      workingDir: workspace.worktreePath,
+      model: session.model,
+    };
+  }
+
+  private toCodexTextContent(content: string | ClaudeContentItem[]): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    const chunks: string[] = [];
+    for (const item of content) {
+      switch (item.type) {
+        case 'text':
+          chunks.push(item.text);
+          break;
+        case 'thinking':
+          chunks.push(item.thinking);
+          break;
+        case 'image':
+          chunks.push('[Image attachment omitted for this provider]');
+          break;
+        case 'tool_result':
+          if (typeof item.content === 'string') {
+            chunks.push(item.content);
+          } else {
+            chunks.push(JSON.stringify(item.content));
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    return chunks.join('\n\n');
   }
 
   /**
@@ -599,28 +737,31 @@ class SessionService {
    * Returns a RegisteredProcess interface with status, lifecycle, and resource methods.
    */
   getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
-    return this.providerAdapter.getSessionProcess(sessionId);
+    return this.claudeAdapter.getSessionProcess(sessionId);
   }
 
   /**
    * Check if a session is running in memory
    */
   isSessionRunning(sessionId: string): boolean {
-    return this.providerAdapter.isSessionRunning(sessionId);
+    return this.resolveAdapterForSessionSync(sessionId).isSessionRunning(sessionId);
   }
 
   /**
    * Check if a session is actively working (not just alive, but processing)
    */
   isSessionWorking(sessionId: string): boolean {
-    return this.providerAdapter.isSessionWorking(sessionId);
+    return this.resolveAdapterForSessionSync(sessionId).isSessionWorking(sessionId);
   }
 
   /**
    * Check if any session in the given list is actively working
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
-    return this.providerAdapter.isAnySessionWorking(sessionIds);
+    return (
+      this.claudeAdapter.isAnySessionWorking(sessionIds) ||
+      this.codexAdapter.isAnySessionWorking(sessionIds)
+    );
   }
 
   /**
@@ -647,6 +788,11 @@ class SessionService {
     };
   }
 
+  async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
+    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    return adapter.getChatBarCapabilities({ selectedModel: session.model });
+  }
+
   /**
    * Get all active Claude processes for admin view
    */
@@ -658,7 +804,7 @@ class SessionService {
     resourceUsage: ResourceUsage | null;
     idleTimeMs: number;
   }> {
-    return this.providerAdapter.getAllActiveProcesses();
+    return this.claudeAdapter.getAllActiveProcesses();
   }
 
   getCodexManagerStatus(): ReturnType<CodexAppServerManager['getStatus']> {
@@ -676,7 +822,7 @@ class SessionService {
    * Returns an iterator of [sessionId, client] pairs.
    */
   getAllClients(): IterableIterator<[string, ClaudeClient]> {
-    return this.providerAdapter.getAllClients();
+    return this.claudeAdapter.getAllClients();
   }
 
   /**
@@ -687,7 +833,7 @@ class SessionService {
     let firstError: unknown = null;
 
     try {
-      await this.providerAdapter.stopAllClients(timeoutMs);
+      await this.claudeAdapter.stopAllClients(timeoutMs);
     } catch (error) {
       firstError = error;
       logger.error('Failed to stop Claude provider clients during shutdown', {
@@ -711,14 +857,17 @@ class SessionService {
     }
   }
 
-  private shouldStopWorkspaceSession(session: { id: string; status: SessionStatus }): {
+  private shouldStopWorkspaceSession(
+    session: Pick<ClaudeSession, 'id' | 'status' | 'provider'>,
+    adapter: typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter
+  ): {
     shouldStop: boolean;
-    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>;
+    pendingClient: Promise<unknown> | undefined;
   } {
-    const pendingClient = this.providerAdapter.getPendingClient(session.id);
+    const pendingClient = adapter.getPendingClient(session.id);
     const shouldStop = Boolean(
       session.status === SessionStatus.RUNNING ||
-        this.providerAdapter.getSessionProcess(session.id) ||
+        adapter.getSessionProcess(session.id) ||
         pendingClient
     );
     return { shouldStop, pendingClient };
@@ -727,7 +876,7 @@ class SessionService {
   private async waitForPendingClient(
     workspaceId: string,
     sessionId: string,
-    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>
+    pendingClient: Promise<unknown> | undefined
   ): Promise<void> {
     if (!pendingClient) {
       return;
@@ -744,10 +893,11 @@ class SessionService {
   }
 
   private async stopWorkspaceSession(
-    session: { id: string; status: SessionStatus },
+    session: Pick<ClaudeSession, 'id' | 'status' | 'provider'>,
     workspaceId: string
   ): Promise<void> {
-    const { shouldStop, pendingClient } = this.shouldStopWorkspaceSession(session);
+    const adapter = this.resolveAdapterForProvider(session.provider ?? 'CLAUDE');
+    const { shouldStop, pendingClient } = this.shouldStopWorkspaceSession(session, adapter);
     if (!shouldStop) {
       return;
     }

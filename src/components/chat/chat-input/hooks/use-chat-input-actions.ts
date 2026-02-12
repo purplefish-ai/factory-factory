@@ -5,6 +5,7 @@ import type { FileMentionKeyResult } from '@/components/chat/file-mention-palett
 import type { SlashKeyResult } from '@/components/chat/slash-command-palette';
 import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
 import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
@@ -14,6 +15,7 @@ interface UseChatInputActionsOptions {
   onCloseFileMentionMenu?: () => void;
   onChange?: (value: string) => void;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
+  capabilities?: ChatBarCapabilities;
   disabled: boolean;
   running: boolean;
   stopping?: boolean;
@@ -115,6 +117,7 @@ export function useChatInputActions({
   onCloseFileMentionMenu,
   onChange,
   onSettingsChange,
+  capabilities,
   disabled,
   running,
   stopping,
@@ -125,6 +128,12 @@ export function useChatInputActions({
   delegateToFileMentionMenu,
 }: UseChatInputActionsOptions): UseChatInputActionsReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const planModeEnabled = capabilities?.planMode.enabled === true;
+  const thinkingEnabled = capabilities?.thinking.enabled === true;
+  const imageAttachmentsEnabled =
+    capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
+  const modelSelectorEnabled = capabilities?.model.enabled === true;
+  const modelValues = new Set(capabilities?.model.options.map((option) => option.value) ?? []);
 
   const sendFromInput = useCallback(
     (inputElement: HTMLTextAreaElement | null) => {
@@ -149,7 +158,9 @@ export function useChatInputActions({
         shift: true,
         shouldHandle: () => !running,
         action: () => {
-          onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+          if (planModeEnabled) {
+            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+          }
         },
       },
       {
@@ -169,7 +180,7 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!running) {
+          if (!running && planModeEnabled) {
             onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
           }
         },
@@ -180,7 +191,7 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!running) {
+          if (!running && thinkingEnabled) {
             onSettingsChange?.({ thinkingEnabled: !settings?.thinkingEnabled });
           }
         },
@@ -191,7 +202,7 @@ export function useChatInputActions({
         shift: true,
         alt: false,
         action: () => {
-          if (!(running || disabled)) {
+          if (!(running || disabled) && imageAttachmentsEnabled) {
             fileInputRef.current?.click();
           }
         },
@@ -231,6 +242,9 @@ export function useChatInputActions({
       settings?.planModeEnabled,
       settings?.thinkingEnabled,
       stopping,
+      planModeEnabled,
+      thinkingEnabled,
+      imageAttachmentsEnabled,
     ]
   );
 
@@ -340,23 +354,29 @@ export function useChatInputActions({
   // Settings change handlers
   const handleModelChange = useCallback(
     (model: string) => {
-      onSettingsChange?.({ selectedModel: model });
+      if (modelSelectorEnabled && modelValues.has(model)) {
+        onSettingsChange?.({ selectedModel: model });
+      }
     },
-    [onSettingsChange]
+    [modelSelectorEnabled, modelValues, onSettingsChange]
   );
 
   const handleThinkingChange = useCallback(
     (pressed: boolean) => {
-      onSettingsChange?.({ thinkingEnabled: pressed });
+      if (thinkingEnabled) {
+        onSettingsChange?.({ thinkingEnabled: pressed });
+      }
     },
-    [onSettingsChange]
+    [thinkingEnabled, onSettingsChange]
   );
 
   const handlePlanModeChange = useCallback(
     (pressed: boolean) => {
-      onSettingsChange?.({ planModeEnabled: pressed });
+      if (planModeEnabled) {
+        onSettingsChange?.({ planModeEnabled: pressed });
+      }
     },
-    [onSettingsChange]
+    [planModeEnabled, onSettingsChange]
   );
 
   return {

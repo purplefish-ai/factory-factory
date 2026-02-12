@@ -16,6 +16,7 @@ import type {
   WebSocketMessage,
 } from '@/lib/claude-types';
 import { DEFAULT_CHAT_SETTINGS, MessageState } from '@/lib/claude-types';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   type ChatAction,
@@ -1448,6 +1449,44 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.chatSettings).toEqual(newSettings);
+    });
+  });
+
+  describe('WS_CHAT_CAPABILITIES action', () => {
+    it('stores capabilities and clamps unsupported settings', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatSettings: {
+          selectedModel: 'sonnet',
+          thinkingEnabled: true,
+          planModeEnabled: true,
+        },
+        slashCommands: [{ name: '/help', description: 'Help' }],
+        slashCommandsLoaded: false,
+      };
+
+      const capabilities: ChatBarCapabilities = {
+        provider: 'CODEX',
+        model: { enabled: false, options: [] },
+        thinking: { enabled: false },
+        planMode: { enabled: true },
+        attachments: { enabled: false, kinds: [] },
+        slashCommands: { enabled: false },
+        usageStats: { enabled: false, contextWindow: false },
+        rewind: { enabled: false },
+      };
+
+      const action: ChatAction = {
+        type: 'WS_CHAT_CAPABILITIES',
+        payload: { capabilities },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.chatCapabilities).toEqual(capabilities);
+      expect(newState.chatSettings.thinkingEnabled).toBe(false);
+      expect(newState.chatSettings.planModeEnabled).toBe(true);
+      expect(newState.slashCommands).toEqual([]);
+      expect(newState.slashCommandsLoaded).toBe(true);
     });
   });
 

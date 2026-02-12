@@ -1,3 +1,4 @@
+import { clampChatSettingsForCapabilities } from '@/components/chat/chat-settings';
 import {
   createBaseResetState,
   createSessionSwitchResetState,
@@ -14,7 +15,10 @@ export function reduceMessageResetSlice(state: ChatState, action: ChatAction): C
         ...state,
         ...createBaseResetState(),
         sessionStatus,
-        chatSettings: DEFAULT_CHAT_SETTINGS,
+        chatSettings: clampChatSettingsForCapabilities(
+          DEFAULT_CHAT_SETTINGS,
+          state.chatCapabilities
+        ),
       };
     }
     case 'RESET_FOR_SESSION_SWITCH':

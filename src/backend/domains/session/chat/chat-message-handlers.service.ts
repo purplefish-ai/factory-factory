@@ -10,7 +10,6 @@
 
 import type { WebSocket } from 'ws';
 import type { SessionInitPolicyBridge } from '@/backend/domains/session/bridges';
-import type { ClaudeClient } from '@/backend/domains/session/claude/index';
 import { sessionDataService } from '@/backend/domains/session/data/session-data.service';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
@@ -35,6 +34,24 @@ const logger = createLogger('chat-message-handlers');
 // ============================================================================
 
 export type { ClientCreator } from './chat-message-handlers/types';
+
+interface ClaudeCompactionClient {
+  isCompactingActive: () => boolean;
+  startCompaction: () => void;
+  endCompaction: () => void;
+}
+
+function isClaudeCompactionClient(value: unknown): value is ClaudeCompactionClient {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<ClaudeCompactionClient>;
+  return (
+    typeof candidate.isCompactingActive === 'function' &&
+    typeof candidate.startCompaction === 'function' &&
+    typeof candidate.endCompaction === 'function'
+  );
+}
 
 // ============================================================================
 // Service
@@ -125,27 +142,27 @@ class ChatMessageHandlerService {
         return;
       }
 
-      let client: ClaudeClient | undefined = sessionService.getClient(dbSessionId);
+      let client = sessionService.getSessionClient(dbSessionId);
 
       // Auto-start: create client if needed, using the dequeued message's settings
       if (!client) {
-        const newClient = await this.autoStartClientForQueue(dbSessionId, msg);
-        if (!newClient) {
+        const started = await this.autoStartClientForQueue(dbSessionId, msg);
+        if (!started) {
           // Re-queue the message at the front so it's not lost
           sessionDomainService.requeueFront(dbSessionId, msg);
           return;
         }
-        client = newClient;
+        client = sessionService.getSessionClient(dbSessionId);
       }
 
-      const shouldRequeueReason = this.getRequeueReason(client);
+      const shouldRequeueReason = this.getRequeueReason(dbSessionId, client);
       if (shouldRequeueReason) {
         this.requeueWithReason(dbSessionId, msg, shouldRequeueReason);
         return;
       }
 
       try {
-        await this.dispatchMessage(dbSessionId, client, msg);
+        await this.dispatchMessage(dbSessionId, msg, client);
       } catch (error) {
         // If dispatch fails (e.g., setMaxThinkingTokens throws before state change),
         // the message is still in ACCEPTED state and can be safely requeued
@@ -156,7 +173,7 @@ class ChatMessageHandlerService {
         });
         // Avoid clobbering markProcessExit() runtime/lastExit when the process
         // has already stopped and exit handling is in flight.
-        if (client.isRunning()) {
+        if (sessionService.isSessionRunning(dbSessionId)) {
           sessionDomainService.markIdle(dbSessionId, 'alive');
         }
         sessionDomainService.requeueFront(dbSessionId, msg);
@@ -216,14 +233,11 @@ class ChatMessageHandlerService {
   /**
    * Auto-start a client for queue dispatch using settings from the provided message.
    */
-  private async autoStartClientForQueue(
-    dbSessionId: string,
-    msg: QueuedMessage
-  ): Promise<ClaudeClient | null> {
+  private async autoStartClientForQueue(dbSessionId: string, msg: QueuedMessage): Promise<boolean> {
     if (!this.clientCreator) {
       logger.error('[Chat WS] Client creator not set');
       sessionDomainService.markError(dbSessionId);
-      return null;
+      return false;
     }
 
     if (DEBUG_CHAT_WS) {
@@ -231,17 +245,18 @@ class ChatMessageHandlerService {
     }
 
     try {
-      return await this.clientCreator.getOrCreate(dbSessionId, {
+      await this.clientCreator.getOrCreate(dbSessionId, {
         thinkingEnabled: msg.settings.thinkingEnabled,
         planModeEnabled: msg.settings.planModeEnabled,
         model: msg.settings.selectedModel ?? undefined,
       });
+      return true;
     } catch (error) {
       logger.error('[Chat WS] Failed to auto-start client for queue dispatch', {
         dbSessionId,
         error: error instanceof Error ? error.message : String(error),
       });
-      return null;
+      return false;
     }
   }
 
@@ -250,16 +265,17 @@ class ChatMessageHandlerService {
    */
   private async dispatchMessage(
     dbSessionId: string,
-    client: ClaudeClient,
-    msg: QueuedMessage
+    msg: QueuedMessage,
+    client?: unknown
   ): Promise<void> {
     const isCompactCommand = this.isCompactCommand(msg.text);
+    const claudeClient = isClaudeCompactionClient(client) ? client : null;
 
     // Set thinking budget first - this can throw and must complete before we
     // change any state. If it fails, the message remains in ACCEPTED state
     // and can be safely requeued by the caller.
     const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-    await client.setMaxThinkingTokens(thinkingTokens);
+    await sessionService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
 
     sessionDomainService.markRunning(dbSessionId);
 
@@ -283,12 +299,12 @@ class ChatMessageHandlerService {
       },
     });
 
-    if (isCompactCommand) {
-      client.startCompaction();
+    if (isCompactCommand && claudeClient) {
+      claudeClient.startCompaction();
     }
 
     try {
-      await client.sendMessage(content);
+      await sessionService.sendSessionMessage(dbSessionId, content);
       sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
       sessionDomainService.emitDelta(dbSessionId, {
         type: 'message_state_changed',
@@ -296,8 +312,8 @@ class ChatMessageHandlerService {
         newState: MessageState.COMMITTED,
       });
     } catch (error) {
-      if (isCompactCommand) {
-        client.endCompaction();
+      if (isCompactCommand && claudeClient) {
+        claudeClient.endCompaction();
       }
       throw error;
     }
@@ -311,14 +327,17 @@ class ChatMessageHandlerService {
     }
   }
 
-  private getRequeueReason(client: ClaudeClient): 'working' | 'compacting' | 'stopped' | null {
-    if (client.isWorking()) {
+  private getRequeueReason(
+    dbSessionId: string,
+    client?: unknown
+  ): 'working' | 'compacting' | 'stopped' | null {
+    if (sessionService.isSessionWorking(dbSessionId)) {
       return 'working';
     }
-    if (!client.isRunning()) {
+    if (!sessionService.isSessionRunning(dbSessionId)) {
       return 'stopped';
     }
-    if (client.isCompactingActive()) {
+    if (isClaudeCompactionClient(client) && client.isCompactingActive()) {
       return 'compacting';
     }
     return null;

@@ -7,6 +7,7 @@ import {
   type ClaudeRuntimeManager,
   claudeRuntimeManager,
 } from '@/backend/domains/session/runtime';
+import { createClaudeChatBarCapabilities } from '@/shared/chat-capabilities';
 import {
   type ClaudeContentItem,
   type ClaudeMessage,
@@ -104,6 +105,10 @@ export class ClaudeSessionProviderAdapter
 
   stopAllClients(timeoutMs = 5000): Promise<void> {
     return this.runtimeManager.stopAllClients(timeoutMs);
+  }
+
+  getChatBarCapabilities(options?: { selectedModel?: string | null }) {
+    return createClaudeChatBarCapabilities(options?.selectedModel ?? undefined);
   }
 
   async sendMessage(sessionId: string, content: string | ClaudeContentItem[]): Promise<void> {

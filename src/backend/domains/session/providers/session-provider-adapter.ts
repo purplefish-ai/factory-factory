@@ -1,3 +1,4 @@
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 export type SessionProvider = 'CLAUDE' | 'CODEX';
 
 export type CanonicalAgentMessageKind =
@@ -67,4 +68,5 @@ export interface SessionProviderAdapter<
   getAllActiveProcesses(): TActiveProcessSummary[];
   getAllClients(): IterableIterator<[string, TClient]>;
   stopAllClients(timeoutMs?: number): Promise<void>;
+  getChatBarCapabilities(options?: { selectedModel?: string | null }): ChatBarCapabilities;
 }
