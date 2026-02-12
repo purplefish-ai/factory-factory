@@ -530,7 +530,7 @@ export class CodexAppServerManager {
       clearTimeout(pending.timeout);
       pending.reject(
         new SessionOperationError(reason, {
-          code: 'CODEX_MANAGER_RESTARTED',
+          code: 'CODEX_MANAGER_UNAVAILABLE',
           metadata: {
             requestId,
             method: pending.method,
