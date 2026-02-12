@@ -1423,7 +1423,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       const result = await callProcessWorkspace(cleanWorkspace);
 
       expect(result.action.type).toBe('WAITING');
-      expect(getTrackers().get('ws-poll')?.pollCount).toBe(1);
+      // pollCount stays at 0 because null fetches don't consume a poll slot
+      expect(getTrackers().get('ws-poll')?.pollCount).toBe(0);
     });
 
     it('skips re-poll when shutting down', async () => {
