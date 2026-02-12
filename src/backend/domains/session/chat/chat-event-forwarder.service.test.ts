@@ -16,6 +16,18 @@ const mockMarkWorkspaceIdle = vi.fn();
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
 const mockSetCachedCommands = vi.fn();
+const mockToCanonicalAgentMessage = vi.fn((message: unknown, order?: number) => ({
+  type: 'agent_message',
+  provider: 'CLAUDE',
+  kind: 'provider_event',
+  ...(order === undefined ? {} : { order }),
+  data: message,
+}));
+const mockToPublicDeltaEvent = vi.fn((event: { data: unknown; order?: number }) =>
+  event.order === undefined
+    ? ({ type: 'claude_message', data: event.data } as const)
+    : ({ type: 'claude_message', data: event.data, order: event.order } as const)
+);
 
 vi.mock('@/backend/domains/session/session-domain.service', () => ({
   sessionDomainService: {
@@ -44,6 +56,14 @@ vi.mock('@/backend/services/workspace-activity.service', () => ({
 vi.mock('@/backend/domains/session/store/slash-command-cache.service', () => ({
   slashCommandCacheService: {
     setCachedCommands: (...args: unknown[]) => mockSetCachedCommands(...args),
+  },
+}));
+
+vi.mock('@/backend/domains/session/providers', () => ({
+  claudeSessionProviderAdapter: {
+    toCanonicalAgentMessage: (message: unknown, order?: number) =>
+      mockToCanonicalAgentMessage(message, order),
+    toPublicDeltaEvent: (event: { data: unknown; order?: number }) => mockToPublicDeltaEvent(event),
   },
 }));
 
@@ -170,5 +190,7 @@ describe('ChatEventForwarderService', () => {
         }),
       })
     );
+    expect(mockToCanonicalAgentMessage).toHaveBeenCalled();
+    expect(mockToPublicDeltaEvent).toHaveBeenCalled();
   });
 });

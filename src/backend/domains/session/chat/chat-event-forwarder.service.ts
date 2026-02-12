@@ -15,6 +15,7 @@ import { WS_READY_STATE } from '@/backend/constants';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import type { ClaudeClient } from '@/backend/domains/session/claude/index';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
+import { claudeSessionProviderAdapter } from '@/backend/domains/session/providers';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
 import { interceptorRegistry } from '@/backend/interceptors';
@@ -100,10 +101,8 @@ class ChatEventForwarderService {
 
   private forwardClaudeMessage(dbSessionId: string, message: ClaudeMessage): void {
     const order = sessionDomainService.appendClaudeEvent(dbSessionId, message);
-    const wsMsg =
-      order === undefined
-        ? ({ type: 'claude_message', data: message } as const)
-        : ({ type: 'claude_message', data: message, order } as const);
+    const canonicalEvent = claudeSessionProviderAdapter.toCanonicalAgentMessage(message, order);
+    const wsMsg = claudeSessionProviderAdapter.toPublicDeltaEvent(canonicalEvent);
     sessionDomainService.emitDelta(dbSessionId, wsMsg);
   }
 

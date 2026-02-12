@@ -393,7 +393,7 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<string | 
 
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')
-    await sessionService.startClaudeSession(session.id, { initialPrompt: '' });
+    await sessionService.startSession(session.id, { initialPrompt: '' });
 
     // Route the issue prompt through the queue pipeline so runtime and replay remain consistent.
     if (issuePrompt) {

@@ -1,8 +1,9 @@
 import { DEBUG_CHAT_WS } from '@/backend/domains/session/chat/chat-message-handlers/constants';
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { QuestionResponseMessage } from '@/shared/websocket';
-import { clearPendingInteractiveRequest, getClientOrSendError, sendWebSocketError } from './utils';
+import { clearPendingInteractiveRequest, sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -10,13 +11,8 @@ export function createQuestionResponseHandler(): ChatMessageHandler<QuestionResp
   return ({ ws, sessionId, message }) => {
     const { requestId, answers } = message;
 
-    const client = getClientOrSendError({ sessionId, ws, requestId });
-    if (!client) {
-      return;
-    }
-
     try {
-      client.answerQuestion(requestId, answers);
+      sessionService.respondToQuestionRequest(sessionId, requestId, answers);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Answered question', { sessionId, requestId });
       }

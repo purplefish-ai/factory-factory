@@ -31,8 +31,8 @@ vi.mock('@/backend/domains/session', () => ({
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     isAnySessionWorking: vi.fn(),
-    stopClaudeSession: vi.fn(),
-    startClaudeSession: vi.fn(),
+    stopSession: vi.fn(),
+    startSession: vi.fn(),
     getClient: vi.fn(),
   },
   sessionDomainService: { injectCommittedUserMessage: vi.fn() },
@@ -145,20 +145,20 @@ describe('configureDomainBridges', () => {
       expect(sessionService.isSessionRunning).toHaveBeenCalledWith('s1');
     });
 
-    it('session bridge delegates stopClaudeSession to sessionService', () => {
+    it('session bridge delegates stopSession to sessionService', () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.session.stopClaudeSession('s1');
-      expect(sessionService.stopClaudeSession).toHaveBeenCalledWith('s1');
+      bridge.session.stopSession('s1');
+      expect(sessionService.stopSession).toHaveBeenCalledWith('s1');
     });
 
-    it('session bridge delegates startClaudeSession to sessionService', () => {
+    it('session bridge delegates startSession to sessionService', () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
-      bridge.session.startClaudeSession('s1', { initialPrompt: 'hello' });
-      expect(sessionService.startClaudeSession).toHaveBeenCalledWith('s1', {
+      bridge.session.startSession('s1', { initialPrompt: 'hello' });
+      expect(sessionService.startSession).toHaveBeenCalledWith('s1', {
         initialPrompt: 'hello',
       });
     });

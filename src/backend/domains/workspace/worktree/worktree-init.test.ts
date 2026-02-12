@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   readConfig: vi.fn(),
   runStartupScript: vi.fn(),
   hasStartupScript: vi.fn(),
-  startClaudeSession: vi.fn(),
+  startSession: vi.fn(),
   stopWorkspaceSessions: vi.fn(),
   enqueue: vi.fn(),
   emitDelta: vi.fn(),
@@ -73,7 +73,7 @@ vi.mock('@/backend/domains/run-script', () => ({
 
 vi.mock('@/backend/domains/session', () => ({
   sessionService: {
-    startClaudeSession: mocks.startClaudeSession,
+    startSession: mocks.startSession,
     stopWorkspaceSessions: mocks.stopWorkspaceSessions,
   },
   sessionDomainService: {
@@ -149,7 +149,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
         cleanup: null,
       },
     });
-    mocks.startClaudeSession.mockResolvedValue(undefined);
+    mocks.startSession.mockResolvedValue(undefined);
     mocks.stopWorkspaceSessions.mockResolvedValue(undefined);
     mocks.enqueue.mockReturnValue({ position: 0 });
     mocks.tryDispatchNextMessage.mockResolvedValue(undefined);
@@ -169,7 +169,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     expect(mocks.createWorktree).not.toHaveBeenCalled();
   });
 
-  it('starts the default Claude session after startup script completes', async () => {
+  it('starts the default session after startup script completes', async () => {
     mocks.runStartupScript.mockResolvedValue({
       success: true,
       exitCode: 0,
@@ -189,7 +189,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       status: SessionStatus.IDLE,
       limit: 1,
     });
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', {
+    expect(mocks.startSession).toHaveBeenCalledWith('session-1', {
       initialPrompt: '',
     });
     expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
@@ -252,7 +252,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     );
   });
 
-  it('skips auto-start when no idle Claude session exists', async () => {
+  it('skips auto-start when no idle session exists', async () => {
     mocks.runStartupScript.mockResolvedValue({
       success: true,
       exitCode: 0,
@@ -268,7 +268,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).not.toHaveBeenCalled();
+    expect(mocks.startSession).not.toHaveBeenCalled();
   });
 
   it('stops eagerly-started session when initialization fails', async () => {
@@ -280,7 +280,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.startSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
   });
@@ -301,7 +301,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startClaudeSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.startSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
   });
 

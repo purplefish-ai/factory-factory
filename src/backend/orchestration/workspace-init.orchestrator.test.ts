@@ -27,7 +27,7 @@ vi.mock('@/backend/domains/session', () => ({
     emitDelta: vi.fn(),
   },
   sessionService: {
-    startClaudeSession: vi.fn(),
+    startSession: vi.fn(),
     stopWorkspaceSessions: vi.fn(),
   },
 }));
@@ -157,7 +157,7 @@ function setupHappyPath() {
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('testuser');
   vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([]);
   vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
-  vi.mocked(sessionService.startClaudeSession).mockResolvedValue(undefined as never);
+  vi.mocked(sessionService.startSession).mockResolvedValue(undefined as never);
   vi.mocked(chatMessageHandlerService.tryDispatchNextMessage).mockResolvedValue(undefined as never);
   return workspace;
 }
@@ -562,7 +562,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.startClaudeSession).toHaveBeenCalledWith('session-1', {
+      expect(sessionService.startSession).toHaveBeenCalledWith('session-1', {
         initialPrompt: '',
       });
     });
@@ -573,7 +573,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.startClaudeSession).not.toHaveBeenCalled();
+      expect(sessionService.startSession).not.toHaveBeenCalled();
     });
 
     it('dispatches queued messages after session start', async () => {

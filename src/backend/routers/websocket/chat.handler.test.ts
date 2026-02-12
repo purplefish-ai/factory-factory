@@ -15,6 +15,7 @@ describe('createChatUpgradeHandler', () => {
     const sessionService = {
       setOnClientCreated: vi.fn(),
       getOrCreateClient: vi.fn(),
+      getOrCreateSessionClient: vi.fn(),
       getSessionOptions: vi.fn(),
     };
     const logger = {
