@@ -70,6 +70,21 @@ vi.mock('@/backend/domains/session/providers', () => ({
     getAllClients: vi.fn(),
     stopAllClients: vi.fn(),
   },
+  codexSessionProviderAdapter: {
+    getManager: vi.fn(() => ({
+      setHandlers: vi.fn(),
+      getStatus: vi.fn(() => ({
+        state: 'stopped',
+        unavailableReason: null,
+        pid: null,
+        startedAt: null,
+        restartCount: 0,
+        activeSessionCount: 0,
+      })),
+    })),
+    getAllClients: vi.fn(() => new Map().entries()),
+    getAllActiveProcesses: vi.fn(() => []),
+  },
 }));
 
 import { claudeSessionProviderAdapter } from '@/backend/domains/session/providers';

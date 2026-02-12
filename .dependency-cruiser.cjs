@@ -170,6 +170,18 @@ module.exports = {
       to: { path: '^src/backend/domains/session/providers/' },
     },
     {
+      name: 'session-codex-import-boundary',
+      severity: 'error',
+      comment:
+        'Codex runtime internals are encapsulated under session codex/provider/runtime seams and should not be imported directly by unrelated session modules.',
+      from: {
+        path: '^src/backend/domains/session/',
+        pathNot:
+          '^src/backend/domains/session/(codex/|providers/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/domains/session/codex/' },
+    },
+    {
       name: 'no-cross-domain-imports',
       severity: 'error',
       comment:

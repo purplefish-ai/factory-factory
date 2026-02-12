@@ -4,12 +4,16 @@ import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/sessio
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
+import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
 import {
   claudeSessionProviderAdapter,
+  codexSessionProviderAdapter,
   type SessionProviderAdapter,
 } from '@/backend/domains/session/providers';
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
+import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
 import {
@@ -60,6 +64,10 @@ class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
   private readonly providerAdapter: ActiveSessionProviderAdapter;
+  private readonly codexAdapter = codexSessionProviderAdapter;
+  private readonly codexEventTranslator = new CodexEventTranslator({
+    userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
+  });
 
   private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
     return typeof client.isWorking === 'function' ? client.isWorking() : false;
@@ -94,6 +102,56 @@ class SessionService {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
     this.providerAdapter = options?.providerAdapter ?? claudeSessionProviderAdapter;
+    this.initializeCodexManagerHandlers();
+  }
+
+  private initializeCodexManagerHandlers(): void {
+    this.codexAdapter.getManager().setHandlers({
+      onNotification: ({ sessionId, method, params }) => {
+        const translatedEvents = this.codexEventTranslator.translateNotification(method, params);
+        for (const event of translatedEvents) {
+          const normalized = this.normalizeCodexDeltaEvent(sessionId, event);
+          sessionDomainService.emitDelta(sessionId, normalized);
+        }
+      },
+      onServerRequest: ({ sessionId, method, params, canonicalRequestId }) => {
+        const event = this.codexEventTranslator.translateServerRequest(
+          method,
+          canonicalRequestId,
+          params
+        );
+        sessionDomainService.emitDelta(sessionId, event);
+      },
+      onStatusChanged: (status) => {
+        if (status.state !== 'degraded' && status.state !== 'unavailable') {
+          return;
+        }
+        for (const [sessionId] of this.codexAdapter.getAllClients()) {
+          sessionDomainService.setRuntimeSnapshot(
+            sessionId,
+            {
+              phase: 'error',
+              processState: 'stopped',
+              activity: 'IDLE',
+              updatedAt: new Date().toISOString(),
+            },
+            true
+          );
+        }
+      },
+    });
+  }
+
+  private normalizeCodexDeltaEvent(sessionId: string, event: SessionDeltaEvent): SessionDeltaEvent {
+    if (event.type !== 'claude_message') {
+      return event;
+    }
+
+    const order = sessionDomainService.appendClaudeEvent(sessionId, event.data);
+    return {
+      ...event,
+      order,
+    };
   }
 
   /**
@@ -572,6 +630,16 @@ class SessionService {
     idleTimeMs: number;
   }> {
     return this.providerAdapter.getAllActiveProcesses();
+  }
+
+  getCodexManagerStatus(): ReturnType<CodexAppServerManager['getStatus']> {
+    return this.codexAdapter.getManager().getStatus();
+  }
+
+  getAllCodexActiveProcesses(): ReturnType<
+    typeof codexSessionProviderAdapter.getAllActiveProcesses
+  > {
+    return this.codexAdapter.getAllActiveProcesses();
   }
 
   /**

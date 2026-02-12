@@ -3,11 +3,15 @@ import {
   ClaudeProcess,
   ClaudeRuntimeManager,
   ClaudeSessionProviderAdapter,
+  CodexAppServerManager,
+  CodexSessionProviderAdapter,
   chatConnectionService,
   chatEventForwarderService,
   chatMessageHandlerService,
   claudeRuntimeManager,
   claudeSessionProviderAdapter,
+  codexAppServerManager,
+  codexSessionProviderAdapter,
   ProcessRegistry,
   processRegistry,
   SessionFileLogger,
@@ -46,9 +50,19 @@ describe('session domain barrel exports', () => {
     expect(ClaudeRuntimeManager).toBeDefined();
   });
 
+  it('exports codex runtime manager', () => {
+    expect(codexAppServerManager).toBeDefined();
+    expect(CodexAppServerManager).toBeDefined();
+  });
+
   it('exports claude session provider adapter', () => {
     expect(claudeSessionProviderAdapter).toBeDefined();
     expect(ClaudeSessionProviderAdapter).toBeDefined();
+  });
+
+  it('exports codex session provider adapter', () => {
+    expect(codexSessionProviderAdapter).toBeDefined();
+    expect(CodexSessionProviderAdapter).toBeDefined();
   });
 
   it('exports session repository', () => {

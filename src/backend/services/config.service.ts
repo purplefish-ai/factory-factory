@@ -71,6 +71,17 @@ export interface ClaudeProcessConfig {
 }
 
 /**
+ * Codex app-server process configuration
+ */
+export interface CodexAppServerConfig {
+  command: string;
+  args: string[];
+  requestTimeoutMs: number;
+  handshakeTimeoutMs: number;
+  requestUserInputEnabled: boolean;
+}
+
+/**
  * CORS configuration
  */
 export interface CorsConfig {
@@ -136,6 +147,9 @@ interface SystemConfig {
 
   // Claude process settings
   claudeProcess: ClaudeProcessConfig;
+
+  // Codex app-server settings
+  codexAppServer: CodexAppServerConfig;
 
   // CORS settings
   cors: CorsConfig;
@@ -294,6 +308,40 @@ function buildClaudeProcessConfig(): ClaudeProcessConfig {
 }
 
 /**
+ * Build Codex app-server configuration from environment with validation.
+ */
+function buildCodexAppServerConfig(): CodexAppServerConfig {
+  const command = process.env.CODEX_APP_SERVER_COMMAND || 'codex';
+  const argsEnv = process.env.CODEX_APP_SERVER_ARGS?.trim();
+  const args = argsEnv && argsEnv.length > 0 ? argsEnv.split(/\s+/) : ['app-server'];
+
+  const requestTimeoutMs = Number.parseInt(
+    process.env.CODEX_APP_SERVER_REQUEST_TIMEOUT_MS ||
+      String(SERVICE_TIMEOUT_MS.codexAppServerRequest),
+    10
+  );
+  const handshakeTimeoutMs = Number.parseInt(
+    process.env.CODEX_APP_SERVER_HANDSHAKE_TIMEOUT_MS ||
+      String(SERVICE_TIMEOUT_MS.codexAppServerHandshake),
+    10
+  );
+
+  return {
+    command,
+    args,
+    requestTimeoutMs:
+      Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0
+        ? requestTimeoutMs
+        : SERVICE_TIMEOUT_MS.codexAppServerRequest,
+    handshakeTimeoutMs:
+      Number.isFinite(handshakeTimeoutMs) && handshakeTimeoutMs > 0
+        ? handshakeTimeoutMs
+        : SERVICE_TIMEOUT_MS.codexAppServerHandshake,
+    requestUserInputEnabled: process.env.CODEX_REQUEST_USER_INPUT_ENABLED === 'true',
+  };
+}
+
+/**
  * Get default base directory
  */
 function getDefaultBaseDir(): string {
@@ -358,6 +406,9 @@ function loadSystemConfig(): SystemConfig {
 
     // Claude process settings
     claudeProcess: buildClaudeProcessConfig(),
+
+    // Codex app-server settings
+    codexAppServer: buildCodexAppServerConfig(),
 
     // CORS settings
     cors: buildCorsConfig(),
@@ -534,6 +585,16 @@ class ConfigService {
    */
   getClaudeProcessConfig(): ClaudeProcessConfig {
     return { ...this.config.claudeProcess };
+  }
+
+  /**
+   * Get Codex app-server configuration
+   */
+  getCodexAppServerConfig(): CodexAppServerConfig {
+    return {
+      ...this.config.codexAppServer,
+      args: [...this.config.codexAppServer.args],
+    };
   }
 
   /**
