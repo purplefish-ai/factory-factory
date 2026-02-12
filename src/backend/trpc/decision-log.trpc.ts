@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { decisionLogQueryService } from '@/backend/services/decision-log-query.service';
+import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import { publicProcedure, router } from './trpc';
 
 export const decisionLogRouter = router({

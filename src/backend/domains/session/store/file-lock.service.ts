@@ -20,10 +20,10 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from '@/backend/services/constants';
+import { createLogger } from '@/backend/services/logger.service';
 import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
 import { persistedLockStoreSchema } from '@/shared/schemas/persisted-stores.schema';
-import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from './constants';
-import { createLogger } from './logger.service';
 
 const logger = createLogger('file-lock');
 

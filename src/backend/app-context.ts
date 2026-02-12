@@ -18,13 +18,13 @@ import {
 } from './domains/session';
 import { terminalService } from './domains/terminal';
 import { kanbanStateService, workspaceStateMachine } from './domains/workspace';
-// Infrastructure imports (stay in services/)
-import { cliHealthService } from './services/cli-health.service';
+// Orchestration and infrastructure imports
+import { cliHealthService } from './orchestration/cli-health.service';
+import { schedulerService } from './orchestration/scheduler.service';
 import { configService } from './services/config.service';
 import { createLogger } from './services/logger.service';
 import { findAvailablePort } from './services/port.service';
 import { rateLimiter } from './services/rate-limiter.service';
-import { schedulerService } from './services/scheduler.service';
 import { serverInstanceService } from './services/server-instance.service';
 
 export type AppServices = {
