@@ -192,18 +192,10 @@ export class CodexSessionProviderAdapter
     this.manager.getRegistry().setActiveTurnId(sessionId, turnId);
   }
 
-  async setModel(sessionId: string, model?: string): Promise<void> {
-    const client = this.requireClient(sessionId);
+  setModel(sessionId: string, model?: string): Promise<void> {
+    this.requireClient(sessionId);
     this.preferredModels.set(sessionId, model);
-
-    await this.sendRequest(
-      'thread/configure',
-      {
-        threadId: client.threadId,
-        ...(model ? { model } : {}),
-      },
-      { threadId: client.threadId }
-    );
+    return Promise.resolve();
   }
 
   setThinkingBudget(_sessionId: string, _tokens: number | null): Promise<void> {

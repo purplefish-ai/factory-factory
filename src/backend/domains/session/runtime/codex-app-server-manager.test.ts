@@ -211,6 +211,58 @@ describe('CodexAppServerManager', () => {
     );
   });
 
+  it('accepts string server request ids and preserves them for responses', async () => {
+    const fake = new FakeChildProcess();
+    const onServerRequest = vi.fn();
+
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+      handlers: {
+        onServerRequest,
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    await manager.getRegistry().setMappedThreadId('session-1', 'thread-1');
+
+    fake.stdout.write(
+      `${JSON.stringify({
+        id: 'req-77',
+        method: 'item/fileChange/requestApproval',
+        params: {
+          threadId: 'thread-1',
+          itemId: 'item-123',
+        },
+      })}\n`
+    );
+
+    await vi.waitFor(() => {
+      expect(onServerRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          requestId: 'req-77',
+          canonicalRequestId: 'item-123',
+        })
+      );
+    });
+
+    expect(manager.getRegistry().getPendingInteractiveRequest('session-1', 'item-123')).toEqual(
+      expect.objectContaining({
+        serverRequestId: 'req-77',
+      })
+    );
+  });
+
   it('times out requests and returns retryable error classification', async () => {
     const fake = new FakeChildProcess();
     const manager = new CodexAppServerManager({

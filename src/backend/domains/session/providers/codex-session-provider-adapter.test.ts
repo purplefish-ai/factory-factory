@@ -111,7 +111,6 @@ describe('CodexSessionProviderAdapter', () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce({ threadId: 'thread-1' }) // start
-      .mockResolvedValueOnce({ ok: true }) // set model
       .mockResolvedValueOnce({ turnId: 'turn-1' }) // send
       .mockResolvedValueOnce({ ok: true }) // interrupt
       .mockResolvedValueOnce({ turns: [] }); // hydrate
@@ -153,12 +152,6 @@ describe('CodexSessionProviderAdapter', () => {
 
     expect(request).toHaveBeenNthCalledWith(
       2,
-      'thread/configure',
-      expect.objectContaining({ model: 'gpt-5' }),
-      { threadId: 'thread-1' }
-    );
-    expect(request).toHaveBeenNthCalledWith(
-      3,
       'turn/start',
       expect.objectContaining({
         input: [{ type: 'text', text: 'Hello from Codex', text_elements: [] }],
@@ -167,17 +160,18 @@ describe('CodexSessionProviderAdapter', () => {
       { threadId: 'thread-1' }
     );
     expect(request).toHaveBeenNthCalledWith(
-      4,
+      3,
       'turn/interrupt',
       expect.objectContaining({ threadId: 'thread-1', turnId: 'turn-1' }),
       { threadId: 'thread-1' }
     );
     expect(request).toHaveBeenNthCalledWith(
-      5,
+      4,
       'thread/read',
       expect.objectContaining({ includeTurns: true }),
       { threadId: 'thread-1' }
     );
+    expect(request).toHaveBeenCalledTimes(4);
   });
 
   it('returns canonical unsupported operation errors for thinking budget and rewind', async () => {
