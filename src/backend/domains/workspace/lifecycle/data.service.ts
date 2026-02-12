@@ -21,8 +21,8 @@ class WorkspaceDataService {
     return workspaceAccessor.findByIdsWithProject(ids);
   }
 
-  update(id: string, data: Parameters<typeof workspaceAccessor.update>[1]) {
-    return workspaceAccessor.update(id, data);
+  setBranchName(id: string, branchName: string) {
+    return workspaceAccessor.update(id, { branchName });
   }
 
   delete(id: string): Promise<Workspace> {

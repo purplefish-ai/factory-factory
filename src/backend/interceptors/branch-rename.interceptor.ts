@@ -55,9 +55,7 @@ export const branchRenameInterceptor: ToolInterceptor = {
     }
 
     // Update the workspace with the new branch name
-    await workspaceDataService.update(context.workspaceId, {
-      branchName: newBranchName,
-    });
+    await workspaceDataService.setBranchName(context.workspaceId, newBranchName);
 
     logger.info('Updated workspace with new branch name', {
       workspaceId: context.workspaceId,
