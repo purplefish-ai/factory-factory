@@ -28,7 +28,7 @@ export async function createIntegrationDatabase(): Promise<IntegrationDatabase> 
   });
 
   process.env.DATABASE_PATH = databasePath;
-  process.env.BASE_DIR = undefined;
+  Reflect.deleteProperty(process.env, 'BASE_DIR');
 
   // The runtime DB module caches Prisma globally; clear both module and global caches
   // so each integration suite gets a fresh client bound to its own temp DB path.
