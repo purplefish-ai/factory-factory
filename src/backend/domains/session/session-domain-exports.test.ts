@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   ClaudeProcess,
+  ClaudeRuntimeManager,
+  ClaudeSessionProviderAdapter,
   chatConnectionService,
   chatEventForwarderService,
   chatMessageHandlerService,
+  claudeRuntimeManager,
+  claudeSessionProviderAdapter,
   ProcessRegistry,
   processRegistry,
   SessionFileLogger,
@@ -35,6 +39,16 @@ describe('session domain barrel exports', () => {
 
   it('exports session process manager', () => {
     expect(sessionProcessManager).toBeDefined();
+  });
+
+  it('exports claude runtime manager', () => {
+    expect(claudeRuntimeManager).toBeDefined();
+    expect(ClaudeRuntimeManager).toBeDefined();
+  });
+
+  it('exports claude session provider adapter', () => {
+    expect(claudeSessionProviderAdapter).toBeDefined();
+    expect(ClaudeSessionProviderAdapter).toBeDefined();
   });
 
   it('exports session repository', () => {

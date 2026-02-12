@@ -24,8 +24,8 @@ import { fixerSessionService } from './fixer-session.service';
 const mockSessionBridge: RatchetSessionBridge = {
   isSessionRunning: vi.fn(),
   isSessionWorking: vi.fn(),
-  stopClaudeSession: vi.fn(),
-  startClaudeSession: vi.fn(),
+  stopSession: vi.fn(),
+  startSession: vi.fn(),
   getClient: vi.fn(),
   injectCommittedUserMessage: vi.fn(),
 };

@@ -45,8 +45,8 @@ import {
 const mockSessionBridge: RatchetSessionBridge = {
   isSessionRunning: vi.fn(),
   isSessionWorking: vi.fn(),
-  stopClaudeSession: vi.fn(),
-  startClaudeSession: vi.fn(),
+  stopSession: vi.fn(),
+  startSession: vi.fn(),
   getClient: vi.fn(),
   injectCommittedUserMessage: vi.fn(),
 };
@@ -447,7 +447,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       promptSent: false,
     } as never);
     vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
-    vi.mocked(mockSessionBridge.stopClaudeSession).mockResolvedValue();
+    vi.mocked(mockSessionBridge.stopSession).mockResolvedValue();
 
     const result = await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
@@ -459,7 +459,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
       ratchetActiveSessionId: null,
     });
-    expect(mockSessionBridge.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
+    expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('ratchet-session');
   });
 
   it('does not dispatch on a clean PR with no new review activity', async () => {
@@ -561,7 +561,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     } as never);
     vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
-    vi.mocked(mockSessionBridge.stopClaudeSession).mockResolvedValue();
+    vi.mocked(mockSessionBridge.stopSession).mockResolvedValue();
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
 
     const action = await unsafeCoerce<{
@@ -572,7 +572,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
       ratchetActiveSessionId: null,
     });
-    expect(mockSessionBridge.stopClaudeSession).toHaveBeenCalledWith('ratchet-session');
+    expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('ratchet-session');
   });
 
   it('decides to trigger fixer when context is actionable', () => {

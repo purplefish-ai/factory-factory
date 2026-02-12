@@ -205,7 +205,7 @@ class FixerSessionService {
     await input.beforeStart?.({ sessionId: acquisitionResult.sessionId, prompt });
 
     if (input.dispatchMode === 'start_empty_and_send') {
-      await this.session.startClaudeSession(acquisitionResult.sessionId, {
+      await this.session.startSession(acquisitionResult.sessionId, {
         initialPrompt: '',
       });
 
@@ -219,7 +219,7 @@ class FixerSessionService {
         promptSent,
       };
     } else {
-      await this.session.startClaudeSession(acquisitionResult.sessionId, {
+      await this.session.startSession(acquisitionResult.sessionId, {
         initialPrompt: prompt,
       });
     }

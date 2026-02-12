@@ -50,5 +50,21 @@ export type { ClientCreatedCallback } from './lifecycle/session.service';
 export { sessionService } from './lifecycle/session.service';
 // Session file logging
 export { SessionFileLogger, sessionFileLogger } from './logging/session-file-logger.service';
+// Provider adapters + runtime managers (internal migration seam)
+export type {
+  CanonicalAgentMessageEvent,
+  CanonicalAgentMessageKind,
+  SessionProvider,
+  SessionProviderAdapter,
+} from './providers';
+export { ClaudeSessionProviderAdapter, claudeSessionProviderAdapter } from './providers';
+export type {
+  ClaudeRuntimeCreatedCallback,
+  ClaudeRuntimeEventHandlers,
+  ProviderRuntimeManager,
+  RuntimeCreatedCallback,
+  RuntimeEventHandlers,
+} from './runtime';
+export { ClaudeRuntimeManager, claudeRuntimeManager } from './runtime';
 // Core domain service (in-memory state management)
 export { sessionDomainService } from './session-domain.service';

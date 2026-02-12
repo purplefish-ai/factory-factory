@@ -146,6 +146,30 @@ module.exports = {
       to: { path: '^src/backend/services/session-store\\.service\\.ts$' },
     },
     {
+      name: 'session-runtime-import-boundary',
+      severity: 'error',
+      comment:
+        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session providers/lifecycle entry points.',
+      from: {
+        path: '^src/backend/domains/session/',
+        pathNot:
+          '^src/backend/domains/session/(runtime/|providers/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/domains/session/runtime/' },
+    },
+    {
+      name: 'session-provider-import-boundary',
+      severity: 'error',
+      comment:
+        'Session provider adapters are internal orchestration seams and should be consumed only from lifecycle/chat forwarding entry points.',
+      from: {
+        path: '^src/backend/domains/session/',
+        pathNot:
+          '^src/backend/domains/session/(providers/|lifecycle/)|^src/backend/domains/session/chat/chat-event-forwarder\\.service\\.ts$|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/domains/session/providers/' },
+    },
+    {
       name: 'no-cross-domain-imports',
       severity: 'error',
       comment:
