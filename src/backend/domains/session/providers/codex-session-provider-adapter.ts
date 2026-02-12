@@ -193,7 +193,7 @@ export class CodexSessionProviderAdapter
         retryable: true,
       });
     }
-    this.manager.getRegistry().setActiveTurnId(sessionId, turnId);
+    this.manager.getRegistry().trySetActiveTurnId(sessionId, turnId);
   }
 
   setModel(sessionId: string, model?: string): Promise<void> {

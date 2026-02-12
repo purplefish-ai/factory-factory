@@ -5,6 +5,7 @@ import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
 import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
+import { asRecord } from '@/backend/domains/session/codex/payload-utils';
 import {
   claudeSessionProviderAdapter,
   codexSessionProviderAdapter,
@@ -48,6 +49,20 @@ type ActiveSessionProviderAdapter = SessionProviderAdapter<
   RegisteredProcess,
   ClaudeActiveProcessSummary
 >;
+
+function parseCodexTurnId(params: unknown): string | null {
+  const record = asRecord(params);
+  if (typeof record.turnId === 'string') {
+    return record.turnId;
+  }
+
+  const turn = asRecord(record.turn);
+  if (typeof turn.id === 'string') {
+    return turn.id;
+  }
+
+  return null;
+}
 
 /**
  * Callback type for client creation hook.
@@ -108,13 +123,17 @@ class SessionService {
   private initializeCodexManagerHandlers(): void {
     this.codexAdapter.getManager().setHandlers({
       onNotification: ({ sessionId, method, params }) => {
+        const registry = this.codexAdapter.getManager().getRegistry();
         if (this.isTerminalCodexTurnMethod(method)) {
-          this.codexAdapter.getManager().getRegistry().setActiveTurnId(sessionId, null);
+          registry.markTurnTerminal(sessionId, parseCodexTurnId(params));
         }
 
         const translatedEvents = this.codexEventTranslator.translateNotification(method, params);
         for (const event of translatedEvents) {
           const normalized = this.normalizeCodexDeltaEvent(sessionId, event);
+          if (normalized.type === 'session_runtime_updated') {
+            sessionDomainService.setRuntimeSnapshot(sessionId, normalized.sessionRuntime, false);
+          }
           sessionDomainService.emitDelta(sessionId, normalized);
         }
       },

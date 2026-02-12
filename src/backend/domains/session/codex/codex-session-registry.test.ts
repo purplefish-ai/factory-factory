@@ -70,4 +70,24 @@ describe('CodexSessionRegistry', () => {
 
     expect(registry.getActiveSessionCount()).toBe(2);
   });
+
+  it('does not reactivate a turn that already reached a terminal state', () => {
+    const registry = new CodexSessionRegistry(new InMemoryCodexThreadMappingStore());
+
+    registry.markTurnTerminal('s1', 'turn-1');
+    const activated = registry.trySetActiveTurnId('s1', 'turn-1');
+
+    expect(activated).toBe(false);
+    expect(registry.getActiveTurnId('s1')).toBeNull();
+  });
+
+  it('clears active turn when terminal notification matches active turn id', () => {
+    const registry = new CodexSessionRegistry(new InMemoryCodexThreadMappingStore());
+
+    registry.setActiveTurnId('s1', 'turn-1');
+    expect(registry.getActiveTurnId('s1')).toBe('turn-1');
+
+    registry.markTurnTerminal('s1', 'turn-1');
+    expect(registry.getActiveTurnId('s1')).toBeNull();
+  });
 });

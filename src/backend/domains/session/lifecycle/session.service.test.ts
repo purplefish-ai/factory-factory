@@ -17,6 +17,7 @@ type CodexManagerHandlersMock = {
 const codexTestState = vi.hoisted(() => ({
   codexRegistry: {
     setActiveTurnId: vi.fn(),
+    markTurnTerminal: vi.fn(),
   },
   codexManagerHandlers: null as CodexManagerHandlersMock | null,
 }));
@@ -863,14 +864,42 @@ describe('SessionService', () => {
     expect(codexSessionProviderAdapter.stopAllClients).toHaveBeenCalledTimes(1);
   });
 
-  it('clears active turn tracking for terminal Codex notifications', () => {
+  it('marks terminal turn tracking for terminal Codex notifications', () => {
     codexTestState.codexManagerHandlers?.onNotification?.({
       sessionId: 'session-1',
       method: 'turn/completed',
       params: { threadId: 'thread-1', turnId: 'turn-1' },
     });
 
-    expect(codexTestState.codexRegistry.setActiveTurnId).toHaveBeenCalledWith('session-1', null);
+    expect(codexTestState.codexRegistry.markTurnTerminal).toHaveBeenCalledWith(
+      'session-1',
+      'turn-1'
+    );
+  });
+
+  it('persists runtime snapshots for translated Codex runtime deltas', () => {
+    const setRuntimeSnapshotSpy = vi.spyOn(sessionDomainService, 'setRuntimeSnapshot');
+    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
+
+    codexTestState.codexManagerHandlers?.onNotification?.({
+      sessionId: 'session-1',
+      method: 'turn/started',
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+
+    expect(setRuntimeSnapshotSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+      }),
+      false
+    );
+    expect(emitDeltaSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ type: 'session_runtime_updated' })
+    );
   });
 
   it('responds to unsupported Codex interactive requests', () => {
