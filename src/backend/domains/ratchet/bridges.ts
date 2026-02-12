@@ -68,7 +68,7 @@ export interface RatchetPRSnapshotBridge {
     observedAt?: Date;
   }): Promise<void>;
   recordCINotification(workspaceId: string, notifiedAt?: Date): Promise<void>;
-  recordReviewCheck(workspaceId: string, checkedAt?: Date): Promise<void>;
+  recordReviewCheck(workspaceId: string, checkedAt?: Date | null): Promise<void>;
 }
 
 // --- Workspace bridge ---

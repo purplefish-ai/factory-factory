@@ -17,6 +17,7 @@ import {
   SERVICE_CACHE_TTL_MS,
   SERVICE_CONCURRENCY,
   SERVICE_INTERVAL_MS,
+  SERVICE_THRESHOLDS,
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
@@ -821,7 +822,28 @@ class RatchetService extends EventEmitter {
       return true;
     }
 
-    return prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime();
+    if (prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime()) {
+      return true;
+    }
+
+    // Self-heal: if the review check timestamp is stale and there's no active fixer session,
+    // treat as new activity so the ratchet re-evaluates. This catches edge cases where a
+    // dispatch was recorded but the session died through an unanticipated path.
+    if (!workspace.ratchetActiveSessionId) {
+      const age = Date.now() - workspace.prReviewLastCheckedAt.getTime();
+      if (age > SERVICE_THRESHOLDS.ratchetReviewCheckStaleMs) {
+        logger.info(
+          'Review check timestamp is stale with no active session, treating as new activity',
+          {
+            workspaceId: workspace.id,
+            checkedAtAge: Math.round(age / 1000),
+          }
+        );
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private async processReviewCommentPoll(
@@ -1014,17 +1036,17 @@ class RatchetService extends EventEmitter {
 
     const session = await claudeSessionAccessor.findById(workspace.ratchetActiveSessionId);
     if (!session) {
-      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      await this.clearFailedRatchetDispatch(workspace, 'session not found in database');
       return null;
     }
 
     if (session.status !== SessionStatus.RUNNING) {
-      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      await this.clearFailedRatchetDispatch(workspace, `session status is ${session.status}`);
       return null;
     }
 
     if (!this.session.isSessionRunning(session.id)) {
-      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+      await this.clearFailedRatchetDispatch(workspace, 'session process is not running');
       return null;
     }
 
@@ -1044,6 +1066,26 @@ class RatchetService extends EventEmitter {
     }
 
     return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
+  }
+
+  /**
+   * Clear a ratchet session that died without completing its work.
+   * Resets dispatch tracking so the next poll cycle re-evaluates and re-dispatches.
+   */
+  private async clearFailedRatchetDispatch(
+    workspace: WorkspaceWithPR,
+    reason: string
+  ): Promise<void> {
+    logger.info('Clearing failed ratchet dispatch, resetting state for retry', {
+      workspaceId: workspace.id,
+      sessionId: workspace.ratchetActiveSessionId,
+      reason,
+    });
+    await workspaceAccessor.update(workspace.id, {
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
+    });
+    await this.snapshot.recordReviewCheck(workspace.id, null);
   }
 
   private async hasActiveSession(workspaceId: string): Promise<boolean> {

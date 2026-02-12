@@ -47,7 +47,7 @@ interface CIObservationInput {
 }
 
 interface ReviewCheckInput {
-  checkedAt?: Date;
+  checkedAt?: Date | null;
   latestCommentId?: string;
 }
 
@@ -98,8 +98,9 @@ class PRSnapshotService extends EventEmitter {
    * Record PR review polling checkpoint.
    */
   async recordReviewCheck(workspaceId: string, input: ReviewCheckInput = {}): Promise<void> {
+    const checkedAt = input.checkedAt === null ? null : (input.checkedAt ?? new Date());
     await workspaceAccessor.update(workspaceId, {
-      prReviewLastCheckedAt: input.checkedAt ?? new Date(),
+      prReviewLastCheckedAt: checkedAt,
       ...(input.latestCommentId !== undefined
         ? { prReviewLastCommentId: input.latestCommentId }
         : {}),

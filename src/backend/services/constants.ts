@@ -41,6 +41,7 @@ export const SERVICE_CONCURRENCY = Object.freeze({
 
 export const SERVICE_THRESHOLDS = Object.freeze({
   schedulerStaleMinutes: 2,
+  ratchetReviewCheckStaleMs: 10 * 60_000, // 10min: treat prReviewLastCheckedAt as stale if no active session
 } as const);
 
 export const SERVICE_TTL_SECONDS = Object.freeze({
