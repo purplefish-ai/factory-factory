@@ -14,6 +14,8 @@ export * from './ratchet-wrench-icon';
 export * from './right-panel';
 export * from './run-script-button';
 export * from './run-script-port-badge';
+export * from './screenshot-viewer-tab';
+export * from './screenshots-panel';
 export * from './terminal-instance';
 export * from './terminal-panel';
 export * from './terminal-tab-bar';

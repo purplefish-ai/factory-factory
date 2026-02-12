@@ -1,4 +1,13 @@
-import { FileQuestion, Files, GitCompare, ListTodo, Play, Plus, Terminal } from 'lucide-react';
+import {
+  Camera,
+  FileQuestion,
+  Files,
+  GitCompare,
+  ListTodo,
+  Play,
+  Plus,
+  Terminal,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
@@ -11,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { DevLogsPanel } from './dev-logs-panel';
 import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
+import { ScreenshotsPanel } from './screenshots-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 import { TerminalTabBar } from './terminal-tab-bar';
@@ -29,7 +39,7 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // Types
 // =============================================================================
 
-type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks';
+type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks' | 'screenshots';
 
 // =============================================================================
 // Main Component
@@ -39,9 +49,15 @@ interface RightPanelProps {
   workspaceId: string;
   className?: string;
   messages?: ChatMessage[];
+  onTakeScreenshots?: () => void;
 }
 
-export function RightPanel({ workspaceId, className, messages = [] }: RightPanelProps) {
+export function RightPanel({
+  workspaceId,
+  className,
+  messages = [],
+  onTakeScreenshots,
+}: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
@@ -101,7 +117,8 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
         storedTop === 'unstaged' ||
         storedTop === 'diff-vs-main' ||
         storedTop === 'files' ||
-        storedTop === 'tasks'
+        storedTop === 'tasks' ||
+        storedTop === 'screenshots'
       ) {
         setActiveTopTab(storedTop);
       }
@@ -131,6 +148,11 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
     },
     [setActiveBottomTab]
   );
+
+  const handleTakeScreenshots = useCallback(() => {
+    setActiveTopTab('screenshots');
+    onTakeScreenshots?.();
+  }, [onTakeScreenshots]);
 
   return (
     <ResizablePanelGroup
@@ -162,6 +184,12 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
               onSelect={() => handleTabChange('files')}
             />
             <TabButton
+              label="Screenshots"
+              icon={<Camera className="h-3.5 w-3.5" />}
+              isActive={activeTopTab === 'screenshots'}
+              onSelect={() => handleTabChange('screenshots')}
+            />
+            <TabButton
               label="Tasks"
               icon={<ListTodo className="h-3.5 w-3.5" />}
               isActive={activeTopTab === 'tasks'}
@@ -175,6 +203,12 @@ export function RightPanel({ workspaceId, className, messages = [] }: RightPanel
             {activeTopTab === 'diff-vs-main' && <DiffVsMainPanel workspaceId={workspaceId} />}
             {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
             {activeTopTab === 'tasks' && <TodoPanelContainer messages={messages} />}
+            {activeTopTab === 'screenshots' && (
+              <ScreenshotsPanel
+                workspaceId={workspaceId}
+                onTakeScreenshots={handleTakeScreenshots}
+              />
+            )}
           </div>
         </div>
       </ResizablePanel>

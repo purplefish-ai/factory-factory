@@ -9,6 +9,7 @@ export type BuildPromptInput = {
     hasHadSessions?: boolean;
     name: string;
     description?: string | null;
+    runScriptPort?: number | null;
   };
   project?: { githubOwner?: string | null } | null;
 };
@@ -64,6 +65,11 @@ export class SessionPromptBuilder {
       });
       systemPrompt = branchRenameInstruction + (workflowPrompt ?? '');
       injectedBranchRename = true;
+    }
+
+    if (workspace.runScriptPort) {
+      const devServerInfo = `\n\n## Dev Server\nA development server is running at http://localhost:${workspace.runScriptPort}. You can use Playwright MCP tools (browser_navigate, browser_screenshot) to capture screenshots of UI changes.\n`;
+      systemPrompt = (systemPrompt ?? '') + devServerInfo;
     }
 
     return { workflowPrompt, systemPrompt, injectedBranchRename };

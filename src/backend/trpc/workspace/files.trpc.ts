@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -13,6 +13,30 @@ import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './wor
 
 const loggerName = 'workspace-files-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
+
+const SCREENSHOT_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
+
+async function validateScreenshotPath(
+  workspaceId: string,
+  screenshotPath: string
+): Promise<string> {
+  if (!screenshotPath.startsWith('.factory-factory/screenshots/')) {
+    throw new Error('Invalid screenshot path');
+  }
+
+  const { worktreePath } = await getWorkspaceWithWorktreeOrThrow(workspaceId);
+
+  if (!(await isPathSafe(worktreePath, screenshotPath))) {
+    throw new Error('Invalid file path');
+  }
+
+  const ext = path.extname(screenshotPath).toLowerCase();
+  if (!SCREENSHOT_IMAGE_EXTENSIONS.has(ext)) {
+    throw new Error('Invalid image format');
+  }
+
+  return path.join(worktreePath, screenshotPath);
+}
 
 /**
  * Recursively list all files in a directory, excluding common ignore patterns
@@ -305,5 +329,89 @@ export const workspaceFilesRouter = router({
         size: fileSize,
         isBinary: false,
       };
+    }),
+
+  // List screenshots in .factory-factory/screenshots/
+  listScreenshots: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(async ({ input }) => {
+      const result = await getWorkspaceWithWorktree(input.workspaceId);
+      if (!result) {
+        return { screenshots: [], hasWorktree: false };
+      }
+
+      const screenshotsDir = path.join(result.worktreePath, '.factory-factory', 'screenshots');
+
+      try {
+        const dirents = await readdir(screenshotsDir, { withFileTypes: true });
+        const screenshots: Array<{ name: string; path: string; size: number }> = [];
+
+        for (const dirent of dirents) {
+          if (!dirent.isFile()) {
+            continue;
+          }
+          const ext = path.extname(dirent.name).toLowerCase();
+          if (!SCREENSHOT_IMAGE_EXTENSIONS.has(ext)) {
+            continue;
+          }
+
+          const filePath = path.join(screenshotsDir, dirent.name);
+          const stats = await stat(filePath);
+          screenshots.push({
+            name: dirent.name,
+            path: `.factory-factory/screenshots/${dirent.name}`,
+            size: stats.size,
+          });
+        }
+
+        screenshots.sort((a, b) => a.name.localeCompare(b.name));
+        return { screenshots, hasWorktree: true };
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          return { screenshots: [], hasWorktree: true };
+        }
+        throw error;
+      }
+    }),
+
+  // Read a screenshot as base64
+  readScreenshot: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        path: z.string(),
+      })
+    )
+    .query(async ({ input }) => {
+      const fullPath = await validateScreenshotPath(input.workspaceId, input.path);
+      const buffer = await readFile(fullPath);
+      const ext = path.extname(input.path).toLowerCase();
+
+      const mimeMap: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+      };
+
+      return {
+        data: buffer.toString('base64'),
+        mimeType: mimeMap[ext] ?? 'image/png',
+        name: path.basename(input.path),
+      };
+    }),
+
+  // Delete a screenshot
+  deleteScreenshot: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        path: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const fullPath = await validateScreenshotPath(input.workspaceId, input.path);
+      await unlink(fullPath);
+      return { success: true };
     }),
 });

@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import {
+  Camera,
   Check,
   Eye,
   GitBranch,
@@ -45,6 +46,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   play: Play,
   terminal: Terminal,
   check: Check,
+  camera: Camera,
   'git-branch': GitBranch,
 };
 

@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils';
 
 import { DiffViewer } from './diff-viewer';
 import { FileViewer } from './file-viewer';
+import { ScreenshotViewerTab } from './screenshot-viewer-tab';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -23,6 +24,7 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
   const showChat = !activeTab || activeTab.type === 'chat';
   const filePath = activeTab?.type === 'file' ? activeTab.path : undefined;
   const diffPath = activeTab?.type === 'diff' ? activeTab.path : undefined;
+  const screenshotPath = activeTab?.type === 'screenshot' ? activeTab.path : undefined;
   const activeTabKey = activeTab?.id;
 
   return (
@@ -35,6 +37,13 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
       )}
       {diffPath && activeTabKey && (
         <DiffViewer workspaceId={workspaceId} filePath={diffPath} tabId={activeTabKey} />
+      )}
+      {screenshotPath && activeTabKey && (
+        <ScreenshotViewerTab
+          workspaceId={workspaceId}
+          screenshotPath={screenshotPath}
+          tabId={activeTabKey}
+        />
       )}
     </div>
   );

@@ -787,6 +787,15 @@ class SessionService {
     const claudeProjectPath = SessionManager.getProjectPath(sessionContext.workingDir);
     await this.repository.updateSession(sessionId, { claudeProjectPath });
 
+    const mcpConfig = JSON.stringify({
+      mcpServers: {
+        playwright: {
+          command: 'npx',
+          args: ['@playwright/mcp@latest', '--viewport-size=1920,1080'],
+        },
+      },
+    });
+
     const clientOptions: ClaudeClientOptions = {
       workingDir: sessionContext.workingDir,
       resumeClaudeSessionId: sessionContext.resumeClaudeSessionId,
@@ -796,6 +805,7 @@ class SessionService {
       includePartialMessages: false,
       thinkingEnabled: options?.thinkingEnabled,
       initialPrompt: options?.initialPrompt,
+      mcpConfig,
       sessionId,
     };
 

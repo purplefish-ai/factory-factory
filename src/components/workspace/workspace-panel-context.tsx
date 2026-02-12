@@ -26,7 +26,7 @@ export type BottomPanelTab = 'terminal' | 'dev-logs' | 'setup-logs';
 
 export interface MainViewTab {
   id: string;
-  type: 'chat' | 'file' | 'diff';
+  type: 'chat' | 'file' | 'diff' | 'screenshot';
   path?: string; // for file/diff tabs
   label: string;
 }
@@ -82,7 +82,7 @@ function isValidTab(tab: unknown): tab is MainViewTab {
   if (typeof t.label !== 'string') {
     return false;
   }
-  if (!['chat', 'file', 'diff'].includes(t.type as string)) {
+  if (!['chat', 'file', 'diff', 'screenshot'].includes(t.type as string)) {
     return false;
   }
 

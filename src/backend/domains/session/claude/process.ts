@@ -33,6 +33,8 @@ export interface ClaudeProcessOptions {
   disallowedTools?: string[];
   initialPrompt?: string;
   hooks?: HooksConfig;
+  /** MCP server configuration JSON string (passed via --mcp-config) */
+  mcpConfig?: string;
   thinkingEnabled?: boolean;
   resourceMonitoring?: ResourceMonitoringOptions;
   sessionId?: string;
@@ -363,6 +365,10 @@ export class ClaudeProcess extends EventEmitter {
 
     if (options.permissionMode) {
       args.push('--permission-mode', options.permissionMode);
+    }
+
+    if (options.mcpConfig) {
+      args.push('--mcp-config', options.mcpConfig);
     }
 
     return args;
