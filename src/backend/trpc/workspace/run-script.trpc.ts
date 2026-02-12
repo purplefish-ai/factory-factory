@@ -16,7 +16,7 @@ export const workspaceRunScriptRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const workspace = await workspaceDataService.findById(input.workspaceId);
+      const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
 
       if (!workspace) {
         throw new TRPCError({
@@ -33,9 +33,23 @@ export const workspaceRunScriptRouter = router({
       }
 
       try {
-        const configPath = join(workspace.worktreePath, 'factory-factory.json');
         const configContent = JSON.stringify(input.config, null, 2);
-        await writeFile(configPath, configContent, 'utf-8');
+
+        // Write to the workspace worktree
+        await writeFile(
+          join(workspace.worktreePath, 'factory-factory.json'),
+          configContent,
+          'utf-8'
+        );
+
+        // Also write to the project repo so the admin panel and future workspaces pick it up
+        if (workspace.project?.repoPath) {
+          await writeFile(
+            join(workspace.project.repoPath, 'factory-factory.json'),
+            configContent,
+            'utf-8'
+          );
+        }
 
         // Update workspace with new run script command
         await workspaceDataService.setRunScriptCommands(
