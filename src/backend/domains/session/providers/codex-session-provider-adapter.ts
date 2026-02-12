@@ -435,12 +435,15 @@ export class CodexSessionProviderAdapter
   }
 
   async stopAllClients(): Promise<void> {
-    for (const [sessionId] of this.clients) {
-      await this.manager.getRegistry().clearSession(sessionId);
+    try {
+      for (const [sessionId] of this.clients) {
+        await this.manager.getRegistry().clearSession(sessionId);
+      }
+    } finally {
+      this.clients.clear();
+      this.preferredModels.clear();
+      await this.manager.stop();
     }
-    this.clients.clear();
-    this.preferredModels.clear();
-    await this.manager.stop();
   }
 
   async interruptTurn(sessionId: string): Promise<void> {

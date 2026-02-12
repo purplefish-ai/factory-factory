@@ -435,4 +435,41 @@ describe('CodexSessionProviderAdapter', () => {
       })
     );
   });
+
+  it('still stops manager and clears local clients when clearSession fails in stopAllClients', async () => {
+    const registry = new CodexSessionRegistry();
+    const request = vi.fn().mockResolvedValue({ threadId: 'thread-1' });
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request,
+      stop: vi.fn().mockResolvedValue(undefined),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    vi.spyOn(registry, 'clearSession').mockRejectedValueOnce(
+      new Error('mapping store unavailable')
+    );
+
+    await expect(adapter.stopAllClients()).rejects.toThrow('mapping store unavailable');
+    expect(manager.stop).toHaveBeenCalledTimes(1);
+    expect([...adapter.getAllClients()]).toHaveLength(0);
+  });
 });
