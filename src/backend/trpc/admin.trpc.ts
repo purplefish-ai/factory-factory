@@ -190,13 +190,15 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get all active processes (Claude and Terminal)
+   * Get all active processes (Claude, Codex app-server, and Terminal)
    */
   getActiveProcesses: publicProcedure.query(async ({ ctx }) => {
     const { sessionService, terminalService } = ctx.appContext.services;
     const logger = getLogger(ctx);
     // Get active Claude processes from in-memory map
     const activeClaudeProcesses = sessionService.getAllActiveProcesses();
+    const codexManager = sessionService.getCodexManagerStatus();
+    const codexProcesses = sessionService.getAllCodexActiveProcesses();
 
     // Get active terminals from in-memory map
     const activeTerminals = terminalService.getAllTerminals();
@@ -305,11 +307,16 @@ export const adminRouter = router({
 
     return {
       claude: claudeProcesses,
+      codex: {
+        manager: codexManager,
+        sessions: codexProcesses,
+      },
       terminal: terminalProcesses,
       summary: {
         totalClaude: claudeProcesses.length,
+        totalCodexSessions: codexProcesses.length,
         totalTerminal: terminalProcesses.length,
-        total: claudeProcesses.length + terminalProcesses.length,
+        total: claudeProcesses.length + codexProcesses.length + terminalProcesses.length,
       },
     };
   }),

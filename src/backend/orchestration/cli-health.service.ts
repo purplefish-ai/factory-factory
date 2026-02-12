@@ -13,8 +13,15 @@ export interface ClaudeCLIHealthStatus {
   error?: string;
 }
 
+export interface CodexCLIHealthStatus {
+  isInstalled: boolean;
+  version?: string;
+  error?: string;
+}
+
 export interface CLIHealthStatus {
   claude: ClaudeCLIHealthStatus;
+  codex: CodexCLIHealthStatus;
   github: GitHubCLIHealthStatus;
   allHealthy: boolean;
 }
@@ -22,6 +29,7 @@ export interface CLIHealthStatus {
 /**
  * Service for checking CLI dependencies health.
  * Checks that required CLIs (Claude, GitHub) are installed and configured.
+ * Codex is reported separately as an optional capability.
  */
 class CLIHealthService {
   private cachedStatus: CLIHealthStatus | null = null;
@@ -53,6 +61,28 @@ class CLIHealthService {
   }
 
   /**
+   * Check if Codex CLI is installed and exposes app-server support.
+   */
+  async checkCodexCLI(): Promise<CodexCLIHealthStatus> {
+    try {
+      const { stdout } = await execFileAsync('codex', ['--version'], {
+        timeout: SERVICE_TIMEOUT_MS.codexCliVersionCheck,
+      });
+      return { isInstalled: true, version: stdout.trim().split('\n')[0] };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isNotFound = message.toLowerCase().includes('enoent') || message.includes('not found');
+
+      return {
+        isInstalled: false,
+        error: isNotFound
+          ? 'Codex CLI is not installed. Install from https://developers.openai.com/codex/app-server/'
+          : `Failed to check Codex CLI: ${message}`,
+      };
+    }
+  }
+
+  /**
    * Check health of all required CLIs.
    * Results are cached for CACHE_TTL_MS to avoid excessive process spawning.
    */
@@ -71,13 +101,15 @@ class CLIHealthService {
     logger.debug('Checking CLI health...');
 
     // Run checks in parallel
-    const [claude, github] = await Promise.all([
+    const [claude, codex, github] = await Promise.all([
       this.checkClaudeCLI(),
+      this.checkCodexCLI(),
       githubCLIService.checkHealth(),
     ]);
 
     const status: CLIHealthStatus = {
       claude,
+      codex,
       github,
       allHealthy: claude.isInstalled && github.isInstalled && github.isAuthenticated,
     };
@@ -89,6 +121,7 @@ class CLIHealthService {
     if (!status.allHealthy) {
       logger.warn('CLI health check found issues', {
         claudeInstalled: claude.isInstalled,
+        codexInstalled: codex.isInstalled,
         githubInstalled: github.isInstalled,
         githubAuthenticated: github.isAuthenticated,
       });

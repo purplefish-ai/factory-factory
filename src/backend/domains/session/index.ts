@@ -57,7 +57,12 @@ export type {
   SessionProvider,
   SessionProviderAdapter,
 } from './providers';
-export { ClaudeSessionProviderAdapter, claudeSessionProviderAdapter } from './providers';
+export {
+  ClaudeSessionProviderAdapter,
+  CodexSessionProviderAdapter,
+  claudeSessionProviderAdapter,
+  codexSessionProviderAdapter,
+} from './providers';
 export type {
   ClaudeRuntimeCreatedCallback,
   ClaudeRuntimeEventHandlers,
@@ -65,6 +70,11 @@ export type {
   RuntimeCreatedCallback,
   RuntimeEventHandlers,
 } from './runtime';
-export { ClaudeRuntimeManager, claudeRuntimeManager } from './runtime';
+export {
+  ClaudeRuntimeManager,
+  CodexAppServerManager,
+  claudeRuntimeManager,
+  codexAppServerManager,
+} from './runtime';
 // Core domain service (in-memory state management)
 export { sessionDomainService } from './session-domain.service';

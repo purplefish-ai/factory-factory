@@ -4,6 +4,24 @@ import type { ClaudeClient } from '@/backend/domains/session/claude/client';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
+type CodexManagerHandlersMock = {
+  onNotification?: (event: { sessionId: string; method: string; params: unknown }) => void;
+  onServerRequest?: (event: {
+    sessionId: string;
+    method: string;
+    params: unknown;
+    canonicalRequestId: string;
+  }) => void;
+};
+
+const codexTestState = vi.hoisted(() => ({
+  codexRegistry: {
+    setActiveTurnId: vi.fn(),
+    markTurnTerminal: vi.fn(),
+  },
+  codexManagerHandlers: null as CodexManagerHandlersMock | null,
+}));
+
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -70,9 +88,32 @@ vi.mock('@/backend/domains/session/providers', () => ({
     getAllClients: vi.fn(),
     stopAllClients: vi.fn(),
   },
+  codexSessionProviderAdapter: {
+    getManager: vi.fn(() => ({
+      setHandlers: vi.fn((handlers) => {
+        codexTestState.codexManagerHandlers = handlers;
+      }),
+      getRegistry: vi.fn(() => codexTestState.codexRegistry),
+      getStatus: vi.fn(() => ({
+        state: 'stopped',
+        unavailableReason: null,
+        pid: null,
+        startedAt: null,
+        restartCount: 0,
+        activeSessionCount: 0,
+      })),
+    })),
+    rejectInteractiveRequest: vi.fn(),
+    getAllClients: vi.fn(() => new Map().entries()),
+    getAllActiveProcesses: vi.fn(() => []),
+    stopAllClients: vi.fn(),
+  },
 }));
 
-import { claudeSessionProviderAdapter } from '@/backend/domains/session/providers';
+import {
+  claudeSessionProviderAdapter,
+  codexSessionProviderAdapter,
+} from '@/backend/domains/session/providers';
 import { sessionPromptBuilder } from './session.prompt-builder';
 import { sessionRepository } from './session.repository';
 import { sessionService } from './session.service';
@@ -800,6 +841,81 @@ describe('SessionService', () => {
       'session-1',
       'req-2',
       { q: 'a' }
+    );
+  });
+
+  it('stops both Claude and Codex providers during shutdown', async () => {
+    vi.mocked(claudeSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
+    vi.mocked(codexSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
+
+    await sessionService.stopAllClients(4321);
+
+    expect(claudeSessionProviderAdapter.stopAllClients).toHaveBeenCalledWith(4321);
+    expect(codexSessionProviderAdapter.stopAllClients).toHaveBeenCalledTimes(1);
+  });
+
+  it('still attempts Codex shutdown when Claude shutdown fails', async () => {
+    vi.mocked(claudeSessionProviderAdapter.stopAllClients).mockRejectedValueOnce(
+      new Error('claude shutdown failed')
+    );
+    vi.mocked(codexSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
+
+    await expect(sessionService.stopAllClients()).rejects.toThrow('claude shutdown failed');
+    expect(codexSessionProviderAdapter.stopAllClients).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks terminal turn tracking for terminal Codex notifications', () => {
+    codexTestState.codexManagerHandlers?.onNotification?.({
+      sessionId: 'session-1',
+      method: 'turn/completed',
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+
+    expect(codexTestState.codexRegistry.markTurnTerminal).toHaveBeenCalledWith(
+      'session-1',
+      'turn-1'
+    );
+  });
+
+  it('persists runtime snapshots for translated Codex runtime deltas', () => {
+    const setRuntimeSnapshotSpy = vi.spyOn(sessionDomainService, 'setRuntimeSnapshot');
+    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
+
+    codexTestState.codexManagerHandlers?.onNotification?.({
+      sessionId: 'session-1',
+      method: 'turn/started',
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+
+    expect(setRuntimeSnapshotSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        phase: 'running',
+        processState: 'alive',
+        activity: 'WORKING',
+      }),
+      false
+    );
+    expect(emitDeltaSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ type: 'session_runtime_updated' })
+    );
+  });
+
+  it('responds to unsupported Codex interactive requests', () => {
+    codexTestState.codexManagerHandlers?.onServerRequest?.({
+      sessionId: 'session-1',
+      method: 'item/unsupported/request',
+      params: { threadId: 'thread-1' },
+      canonicalRequestId: 'request-1',
+    });
+
+    expect(codexSessionProviderAdapter.rejectInteractiveRequest).toHaveBeenCalledWith(
+      'session-1',
+      'request-1',
+      expect.objectContaining({
+        message: expect.stringContaining('Unsupported Codex interactive request'),
+      })
     );
   });
 

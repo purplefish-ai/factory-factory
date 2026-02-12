@@ -4,13 +4,18 @@ import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/sessio
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
+import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
+import { parseTurnId } from '@/backend/domains/session/codex/payload-utils';
 import {
   type ClaudeActiveProcessSummary,
   claudeSessionProviderAdapter,
+  codexSessionProviderAdapter,
   type SessionProviderAdapter,
 } from '@/backend/domains/session/providers';
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
+import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
 import {
@@ -52,6 +57,10 @@ class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
   private readonly providerAdapter: ActiveSessionProviderAdapter;
+  private readonly codexAdapter = codexSessionProviderAdapter;
+  private readonly codexEventTranslator = new CodexEventTranslator({
+    userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
+  });
 
   private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
     return typeof client.isWorking === 'function' ? client.isWorking() : false;
@@ -86,6 +95,91 @@ class SessionService {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
     this.providerAdapter = options?.providerAdapter ?? claudeSessionProviderAdapter;
+    this.initializeCodexManagerHandlers();
+  }
+
+  private initializeCodexManagerHandlers(): void {
+    this.codexAdapter.getManager().setHandlers({
+      onNotification: ({ sessionId, method, params }) => {
+        const registry = this.codexAdapter.getManager().getRegistry();
+        if (this.isTerminalCodexTurnMethod(method)) {
+          registry.markTurnTerminal(sessionId, parseTurnId(params));
+        }
+
+        const translatedEvents = this.codexEventTranslator.translateNotification(method, params);
+        for (const event of translatedEvents) {
+          const normalized = this.normalizeCodexDeltaEvent(sessionId, event);
+          if (normalized.type === 'session_runtime_updated') {
+            sessionDomainService.setRuntimeSnapshot(sessionId, normalized.sessionRuntime, false);
+          }
+          sessionDomainService.emitDelta(sessionId, normalized);
+        }
+      },
+      onServerRequest: ({ sessionId, method, params, canonicalRequestId }) => {
+        const event = this.codexEventTranslator.translateServerRequest(
+          method,
+          canonicalRequestId,
+          params
+        );
+
+        if (event.type === 'error') {
+          try {
+            this.codexAdapter.rejectInteractiveRequest(sessionId, canonicalRequestId, {
+              message: event.message,
+              data: event.data,
+            });
+          } catch (error) {
+            logger.warn('Failed responding to unsupported Codex interactive request', {
+              sessionId,
+              requestId: canonicalRequestId,
+              method,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        sessionDomainService.emitDelta(sessionId, event);
+      },
+      onStatusChanged: (status) => {
+        if (status.state !== 'degraded' && status.state !== 'unavailable') {
+          return;
+        }
+        for (const [sessionId] of this.codexAdapter.getAllClients()) {
+          sessionDomainService.setRuntimeSnapshot(
+            sessionId,
+            {
+              phase: 'error',
+              processState: 'stopped',
+              activity: 'IDLE',
+              updatedAt: new Date().toISOString(),
+            },
+            true
+          );
+        }
+      },
+    });
+  }
+
+  private normalizeCodexDeltaEvent(sessionId: string, event: SessionDeltaEvent): SessionDeltaEvent {
+    if (event.type !== 'claude_message') {
+      return event;
+    }
+
+    const order = sessionDomainService.appendClaudeEvent(sessionId, event.data);
+    return {
+      ...event,
+      order,
+    };
+  }
+
+  private isTerminalCodexTurnMethod(method: string): boolean {
+    return (
+      method.startsWith('turn/completed') ||
+      method.startsWith('turn/finished') ||
+      method.startsWith('turn/interrupted') ||
+      method.startsWith('turn/cancelled') ||
+      method.startsWith('turn/failed')
+    );
   }
 
   /**
@@ -566,6 +660,16 @@ class SessionService {
     return this.providerAdapter.getAllActiveProcesses();
   }
 
+  getCodexManagerStatus(): ReturnType<CodexAppServerManager['getStatus']> {
+    return this.codexAdapter.getManager().getStatus();
+  }
+
+  getAllCodexActiveProcesses(): ReturnType<
+    typeof codexSessionProviderAdapter.getAllActiveProcesses
+  > {
+    return this.codexAdapter.getAllActiveProcesses();
+  }
+
   /**
    * Get all active clients for cleanup purposes.
    * Returns an iterator of [sessionId, client] pairs.
@@ -579,7 +683,31 @@ class SessionService {
    * @param timeoutMs - Timeout for each client stop operation
    */
   async stopAllClients(timeoutMs = 5000): Promise<void> {
-    await this.providerAdapter.stopAllClients(timeoutMs);
+    let firstError: unknown = null;
+
+    try {
+      await this.providerAdapter.stopAllClients(timeoutMs);
+    } catch (error) {
+      firstError = error;
+      logger.error('Failed to stop Claude provider clients during shutdown', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      await this.codexAdapter.stopAllClients();
+    } catch (error) {
+      if (!firstError) {
+        firstError = error;
+      }
+      logger.error('Failed to stop Codex provider clients during shutdown', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    if (firstError) {
+      throw firstError instanceof Error ? firstError : new Error(String(firstError));
+    }
   }
 
   private shouldStopWorkspaceSession(session: { id: string; status: SessionStatus }): {
