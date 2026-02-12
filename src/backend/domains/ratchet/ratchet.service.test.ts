@@ -21,6 +21,7 @@ vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
 vi.mock('@/backend/resource_accessors/user-settings.accessor', () => ({
   userSettingsAccessor: {
     get: vi.fn(),
+    getDefaultSessionProvider: vi.fn(),
   },
 }));
 
@@ -101,6 +102,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
+    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('checks workspaces and processes each', async () => {
@@ -598,6 +600,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
       id: 'ratchet-session',
+      provider: 'CLAUDE',
       status: SessionStatus.RUNNING,
     } as never);
     vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(false);
@@ -662,6 +665,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
     vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
       id: 'ratchet-session',
+      provider: 'CLAUDE',
       status: SessionStatus.RUNNING,
     } as never);
     vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
@@ -1267,6 +1271,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('returns null and resets dispatch tracking when session is not RUNNING', async () => {
       vi.mocked(claudeSessionAccessor.findById).mockResolvedValue({
         id: 'completed-session',
+        provider: 'CLAUDE',
         status: SessionStatus.IDLE,
       } as never);
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);

@@ -19,6 +19,7 @@ vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
 vi.mock('@/backend/resource_accessors/user-settings.accessor', () => ({
   userSettingsAccessor: {
     get: vi.fn(),
+    getDefaultSessionProvider: vi.fn(),
   },
 }));
 
@@ -64,6 +65,7 @@ describe('FixerSessionService', () => {
     vi.mocked(userSettingsAccessor.get).mockResolvedValue({
       defaultSessionProvider: 'CLAUDE',
     } as never);
+    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('skips when workspace is missing worktree', async () => {
