@@ -5,6 +5,7 @@ import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
 import {
+  type ClaudeActiveProcessSummary,
   claudeSessionProviderAdapter,
   type SessionProviderAdapter,
 } from '@/backend/domains/session/providers';
@@ -23,15 +24,6 @@ import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
-
-type ClaudeActiveProcessSummary = {
-  sessionId: string;
-  pid: number | undefined;
-  status: string;
-  isRunning: boolean;
-  resourceUsage: ResourceUsage | null;
-  idleTimeMs: number;
-};
 
 type ActiveSessionProviderAdapter = SessionProviderAdapter<
   ClaudeClient,

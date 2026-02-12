@@ -1,3 +1,4 @@
+export type { ClaudeActiveProcessSummary } from './claude-session-provider-adapter';
 export {
   ClaudeSessionProviderAdapter,
   claudeSessionProviderAdapter,
