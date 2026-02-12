@@ -167,8 +167,8 @@ export class ClaudeSessionProviderAdapter
     }
 
     return event.order === undefined
-      ? ({ type: 'claude_message', data: event.data } as const)
-      : ({ type: 'claude_message', data: event.data, order: event.order } as const);
+      ? ({ type: 'agent_message', data: event.data } as const)
+      : ({ type: 'agent_message', data: event.data, order: event.order } as const);
   }
 
   private resolveMessageKind(

@@ -484,7 +484,7 @@ describe('CodexSessionProviderAdapter', () => {
     const delta = adapter.toPublicDeltaEvent(canonical);
     expect(delta).toEqual(
       expect.objectContaining({
-        type: 'claude_message',
+        type: 'agent_message',
         order: 7,
       })
     );

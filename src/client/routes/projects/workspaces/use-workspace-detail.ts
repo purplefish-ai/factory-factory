@@ -54,26 +54,25 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
     }
   }, [workspace?.prUrl, workspaceId, syncPRStatus]);
 
-  const { data: claudeSessions, isLoading: sessionsLoading } =
-    trpc.session.listClaudeSessions.useQuery(
-      { workspaceId },
-      {
-        refetchInterval: 10_000, // Poll every 10s instead of 5s
-        staleTime: 0, // Always refetch on invalidate - critical for session creation UX
-        refetchOnWindowFocus: false,
-      }
-    );
+  const { data: sessions, isLoading: sessionsLoading } = trpc.session.listSessions.useQuery(
+    { workspaceId },
+    {
+      refetchInterval: 10_000, // Poll every 10s instead of 5s
+      staleTime: 0, // Always refetch on invalidate - critical for session creation UX
+      refetchOnWindowFocus: false,
+    }
+  );
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
 
-  const firstSession = claudeSessions?.[0];
+  const firstSession = sessions?.[0];
   // Database record ID for the first session
   const initialDbSessionId = firstSession?.id;
 
   return {
     workspace,
     workspaceLoading,
-    claudeSessions,
+    sessions,
     sessionsLoading,
     initialDbSessionId,
     maxSessions,
@@ -88,15 +87,26 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
 interface UseSessionManagementOptions {
   workspaceId: string;
   slug: string;
-  claudeSessions: ReturnType<typeof useWorkspaceData>['claudeSessions'];
+  sessions: ReturnType<typeof useWorkspaceData>['sessions'];
   sendMessage: (text: string) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
   setSelectedDbSessionId: React.Dispatch<React.SetStateAction<string | null>>;
   /** Selected model from chat settings */
   selectedModel: string;
+  /** Provider selection for newly created sessions */
+  selectedProvider: NewSessionProviderSelection;
   /** Whether the session is ready to receive messages (session_loaded received) */
   isSessionReady: boolean;
+}
+
+type SessionProviderValue = 'CLAUDE' | 'CODEX';
+export type NewSessionProviderSelection = SessionProviderValue | 'WORKSPACE_DEFAULT';
+
+export function resolveExplicitSessionProvider(
+  selectedProvider: NewSessionProviderSelection
+): SessionProviderValue | undefined {
+  return selectedProvider === 'WORKSPACE_DEFAULT' ? undefined : selectedProvider;
 }
 
 /** Minimal mutation interface exposing only the properties we use */
@@ -116,7 +126,13 @@ interface AvailableIde {
 /** Explicit return type to avoid TypeScript portability issues with internal tRPC types */
 export interface UseSessionManagementReturn {
   createSession: MutationLike<
-    { workspaceId: string; workflow: string; model: string; name: string },
+    {
+      workspaceId: string;
+      workflow: string;
+      model: string;
+      name: string;
+      provider?: SessionProviderValue;
+    },
     { id: string }
   >;
   deleteSession: MutationLike<{ id: string }>;
@@ -133,12 +149,13 @@ export interface UseSessionManagementReturn {
 export function useSessionManagement({
   workspaceId,
   slug,
-  claudeSessions,
+  sessions,
   sendMessage,
   inputRef,
   selectedDbSessionId,
   setSelectedDbSessionId,
   selectedModel,
+  selectedProvider,
   isSessionReady,
 }: UseSessionManagementOptions): UseSessionManagementReturn {
   const navigate = useNavigate();
@@ -163,37 +180,35 @@ export function useSessionManagement({
     wasSessionReadyRef.current = isSessionReady;
   }, [selectedDbSessionId, sendMessage, isSessionReady]);
 
-  const createSession = trpc.session.createClaudeSession.useMutation({
+  const createSession = trpc.session.createSession.useMutation({
     onSuccess: (_data) => {
       // Invalidate marks the data as stale, then immediately refetch
       // With staleTime: 0, invalidate will trigger an immediate refetch
-      utils.session.listClaudeSessions.invalidate({ workspaceId });
+      utils.session.listSessions.invalidate({ workspaceId });
     },
   });
 
-  const deleteSession = trpc.session.deleteClaudeSession.useMutation({
+  const deleteSession = trpc.session.deleteSession.useMutation({
     onMutate: async ({ id }) => {
       // Cancel outgoing refetches so they don't overwrite our optimistic update
-      await utils.session.listClaudeSessions.cancel({ workspaceId });
+      await utils.session.listSessions.cancel({ workspaceId });
 
       // Snapshot previous value
-      const previousSessions = utils.session.listClaudeSessions.getData({ workspaceId });
+      const previousSessions = utils.session.listSessions.getData({ workspaceId });
 
       // Optimistically remove the session from the list
-      utils.session.listClaudeSessions.setData({ workspaceId }, (old) =>
-        old?.filter((s) => s.id !== id)
-      );
+      utils.session.listSessions.setData({ workspaceId }, (old) => old?.filter((s) => s.id !== id));
 
       return { previousSessions };
     },
     onError: (_err, _variables, context) => {
       // Roll back on error
       if (context?.previousSessions) {
-        utils.session.listClaudeSessions.setData({ workspaceId }, context.previousSessions);
+        utils.session.listSessions.setData({ workspaceId }, context.previousSessions);
       }
     },
     onSettled: () => {
-      utils.session.listClaudeSessions.invalidate({ workspaceId });
+      utils.session.listSessions.invalidate({ workspaceId });
     },
   });
 
@@ -226,11 +241,11 @@ export function useSessionManagement({
 
   const handleCloseSession = useCallback(
     (dbSessionId: string) => {
-      if (!claudeSessions || claudeSessions.length === 0) {
+      if (!sessions || sessions.length === 0) {
         return;
       }
 
-      const sessionIndex = claudeSessions.findIndex((s) => s.id === dbSessionId);
+      const sessionIndex = sessions.findIndex((s) => s.id === dbSessionId);
       if (sessionIndex === -1) {
         return;
       }
@@ -238,22 +253,22 @@ export function useSessionManagement({
       const isSelectedSession = dbSessionId === selectedDbSessionId;
       deleteSession.mutate({ id: dbSessionId });
 
-      if (isSelectedSession && claudeSessions.length > 1) {
+      if (isSelectedSession && sessions.length > 1) {
         // Select the next or previous session
         // The WebSocket will automatically reconnect and load the new session
-        const nextSession = claudeSessions[sessionIndex + 1] ?? claudeSessions[sessionIndex - 1];
+        const nextSession = sessions[sessionIndex + 1] ?? sessions[sessionIndex - 1];
         setSelectedDbSessionId(nextSession?.id ?? null);
-      } else if (claudeSessions.length === 1) {
+      } else if (sessions.length === 1) {
         // No more sessions - clear selection
         setSelectedDbSessionId(null);
       }
     },
-    [claudeSessions, selectedDbSessionId, deleteSession, setSelectedDbSessionId]
+    [sessions, selectedDbSessionId, deleteSession, setSelectedDbSessionId]
   );
 
   // Generate next available "Chat N" name based on existing sessions
   const getNextChatName = useCallback(() => {
-    const existingNumbers = (claudeSessions ?? [])
+    const existingNumbers = (sessions ?? [])
       .map((s) => {
         const match = s.name?.match(/^Chat (\d+)$/);
         return match ? Number.parseInt(match[1] as string, 10) : 0;
@@ -261,13 +276,20 @@ export function useSessionManagement({
       .filter((n) => n > 0);
     const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1;
     return `Chat ${nextNumber}`;
-  }, [claudeSessions]);
+  }, [sessions]);
 
   const handleNewChat = useCallback(() => {
     const name = getNextChatName();
+    const provider = resolveExplicitSessionProvider(selectedProvider);
 
     createSession.mutate(
-      { workspaceId, workflow: 'followup', model: selectedModel || undefined, name },
+      {
+        workspaceId,
+        workflow: 'followup',
+        model: selectedModel || undefined,
+        name,
+        provider,
+      },
       {
         onSuccess: (session) => {
           // Setting the new session ID triggers WebSocket reconnection automatically
@@ -283,12 +305,14 @@ export function useSessionManagement({
     setSelectedDbSessionId,
     inputRef,
     selectedModel,
+    selectedProvider,
   ]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
+      const provider = resolveExplicitSessionProvider(selectedProvider);
       createSession.mutate(
-        { workspaceId, workflow: 'followup', name, model: selectedModel || undefined },
+        { workspaceId, workflow: 'followup', name, model: selectedModel || undefined, provider },
         {
           onSuccess: (session) => {
             // Store the pending prompt to be sent once the session state settles
@@ -299,7 +323,7 @@ export function useSessionManagement({
         }
       );
     },
-    [createSession, workspaceId, setSelectedDbSessionId, selectedModel]
+    [createSession, workspaceId, setSelectedDbSessionId, selectedModel, selectedProvider]
   );
 
   return {

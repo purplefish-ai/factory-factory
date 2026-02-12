@@ -4,7 +4,7 @@ import type { ChatMessage, ClaudeMessage } from '@/lib/claude-types';
 
 export function reduceMessageTransportSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
-    case 'WS_CLAUDE_MESSAGE':
+    case 'WS_AGENT_MESSAGE':
       return handleClaudeMessage(state, action.payload.message, action.payload.order);
     case 'WS_ERROR': {
       const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);

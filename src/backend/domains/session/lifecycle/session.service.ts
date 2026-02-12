@@ -162,7 +162,7 @@ class SessionService {
   }
 
   private normalizeCodexDeltaEvent(sessionId: string, event: SessionDeltaEvent): SessionDeltaEvent {
-    if (event.type !== 'claude_message') {
+    if (event.type !== 'agent_message') {
       return event;
     }
 

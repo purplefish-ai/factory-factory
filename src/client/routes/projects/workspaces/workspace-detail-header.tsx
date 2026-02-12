@@ -6,9 +6,28 @@ import {
   GitPullRequest,
   Loader2,
   PanelRight,
+  Settings2,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   QuickActionsMenu,
@@ -20,7 +39,24 @@ import {
 import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
-import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
+import type {
+  NewSessionProviderSelection,
+  useSessionManagement,
+  useWorkspaceData,
+} from './use-workspace-detail';
+
+const PROVIDER_OPTIONS = [
+  { value: 'WORKSPACE_DEFAULT', label: 'Workspace Default' },
+  { value: 'CLAUDE', label: 'Claude' },
+  { value: 'CODEX', label: 'Codex' },
+] as const;
+
+function resolveProviderSelection(value: unknown): NewSessionProviderSelection {
+  if (value === 'CLAUDE' || value === 'CODEX' || value === 'WORKSPACE_DEFAULT') {
+    return value;
+  }
+  return 'WORKSPACE_DEFAULT';
+}
 
 function ToggleRightPanelButton() {
   const { rightPanelVisible, toggleRightPanel } = useWorkspacePanel();
@@ -168,6 +204,158 @@ function RatchetingToggle({
   );
 }
 
+function NewSessionProviderSelect({
+  selectedProvider,
+  setSelectedProvider,
+  disabled,
+}: {
+  selectedProvider: NewSessionProviderSelection;
+  setSelectedProvider: React.Dispatch<React.SetStateAction<NewSessionProviderSelection>>;
+  disabled: boolean;
+}) {
+  return (
+    <Select
+      value={selectedProvider}
+      onValueChange={(value) => {
+        setSelectedProvider(resolveProviderSelection(value));
+      }}
+      disabled={disabled}
+    >
+      <SelectTrigger className="h-8 w-[148px] text-xs">
+        <SelectValue placeholder="New session provider" />
+      </SelectTrigger>
+      <SelectContent>
+        {PROVIDER_OPTIONS.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function WorkspaceProviderSettings({
+  workspace,
+  workspaceId,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspaceId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [defaultProvider, setDefaultProvider] = useState<NewSessionProviderSelection>(
+    resolveProviderSelection(workspace.defaultSessionProvider)
+  );
+  const [ratchetProvider, setRatchetProvider] = useState<NewSessionProviderSelection>(
+    resolveProviderSelection(workspace.ratchetSessionProvider)
+  );
+  const utils = trpc.useUtils();
+
+  const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
+    onSuccess: () => {
+      utils.workspace.get.invalidate({ id: workspaceId });
+      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
+      setOpen(false);
+    },
+  });
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setDefaultProvider(resolveProviderSelection(workspace.defaultSessionProvider));
+    setRatchetProvider(resolveProviderSelection(workspace.ratchetSessionProvider));
+  }, [open, workspace.defaultSessionProvider, workspace.ratchetSessionProvider]);
+
+  const currentDefaultProvider = resolveProviderSelection(workspace.defaultSessionProvider);
+  const currentRatchetProvider = resolveProviderSelection(workspace.ratchetSessionProvider);
+  const isDirty =
+    defaultProvider !== currentDefaultProvider || ratchetProvider !== currentRatchetProvider;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Provider settings">
+              <Settings2 className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Provider settings</TooltipContent>
+      </Tooltip>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>Session Provider Defaults</DialogTitle>
+          <DialogDescription>
+            Configure workspace defaults and ratchet provider behavior.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="workspace-default-provider">Default Session Provider</Label>
+            <Select
+              value={defaultProvider}
+              onValueChange={(value) => {
+                setDefaultProvider(resolveProviderSelection(value));
+              }}
+            >
+              <SelectTrigger id="workspace-default-provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDER_OPTIONS.map((option) => (
+                  <SelectItem key={`default-${option.value}`} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="workspace-ratchet-provider">Ratchet Session Provider</Label>
+            <Select
+              value={ratchetProvider}
+              onValueChange={(value) => {
+                setRatchetProvider(resolveProviderSelection(value));
+              }}
+            >
+              <SelectTrigger id="workspace-ratchet-provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDER_OPTIONS.map((option) => (
+                  <SelectItem key={`ratchet-${option.value}`} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              updateProviderDefaults.mutate({
+                workspaceId,
+                defaultSessionProvider: defaultProvider,
+                ratchetSessionProvider: ratchetProvider,
+              });
+            }}
+            disabled={!isDirty || updateProviderDefaults.isPending}
+          >
+            {updateProviderDefaults.isPending ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 interface WorkspaceHeaderProps {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   workspaceId: string;
@@ -177,6 +365,8 @@ interface WorkspaceHeaderProps {
   archivePending: boolean;
   onArchiveRequest: () => void;
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
+  selectedProvider: NewSessionProviderSelection;
+  setSelectedProvider: React.Dispatch<React.SetStateAction<NewSessionProviderSelection>>;
   running: boolean;
   isCreatingSession: boolean;
   hasChanges?: boolean;
@@ -191,6 +381,8 @@ export function WorkspaceHeader({
   archivePending,
   onArchiveRequest,
   handleQuickAction,
+  selectedProvider,
+  setSelectedProvider,
   running,
   isCreatingSession,
   hasChanges,
@@ -210,6 +402,12 @@ export function WorkspaceHeader({
         <WorkspaceCiStatus workspace={workspace} />
       </div>
       <div className="flex items-center justify-end gap-0.5 md:gap-1 shrink-0">
+        <NewSessionProviderSelect
+          selectedProvider={selectedProvider}
+          setSelectedProvider={setSelectedProvider}
+          disabled={running || isCreatingSession}
+        />
+        <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
         <QuickActionsMenu
           onExecuteAgent={(action) => {

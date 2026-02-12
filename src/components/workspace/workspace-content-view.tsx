@@ -11,11 +11,11 @@ import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
 // =============================================================================
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
-type ClaudeSession = RouterOutputs['session']['listClaudeSessions'][number];
+type Session = RouterOutputs['session']['listSessions'][number];
 
 interface WorkspaceContentViewProps {
   workspaceId: string;
-  claudeSessions: ClaudeSession[] | undefined;
+  sessions: Session[] | undefined;
   selectedSessionId: string | null;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
   isCreatingSession: boolean;
@@ -43,7 +43,7 @@ interface WorkspaceContentViewProps {
  */
 export function WorkspaceContentView({
   workspaceId,
-  claudeSessions,
+  sessions,
   selectedSessionId,
   sessionSummariesById,
   isCreatingSession,
@@ -55,7 +55,7 @@ export function WorkspaceContentView({
   maxSessions,
   hasWorktreePath,
 }: WorkspaceContentViewProps) {
-  const hasNoSessions = claudeSessions && claudeSessions.length === 0;
+  const hasNoSessions = sessions && sessions.length === 0;
 
   // Always show tab bar (with "+" button), but render empty state content when no sessions exist
   return (
@@ -63,7 +63,7 @@ export function WorkspaceContentView({
       {/* Tab bar - flex-shrink-0 ensures it stays visible */}
       <div className="border-b flex-shrink-0">
         <MainViewTabBar
-          sessions={claudeSessions}
+          sessions={sessions}
           currentSessionId={selectedSessionId}
           sessionSummariesById={sessionSummariesById}
           onSelectSession={onSelectSession}

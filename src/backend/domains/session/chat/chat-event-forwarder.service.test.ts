@@ -25,8 +25,8 @@ const mockToCanonicalAgentMessage = vi.fn((message: unknown, order?: number) => 
 }));
 const mockToPublicDeltaEvent = vi.fn((event: { data: unknown; order?: number }) =>
   event.order === undefined
-    ? ({ type: 'claude_message', data: event.data } as const)
-    : ({ type: 'claude_message', data: event.data, order: event.order } as const)
+    ? ({ type: 'agent_message', data: event.data } as const)
+    : ({ type: 'agent_message', data: event.data, order: event.order } as const)
 );
 
 vi.mock('@/backend/domains/session/session-domain.service', () => ({
@@ -181,7 +181,7 @@ describe('ChatEventForwarderService', () => {
     expect(mockEmitDelta).toHaveBeenCalledWith(
       'session-tool-use-fallback',
       expect.objectContaining({
-        type: 'claude_message',
+        type: 'agent_message',
         data: expect.objectContaining({
           type: 'stream_event',
           event: expect.objectContaining({

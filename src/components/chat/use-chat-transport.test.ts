@@ -111,9 +111,9 @@ describe('isWebSocketMessage', () => {
     );
   });
 
-  it('rejects claude_message without a nested Claude payload', () => {
-    expect(isWebSocketMessage({ type: 'claude_message' })).toBe(false);
-    expect(isWebSocketMessage({ type: 'claude_message', data: null })).toBe(false);
-    expect(isWebSocketMessage({ type: 'claude_message', data: { type: 'not_real' } })).toBe(false);
+  it('rejects agent_message without a nested Claude payload', () => {
+    expect(isWebSocketMessage({ type: 'agent_message' })).toBe(false);
+    expect(isWebSocketMessage({ type: 'agent_message', data: null })).toBe(false);
+    expect(isWebSocketMessage({ type: 'agent_message', data: { type: 'not_real' } })).toBe(false);
   });
 });

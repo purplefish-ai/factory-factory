@@ -88,7 +88,7 @@ describe('session-replay-builder', () => {
           newState: 'COMMITTED',
         }),
         expect.objectContaining({
-          type: 'claude_message',
+          type: 'agent_message',
           order: 1,
         }),
         expect.objectContaining({

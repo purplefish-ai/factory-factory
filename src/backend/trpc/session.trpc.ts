@@ -29,10 +29,10 @@ export const sessionRouter = router({
     .input(z.object({ id: z.string() }))
     .query(({ input }) => getQuickAction(input.id)),
 
-  // Claude Sessions
+  // Sessions
 
-  // List claude sessions for a workspace
-  listClaudeSessions: publicProcedure
+  // List sessions for a workspace
+  listSessions: publicProcedure
     .input(
       z.object({
         workspaceId: z.string(),
@@ -54,17 +54,17 @@ export const sessionRouter = router({
       }));
     }),
 
-  // Get claude session by ID
-  getClaudeSession: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+  // Get session by ID
+  getSession: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
     const session = await sessionDataService.findClaudeSessionById(input.id);
     if (!session) {
-      throw new Error(`Claude session not found: ${input.id}`);
+      throw new Error(`Session not found: ${input.id}`);
     }
     return session;
   }),
 
-  // Create a new claude session
-  createClaudeSession: publicProcedure
+  // Create a new session
+  createSession: publicProcedure
     .input(
       z.object({
         workspaceId: z.string(),
@@ -109,8 +109,8 @@ export const sessionRouter = router({
       return session;
     }),
 
-  // Update a claude session (metadata only - use start/stop for status changes)
-  updateClaudeSession: publicProcedure
+  // Update a session (metadata only - use start/stop for status changes)
+  updateSession: publicProcedure
     .input(
       z.object({
         id: z.string(),
@@ -125,8 +125,8 @@ export const sessionRouter = router({
       return sessionDataService.updateClaudeSession(id, updates);
     }),
 
-  // Start a claude session (spawns the Claude process)
-  startClaudeSession: publicProcedure
+  // Start a session
+  startSession: publicProcedure
     .input(
       z.object({
         id: z.string(),
@@ -135,30 +135,30 @@ export const sessionRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
-      await sessionService.startClaudeSession(input.id, {
+      await sessionService.startSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
       return sessionDataService.findClaudeSessionById(input.id);
     }),
 
-  // Stop a claude session (gracefully stops the process)
-  stopClaudeSession: publicProcedure
+  // Stop a session
+  stopSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
-      await sessionService.stopClaudeSession(input.id, {
+      await sessionService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
       });
       return sessionDataService.findClaudeSessionById(input.id);
     }),
 
-  // Delete a claude session
-  deleteClaudeSession: publicProcedure
+  // Delete a session
+  deleteSession: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { sessionService, sessionDomainService } = ctx.appContext.services;
-      // Stop process first to prevent orphaned Claude processes
-      await sessionService.stopClaudeSession(input.id, {
+      // Stop process first to prevent orphaned session processes
+      await sessionService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
       });
       // Clear any in-memory session store state

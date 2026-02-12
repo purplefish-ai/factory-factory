@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import type { WebSocketMessage } from '@/lib/claude-types';
-import { isWebSocketMessage, isWsClaudeMessage } from '@/lib/claude-types';
+import { isWebSocketMessage, isWsAgentMessage } from '@/lib/claude-types';
 import { createDebugLogger } from '@/lib/debug';
 import type { ChatAction, ChatState } from './reducer';
 import { createActionFromWebSocketMessage } from './reducer';
@@ -34,10 +34,10 @@ export interface UseChatTransportReturn {
 
 /**
  * Handle Claude message with tool input streaming.
- * Expects a validated claude_message WebSocket message.
+ * Expects a validated agent_message WebSocket message.
  */
 function handleClaudeMessageWithStreaming(
-  wsMessage: Extract<WebSocketMessage, { type: 'claude_message' }>,
+  wsMessage: Extract<WebSocketMessage, { type: 'agent_message' }>,
   toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>,
   dispatch: React.Dispatch<ChatAction>
 ): void {
@@ -120,7 +120,7 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
       clearRewindTimeoutIfMatching(wsMessage);
 
       // Handle Claude messages specially for tool input streaming
-      if (isWsClaudeMessage(wsMessage)) {
+      if (isWsAgentMessage(wsMessage)) {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
       }
 

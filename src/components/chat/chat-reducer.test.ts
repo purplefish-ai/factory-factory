@@ -296,10 +296,10 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
-  // WS_CLAUDE_MESSAGE Action
+  // WS_AGENT_MESSAGE Action
   // -------------------------------------------------------------------------
 
-  describe('WS_CLAUDE_MESSAGE action', () => {
+  describe('WS_AGENT_MESSAGE action', () => {
     it('should add assistant message with tool content to messages array', () => {
       const claudeMsg: ClaudeMessage = {
         type: 'assistant',
@@ -309,7 +309,7 @@ describe('chatReducer', () => {
         },
       };
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: claudeMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -322,7 +322,7 @@ describe('chatReducer', () => {
     it('should store assistant message with text content', () => {
       const claudeMsg = createTestAssistantMessage();
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: claudeMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -335,7 +335,7 @@ describe('chatReducer', () => {
     it('should not duplicate Claude messages when the same order is received twice', () => {
       const claudeMsg = createTestAssistantMessage();
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: claudeMsg, order: 42 },
       };
 
@@ -351,7 +351,7 @@ describe('chatReducer', () => {
       const state = { ...initialState, sessionStatus: { phase: 'starting' } as const };
       const claudeMsg = createTestAssistantMessage();
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: claudeMsg, order: 0 },
       };
       const newState = chatReducer(state, action);
@@ -363,7 +363,7 @@ describe('chatReducer', () => {
       const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
       const resultMsg = createTestResultMessage();
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: resultMsg, order: 0 },
       };
       const newState = chatReducer(state, action);
@@ -375,14 +375,14 @@ describe('chatReducer', () => {
     it('suppresses result message when it duplicates the latest assistant text', () => {
       const assistantMsg = createTestAssistantMessage();
       const assistantAction: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: assistantMsg, order: 0 },
       };
       const withAssistant = chatReducer(initialState, assistantAction);
 
       const duplicateResult = createTestResultMessage('Hello!');
       const resultAction: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: duplicateResult, order: 1 },
       };
       const withResult = chatReducer(withAssistant, resultAction);
@@ -396,7 +396,7 @@ describe('chatReducer', () => {
 
     it('suppresses duplicate result even when a queued placeholder is present', () => {
       let state = chatReducer(initialState, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: {
             type: 'assistant',
@@ -419,7 +419,7 @@ describe('chatReducer', () => {
       });
 
       const withResult = chatReducer(state, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: createTestResultMessage('Dup'),
           order: 2,
@@ -437,14 +437,14 @@ describe('chatReducer', () => {
     it('keeps result message when it differs from latest assistant text', () => {
       const assistantMsg = createTestAssistantMessage();
       const assistantAction: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: assistantMsg, order: 0 },
       };
       const withAssistant = chatReducer(initialState, assistantAction);
 
       const distinctResult = createTestResultMessage('Different final text');
       const resultAction: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: distinctResult, order: 1 },
       };
       const withResult = chatReducer(withAssistant, resultAction);
@@ -465,7 +465,7 @@ describe('chatReducer', () => {
         },
       });
       state = chatReducer(state, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: {
             type: 'assistant',
@@ -485,7 +485,7 @@ describe('chatReducer', () => {
         },
       });
       state = chatReducer(state, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: {
             type: 'assistant',
@@ -498,7 +498,7 @@ describe('chatReducer', () => {
         },
       });
       const withResult = chatReducer(state, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: createTestResultMessage('Same answer'),
           order: 4,
@@ -513,7 +513,7 @@ describe('chatReducer', () => {
       const toolUseId = 'tool-use-123';
       const toolUseMsg = createTestToolUseMessage(toolUseId);
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: toolUseMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -525,7 +525,7 @@ describe('chatReducer', () => {
     it('should store thinking messages', () => {
       const thinkingMsg = createTestThinkingMessage();
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: thinkingMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -536,7 +536,7 @@ describe('chatReducer', () => {
     it('should store assistant messages with thinking-only content', () => {
       const thinkingAssistantMsg = createTestThinkingAssistantMessage();
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: thinkingAssistantMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -548,7 +548,7 @@ describe('chatReducer', () => {
     it('should store tool_result messages from user type', () => {
       const toolResultMsg = createTestToolResultMessage('tool-123');
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: toolResultMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -566,7 +566,7 @@ describe('chatReducer', () => {
         },
       };
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: deltaMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -583,7 +583,7 @@ describe('chatReducer', () => {
         },
       };
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: msgStartEvent, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -600,7 +600,7 @@ describe('chatReducer', () => {
         },
       };
       const action: ChatAction = {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: userMsg, order: 0 },
       };
       const newState = chatReducer(initialState, action);
@@ -610,7 +610,7 @@ describe('chatReducer', () => {
 
     it('should append thinking_delta to matching thinking block index only', () => {
       let state = chatReducer(initialState, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: {
             type: 'stream_event',
@@ -624,7 +624,7 @@ describe('chatReducer', () => {
         },
       });
       state = chatReducer(state, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: {
             type: 'stream_event',
@@ -639,7 +639,7 @@ describe('chatReducer', () => {
       });
 
       state = chatReducer(state, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: {
             type: 'stream_event',
@@ -665,12 +665,12 @@ describe('chatReducer', () => {
 
     it('should append latest thinking from stream events only', () => {
       let state = chatReducer(initialState, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: createTestThinkingMessage(), order: 0 },
       });
 
       state = chatReducer(state, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: {
           message: {
             type: 'stream_event',
@@ -958,7 +958,7 @@ describe('chatReducer', () => {
 
       // First add the tool use message
       let state = chatReducer(initialState, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: toolUseMsg, order: 0 },
       });
       expect(state.toolUseIdToIndex.get(toolUseId)).toBe(0);
@@ -983,7 +983,7 @@ describe('chatReducer', () => {
 
       // Add tool use message but clear the index
       let state = chatReducer(initialState, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: toolUseMsg, order: 0 },
       });
       state = { ...state, toolUseIdToIndex: new Map() }; // Clear the index
@@ -1018,7 +1018,7 @@ describe('chatReducer', () => {
 
       // Add tool use message at index 0
       let state = chatReducer(initialState, {
-        type: 'WS_CLAUDE_MESSAGE',
+        type: 'WS_AGENT_MESSAGE',
         payload: { message: toolUseMsg, order: 0 },
       });
       expect(state.toolUseIdToIndex.get(toolUseId)).toBe(0);
@@ -1612,7 +1612,7 @@ describe('chatReducer', () => {
         type: 'SESSION_REPLAY_BATCH',
         payload: {
           replayEvents: [
-            { type: 'claude_message', data: createTestResultMessage(), order: 0 },
+            { type: 'agent_message', data: createTestResultMessage(), order: 0 },
             {
               type: 'session_runtime_updated',
               sessionRuntime: {
@@ -2024,22 +2024,22 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toBeNull();
   });
 
-  it('should convert claude_message to WS_CLAUDE_MESSAGE action', () => {
+  it('should convert agent_message to WS_AGENT_MESSAGE action', () => {
     const claudeMsg: ClaudeMessage = {
       type: 'assistant',
       message: { role: 'assistant', content: 'Hello!' },
     };
-    const wsMessage: WebSocketMessage = { type: 'claude_message', data: claudeMsg, order: 5 };
+    const wsMessage: WebSocketMessage = { type: 'agent_message', data: claudeMsg, order: 5 };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toEqual({
-      type: 'WS_CLAUDE_MESSAGE',
+      type: 'WS_AGENT_MESSAGE',
       payload: { message: claudeMsg, order: 5 },
     });
   });
 
-  it('should return null for claude_message without data', () => {
-    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'claude_message' });
+  it('should return null for agent_message without data', () => {
+    const wsMessage = unsafeCoerce<WebSocketMessage>({ type: 'agent_message' });
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
@@ -2557,7 +2557,7 @@ describe('Token Stats Accumulation', () => {
     };
 
     const action: ChatAction = {
-      type: 'WS_CLAUDE_MESSAGE',
+      type: 'WS_AGENT_MESSAGE',
       payload: { message: resultMsg, order: 0 },
     };
     const newState = chatReducer(state, action);
@@ -2585,7 +2585,7 @@ describe('Token Stats Accumulation', () => {
       num_turns: 1,
     };
     state = chatReducer(state, {
-      type: 'WS_CLAUDE_MESSAGE',
+      type: 'WS_AGENT_MESSAGE',
       payload: { message: resultMsg1, order: 0 },
     });
 
@@ -2598,7 +2598,7 @@ describe('Token Stats Accumulation', () => {
       num_turns: 2,
     };
     state = chatReducer(state, {
-      type: 'WS_CLAUDE_MESSAGE',
+      type: 'WS_AGENT_MESSAGE',
       payload: { message: resultMsg2, order: 1 },
     });
 
@@ -2635,7 +2635,7 @@ describe('Token Stats Accumulation', () => {
     };
 
     const action: ChatAction = {
-      type: 'WS_CLAUDE_MESSAGE',
+      type: 'WS_AGENT_MESSAGE',
       payload: { message: resultMsg, order: 0 },
     };
     const newState = chatReducer(state, action);
@@ -2656,7 +2656,7 @@ describe('Token Stats Accumulation', () => {
     };
 
     const action: ChatAction = {
-      type: 'WS_CLAUDE_MESSAGE',
+      type: 'WS_AGENT_MESSAGE',
       payload: { message: assistantMsg, order: 0 },
     };
     const newState = chatReducer(state, action);

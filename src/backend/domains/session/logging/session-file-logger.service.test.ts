@@ -270,12 +270,12 @@ describe('SessionFileLogger', () => {
       expect(mockStream.write).not.toHaveBeenCalled();
     });
 
-    it('should extract summary info for claude_message type', async () => {
+    it('should extract summary info for agent_message type', async () => {
       const logger = new SessionFileLogger();
       logger.initSession('test-session');
 
       logger.log('test-session', 'OUT_TO_CLIENT', {
-        type: 'claude_message',
+        type: 'agent_message',
         data: {
           type: 'stream_event',
           event: {
@@ -291,7 +291,7 @@ describe('SessionFileLogger', () => {
       await vi.runAllTimersAsync();
 
       const logContent = mockStream.writtenData[1];
-      expect(logContent).toContain('type=claude_message');
+      expect(logContent).toContain('type=agent_message');
       expect(logContent).toContain('inner_type=stream_event');
       expect(logContent).toContain('event_type=content_block_start');
       expect(logContent).toContain('block_type=tool_use');
@@ -540,30 +540,30 @@ describe('extractLogSummary', () => {
     expect(extractLogSummary({ data: 'hello' })).toBe('type=unknown');
   });
 
-  it('should extract inner type for claude_message', () => {
+  it('should extract inner type for agent_message', () => {
     const data = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: { type: 'assistant' },
     };
-    expect(extractLogSummary(data)).toBe('type=claude_message inner_type=assistant');
+    expect(extractLogSummary(data)).toBe('type=agent_message inner_type=assistant');
   });
 
   it('should extract stream event details', () => {
     const data = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: {
         type: 'stream_event',
         event: { type: 'content_block_start' },
       },
     };
     expect(extractLogSummary(data)).toBe(
-      'type=claude_message inner_type=stream_event event_type=content_block_start'
+      'type=agent_message inner_type=stream_event event_type=content_block_start'
     );
   });
 
   it('should extract content block details with tool name', () => {
     const data = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: {
         type: 'stream_event',
         event: {
@@ -576,13 +576,13 @@ describe('extractLogSummary', () => {
       },
     };
     expect(extractLogSummary(data)).toBe(
-      'type=claude_message inner_type=stream_event event_type=content_block_start block_type=tool_use tool=read_file'
+      'type=agent_message inner_type=stream_event event_type=content_block_start block_type=tool_use tool=read_file'
     );
   });
 
   it('should extract content block without tool name', () => {
     const data = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: {
         type: 'stream_event',
         event: {
@@ -592,13 +592,13 @@ describe('extractLogSummary', () => {
       },
     };
     expect(extractLogSummary(data)).toBe(
-      'type=claude_message inner_type=stream_event event_type=content_block_delta block_type=text'
+      'type=agent_message inner_type=stream_event event_type=content_block_delta block_type=text'
     );
   });
 
   it('should extract user message content types', () => {
     const data = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: {
         type: 'user',
         message: {
@@ -607,49 +607,49 @@ describe('extractLogSummary', () => {
       },
     };
     expect(extractLogSummary(data)).toBe(
-      'type=claude_message inner_type=user content_types=[text,tool_result]'
+      'type=agent_message inner_type=user content_types=[text,tool_result]'
     );
   });
 
   it('should handle user message without content array', () => {
     const data = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: {
         type: 'user',
         message: {},
       },
     };
-    expect(extractLogSummary(data)).toBe('type=claude_message inner_type=user');
+    expect(extractLogSummary(data)).toBe('type=agent_message inner_type=user');
   });
 
   it('should extract result presence', () => {
     const dataWithResult = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: { type: 'result', result: { success: true } },
     };
     expect(extractLogSummary(dataWithResult)).toBe(
-      'type=claude_message inner_type=result result_present=true'
+      'type=agent_message inner_type=result result_present=true'
     );
 
     const dataWithoutResult = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: { type: 'result', result: null },
     };
     expect(extractLogSummary(dataWithoutResult)).toBe(
-      'type=claude_message inner_type=result result_present=false'
+      'type=agent_message inner_type=result result_present=false'
     );
   });
 
   it('should handle stream event without event object', () => {
     const data = {
-      type: 'claude_message',
+      type: 'agent_message',
       data: { type: 'stream_event' },
     };
-    expect(extractLogSummary(data)).toBe('type=claude_message inner_type=stream_event');
+    expect(extractLogSummary(data)).toBe('type=agent_message inner_type=stream_event');
   });
 
-  it('should handle claude_message without data', () => {
-    const data = { type: 'claude_message' };
-    expect(extractLogSummary(data)).toBe('type=claude_message');
+  it('should handle agent_message without data', () => {
+    const data = { type: 'agent_message' };
+    expect(extractLogSummary(data)).toBe('type=agent_message');
   });
 });

@@ -46,7 +46,7 @@ function extractContentBlockSummary(event: Record<string, unknown>): string {
 }
 
 /**
- * Extracts summary info from a stream event within claude_message data
+ * Extracts summary info from a stream event within agent_message data
  */
 function extractStreamEventSummary(innerData: Record<string, unknown>): string {
   const event = innerData.event as Record<string, unknown> | undefined;
@@ -71,7 +71,7 @@ function extractUserMessageSummary(innerData: Record<string, unknown>): string {
 }
 
 /**
- * Extracts summary info from claude_message data based on inner type
+ * Extracts summary info from agent_message data based on inner type
  */
 function extractClaudeMessageSummary(innerData: Record<string, unknown>): string {
   let summary = ` inner_type=${String(innerData.type ?? 'unknown')}`;
@@ -102,7 +102,7 @@ export function extractLogSummary(data: unknown): string {
   const obj = data as Record<string, unknown>;
   let summary = `type=${String(obj.type ?? 'unknown')}`;
 
-  if (obj.type === 'claude_message' && obj.data) {
+  if (obj.type === 'agent_message' && obj.data) {
     const innerData = obj.data as Record<string, unknown>;
     summary += extractClaudeMessageSummary(innerData);
   }
