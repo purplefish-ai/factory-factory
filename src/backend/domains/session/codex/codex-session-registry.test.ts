@@ -71,6 +71,31 @@ describe('CodexSessionRegistry', () => {
     expect(registry.getActiveSessionCount()).toBe(2);
   });
 
+  it('clears persisted thread mapping when clearing a session', async () => {
+    const mappings = new Map<string, string>();
+    const store: CodexThreadMappingStore = {
+      getMappedThreadId: vi.fn().mockImplementation((sessionId: string) => {
+        return Promise.resolve(mappings.get(sessionId) ?? null);
+      }),
+      setMappedThreadId: vi.fn().mockImplementation((sessionId: string, threadId: string) => {
+        mappings.set(sessionId, threadId);
+        return Promise.resolve();
+      }),
+      clearMappedThreadId: vi.fn().mockImplementation((sessionId: string) => {
+        mappings.delete(sessionId);
+        return Promise.resolve();
+      }),
+    };
+    const registry = new CodexSessionRegistry(store);
+
+    await registry.setMappedThreadId('s1', 't1');
+    await registry.clearSession('s1');
+
+    expect(store.clearMappedThreadId).toHaveBeenCalledWith('s1');
+    expect(registry.getSessionIdByThreadId('t1')).toBeNull();
+    expect(await registry.resolveThreadId('s1')).toBeNull();
+  });
+
   it('does not reactivate a turn that already reached a terminal state', () => {
     const registry = new CodexSessionRegistry(new InMemoryCodexThreadMappingStore());
 

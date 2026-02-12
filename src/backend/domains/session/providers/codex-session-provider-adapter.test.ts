@@ -4,12 +4,12 @@ import { configService } from '@/backend/services/config.service';
 import { CodexSessionProviderAdapter } from './codex-session-provider-adapter';
 
 describe('CodexSessionProviderAdapter', () => {
-  it('starts or resumes threads through shared manager and persists mapping seam', async () => {
+  it('starts a fresh thread after stop clears persisted mapping seam', async () => {
     const registry = new CodexSessionRegistry();
     const request = vi
       .fn()
       .mockResolvedValueOnce({ threadId: 'thread-1' })
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce({ threadId: 'thread-2' });
 
     const manager = {
       ensureStarted: vi.fn().mockResolvedValue(undefined),
@@ -46,18 +46,19 @@ describe('CodexSessionProviderAdapter', () => {
     await adapter.stopClient('session-1');
     expect(registry.getSessionIdByThreadId('thread-1')).toBeNull();
 
-    await adapter.getOrCreateClient(
+    const recreated = await adapter.getOrCreateClient(
       'session-1',
       { sessionId: 'session-1', workingDir: '/tmp/project' },
       {},
       { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
     );
 
+    expect(recreated.threadId).toBe('thread-2');
     expect(request).toHaveBeenNthCalledWith(
       2,
-      'thread/resume',
-      expect.objectContaining({ threadId: 'thread-1' }),
-      { threadId: 'thread-1' }
+      'thread/start',
+      expect.objectContaining({ cwd: '/tmp/project', experimentalRawEvents: false }),
+      undefined
     );
   });
 

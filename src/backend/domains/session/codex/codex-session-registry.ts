@@ -133,7 +133,7 @@ export class CodexSessionRegistry {
     return request;
   }
 
-  clearSession(sessionId: string): void {
+  async clearSession(sessionId: string): Promise<void> {
     const threadId = this.sessionToThread.get(sessionId);
     if (threadId) {
       this.threadToSession.delete(threadId);
@@ -142,6 +142,7 @@ export class CodexSessionRegistry {
     this.sessionToTurn.delete(sessionId);
     this.terminalTurnsBySession.delete(sessionId);
     this.pendingBySession.delete(sessionId);
+    await this.mappingStore.clearMappedThreadId(sessionId);
   }
 
   getActiveSessionCount(): number {

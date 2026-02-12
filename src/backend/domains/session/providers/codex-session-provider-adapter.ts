@@ -137,16 +137,15 @@ export class CodexSessionProviderAdapter
     return this.pending.get(sessionId);
   }
 
-  stopClient(sessionId: string): Promise<void> {
+  async stopClient(sessionId: string): Promise<void> {
     this.stopping.add(sessionId);
     try {
-      this.manager.getRegistry().clearSession(sessionId);
+      await this.manager.getRegistry().clearSession(sessionId);
       this.clients.delete(sessionId);
       this.preferredModels.delete(sessionId);
     } finally {
       this.stopping.delete(sessionId);
     }
-    return Promise.resolve();
   }
 
   async sendMessage(sessionId: string, content: string): Promise<void> {
@@ -437,7 +436,7 @@ export class CodexSessionProviderAdapter
 
   async stopAllClients(): Promise<void> {
     for (const [sessionId] of this.clients) {
-      this.manager.getRegistry().clearSession(sessionId);
+      await this.manager.getRegistry().clearSession(sessionId);
     }
     this.clients.clear();
     this.preferredModels.clear();
