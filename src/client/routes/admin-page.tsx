@@ -1,9 +1,10 @@
-import { CheckCircle2, Download, FileJson, FileText, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Download, FileJson, FileText, Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { FactoryConfigScripts } from '@/components/factory-config-scripts';
+import { ProjectFactoryConfigPanel } from '@/components/project/project-factory-config-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +44,8 @@ function ProjectFactoryConfigCard({
   projectId: string;
   projectName: string;
 }) {
+  const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const utils = trpc.useUtils();
   const { data: factoryConfig } = trpc.workspace.getFactoryConfig.useQuery({ projectId });
 
   const refreshConfigs = trpc.workspace.refreshFactoryConfigs.useMutation({
@@ -66,6 +69,15 @@ function ProjectFactoryConfigCard({
 
   return (
     <div className="rounded-lg border bg-card">
+      <ProjectFactoryConfigPanel
+        open={editPanelOpen}
+        onOpenChange={setEditPanelOpen}
+        projectId={projectId}
+        currentConfig={factoryConfig ?? undefined}
+        onSaved={() => {
+          utils.workspace.getFactoryConfig.invalidate({ projectId });
+        }}
+      />
       <div className="border-b bg-muted/50 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -81,6 +93,14 @@ function ProjectFactoryConfigCard({
                 Not configured
               </Badge>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setEditPanelOpen(true)}
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </Button>
           </div>
           <Button
             variant="outline"
@@ -103,21 +123,9 @@ function ProjectFactoryConfigCard({
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              No factory-factory.json found in this repository. Create one to configure workspace
-              setup and run scripts.
+              No factory-factory.json found in this repository. Click the edit button above to
+              configure workspace setup and run scripts.
             </p>
-            <div className="text-xs text-muted-foreground space-y-1 bg-muted/50 rounded-md p-3">
-              <p className="font-medium">To add configuration:</p>
-              <ol className="list-decimal list-inside space-y-1 ml-2">
-                <li>
-                  Create{' '}
-                  <code className="bg-background px-1 py-0.5 rounded">factory-factory.json</code> in
-                  repository root
-                </li>
-                <li>Add scripts for setup, run, and/or cleanup</li>
-                <li>Click "Refresh Workspaces" above</li>
-              </ol>
-            </div>
           </div>
         )}
       </div>
