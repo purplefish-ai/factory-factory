@@ -259,19 +259,23 @@ describe('PRSnapshotService', () => {
     });
 
     it('emits pr_snapshot_updated after successful applySnapshot', async () => {
-      mockFindById.mockResolvedValue({ id: 'ws-1', prUrl: 'https://github.com/org/repo/pull/42' });
-
       const events: PRSnapshotUpdatedEvent[] = [];
       prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
         events.push(event);
       });
 
-      await prSnapshotService.applySnapshot('ws-1', {
-        prNumber: 42,
-        prState: 'OPEN',
-        prCiStatus: 'SUCCESS',
-        prReviewState: null,
-      });
+      await prSnapshotService.applySnapshot(
+        'ws-1',
+        {
+          prNumber: 42,
+          prState: 'OPEN',
+          prCiStatus: 'SUCCESS',
+          prReviewState: null,
+        },
+        {
+          eventPrUrl: 'https://github.com/org/repo/pull/42',
+        }
+      );
 
       expect(events).toHaveLength(1);
       expect(events[0]).toEqual({
@@ -285,15 +289,10 @@ describe('PRSnapshotService', () => {
     });
 
     it('emits pr_snapshot_updated on refreshWorkspace when snapshot succeeds', async () => {
-      mockFindById
-        .mockResolvedValueOnce({
-          id: 'ws-2',
-          prUrl: 'https://github.com/org/repo/pull/10',
-        })
-        .mockResolvedValueOnce({
-          id: 'ws-2',
-          prUrl: 'https://github.com/org/repo/pull/10',
-        });
+      mockFindById.mockResolvedValue({
+        id: 'ws-2',
+        prUrl: 'https://github.com/org/repo/pull/10',
+      });
       mockFetchAndComputePRState.mockResolvedValue({
         prNumber: 10,
         prState: 'OPEN',
@@ -356,9 +355,7 @@ describe('PRSnapshotService', () => {
     });
 
     it('emits event on attachAndRefreshPR', async () => {
-      mockFindById
-        .mockResolvedValueOnce({ id: 'ws-attach', prUrl: null })
-        .mockResolvedValueOnce({ id: 'ws-attach', prUrl: 'https://github.com/org/repo/pull/77' });
+      mockFindById.mockResolvedValueOnce({ id: 'ws-attach', prUrl: null });
       mockFetchAndComputePRState.mockResolvedValue({
         prNumber: 77,
         prState: 'OPEN',
