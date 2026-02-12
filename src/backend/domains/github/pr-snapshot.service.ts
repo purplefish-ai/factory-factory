@@ -33,6 +33,7 @@ export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
 
 export interface PRSnapshotUpdatedEvent {
   workspaceId: string;
+  prUrl?: string | null;
   prNumber: number;
   prState: string;
   prCiStatus: string;
@@ -48,6 +49,11 @@ interface CIObservationInput {
 interface ReviewCheckInput {
   checkedAt?: Date;
   latestCommentId?: string;
+}
+
+interface ApplySnapshotOptions {
+  eventPrUrl?: string | null;
+  persistPrUrl?: string | null;
 }
 
 class PRSnapshotService extends EventEmitter {
@@ -138,7 +144,9 @@ class PRSnapshotService extends EventEmitter {
           prReviewState: snapshot.prReviewState,
           prCiStatus: snapshot.prCiStatus,
         },
-        prUrl
+        {
+          persistPrUrl: prUrl,
+        }
       );
 
       logger.info('Attached PR and refreshed snapshot', {
@@ -191,12 +199,18 @@ class PRSnapshotService extends EventEmitter {
         return { success: false, reason: 'fetch_failed' };
       }
 
-      await this.applySnapshot(workspaceId, {
-        prNumber: snapshot.prNumber,
-        prState: snapshot.prState,
-        prReviewState: snapshot.prReviewState,
-        prCiStatus: snapshot.prCiStatus,
-      });
+      await this.applySnapshot(
+        workspaceId,
+        {
+          prNumber: snapshot.prNumber,
+          prState: snapshot.prState,
+          prReviewState: snapshot.prReviewState,
+          prCiStatus: snapshot.prCiStatus,
+        },
+        {
+          eventPrUrl: prUrl,
+        }
+      );
 
       return {
         success: true,
@@ -213,20 +227,27 @@ class PRSnapshotService extends EventEmitter {
     }
   }
 
-  async applySnapshot(workspaceId: string, snapshot: SnapshotData, prUrl?: string): Promise<void> {
+  async applySnapshot(
+    workspaceId: string,
+    snapshot: SnapshotData,
+    options: ApplySnapshotOptions = {}
+  ): Promise<void> {
+    const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
+
     await workspaceAccessor.update(workspaceId, {
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prReviewState: snapshot.prReviewState,
       prCiStatus: snapshot.prCiStatus,
       prUpdatedAt: new Date(),
-      ...(prUrl !== undefined ? { prUrl } : {}),
+      ...(options.persistPrUrl !== undefined ? { prUrl: options.persistPrUrl } : {}),
     });
 
     await this.kanban.updateCachedKanbanColumn(workspaceId);
 
     this.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId,
+      ...(eventPrUrl !== undefined ? { prUrl: eventPrUrl } : {}),
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prCiStatus: snapshot.prCiStatus,
