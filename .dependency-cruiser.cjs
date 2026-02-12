@@ -140,7 +140,7 @@ module.exports = {
         'External consumers must import from domain barrel files (domains/{name}/), ' +
         'not from internal paths (domains/{name}/subfolder/). ' +
         'This keeps domain internals encapsulated. ' +
-        'Exceptions: orchestrators/interceptors with documented circular-dep avoidance.',
+        'Exception: conversation-rename interceptor has documented circular-dep avoidance.',
       from: {
         path: '^src/backend',
         pathNot:
@@ -148,13 +148,21 @@ module.exports = {
           // These files use direct module paths to avoid circular dependencies:
           // - conversation-rename imports session/claude and session/lifecycle to avoid
           //   session barrel -> chat-event-forwarder -> interceptors -> session barrel cycle
-          // - workspace-init imports workspace/lifecycle and workspace/worktree to avoid
-          //   workspace barrel -> creation.service -> workspace-init -> workspace barrel cycle
-          '^src/backend/interceptors/conversation-rename\\.interceptor\\.ts$|' +
-          '^src/backend/orchestration/workspace-init\\.orchestrator\\.ts$',
+          '^src/backend/interceptors/conversation-rename\\.interceptor\\.ts$',
       },
       to: {
         path: '^src/backend/domains/[^/]+/.+/',
+      },
+    },
+    {
+      name: 'no-orchestration-importing-domain-internals',
+      severity: 'error',
+      comment:
+        'Orchestration must import domains through barrels only (domains/{name}/index.ts), ' +
+        'not through domain internals.',
+      from: { path: '^src/backend/orchestration/' },
+      to: {
+        path: '^src/backend/domains/[^/]+/(?!index\\.ts$).+',
       },
     },
     {
@@ -180,8 +188,6 @@ module.exports = {
         path: '^src/backend/domains/',
         pathNot:
           '\\.test\\.ts$|' +
-          // creation.service uses dynamic import() to trigger workspace init after creation
-          '^src/backend/domains/workspace/lifecycle/creation\\.service\\.ts$|' +
           // reconciliation needs to re-trigger workspace init for stuck provisioning
           '^src/backend/domains/ratchet/reconciliation\\.service\\.ts$',
       },

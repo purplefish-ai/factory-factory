@@ -12,7 +12,7 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
-import { archiveWorkspace } from '@/backend/orchestration';
+import { archiveWorkspace, initializeWorkspaceWorktree } from '@/backend/orchestration';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
@@ -132,6 +132,24 @@ export const workspaceRouter = router({
     });
 
     const { workspace } = await workspaceCreationService.create(input);
+
+    const branchName =
+      input.type === 'MANUAL'
+        ? input.branchName
+        : input.type === 'RESUME_BRANCH'
+          ? input.branchName
+          : undefined;
+    const useExistingBranch = input.type === 'RESUME_BRANCH';
+
+    void initializeWorkspaceWorktree(workspace.id, {
+      branchName,
+      useExistingBranch,
+    }).catch((error) => {
+      logger.error('Unexpected error during background workspace initialization', {
+        workspaceId: workspace.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     return workspace;
   }),
