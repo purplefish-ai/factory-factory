@@ -18,7 +18,7 @@ import type {
   SessionProviderAdapter,
 } from './session-provider-adapter';
 
-type ClaudeActiveProcessSummary = {
+export type ClaudeActiveProcessSummary = {
   sessionId: string;
   pid: number | undefined;
   status: string;
