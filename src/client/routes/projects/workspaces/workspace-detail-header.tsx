@@ -405,7 +405,7 @@ export function WorkspaceHeader({
         <NewSessionProviderSelect
           selectedProvider={selectedProvider}
           setSelectedProvider={setSelectedProvider}
-          disabled={running || isCreatingSession}
+          disabled={isCreatingSession}
         />
         <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
