@@ -44,6 +44,42 @@ A web app (React, similar stack to desktop UI) that connects to FF Cloud:
 
 The web frontend talks to FF Cloud via the same WebSocket relay and tRPC API. It does not talk to VMs directly.
 
+## How to test manually
+
+1. **Log in to the web app:**
+   Open the web app in a browser. Log in with the account created in phase 3. Verify you see the workspace list.
+
+2. **Create a workspace from a GitHub issue:**
+   Click "New Workspace", paste a GitHub issue URL, submit. Verify:
+   - Workspace appears in the list with status "Provisioning" then "Ready"
+   - The VM has cloned the repo
+
+3. **Send a message and see streaming response:**
+   Open the workspace. Type a message to Claude. Verify:
+   - Claude's response streams in token-by-token (not all at once)
+   - Thinking indicators show during processing
+   - Tool use events are visible
+
+4. **Answer a question from Claude:**
+   Send a prompt that triggers Claude to ask a user question (e.g., "Create a file called test.txt with whatever content you think is best, but ask me first"). Verify:
+   - The question appears in the UI
+   - You can type an answer and send it
+   - Claude continues based on your answer
+
+5. **Permission request flow:**
+   Send a prompt that triggers a permission request. Verify:
+   - The permission dialog appears
+   - You can approve or deny
+   - Claude proceeds or stops accordingly
+
+6. **Reconnection:**
+   With a session running, close the browser tab and reopen the workspace. Verify:
+   - Full conversation history is restored (via `messages_snapshot`)
+   - If Claude is still responding, streaming resumes
+
+7. **Desktop and web see the same workspaces:**
+   Send a workspace to cloud from desktop. Open the web app. Verify it appears in the web workspace list with correct status.
+
 ## Done when
 
 A user can log into the web app, create a workspace from a GitHub issue, interact with Claude in real time (send messages, answer questions, approve permissions), and see streaming responses — the same experience they'd get on desktop.

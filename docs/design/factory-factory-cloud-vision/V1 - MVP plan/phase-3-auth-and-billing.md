@@ -32,6 +32,35 @@ Add `user_id` foreign key to `workspaces` and `vms` tables. All queries become u
 - **Payment integration:** Stripe for subscriptions and metered billing
 - **Usage dashboard:** Users can see their usage and billing status
 
+## How to test manually
+
+1. **Sign up and log in:**
+   - Go to the sign-up page, create an account with email/password
+   - Log out, log back in — verify session persists
+   - Sign up with GitHub OAuth — verify it creates a separate account linked to GitHub
+
+2. **API key auth:**
+   Generate an API key from the dashboard. Use it to call a protected endpoint:
+   ```bash
+   curl http://localhost:3000/api/workspaces -H "Authorization: Bearer <api-key>"
+   ```
+   Verify it returns only your workspaces.
+
+3. **Multi-tenant isolation:**
+   Create two user accounts. Send a workspace to cloud from each. Verify:
+   - User A cannot see User B's workspaces via API
+   - User A cannot access User B's VM
+   - Swapping JWT tokens between users is rejected
+
+4. **Billing and quotas:**
+   - Sign up on the Free plan. Provision a VM and start workspaces until you hit the quota limit
+   - Verify the error message is clear ("Compute quota exceeded, upgrade to Pro")
+   - Upgrade to Pro via Stripe checkout — verify the quota limit increases
+   - Check the Stripe dashboard: subscription is active, metered usage is being reported
+
+5. **Usage dashboard:**
+   Log in and navigate to the usage page. Verify it shows compute minutes, number of workspaces, and current billing period.
+
 ## Done when
 
 Users can sign up, authenticate, choose a plan, pay, and use the cloud product within their plan limits. All API endpoints are user-scoped. The web frontend (phase 4) can build on real auth.

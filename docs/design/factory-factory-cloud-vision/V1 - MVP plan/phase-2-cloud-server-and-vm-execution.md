@@ -9,16 +9,56 @@ Create `factory-factory-cloud` (private repo, closed source):
 ```
 factory-factory-cloud/
   src/
-    server.ts                   # Express server
-    services/
-      vm.service.ts             # Docker container orchestration
-      workspace.service.ts      # Workspace management (uses @factory-factory/core)
+    app/                          # Next.js app directory
+      api/                        # REST API routes (for desktop app)
+        workspaces/route.ts
+        vms/route.ts
+      trpc/                       # tRPC router (for web frontend)
+        [trpc]/route.ts
+    services/                     # Business logic (all API surfaces delegate here)
+      vm.service.ts               # Docker container orchestration
+      workspace.service.ts        # Workspace management (uses @factory-factory/core)
+      relay.service.ts            # WebSocket relay between clients and VMs
+    trpc/                         # tRPC router definitions
+      workspace.router.ts
+      vm.router.ts
+    ws/                           # WebSocket handlers (raw ws, not tRPC)
+      relay.handler.ts
+      terminal.handler.ts
     db/
-      schema.prisma             # PostgreSQL
+      schema.prisma               # PostgreSQL, multi-tenant
   package.json
     dependencies:
       "@factory-factory/core": "^1.0.0"
 ```
+
+### Tech Stack
+
+- **Next.js** — React frontend + API routes in one project
+- **TypeScript** — same as FF Core and FF Desktop
+- **PostgreSQL + Prisma** — multi-tenant data (users, workspaces, VMs, billing)
+- **tRPC** — typed API for the web frontend
+- **REST API routes** — for desktop app and external consumers
+- **Raw WebSocket (`ws`)** — for real-time relay between clients and VMs
+- **Auth.js (NextAuth)** — JWT, OAuth with GitHub, session management
+- **Stripe** — subscriptions, metered billing
+- **Docker SDK (`dockerode`)** — programmatic container management
+
+### Service-Layer Architecture
+
+All business logic lives in services. tRPC routers, REST API routes, and WebSocket handlers are thin wrappers that handle auth/validation and delegate to the same services:
+
+```
+Web Frontend  ──tRPC──►  tRPC Router  ──►  WorkspaceService.create()
+Desktop App   ──REST──►  API Route    ──►  WorkspaceService.create()
+Both          ──WS────►  WS Handler   ──►  RelayService.forward()
+```
+
+This means:
+- No business logic duplication across API surfaces
+- tRPC or REST routes can be added/removed without touching services
+- Services are independently testable
+- Same pattern FF Desktop already uses (tRPC routers call domain services)
 
 ## 2.2 PostgreSQL Schema
 
@@ -77,6 +117,45 @@ When a user's VM is first provisioned, FF Cloud launches an **onboarding session
 1. Desktop requests workspace state from FF Cloud API
 2. FF Cloud exports workspace state from the user's VM
 3. Desktop restores state locally, sets `location='DESKTOP'`
+
+## How to test manually
+
+1. **Provision a VM:**
+   ```bash
+   curl -X POST http://localhost:3000/api/vms -H "Content-Type: application/json" \
+     -d '{"userId": "test-user"}'
+   ```
+   Verify a Docker container is created and running (`docker ps` shows it).
+
+2. **Terminal onboarding:**
+   Open a terminal session to the VM (via desktop app "Set up Cloud" flow or API). Inside the terminal:
+   ```bash
+   gh auth login    # Complete GitHub auth
+   gh auth status   # Verify: logged in
+   claude --version # Verify Claude CLI is available
+   ```
+
+3. **Send a workspace to cloud:**
+   In the desktop app, open a workspace with an active PR. Click "Send to Cloud". Verify:
+   - Desktop shows `location: CLOUD`
+   - FF Cloud API returns the workspace when queried
+   - The VM has cloned the repo (check via terminal session)
+
+4. **Execute a Claude session in the cloud:**
+   Via the API, start a session on the cloud workspace:
+   ```bash
+   curl -X POST http://localhost:3000/api/workspaces/{id}/sessions \
+     -H "Content-Type: application/json" -d '{"prompt": "What files are in this repo?"}'
+   ```
+   Verify Claude responds (check session status via API).
+
+5. **Pull workspace back to desktop:**
+   In the desktop app, click "Pull from Cloud". Verify:
+   - Desktop shows `location: DESKTOP`
+   - Workspace state (PR info, session history) is intact
+
+6. **Health check and idle suspend:**
+   Leave the VM idle for the configured timeout. Verify it suspends (container stopped but not removed). Trigger a new request — verify it resumes.
 
 ## Done when
 

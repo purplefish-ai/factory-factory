@@ -708,6 +708,40 @@ Desktop's orchestration layer calls `configureDomainBridges()` from core at star
 - Desktop app works identically (same commands: `pnpm dev`, `pnpm build`, `pnpm dev:electron`)
 - Publish `@factory-factory/core` to npm with semantic versioning
 
+## How to test manually
+
+1. **Install core from npm in a fresh project:**
+   ```bash
+   mkdir /tmp/test-core && cd /tmp/test-core && npm init -y
+   npm install @factory-factory/core
+   node -e "const core = require('@factory-factory/core'); console.log(Object.keys(core))"
+   ```
+   Verify the exported API matches the spec in section 1.3.
+
+2. **Run the desktop app end-to-end:**
+   ```bash
+   pnpm dev:electron
+   ```
+   Create a project, create a workspace from a GitHub issue, start a Claude session, send a message, verify streaming responses. This should work identically to before the refactor.
+
+3. **Run the full test suite:**
+   ```bash
+   pnpm test && pnpm typecheck && pnpm check:fix
+   ```
+   All tests pass, no type errors, no lint errors.
+
+4. **Verify domain isolation:**
+   ```bash
+   pnpm exec dependency-cruiser -- packages/core/src
+   ```
+   No cross-domain imports within core. All bridge interfaces are used correctly.
+
+5. **Verify desktop imports core (not internal paths):**
+   ```bash
+   grep -r "from '@/backend/domains/" packages/desktop/src/ | head -20
+   ```
+   Should return zero results — all domain imports should be from `@factory-factory/core`.
+
 ## Done when
 
 Desktop FF works exactly as before, but internally uses the extracted core library. `@factory-factory/core` is published to npm and installable by any consumer.
