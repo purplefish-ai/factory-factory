@@ -1,16 +1,18 @@
-import { FileJson, Loader2, Play, Square } from 'lucide-react';
+import { Loader2, Play, Square } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/frontend/lib/trpc';
+import { DevServerSetupDialog } from './dev-server-setup-dialog';
 import { useWorkspacePanel } from './workspace-panel-context';
 
 interface RunScriptButtonProps {
   workspaceId: string;
-  showPlaceholder?: boolean;
 }
 
-export function RunScriptButton({ workspaceId, showPlaceholder = true }: RunScriptButtonProps) {
+export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
   const { setActiveBottomTab, setRightPanelVisible } = useWorkspacePanel();
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
 
   // Query run script status (React Query automatically deduplicates with same key)
   const { data: status, refetch } = trpc.workspace.getRunScriptStatus.useQuery(
@@ -38,41 +40,29 @@ export function RunScriptButton({ workspaceId, showPlaceholder = true }: RunScri
     },
   });
 
-  // Show placeholder button if no run script configured
+  // Show setup button if no run script configured
   if (!status?.hasRunScript) {
-    if (!showPlaceholder) {
-      return null;
-    }
-
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8 opacity-40 cursor-help" disabled>
-            <Play className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs">
-          <div className="space-y-2">
-            <p className="font-medium">No dev server configured</p>
-            <p className="text-xs">
-              To enable the play button, create a{' '}
-              <code className="bg-muted px-1 rounded">factory-factory.json</code> file in your
-              project root:
-            </p>
-            <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
-              {`{
-  "scripts": {
-    "run": "npm run dev"
-  }
-}`}
-            </pre>
-            <p className="text-xs text-muted-foreground">
-              <FileJson className="h-3 w-3 inline mr-1" />
-              Use the quick actions menu to generate this file
-            </p>
-          </div>
-        </TooltipContent>
-      </Tooltip>
+      <>
+        <DevServerSetupDialog
+          open={setupDialogOpen}
+          onOpenChange={setSetupDialogOpen}
+          workspaceId={workspaceId}
+        />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setSetupDialogOpen(true)}
+            >
+              <Play className="h-4 w-4 text-green-600 fill-green-600" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Setup dev server</TooltipContent>
+        </Tooltip>
+      </>
     );
   }
 

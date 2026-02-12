@@ -25,6 +25,17 @@ class WorkspaceDataService {
     return workspaceAccessor.update(id, { branchName });
   }
 
+  setRunScriptCommands(
+    id: string,
+    runScriptCommand: string | null,
+    runScriptCleanupCommand: string | null
+  ) {
+    return workspaceAccessor.update(id, {
+      runScriptCommand,
+      runScriptCleanupCommand,
+    });
+  }
+
   delete(id: string): Promise<Workspace> {
     return workspaceAccessor.delete(id);
   }
