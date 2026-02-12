@@ -26,9 +26,9 @@ export {
   WorkspaceStateMachineError,
   workspaceStateMachine,
 } from './lifecycle/state-machine.service';
+// --- Workspace query/aggregation ---
 export { projectManagementService } from './query/project-management.service';
 export { userSettingsQueryService } from './query/user-settings-query.service';
-// --- Workspace query/aggregation ---
 export { workspaceQueryService } from './query/workspace-query.service';
 // --- State derivation (pure functions) ---
 export {
