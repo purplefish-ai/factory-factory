@@ -1,13 +1,7 @@
 import type { SessionDeltaEvent } from '@/shared/claude';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { createUnsupportedOperationError } from './errors';
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null) {
-    return {};
-  }
-  return value as Record<string, unknown>;
-}
+import { asRecord } from './payload-utils';
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;

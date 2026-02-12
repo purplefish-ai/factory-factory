@@ -2,6 +2,7 @@ import {
   createUnsupportedOperationError,
   SessionOperationError,
 } from '@/backend/domains/session/codex/errors';
+import { asRecord } from '@/backend/domains/session/codex/payload-utils';
 import type {
   CodexPendingInteractiveRequest,
   CodexRequestOptions,
@@ -52,13 +53,6 @@ export interface CodexActiveProcessSummary {
   status: string;
   isRunning: boolean;
   idleTimeMs: number;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null) {
-    return {};
-  }
-  return value as Record<string, unknown>;
 }
 
 function parseThreadId(result: unknown): string | null {
@@ -243,6 +237,25 @@ export class CodexSessionProviderAdapter
     this.manager.respond(pending.serverRequestId, {
       answers: normalizedAnswers,
     });
+  }
+
+  rejectInteractiveRequest(
+    sessionId: string,
+    requestId: string,
+    reason: { message: string; data?: unknown }
+  ): void {
+    const pending = this.consumePendingRequest(sessionId, requestId);
+    const metadata = asRecord(reason.data);
+
+    this.manager.respond(
+      pending.serverRequestId,
+      {
+        code: typeof metadata.code === 'number' ? metadata.code : -32_601,
+        message: reason.message,
+        ...(reason.data === undefined ? {} : { data: reason.data }),
+      },
+      true
+    );
   }
 
   toCanonicalAgentMessage(

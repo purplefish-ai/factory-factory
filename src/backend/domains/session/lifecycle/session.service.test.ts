@@ -4,6 +4,23 @@ import type { ClaudeClient } from '@/backend/domains/session/claude/client';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
+type CodexManagerHandlersMock = {
+  onNotification?: (event: { sessionId: string; method: string; params: unknown }) => void;
+  onServerRequest?: (event: {
+    sessionId: string;
+    method: string;
+    params: unknown;
+    canonicalRequestId: string;
+  }) => void;
+};
+
+const codexTestState = vi.hoisted(() => ({
+  codexRegistry: {
+    setActiveTurnId: vi.fn(),
+  },
+  codexManagerHandlers: null as CodexManagerHandlersMock | null,
+}));
+
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -72,7 +89,10 @@ vi.mock('@/backend/domains/session/providers', () => ({
   },
   codexSessionProviderAdapter: {
     getManager: vi.fn(() => ({
-      setHandlers: vi.fn(),
+      setHandlers: vi.fn((handlers) => {
+        codexTestState.codexManagerHandlers = handlers;
+      }),
+      getRegistry: vi.fn(() => codexTestState.codexRegistry),
       getStatus: vi.fn(() => ({
         state: 'stopped',
         unavailableReason: null,
@@ -82,12 +102,16 @@ vi.mock('@/backend/domains/session/providers', () => ({
         activeSessionCount: 0,
       })),
     })),
+    rejectInteractiveRequest: vi.fn(),
     getAllClients: vi.fn(() => new Map().entries()),
     getAllActiveProcesses: vi.fn(() => []),
   },
 }));
 
-import { claudeSessionProviderAdapter } from '@/backend/domains/session/providers';
+import {
+  claudeSessionProviderAdapter,
+  codexSessionProviderAdapter,
+} from '@/backend/domains/session/providers';
 import { sessionPromptBuilder } from './session.prompt-builder';
 import { sessionRepository } from './session.repository';
 import { sessionService } from './session.service';
@@ -815,6 +839,33 @@ describe('SessionService', () => {
       'session-1',
       'req-2',
       { q: 'a' }
+    );
+  });
+
+  it('clears active turn tracking for terminal Codex notifications', () => {
+    codexTestState.codexManagerHandlers?.onNotification?.({
+      sessionId: 'session-1',
+      method: 'turn/completed',
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+
+    expect(codexTestState.codexRegistry.setActiveTurnId).toHaveBeenCalledWith('session-1', null);
+  });
+
+  it('responds to unsupported Codex interactive requests', () => {
+    codexTestState.codexManagerHandlers?.onServerRequest?.({
+      sessionId: 'session-1',
+      method: 'item/unsupported/request',
+      params: { threadId: 'thread-1' },
+      canonicalRequestId: 'request-1',
+    });
+
+    expect(codexSessionProviderAdapter.rejectInteractiveRequest).toHaveBeenCalledWith(
+      'session-1',
+      'request-1',
+      expect.objectContaining({
+        message: expect.stringContaining('Unsupported Codex interactive request'),
+      })
     );
   });
 

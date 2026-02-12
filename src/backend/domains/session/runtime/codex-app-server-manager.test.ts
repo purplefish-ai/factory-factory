@@ -30,8 +30,10 @@ class FakeChildProcess extends EventEmitter {
   stdout = new PassThrough();
   stderr = new PassThrough();
   stdin = new CaptureWritable();
+  killSignals: Array<NodeJS.Signals | undefined> = [];
 
   kill(_signal?: NodeJS.Signals): boolean {
+    this.killSignals.push(_signal);
     this.emit('exit', 0, null);
     return true;
   }
@@ -348,6 +350,57 @@ describe('CodexAppServerManager', () => {
       state: 'degraded',
       unavailableReason: 'process_exited',
     });
+  });
+
+  it('keeps stopped status after intentional stop even when exit event fires', async () => {
+    const fake = new FakeChildProcess();
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    await manager.stop();
+
+    expect(manager.getStatus()).toMatchObject({
+      state: 'stopped',
+      unavailableReason: null,
+    });
+  });
+
+  it('kills child process and stays unavailable when process emits error', async () => {
+    const fake = new FakeChildProcess();
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    fake.emit('error', new Error('boom'));
+
+    await vi.waitFor(() => {
+      expect(manager.getStatus().state).toBe('unavailable');
+    });
+    expect(fake.killSignals.length).toBeGreaterThan(0);
+    expect(manager.getStatus().unavailableReason).toBe('spawn_failed');
   });
 
   it('acts as a singleton status source across callers via exported instance semantics', async () => {

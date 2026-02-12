@@ -270,6 +270,64 @@ describe('CodexSessionProviderAdapter', () => {
     });
   });
 
+  it('rejects unsupported interactive requests with JSON-RPC error responses', async () => {
+    const registry = new CodexSessionRegistry();
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request: vi.fn().mockResolvedValue({ threadId: 'thread-1' }),
+      stop: vi.fn().mockResolvedValue(undefined),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    registry.addPendingInteractiveRequest({
+      sessionId: 'session-1',
+      threadId: 'thread-1',
+      requestId: 'unsupported-1',
+      serverRequestId: 'req-77',
+      method: 'item/tool/requestUserInput',
+      params: {},
+    });
+
+    adapter.rejectInteractiveRequest('session-1', 'unsupported-1', {
+      message: 'Unsupported Codex interactive request: item/tool/requestUserInput',
+      data: {
+        code: 'UNSUPPORTED_OPERATION',
+        operation: 'question_response',
+      },
+    });
+
+    expect(manager.respond).toHaveBeenCalledWith(
+      'req-77',
+      {
+        code: -32_601,
+        message: 'Unsupported Codex interactive request: item/tool/requestUserInput',
+        data: {
+          code: 'UNSUPPORTED_OPERATION',
+          operation: 'question_response',
+        },
+      },
+      true
+    );
+  });
+
   it('emits Claude-compatible public deltas for CODEX canonical messages', () => {
     const adapter = new CodexSessionProviderAdapter({
       ensureStarted: vi.fn(),

@@ -108,6 +108,10 @@ class SessionService {
   private initializeCodexManagerHandlers(): void {
     this.codexAdapter.getManager().setHandlers({
       onNotification: ({ sessionId, method, params }) => {
+        if (this.isTerminalCodexTurnMethod(method)) {
+          this.codexAdapter.getManager().getRegistry().setActiveTurnId(sessionId, null);
+        }
+
         const translatedEvents = this.codexEventTranslator.translateNotification(method, params);
         for (const event of translatedEvents) {
           const normalized = this.normalizeCodexDeltaEvent(sessionId, event);
@@ -120,6 +124,23 @@ class SessionService {
           canonicalRequestId,
           params
         );
+
+        if (event.type === 'error') {
+          try {
+            this.codexAdapter.rejectInteractiveRequest(sessionId, canonicalRequestId, {
+              message: event.message,
+              data: event.data,
+            });
+          } catch (error) {
+            logger.warn('Failed responding to unsupported Codex interactive request', {
+              sessionId,
+              requestId: canonicalRequestId,
+              method,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
         sessionDomainService.emitDelta(sessionId, event);
       },
       onStatusChanged: (status) => {
@@ -152,6 +173,16 @@ class SessionService {
       ...event,
       order,
     };
+  }
+
+  private isTerminalCodexTurnMethod(method: string): boolean {
+    return (
+      method.startsWith('turn/completed') ||
+      method.startsWith('turn/finished') ||
+      method.startsWith('turn/interrupted') ||
+      method.startsWith('turn/cancelled') ||
+      method.startsWith('turn/failed')
+    );
   }
 
   /**

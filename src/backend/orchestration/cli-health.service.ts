@@ -29,6 +29,7 @@ export interface CLIHealthStatus {
 /**
  * Service for checking CLI dependencies health.
  * Checks that required CLIs (Claude, GitHub) are installed and configured.
+ * Codex is reported separately as an optional capability.
  */
 class CLIHealthService {
   private cachedStatus: CLIHealthStatus | null = null;
@@ -110,8 +111,7 @@ class CLIHealthService {
       claude,
       codex,
       github,
-      allHealthy:
-        claude.isInstalled && codex.isInstalled && github.isInstalled && github.isAuthenticated,
+      allHealthy: claude.isInstalled && github.isInstalled && github.isAuthenticated,
     };
 
     // Cache the result

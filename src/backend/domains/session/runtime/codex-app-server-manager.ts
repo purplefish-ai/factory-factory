@@ -6,6 +6,7 @@ import {
   CodexManagerUnavailableError,
   SessionOperationError,
 } from '@/backend/domains/session/codex/errors';
+import { asRecord } from '@/backend/domains/session/codex/payload-utils';
 import type {
   CodexManagerHandlers,
   CodexManagerServerRequestEvent,
@@ -73,13 +74,6 @@ function parseError(error: unknown): CodexTransportError {
   };
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null) {
-    return {};
-  }
-  return value as Record<string, unknown>;
-}
-
 function getThreadId(params: unknown): string | null {
   const record = asRecord(params);
   if (typeof record.threadId === 'string') {
@@ -108,20 +102,6 @@ function getCanonicalRequestId(serverRequestId: CodexRequestId, params: unknown)
   }
 
   return `codex-request-${String(serverRequestId)}`;
-}
-
-function buildUnavailableStatus(
-  unavailableReason: CodexUnavailableReason,
-  activeSessionCount: number
-): CodexManagerStatus {
-  return {
-    state: 'unavailable',
-    unavailableReason,
-    pid: null,
-    startedAt: null,
-    restartCount: 0,
-    activeSessionCount,
-  };
 }
 
 const DEFAULT_PROCESS_FACTORY: CodexProcessFactory = {
@@ -294,18 +274,13 @@ export class CodexAppServerManager {
   }
 
   stop(): Promise<void> {
-    if (!this.process) {
+    const processToStop = this.process;
+    if (!processToStop) {
       this.state = 'stopped';
       this.unavailableReason = null;
       this.startedAt = null;
       this.emitStatus();
       return Promise.resolve();
-    }
-
-    try {
-      this.process.kill('SIGTERM');
-    } catch {
-      // ignore shutdown errors
     }
 
     this.process = null;
@@ -314,6 +289,12 @@ export class CodexAppServerManager {
     this.startedAt = null;
     this.rejectAllPending('Codex app-server stopped');
     this.emitStatus();
+
+    try {
+      processToStop.kill('SIGTERM');
+    } catch {
+      // ignore shutdown errors
+    }
     return Promise.resolve();
   }
 
@@ -359,12 +340,14 @@ export class CodexAppServerManager {
         error: error.message,
       });
       this.markUnavailable('spawn_failed');
-      this.rejectAllPending('Codex app-server process error');
     });
 
     child.on('exit', (code, signal) => {
       logger.warn('Codex app-server exited', { code, signal });
       this.process = null;
+      if (this.state === 'stopped' || this.state === 'unavailable') {
+        return;
+      }
       this.state = 'degraded';
       this.unavailableReason = 'process_exited';
       this.restartCount += 1;
@@ -524,10 +507,20 @@ export class CodexAppServerManager {
   }
 
   private markUnavailable(reason: CodexUnavailableReason): void {
+    const processToStop = this.process;
     this.state = 'unavailable';
     this.unavailableReason = reason;
     this.process = null;
     this.startedAt = null;
+
+    if (processToStop) {
+      try {
+        processToStop.kill('SIGTERM');
+      } catch {
+        // ignore shutdown errors
+      }
+    }
+
     this.rejectAllPending(`Codex app-server unavailable: ${reason}`);
     this.emitStatus();
   }
@@ -556,9 +549,3 @@ export class CodexAppServerManager {
 }
 
 export const codexAppServerManager = new CodexAppServerManager();
-
-export function getCodexUnavailableStatusForAdmin(
-  reason: CodexUnavailableReason
-): CodexManagerStatus {
-  return buildUnavailableStatus(reason, 0);
-}
