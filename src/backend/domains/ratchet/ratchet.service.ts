@@ -13,7 +13,6 @@ import type { SessionProvider } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
-import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
   SERVICE_CACHE_TTL_MS,
@@ -25,7 +24,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
-import { resolveRatchetProviderFromWorkspace } from './provider-selection';
+import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 
 const logger = createLogger('ratchet');
 
@@ -1039,7 +1038,10 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    const resolvedRatchetProvider = await this.resolveRatchetProvider(workspace);
+    const resolvedRatchetProvider = await ratchetProviderResolverService.resolveRatchetProvider({
+      workspaceId: workspace.id,
+      workspace,
+    });
     const session = await claudeSessionAccessor.findById(workspace.ratchetActiveSessionId);
     if (!session) {
       await this.clearFailedRatchetDispatch(workspace, 'session not found in database');
@@ -1138,16 +1140,6 @@ class RatchetService extends EventEmitter {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }
-
-  private async resolveRatchetProvider(workspace: WorkspaceWithPR): Promise<SessionProvider> {
-    const selectedProvider = resolveRatchetProviderFromWorkspace(workspace);
-    if (selectedProvider) {
-      return selectedProvider;
-    }
-
-    const settings = await userSettingsAccessor.get();
-    return settings.defaultSessionProvider;
   }
 
   private resolveRatchetPrContext(

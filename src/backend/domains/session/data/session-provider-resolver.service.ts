@@ -1,10 +1,7 @@
-import type { SessionProvider, Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
+import type { SessionProvider, Workspace } from '@prisma-gen/client';
+import { asConcreteWorkspaceProvider } from '@/backend/lib/provider-selection';
 import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
-
-function asConcreteProvider(selection: WorkspaceProviderSelection): SessionProvider | null {
-  return selection === 'WORKSPACE_DEFAULT' ? null : selection;
-}
 
 class SessionProviderResolverService {
   async resolveSessionProvider(params: {
@@ -21,33 +18,13 @@ class SessionProviderResolverService {
       throw new Error(`Workspace not found: ${params.workspaceId}`);
     }
 
-    const workspaceProvider = asConcreteProvider(workspace.defaultSessionProvider);
+    const workspaceProvider = asConcreteWorkspaceProvider(workspace.defaultSessionProvider);
     if (workspaceProvider) {
       return workspaceProvider;
     }
 
     const settings = await userSettingsAccessor.get();
     return settings.defaultSessionProvider;
-  }
-
-  async resolveRatchetProvider(params: {
-    workspaceId: string;
-    workspace?: Workspace;
-  }): Promise<SessionProvider> {
-    const workspace = params.workspace ?? (await workspaceAccessor.findRawById(params.workspaceId));
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${params.workspaceId}`);
-    }
-
-    const ratchetProvider = asConcreteProvider(workspace.ratchetSessionProvider);
-    if (ratchetProvider) {
-      return ratchetProvider;
-    }
-
-    return this.resolveSessionProvider({
-      workspaceId: workspace.id,
-      workspace,
-    });
   }
 }
 

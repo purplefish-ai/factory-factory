@@ -112,32 +112,4 @@ describe('sessionProviderResolverService', () => {
     expect(provider).toBe('CLAUDE');
     expect(userSettingsAccessor.get).toHaveBeenCalledTimes(1);
   });
-
-  it('uses workspace ratchet provider when explicitly configured', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(
-      createWorkspace({ ratchetSessionProvider: 'CODEX' })
-    );
-
-    const provider = await sessionProviderResolverService.resolveRatchetProvider({
-      workspaceId: 'ws-1',
-    });
-
-    expect(provider).toBe('CODEX');
-    expect(userSettingsAccessor.get).not.toHaveBeenCalled();
-  });
-
-  it('falls back to resolved session provider when ratchet provider is WORKSPACE_DEFAULT', async () => {
-    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue(
-      createWorkspace({
-        defaultSessionProvider: 'CODEX',
-        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
-      })
-    );
-
-    const provider = await sessionProviderResolverService.resolveRatchetProvider({
-      workspaceId: 'ws-1',
-    });
-
-    expect(provider).toBe('CODEX');
-  });
 });
