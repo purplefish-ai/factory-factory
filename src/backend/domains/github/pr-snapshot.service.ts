@@ -33,7 +33,7 @@ export const PR_SNAPSHOT_UPDATED = 'pr_snapshot_updated' as const;
 
 export interface PRSnapshotUpdatedEvent {
   workspaceId: string;
-  prUrl: string | null;
+  prUrl?: string | null;
   prNumber: number;
   prState: string;
   prCiStatus: string;
@@ -232,7 +232,7 @@ class PRSnapshotService extends EventEmitter {
     snapshot: SnapshotData,
     options: ApplySnapshotOptions = {}
   ): Promise<void> {
-    const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl ?? null;
+    const eventPrUrl = options.eventPrUrl ?? options.persistPrUrl;
 
     await workspaceAccessor.update(workspaceId, {
       prNumber: snapshot.prNumber,
@@ -247,7 +247,7 @@ class PRSnapshotService extends EventEmitter {
 
     this.emit(PR_SNAPSHOT_UPDATED, {
       workspaceId,
-      prUrl: eventPrUrl,
+      ...(eventPrUrl !== undefined ? { prUrl: eventPrUrl } : {}),
       prNumber: snapshot.prNumber,
       prState: snapshot.prState,
       prCiStatus: snapshot.prCiStatus,

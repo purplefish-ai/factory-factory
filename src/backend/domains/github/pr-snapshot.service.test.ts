@@ -288,6 +288,30 @@ describe('PRSnapshotService', () => {
       });
     });
 
+    it('does not include prUrl in event when applySnapshot is called without prUrl options', async () => {
+      const events: PRSnapshotUpdatedEvent[] = [];
+      prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+        events.push(event);
+      });
+
+      await prSnapshotService.applySnapshot('ws-plain', {
+        prNumber: 11,
+        prState: 'OPEN',
+        prCiStatus: 'SUCCESS',
+        prReviewState: null,
+      });
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        workspaceId: 'ws-plain',
+        prNumber: 11,
+        prState: 'OPEN',
+        prCiStatus: 'SUCCESS',
+        prReviewState: null,
+      });
+      expect(events[0]).not.toHaveProperty('prUrl');
+    });
+
     it('emits pr_snapshot_updated on refreshWorkspace when snapshot succeeds', async () => {
       mockFindById.mockResolvedValue({
         id: 'ws-2',

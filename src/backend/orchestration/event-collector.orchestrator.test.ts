@@ -457,6 +457,46 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
   });
 
+  it('pr_snapshot_updated without prUrl does not overwrite existing prUrl in store', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'SUCCESS',
+      prReviewState: null,
+    });
+
+    vi.advanceTimersByTime(150);
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      {
+        prNumber: 42,
+        prState: 'OPEN',
+        prCiStatus: 'SUCCESS',
+      },
+      'event:pr_snapshot_updated'
+    );
+  });
+
   it('stopEventCollector flushes pending and clears coalescer', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
