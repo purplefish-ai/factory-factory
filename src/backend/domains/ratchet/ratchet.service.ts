@@ -308,15 +308,14 @@ class RatchetService extends EventEmitter {
 
     const activeSessionId = workspace.ratchetActiveSessionId;
     if (activeSessionId && this.session.isSessionRunning(activeSessionId)) {
-      try {
-        await this.session.stopSession(activeSessionId);
-      } catch (error) {
-        logger.warn('Failed to stop active ratchet session while disabling ratchet', {
+      await this.safeStopSession(
+        activeSessionId,
+        'Failed to stop active ratchet session while disabling ratchet',
+        {
           workspaceId,
           sessionId: activeSessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+        }
+      );
     }
 
     await workspaceAccessor.update(workspaceId, {
@@ -1102,16 +1101,26 @@ class RatchetService extends EventEmitter {
     await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: null });
   }
 
-  private async stopCompletedRatchetSession(workspaceId: string, sessionId: string): Promise<void> {
+  private async safeStopSession(
+    sessionId: string,
+    warningMessage: string,
+    warningContext: Record<string, unknown>
+  ): Promise<void> {
     try {
       await this.session.stopSession(sessionId);
     } catch (error) {
-      logger.warn('Failed to stop completed ratchet session', {
-        workspaceId,
-        sessionId,
+      logger.warn(warningMessage, {
+        ...warningContext,
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  private async stopCompletedRatchetSession(workspaceId: string, sessionId: string): Promise<void> {
+    await this.safeStopSession(sessionId, 'Failed to stop completed ratchet session', {
+      workspaceId,
+      sessionId,
+    });
   }
 
   private async stopSessionForProviderMismatch(
@@ -1120,17 +1129,12 @@ class RatchetService extends EventEmitter {
     expectedProvider: SessionProvider,
     actualProvider: SessionProvider
   ): Promise<void> {
-    try {
-      await this.session.stopSession(sessionId);
-    } catch (error) {
-      logger.warn('Failed to stop mismatched ratchet provider session', {
-        workspaceId,
-        sessionId,
-        expectedProvider,
-        actualProvider,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await this.safeStopSession(sessionId, 'Failed to stop mismatched ratchet provider session', {
+      workspaceId,
+      sessionId,
+      expectedProvider,
+      actualProvider,
+    });
   }
 
   private resolveRatchetPrContext(
