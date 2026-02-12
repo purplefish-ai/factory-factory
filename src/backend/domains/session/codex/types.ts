@@ -17,15 +17,15 @@ export interface CodexManagerStatus {
   activeSessionCount: number;
 }
 
+export type CodexRequestId = string | number;
+
 export interface CodexTransportRequest {
-  jsonrpc: '2.0';
-  id: number;
+  id: CodexRequestId;
   method: string;
   params?: unknown;
 }
 
 export interface CodexTransportNotification {
-  jsonrpc: '2.0';
   method: string;
   params?: unknown;
 }
@@ -37,8 +37,7 @@ export interface CodexTransportError {
 }
 
 export interface CodexTransportResponse {
-  jsonrpc: '2.0';
-  id: number;
+  id: CodexRequestId;
   result?: unknown;
   error?: CodexTransportError;
 }
@@ -60,7 +59,7 @@ export interface CodexManagerServerRequestEvent {
   threadId: string;
   method: string;
   params: unknown;
-  requestId: number;
+  requestId: CodexRequestId;
   canonicalRequestId: string;
 }
 
@@ -75,7 +74,7 @@ export interface CodexPendingInteractiveRequest {
   sessionId: string;
   threadId: string;
   requestId: string;
-  serverRequestId: number;
+  serverRequestId: CodexRequestId;
   method: string;
   params: Record<string, unknown>;
 }

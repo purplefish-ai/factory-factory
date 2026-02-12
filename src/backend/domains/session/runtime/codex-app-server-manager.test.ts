@@ -58,9 +58,7 @@ function respondToInitialize(fake: FakeChildProcess): void {
     throw new Error('initialize request not found in fake stdin');
   }
 
-  fake.stdout.write(
-    `${JSON.stringify({ jsonrpc: '2.0', id: initLine.id, result: { ok: true } })}\n`
-  );
+  fake.stdout.write(`${JSON.stringify({ id: initLine.id, result: { ok: true } })}\n`);
 }
 
 describe('CodexAppServerManager', () => {
@@ -133,7 +131,6 @@ describe('CodexAppServerManager', () => {
 
     fake.stdout.write(
       `${JSON.stringify({
-        jsonrpc: '2.0',
         method: 'turn/updated',
         params: { threadId: 'thread-1', turnId: 'turn-1' },
       })}\n`
@@ -152,7 +149,6 @@ describe('CodexAppServerManager', () => {
     onNotification.mockClear();
     fake.stdout.write(
       `${JSON.stringify({
-        jsonrpc: '2.0',
         method: 'turn/updated',
         params: { threadId: 'unknown-thread', turnId: 'turn-2' },
       })}\n`
@@ -188,7 +184,6 @@ describe('CodexAppServerManager', () => {
 
     fake.stdout.write(
       `${JSON.stringify({
-        jsonrpc: '2.0',
         id: 77,
         method: 'item/commandExecution/requestApproval',
         params: {

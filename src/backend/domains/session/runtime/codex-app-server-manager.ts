@@ -11,6 +11,7 @@ import type {
   CodexManagerServerRequestEvent,
   CodexManagerStatus,
   CodexProcessFactory,
+  CodexRequestId,
   CodexRequestOptions,
   CodexTransportError,
   CodexTransportRequest,
@@ -30,9 +31,13 @@ interface PendingRequest {
   timeout: NodeJS.Timeout;
 }
 
-const JsonRpcEnvelopeSchema = z
+const TransportEnvelopeSchema = z
   .object({
-    jsonrpc: z.literal('2.0'),
+    id: z.union([z.number(), z.string()]).optional(),
+    method: z.string().optional(),
+    params: z.unknown().optional(),
+    result: z.unknown().optional(),
+    error: z.unknown().optional(),
   })
   .passthrough();
 
@@ -89,7 +94,7 @@ function getThreadId(params: unknown): string | null {
   return null;
 }
 
-function getCanonicalRequestId(serverRequestId: number, params: unknown): string {
+function getCanonicalRequestId(serverRequestId: CodexRequestId, params: unknown): string {
   const record = asRecord(params);
   if (typeof record.requestId === 'string' && record.requestId.length > 0) {
     return record.requestId;
@@ -102,7 +107,7 @@ function getCanonicalRequestId(serverRequestId: number, params: unknown): string
     return item.id;
   }
 
-  return `codex-request-${serverRequestId}`;
+  return `codex-request-${String(serverRequestId)}`;
 }
 
 function buildUnavailableStatus(
@@ -218,7 +223,6 @@ export class CodexAppServerManager {
       options?.timeoutMs ?? configService.getCodexAppServerConfig().requestTimeoutMs;
 
     const payload: CodexTransportRequest = {
-      jsonrpc: '2.0',
       id,
       method,
       ...(params === undefined ? {} : { params }),
@@ -272,20 +276,18 @@ export class CodexAppServerManager {
 
   notify(method: string, params?: unknown): void {
     const payload = {
-      jsonrpc: '2.0',
       method,
       ...(params === undefined ? {} : { params }),
     };
     this.write(payload);
   }
 
-  respond(serverRequestId: number, result: unknown, isError = false): void {
+  respond(serverRequestId: CodexRequestId, result: unknown, isError = false): void {
     if (!this.process?.stdin.writable) {
       throw new CodexManagerUnavailableError('process_exited');
     }
 
     this.write({
-      jsonrpc: '2.0',
       id: serverRequestId,
       ...(isError ? { error: result } : { result }),
     });
@@ -338,7 +340,7 @@ export class CodexAppServerManager {
       }
 
       try {
-        const parsed = JsonRpcEnvelopeSchema.parse(JSON.parse(line));
+        const parsed = TransportEnvelopeSchema.parse(JSON.parse(line));
         this.handleInbound(parsed);
       } catch (error) {
         logger.warn('Failed to parse Codex app-server line', {
@@ -376,14 +378,16 @@ export class CodexAppServerManager {
         {
           clientInfo: {
             name: 'factory-factory',
+            title: null,
             version: configService.getAppVersion(),
           },
+          capabilities: null,
         },
         {
           timeoutMs: processConfig.handshakeTimeoutMs,
         }
       );
-      this.notify('initialized', {});
+      this.notify('initialized');
     } catch (error) {
       this.markUnavailable('handshake_failed');
       throw new CodexManagerUnavailableError(
@@ -442,6 +446,13 @@ export class CodexAppServerManager {
   }
 
   private handleResponse(message: CodexTransportResponse): void {
+    if (typeof message.id !== 'number') {
+      logger.warn('Received response with non-numeric request id', {
+        requestId: message.id,
+      });
+      return;
+    }
+
     const pending = this.pending.get(message.id);
     if (!pending) {
       logger.warn('Received response for unknown Codex request id', {

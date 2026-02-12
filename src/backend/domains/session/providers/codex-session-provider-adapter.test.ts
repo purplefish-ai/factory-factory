@@ -39,7 +39,7 @@ describe('CodexSessionProviderAdapter', () => {
     expect(request).toHaveBeenNthCalledWith(
       1,
       'thread/start',
-      expect.objectContaining({ sessionId: 'session-1' }),
+      expect.objectContaining({ cwd: '/tmp/project', experimentalRawEvents: false }),
       undefined
     );
 
@@ -98,7 +98,10 @@ describe('CodexSessionProviderAdapter', () => {
     expect(request).toHaveBeenNthCalledWith(
       2,
       'turn/start',
-      expect.objectContaining({ input: 'Hello from Codex', model: 'gpt-5' }),
+      expect.objectContaining({
+        input: [{ type: 'text', text: 'Hello from Codex', text_elements: [] }],
+        model: 'gpt-5',
+      }),
       { threadId: 'thread-1' }
     );
   });
@@ -157,7 +160,10 @@ describe('CodexSessionProviderAdapter', () => {
     expect(request).toHaveBeenNthCalledWith(
       3,
       'turn/start',
-      expect.objectContaining({ input: 'Hello from Codex', model: 'gpt-5' }),
+      expect.objectContaining({
+        input: [{ type: 'text', text: 'Hello from Codex', text_elements: [] }],
+        model: 'gpt-5',
+      }),
       { threadId: 'thread-1' }
     );
     expect(request).toHaveBeenNthCalledWith(
@@ -240,7 +246,7 @@ describe('CodexSessionProviderAdapter', () => {
 
     adapter.respondToPermission('session-1', 'approval-1', true);
 
-    expect(manager.respond).toHaveBeenCalledWith(101, { decision: 'allow' });
+    expect(manager.respond).toHaveBeenCalledWith(101, { decision: 'accept' });
 
     registry.addPendingInteractiveRequest({
       sessionId: 'session-1',
@@ -263,7 +269,9 @@ describe('CodexSessionProviderAdapter', () => {
 
     expect(manager.respond).toHaveBeenCalledWith(202, {
       answers: {
-        answer: 'yes',
+        answer: {
+          answers: ['yes'],
+        },
       },
     });
   });

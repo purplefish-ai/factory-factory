@@ -182,7 +182,7 @@ export class CodexSessionProviderAdapter
       'turn/start',
       {
         threadId: client.threadId,
-        input: content,
+        input: [{ type: 'text', text: content, text_elements: [] }],
         ...(model ? { model } : {}),
       },
       { threadId: client.threadId }
@@ -221,11 +221,10 @@ export class CodexSessionProviderAdapter
       pending.serverRequestId,
       allow
         ? {
-            decision: 'allow',
+            decision: 'accept',
           }
         : {
-            decision: 'deny',
-            reason: 'User denied',
+            decision: 'decline',
           }
     );
   }
@@ -240,9 +239,17 @@ export class CodexSessionProviderAdapter
     }
 
     const pending = this.consumePendingRequest(sessionId, requestId);
+    const normalizedAnswers = Object.fromEntries(
+      Object.entries(answers).map(([questionId, value]) => [
+        questionId,
+        {
+          answers: Array.isArray(value) ? value : [value],
+        },
+      ])
+    );
 
     this.manager.respond(pending.serverRequestId, {
-      answers,
+      answers: normalizedAnswers,
     });
   }
 
@@ -445,11 +452,24 @@ export class CodexSessionProviderAdapter
   async interruptTurn(sessionId: string): Promise<void> {
     const client = this.requireClient(sessionId);
     const turnId = this.manager.getRegistry().getActiveTurnId(sessionId);
+    if (!turnId) {
+      throw new SessionOperationError(
+        `No active Codex turn to interrupt for session: ${sessionId}`,
+        {
+          code: 'CODEX_ACTIVE_TURN_MISSING',
+          metadata: {
+            sessionId,
+          },
+          retryable: true,
+        }
+      );
+    }
+
     await this.sendRequest(
       'turn/interrupt',
       {
         threadId: client.threadId,
-        ...(turnId ? { turnId } : {}),
+        turnId,
       },
       { threadId: client.threadId }
     );
@@ -481,7 +501,8 @@ export class CodexSessionProviderAdapter
     if (!threadId) {
       const result = await this.sendRequest('thread/start', {
         cwd: options.workingDir,
-        sessionId: options.sessionId,
+        experimentalRawEvents: false,
+        ...(options.model ? { model: options.model } : {}),
       });
 
       threadId = parseThreadId(result);

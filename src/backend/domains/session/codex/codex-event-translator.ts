@@ -214,7 +214,7 @@ export class CodexEventTranslator {
       };
     }
 
-    if (method === 'item/tool/requestUserInput') {
+    if (method === 'item/tool/requestUserInput' || method === 'tool/requestUserInput') {
       if (!this.options?.userInputEnabled) {
         const error = createUnsupportedOperationError('question_response');
         return {
@@ -227,30 +227,65 @@ export class CodexEventTranslator {
         };
       }
 
-      const prompt =
-        asString(asRecord(params).prompt) ??
-        asString(asRecord(asRecord(params).item).prompt) ??
-        'Provide input';
+      const record = asRecord(params);
+      const rawQuestions = Array.isArray(record.questions) ? record.questions : [];
+      const questions =
+        rawQuestions.length > 0
+          ? rawQuestions.map((question) => {
+              const questionRecord = asRecord(question);
+              const rawOptions = Array.isArray(questionRecord.options)
+                ? questionRecord.options
+                : [];
+              const options =
+                rawOptions.length > 0
+                  ? rawOptions.map((option) => {
+                      const optionRecord = asRecord(option);
+                      return {
+                        label: asString(optionRecord.label) ?? 'Option',
+                        description: asString(optionRecord.description) ?? '',
+                      };
+                    })
+                  : [
+                      {
+                        label: 'Continue',
+                        description: 'Provide an answer and continue execution.',
+                      },
+                      {
+                        label: 'Cancel',
+                        description: 'Decline and stop this request.',
+                      },
+                    ];
+
+              return {
+                header: asString(questionRecord.header) ?? 'Codex Input',
+                question: asString(questionRecord.question) ?? 'Provide input',
+                options,
+              };
+            })
+          : [
+              {
+                header: 'Codex Input',
+                question:
+                  asString(record.prompt) ??
+                  asString(asRecord(record.item).prompt) ??
+                  'Provide input',
+                options: [
+                  {
+                    label: 'Continue',
+                    description: 'Provide an answer and continue execution.',
+                  },
+                  {
+                    label: 'Cancel',
+                    description: 'Decline and stop this request.',
+                  },
+                ],
+              },
+            ];
 
       return {
         type: 'user_question',
         requestId,
-        questions: [
-          {
-            header: 'Codex Input',
-            question: prompt,
-            options: [
-              {
-                label: 'Continue',
-                description: 'Provide an answer and continue execution.',
-              },
-              {
-                label: 'Cancel',
-                description: 'Decline and stop this request.',
-              },
-            ],
-          },
-        ],
+        questions,
       };
     }
 
