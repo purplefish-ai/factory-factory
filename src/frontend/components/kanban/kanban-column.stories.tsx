@@ -29,6 +29,8 @@ const baseWorkspace: WorkspaceWithKanban = {
   worktreePath: '/path/to/worktree',
   prUrl: null,
   prNumber: null,
+  defaultSessionProvider: 'WORKSPACE_DEFAULT',
+  ratchetSessionProvider: 'WORKSPACE_DEFAULT',
   prState: 'NONE',
   prReviewState: null,
   prCiStatus: 'UNKNOWN',

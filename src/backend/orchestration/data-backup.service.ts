@@ -6,7 +6,7 @@
  */
 
 import { RatchetState, RunScriptStatus } from '@factory-factory/core';
-import type { Prisma } from '@prisma-gen/client';
+import { type Prisma, SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import type { z } from 'zod';
 import {
   type DataBackupTransactionClient,
@@ -17,13 +17,17 @@ import type {
   ExportData,
   ExportDataV1,
   ExportDataV2,
+  ExportDataV3,
+  exportedAgentSessionSchema,
   exportedClaudeSessionSchema,
   exportedProjectSchema,
   exportedTerminalSessionSchema,
   exportedUserSettingsSchemaV1,
   exportedUserSettingsSchemaV2,
+  exportedUserSettingsSchemaV3,
   exportedWorkspaceSchemaV1,
   exportedWorkspaceSchemaV2,
+  exportedWorkspaceSchemaV3,
 } from '@/shared/schemas/export-data.schema';
 
 type TransactionClient = DataBackupTransactionClient;
@@ -42,7 +46,7 @@ export interface ImportCounter {
 export interface ImportResults {
   projects: ImportCounter;
   workspaces: ImportCounter;
-  claudeSessions: ImportCounter;
+  agentSessions: ImportCounter;
   terminalSessions: ImportCounter;
   userSettings: { imported: boolean; skipped: boolean };
 }
@@ -51,10 +55,13 @@ export interface ImportResults {
 type ExportedProject = z.infer<typeof exportedProjectSchema>;
 type ExportedWorkspaceV1 = z.infer<typeof exportedWorkspaceSchemaV1>;
 type ExportedWorkspaceV2 = z.infer<typeof exportedWorkspaceSchemaV2>;
+type ExportedWorkspaceV3 = z.infer<typeof exportedWorkspaceSchemaV3>;
+type ExportedAgentSession = z.infer<typeof exportedAgentSessionSchema>;
 type ExportedClaudeSession = z.infer<typeof exportedClaudeSessionSchema>;
 type ExportedTerminalSession = z.infer<typeof exportedTerminalSessionSchema>;
 type ExportedUserSettingsV1 = z.infer<typeof exportedUserSettingsSchemaV1>;
 type ExportedUserSettingsV2 = z.infer<typeof exportedUserSettingsSchemaV2>;
+type ExportedUserSettingsV3 = z.infer<typeof exportedUserSettingsSchemaV3>;
 
 function normalizeRunScriptStatus(
   status: z.infer<typeof exportedWorkspaceSchemaV1.shape.runScriptStatus>
@@ -93,6 +100,22 @@ function migrateWorkspaceV1ToV2(
   };
 }
 
+function migrateWorkspaceV2ToV3(
+  v2:
+    | ExportedWorkspaceV2
+    | (ExportedWorkspaceV2 & Partial<ExportedWorkspaceV3>)
+    | (ExportedWorkspaceV3 & Partial<ExportedWorkspaceV2>)
+): ExportedWorkspaceV3 {
+  const partial = v2 as Partial<ExportedWorkspaceV3>;
+  return {
+    ...v2,
+    defaultSessionProvider:
+      partial.defaultSessionProvider ?? WorkspaceProviderSelection.WORKSPACE_DEFAULT,
+    ratchetSessionProvider:
+      partial.ratchetSessionProvider ?? WorkspaceProviderSelection.WORKSPACE_DEFAULT,
+  };
+}
+
 /**
  * Migrates v1 user settings to v2 format by adding default values for new fields.
  * Uses ?? to preserve any existing v2 fields in forward-filled/mixed backups.
@@ -112,6 +135,19 @@ function migrateUserSettingsV1ToV2(
     ratchetEnabled: partial.ratchetEnabled ?? false,
     // The following fields were removed from the schema but are kept here for importing old backups
     // They will be ignored when creating the UserSettings record
+  };
+}
+
+function migrateUserSettingsV2ToV3(
+  v2:
+    | ExportedUserSettingsV2
+    | (ExportedUserSettingsV2 & Partial<ExportedUserSettingsV3> & Record<string, unknown>)
+    | (ExportedUserSettingsV3 & Partial<ExportedUserSettingsV2> & Record<string, unknown>)
+): ExportedUserSettingsV3 {
+  const partial = v2 as Partial<ExportedUserSettingsV3> & Record<string, unknown>;
+  return {
+    ...v2,
+    defaultSessionProvider: partial.defaultSessionProvider ?? SessionProvider.CLAUDE,
   };
 }
 
@@ -155,6 +191,17 @@ function ensureWorkspaceV2Defaults(w: ExportedWorkspaceV2): ExportedWorkspaceV2 
   };
 }
 
+function ensureWorkspaceV3Defaults(w: ExportedWorkspaceV3): ExportedWorkspaceV3 {
+  const base = ensureWorkspaceV2Defaults(w);
+  return {
+    ...base,
+    defaultSessionProvider:
+      w.defaultSessionProvider ?? WorkspaceProviderSelection.WORKSPACE_DEFAULT,
+    ratchetSessionProvider:
+      w.ratchetSessionProvider ?? WorkspaceProviderSelection.WORKSPACE_DEFAULT,
+  };
+}
+
 /**
  * Ensures v2 user settings has all required fields.
  * Validates that claimed v2 data actually has v2 fields to prevent runtime errors.
@@ -170,6 +217,28 @@ function ensureUserSettingsV2Defaults(s: ExportedUserSettingsV2): ExportedUserSe
   }
 
   return s;
+}
+
+function ensureUserSettingsV3Defaults(s: ExportedUserSettingsV3): ExportedUserSettingsV3 {
+  const base = ensureUserSettingsV2Defaults(s);
+  return {
+    ...base,
+    defaultSessionProvider: s.defaultSessionProvider ?? SessionProvider.CLAUDE,
+  };
+}
+
+function resolveImportAgentSessions(
+  input: ExportDataV1 | ExportDataV2 | ExportDataV3
+): ExportedAgentSession[] {
+  if ('agentSessions' in input.data) {
+    return input.data.agentSessions;
+  }
+
+  if ('claudeSessions' in input.data) {
+    return input.data.claudeSessions.map(mapLegacyClaudeSessionToAgentSession);
+  }
+
+  return [];
 }
 
 // ============================================================================
@@ -221,7 +290,7 @@ async function importProjects(
 }
 
 async function importWorkspaces(
-  workspaces: Array<ExportedWorkspaceV1 | ExportedWorkspaceV2>,
+  workspaces: Array<ExportedWorkspaceV1 | ExportedWorkspaceV2 | ExportedWorkspaceV3>,
   schemaVersion: number,
   tx: TransactionClient
 ): Promise<ImportCounter> {
@@ -244,12 +313,14 @@ async function importWorkspaces(
       continue;
     }
 
-    // Migrate v1 to v2 if needed (based on schema version from meta)
-    // For v2, also ensure optional fields have defaults and validate required v2 fields
-    const w: ExportedWorkspaceV2 =
-      schemaVersion >= 2
-        ? ensureWorkspaceV2Defaults(workspace as ExportedWorkspaceV2)
-        : migrateWorkspaceV1ToV2(workspace);
+    let w: ExportedWorkspaceV3;
+    if (schemaVersion >= 3) {
+      w = ensureWorkspaceV3Defaults(workspace as ExportedWorkspaceV3);
+    } else if (schemaVersion >= 2) {
+      w = migrateWorkspaceV2ToV3(ensureWorkspaceV2Defaults(workspace as ExportedWorkspaceV2));
+    } else {
+      w = migrateWorkspaceV2ToV3(migrateWorkspaceV1ToV2(workspace));
+    }
 
     await tx.workspace.create({
       data: {
@@ -278,6 +349,8 @@ async function importWorkspaces(
         prUrl: w.prUrl,
         githubIssueNumber: w.githubIssueNumber,
         githubIssueUrl: w.githubIssueUrl,
+        defaultSessionProvider: w.defaultSessionProvider,
+        ratchetSessionProvider: w.ratchetSessionProvider,
         prNumber: w.prNumber,
         prState: w.prState,
         prReviewState: w.prReviewState,
@@ -309,14 +382,34 @@ async function importWorkspaces(
   return counter;
 }
 
-async function importClaudeSessions(
-  sessions: ExportedClaudeSession[],
+function mapLegacyClaudeSessionToAgentSession(
+  session: ExportedClaudeSession
+): ExportedAgentSession {
+  return {
+    id: session.id,
+    workspaceId: session.workspaceId,
+    name: session.name,
+    workflow: session.workflow,
+    model: session.model,
+    status: session.status,
+    provider: SessionProvider.CLAUDE,
+    providerSessionId: session.claudeSessionId,
+    providerProjectPath: session.claudeProjectPath ?? null,
+    providerProcessPid: session.claudeProcessPid,
+    providerMetadata: null,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
+async function importAgentSessions(
+  sessions: ExportedAgentSession[],
   tx: TransactionClient
 ): Promise<ImportCounter> {
   const counter: ImportCounter = { imported: 0, skipped: 0 };
 
   for (const s of sessions) {
-    const existing = await tx.claudeSession.findUnique({ where: { id: s.id } });
+    const existing = await tx.agentSession.findUnique({ where: { id: s.id } });
     if (existing) {
       counter.skipped++;
       continue;
@@ -324,7 +417,7 @@ async function importClaudeSessions(
 
     const workspace = await tx.workspace.findUnique({ where: { id: s.workspaceId } });
     if (!workspace) {
-      logger.warn('Skipping claude session due to missing workspace', {
+      logger.warn('Skipping agent session due to missing workspace', {
         sessionId: s.id,
         workspaceId: s.workspaceId,
       });
@@ -332,7 +425,7 @@ async function importClaudeSessions(
       continue;
     }
 
-    await tx.claudeSession.create({
+    await tx.agentSession.create({
       data: {
         id: s.id,
         workspaceId: s.workspaceId,
@@ -340,9 +433,12 @@ async function importClaudeSessions(
         workflow: s.workflow,
         model: s.model,
         status: s.status,
-        claudeSessionId: s.claudeSessionId,
-        claudeProjectPath: s.claudeProjectPath,
-        claudeProcessPid: s.claudeProcessPid,
+        provider: s.provider,
+        providerSessionId: s.providerSessionId,
+        providerProjectPath: s.providerProjectPath,
+        providerProcessPid: s.providerProcessPid,
+        providerMetadata:
+          s.providerMetadata != null ? (s.providerMetadata as Prisma.InputJsonValue) : undefined,
         createdAt: new Date(s.createdAt),
         updatedAt: new Date(s.updatedAt),
       },
@@ -394,7 +490,7 @@ async function importTerminalSessions(
 }
 
 async function importUserSettings(
-  settings: ExportedUserSettingsV1 | ExportedUserSettingsV2 | null,
+  settings: ExportedUserSettingsV1 | ExportedUserSettingsV2 | ExportedUserSettingsV3 | null,
   schemaVersion: number,
   tx: TransactionClient
 ): Promise<{ imported: boolean; skipped: boolean }> {
@@ -407,12 +503,14 @@ async function importUserSettings(
     return { imported: false, skipped: true };
   }
 
-  // Migrate v1 to v2 if needed (based on schema version from meta)
-  // For v2, also ensure all required fields are present
-  const s: ExportedUserSettingsV2 =
-    schemaVersion >= 2
-      ? ensureUserSettingsV2Defaults(settings as ExportedUserSettingsV2)
-      : migrateUserSettingsV1ToV2(settings);
+  let s: ExportedUserSettingsV3;
+  if (schemaVersion >= 3) {
+    s = ensureUserSettingsV3Defaults(settings as ExportedUserSettingsV3);
+  } else if (schemaVersion >= 2) {
+    s = migrateUserSettingsV2ToV3(ensureUserSettingsV2Defaults(settings as ExportedUserSettingsV2));
+  } else {
+    s = migrateUserSettingsV2ToV3(migrateUserSettingsV1ToV2(settings));
+  }
 
   await tx.userSettings.create({
     data: {
@@ -423,6 +521,7 @@ async function importUserSettings(
       notificationSoundPath: s.notificationSoundPath,
       // Ratchet settings
       ratchetEnabled: s.ratchetEnabled,
+      defaultSessionProvider: s.defaultSessionProvider,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
       // as they are rebuild-able cache data
       // Deprecated fields are ignored - they no longer exist in the schema
@@ -441,20 +540,20 @@ class DataBackupService {
    * Export all data for backup/migration.
    * Exports projects, workspaces, sessions, and user preferences.
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
-   * Exports in schema version 2 format.
+   * Exports in schema version 3 format.
    */
   async exportData(appVersion: string): Promise<ExportData> {
     logger.info('Exporting database data');
 
     // Fetch all data
-    const { projects, workspaces, claudeSessions, terminalSessions, userSettings } =
+    const { projects, workspaces, agentSessions, terminalSessions, userSettings } =
       await dataBackupAccessor.getSnapshotForExport();
 
     const exportData: ExportData = {
       meta: {
         exportedAt: new Date().toISOString(),
         version: appVersion,
-        schemaVersion: 2,
+        schemaVersion: 3,
       },
       data: {
         projects: projects.map((p) => ({
@@ -498,6 +597,8 @@ class DataBackupService {
           prUrl: w.prUrl,
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,
+          defaultSessionProvider: w.defaultSessionProvider,
+          ratchetSessionProvider: w.ratchetSessionProvider,
           prNumber: w.prNumber,
           prState: w.prState,
           prReviewState: w.prReviewState,
@@ -522,16 +623,18 @@ class DataBackupService {
           createdAt: w.createdAt.toISOString(),
           updatedAt: w.updatedAt.toISOString(),
         })),
-        claudeSessions: claudeSessions.map((s) => ({
+        agentSessions: agentSessions.map((s) => ({
           id: s.id,
           workspaceId: s.workspaceId,
           name: s.name,
           workflow: s.workflow,
           model: s.model,
           status: s.status,
-          claudeSessionId: s.claudeSessionId,
-          claudeProjectPath: s.claudeProjectPath,
-          claudeProcessPid: s.claudeProcessPid,
+          provider: s.provider,
+          providerSessionId: s.providerSessionId,
+          providerProjectPath: s.providerProjectPath,
+          providerProcessPid: s.providerProcessPid,
+          providerMetadata: s.providerMetadata,
           createdAt: s.createdAt.toISOString(),
           updatedAt: s.updatedAt.toISOString(),
         })),
@@ -552,6 +655,7 @@ class DataBackupService {
               notificationSoundPath: userSettings.notificationSoundPath,
               // Ratchet settings
               ratchetEnabled: userSettings.ratchetEnabled,
+              defaultSessionProvider: userSettings.defaultSessionProvider,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
               // as they are rebuild-able cache data (per design doc)
             }
@@ -562,7 +666,7 @@ class DataBackupService {
     logger.info('Export completed', {
       projectCount: projects.length,
       workspaceCount: workspaces.length,
-      claudeSessionCount: claudeSessions.length,
+      agentSessionCount: agentSessions.length,
       terminalSessionCount: terminalSessions.length,
     });
 
@@ -571,12 +675,12 @@ class DataBackupService {
 
   /**
    * Import data from a backup file.
-   * Supports both v1 and v2 schema versions with automatic migration.
+   * Supports v1/v2/v3 schema versions with automatic migration.
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    * All imports are wrapped in a transaction for atomicity.
    */
-  async importData(input: ExportDataV1 | ExportDataV2): Promise<ImportResults> {
+  async importData(input: ExportDataV1 | ExportDataV2 | ExportDataV3): Promise<ImportResults> {
     logger.info('Starting data import', {
       schemaVersion: input.meta.schemaVersion,
       exportedAt: input.meta.exportedAt,
@@ -589,14 +693,15 @@ class DataBackupService {
       const schemaVersion = input.meta.schemaVersion;
       const projects = await importProjects(input.data.projects, tx);
       const workspaces = await importWorkspaces(input.data.workspaces, schemaVersion, tx);
-      const claudeSessions = await importClaudeSessions(input.data.claudeSessions, tx);
+      const sessionsToImport = resolveImportAgentSessions(input);
+      const agentSessions = await importAgentSessions(sessionsToImport, tx);
       const terminalSessions = await importTerminalSessions(input.data.terminalSessions, tx);
       const userSettings = await importUserSettings(input.data.userSettings, schemaVersion, tx);
 
       return {
         projects,
         workspaces,
-        claudeSessions,
+        agentSessions,
         terminalSessions,
         userSettings,
       };
@@ -606,7 +711,7 @@ class DataBackupService {
       schemaVersion: input.meta.schemaVersion,
       projects: results.projects,
       workspaces: results.workspaces,
-      claudeSessions: results.claudeSessions,
+      agentSessions: results.agentSessions,
       terminalSessions: results.terminalSessions,
     });
 

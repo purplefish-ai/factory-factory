@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { CIStatus, PRState } from '@factory-factory/core';
 import { createLogger } from '@/backend/services/logger.service';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
@@ -158,10 +159,10 @@ class GitHubCLIService {
    * Returns null if PR cannot be fetched.
    */
   async fetchAndComputePRState(prUrl: string): Promise<{
-    prState: import('@prisma-gen/client').PRState;
+    prState: PRState;
     prNumber: number;
     prReviewState: string | null;
-    prCiStatus: import('@prisma-gen/client').CIStatus;
+    prCiStatus: CIStatus;
   } | null> {
     const status = await this.getPRStatus(prUrl);
     if (!status) {

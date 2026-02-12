@@ -1,10 +1,12 @@
 import { SessionStatus } from '@factory-factory/core';
+import { SessionProvider } from '@prisma-gen/client';
 import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RatchetSessionBridge } from './bridges';
+import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 
 const logger = createLogger('fixer-session');
 
@@ -73,11 +75,15 @@ class FixerSessionService {
     workspaceId: string,
     workflow: string
   ): Promise<{ id: string; status: SessionStatus } | null> {
+    const provider = await ratchetProviderResolverService.resolveRatchetProvider({
+      workspaceId,
+    });
     const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
     const matching = sessions
       .filter(
         (s) =>
           s.workflow === workflow &&
+          s.provider === provider &&
           (s.status === SessionStatus.RUNNING || s.status === SessionStatus.IDLE)
       )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -119,12 +125,17 @@ class FixerSessionService {
     input: AcquireAndDispatchInput,
     worktreePath: string
   ): Promise<SessionAcquisitionDecision> {
+    const provider = await ratchetProviderResolverService.resolveRatchetProvider({
+      workspaceId: input.workspaceId,
+    });
     const acquisition = await claudeSessionAccessor.acquireFixerSession({
       workspaceId: input.workspaceId,
       workflow: input.workflow,
       sessionName: input.sessionName,
       maxSessions: configService.getMaxSessionsPerWorkspace(),
-      claudeProjectPath: getClaudeProjectPath(worktreePath),
+      provider,
+      claudeProjectPath:
+        provider === SessionProvider.CLAUDE ? getClaudeProjectPath(worktreePath) : null,
     });
 
     if (acquisition.outcome === 'limit_reached') {

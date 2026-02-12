@@ -7,9 +7,15 @@ import {
   WorkspaceCreationSource,
   WorkspaceStatus,
 } from '@factory-factory/core';
-import type { Project, UserSettings, Workspace } from '@prisma-gen/client';
+import {
+  type Project,
+  SessionProvider,
+  type UserSettings,
+  type Workspace,
+  WorkspaceProviderSelection,
+} from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ExportDataV1, ExportDataV2 } from '@/shared/schemas/export-data.schema';
+import type { ExportDataV1, ExportDataV2, ExportDataV3 } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
 // Use vi.hoisted so mockTx is available when vi.mock factory runs (vi.mock is hoisted above imports)
@@ -22,7 +28,7 @@ const mockTx = vi.hoisted(() => ({
     findUnique: vi.fn(),
     create: vi.fn(),
   },
-  claudeSession: {
+  agentSession: {
     findUnique: vi.fn(),
     create: vi.fn(),
   },
@@ -49,7 +55,7 @@ vi.mock('@/backend/db', () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
     },
-    claudeSession: {
+    agentSession: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
@@ -113,6 +119,8 @@ describe('DataBackupService', () => {
     prUrl: 'https://github.com/test/repo/pull/1',
     githubIssueNumber: 123,
     githubIssueUrl: 'https://github.com/test/repo/issues/123',
+    defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
+    ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
     prNumber: 1,
     prState: PRState.OPEN,
     prReviewState: 'APPROVED',
@@ -149,6 +157,7 @@ describe('DataBackupService', () => {
     cachedSlashCommands: { commands: [] },
     // Ratchet settings
     ratchetEnabled: true,
+    defaultSessionProvider: SessionProvider.CLAUDE,
     createdAt: new Date('2025-01-01T00:00:00.000Z'),
     updatedAt: new Date('2025-01-01T00:00:00.000Z'),
   };
@@ -158,16 +167,16 @@ describe('DataBackupService', () => {
   });
 
   describe('exportData', () => {
-    it('should export data in v2 format with all fields', async () => {
+    it('should export data in v3 format with all fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspaceV2]);
-      vi.mocked(prisma.claudeSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettingsV2);
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(2);
+      expect(result.meta.schemaVersion).toBe(3);
       expect(result.meta.version).toBe('1.0.0');
       expect(result.data.projects).toHaveLength(1);
       expect(result.data.workspaces).toHaveLength(1);
@@ -182,11 +191,14 @@ describe('DataBackupService', () => {
       expect(exportedWorkspace?.ratchetLastCiRunId).toBe('run-123');
       expect(exportedWorkspace?.prReviewLastCheckedAt).toBe('2025-01-01T00:20:00.000Z');
       expect(exportedWorkspace?.prReviewLastCommentId).toBe('comment-123');
+      expect(exportedWorkspace?.defaultSessionProvider).toBe('CLAUDE');
+      expect(exportedWorkspace?.ratchetSessionProvider).toBe('WORKSPACE_DEFAULT');
 
       // Verify all user settings fields are exported
       const exportedSettings = result.data.userSettings;
       expect(exportedSettings).not.toBeNull();
       expect(exportedSettings?.ratchetEnabled).toBe(true);
+      expect(exportedSettings?.defaultSessionProvider).toBe('CLAUDE');
 
       // Verify cached data is excluded
       expect('workspaceOrder' in (exportedSettings ?? {})).toBe(false);
@@ -196,7 +208,7 @@ describe('DataBackupService', () => {
     it('should handle null user settings', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([]);
-      vi.mocked(prisma.claudeSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
 
@@ -205,10 +217,10 @@ describe('DataBackupService', () => {
       expect(result.data.userSettings).toBeNull();
     });
 
-    it('should export valid v2 schema', async () => {
+    it('should export valid schema', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspaceV2]);
-      vi.mocked(prisma.claudeSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
       vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(mockUserSettingsV2);
 
@@ -533,6 +545,110 @@ describe('DataBackupService', () => {
       expect(mockTx.workspace.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           runScriptStatus: RunScriptStatus.IDLE,
+        }),
+      });
+    });
+  });
+
+  describe('importData - session payload compatibility', () => {
+    it('maps legacy claudeSessions payload into agentSessions rows', async () => {
+      const exportedData: ExportDataV2 = {
+        meta: {
+          exportedAt: '2025-01-01T00:00:00.000Z',
+          version: '1.0.0',
+          schemaVersion: 2,
+        },
+        data: {
+          projects: [],
+          workspaces: [],
+          claudeSessions: [
+            {
+              id: 'legacy-session-1',
+              workspaceId: 'ws-1',
+              name: 'Legacy Session',
+              workflow: 'followup',
+              model: 'sonnet',
+              status: 'IDLE',
+              claudeSessionId: 'claude-123',
+              claudeProjectPath: '/tmp/worktree',
+              claudeProcessPid: 1234,
+              createdAt: '2025-01-01T00:00:00.000Z',
+              updatedAt: '2025-01-01T00:05:00.000Z',
+            },
+          ],
+          terminalSessions: [],
+          userSettings: null,
+        },
+      };
+
+      vi.mocked(mockTx.agentSession.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue({ id: 'ws-1' } as never);
+      vi.mocked(mockTx.agentSession.create).mockResolvedValue({} as never);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.agentSessions.imported).toBe(1);
+      expect(mockTx.agentSession.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: 'legacy-session-1',
+          workspaceId: 'ws-1',
+          provider: SessionProvider.CLAUDE,
+          providerSessionId: 'claude-123',
+          providerProjectPath: '/tmp/worktree',
+          providerProcessPid: 1234,
+          providerMetadata: undefined,
+        }),
+      });
+    });
+
+    it('imports v3 agentSessions payload without legacy remapping', async () => {
+      const exportedData: ExportDataV3 = {
+        meta: {
+          exportedAt: '2025-01-01T00:00:00.000Z',
+          version: '1.0.0',
+          schemaVersion: 3,
+        },
+        data: {
+          projects: [],
+          workspaces: [],
+          agentSessions: [
+            {
+              id: 'agent-session-1',
+              workspaceId: 'ws-1',
+              name: 'Codex Session',
+              workflow: 'followup',
+              model: 'sonnet',
+              status: 'RUNNING',
+              provider: SessionProvider.CODEX,
+              providerSessionId: 'thread-123',
+              providerProjectPath: null,
+              providerProcessPid: null,
+              providerMetadata: { transport: 'app-server' },
+              createdAt: '2025-01-01T00:00:00.000Z',
+              updatedAt: '2025-01-01T00:05:00.000Z',
+            },
+          ],
+          terminalSessions: [],
+          userSettings: null,
+        },
+      };
+
+      vi.mocked(mockTx.agentSession.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue({ id: 'ws-1' } as never);
+      vi.mocked(mockTx.agentSession.create).mockResolvedValue({} as never);
+
+      const result = await dataBackupService.importData(exportedData);
+
+      expect(result.agentSessions.imported).toBe(1);
+      expect(mockTx.agentSession.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: 'agent-session-1',
+          workspaceId: 'ws-1',
+          provider: SessionProvider.CODEX,
+          providerSessionId: 'thread-123',
+          providerProjectPath: null,
+          providerProcessPid: null,
+          providerMetadata: { transport: 'app-server' },
         }),
       });
     });

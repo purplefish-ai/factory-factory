@@ -1,5 +1,5 @@
 import type { WorkspaceStatus } from '@factory-factory/core';
-import type { Workspace } from '@prisma-gen/client';
+import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 
 class WorkspaceDataService {
@@ -34,6 +34,19 @@ class WorkspaceDataService {
     return workspaceAccessor.update(id, {
       runScriptCommand,
       runScriptCleanupCommand,
+    });
+  }
+
+  update(
+    id: string,
+    data: {
+      defaultSessionProvider?: WorkspaceProviderSelection;
+      ratchetSessionProvider?: WorkspaceProviderSelection;
+    }
+  ) {
+    return workspaceAccessor.update(id, {
+      defaultSessionProvider: data.defaultSessionProvider,
+      ratchetSessionProvider: data.ratchetSessionProvider,
     });
   }
 

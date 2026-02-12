@@ -1,4 +1,5 @@
 import { KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
+import { WorkspaceProviderSelection } from '@prisma-gen/client';
 import { z } from 'zod';
 import { ratchetService } from '@/backend/domains/ratchet';
 import { sessionService } from '@/backend/domains/session';
@@ -172,6 +173,23 @@ export const workspaceRouter = router({
         throw new Error(`Workspace not found: ${input.workspaceId}`);
       }
       return updatedWorkspace;
+    }),
+
+  // Update workspace provider defaults (session + ratchet).
+  updateProviderDefaults: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        defaultSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
+        ratchetSessionProvider: z.nativeEnum(WorkspaceProviderSelection).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const updated = await workspaceDataService.update(input.workspaceId, {
+        defaultSessionProvider: input.defaultSessionProvider,
+        ratchetSessionProvider: input.ratchetSessionProvider,
+      });
+      return updated;
     }),
 
   // Archive a workspace

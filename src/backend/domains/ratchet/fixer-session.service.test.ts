@@ -5,6 +5,7 @@ import type { RatchetSessionBridge } from './bridges';
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: vi.fn(),
+    findRawById: vi.fn(),
   },
 }));
 
@@ -12,6 +13,13 @@ vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
   claudeSessionAccessor: {
     findByWorkspaceId: vi.fn(),
     acquireFixerSession: vi.fn(),
+  },
+}));
+
+vi.mock('@/backend/resource_accessors/user-settings.accessor', () => ({
+  userSettingsAccessor: {
+    get: vi.fn(),
+    getDefaultSessionProvider: vi.fn(),
   },
 }));
 
@@ -31,6 +39,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
 import { fixerSessionService } from './fixer-session.service';
@@ -48,6 +57,15 @@ describe('FixerSessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fixerSessionService.configure({ session: mockSessionBridge });
+    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      id: 'w1',
+      defaultSessionProvider: 'WORKSPACE_DEFAULT',
+      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+    } as never);
+    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+      defaultSessionProvider: 'CLAUDE',
+    } as never);
+    vi.mocked(userSettingsAccessor.getDefaultSessionProvider).mockResolvedValue('CLAUDE');
   });
 
   it('skips when workspace is missing worktree', async () => {
@@ -140,6 +158,34 @@ describe('FixerSessionService', () => {
     });
   });
 
+  it('does not set claudeProjectPath when resolved provider is CODEX', async () => {
+    vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+      id: 'w1',
+      defaultSessionProvider: 'CODEX',
+      ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+    } as never);
+    vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
+    vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
+    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+      outcome: 'limit_reached',
+    });
+
+    await fixerSessionService.acquireAndDispatch({
+      workspaceId: 'w1',
+      workflow: 'ci-fix',
+      sessionName: 'CI Fixing',
+      runningIdleAction: 'send_message',
+      buildPrompt: () => 'prompt',
+    });
+
+    expect(claudeSessionAccessor.acquireFixerSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CODEX',
+        claudeProjectPath: null,
+      })
+    );
+  });
+
   it('deduplicates concurrent acquisition by workspace/workflow', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
     vi.mocked(claudeSessionAccessor.acquireFixerSession).mockImplementation(async () => {
@@ -176,12 +222,14 @@ describe('FixerSessionService', () => {
       {
         id: 'old',
         workflow: 'ci-fix',
+        provider: 'CLAUDE',
         status: SessionStatus.RUNNING,
         createdAt: new Date('2025-01-01T00:00:00Z'),
       },
       {
         id: 'new',
         workflow: 'ci-fix',
+        provider: 'CLAUDE',
         status: SessionStatus.IDLE,
         createdAt: new Date('2025-01-02T00:00:00Z'),
       },
