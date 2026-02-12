@@ -472,4 +472,52 @@ describe('CodexSessionProviderAdapter', () => {
     expect(manager.stop).toHaveBeenCalledTimes(1);
     expect([...adapter.getAllClients()]).toHaveLength(0);
   });
+
+  it('attempts to clear all sessions even when one clearSession fails', async () => {
+    const registry = new CodexSessionRegistry();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ threadId: 'thread-1' })
+      .mockResolvedValueOnce({ threadId: 'thread-2' });
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request,
+      stop: vi.fn().mockResolvedValue(undefined),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+    await adapter.getOrCreateClient(
+      'session-2',
+      { sessionId: 'session-2', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    const clearSessionSpy = vi
+      .spyOn(registry, 'clearSession')
+      .mockRejectedValueOnce(new Error('mapping store unavailable'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(adapter.stopAllClients()).rejects.toThrow('mapping store unavailable');
+    expect(clearSessionSpy).toHaveBeenNthCalledWith(1, 'session-1');
+    expect(clearSessionSpy).toHaveBeenNthCalledWith(2, 'session-2');
+    expect(manager.stop).toHaveBeenCalledTimes(1);
+  });
 });

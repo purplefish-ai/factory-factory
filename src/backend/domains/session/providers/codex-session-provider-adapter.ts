@@ -435,14 +435,25 @@ export class CodexSessionProviderAdapter
   }
 
   async stopAllClients(): Promise<void> {
+    let firstCleanupError: unknown = null;
     try {
       for (const [sessionId] of this.clients) {
-        await this.manager.getRegistry().clearSession(sessionId);
+        try {
+          await this.manager.getRegistry().clearSession(sessionId);
+        } catch (error) {
+          if (!firstCleanupError) {
+            firstCleanupError = error;
+          }
+        }
       }
     } finally {
       this.clients.clear();
       this.preferredModels.clear();
       await this.manager.stop();
+    }
+
+    if (firstCleanupError) {
+      throw firstCleanupError;
     }
   }
 
