@@ -5,8 +5,8 @@
  * and updates the workspace with the new branch name when detected.
  */
 
+import { workspaceDataService } from '@/backend/domains/workspace';
 import { gitCommand } from '@/backend/lib/shell';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { extractInputValue, isString } from '@/backend/schemas/tool-inputs.schema';
 import { createLogger } from '@/backend/services/logger.service';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
@@ -55,9 +55,7 @@ export const branchRenameInterceptor: ToolInterceptor = {
     }
 
     // Update the workspace with the new branch name
-    await workspaceAccessor.update(context.workspaceId, {
-      branchName: newBranchName,
-    });
+    await workspaceDataService.setBranchName(context.workspaceId, newBranchName);
 
     logger.info('Updated workspace with new branch name', {
       workspaceId: context.workspaceId,

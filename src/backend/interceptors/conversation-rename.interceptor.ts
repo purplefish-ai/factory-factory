@@ -7,11 +7,10 @@
  */
 
 import { SessionManager } from '@/backend/domains/session/claude';
+import { sessionDataService } from '@/backend/domains/session/data/session-data.service';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
+import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
 import { buildBranchRenameInstruction } from '@/backend/prompts/branch-rename';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
-import { projectAccessor } from '@/backend/resource_accessors/project.accessor';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { countUserMessages, extractKeyTopics } from '@/backend/utils/conversation-analyzer';
@@ -60,13 +59,13 @@ export const conversationRenameInterceptor: ToolInterceptor = {
       }
 
       // Get the current Claude session to access its claudeSessionId
-      const currentSession = await claudeSessionAccessor.findById(context.sessionId);
+      const currentSession = await sessionDataService.findClaudeSessionById(context.sessionId);
       if (!currentSession?.claudeSessionId) {
         return;
       }
 
       // Get workspace to check branch name
-      const workspace = await workspaceAccessor.findById(context.workspaceId);
+      const workspace = await workspaceDataService.findById(context.workspaceId);
       if (!workspace) {
         return;
       }
@@ -117,7 +116,7 @@ export const conversationRenameInterceptor: ToolInterceptor = {
         });
 
         // Get project info for branch prefix
-        const project = await projectAccessor.findById(workspace.projectId);
+        const project = await projectManagementService.findById(workspace.projectId);
 
         // Build rename instruction with conversation context
         // Only include summary if non-empty

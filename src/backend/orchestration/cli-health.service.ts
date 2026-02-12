@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/domains/github';
-import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from './constants';
-import { createLogger } from './logger.service';
+import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
+import { createLogger } from '@/backend/services/logger.service';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('cli-health');

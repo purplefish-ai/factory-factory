@@ -520,13 +520,14 @@ describe('websocket integration', () => {
 
     ws.send(JSON.stringify({ type: 'list_sessions' }));
 
-    await new Promise((resolve) => setTimeout(resolve, 25));
-    expect(appContext.services.chatMessageHandlerService.handleMessage).toHaveBeenCalledWith(
-      expect.any(Object),
-      null,
-      normalizedWorkingDir,
-      { type: 'list_sessions' }
-    );
+    await vi.waitFor(() => {
+      expect(appContext.services.chatMessageHandlerService.handleMessage).toHaveBeenCalledWith(
+        expect.any(Object),
+        null,
+        normalizedWorkingDir,
+        { type: 'list_sessions' }
+      );
+    });
   });
 
   it('terminal create flow stores terminal sessions that can be queried by accessor', async () => {

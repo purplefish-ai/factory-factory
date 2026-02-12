@@ -66,7 +66,7 @@
     "start:electron": "electron .",
     "postinstall": "node scripts/postinstall.mjs",
     "prepare": "husky",
-    "deps:check": "depcruise src --config .dependency-cruiser.cjs",
+    "deps:check": "depcruise src electron --config .dependency-cruiser.cjs",
     "knip": "knip --include files,dependencies,unlisted"
   },
   "dependencies": {

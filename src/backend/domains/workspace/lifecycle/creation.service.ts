@@ -69,7 +69,6 @@ export interface WorkspaceCreationDependencies {
  * - Ratchet defaulting from user settings
  * - Workspace record creation with source metadata
  * - Default session provisioning policy
- * - Background worktree initialization kickoff
  *
  * All workspace creation paths (UI, issue intake, branch resume) must
  * flow through this service for consistent behavior.
@@ -81,7 +80,7 @@ export class WorkspaceCreationService {
    * Create a workspace from a source-discriminated input.
    */
   async create(source: WorkspaceCreationSource): Promise<WorkspaceCreationResult> {
-    const { logger, configService } = this.deps;
+    const { configService } = this.deps;
 
     // Validate and prepare creation based on source type
     const { preparedInput, initMode } = await this.prepareCreation(source);
@@ -106,9 +105,6 @@ export class WorkspaceCreationService {
 
     // Provision default session if enabled
     const defaultSessionCreated = await this.provisionDefaultSession(workspace.id, configService);
-
-    // Kick off background initialization
-    this.startBackgroundInitialization(workspace.id, source, logger);
 
     return {
       workspace,
@@ -247,43 +243,5 @@ export class WorkspaceCreationService {
       });
       return false;
     }
-  }
-
-  /**
-   * Start background worktree initialization.
-   * Does not await - initialization happens asynchronously and workspace
-   * detail page polls for status updates.
-   */
-  private startBackgroundInitialization(
-    workspaceId: string,
-    source: WorkspaceCreationSource,
-    logger: Logger
-  ): void {
-    // Import initializeWorkspaceWorktree dynamically to avoid circular dependency
-    // (workspace barrel -> creation.service -> orchestration barrel -> orchestrator -> workspace barrel)
-    import('@/backend/orchestration/workspace-init.orchestrator')
-      .then(({ initializeWorkspaceWorktree }) => {
-        const branchName =
-          source.type === 'MANUAL'
-            ? source.branchName
-            : source.type === 'RESUME_BRANCH'
-              ? source.branchName
-              : undefined;
-        const useExistingBranch = source.type === 'RESUME_BRANCH';
-
-        return initializeWorkspaceWorktree(workspaceId, {
-          branchName,
-          useExistingBranch,
-        });
-      })
-      .catch((error) => {
-        logger.error(
-          'Unexpected error during background workspace initialization',
-          error as Error,
-          {
-            workspaceId,
-          }
-        );
-      });
   }
 }
