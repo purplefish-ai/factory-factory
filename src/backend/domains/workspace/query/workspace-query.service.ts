@@ -1,4 +1,4 @@
-import { type KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
+import { type KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
 import pLimit from 'p-limit';
 import type {
   WorkspaceGitHubBridge,

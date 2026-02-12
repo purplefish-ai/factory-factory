@@ -1,4 +1,5 @@
-import type { KanbanColumn, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import type { KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
+import type { Workspace } from '@prisma-gen/browser';
 import {
   Archive,
   FileCheck,

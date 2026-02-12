@@ -1,4 +1,5 @@
-import type { ClaudeSession, SessionStatus, TerminalSession } from '@prisma-gen/client';
+import type { SessionStatus } from '@factory-factory/core';
+import type { ClaudeSession, TerminalSession } from '@prisma-gen/client';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 

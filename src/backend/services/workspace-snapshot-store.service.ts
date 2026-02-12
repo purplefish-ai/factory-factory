@@ -21,7 +21,7 @@ import type {
   RatchetState,
   RunScriptStatus,
   WorkspaceStatus,
-} from '@prisma-gen/client';
+} from '@factory-factory/core';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { createLogger } from './logger.service';
 

@@ -1,4 +1,3 @@
-import type { Project, UserSettings, Workspace } from '@prisma-gen/client';
 import {
   CIStatus,
   KanbanColumn,
@@ -7,7 +6,8 @@ import {
   RunScriptStatus,
   WorkspaceCreationSource,
   WorkspaceStatus,
-} from '@prisma-gen/client';
+} from '@factory-factory/core';
+import type { Project, UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExportDataV1, ExportDataV2 } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';

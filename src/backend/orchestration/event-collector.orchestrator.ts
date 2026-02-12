@@ -16,7 +16,7 @@
  * - NOT re-exported from orchestration/index.ts (circular dep risk)
  */
 
-import type { CIStatus, PRState } from '@prisma-gen/client';
+import type { CIStatus, PRState } from '@factory-factory/core';
 import {
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,

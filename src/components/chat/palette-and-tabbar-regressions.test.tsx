@@ -3,16 +3,20 @@
 // Mock Prisma client to avoid node: module imports in jsdom - must be before imports
 import { vi } from 'vitest';
 
-vi.mock('@prisma-gen/client', () => ({
-  SessionStatus: {
-    IDLE: 'IDLE',
-    RUNNING: 'RUNNING',
-    ERROR: 'ERROR',
-    STOPPED: 'STOPPED',
-  },
-}));
+vi.mock('@factory-factory/core', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    SessionStatus: {
+      IDLE: 'IDLE',
+      RUNNING: 'RUNNING',
+      ERROR: 'ERROR',
+      STOPPED: 'STOPPED',
+    },
+  };
+});
 
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { createElement, createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';

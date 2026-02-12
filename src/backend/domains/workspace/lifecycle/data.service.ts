@@ -1,4 +1,5 @@
-import type { Workspace, WorkspaceStatus } from '@prisma-gen/client';
+import type { WorkspaceStatus } from '@factory-factory/core';
+import type { Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 
 class WorkspaceDataService {

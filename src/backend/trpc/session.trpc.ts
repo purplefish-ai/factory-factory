@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { SessionManager, sessionDataService } from '@/backend/domains/session';

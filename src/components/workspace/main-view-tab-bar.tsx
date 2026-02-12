@@ -1,4 +1,4 @@
-import type { SessionStatus as DbSessionStatus } from '@prisma-gen/client';
+import type { SessionStatus as DbSessionStatus } from '@factory-factory/core';
 import { FileCode, FileDiff, Plus } from 'lucide-react';
 
 import { TabButton } from '@/components/ui/tab-button';

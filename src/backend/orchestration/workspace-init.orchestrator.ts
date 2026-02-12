@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { githubCLIService } from '@/backend/domains/github';
 import { startupScriptService } from '@/backend/domains/run-script';
 import {

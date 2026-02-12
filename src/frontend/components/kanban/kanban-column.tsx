@@ -1,4 +1,4 @@
-import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
+import type { KanbanColumn as KanbanColumnType } from '@factory-factory/core';
 import { Badge } from '@/components/ui/badge';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 

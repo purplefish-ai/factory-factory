@@ -1,4 +1,4 @@
-import type { SessionStatus } from '@prisma-gen/client';
+import type { SessionStatus } from '@factory-factory/core';
 import {
   Activity,
   CheckCircle2,

@@ -2,12 +2,11 @@ import type {
   CIStatus,
   KanbanColumn,
   PRState,
-  Prisma,
   RatchetState,
   RunScriptStatus,
-  Workspace,
   WorkspaceStatus,
-} from '@prisma-gen/client';
+} from '@factory-factory/core';
+import type { Prisma, Workspace } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 
 /**

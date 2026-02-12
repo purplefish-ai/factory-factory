@@ -1,4 +1,5 @@
-import { type ClaudeSession, type Prisma, SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
+import type { ClaudeSession, Prisma } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 
 interface CreateClaudeSessionInput {

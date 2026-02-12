@@ -1,4 +1,4 @@
-import { CIStatus, PRState } from '@prisma-gen/client';
+import { CIStatus, PRState } from '@factory-factory/core';
 import type { z } from 'zod';
 import type {
   GitHubComment,

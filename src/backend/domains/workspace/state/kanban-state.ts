@@ -1,4 +1,5 @@
-import { KanbanColumn, PRState, type Workspace, WorkspaceStatus } from '@prisma-gen/client';
+import { KanbanColumn, PRState, WorkspaceStatus } from '@factory-factory/core';
+import type { Workspace } from '@prisma-gen/client';
 import type { WorkspaceSessionBridge } from '@/backend/domains/workspace/bridges';
 import { workspaceAccessor } from '@/backend/resource_accessors/index';
 import { createLogger } from '@/backend/services/logger.service';

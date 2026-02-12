@@ -14,7 +14,7 @@ import {
   SessionStatus as PrismaSessionStatus,
   WorkspaceCreationSource as PrismaWorkspaceCreationSource,
   WorkspaceStatus as PrismaWorkspaceStatus,
-} from '@prisma-gen/client';
+} from '@factory-factory/core';
 import { describe, expect, it } from 'vitest';
 import { exportedClaudeSessionSchema, exportedWorkspaceSchemaV2 } from './export-data.schema';
 

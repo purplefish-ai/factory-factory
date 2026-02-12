@@ -8,7 +8,7 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
+import { CIStatus, RatchetState, SessionStatus } from '@factory-factory/core';
 import pLimit from 'p-limit';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';

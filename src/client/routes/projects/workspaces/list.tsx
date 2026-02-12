@@ -1,4 +1,4 @@
-import type { WorkspaceStatus } from '@prisma-gen/browser';
+import type { WorkspaceStatus } from '@factory-factory/core';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';

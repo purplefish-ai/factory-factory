@@ -5,7 +5,7 @@
  * Prevents duplicate concurrent CI fixing sessions per workspace.
  */
 
-import type { SessionStatus } from '@prisma-gen/client';
+import type { SessionStatus } from '@factory-factory/core';
 import {
   dispatchFixWorkflow,
   isFixWorkflowInProgress,
