@@ -322,6 +322,12 @@ export class CodexAppServerManager {
     });
 
     child.on('error', (error) => {
+      if (this.process !== child) {
+        logger.debug('Ignoring stale Codex app-server error event', {
+          error: error.message,
+        });
+        return;
+      }
       logger.error('Codex app-server process error', {
         error: error.message,
       });
@@ -329,6 +335,10 @@ export class CodexAppServerManager {
     });
 
     child.on('exit', (code, signal) => {
+      if (this.process !== child) {
+        logger.debug('Ignoring stale Codex app-server exit event', { code, signal });
+        return;
+      }
       logger.warn('Codex app-server exited', { code, signal });
       this.process = null;
       if (this.state === 'stopped' || this.state === 'unavailable') {

@@ -26,15 +26,27 @@ class CaptureWritable extends Writable {
 }
 
 class FakeChildProcess extends EventEmitter {
-  pid = 4242;
+  pid: number;
   stdout = new PassThrough();
   stderr = new PassThrough();
   stdin = new CaptureWritable();
   killSignals: Array<NodeJS.Signals | undefined> = [];
 
+  constructor(
+    private readonly options?: {
+      pid?: number;
+      emitExitOnKill?: boolean;
+    }
+  ) {
+    super();
+    this.pid = options?.pid ?? 4242;
+  }
+
   kill(_signal?: NodeJS.Signals): boolean {
     this.killSignals.push(_signal);
-    this.emit('exit', 0, null);
+    if (this.options?.emitExitOnKill !== false) {
+      this.emit('exit', 0, null);
+    }
     return true;
   }
 }
@@ -477,6 +489,90 @@ describe('CodexAppServerManager', () => {
     expect(manager.getStatus()).toMatchObject({
       state: 'stopped',
       unavailableReason: null,
+    });
+  });
+
+  it('ignores stale exit events from previously stopped process after restart', async () => {
+    const stale = new FakeChildProcess({ pid: 1111, emitExitOnKill: false });
+    const fresh = new FakeChildProcess({ pid: 2222 });
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi
+          .fn()
+          .mockImplementationOnce(() => stale)
+          .mockImplementationOnce(() => fresh),
+      },
+    });
+
+    const firstStart = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(stale.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(stale);
+    await firstStart;
+
+    await manager.stop();
+
+    const secondStart = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fresh.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fresh);
+    await secondStart;
+
+    stale.emit('exit', 1, 'SIGKILL');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(manager.getStatus()).toMatchObject({
+      state: 'ready',
+      unavailableReason: null,
+      pid: 2222,
+    });
+  });
+
+  it('ignores stale error events from previously stopped process after restart', async () => {
+    const stale = new FakeChildProcess({ pid: 3333, emitExitOnKill: false });
+    const fresh = new FakeChildProcess({ pid: 4444 });
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi
+          .fn()
+          .mockImplementationOnce(() => stale)
+          .mockImplementationOnce(() => fresh),
+      },
+    });
+
+    const firstStart = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(stale.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(stale);
+    await firstStart;
+
+    await manager.stop();
+
+    const secondStart = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fresh.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fresh);
+    await secondStart;
+
+    stale.emit('error', new Error('stale process error'));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(manager.getStatus()).toMatchObject({
+      state: 'ready',
+      unavailableReason: null,
+      pid: 4444,
     });
   });
 

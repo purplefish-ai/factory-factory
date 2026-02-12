@@ -66,7 +66,7 @@ class CLIHealthService {
   async checkCodexCLI(): Promise<CodexCLIHealthStatus> {
     try {
       const { stdout } = await execFileAsync('codex', ['--version'], {
-        timeout: SERVICE_TIMEOUT_MS.claudeCliVersionCheck,
+        timeout: SERVICE_TIMEOUT_MS.codexCliVersionCheck,
       });
       return { isInstalled: true, version: stdout.trim().split('\n')[0] };
     } catch (error) {
