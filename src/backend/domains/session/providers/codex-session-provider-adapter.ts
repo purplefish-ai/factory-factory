@@ -443,6 +443,7 @@ export class CodexSessionProviderAdapter
 
   async stopAllClients(): Promise<void> {
     let firstCleanupError: unknown = null;
+    let stopError: unknown = null;
     try {
       for (const [sessionId] of this.clients) {
         try {
@@ -456,11 +457,25 @@ export class CodexSessionProviderAdapter
     } finally {
       this.clients.clear();
       this.preferredModels.clear();
-      await this.manager.stop();
+      try {
+        await this.manager.stop();
+      } catch (error) {
+        stopError = error;
+      }
     }
 
     if (firstCleanupError) {
+      if (stopError) {
+        throw new AggregateError(
+          [firstCleanupError, stopError],
+          'Codex stopAllClients failed during cleanup and manager shutdown'
+        );
+      }
       throw firstCleanupError;
+    }
+
+    if (stopError) {
+      throw stopError;
     }
   }
 

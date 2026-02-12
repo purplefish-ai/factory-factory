@@ -574,4 +574,45 @@ describe('CodexSessionProviderAdapter', () => {
     expect(clearSessionSpy).toHaveBeenNthCalledWith(2, 'session-2');
     expect(manager.stop).toHaveBeenCalledTimes(1);
   });
+
+  it('reports both cleanup and manager stop errors when they occur together', async () => {
+    const registry = new CodexSessionRegistry();
+    const request = vi.fn().mockResolvedValue({ threadId: 'thread-1' });
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request,
+      stop: vi.fn().mockRejectedValue(new Error('manager stop failed')),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    vi.spyOn(registry, 'clearSession').mockRejectedValueOnce(
+      new Error('mapping store unavailable')
+    );
+
+    const error = await adapter.stopAllClients().catch((rejection) => rejection);
+
+    expect(error).toBeInstanceOf(AggregateError);
+    const aggregateError = error as AggregateError;
+    expect(aggregateError.errors).toHaveLength(2);
+    expect(aggregateError.errors[0]).toMatchObject({ message: 'mapping store unavailable' });
+    expect(aggregateError.errors[1]).toMatchObject({ message: 'manager stop failed' });
+  });
 });
