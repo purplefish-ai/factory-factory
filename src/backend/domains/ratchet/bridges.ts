@@ -4,7 +4,7 @@
  * The ratchet domain never imports from other domains directly.
  */
 
-import type { CIStatus } from '@prisma-gen/client';
+import type { CIStatus } from '@factory-factory/core';
 
 // --- Session bridge ---
 

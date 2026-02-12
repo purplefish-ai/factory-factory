@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';

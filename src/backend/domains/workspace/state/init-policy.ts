@@ -1,4 +1,4 @@
-import type { WorkspaceStatus } from '@prisma-gen/client';
+import type { WorkspaceStatus } from '@factory-factory/core';
 import type { WorkspaceInitBanner, WorkspaceInitPhase } from '@/shared/workspace-init';
 
 export interface WorkspaceInitPolicyInput {

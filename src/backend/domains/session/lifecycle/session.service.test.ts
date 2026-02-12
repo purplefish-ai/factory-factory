@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClaudeClient } from '@/backend/domains/session/claude/client';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';

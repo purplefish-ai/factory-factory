@@ -1,4 +1,4 @@
-import { CIStatus, RatchetState, SessionStatus } from '@prisma-gen/client';
+import { CIStatus, RatchetState, SessionStatus } from '@factory-factory/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';

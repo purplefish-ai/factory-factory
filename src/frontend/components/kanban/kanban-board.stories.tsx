@@ -1,4 +1,4 @@
-import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
+import type { KanbanColumn as KanbanColumnType } from '@factory-factory/core';
 import type { Meta, StoryObj } from '@storybook/react';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';

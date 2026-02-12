@@ -1,4 +1,4 @@
-import { CIStatus, PRState, RatchetState } from '@prisma-gen/client';
+import { CIStatus, PRState, RatchetState } from '@factory-factory/core';
 import { describe, expect, it } from 'vitest';
 import { deriveWorkspaceFlowState, deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 

@@ -1,4 +1,5 @@
-import { type ClaudeSession, SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
+import type { ClaudeSession } from '@prisma-gen/client';
 import type { RewindFilesResponse } from '@/backend/domains/session/claude';
 import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';

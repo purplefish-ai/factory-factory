@@ -1,4 +1,4 @@
-import { KanbanColumn, WorkspaceStatus } from '@prisma-gen/client';
+import { KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
 import { z } from 'zod';
 import { ratchetService } from '@/backend/domains/ratchet';
 import { sessionService } from '@/backend/domains/session';

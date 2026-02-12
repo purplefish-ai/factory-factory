@@ -1,4 +1,4 @@
-import { CIStatus, PRState, RatchetState } from '@prisma-gen/client';
+import { CIStatus, PRState, RatchetState } from '@factory-factory/core';
 
 export type WorkspaceFlowPhase =
   | 'NO_PR'

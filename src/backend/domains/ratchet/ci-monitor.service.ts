@@ -5,7 +5,7 @@
  * Runs on a 3-minute polling interval with adaptive backoff on rate limits.
  */
 
-import { CIStatus, SessionStatus } from '@prisma-gen/client';
+import { CIStatus, SessionStatus } from '@factory-factory/core';
 import pLimit from 'p-limit';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';

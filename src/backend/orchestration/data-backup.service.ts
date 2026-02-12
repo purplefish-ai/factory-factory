@@ -5,7 +5,8 @@
  * Used when database migrations require a reset.
  */
 
-import { type Prisma, RatchetState, RunScriptStatus } from '@prisma-gen/client';
+import { RatchetState, RunScriptStatus } from '@factory-factory/core';
+import type { Prisma } from '@prisma-gen/client';
 import type { z } from 'zod';
 import {
   type DataBackupTransactionClient,

@@ -1,4 +1,4 @@
-import type { SessionStatus } from '@prisma-gen/browser';
+import type { SessionStatus } from '@factory-factory/core';
 
 export type SessionRuntimePhase =
   | 'loading'

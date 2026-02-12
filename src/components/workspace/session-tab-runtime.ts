@@ -1,4 +1,4 @@
-import type { SessionStatus as DbSessionStatus } from '@prisma-gen/client';
+import type { SessionStatus as DbSessionStatus } from '@factory-factory/core';
 import {
   Activity,
   CheckCircle2,

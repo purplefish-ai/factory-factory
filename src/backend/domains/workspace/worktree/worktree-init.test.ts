@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveSelectedModel } from '@/shared/claude';
 

@@ -1,4 +1,4 @@
-import { SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration';
 import {
   claudeSessionAccessor,

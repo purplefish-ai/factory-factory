@@ -7,7 +7,8 @@
 import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { type DecisionLog, SessionStatus } from '@prisma-gen/client';
+import { SessionStatus } from '@factory-factory/core';
+import type { DecisionLog } from '@prisma-gen/client';
 import { z } from 'zod';
 import { sessionDataService } from '@/backend/domains/session';
 import { workspaceDataService } from '@/backend/domains/workspace';

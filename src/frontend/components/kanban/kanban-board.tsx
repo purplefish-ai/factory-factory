@@ -1,4 +1,4 @@
-import type { KanbanColumn as KanbanColumnType } from '@prisma-gen/browser';
+import type { KanbanColumn as KanbanColumnType } from '@factory-factory/core';
 import { RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';

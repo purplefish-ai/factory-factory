@@ -1,4 +1,5 @@
-import type { CIStatus, Workspace, WorkspaceStatus } from '@prisma-gen/browser';
+import type { CIStatus, WorkspaceStatus } from '@factory-factory/core';
+import type { Workspace } from '@prisma-gen/browser';
 import { GitBranch } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
