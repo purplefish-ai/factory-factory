@@ -1,5 +1,5 @@
 import { FileJson, Loader2, Play } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,12 +18,31 @@ interface DevServerSetupPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workspaceId: string;
+  currentRunCommand?: string | null;
+  currentCleanupCommand?: string | null;
 }
 
-export function DevServerSetupPanel({ open, onOpenChange, workspaceId }: DevServerSetupPanelProps) {
-  const [runCommand, setRunCommand] = useState('npm run dev');
+export function DevServerSetupPanel({
+  open,
+  onOpenChange,
+  workspaceId,
+  currentRunCommand,
+  currentCleanupCommand,
+}: DevServerSetupPanelProps) {
+  const isEditing = !!currentRunCommand;
+
+  const [runCommand, setRunCommand] = useState('');
   const [setupCommand, setSetupCommand] = useState('');
   const [cleanupCommand, setCleanupCommand] = useState('');
+
+  // Reset form fields when panel opens
+  useEffect(() => {
+    if (open) {
+      setRunCommand(currentRunCommand ?? 'npm run dev');
+      setSetupCommand('');
+      setCleanupCommand(currentCleanupCommand ?? '');
+    }
+  }, [open, currentRunCommand, currentCleanupCommand]);
 
   const utils = trpc.useUtils();
 
@@ -54,12 +73,12 @@ export function DevServerSetupPanel({ open, onOpenChange, workspaceId }: DevServ
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Play className="h-5 w-5 text-green-600" />
-            Setup Dev Server
+            {isEditing ? 'Edit Dev Server' : 'Setup Dev Server'}
           </SheetTitle>
           <SheetDescription>
-            Configure your dev server to enable the play button. This will create a{' '}
-            <code className="bg-muted px-1 rounded text-xs">factory-factory.json</code> file in your
-            project root.
+            {isEditing
+              ? 'Update your dev server configuration. Changes will be written to factory-factory.json.'
+              : 'Configure your dev server to enable the play button. This will create a factory-factory.json file in your project root.'}
           </SheetDescription>
         </SheetHeader>
 
@@ -208,12 +227,12 @@ export function DevServerSetupPanel({ open, onOpenChange, workspaceId }: DevServ
             {createConfig.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                Saving...
               </>
             ) : (
               <>
                 <FileJson className="mr-2 h-4 w-4" />
-                Create Configuration
+                {isEditing ? 'Save Configuration' : 'Create Configuration'}
               </>
             )}
           </Button>

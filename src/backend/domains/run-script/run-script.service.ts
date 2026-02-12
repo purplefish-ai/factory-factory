@@ -572,6 +572,7 @@ export class RunScriptService {
       startedAt: freshWorkspace.runScriptStartedAt,
       hasRunScript: !!freshWorkspace.runScriptCommand,
       runScriptCommand: freshWorkspace.runScriptCommand,
+      runScriptCleanupCommand: freshWorkspace.runScriptCleanupCommand,
     };
   }
 
