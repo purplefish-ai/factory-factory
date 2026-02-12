@@ -47,7 +47,7 @@ export async function createIntegrationDatabase(): Promise<IntegrationDatabase> 
 
 export async function clearIntegrationDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.terminalSession.deleteMany();
-  await prisma.claudeSession.deleteMany();
+  await prisma.agentSession.deleteMany();
   await prisma.workspace.deleteMany();
   await prisma.project.deleteMany();
   await prisma.userSettings.deleteMany();

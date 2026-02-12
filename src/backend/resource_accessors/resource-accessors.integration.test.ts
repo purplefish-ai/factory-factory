@@ -370,12 +370,13 @@ describe('resource accessors integration', () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
 
-      const existing = await prisma.claudeSession.create({
+      const existing = await prisma.agentSession.create({
         data: {
           workspaceId: workspace.id,
           workflow: 'ci-fix',
           status: SessionStatus.RUNNING,
           model: 'sonnet',
+          provider: 'CLAUDE',
         },
       });
 
@@ -398,19 +399,21 @@ describe('resource accessors integration', () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
 
-      await prisma.claudeSession.createMany({
+      await prisma.agentSession.createMany({
         data: [
           {
             workspaceId: workspace.id,
             workflow: 'explore',
             status: SessionStatus.COMPLETED,
             model: 'sonnet',
+            provider: 'CLAUDE',
           },
           {
             workspaceId: workspace.id,
             workflow: 'feature',
             status: SessionStatus.COMPLETED,
             model: 'opus',
+            provider: 'CLAUDE',
           },
         ],
       });
@@ -430,12 +433,13 @@ describe('resource accessors integration', () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
 
-      await prisma.claudeSession.create({
+      await prisma.agentSession.create({
         data: {
           workspaceId: workspace.id,
           workflow: 'explore',
           model: 'opus',
           status: SessionStatus.COMPLETED,
+          provider: 'CLAUDE',
         },
       });
 
@@ -452,7 +456,7 @@ describe('resource accessors integration', () => {
         throw new Error(`Expected created outcome, received ${acquired.outcome}`);
       }
 
-      const created = await prisma.claudeSession.findUniqueOrThrow({
+      const created = await prisma.agentSession.findUniqueOrThrow({
         where: { id: acquired.sessionId },
       });
       expect(created.model).toBe('opus');

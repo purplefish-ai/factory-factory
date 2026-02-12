@@ -87,6 +87,7 @@ export class WorkspaceCreationService {
 
     // Apply ratchet default from user settings if not explicitly provided
     const ratchetEnabled = await this.resolveRatchetEnabled(source.ratchetEnabled);
+    const defaultSessionProvider = await this.resolveDefaultSessionProvider();
 
     // Create workspace record
     const workspace = await workspaceAccessor.create({
@@ -104,7 +105,11 @@ export class WorkspaceCreationService {
     }
 
     // Provision default session if enabled
-    const defaultSessionCreated = await this.provisionDefaultSession(workspace.id, configService);
+    const defaultSessionCreated = await this.provisionDefaultSession(
+      workspace.id,
+      configService,
+      defaultSessionProvider
+    );
 
     return {
       workspace,
@@ -211,13 +216,19 @@ export class WorkspaceCreationService {
     return settings.ratchetEnabled;
   }
 
+  private async resolveDefaultSessionProvider(): Promise<'CLAUDE' | 'CODEX'> {
+    const settings = await userSettingsAccessor.get();
+    return settings.defaultSessionProvider;
+  }
+
   /**
    * Provision default Claude session for workspace if max sessions > 0.
    * Returns true if session was created, false otherwise.
    */
   private async provisionDefaultSession(
     workspaceId: string,
-    configService: ConfigService
+    configService: ConfigService,
+    provider: 'CLAUDE' | 'CODEX'
   ): Promise<boolean> {
     const maxSessions = configService.getMaxSessionsPerWorkspace();
     if (maxSessions <= 0) {
@@ -226,13 +237,15 @@ export class WorkspaceCreationService {
 
     try {
       const workspace = await workspaceAccessor.findById(workspaceId);
-      const claudeProjectPath = workspace?.worktreePath
-        ? getClaudeProjectPath(workspace.worktreePath)
-        : null;
+      const claudeProjectPath =
+        provider === 'CLAUDE' && workspace?.worktreePath
+          ? getClaudeProjectPath(workspace.worktreePath)
+          : null;
       await claudeSessionAccessor.create({
         workspaceId,
         workflow: DEFAULT_FOLLOWUP,
         name: 'Chat 1',
+        provider,
         claudeProjectPath,
       });
       return true;

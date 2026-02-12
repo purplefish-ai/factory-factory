@@ -1,5 +1,6 @@
-import type { ClaudeSession, Project, Workspace } from '@prisma-gen/client';
+import type { Project, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionRepository } from './session.repository';
 

@@ -18,6 +18,12 @@ vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
   },
 }));
 
+vi.mock('@/backend/resource_accessors/user-settings.accessor', () => ({
+  userSettingsAccessor: {
+    get: vi.fn(),
+  },
+}));
+
 vi.mock('./fixer-session.service', () => ({
   fixerSessionService: {
     acquireAndDispatch: vi.fn(),
@@ -34,6 +40,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { fixerSessionService } from './fixer-session.service';
 import {
@@ -80,6 +87,20 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
     vi.mocked(mockGitHubBridge.getAuthenticatedUsername).mockResolvedValue(null);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
+    vi.mocked(userSettingsAccessor.get).mockResolvedValue({
+      id: 'settings-1',
+      userId: 'default',
+      preferredIde: 'cursor',
+      customIdeCommand: null,
+      playSoundOnComplete: true,
+      notificationSoundPath: null,
+      workspaceOrder: null,
+      cachedSlashCommands: null,
+      ratchetEnabled: false,
+      defaultSessionProvider: 'CLAUDE',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
   });
 
   it('checks workspaces and processes each', async () => {

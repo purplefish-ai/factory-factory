@@ -10,6 +10,7 @@ export {
   type ExportData,
   type ExportDataV1,
   type ExportDataV2,
+  type ExportDataV3,
   exportDataSchema,
 } from '@/shared/schemas/export-data.schema';
 // Configuration service

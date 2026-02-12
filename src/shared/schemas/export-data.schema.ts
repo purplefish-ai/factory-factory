@@ -34,6 +34,8 @@ const RatchetState = z.enum([
   'MERGED',
 ]);
 const SessionStatus = z.enum(['IDLE', 'RUNNING', 'PAUSED', 'COMPLETED', 'FAILED']);
+const SessionProvider = z.enum(['CLAUDE', 'CODEX']);
+const WorkspaceProviderSelection = z.enum(['WORKSPACE_DEFAULT', 'CLAUDE', 'CODEX']);
 
 const exportedProjectSchema = z.object({
   id: z.string(),
@@ -109,6 +111,12 @@ const exportedWorkspaceSchemaV2 = exportedWorkspaceSchemaV1.extend({
   ratchetLastNotifiedState: RatchetState.nullable(),
 });
 
+// Schema v3 - includes provider default selection fields
+const exportedWorkspaceSchemaV3 = exportedWorkspaceSchemaV2.extend({
+  defaultSessionProvider: WorkspaceProviderSelection,
+  ratchetSessionProvider: WorkspaceProviderSelection,
+});
+
 const exportedClaudeSessionSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -119,6 +127,22 @@ const exportedClaudeSessionSchema = z.object({
   claudeSessionId: z.string().nullable(),
   claudeProjectPath: z.string().nullable().optional(),
   claudeProcessPid: z.number().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const exportedAgentSessionSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string().nullable(),
+  workflow: z.string(),
+  model: z.string(),
+  status: SessionStatus,
+  provider: SessionProvider,
+  providerSessionId: z.string().nullable(),
+  providerProjectPath: z.string().nullable(),
+  providerProcessPid: z.number().nullable(),
+  providerMetadata: z.unknown().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -169,6 +193,11 @@ const exportedUserSettingsSchemaV2 = z.object({
   prReviewFixPrompt: z.string().nullable().optional(),
 });
 
+// Schema v3 - includes provider default field
+const exportedUserSettingsSchemaV3 = exportedUserSettingsSchemaV2.extend({
+  defaultSessionProvider: SessionProvider,
+});
+
 // Schema v1 - for importing legacy backups
 const exportDataSchemaV1 = z.object({
   meta: z.object({
@@ -201,20 +230,43 @@ const exportDataSchemaV2 = z.object({
   }),
 });
 
-// Main export schema that accepts both v1 and v2
-export const exportDataSchema = z.union([exportDataSchemaV2, exportDataSchemaV1]);
+const exportDataSchemaV3 = z.object({
+  meta: z.object({
+    exportedAt: z.string(),
+    version: z.string(),
+    schemaVersion: z.literal(3),
+  }),
+  data: z.object({
+    projects: z.array(exportedProjectSchema),
+    workspaces: z.array(exportedWorkspaceSchemaV3),
+    agentSessions: z.array(exportedAgentSessionSchema),
+    terminalSessions: z.array(exportedTerminalSessionSchema),
+    userSettings: exportedUserSettingsSchemaV3.nullable(),
+  }),
+});
+
+// Main export schema that accepts all known versions.
+export const exportDataSchema = z.union([
+  exportDataSchemaV3,
+  exportDataSchemaV2,
+  exportDataSchemaV1,
+]);
 
 // Export individual schemas for backend use (avoids accessing Zod internals)
 export {
   exportedProjectSchema,
   exportedWorkspaceSchemaV1,
   exportedWorkspaceSchemaV2,
+  exportedWorkspaceSchemaV3,
   exportedClaudeSessionSchema,
+  exportedAgentSessionSchema,
   exportedTerminalSessionSchema,
   exportedUserSettingsSchemaV1,
   exportedUserSettingsSchemaV2,
+  exportedUserSettingsSchemaV3,
 };
 
-export type ExportData = z.infer<typeof exportDataSchemaV2>;
+export type ExportData = z.infer<typeof exportDataSchemaV3>;
 export type ExportDataV1 = z.infer<typeof exportDataSchemaV1>;
 export type ExportDataV2 = z.infer<typeof exportDataSchemaV2>;
+export type ExportDataV3 = z.infer<typeof exportDataSchemaV3>;

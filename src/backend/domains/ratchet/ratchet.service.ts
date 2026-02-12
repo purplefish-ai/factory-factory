@@ -9,9 +9,11 @@
 
 import { EventEmitter } from 'node:events';
 import { CIStatus, RatchetState, SessionStatus } from '@factory-factory/core';
+import type { SessionProvider } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
   SERVICE_CACHE_TTL_MS,
@@ -23,6 +25,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
+import { resolveRatchetProviderFromWorkspace } from './provider-selection';
 
 const logger = createLogger('ratchet');
 
@@ -104,6 +107,8 @@ interface WorkspaceWithPR {
   id: string;
   prUrl: string;
   prNumber: number | null;
+  defaultSessionProvider?: 'WORKSPACE_DEFAULT' | 'CLAUDE' | 'CODEX';
+  ratchetSessionProvider?: 'WORKSPACE_DEFAULT' | 'CLAUDE' | 'CODEX';
   ratchetEnabled: boolean;
   ratchetState: RatchetState;
   ratchetActiveSessionId: string | null;
@@ -1034,9 +1039,24 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
+    const resolvedRatchetProvider = await this.resolveRatchetProvider(workspace);
     const session = await claudeSessionAccessor.findById(workspace.ratchetActiveSessionId);
     if (!session) {
       await this.clearFailedRatchetDispatch(workspace, 'session not found in database');
+      return null;
+    }
+
+    if (session.provider !== resolvedRatchetProvider) {
+      await this.clearFailedRatchetDispatch(
+        workspace,
+        `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`
+      );
+      await this.stopSessionForProviderMismatch(
+        workspace.id,
+        session.id,
+        resolvedRatchetProvider,
+        session.provider
+      );
       return null;
     }
 
@@ -1052,16 +1072,8 @@ class RatchetService extends EventEmitter {
 
     // Ratchet session has completed its current unit of work: close it to avoid lingering idle agents.
     if (!this.session.isSessionWorking(session.id)) {
-      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
-      try {
-        await this.session.stopSession(session.id);
-      } catch (error) {
-        logger.warn('Failed to stop completed ratchet session', {
-          workspaceId: workspace.id,
-          sessionId: session.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      await this.clearActiveRatchetSession(workspace.id);
+      await this.stopCompletedRatchetSession(workspace.id, session.id);
       return null;
     }
 
@@ -1091,6 +1103,51 @@ class RatchetService extends EventEmitter {
   private async hasActiveSession(workspaceId: string): Promise<boolean> {
     const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
     return sessions.some((session) => this.session.isSessionWorking(session.id));
+  }
+
+  private async clearActiveRatchetSession(workspaceId: string): Promise<void> {
+    await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: null });
+  }
+
+  private async stopCompletedRatchetSession(workspaceId: string, sessionId: string): Promise<void> {
+    try {
+      await this.session.stopSession(sessionId);
+    } catch (error) {
+      logger.warn('Failed to stop completed ratchet session', {
+        workspaceId,
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async stopSessionForProviderMismatch(
+    workspaceId: string,
+    sessionId: string,
+    expectedProvider: SessionProvider,
+    actualProvider: SessionProvider
+  ): Promise<void> {
+    try {
+      await this.session.stopSession(sessionId);
+    } catch (error) {
+      logger.warn('Failed to stop mismatched ratchet provider session', {
+        workspaceId,
+        sessionId,
+        expectedProvider,
+        actualProvider,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async resolveRatchetProvider(workspace: WorkspaceWithPR): Promise<SessionProvider> {
+    const selectedProvider = resolveRatchetProviderFromWorkspace(workspace);
+    if (selectedProvider) {
+      return selectedProvider;
+    }
+
+    const settings = await userSettingsAccessor.get();
+    return settings.defaultSessionProvider;
   }
 
   private resolveRatchetPrContext(

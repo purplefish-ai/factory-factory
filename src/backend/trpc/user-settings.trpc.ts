@@ -4,6 +4,7 @@
  * Provides operations for managing user settings (IDE preferences, etc).
  */
 
+import { SessionProvider } from '@prisma-gen/client';
 import { z } from 'zod';
 import { userSettingsQueryService } from '@/backend/domains/workspace';
 import { execCommand } from '@/backend/lib/shell';
@@ -41,6 +42,8 @@ export const userSettingsRouter = router({
         notificationSoundPath: z.string().nullable().optional(),
         // Ratchet settings
         ratchetEnabled: z.boolean().optional(),
+        // Session provider defaults
+        defaultSessionProvider: z.nativeEnum(SessionProvider).optional(),
       })
     )
     .mutation(async ({ input }) => {

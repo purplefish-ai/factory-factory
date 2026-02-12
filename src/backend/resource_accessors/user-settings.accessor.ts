@@ -1,4 +1,4 @@
-import type { Prisma, UserSettings } from '@prisma-gen/client';
+import type { Prisma, SessionProvider, UserSettings } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 
 interface UpdateUserSettingsInput {
@@ -9,6 +9,7 @@ interface UpdateUserSettingsInput {
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   // Ratchet settings
   ratchetEnabled?: boolean;
+  defaultSessionProvider?: SessionProvider;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }
@@ -34,6 +35,7 @@ class UserSettingsAccessor {
           preferredIde: 'cursor',
           customIdeCommand: null,
           playSoundOnComplete: true,
+          defaultSessionProvider: 'CLAUDE',
         },
       });
     }
@@ -57,6 +59,7 @@ class UserSettingsAccessor {
         customIdeCommand: data.customIdeCommand ?? null,
         playSoundOnComplete: data.playSoundOnComplete ?? true,
         cachedSlashCommands: data.cachedSlashCommands ?? undefined,
+        defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
       },
     });
   }

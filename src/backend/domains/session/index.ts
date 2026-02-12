@@ -39,8 +39,9 @@ export {
   processRegistry,
   SessionManager,
 } from './claude';
-// Session data access
 export { sessionDataService } from './data/session-data.service';
+// Session data access
+export { sessionProviderResolverService } from './data/session-provider-resolver.service';
 export type { SessionProcessManager } from './lifecycle/session.process-manager';
 export { sessionProcessManager } from './lifecycle/session.process-manager';
 export { sessionPromptBuilder } from './lifecycle/session.prompt-builder';

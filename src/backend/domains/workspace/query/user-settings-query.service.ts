@@ -12,6 +12,7 @@ class UserSettingsQueryService {
     playSoundOnComplete?: boolean;
     notificationSoundPath?: string | null;
     ratchetEnabled?: boolean;
+    defaultSessionProvider?: 'CLAUDE' | 'CODEX';
   }): Promise<UserSettings> {
     return userSettingsAccessor.update(data);
   }

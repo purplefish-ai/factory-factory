@@ -1,6 +1,9 @@
 import type { SessionStatus } from '@factory-factory/core';
-import type { ClaudeSession, TerminalSession } from '@prisma-gen/client';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import type { SessionProvider, TerminalSession } from '@prisma-gen/client';
+import {
+  type ClaudeSession,
+  claudeSessionAccessor,
+} from '@/backend/resource_accessors/claude-session.accessor';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 
 class SessionDataService {
@@ -12,7 +15,7 @@ class SessionDataService {
 
   findClaudeSessionsByWorkspaceId(
     workspaceId: string,
-    filters?: { status?: SessionStatus; limit?: number }
+    filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
   ): Promise<ClaudeSession[]> {
     return claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
   }
@@ -22,6 +25,7 @@ class SessionDataService {
     name?: string;
     workflow: string;
     model?: string;
+    provider?: SessionProvider;
     claudeProjectPath?: string | null;
   }): Promise<ClaudeSession> {
     return claudeSessionAccessor.create(data);
@@ -34,6 +38,7 @@ class SessionDataService {
       workflow?: string;
       model?: string;
       status?: SessionStatus;
+      provider?: SessionProvider;
       claudeSessionId?: string | null;
       claudeProjectPath?: string | null;
       claudeProcessPid?: number | null;

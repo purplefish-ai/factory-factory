@@ -28,6 +28,17 @@ enum SessionStatus {
   FAILED
 }
 
+enum SessionProvider {
+  CLAUDE
+  CODEX
+}
+
+enum WorkspaceProviderSelection {
+  WORKSPACE_DEFAULT
+  CLAUDE
+  CODEX
+}
+
 enum PRState {
   NONE
   DRAFT
@@ -148,7 +159,9 @@ model Workspace {
   prUrl               String?
   githubIssueNumber   Int?
   githubIssueUrl      String?
-  claudeSessions      ClaudeSession[]
+  defaultSessionProvider WorkspaceProviderSelection @default(WORKSPACE_DEFAULT)
+  ratchetSessionProvider WorkspaceProviderSelection @default(WORKSPACE_DEFAULT)
+  agentSessions       AgentSession[]
   terminalSessions    TerminalSession[]
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
@@ -192,22 +205,26 @@ model Workspace {
   @@index([projectId, cachedKanbanColumn])
 }
 
-model ClaudeSession {
-  id               String        @id @default(cuid())
-  workspaceId      String
-  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  name             String?
-  workflow         String        // "explore", "implement", "test"
-  model            String        @default("sonnet")
-  status           SessionStatus @default(IDLE)
-  claudeSessionId  String?       // For resume
-  claudeProjectPath String?      // Persisted ~/.claude/projects/<escaped-path> for history lookup
-  claudeProcessPid Int?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+model AgentSession {
+  id                  String        @id @default(cuid())
+  workspaceId         String
+  workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name                String?
+  workflow            String // "explore", "implement", "test"
+  model               String        @default("sonnet")
+  status              SessionStatus @default(IDLE)
+  provider            SessionProvider
+  providerSessionId   String?
+  providerProjectPath String?
+  providerProcessPid  Int?
+  providerMetadata    Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   @@index([workspaceId])
   @@index([status])
+  @@index([provider])
+  @@index([workspaceId, provider])
 }
 
 model TerminalSession {
@@ -244,6 +261,7 @@ model UserSettings {
 
   // Ratchet Settings (unified PR progression)
   ratchetEnabled            Boolean  @default(false)  // Default for new GitHub-issue-created workspaces
+  defaultSessionProvider    SessionProvider @default(CLAUDE)
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

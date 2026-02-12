@@ -1,5 +1,5 @@
 import type {
-  ClaudeSession,
+  AgentSession,
   Prisma,
   Project,
   TerminalSession,
@@ -13,7 +13,7 @@ export type DataBackupTransactionClient = Prisma.TransactionClient;
 export interface DataBackupSnapshot {
   projects: Project[];
   workspaces: Workspace[];
-  claudeSessions: ClaudeSession[];
+  agentSessions: AgentSession[];
   terminalSessions: TerminalSession[];
   userSettings: UserSettings | null;
 }
@@ -23,13 +23,13 @@ class DataBackupAccessor {
     return Promise.all([
       prisma.project.findMany({ orderBy: { createdAt: 'asc' } }),
       prisma.workspace.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.claudeSession.findMany({ orderBy: { createdAt: 'asc' } }),
+      prisma.agentSession.findMany({ orderBy: { createdAt: 'asc' } }),
       prisma.terminalSession.findMany({ orderBy: { createdAt: 'asc' } }),
       prisma.userSettings.findFirst({ where: { userId: 'default' } }),
-    ]).then(([projects, workspaces, claudeSessions, terminalSessions, userSettings]) => ({
+    ]).then(([projects, workspaces, agentSessions, terminalSessions, userSettings]) => ({
       projects,
       workspaces,
-      claudeSessions,
+      agentSessions,
       terminalSessions,
       userSettings,
     }));

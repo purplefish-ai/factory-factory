@@ -1,12 +1,31 @@
 import { SessionStatus } from '@factory-factory/core';
-import type { ClaudeSession, Prisma } from '@prisma-gen/client';
+import {
+  type AgentSession,
+  Prisma,
+  SessionProvider,
+  type Workspace,
+} from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+
+export type ClaudeSession = Omit<
+  AgentSession,
+  'providerSessionId' | 'providerProjectPath' | 'providerProcessPid'
+> & {
+  claudeSessionId: string | null;
+  claudeProjectPath: string | null;
+  claudeProcessPid: number | null;
+};
+
+export type ClaudeSessionWithWorkspace = ClaudeSession & {
+  workspace: Workspace;
+};
 
 interface CreateClaudeSessionInput {
   workspaceId: string;
   name?: string;
   workflow: string;
   model?: string;
+  provider?: SessionProvider;
   claudeProjectPath?: string | null;
 }
 
@@ -15,6 +34,8 @@ interface UpdateClaudeSessionInput {
   workflow?: string;
   model?: string;
   status?: SessionStatus;
+  provider?: SessionProvider;
+  providerMetadata?: Prisma.InputJsonValue | null;
   claudeSessionId?: string | null;
   claudeProjectPath?: string | null;
   claudeProcessPid?: number | null;
@@ -22,6 +43,7 @@ interface UpdateClaudeSessionInput {
 
 interface FindByWorkspaceIdFilters {
   status?: SessionStatus;
+  provider?: SessionProvider;
   limit?: number;
 }
 
@@ -30,6 +52,7 @@ interface AcquireFixerSessionInput {
   workflow: string;
   sessionName: string;
   maxSessions: number;
+  provider?: SessionProvider;
   claudeProjectPath: string | null;
 }
 
@@ -38,74 +61,125 @@ type FixerSessionAcquisition =
   | { outcome: 'limit_reached' }
   | { outcome: 'created'; sessionId: string };
 
-// Type for ClaudeSession with workspace included
-type ClaudeSessionWithWorkspace = Prisma.ClaudeSessionGetPayload<{
+type AgentSessionWithWorkspace = Prisma.AgentSessionGetPayload<{
   include: { workspace: true };
 }>;
 
+function toLegacySession(session: AgentSession): ClaudeSession {
+  return {
+    ...session,
+    claudeSessionId: session.providerSessionId,
+    claudeProjectPath: session.providerProjectPath,
+    claudeProcessPid: session.providerProcessPid,
+  };
+}
+
+function toLegacySessionWithWorkspace(
+  session: AgentSessionWithWorkspace
+): ClaudeSessionWithWorkspace {
+  return {
+    ...toLegacySession(session),
+    workspace: session.workspace,
+  };
+}
+
 class ClaudeSessionAccessor {
   create(data: CreateClaudeSessionInput): Promise<ClaudeSession> {
-    return prisma.claudeSession.create({
-      data: {
-        workspaceId: data.workspaceId,
-        name: data.name,
-        workflow: data.workflow,
-        model: data.model ?? 'sonnet',
-        claudeProjectPath: data.claudeProjectPath ?? null,
-      },
-    });
+    return prisma.agentSession
+      .create({
+        data: {
+          workspaceId: data.workspaceId,
+          name: data.name,
+          workflow: data.workflow,
+          model: data.model ?? 'sonnet',
+          provider: data.provider ?? SessionProvider.CLAUDE,
+          providerProjectPath: data.claudeProjectPath ?? null,
+        },
+      })
+      .then(toLegacySession);
   }
 
   findById(id: string): Promise<ClaudeSessionWithWorkspace | null> {
-    return prisma.claudeSession.findUnique({
-      where: { id },
-      include: {
-        workspace: true,
-      },
-    });
+    return prisma.agentSession
+      .findUnique({
+        where: { id },
+        include: {
+          workspace: true,
+        },
+      })
+      .then((session) => (session ? toLegacySessionWithWorkspace(session) : null));
   }
 
   findByWorkspaceId(
     workspaceId: string,
     filters?: FindByWorkspaceIdFilters
   ): Promise<ClaudeSession[]> {
-    const where: Prisma.ClaudeSessionWhereInput = { workspaceId };
+    const where: Prisma.AgentSessionWhereInput = { workspaceId };
 
     if (filters?.status) {
       where.status = filters.status;
     }
 
-    return prisma.claudeSession.findMany({
-      where,
-      take: filters?.limit,
-      orderBy: { createdAt: 'asc' },
-    });
+    if (filters?.provider) {
+      where.provider = filters.provider;
+    }
+
+    return prisma.agentSession
+      .findMany({
+        where,
+        take: filters?.limit,
+        orderBy: { createdAt: 'asc' },
+      })
+      .then((sessions) => sessions.map(toLegacySession));
   }
 
   update(id: string, data: UpdateClaudeSessionInput): Promise<ClaudeSession> {
-    return prisma.claudeSession.update({
-      where: { id },
-      data,
-    });
+    const updateData: Prisma.AgentSessionUpdateInput = {
+      name: data.name,
+      workflow: data.workflow,
+      model: data.model,
+      status: data.status,
+      provider: data.provider,
+      providerMetadata:
+        data.providerMetadata === undefined
+          ? undefined
+          : data.providerMetadata === null
+            ? Prisma.JsonNull
+            : data.providerMetadata,
+      providerSessionId: data.claudeSessionId,
+      providerProjectPath: data.claudeProjectPath,
+      providerProcessPid: data.claudeProcessPid,
+    };
+
+    return prisma.agentSession
+      .update({
+        where: { id },
+        data: updateData,
+      })
+      .then(toLegacySession);
   }
 
   delete(id: string): Promise<ClaudeSession> {
-    return prisma.claudeSession.delete({
-      where: { id },
-    });
+    return prisma.agentSession
+      .delete({
+        where: { id },
+      })
+      .then(toLegacySession);
   }
 
   /**
-   * Find all sessions where claudeProcessPid is not null.
+   * Find all sessions where providerProcessPid is not null.
    * Used for orphan process detection.
    */
   findWithPid(): Promise<ClaudeSession[]> {
-    return prisma.claudeSession.findMany({
-      where: {
-        claudeProcessPid: { not: null },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+    return prisma.agentSession
+      .findMany({
+        where: {
+          providerProcessPid: { not: null },
+        },
+        orderBy: { updatedAt: 'desc' },
+      })
+      .then((sessions) => sessions.map(toLegacySession));
   }
 
   /**
@@ -114,10 +188,11 @@ class ClaudeSessionAccessor {
    */
   acquireFixerSession(input: AcquireFixerSessionInput): Promise<FixerSessionAcquisition> {
     return prisma.$transaction(async (tx) => {
-      const existingSession = await tx.claudeSession.findFirst({
+      const existingSession = await tx.agentSession.findFirst({
         where: {
           workspaceId: input.workspaceId,
           workflow: input.workflow,
+          provider: input.provider ?? SessionProvider.CLAUDE,
           status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
         },
         orderBy: { createdAt: 'desc' },
@@ -131,7 +206,7 @@ class ClaudeSessionAccessor {
         };
       }
 
-      const allSessions = await tx.claudeSession.findMany({
+      const allSessions = await tx.agentSession.findMany({
         where: { workspaceId: input.workspaceId },
         select: { id: true },
       });
@@ -140,22 +215,27 @@ class ClaudeSessionAccessor {
         return { outcome: 'limit_reached' };
       }
 
-      const recentSession = await tx.claudeSession.findFirst({
-        where: { workspaceId: input.workspaceId, workflow: { not: input.workflow } },
+      const recentSession = await tx.agentSession.findFirst({
+        where: {
+          workspaceId: input.workspaceId,
+          workflow: { not: input.workflow },
+          provider: input.provider ?? SessionProvider.CLAUDE,
+        },
         orderBy: { updatedAt: 'desc' },
         select: { model: true },
       });
 
       const model = recentSession?.model ?? 'sonnet';
 
-      const newSession = await tx.claudeSession.create({
+      const newSession = await tx.agentSession.create({
         data: {
           workspaceId: input.workspaceId,
           workflow: input.workflow,
           name: input.sessionName,
           model,
           status: SessionStatus.IDLE,
-          claudeProjectPath: input.claudeProjectPath,
+          provider: input.provider ?? SessionProvider.CLAUDE,
+          providerProjectPath: input.claudeProjectPath,
         },
       });
 

@@ -42,7 +42,7 @@ export function DataImportButton({
       const summary = [
         `Projects: ${results.projects.imported} imported, ${results.projects.skipped} skipped`,
         `Workspaces: ${results.workspaces.imported} imported, ${results.workspaces.skipped} skipped`,
-        `Claude Sessions: ${results.claudeSessions.imported} imported, ${results.claudeSessions.skipped} skipped`,
+        `Agent Sessions: ${results.agentSessions.imported} imported, ${results.agentSessions.skipped} skipped`,
         `Terminal Sessions: ${results.terminalSessions.imported} imported, ${results.terminalSessions.skipped} skipped`,
         `User Settings: ${results.userSettings.imported ? 'imported' : results.userSettings.skipped ? 'skipped (exists)' : 'none'}`,
       ].join('\n');
@@ -63,13 +63,18 @@ export function DataImportButton({
   });
 
   const buildImportSummary = (data: ParsedExportData): string => {
+    const sessionCount =
+      'agentSessions' in data.data
+        ? data.data.agentSessions.length
+        : data.data.claudeSessions.length;
+
     return [
       `Exported: ${new Date(data.meta.exportedAt).toLocaleString()}`,
       `Version: ${data.meta.version}`,
       '',
       `Projects: ${data.data.projects.length}`,
       `Workspaces: ${data.data.workspaces.length}`,
-      `Claude Sessions: ${data.data.claudeSessions.length}`,
+      `Agent Sessions: ${sessionCount}`,
       `Terminal Sessions: ${data.data.terminalSessions.length}`,
       `User Settings: ${data.data.userSettings ? 'Yes' : 'No'}`,
     ].join('\n');

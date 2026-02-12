@@ -1,5 +1,5 @@
 import type { WorkspaceStatus } from '@factory-factory/core';
-import type { Workspace } from '@prisma-gen/client';
+import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 
 class WorkspaceDataService {
@@ -35,6 +35,16 @@ class WorkspaceDataService {
       runScriptCommand,
       runScriptCleanupCommand,
     });
+  }
+
+  update(
+    id: string,
+    data: {
+      defaultSessionProvider?: WorkspaceProviderSelection;
+      ratchetSessionProvider?: WorkspaceProviderSelection;
+    }
+  ) {
+    return workspaceAccessor.update(id, data);
   }
 
   delete(id: string): Promise<Workspace> {

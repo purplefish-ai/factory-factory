@@ -41,6 +41,8 @@ describe('WorkspaceCreationService', () => {
     prUrl: null,
     githubIssueNumber: null,
     githubIssueUrl: null,
+    defaultSessionProvider: 'WORKSPACE_DEFAULT',
+    ratchetSessionProvider: 'WORKSPACE_DEFAULT',
     prNumber: null,
     prState: 'NONE',
     prReviewState: null,
@@ -123,6 +125,7 @@ describe('WorkspaceCreationService', () => {
       workspaceOrder: null,
       cachedSlashCommands: null,
       ratchetEnabled: true,
+      defaultSessionProvider: 'CLAUDE',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -139,6 +142,8 @@ describe('WorkspaceCreationService', () => {
       name: 'Chat 1',
       status: 'IDLE',
       model: 'sonnet',
+      provider: 'CLAUDE',
+      providerMetadata: null,
       claudeSessionId: null,
       claudeProjectPath: null,
       claudeProcessPid: null,
@@ -205,6 +210,7 @@ describe('WorkspaceCreationService', () => {
           workspaceOrder: null,
           cachedSlashCommands: null,
           ratchetEnabled: false,
+          defaultSessionProvider: 'CLAUDE',
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -358,6 +364,7 @@ describe('WorkspaceCreationService', () => {
           workspaceId: 'ws-123',
           workflow: 'followup',
           name: 'Chat 1',
+          provider: 'CLAUDE',
           claudeProjectPath: null,
         });
       });
@@ -396,6 +403,36 @@ describe('WorkspaceCreationService', () => {
           'Failed to create default session for workspace',
           expect.objectContaining({
             workspaceId: 'ws-123',
+          })
+        );
+      });
+
+      it('uses user default provider when creating the default session', async () => {
+        vi.spyOn(userSettingsAccessorModule.userSettingsAccessor, 'get').mockResolvedValue({
+          id: '1',
+          userId: 'default',
+          preferredIde: 'cursor',
+          customIdeCommand: '',
+          playSoundOnComplete: true,
+          notificationSoundPath: null,
+          workspaceOrder: null,
+          cachedSlashCommands: null,
+          ratchetEnabled: true,
+          defaultSessionProvider: 'CODEX',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        await service.create({
+          type: 'MANUAL',
+          projectId: 'proj-1',
+          name: 'Test',
+        });
+
+        expect(claudeSessionAccessorModule.claudeSessionAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: 'CODEX',
+            claudeProjectPath: null,
           })
         );
       });

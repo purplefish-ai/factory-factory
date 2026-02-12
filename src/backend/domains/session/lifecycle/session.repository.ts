@@ -1,4 +1,5 @@
-import type { ClaudeSession, Project, Workspace } from '@prisma-gen/client';
+import type { Project, Workspace } from '@prisma-gen/client';
+import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
 import {
   claudeSessionAccessor,
   projectAccessor,

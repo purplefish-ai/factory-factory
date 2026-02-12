@@ -1,5 +1,4 @@
 import { SessionStatus } from '@factory-factory/core';
-import type { ClaudeSession } from '@prisma-gen/client';
 import type { RewindFilesResponse } from '@/backend/domains/session/claude';
 import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';
@@ -16,6 +15,7 @@ import {
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';

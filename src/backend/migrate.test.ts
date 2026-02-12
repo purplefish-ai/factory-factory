@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -378,6 +378,145 @@ PRAGMA defer_foreign_keys=OFF;`
       expect(fks[0]?.table).toBe('users');
     } finally {
       db2.close();
+    }
+  });
+
+  it('migrates ClaudeSession rows to AgentSession with locked mapping and indexes', () => {
+    createMigrationDir('001_agent_session_cutover');
+    const migrationSqlPath = join(
+      process.cwd(),
+      'prisma',
+      'migrations',
+      '20260212163000_agent_session_provider_cutover',
+      'migration.sql'
+    );
+    setupMigration('001_agent_session_cutover', readFileSync(migrationSqlPath, 'utf-8'));
+
+    const db = new Database(databasePath);
+    try {
+      db.exec(`
+        CREATE TABLE "Project" (
+          "id" TEXT NOT NULL PRIMARY KEY
+        );
+
+        CREATE TABLE "Workspace" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "projectId" TEXT NOT NULL,
+          "name" TEXT NOT NULL,
+          "status" TEXT NOT NULL DEFAULT 'READY',
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" DATETIME NOT NULL
+        );
+
+        CREATE TABLE "UserSettings" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "userId" TEXT NOT NULL
+        );
+
+        CREATE TABLE "ClaudeSession" (
+          "id" TEXT NOT NULL PRIMARY KEY,
+          "workspaceId" TEXT NOT NULL,
+          "name" TEXT,
+          "workflow" TEXT NOT NULL,
+          "model" TEXT NOT NULL DEFAULT 'sonnet',
+          "status" TEXT NOT NULL DEFAULT 'IDLE',
+          "claudeSessionId" TEXT,
+          "claudeProjectPath" TEXT,
+          "claudeProcessPid" INTEGER,
+          "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" DATETIME NOT NULL
+        );
+      `);
+
+      db.prepare('INSERT INTO "Project" ("id") VALUES (?)').run('proj-1');
+      db.prepare(
+        'INSERT INTO "Workspace" ("id", "projectId", "name", "status", "updatedAt") VALUES (?, ?, ?, ?, ?)'
+      ).run('ws-1', 'proj-1', 'Workspace 1', 'READY', '2026-02-01T10:00:00.000Z');
+      db.prepare('INSERT INTO "UserSettings" ("id", "userId") VALUES (?, ?)').run(
+        'settings-1',
+        'default'
+      );
+      db.prepare(
+        `INSERT INTO "ClaudeSession"
+           ("id", "workspaceId", "name", "workflow", "model", "status", "claudeSessionId", "claudeProjectPath", "claudeProcessPid", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        'session-1',
+        'ws-1',
+        'Chat 1',
+        'followup',
+        'sonnet',
+        'RUNNING',
+        'claude-abc',
+        '/tmp/project',
+        4242,
+        '2026-02-01T10:01:00.000Z',
+        '2026-02-01T10:02:00.000Z'
+      );
+
+      runMigrations({
+        databasePath,
+        migrationsPath,
+        log: () => {
+          // no-op
+        },
+      });
+
+      const migrated = db
+        .prepare(
+          `SELECT "id", "workspaceId", "name", "workflow", "model", "status",
+                  "provider", "providerSessionId", "providerProjectPath",
+                  "providerProcessPid", "providerMetadata", "createdAt", "updatedAt"
+           FROM "AgentSession"
+           WHERE "id" = ?`
+        )
+        .get('session-1') as Record<string, unknown> | undefined;
+
+      expect(migrated).toMatchObject({
+        id: 'session-1',
+        workspaceId: 'ws-1',
+        name: 'Chat 1',
+        workflow: 'followup',
+        model: 'sonnet',
+        status: 'RUNNING',
+        provider: 'CLAUDE',
+        providerSessionId: 'claude-abc',
+        providerProjectPath: '/tmp/project',
+        providerProcessPid: 4242,
+        providerMetadata: null,
+        createdAt: '2026-02-01T10:01:00.000Z',
+        updatedAt: '2026-02-01T10:02:00.000Z',
+      });
+
+      const legacyTable = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ClaudeSession'")
+        .all() as Array<{ name: string }>;
+      expect(legacyTable).toHaveLength(0);
+
+      const indexNames = (
+        db
+          .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='AgentSession'")
+          .all() as Array<{
+          name: string;
+        }>
+      ).map((row) => row.name);
+      expect(indexNames).toEqual(
+        expect.arrayContaining([
+          'AgentSession_workspaceId_idx',
+          'AgentSession_status_idx',
+          'AgentSession_provider_idx',
+          'AgentSession_workspaceId_provider_idx',
+        ])
+      );
+
+      const queryPlan = db
+        .prepare(
+          'EXPLAIN QUERY PLAN SELECT * FROM "AgentSession" WHERE "workspaceId" = ? AND "provider" = ?'
+        )
+        .all('ws-1', 'CLAUDE') as Record<string, unknown>[];
+      expect(JSON.stringify(queryPlan)).toContain('AgentSession_workspaceId_provider_idx');
+    } finally {
+      db.close();
     }
   });
 });
