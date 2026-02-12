@@ -236,15 +236,14 @@ export function configureEventCollector(): void {
 
   // 2. PR snapshot updates
   prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
-    coalescer.enqueue(
-      event.workspaceId,
-      {
-        prNumber: event.prNumber,
-        prState: event.prState as PRState,
-        prCiStatus: event.prCiStatus as CIStatus,
-      },
-      'event:pr_snapshot_updated'
-    );
+    const snapshotUpdate: SnapshotUpdateInput = {
+      ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
+      prNumber: event.prNumber,
+      prState: event.prState as PRState,
+      prCiStatus: event.prCiStatus as CIStatus,
+    };
+
+    coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated');
   });
 
   // 3. Ratchet state changes
