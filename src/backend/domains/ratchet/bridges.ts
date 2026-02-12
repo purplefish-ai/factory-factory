@@ -12,8 +12,8 @@ import type { CIStatus } from '@prisma-gen/client';
 export interface RatchetSessionBridge {
   isSessionRunning(sessionId: string): boolean;
   isSessionWorking(sessionId: string): boolean;
-  stopClaudeSession(sessionId: string): Promise<void>;
-  startClaudeSession(sessionId: string, opts: { initialPrompt?: string }): Promise<void>;
+  stopSession(sessionId: string): Promise<void>;
+  startSession(sessionId: string, opts: { initialPrompt?: string }): Promise<void>;
   getClient(
     sessionId: string
   ): { isRunning(): boolean; sendMessage(msg: string): Promise<void> } | null;

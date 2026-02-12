@@ -8,20 +8,12 @@ const logger = createLogger('chat-message-handlers');
 
 export function createRewindFilesHandler(): ChatMessageHandler<RewindFilesMessage> {
   return async ({ ws, sessionId, message }) => {
-    const client = sessionService.getClient(sessionId);
-    if (!client) {
-      ws.send(
-        JSON.stringify({
-          type: 'rewind_files_error',
-          userMessageId: message.userMessageId,
-          rewindError: 'No active client for session',
-        })
-      );
-      return;
-    }
-
     try {
-      const response = await client.rewindFiles(message.userMessageId, message.dryRun);
+      const response = await sessionService.rewindSessionFiles(
+        sessionId,
+        message.userMessageId,
+        message.dryRun
+      );
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Rewind files request completed', {
           sessionId,

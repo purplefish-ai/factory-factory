@@ -313,7 +313,7 @@ class RatchetService extends EventEmitter {
     const activeSessionId = workspace.ratchetActiveSessionId;
     if (activeSessionId && this.session.isSessionRunning(activeSessionId)) {
       try {
-        await this.session.stopClaudeSession(activeSessionId);
+        await this.session.stopSession(activeSessionId);
       } catch (error) {
         logger.warn('Failed to stop active ratchet session while disabling ratchet', {
           workspaceId,
@@ -1032,7 +1032,7 @@ class RatchetService extends EventEmitter {
     if (!this.session.isSessionWorking(session.id)) {
       await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
       try {
-        await this.session.stopClaudeSession(session.id);
+        await this.session.stopSession(session.id);
       } catch (error) {
         logger.warn('Failed to stop completed ratchet session', {
           workspaceId: workspace.id,
@@ -1299,7 +1299,7 @@ class RatchetService extends EventEmitter {
           });
           await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
           if (this.session.isSessionRunning(result.sessionId)) {
-            await this.session.stopClaudeSession(result.sessionId);
+            await this.session.stopSession(result.sessionId);
           }
           return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
         }

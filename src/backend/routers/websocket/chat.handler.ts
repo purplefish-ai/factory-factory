@@ -64,7 +64,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     }
 
     // Delegate client lifecycle to sessionService
-    const client = await sessionService.getOrCreateClient(dbSessionId, {
+    const client = await sessionService.getOrCreateSessionClient(dbSessionId, {
       thinkingEnabled: options.thinkingEnabled,
       permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,

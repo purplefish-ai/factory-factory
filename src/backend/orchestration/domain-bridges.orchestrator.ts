@@ -48,8 +48,8 @@ export function configureDomainBridges(): void {
   const ratchetSessionBridge: RatchetSessionBridge = {
     isSessionRunning: (id) => sessionService.isSessionRunning(id),
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
-    stopClaudeSession: (id) => sessionService.stopClaudeSession(id),
-    startClaudeSession: (id, opts) => sessionService.startClaudeSession(id, opts),
+    stopSession: (id) => sessionService.stopSession(id),
+    startSession: (id, opts) => sessionService.startSession(id, opts),
     getClient: (id) => sessionService.getClient(id) ?? null,
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),

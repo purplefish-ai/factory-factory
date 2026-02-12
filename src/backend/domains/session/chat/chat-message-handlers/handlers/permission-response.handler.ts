@@ -1,8 +1,9 @@
 import { DEBUG_CHAT_WS } from '@/backend/domains/session/chat/chat-message-handlers/constants';
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { PermissionResponseMessage } from '@/shared/websocket';
-import { clearPendingInteractiveRequest, getClientOrSendError, sendWebSocketError } from './utils';
+import { clearPendingInteractiveRequest, sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
@@ -10,17 +11,8 @@ export function createPermissionResponseHandler(): ChatMessageHandler<Permission
   return ({ ws, sessionId, message }) => {
     const { requestId, allow } = message;
 
-    const client = getClientOrSendError({ sessionId, ws, requestId });
-    if (!client) {
-      return;
-    }
-
     try {
-      if (allow) {
-        client.approveInteractiveRequest(requestId);
-      } else {
-        client.denyInteractiveRequest(requestId, 'User denied');
-      }
+      sessionService.respondToPermissionRequest(sessionId, requestId, allow);
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
       }

@@ -1,19 +1,22 @@
 import { type ClaudeSession, SessionStatus } from '@prisma-gen/client';
+import type { RewindFilesResponse } from '@/backend/domains/session/claude';
 import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
+import {
+  type ClaudeActiveProcessSummary,
+  claudeSessionProviderAdapter,
+  type SessionProviderAdapter,
+} from '@/backend/domains/session/providers';
+import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
+import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
-import type {
-  ClientCreatedCallback as ProcessClientCreatedCallback,
-  SessionProcessManager,
-} from './session.process-manager';
-import { sessionProcessManager } from './session.process-manager';
 import type { SessionPromptBuilder } from './session.prompt-builder';
 import { sessionPromptBuilder } from './session.prompt-builder';
 import type { SessionRepository } from './session.repository';
@@ -22,17 +25,33 @@ import { sessionRepository } from './session.repository';
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
+type ActiveSessionProviderAdapter = SessionProviderAdapter<
+  ClaudeClient,
+  ClaudeClientOptions,
+  ClaudeRuntimeEventHandlers,
+  ClaudeMessage,
+  SessionDeltaEvent,
+  string | ClaudeContentItem[],
+  RewindFilesResponse,
+  RegisteredProcess,
+  ClaudeActiveProcessSummary
+>;
+
 /**
  * Callback type for client creation hook.
  * Called after a ClaudeClient is created, allowing other services to set up
  * event forwarding without creating circular dependencies.
  */
-export type ClientCreatedCallback = ProcessClientCreatedCallback;
+export type ClientCreatedCallback = (
+  sessionId: string,
+  client: ClaudeClient,
+  context: { workspaceId: string; workingDir: string }
+) => void;
 
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
-  private readonly processManager: SessionProcessManager;
+  private readonly providerAdapter: ActiveSessionProviderAdapter;
 
   private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
     return typeof client.isWorking === 'function' ? client.isWorking() : false;
@@ -56,62 +75,69 @@ class SessionService {
    * Used by chat handler to set up event forwarding without circular dependencies.
    */
   setOnClientCreated(callback: ClientCreatedCallback): void {
-    this.processManager.setOnClientCreated(callback);
+    this.providerAdapter.setOnClientCreated(callback);
   }
 
   constructor(options?: {
     repository?: SessionRepository;
     promptBuilder?: SessionPromptBuilder;
-    processManager?: SessionProcessManager;
+    providerAdapter?: ActiveSessionProviderAdapter;
   }) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
-    this.processManager = options?.processManager ?? sessionProcessManager;
+    this.providerAdapter = options?.providerAdapter ?? claudeSessionProviderAdapter;
   }
 
   /**
-   * Start a Claude session.
+   * Start a session using the active provider adapter.
    * Uses getOrCreateClient() internally for unified lifecycle management with race protection.
    */
-  async startClaudeSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
+  async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
-    if (this.processManager.isStopInProgress(sessionId)) {
+    if (this.providerAdapter.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
     // Check if session is already running to prevent duplicate message sends
-    const existingClient = this.processManager.getClient(sessionId);
+    const existingClient = this.providerAdapter.getClient(sessionId);
     if (existingClient) {
       throw new Error('Session is already running');
     }
 
     // Use getOrCreateClient for race-protected creation
     // If concurrent starts happen, one will succeed and others will wait then fail the check above
-    const client = await this.getOrCreateClient(sessionId, {
+    await this.getOrCreateSessionClient(sessionId, {
       permissionMode: 'bypassPermissions',
     });
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
     if (initialPrompt) {
-      await client.sendMessage(initialPrompt);
+      await this.providerAdapter.sendMessage(sessionId, initialPrompt);
     }
 
-    logger.info('Claude session started', { sessionId });
+    logger.info('Session started', { sessionId, provider: 'CLAUDE' });
   }
 
   /**
-   * Stop a Claude session gracefully.
+   * Backward-compatible Claude-named entrypoint used by existing public contracts.
+   */
+  async startClaudeSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
+    await this.startSession(sessionId, options);
+  }
+
+  /**
+   * Stop a session gracefully via the active provider adapter.
    * All sessions use ClaudeClient for unified lifecycle management.
    */
-  async stopClaudeSession(
+  async stopSession(
     sessionId: string,
     options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
-    if (this.processManager.isStopInProgress(sessionId)) {
+    if (this.providerAdapter.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
@@ -125,7 +151,7 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    await this.processManager.stopClient(sessionId);
+    await this.providerAdapter.stopClient(sessionId);
     await this.updateStoppedSessionState(sessionId);
 
     sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
@@ -145,7 +171,17 @@ class SessionService {
       shouldCleanupTransientRatchetSession
     );
 
-    logger.info('Claude session stopped', { sessionId });
+    logger.info('Session stopped', { sessionId, provider: 'CLAUDE' });
+  }
+
+  /**
+   * Backward-compatible Claude-named entrypoint used by existing public contracts.
+   */
+  async stopClaudeSession(
+    sessionId: string,
+    options?: { cleanupTransientRatchetSession?: boolean }
+  ): Promise<void> {
+    await this.stopSession(sessionId, options);
   }
 
   private async loadSessionForStop(sessionId: string): Promise<ClaudeSession | null> {
@@ -229,14 +265,10 @@ class SessionService {
   // ===========================================================================
 
   /**
-   * Get or create a ClaudeClient for a session.
-   * This is the single source of truth for client lifecycle management.
-   *
-   * @param sessionId - The database session ID
-   * @param options - Optional client configuration overrides
-   * @returns The ClaudeClient instance
+   * Get or create a provider client for a session.
+   * This is the single source of truth for runtime client lifecycle management.
    */
-  async getOrCreateClient(
+  async getOrCreateSessionClient(
     sessionId: string,
     options?: {
       thinkingEnabled?: boolean;
@@ -245,7 +277,7 @@ class SessionService {
     }
   ): Promise<ClaudeClient> {
     // Check for existing client first - fast path
-    const existing = this.processManager.getClient(sessionId);
+    const existing = this.providerAdapter.getClient(sessionId);
     if (existing) {
       const isWorking = this.getClientWorkingState(existing);
       sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -265,15 +297,13 @@ class SessionService {
     });
 
     try {
-      // Use processManager.getOrCreateClient() for race protection
-      // Build options first, then delegate to processManager
       const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
         thinkingEnabled: options?.thinkingEnabled,
         permissionMode: options?.permissionMode,
         model: options?.model,
       });
 
-      const client = await this.processManager.getOrCreateClient(
+      const client = await this.providerAdapter.getOrCreateClient(
         sessionId,
         clientOptions,
         handlers,
@@ -308,13 +338,61 @@ class SessionService {
   }
 
   /**
+   * Backward-compatible Claude-named entrypoint used by existing public contracts.
+   */
+  async getOrCreateClient(
+    sessionId: string,
+    options?: {
+      thinkingEnabled?: boolean;
+      permissionMode?: 'bypassPermissions' | 'plan';
+      model?: string;
+    }
+  ): Promise<ClaudeClient> {
+    return await this.getOrCreateSessionClient(sessionId, options);
+  }
+
+  /**
    * Get an existing ClaudeClient without creating one.
    *
    * @param sessionId - The database session ID
    * @returns The ClaudeClient if it exists and is running, undefined otherwise
    */
   getClient(sessionId: string): ClaudeClient | undefined {
-    return this.processManager.getClient(sessionId);
+    return this.providerAdapter.getClient(sessionId);
+  }
+
+  toPublicMessageDelta(message: ClaudeMessage, order?: number): SessionDeltaEvent {
+    return this.providerAdapter.toPublicDeltaEvent(
+      this.providerAdapter.toCanonicalAgentMessage(message, order)
+    );
+  }
+
+  async setSessionModel(sessionId: string, model?: string): Promise<void> {
+    await this.providerAdapter.setModel(sessionId, model);
+  }
+
+  async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
+    await this.providerAdapter.setThinkingBudget(sessionId, maxTokens);
+  }
+
+  async rewindSessionFiles(
+    sessionId: string,
+    userMessageId: string,
+    dryRun?: boolean
+  ): Promise<RewindFilesResponse> {
+    return await this.providerAdapter.rewindFiles(sessionId, userMessageId, dryRun);
+  }
+
+  respondToPermissionRequest(sessionId: string, requestId: string, allow: boolean): void {
+    this.providerAdapter.respondToPermission(sessionId, requestId, allow);
+  }
+
+  respondToQuestionRequest(
+    sessionId: string,
+    requestId: string,
+    answers: Record<string, string | string[]>
+  ): void {
+    this.providerAdapter.respondToQuestion(sessionId, requestId, answers);
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
@@ -322,7 +400,7 @@ class SessionService {
     const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
     const base = persisted ?? fallback;
 
-    const client = this.processManager.getClient(sessionId);
+    const client = this.providerAdapter.getClient(sessionId);
     if (client) {
       const isWorking = this.getClientWorkingState(client);
       return {
@@ -333,7 +411,7 @@ class SessionService {
       };
     }
 
-    if (this.processManager.getPendingClient(sessionId) !== undefined) {
+    if (this.providerAdapter.getPendingClient(sessionId) !== undefined) {
       return {
         phase: 'starting',
         processState: 'alive',
@@ -342,7 +420,7 @@ class SessionService {
       };
     }
 
-    if (this.processManager.isStopInProgress(sessionId)) {
+    if (this.providerAdapter.isStopInProgress(sessionId)) {
       return {
         ...base,
         phase: 'stopping',
@@ -368,7 +446,7 @@ class SessionService {
   /**
    * Internal: Set up handlers that update DB on client events.
    */
-  private buildClientEventHandlers() {
+  private buildClientEventHandlers(): ClaudeRuntimeEventHandlers {
     return {
       onSessionId: async (sessionId: string, claudeSessionId: string) => {
         try {
@@ -426,28 +504,28 @@ class SessionService {
    * Returns a RegisteredProcess interface with status, lifecycle, and resource methods.
    */
   getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
-    return this.processManager.getClaudeProcess(sessionId);
+    return this.providerAdapter.getSessionProcess(sessionId);
   }
 
   /**
    * Check if a session is running in memory
    */
   isSessionRunning(sessionId: string): boolean {
-    return this.processManager.isSessionRunning(sessionId);
+    return this.providerAdapter.isSessionRunning(sessionId);
   }
 
   /**
    * Check if a session is actively working (not just alive, but processing)
    */
   isSessionWorking(sessionId: string): boolean {
-    return this.processManager.isSessionWorking(sessionId);
+    return this.providerAdapter.isSessionWorking(sessionId);
   }
 
   /**
    * Check if any session in the given list is actively working
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
-    return this.processManager.isAnySessionWorking(sessionIds);
+    return this.providerAdapter.isAnySessionWorking(sessionIds);
   }
 
   /**
@@ -485,7 +563,7 @@ class SessionService {
     resourceUsage: ResourceUsage | null;
     idleTimeMs: number;
   }> {
-    return this.processManager.getAllActiveProcesses();
+    return this.providerAdapter.getAllActiveProcesses();
   }
 
   /**
@@ -493,7 +571,7 @@ class SessionService {
    * Returns an iterator of [sessionId, client] pairs.
    */
   getAllClients(): IterableIterator<[string, ClaudeClient]> {
-    return this.processManager.getAllClients();
+    return this.providerAdapter.getAllClients();
   }
 
   /**
@@ -501,17 +579,17 @@ class SessionService {
    * @param timeoutMs - Timeout for each client stop operation
    */
   async stopAllClients(timeoutMs = 5000): Promise<void> {
-    await this.processManager.stopAllClients(timeoutMs);
+    await this.providerAdapter.stopAllClients(timeoutMs);
   }
 
   private shouldStopWorkspaceSession(session: { id: string; status: SessionStatus }): {
     shouldStop: boolean;
-    pendingClient: ReturnType<SessionProcessManager['getPendingClient']>;
+    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>;
   } {
-    const pendingClient = this.processManager.getPendingClient(session.id);
+    const pendingClient = this.providerAdapter.getPendingClient(session.id);
     const shouldStop = Boolean(
       session.status === SessionStatus.RUNNING ||
-        this.processManager.getClaudeProcess(session.id) ||
+        this.providerAdapter.getSessionProcess(session.id) ||
         pendingClient
     );
     return { shouldStop, pendingClient };
@@ -520,7 +598,7 @@ class SessionService {
   private async waitForPendingClient(
     workspaceId: string,
     sessionId: string,
-    pendingClient: ReturnType<SessionProcessManager['getPendingClient']>
+    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>
   ): Promise<void> {
     if (!pendingClient) {
       return;
@@ -548,7 +626,7 @@ class SessionService {
     await this.waitForPendingClient(workspaceId, session.id, pendingClient);
 
     try {
-      await this.stopClaudeSession(session.id);
+      await this.stopSession(session.id);
     } catch (error) {
       logger.error('Failed to stop workspace session', {
         sessionId: session.id,

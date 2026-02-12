@@ -1,12 +1,5 @@
 import type WebSocket from 'ws';
-import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-
-interface GetClientOptions {
-  sessionId: string;
-  ws: WebSocket;
-  requestId?: string;
-}
 
 export function sendWebSocketError(ws: WebSocket, message: string): void {
   ws.send(JSON.stringify({ type: 'error', message }));
@@ -14,20 +7,4 @@ export function sendWebSocketError(ws: WebSocket, message: string): void {
 
 export function clearPendingInteractiveRequest(sessionId: string, requestId: string): void {
   sessionDomainService.clearPendingInteractiveRequestIfMatches(sessionId, requestId);
-}
-
-export function getClientOrSendError({
-  sessionId,
-  ws,
-  requestId,
-}: GetClientOptions): NonNullable<ReturnType<typeof sessionService.getClient>> | null {
-  const client = sessionService.getClient(sessionId);
-  if (!client) {
-    if (requestId) {
-      clearPendingInteractiveRequest(sessionId, requestId);
-    }
-    sendWebSocketError(ws, 'No active client for session');
-    return null;
-  }
-  return client;
 }
