@@ -2,8 +2,8 @@ import type { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/cl
 import { asConcreteWorkspaceProvider } from '@/backend/lib/provider-selection';
 
 export function resolveRatchetProviderFromWorkspace(workspace: {
-  ratchetSessionProvider?: WorkspaceProviderSelection | null;
-  defaultSessionProvider?: WorkspaceProviderSelection | null;
+  ratchetSessionProvider: WorkspaceProviderSelection;
+  defaultSessionProvider: WorkspaceProviderSelection;
 }): SessionProvider | null {
   return (
     asConcreteWorkspaceProvider(workspace.ratchetSessionProvider) ??

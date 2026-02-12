@@ -5,8 +5,8 @@ import { resolveRatchetProviderFromWorkspace } from './provider-selection';
 
 type RatchetProviderWorkspace = {
   id: string;
-  ratchetSessionProvider?: WorkspaceProviderSelection | null;
-  defaultSessionProvider?: WorkspaceProviderSelection | null;
+  ratchetSessionProvider: WorkspaceProviderSelection;
+  defaultSessionProvider: WorkspaceProviderSelection;
 };
 
 class RatchetProviderResolverService {

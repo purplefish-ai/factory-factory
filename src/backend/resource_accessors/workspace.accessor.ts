@@ -88,6 +88,21 @@ type WorkspaceWithAgentSessions = Prisma.WorkspaceGetPayload<{
   include: { agentSessions: true; terminalSessions: true };
 }>;
 
+type WorkspaceForRatchet = {
+  id: string;
+  prUrl: string;
+  prNumber: number | null;
+  prState: PRState;
+  prCiStatus: CIStatus;
+  defaultSessionProvider: WorkspaceProviderSelection;
+  ratchetSessionProvider: WorkspaceProviderSelection;
+  ratchetEnabled: boolean;
+  ratchetState: RatchetState;
+  ratchetActiveSessionId: string | null;
+  ratchetLastCiRunId: string | null;
+  prReviewLastCheckedAt: Date | null;
+};
+
 export type WorkspaceWithSessions = Omit<WorkspaceWithAgentSessions, 'agentSessions'> & {
   claudeSessions: WorkspaceWithAgentSessions['agentSessions'];
 };
@@ -605,22 +620,7 @@ class WorkspaceAccessor {
    * Find READY workspaces with PR URLs for ratchet monitoring.
    * Returns workspaces that have PRs to monitor for progression.
    */
-  findWithPRsForRatchet(): Promise<
-    Array<{
-      id: string;
-      prUrl: string;
-      prNumber: number | null;
-      prState: PRState;
-      prCiStatus: CIStatus;
-      defaultSessionProvider?: WorkspaceProviderSelection;
-      ratchetSessionProvider?: WorkspaceProviderSelection;
-      ratchetEnabled: boolean;
-      ratchetState: RatchetState;
-      ratchetActiveSessionId: string | null;
-      ratchetLastCiRunId: string | null;
-      prReviewLastCheckedAt: Date | null;
-    }>
-  > {
+  findWithPRsForRatchet(): Promise<WorkspaceForRatchet[]> {
     return prisma.workspace.findMany({
       where: {
         status: 'READY',
@@ -644,41 +644,13 @@ class WorkspaceAccessor {
         prReviewLastCheckedAt: true,
       },
       orderBy: { ratchetLastCheckedAt: 'asc' }, // Check oldest first
-    }) as Promise<
-      Array<{
-        id: string;
-        prUrl: string;
-        prNumber: number | null;
-        prState: PRState;
-        prCiStatus: CIStatus;
-        defaultSessionProvider?: WorkspaceProviderSelection;
-        ratchetSessionProvider?: WorkspaceProviderSelection;
-        ratchetEnabled: boolean;
-        ratchetState: RatchetState;
-        ratchetActiveSessionId: string | null;
-        ratchetLastCiRunId: string | null;
-        prReviewLastCheckedAt: Date | null;
-      }>
-    >;
+    }) as Promise<WorkspaceForRatchet[]>;
   }
 
   /**
    * Find a single READY workspace with PR for ratchet processing.
    */
-  findForRatchetById(id: string): Promise<{
-    id: string;
-    prUrl: string;
-    prNumber: number | null;
-    prState: PRState;
-    prCiStatus: CIStatus;
-    defaultSessionProvider?: WorkspaceProviderSelection;
-    ratchetSessionProvider?: WorkspaceProviderSelection;
-    ratchetEnabled: boolean;
-    ratchetState: RatchetState;
-    ratchetActiveSessionId: string | null;
-    ratchetLastCiRunId: string | null;
-    prReviewLastCheckedAt: Date | null;
-  } | null> {
+  findForRatchetById(id: string): Promise<WorkspaceForRatchet | null> {
     return prisma.workspace.findFirst({
       where: {
         id,
@@ -699,20 +671,7 @@ class WorkspaceAccessor {
         ratchetLastCiRunId: true,
         prReviewLastCheckedAt: true,
       },
-    }) as Promise<{
-      id: string;
-      prUrl: string;
-      prNumber: number | null;
-      prState: PRState;
-      prCiStatus: CIStatus;
-      defaultSessionProvider?: WorkspaceProviderSelection;
-      ratchetSessionProvider?: WorkspaceProviderSelection;
-      ratchetEnabled: boolean;
-      ratchetState: RatchetState;
-      ratchetActiveSessionId: string | null;
-      ratchetLastCiRunId: string | null;
-      prReviewLastCheckedAt: Date | null;
-    } | null>;
+    }) as Promise<WorkspaceForRatchet | null>;
   }
 }
 

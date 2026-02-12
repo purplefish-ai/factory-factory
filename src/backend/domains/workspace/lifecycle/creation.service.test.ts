@@ -201,6 +201,10 @@ describe('WorkspaceCreationService', () => {
             ratchetEnabled: false,
           })
         );
+        expect(userSettingsAccessorModule.userSettingsAccessor.get).not.toHaveBeenCalled();
+        expect(
+          userSettingsAccessorModule.userSettingsAccessor.getDefaultSessionProvider
+        ).toHaveBeenCalled();
       });
 
       it('should default to user settings ratchetEnabled when not provided', async () => {
@@ -235,6 +239,21 @@ describe('WorkspaceCreationService', () => {
             ratchetEnabled: false,
           })
         );
+      });
+
+      it('fetches user settings once when ratchetEnabled is implicit', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'MANUAL',
+          projectId: 'proj-1',
+          name: 'My Workspace',
+        };
+
+        await service.create(source);
+
+        expect(userSettingsAccessorModule.userSettingsAccessor.get).toHaveBeenCalledTimes(1);
+        expect(
+          userSettingsAccessorModule.userSettingsAccessor.getDefaultSessionProvider
+        ).not.toHaveBeenCalled();
       });
     });
 
@@ -412,10 +431,20 @@ describe('WorkspaceCreationService', () => {
       });
 
       it('uses user default provider when creating the default session', async () => {
-        vi.spyOn(
-          userSettingsAccessorModule.userSettingsAccessor,
-          'getDefaultSessionProvider'
-        ).mockResolvedValue('CODEX');
+        vi.spyOn(userSettingsAccessorModule.userSettingsAccessor, 'get').mockResolvedValue({
+          id: '1',
+          userId: 'default',
+          preferredIde: 'cursor',
+          customIdeCommand: '',
+          playSoundOnComplete: true,
+          notificationSoundPath: null,
+          workspaceOrder: null,
+          cachedSlashCommands: null,
+          ratchetEnabled: true,
+          defaultSessionProvider: 'CODEX',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
 
         await service.create({
           type: 'MANUAL',

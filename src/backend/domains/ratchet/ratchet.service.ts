@@ -102,18 +102,9 @@ export interface RatchetCheckResult {
   results: WorkspaceRatchetResult[];
 }
 
-interface WorkspaceWithPR {
-  id: string;
-  prUrl: string;
-  prNumber: number | null;
-  defaultSessionProvider?: 'WORKSPACE_DEFAULT' | 'CLAUDE' | 'CODEX';
-  ratchetSessionProvider?: 'WORKSPACE_DEFAULT' | 'CLAUDE' | 'CODEX';
-  ratchetEnabled: boolean;
-  ratchetState: RatchetState;
-  ratchetActiveSessionId: string | null;
-  ratchetLastCiRunId: string | null;
-  prReviewLastCheckedAt: Date | null;
-}
+type WorkspaceWithPR = NonNullable<
+  Awaited<ReturnType<typeof workspaceAccessor.findForRatchetById>>
+>;
 
 export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
 

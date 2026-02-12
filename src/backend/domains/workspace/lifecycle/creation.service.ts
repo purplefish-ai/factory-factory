@@ -1,4 +1,4 @@
-import type { Prisma, Workspace } from '@prisma-gen/client';
+import type { Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
 import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
@@ -85,9 +85,10 @@ export class WorkspaceCreationService {
     // Validate and prepare creation based on source type
     const { preparedInput, initMode } = await this.prepareCreation(source);
 
-    // Apply ratchet default from user settings if not explicitly provided
-    const ratchetEnabled = await this.resolveRatchetEnabled(source.ratchetEnabled);
-    const defaultSessionProvider = await this.resolveDefaultSessionProvider();
+    // Apply workspace creation defaults from user settings where needed.
+    const { ratchetEnabled, defaultSessionProvider } = await this.resolveWorkspaceCreationDefaults(
+      source.ratchetEnabled
+    );
 
     // Create workspace record
     const workspace = await workspaceAccessor.create({
@@ -205,19 +206,22 @@ export class WorkspaceCreationService {
     }
   }
 
-  /**
-   * Resolve ratchet enabled flag with user settings default.
-   */
-  private async resolveRatchetEnabled(explicit?: boolean): Promise<boolean> {
-    if (explicit !== undefined) {
-      return explicit;
+  private async resolveWorkspaceCreationDefaults(explicitRatchetEnabled?: boolean): Promise<{
+    ratchetEnabled: boolean;
+    defaultSessionProvider: SessionProvider;
+  }> {
+    if (explicitRatchetEnabled !== undefined) {
+      return {
+        ratchetEnabled: explicitRatchetEnabled,
+        defaultSessionProvider: await userSettingsAccessor.getDefaultSessionProvider(),
+      };
     }
-    const settings = await userSettingsAccessor.get();
-    return settings.ratchetEnabled;
-  }
 
-  private resolveDefaultSessionProvider(): Promise<'CLAUDE' | 'CODEX'> {
-    return userSettingsAccessor.getDefaultSessionProvider();
+    const settings = await userSettingsAccessor.get();
+    return {
+      ratchetEnabled: settings.ratchetEnabled,
+      defaultSessionProvider: settings.defaultSessionProvider,
+    };
   }
 
   /**
@@ -227,7 +231,7 @@ export class WorkspaceCreationService {
   private async provisionDefaultSession(
     workspaceId: string,
     configService: ConfigService,
-    provider: 'CLAUDE' | 'CODEX'
+    provider: SessionProvider
   ): Promise<boolean> {
     const maxSessions = configService.getMaxSessionsPerWorkspace();
     if (maxSessions <= 0) {

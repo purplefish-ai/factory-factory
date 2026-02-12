@@ -113,6 +113,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         prNumber: 1,
         prState: 'OPEN',
         prCiStatus: CIStatus.UNKNOWN,
+        defaultSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
         ratchetEnabled: true,
         ratchetState: RatchetState.IDLE,
         ratchetActiveSessionId: null,
