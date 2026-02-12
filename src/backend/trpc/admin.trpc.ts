@@ -455,10 +455,10 @@ export const adminRouter = router({
   }),
 
   /**
-   * Stop a Claude session by ID (admin override).
+   * Stop a session by ID (admin override).
    * This allows admins to forcefully stop sessions that may be stuck or consuming resources.
    */
-  stopClaudeSession: publicProcedure
+  stopSession: publicProcedure
     .input(z.object({ sessionId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
@@ -466,12 +466,12 @@ export const adminRouter = router({
 
       const wasRunning = sessionService.isSessionRunning(input.sessionId);
 
-      logger.info('Admin stopping Claude session', {
+      logger.info('Admin stopping session', {
         sessionId: input.sessionId,
         wasRunning,
       });
 
-      await sessionService.stopClaudeSession(input.sessionId);
+      await sessionService.stopSession(input.sessionId);
 
       return {
         wasRunning,
