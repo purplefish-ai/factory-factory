@@ -7,6 +7,7 @@ import { SessionManager } from '@/backend/domains/session/claude/session';
 import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
 import { parseTurnId } from '@/backend/domains/session/codex/payload-utils';
 import {
+  type ClaudeActiveProcessSummary,
   claudeSessionProviderAdapter,
   codexSessionProviderAdapter,
   type SessionProviderAdapter,
@@ -28,15 +29,6 @@ import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
-
-type ClaudeActiveProcessSummary = {
-  sessionId: string;
-  pid: number | undefined;
-  status: string;
-  isRunning: boolean;
-  resourceUsage: ResourceUsage | null;
-  idleTimeMs: number;
-};
 
 type ActiveSessionProviderAdapter = SessionProviderAdapter<
   ClaudeClient,
