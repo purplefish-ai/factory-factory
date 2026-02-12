@@ -2,23 +2,11 @@
 
 ## What This Is
 
-A developer tool that manages workspaces with AI agents, GitHub integration, CI monitoring, and auto-fix capabilities. The backend has 6 domain modules under `src/backend/domains/` with an orchestration layer for cross-domain coordination. Project-level UI surfaces (sidebar, Kanban, workspace list) display workspace state and agent activity.
+A developer tool that manages workspaces with AI agents, GitHub integration, CI monitoring, and auto-fix capabilities. The backend has 6 domain modules under `src/backend/domains/` with an orchestration layer for cross-domain coordination. Project-level UI surfaces (sidebar, Kanban, workspace list) display real-time workspace state via WebSocket-pushed snapshots.
 
 ## Core Value
 
 Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
-
-## Current Milestone: v1.1 Project Snapshot Service -- SHIPPED 2026-02-11
-
-**Goal:** Replace multiple independent polling loops with a single in-memory materialized view of all workspace states, pushed to clients via WebSocket.
-
-**Delivered:**
-- Backend in-memory snapshot store — one entry per workspace with git state, PR status, CI status, agent state
-- Event-driven delta updates — mutations update individual workspace entries as they happen
-- WebSocket push — changed workspace snapshots pushed to connected clients immediately
-- Safety-net reconciliation poll — periodic (once/minute) full recompute to catch missed events
-- Single snapshot query — sidebar, Kanban, and workspace list all read from one source
-- Debug metadata — version, computedAt, source of last update on each snapshot entry
 
 ## Requirements
 
@@ -35,33 +23,31 @@ Every domain object has exactly one owner module, and any operation touching tha
 - ✓ Unit test suite per domain — co-located tests, 1609 tests passing — v1.0
 - ✓ Static Maps eliminated (DOM-04) — module-level mutable state replaced with instance fields — v1.0
 - ✓ Backward compatibility — all tRPC endpoints, WebSocket handlers, and CLI commands work identically — v1.0
+- ✓ In-memory snapshot store with per-workspace entries — v1.1
+- ✓ Event-driven delta updates from domain mutations — v1.1
+- ✓ WebSocket push of changed snapshots to clients — v1.1
+- ✓ Safety-net reconciliation poll (~1 min cadence) — v1.1
+- ✓ Sidebar, Kanban, and workspace list consume single snapshot query — v1.1
+- ✓ Debug metadata on each snapshot entry (version, computedAt, source) — v1.1
 
 ### Active
 
-None -- v1.1 milestone complete.
-
-### Validated (v1.1)
-
-- ✓ In-memory snapshot store with per-workspace entries -- Phase 11
-- ✓ Event-driven delta updates from mutations -- Phases 12-13
-- ✓ WebSocket push of changed snapshots to clients -- Phase 15
-- ✓ Safety-net reconciliation poll (~1 min cadence) -- Phase 14
-- ✓ Sidebar, Kanban, and workspace list consume single snapshot query -- Phases 16-17
-- ✓ Debug metadata on each snapshot entry (version, computedAt, source) -- Phase 11
+(None — planning next milestone)
 
 ### Out of Scope
 
-- Frontend refactoring — this project was backend-only (v1.0)
 - Database schema changes — snapshot is in-memory, not persisted
 - Workspace detail/session-specific polling — different lifecycle, stays as-is
-- New UI surfaces — no dashboard or new views, just rewire existing three
 - Agent status detail — snapshot carries state only (idle/busy/waiting/needs-attention), not reasons
+- Persistent snapshot (write to DB/disk) — derived cache, rebuild on restart is fast (~100ms)
+- Distributed pub/sub (Redis, NATS) — single-process Node.js server
+- Client-side snapshot computation — would duplicate server-side business logic
 
 ## Context
 
-**Current state:** The backend has 6 domain modules in `src/backend/domains/` (session, workspace, github, ratchet, terminal, run-script), each with barrel-file encapsulation. Cross-domain flows use bridge interfaces wired at startup via `src/backend/orchestration/domain-bridges.ts`. Infrastructure services (logger, config, scheduler, port, health, etc.) remain in `src/backend/services/`. All imports use domain barrel paths. 18 dependency-cruiser rules enforce boundaries.
+**Current state:** The backend has 6 domain modules in `src/backend/domains/` (session, workspace, github, ratchet, terminal, run-script), each with barrel-file encapsulation. Cross-domain flows use bridge interfaces wired at startup via `src/backend/orchestration/domain-bridges.ts`. Infrastructure services (logger, config, scheduler, port, health, snapshot store, etc.) remain in `src/backend/services/`. All imports use domain barrel paths. 18 dependency-cruiser rules enforce boundaries.
 
-**Snapshot service (v1.1):** Sidebar, Kanban, and workspace list now read from a single WebSocket-pushed snapshot instead of independent polling loops. Event-driven updates flow through an orchestration-layer event collector with 150ms coalescing. A 60-second safety-net reconciliation catches missed events and computes git stats. All 32 v1.1 requirements satisfied.
+**Snapshot service:** Sidebar, Kanban, and workspace list read from a single WebSocket-pushed snapshot instead of independent polling loops. Event-driven updates flow through an orchestration-layer event collector with 150ms coalescing. A 60-second safety-net reconciliation catches missed events and computes git stats. 32 v1.1 requirements satisfied, 2064 tests passing.
 
 **Tech stack:** TypeScript, Express, tRPC, Prisma, Vitest, Biome, dependency-cruiser
 **Test suite:** 2064 tests across 111 files
@@ -83,12 +69,15 @@ None -- v1.1 milestone complete.
 | Event-driven + safety-net poll | Events for speed, poll for correctness — catch missed events | ✓ Good — ~200ms event latency, 60s reconciliation catches drift |
 | WebSocket push for snapshot delivery | Eliminates frontend polling for project-level surfaces | ✓ Good — sidebar/kanban/list all real-time |
 | State-only agent status in snapshot | Keep snapshot lightweight; details via workspace detail view | ✓ Good — simple idle/busy/waiting/needs-attention state |
+| 150ms trailing-edge debounce for coalescing | Midpoint of 100-200ms requirement, balances latency vs dedup | ✓ Good — effective burst handling |
+| Field-level timestamps for concurrent updates | Prevents reconciliation from overwriting newer event-driven data | ✓ Good — clean concurrent update safety |
 
 ## Constraints
 
-- **Backward compatibility**: All tRPC endpoints continue to work identically — validated by 1609 tests + smoke test
+- **Backward compatibility**: All tRPC endpoints continue to work identically — validated by 2064 tests
 - **Test parity**: All existing tests pass; new co-located tests added per domain
 - **AppContext**: `app-context.ts` references domain modules via barrel imports
+- **Architecture boundaries**: 18 dependency-cruiser rules, zero violations across 736 modules
 
 ---
-*Last updated: 2026-02-11 -- v1.1 Project Snapshot Service shipped*
+*Last updated: 2026-02-12 after v1.1 milestone*

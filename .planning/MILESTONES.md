@@ -14,3 +14,20 @@
 
 ---
 
+
+## v1.1 Project Snapshot Service (Shipped: 2026-02-12)
+
+**Phases completed:** 8 phases (11-18), 11 plans
+**Timeline:** 1 day (2026-02-11)
+**Files changed:** 176 (+25,254 / -3,097)
+
+**Key accomplishments:**
+- In-memory WorkspaceSnapshotStore with versioned per-workspace entries, field-level timestamp merging, and derived state recomputation
+- EventEmitter-based domain event emission across workspace, github, ratchet, run-script, and session domains — events emitted after successful mutations only
+- Event collector orchestrator with 150ms per-workspace coalescing, wiring all 6 domain event types to snapshot store updates
+- Safety-net reconciliation (60s cadence) with drift detection, git stats computation, and stale entry cleanup
+- Project-scoped /snapshots WebSocket endpoint with full-snapshot-on-connect and per-workspace delta push
+- Sidebar, kanban, and workspace list migrated from independent polling (2s/15s) to WebSocket-driven snapshots with 30-60s polling fallback
+
+---
+
