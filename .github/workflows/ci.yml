@@ -144,6 +144,9 @@ jobs:
       - name: Run tests with coverage
         run: pnpm test:coverage
 
+      - name: Enforce critical backend coverage
+        run: pnpm check:coverage:critical
+
       - name: Report Coverage
         if: always() && github.event_name == 'pull_request'
         uses: davelosert/vitest-coverage-report-action@v2
