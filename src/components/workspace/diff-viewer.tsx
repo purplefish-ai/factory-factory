@@ -1,5 +1,7 @@
 import { AlertCircle, Eye, FileCode, Loader2 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useMemo, useRef, useState } from 'react';
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
@@ -11,8 +13,12 @@ import {
   getDiffLineBackground,
   getDiffLinePrefix,
   getDiffLineTextColor,
+  type LineTokenMap,
   parseDetailedDiff,
+  type SyntaxToken,
+  tokenizeDiffLines,
 } from '@/lib/diff';
+import { getLanguageFromPath } from '@/lib/language-detection';
 import { cn } from '@/lib/utils';
 import { usePersistentScroll } from './use-persistent-scroll';
 
@@ -78,15 +84,38 @@ function MarkdownPreview({ workspaceId, filePath }: MarkdownPreviewProps) {
   );
 }
 
+interface SyntaxHighlightedContentProps {
+  tokens: SyntaxToken[];
+}
+
+function SyntaxHighlightedContent({ tokens }: SyntaxHighlightedContentProps) {
+  return (
+    <>
+      {tokens.map((token, i) => {
+        const key = `${i}-${token.content.length}`;
+        return (
+          <span key={key} style={token.style}>
+            {token.content}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 interface DiffLineProps {
   line: DiffLine;
   lineNumberWidth: number;
+  tokens?: SyntaxToken[] | null;
 }
 
-function DiffLineComponent({ line, lineNumberWidth }: DiffLineProps) {
+function DiffLineComponent({ line, lineNumberWidth, tokens }: DiffLineProps) {
   const bgColor = getDiffLineBackground(line.type);
-  const textColor = getDiffLineTextColor(line.type);
   const prefix = getDiffLinePrefix(line.type);
+  const hasTokens = tokens != null && tokens.length > 0;
+  // When syntax tokens are available, let them control text color for code lines.
+  // Header/hunk lines and lines without tokens use the standard diff text color.
+  const textColor = hasTokens ? undefined : getDiffLineTextColor(line.type);
 
   return (
     <div className={cn('flex font-mono text-xs', bgColor)}>
@@ -106,12 +135,16 @@ function DiffLineComponent({ line, lineNumberWidth }: DiffLineProps) {
         </span>
       </div>
 
-      {/* Prefix */}
-      <span className={cn('flex-shrink-0 w-4 text-center select-none', textColor)}>{prefix}</span>
+      {/* Prefix — always uses diff text color */}
+      <span
+        className={cn('flex-shrink-0 w-4 text-center select-none', getDiffLineTextColor(line.type))}
+      >
+        {prefix}
+      </span>
 
       {/* Content */}
       <pre className={cn('flex-1 whitespace-pre-wrap break-all px-2', textColor)}>
-        {line.content}
+        {hasTokens ? <SyntaxHighlightedContent tokens={tokens} /> : line.content}
       </pre>
     </div>
   );
@@ -122,6 +155,7 @@ function DiffLineComponent({ line, lineNumberWidth }: DiffLineProps) {
 // =============================================================================
 
 export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
+  const { resolvedTheme } = useTheme();
   const { data, isLoading, error } = trpc.workspace.getFileDiff.useQuery({
     workspaceId,
     filePath,
@@ -145,6 +179,17 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   const lineNumberWidth = useMemo(() => {
     return calculateLineNumberWidth(parsedDiff);
   }, [parsedDiff]);
+
+  // Syntax highlighting
+  const syntaxTheme = resolvedTheme === 'dark' ? oneDark : oneLight;
+  const language = getLanguageFromPath(filePath);
+
+  const tokenMap: LineTokenMap | null = useMemo(() => {
+    if (parsedDiff.length === 0) {
+      return null;
+    }
+    return tokenizeDiffLines(parsedDiff, language, syntaxTheme);
+  }, [parsedDiff, language, syntaxTheme]);
 
   const { handleScroll: handleDiffScroll } = usePersistentScroll({
     tabId,
@@ -228,6 +273,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
                 key={`${line.type}-${line.lineNumber?.old ?? ''}-${line.lineNumber?.new ?? ''}-${index}`}
                 line={line}
                 lineNumberWidth={lineNumberWidth}
+                tokens={tokenMap?.get(index)}
               />
             ))}
           </div>

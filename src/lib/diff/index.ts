@@ -18,6 +18,8 @@ export {
   getSimpleDiffLineClassName,
   getSimpleDiffLinePrefix,
 } from './styles';
+export type { LineTokenMap, PrismStylesheet, SyntaxToken } from './syntax-highlight';
+export { tokenizeDiffLines } from './syntax-highlight';
 export type {
   DiffFile,
   DiffHunk,
