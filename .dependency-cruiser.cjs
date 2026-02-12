@@ -95,6 +95,30 @@ module.exports = {
       to: { path: '^src/backend/resource_accessors' },
     },
     {
+      name: 'only-domains-or-orchestration-import-accessors',
+      severity: 'error',
+      comment:
+        'Resource accessors are data-layer internals and may only be imported by domains and orchestration',
+      from: {
+        path: '^src/backend',
+        pathNot:
+          '^src/backend/(domains/|orchestration/|resource_accessors/)|^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/resource_accessors/' },
+    },
+    {
+      name: 'only-allowlisted-orchestration-import-accessors',
+      severity: 'error',
+      comment:
+        'Orchestration accessor imports must stay explicit and minimal. Add new files here only with clear rationale.',
+      from: {
+        path: '^src/backend/orchestration/',
+        pathNot:
+          '^src/backend/orchestration/(workspace-init\\.orchestrator|snapshot-reconciliation\\.orchestrator|scheduler\\.service|health\\.service|decision-log-query\\.service|data-backup\\.service|types)\\.ts$|^src/backend/orchestration/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/resource_accessors/' },
+    },
+    {
       name: 'no-shared-importing-app-layers',
       severity: 'error',
       comment:
@@ -140,14 +164,11 @@ module.exports = {
         'External consumers must import from domain barrel files (domains/{name}/), ' +
         'not from internal paths (domains/{name}/subfolder/). ' +
         'This keeps domain internals encapsulated. ' +
-        'Exception: conversation-rename interceptor has documented circular-dep avoidance.',
+        'Exception: conversation-rename interceptor uses deep imports to avoid circular dependency.',
       from: {
         path: '^src/backend',
         pathNot:
           '^src/backend/domains/([^/]+)/|' +
-          // These files use direct module paths to avoid circular dependencies:
-          // - conversation-rename imports session/claude and session/lifecycle to avoid
-          //   session barrel -> chat-event-forwarder -> interceptors -> session barrel cycle
           '^src/backend/interceptors/conversation-rename\\.interceptor\\.ts$',
       },
       to: {
