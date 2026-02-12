@@ -84,7 +84,9 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
     if (isRunning) {
       return status.port ? `Stop dev server (port ${status.port})` : 'Stop dev server';
     }
-    return 'Start dev server';
+    return status.runScriptCommand
+      ? `Start dev server: ${status.runScriptCommand}`
+      : 'Start dev server';
   })();
 
   return (
