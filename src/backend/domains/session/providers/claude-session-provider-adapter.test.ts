@@ -81,6 +81,9 @@ describe('ClaudeSessionProviderAdapter', () => {
 
     await adapter.stopClient('s1');
     expect(runtimeManager.stopClient).toHaveBeenCalledWith('s1');
+
+    adapter.getSessionProcess('s1');
+    expect(runtimeManager.getClaudeProcess).toHaveBeenCalledWith('s1');
   });
 
   it('routes model/thinking/rewind and interactive responses through the active client', async () => {

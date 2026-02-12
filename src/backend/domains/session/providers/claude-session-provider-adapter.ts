@@ -18,8 +18,28 @@ import type {
   SessionProviderAdapter,
 } from './session-provider-adapter';
 
+type ClaudeActiveProcessSummary = {
+  sessionId: string;
+  pid: number | undefined;
+  status: string;
+  isRunning: boolean;
+  resourceUsage: ResourceUsage | null;
+  idleTimeMs: number;
+};
+
 export class ClaudeSessionProviderAdapter
-  implements SessionProviderAdapter<ClaudeClient, ClaudeClientOptions, ClaudeRuntimeEventHandlers>
+  implements
+    SessionProviderAdapter<
+      ClaudeClient,
+      ClaudeClientOptions,
+      ClaudeRuntimeEventHandlers,
+      ClaudeMessage,
+      SessionDeltaEvent,
+      string | ClaudeContentItem[],
+      RewindFilesResponse,
+      RegisteredProcess,
+      ClaudeActiveProcessSummary
+    >
 {
   constructor(private readonly runtimeManager: ClaudeRuntimeManager = claudeRuntimeManager) {}
 
@@ -58,7 +78,7 @@ export class ClaudeSessionProviderAdapter
     return this.runtimeManager.stopClient(sessionId);
   }
 
-  getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
+  getSessionProcess(sessionId: string): RegisteredProcess | undefined {
     return this.runtimeManager.getClaudeProcess(sessionId);
   }
 
@@ -74,14 +94,7 @@ export class ClaudeSessionProviderAdapter
     return this.runtimeManager.isAnySessionWorking(sessionIds);
   }
 
-  getAllActiveProcesses(): Array<{
-    sessionId: string;
-    pid: number | undefined;
-    status: string;
-    isRunning: boolean;
-    resourceUsage: ResourceUsage | null;
-    idleTimeMs: number;
-  }> {
+  getAllActiveProcesses(): ClaudeActiveProcessSummary[] {
     return this.runtimeManager.getAllActiveProcesses();
   }
 
@@ -135,7 +148,10 @@ export class ClaudeSessionProviderAdapter
     client.answerQuestion(requestId, answers);
   }
 
-  toCanonicalAgentMessage(message: ClaudeMessage, order?: number): CanonicalAgentMessageEvent {
+  toCanonicalAgentMessage(
+    message: ClaudeMessage,
+    order?: number
+  ): CanonicalAgentMessageEvent<ClaudeMessage> {
     return {
       type: 'agent_message',
       provider: 'CLAUDE',
@@ -145,7 +161,7 @@ export class ClaudeSessionProviderAdapter
     };
   }
 
-  toPublicDeltaEvent(event: CanonicalAgentMessageEvent): SessionDeltaEvent {
+  toPublicDeltaEvent(event: CanonicalAgentMessageEvent<ClaudeMessage>): SessionDeltaEvent {
     if (event.provider !== 'CLAUDE') {
       throw new Error(`Cannot map provider ${event.provider} to Claude websocket delta`);
     }
@@ -155,7 +171,9 @@ export class ClaudeSessionProviderAdapter
       : ({ type: 'claude_message', data: event.data, order: event.order } as const);
   }
 
-  private resolveMessageKind(message: ClaudeMessage): CanonicalAgentMessageEvent['kind'] {
+  private resolveMessageKind(
+    message: ClaudeMessage
+  ): CanonicalAgentMessageEvent<ClaudeMessage>['kind'] {
     switch (message.type) {
       case 'assistant':
         return 'assistant_text';

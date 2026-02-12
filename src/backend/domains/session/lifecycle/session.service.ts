@@ -5,13 +5,13 @@ import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
 import {
-  type ClaudeSessionProviderAdapter,
   claudeSessionProviderAdapter,
+  type SessionProviderAdapter,
 } from '@/backend/domains/session/providers';
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
-import type { ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
+import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -23,6 +23,27 @@ import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
+
+type ClaudeActiveProcessSummary = {
+  sessionId: string;
+  pid: number | undefined;
+  status: string;
+  isRunning: boolean;
+  resourceUsage: ResourceUsage | null;
+  idleTimeMs: number;
+};
+
+type ActiveSessionProviderAdapter = SessionProviderAdapter<
+  ClaudeClient,
+  ClaudeClientOptions,
+  ClaudeRuntimeEventHandlers,
+  ClaudeMessage,
+  SessionDeltaEvent,
+  string | ClaudeContentItem[],
+  RewindFilesResponse,
+  RegisteredProcess,
+  ClaudeActiveProcessSummary
+>;
 
 /**
  * Callback type for client creation hook.
@@ -38,7 +59,7 @@ export type ClientCreatedCallback = (
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
-  private readonly providerAdapter: ClaudeSessionProviderAdapter;
+  private readonly providerAdapter: ActiveSessionProviderAdapter;
 
   private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
     return typeof client.isWorking === 'function' ? client.isWorking() : false;
@@ -68,7 +89,7 @@ class SessionService {
   constructor(options?: {
     repository?: SessionRepository;
     promptBuilder?: SessionPromptBuilder;
-    providerAdapter?: ClaudeSessionProviderAdapter;
+    providerAdapter?: ActiveSessionProviderAdapter;
   }) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
@@ -491,7 +512,7 @@ class SessionService {
    * Returns a RegisteredProcess interface with status, lifecycle, and resource methods.
    */
   getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
-    return this.providerAdapter.getClaudeProcess(sessionId);
+    return this.providerAdapter.getSessionProcess(sessionId);
   }
 
   /**
@@ -571,12 +592,12 @@ class SessionService {
 
   private shouldStopWorkspaceSession(session: { id: string; status: SessionStatus }): {
     shouldStop: boolean;
-    pendingClient: ReturnType<ClaudeSessionProviderAdapter['getPendingClient']>;
+    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>;
   } {
     const pendingClient = this.providerAdapter.getPendingClient(session.id);
     const shouldStop = Boolean(
       session.status === SessionStatus.RUNNING ||
-        this.providerAdapter.getClaudeProcess(session.id) ||
+        this.providerAdapter.getSessionProcess(session.id) ||
         pendingClient
     );
     return { shouldStop, pendingClient };
@@ -585,7 +606,7 @@ class SessionService {
   private async waitForPendingClient(
     workspaceId: string,
     sessionId: string,
-    pendingClient: ReturnType<ClaudeSessionProviderAdapter['getPendingClient']>
+    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>
   ): Promise<void> {
     if (!pendingClient) {
       return;

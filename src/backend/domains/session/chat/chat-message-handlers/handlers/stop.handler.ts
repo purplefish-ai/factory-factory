@@ -5,7 +5,7 @@ import type { StopMessage } from '@/shared/websocket';
 
 export function createStopHandler(): ChatMessageHandler<StopMessage> {
   return async ({ sessionId }) => {
-    await sessionService.stopClaudeSession(sessionId);
+    await sessionService.stopSession(sessionId);
     // Only clear pending requests here - clientEventSetup cleanup happens in the exit handler
     // to avoid race conditions where a new client is created before the old one exits
     chatEventForwarderService.clearPendingRequest(sessionId);

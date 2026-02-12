@@ -62,7 +62,7 @@ vi.mock('@/backend/domains/session/providers', () => ({
         ? ({ type: 'claude_message', data: event.data } as const)
         : ({ type: 'claude_message', data: event.data, order: event.order } as const)
     ),
-    getClaudeProcess: vi.fn(),
+    getSessionProcess: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     isAnySessionWorking: vi.fn(),
@@ -567,7 +567,7 @@ describe('SessionService', () => {
 
     vi.mocked(sessionRepository.getSessionsByWorkspaceId).mockResolvedValue([session]);
     vi.mocked(claudeSessionProviderAdapter.getPendingClient).mockReturnValue(pendingClient);
-    vi.mocked(claudeSessionProviderAdapter.getClaudeProcess).mockReturnValue(undefined);
+    vi.mocked(claudeSessionProviderAdapter.getSessionProcess).mockReturnValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
     vi.mocked(claudeSessionProviderAdapter.stopClient).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
