@@ -40,10 +40,12 @@ const workspaceFieldOwners = {
   runScriptCommand: new Set([
     'src/backend/orchestration/workspace-init.orchestrator.ts',
     'src/backend/domains/workspace/query/workspace-query.service.ts',
+    'src/backend/domains/workspace/lifecycle/data.service.ts',
   ]),
   runScriptCleanupCommand: new Set([
     'src/backend/orchestration/workspace-init.orchestrator.ts',
     'src/backend/domains/workspace/query/workspace-query.service.ts',
+    'src/backend/domains/workspace/lifecycle/data.service.ts',
   ]),
 };
 
