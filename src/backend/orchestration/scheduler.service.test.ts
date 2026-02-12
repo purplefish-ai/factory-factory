@@ -25,7 +25,7 @@ vi.mock('@/backend/domains/github', () => ({
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),

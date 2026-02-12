@@ -41,7 +41,7 @@ vi.mock('@/backend/services/workspace-activity.service', () => ({
   },
 }));
 
-vi.mock('@/backend/services/slash-command-cache.service', () => ({
+vi.mock('@/backend/domains/session/store/slash-command-cache.service', () => ({
   slashCommandCacheService: {
     setCachedCommands: (...args: unknown[]) => mockSetCachedCommands(...args),
   },

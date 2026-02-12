@@ -8,8 +8,12 @@
 import pLimit from 'p-limit';
 import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
-import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from './constants';
-import { createLogger } from './logger.service';
+import {
+  SERVICE_CONCURRENCY,
+  SERVICE_INTERVAL_MS,
+  SERVICE_THRESHOLDS,
+} from '@/backend/services/constants';
+import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('scheduler');
 

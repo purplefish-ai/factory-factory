@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma-gen/client';
 import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
+import { createLogger } from '@/backend/services/logger.service';
 import type { CommandInfo } from '@/shared/claude';
-import { createLogger } from './logger.service';
 
 const logger = createLogger('slash-command-cache');
 

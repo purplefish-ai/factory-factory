@@ -1,6 +1,6 @@
 {
   "name": "factory-factory",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Workspace-based coding environment for running multiple Claude Code sessions in parallel",
   "private": false,
   "license": "MIT",
@@ -46,6 +46,8 @@
     "test": "node scripts/ensure-native-modules.mjs node && vitest run",
     "test:watch": "node scripts/ensure-native-modules.mjs node && vitest",
     "test:coverage": "node scripts/ensure-native-modules.mjs node && vitest run --coverage",
+    "test:integration": "node scripts/ensure-native-modules.mjs node && vitest run \"src/backend/**/*.integration.test.ts\"",
+    "check:coverage:critical": "node scripts/check-critical-coverage.mjs",
     "check": "biome check . && pnpm check:ownership",
     "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",
     "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
@@ -64,7 +66,7 @@
     "start:electron": "electron .",
     "postinstall": "node scripts/postinstall.mjs",
     "prepare": "husky",
-    "deps:check": "depcruise src --config .dependency-cruiser.cjs",
+    "deps:check": "depcruise src electron --config .dependency-cruiser.cjs",
     "knip": "knip --include files,dependencies,unlisted"
   },
   "dependencies": {

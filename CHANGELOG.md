@@ -5,6 +5,40 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-02-11
+
+### Added
+
+- Add v1.1 Project Snapshot Service for improved workspace state management (#944)
+- Add Factory Factory signature to agent-created PRs (#938)
+- Always show session tab bar with + button for easier session management (#948)
+
+### Fixed
+
+- Fix snapshot_removed not clearing workspace.get cache (#952)
+- Fix #912: Catch unhandled sendRaw rejection in sendInitialize and sendRewindFiles (#946)
+- Fix CI status computation to handle NEUTRAL conclusion (#947)
+- Fix #935: Prevent workspace from tagging old merged PRs (#939)
+- Fix #914: LoggerService crash on circular references (#925)
+- Fix logger service to expand environment variables in BASE_DIR (#934)
+- Fix workspace tab status drift and stuck loading state (#931)
+
+### Changed
+
+- Unify workspace status with snapshot single writer (#949)
+- Dedupe workspace, chat, and fixer flows across stack (#941)
+- Unify workspace init script messaging (#906)
+- Refresh README with npx instructions and comprehensive updates (#933)
+
+### Refactored
+
+- Enforce single-writer ownership and fix test ABI setup (#951)
+- Enforce safer promise handling with Biome rules (#950)
+- Enforce @ imports and remove compatibility barrels (#942)
+- Refactor websocket handlers and queue policies (#940)
+- Remove unused REST and MCP routing surfaces (#943)
+- Remove redundant init script banner, keep inline chat message (#932)
+
 ## [0.2.7] - 2026-02-10
 
 ### Added

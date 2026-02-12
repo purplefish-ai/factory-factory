@@ -15,7 +15,7 @@ vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
   },
 }));
 
-vi.mock('./logger.service', () => ({
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     get info() {
       return mockLoggerInfo;

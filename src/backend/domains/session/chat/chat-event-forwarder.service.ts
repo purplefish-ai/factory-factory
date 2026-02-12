@@ -16,6 +16,7 @@ import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import type { ClaudeClient } from '@/backend/domains/session/claude/index';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
 import { interceptorRegistry } from '@/backend/interceptors';
 import type { EventEmitterListener } from '@/backend/lib/event-emitter-types';
 import {
@@ -27,7 +28,6 @@ import {
 } from '@/backend/schemas/tool-inputs.schema';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { slashCommandCacheService } from '@/backend/services/slash-command-cache.service';
 import { type ClaudeContentItem, type ClaudeMessage, hasToolResultContent } from '@/shared/claude';
 import {
   type InteractiveResponseTool,

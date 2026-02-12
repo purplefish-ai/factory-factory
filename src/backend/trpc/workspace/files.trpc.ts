@@ -14,7 +14,161 @@ import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './wor
 const loggerName = 'workspace-files-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
 
+/**
+ * Recursively list all files in a directory, excluding common ignore patterns
+ */
+async function listFilesRecursive(
+  rootPath: string,
+  currentPath = '',
+  maxDepth = 10,
+  currentDepth = 0
+): Promise<string[]> {
+  if (currentDepth >= maxDepth) {
+    return [];
+  }
+
+  const fullPath = path.join(rootPath, currentPath);
+  const files: string[] = [];
+
+  // Common patterns to ignore
+  const ignorePatterns = [
+    '.git',
+    'node_modules',
+    '.next',
+    'dist',
+    'build',
+    '.turbo',
+    'coverage',
+    '.vscode',
+    '.idea',
+  ];
+
+  try {
+    const dirents = await readdir(fullPath, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+      // Skip ignored patterns
+      if (ignorePatterns.includes(dirent.name)) {
+        continue;
+      }
+
+      // Skip hidden files/folders (optional - could make configurable)
+      if (dirent.name.startsWith('.')) {
+        continue;
+      }
+
+      const relativePath = currentPath ? path.join(currentPath, dirent.name) : dirent.name;
+
+      if (dirent.isDirectory()) {
+        // Recursively list files in subdirectory
+        const subFiles = await listFilesRecursive(
+          rootPath,
+          relativePath,
+          maxDepth,
+          currentDepth + 1
+        );
+        files.push(...subFiles);
+      } else {
+        // Add file to list
+        files.push(relativePath);
+      }
+    }
+  } catch (_error) {
+    // Silently skip directories we can't read
+    return files;
+  }
+
+  return files;
+}
+
+/**
+ * Comparator for sorting files by relevance
+ */
+function compareFilesByRelevance(a: string, b: string, queryLower?: string): number {
+  // Compare basenames if query provided
+  if (queryLower) {
+    const aBasename = path.basename(a).toLowerCase();
+    const bBasename = path.basename(b).toLowerCase();
+
+    // Exact matches first
+    const aExact = aBasename === queryLower;
+    const bExact = bBasename === queryLower;
+    if (aExact !== bExact) {
+      return aExact ? -1 : 1;
+    }
+
+    // Prefix matches next
+    const aStarts = aBasename.startsWith(queryLower);
+    const bStarts = bBasename.startsWith(queryLower);
+    if (aStarts !== bStarts) {
+      return aStarts ? -1 : 1;
+    }
+  }
+
+  // Sort by depth (fewer slashes first)
+  const aDepth = a.split('/').length;
+  const bDepth = b.split('/').length;
+  if (aDepth !== bDepth) {
+    return aDepth - bDepth;
+  }
+
+  // Finally alphabetically
+  return a.localeCompare(b);
+}
+
 export const workspaceFilesRouter = router({
+  // List all files recursively (for autocomplete)
+  listAllFiles: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        query: z.string().optional(),
+        limit: z.number().min(1).max(100).default(50),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
+      const result = await getWorkspaceWithWorktree(input.workspaceId);
+
+      if (!result) {
+        logger.warn('No worktreePath for workspace', { workspaceId: input.workspaceId });
+        return { files: [], hasWorktree: false };
+      }
+
+      const { worktreePath } = result;
+
+      try {
+        // Get all files recursively
+        let files = await listFilesRecursive(worktreePath);
+
+        // Filter by query if provided (case-insensitive)
+        if (input.query) {
+          const queryLower = input.query.toLowerCase();
+          files = files.filter((file) => file.toLowerCase().includes(queryLower));
+        }
+
+        // Sort by relevance (prefer shorter paths, exact matches first)
+        const queryLower = input.query?.toLowerCase();
+        files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
+
+        // Limit results
+        files = files.slice(0, input.limit);
+
+        logger.info('listAllFiles returning files', {
+          workspaceId: input.workspaceId,
+          query: input.query,
+          totalFiles: files.length,
+        });
+
+        return { files, hasWorktree: true };
+      } catch (error) {
+        logger.error('listAllFiles error', error as Error, {
+          workspaceId: input.workspaceId,
+        });
+        throw error;
+      }
+    }),
+
   // List files in directory
   listFiles: publicProcedure
     .input(

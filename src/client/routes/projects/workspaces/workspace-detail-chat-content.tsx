@@ -344,6 +344,7 @@ export const ChatContent = memo(function ChatContent({
           slashCommands={slashCommands}
           slashCommandsLoaded={slashCommandsLoaded}
           tokenStats={tokenStats}
+          workspaceId={workspaceId}
         />
       </div>
 

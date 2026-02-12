@@ -21,9 +21,6 @@ vi.mock('@/backend/resource_accessors/user-settings.accessor');
 vi.mock('@/backend/resource_accessors/claude-session.accessor');
 vi.mock('@/backend/services/git-ops.service');
 vi.mock('@/backend/domains/workspace/worktree/worktree-lifecycle.service');
-vi.mock('@/backend/orchestration', () => ({
-  initializeWorkspaceWorktree: vi.fn().mockResolvedValue(undefined),
-}));
 
 describe('WorkspaceCreationService', () => {
   let service: WorkspaceCreationService;

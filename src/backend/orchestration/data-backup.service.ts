@@ -11,6 +11,7 @@ import {
   type DataBackupTransactionClient,
   dataBackupAccessor,
 } from '@/backend/resource_accessors/data-backup.accessor';
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   ExportData,
   ExportDataV1,
@@ -23,7 +24,6 @@ import type {
   exportedWorkspaceSchemaV1,
   exportedWorkspaceSchemaV2,
 } from '@/shared/schemas/export-data.schema';
-import { createLogger } from './logger.service';
 
 type TransactionClient = DataBackupTransactionClient;
 
