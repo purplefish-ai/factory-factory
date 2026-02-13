@@ -12,8 +12,8 @@
  * patterns instead, similar to use-websocket-transport.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatSettings, QueuedMessage } from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS, DEFAULT_THINKING_BUDGET } from '@/lib/claude-types';
+import type { ChatSettings, QueuedMessage } from '@/lib/chat-protocol';
+import { DEFAULT_CHAT_SETTINGS, DEFAULT_THINKING_BUDGET } from '@/lib/chat-protocol';
 import type { ChatState } from './reducer';
 import { chatReducer, createInitialChatState } from './reducer';
 

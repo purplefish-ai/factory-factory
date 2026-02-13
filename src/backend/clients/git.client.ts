@@ -128,6 +128,7 @@ export interface GitClientConfig {
 export class GitClient {
   private baseRepoPath: string;
   private worktreeBase: string;
+  private branchNameNonce: number;
 
   constructor(config: GitClientConfig) {
     if (!config.baseRepoPath) {
@@ -139,6 +140,13 @@ export class GitClient {
 
     this.baseRepoPath = config.baseRepoPath;
     this.worktreeBase = config.worktreeBase;
+    this.branchNameNonce = crypto.randomInt(0x1_00_00_00);
+  }
+
+  private nextBranchHex(): string {
+    const value = this.branchNameNonce & 0xff_ff_ff;
+    this.branchNameNonce = (this.branchNameNonce + 1) & 0xff_ff_ff;
+    return value.toString(16).padStart(6, '0');
   }
 
   async createWorktree(
@@ -331,11 +339,9 @@ export class GitClient {
    * Example: martin-purplefish/flux-1
    */
   generateBranchName(prefix?: string, workspaceName?: string): string {
-    const suffix = workspaceName
-      ? this.sanitizeBranchName(workspaceName)
-      : crypto.randomBytes(3).toString('hex');
+    const suffix = workspaceName ? this.sanitizeBranchName(workspaceName) : this.nextBranchHex();
     // If sanitization resulted in empty string, fall back to random hex
-    const finalSuffix = suffix || crypto.randomBytes(3).toString('hex');
+    const finalSuffix = suffix || this.nextBranchHex();
     return prefix ? `${prefix}/${finalSuffix}` : finalSuffix;
   }
 

@@ -37,8 +37,8 @@ vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   },
 }));
 
-vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
-  claudeSessionAccessor: {
+vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
+  agentSessionAccessor: {
     findByWorkspaceId: mocks.findByWorkspaceId,
   },
 }));

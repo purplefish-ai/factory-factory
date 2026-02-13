@@ -1,8 +1,8 @@
 import { Copy, RotateCcw, X } from 'lucide-react';
 import { memo } from 'react';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
-import type { ChatMessage, GroupedMessageItem } from '@/lib/claude-types';
-import { extractTextFromMessage, isThinkingContent, isToolSequence } from '@/lib/claude-types';
+import type { ChatMessage, GroupedMessageItem } from '@/lib/chat-protocol';
+import { extractTextFromMessage, isThinkingContent, isToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';

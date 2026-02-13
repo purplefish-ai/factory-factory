@@ -14,8 +14,8 @@
  */
 
 import { useCallback } from 'react';
-import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
-import { DEFAULT_THINKING_BUDGET } from '@/lib/claude-types';
+import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
+import { DEFAULT_THINKING_BUDGET } from '@/lib/chat-protocol';
 import type {
   PermissionResponseMessage,
   QuestionResponseMessage,
@@ -26,6 +26,7 @@ import type {
   StopMessage,
 } from '@/shared/websocket';
 import { persistSettings } from './chat-persistence';
+import { clampChatSettingsForCapabilities } from './chat-settings';
 import type { ChatAction, ChatState } from './reducer';
 
 // =============================================================================
@@ -129,7 +130,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         id,
         text: trimmedText,
         attachments: attachments.length > 0 ? attachments : undefined,
-        settings: stateRef.current.chatSettings,
+        settings: clampChatSettingsForCapabilities(
+          stateRef.current.chatSettings,
+          stateRef.current.chatCapabilities
+        ),
       };
       send(msg);
     },
@@ -146,7 +150,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   }, [send, dispatch, stateRef]);
 
   const clearChat = useCallback(() => {
-    // Stop any running Claude process
+    // Stop any running provider session process
     if (stateRef.current.sessionStatus.phase === 'running') {
       dispatch({ type: 'STOP_REQUESTED' });
       send({ type: 'stop' } as StopMessage);
@@ -189,12 +193,16 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   const updateSettings = useCallback(
     (settings: Partial<ChatSettings>) => {
       dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
-      // Persist updated settings
-      const newSettings = { ...stateRef.current.chatSettings, ...settings };
+      // Persist capability-aware settings to avoid invalid provider combinations.
+      const capabilities = stateRef.current.chatCapabilities;
+      const newSettings = clampChatSettingsForCapabilities(
+        { ...stateRef.current.chatSettings, ...settings },
+        capabilities
+      );
       persistSettings(dbSessionIdRef.current, newSettings);
 
       // Send thinking budget update when thinkingEnabled changes
-      if ('thinkingEnabled' in settings) {
+      if ('thinkingEnabled' in settings && capabilities.thinking.enabled) {
         const maxTokens = settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
         send({ type: 'set_thinking_budget', max_tokens: maxTokens });
       }
@@ -231,8 +239,13 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   }, [dispatch]);
 
   // Rewind files actions
+  const rewindEnabled = stateRef.current.chatCapabilities.rewind.enabled;
   const startRewindPreview = useCallback(
     (userMessageUuid: string) => {
+      if (!rewindEnabled) {
+        return;
+      }
+
       // Clear any existing timeout
       if (rewindTimeoutRef.current) {
         clearTimeout(rewindTimeoutRef.current);
@@ -278,10 +291,14 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         rewindTimeoutRef.current = null;
       }, 30_000); // 30 second timeout
     },
-    [send, dispatch, rewindTimeoutRef]
+    [send, dispatch, rewindEnabled, rewindTimeoutRef]
   );
 
   const confirmRewind = useCallback(() => {
+    if (!rewindEnabled) {
+      return;
+    }
+
     // Clear any existing timeout
     if (rewindTimeoutRef.current) {
       clearTimeout(rewindTimeoutRef.current);
@@ -325,7 +342,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       });
       rewindTimeoutRef.current = null;
     }, 30_000); // 30 second timeout
-  }, [send, dispatch, stateRef, rewindTimeoutRef]);
+  }, [send, dispatch, rewindEnabled, stateRef, rewindTimeoutRef]);
 
   const cancelRewind = useCallback(() => {
     // Clear the timeout when canceling

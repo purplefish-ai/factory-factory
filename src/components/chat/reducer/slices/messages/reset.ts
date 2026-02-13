@@ -1,9 +1,10 @@
+import { clampChatSettingsForCapabilities } from '@/components/chat/chat-settings';
 import {
   createBaseResetState,
   createSessionSwitchResetState,
 } from '@/components/chat/reducer/state';
 import type { ChatAction, ChatState, SessionStatus } from '@/components/chat/reducer/types';
-import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 
 export function reduceMessageResetSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -14,7 +15,10 @@ export function reduceMessageResetSlice(state: ChatState, action: ChatAction): C
         ...state,
         ...createBaseResetState(),
         sessionStatus,
-        chatSettings: DEFAULT_CHAT_SETTINGS,
+        chatSettings: clampChatSettingsForCapabilities(
+          DEFAULT_CHAT_SETTINGS,
+          state.chatCapabilities
+        ),
       };
     }
     case 'RESET_FOR_SESSION_SWITCH':

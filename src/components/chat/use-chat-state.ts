@@ -25,7 +25,7 @@
  */
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/claude-types';
+import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/chat-protocol';
 import { type ChatAction, type ChatState, chatReducer, createInitialChatState } from './reducer';
 import { createToolInputAccumulatorState } from './streaming-utils';
 import { useChatActions } from './use-chat-actions';

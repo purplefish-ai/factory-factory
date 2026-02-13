@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import type { WebSocketMessage } from '@/lib/claude-types';
-import { isWebSocketMessage, isWsAgentMessage } from '@/lib/claude-types';
+import type { WebSocketMessage } from '@/lib/chat-protocol';
+import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
 import { createDebugLogger } from '@/lib/debug';
 import type { ChatAction, ChatState } from './reducer';
 import { createActionFromWebSocketMessage } from './reducer';

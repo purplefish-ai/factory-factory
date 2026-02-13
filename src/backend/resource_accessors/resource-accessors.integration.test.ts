@@ -25,7 +25,7 @@ let prisma: PrismaClient;
 
 let workspaceAccessor: typeof import('./workspace.accessor').workspaceAccessor;
 let projectAccessor: typeof import('./project.accessor').projectAccessor;
-let claudeSessionAccessor: typeof import('./claude-session.accessor').claudeSessionAccessor;
+let agentSessionAccessor: typeof import('./agent-session.accessor').agentSessionAccessor;
 let terminalSessionAccessor: typeof import('./terminal-session.accessor').terminalSessionAccessor;
 let userSettingsAccessor: typeof import('./user-settings.accessor').userSettingsAccessor;
 let decisionLogAccessor: typeof import('./decision-log.accessor').decisionLogAccessor;
@@ -44,7 +44,7 @@ beforeAll(async () => {
   ({
     workspaceAccessor,
     projectAccessor,
-    claudeSessionAccessor,
+    agentSessionAccessor,
     terminalSessionAccessor,
     userSettingsAccessor,
     decisionLogAccessor,
@@ -365,7 +365,7 @@ describe('resource accessors integration', () => {
     });
   });
 
-  describe('claudeSessionAccessor', () => {
+  describe('agentSessionAccessor', () => {
     it('returns existing RUNNING fixer session instead of creating a new one', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
@@ -380,7 +380,7 @@ describe('resource accessors integration', () => {
         },
       });
 
-      const acquired = await claudeSessionAccessor.acquireFixerSession({
+      const acquired = await agentSessionAccessor.acquireFixerSession({
         workspaceId: workspace.id,
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
@@ -418,7 +418,7 @@ describe('resource accessors integration', () => {
         ],
       });
 
-      const acquired = await claudeSessionAccessor.acquireFixerSession({
+      const acquired = await agentSessionAccessor.acquireFixerSession({
         workspaceId: workspace.id,
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
@@ -443,7 +443,7 @@ describe('resource accessors integration', () => {
         },
       });
 
-      const acquired = await claudeSessionAccessor.acquireFixerSession({
+      const acquired = await agentSessionAccessor.acquireFixerSession({
         workspaceId: workspace.id,
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',

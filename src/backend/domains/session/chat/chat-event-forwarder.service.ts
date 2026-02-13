@@ -247,7 +247,7 @@ class ChatEventForwarderService {
         slashCommands: initResponse.commands,
       } as const;
       sessionDomainService.emitDelta(dbSessionId, slashCommandsMsg);
-      void slashCommandCacheService.setCachedCommands(initResponse.commands);
+      void slashCommandCacheService.setCachedCommands('CLAUDE', initResponse.commands);
     }
 
     const pendingToolNames = new Map<string, string>();

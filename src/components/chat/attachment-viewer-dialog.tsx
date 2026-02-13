@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { MessageAttachment } from '@/lib/claude-types';
+import type { MessageAttachment } from '@/lib/chat-protocol';
 import { formatFileSize, formatLineCount, isTextAttachment } from '@/lib/image-utils';
 
 interface AttachmentViewerDialogProps {

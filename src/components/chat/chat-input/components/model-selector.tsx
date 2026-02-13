@@ -8,10 +8,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { AVAILABLE_MODELS } from '@/lib/claude-types';
+import type { ChatModelOption } from '@/shared/chat-capabilities';
 
 interface ModelSelectorProps {
   selectedModel: string;
+  options: ChatModelOption[];
   onChange: (model: string) => void;
   disabled?: boolean;
 }
@@ -19,9 +20,9 @@ interface ModelSelectorProps {
 /**
  * Model selector dropdown.
  */
-export function ModelSelector({ selectedModel, onChange, disabled }: ModelSelectorProps) {
-  const currentModel = AVAILABLE_MODELS.find((m) => m.value === selectedModel);
-  const displayName = currentModel?.displayName ?? AVAILABLE_MODELS[0]?.displayName;
+export function ModelSelector({ selectedModel, options, onChange, disabled }: ModelSelectorProps) {
+  const currentModel = options.find((m) => m.value === selectedModel);
+  const displayName = currentModel?.label ?? options[0]?.label;
 
   return (
     <DropdownMenu>
@@ -38,9 +39,9 @@ export function ModelSelector({ selectedModel, onChange, disabled }: ModelSelect
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
         <DropdownMenuRadioGroup value={selectedModel} onValueChange={onChange}>
-          {AVAILABLE_MODELS.map((model) => (
+          {options.map((model) => (
             <DropdownMenuRadioItem key={model.value} value={model.value}>
-              {model.displayName}
+              {model.label}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

@@ -1,7 +1,7 @@
 import { debugLog, insertMessageByOrder } from '@/components/chat/reducer/helpers';
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
-import type { ChatMessage } from '@/lib/claude-types';
-import { MessageState, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/claude-types';
+import type { ChatMessage } from '@/lib/chat-protocol';
+import { MessageState, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
 
 export function reduceMessageStateMachineSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

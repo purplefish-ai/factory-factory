@@ -8,8 +8,9 @@ import type {
   QueuedMessage,
   SessionInfo,
   TokenStats,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
   PendingMessageContent,
   PendingRequest,
@@ -27,7 +28,7 @@ const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 export interface UseChatWebSocketOptions {
   /**
    * Database session ID (required).
-   * This is the primary key for the ClaudeSession record.
+   * This is the primary key for the agent session record.
    * Must be provided before connecting - the hook will not connect without it.
    */
   dbSessionId: string | null;
@@ -47,6 +48,7 @@ export interface UseChatWebSocketReturn {
   pendingRequest: PendingRequest;
   // Chat settings
   chatSettings: ChatSettings;
+  chatCapabilities: ChatBarCapabilities;
   // Input draft (preserved across tab switches)
   inputDraft: string;
   // Input attachments (for recovery on rejection)
@@ -205,7 +207,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     currentLoadRequestIdRef.current = loadRequestId;
     scheduleLoadRetry(loadGeneration, loadRequestId);
-    sendRef.current({ type: 'list_sessions' });
     sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
   }, [chat.dispatch, scheduleLoadRetry]);
 
@@ -247,6 +248,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     availableSessions: chat.availableSessions,
     pendingRequest: chat.pendingRequest,
     chatSettings: chat.chatSettings,
+    chatCapabilities: chat.chatCapabilities,
     inputDraft: chat.inputDraft,
     inputAttachments: chat.inputAttachments,
     queuedMessages: chat.queuedMessages,

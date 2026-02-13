@@ -104,6 +104,20 @@ vi.mock('@/backend/domains/session/providers', () => ({
       })),
     })),
     rejectInteractiveRequest: vi.fn(),
+    getClient: vi.fn(),
+    getPendingClient: vi.fn(),
+    isStopInProgress: vi.fn(),
+    stopClient: vi.fn(),
+    sendMessage: vi.fn(),
+    setModel: vi.fn(),
+    setThinkingBudget: vi.fn(),
+    rewindFiles: vi.fn(),
+    respondToPermission: vi.fn(),
+    respondToQuestion: vi.fn(),
+    isSessionRunning: vi.fn(),
+    isSessionWorking: vi.fn(),
+    getSessionProcess: vi.fn(),
+    isAnySessionWorking: vi.fn(),
     getAllClients: vi.fn(() => new Map().entries()),
     getAllActiveProcesses: vi.fn(() => []),
     stopAllClients: vi.fn(),
@@ -121,6 +135,20 @@ import { sessionService } from './session.service';
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (
+      sessionService as unknown as {
+        sessionProviderCache: Map<string, unknown>;
+      }
+    ).sessionProviderCache.clear();
+    sessionService.setOnCodexTerminalTurn(() => undefined);
+    vi.mocked(claudeSessionProviderAdapter.getClient).mockReturnValue(undefined);
+    vi.mocked(claudeSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
+    vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
+    vi.mocked(claudeSessionProviderAdapter.isSessionWorking).mockReturnValue(false);
+    vi.mocked(codexSessionProviderAdapter.getClient).mockReturnValue(undefined);
+    vi.mocked(codexSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
+    vi.mocked(codexSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
+    vi.mocked(codexSessionProviderAdapter.isSessionWorking).mockReturnValue(false);
   });
 
   it('starts a session via process manager and updates DB state', async () => {
@@ -203,6 +231,17 @@ describe('SessionService', () => {
   });
 
   it('returns existing client without loading options', async () => {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
+      id: 'session-1',
+      workspaceId: 'workspace-1',
+      status: SessionStatus.IDLE,
+      workflow: 'default',
+      model: 'sonnet',
+      provider: 'CLAUDE',
+      claudeSessionId: null,
+    });
     const client = unsafeCoerce<Awaited<ReturnType<typeof claudeSessionProviderAdapter.getClient>>>(
       {
         isRunning: vi.fn().mockReturnValue(true),
@@ -210,12 +249,13 @@ describe('SessionService', () => {
     );
 
     vi.mocked(claudeSessionProviderAdapter.getClient).mockReturnValue(client);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
 
     const result = await sessionService.getOrCreateClient('session-1');
 
     expect(result).toBe(client);
     expect(claudeSessionProviderAdapter.getOrCreateClient).not.toHaveBeenCalled();
-    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
+    expect(sessionRepository.getSessionById).toHaveBeenCalledWith('session-1');
   });
 
   it('delegates to processManager.getOrCreateClient for race protection', async () => {
@@ -300,6 +340,23 @@ describe('SessionService', () => {
     await sessionService.stopClaudeSession('session-1');
 
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
+  });
+
+  it('evicts cached provider after manual stop', async () => {
+    const providerCache = (
+      sessionService as unknown as {
+        sessionProviderCache: Map<string, unknown>;
+      }
+    ).sessionProviderCache;
+    providerCache.set('session-1', 'CLAUDE');
+
+    vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
+    vi.mocked(claudeSessionProviderAdapter.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    await sessionService.stopClaudeSession('session-1');
+
+    expect(providerCache.has('session-1')).toBe(false);
   });
 
   it('deletes ratchet session record during manual stop', async () => {
@@ -402,6 +459,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
     vi.mocked(sessionPromptBuilder.shouldInjectBranchRename).mockReturnValue(false);
     vi.mocked(sessionPromptBuilder.buildSystemPrompt).mockReturnValue({
       workflowPrompt: undefined,
@@ -434,14 +492,7 @@ describe('SessionService', () => {
       'Session not found: session-1'
     );
 
-    expect(setRuntimeSnapshotSpy).toHaveBeenCalledWith(
-      'session-1',
-      expect.objectContaining({
-        phase: 'error',
-        processState: 'stopped',
-        activity: 'IDLE',
-      })
-    );
+    expect(setRuntimeSnapshotSpy).not.toHaveBeenCalled();
   });
 
   it('returns null session options when workspace is missing', async () => {
@@ -607,6 +658,12 @@ describe('SessionService', () => {
     const pendingClient = Promise.resolve(unsafeCoerce<ClaudeClient>(client));
 
     vi.mocked(sessionRepository.getSessionsByWorkspaceId).mockResolvedValue([session]);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        ...session,
+        provider: 'CLAUDE',
+      })
+    );
     vi.mocked(claudeSessionProviderAdapter.getPendingClient).mockReturnValue(pendingClient);
     vi.mocked(claudeSessionProviderAdapter.getSessionProcess).mockReturnValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
@@ -621,6 +678,50 @@ describe('SessionService', () => {
       status: SessionStatus.IDLE,
       claudeProcessPid: null,
     });
+  });
+
+  it('does not stop idle Codex sessions that have no running client', async () => {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionsByWorkspaceId>>>[number]
+    >({
+      id: 'session-codex-idle',
+      workspaceId: 'workspace-1',
+      provider: 'CODEX',
+      status: SessionStatus.IDLE,
+    });
+
+    vi.mocked(sessionRepository.getSessionsByWorkspaceId).mockResolvedValue([session]);
+    vi.mocked(codexSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
+    vi.mocked(codexSessionProviderAdapter.isSessionRunning).mockReturnValue(false);
+
+    await sessionService.stopWorkspaceSessions('workspace-1');
+
+    expect(codexSessionProviderAdapter.stopClient).not.toHaveBeenCalled();
+    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
+  });
+
+  it('uses workspace provider hint when stopSession lookup fails', async () => {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionsByWorkspaceId>>>[number]
+    >({
+      id: 'session-codex-running',
+      workspaceId: 'workspace-1',
+      provider: 'CODEX',
+      status: SessionStatus.RUNNING,
+    });
+
+    vi.mocked(sessionRepository.getSessionsByWorkspaceId).mockResolvedValue([session]);
+    vi.mocked(codexSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
+    vi.mocked(codexSessionProviderAdapter.isSessionRunning).mockReturnValue(true);
+    vi.mocked(sessionRepository.getSessionById).mockRejectedValueOnce(new Error('db unavailable'));
+    vi.mocked(codexSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
+    vi.mocked(codexSessionProviderAdapter.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue(unsafeCoerce({}));
+
+    await sessionService.stopWorkspaceSessions('workspace-1');
+
+    expect(codexSessionProviderAdapter.stopClient).toHaveBeenCalledWith('session-codex-running');
+    expect(claudeSessionProviderAdapter.stopClient).not.toHaveBeenCalled();
   });
 
   it('updates DB status when getOrCreateClient creates new client', async () => {
@@ -674,6 +775,56 @@ describe('SessionService', () => {
       status: SessionStatus.RUNNING,
       claudeProcessPid: 999,
     });
+  });
+
+  it('avoids redundant session DB lookups during startSession', async () => {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
+      id: 'session-1',
+      workspaceId: 'workspace-1',
+      status: SessionStatus.IDLE,
+      workflow: 'default',
+      model: 'sonnet',
+      provider: 'CLAUDE',
+      claudeSessionId: null,
+    });
+
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
+      id: 'workspace-1',
+      worktreePath: '/tmp/work',
+      branchName: 'feature-branch',
+      isAutoGeneratedBranch: false,
+      hasHadSessions: true,
+      name: 'Workspace A',
+      description: null,
+      projectId: 'project-1',
+    });
+
+    const client = unsafeCoerce<
+      Awaited<ReturnType<typeof claudeSessionProviderAdapter.getOrCreateClient>>
+    >({
+      getPid: vi.fn().mockReturnValue(111),
+    });
+
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
+    vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
+    vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
+    vi.mocked(sessionPromptBuilder.shouldInjectBranchRename).mockReturnValue(false);
+    vi.mocked(sessionPromptBuilder.buildSystemPrompt).mockReturnValue({
+      workflowPrompt: undefined,
+      systemPrompt: undefined,
+      injectedBranchRename: false,
+    });
+    vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
+    vi.mocked(claudeSessionProviderAdapter.getClient).mockReturnValue(undefined);
+    vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
+    vi.mocked(claudeSessionProviderAdapter.sendMessage).mockResolvedValue(undefined);
+
+    await sessionService.startClaudeSession('session-1', { initialPrompt: 'go' });
+
+    expect(sessionRepository.getSessionById).toHaveBeenCalledTimes(1);
   });
 
   it('normalizes stale loading runtime to idle when no process is active', () => {
@@ -812,6 +963,17 @@ describe('SessionService', () => {
   });
 
   it('delegates provider command helpers to adapter methods', async () => {
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+        status: SessionStatus.IDLE,
+        workflow: 'default',
+        model: 'sonnet',
+        provider: 'CLAUDE',
+        claudeSessionId: null,
+      })
+    );
     vi.mocked(claudeSessionProviderAdapter.setModel).mockResolvedValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.setThinkingBudget).mockResolvedValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.rewindFiles).mockResolvedValue({
@@ -845,6 +1007,14 @@ describe('SessionService', () => {
   });
 
   it('stops both Claude and Codex providers during shutdown', async () => {
+    const providerCache = (
+      sessionService as unknown as {
+        sessionProviderCache: Map<string, unknown>;
+      }
+    ).sessionProviderCache;
+    providerCache.set('session-1', 'CLAUDE');
+    providerCache.set('session-2', 'CODEX');
+
     vi.mocked(claudeSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
     vi.mocked(codexSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
 
@@ -852,6 +1022,7 @@ describe('SessionService', () => {
 
     expect(claudeSessionProviderAdapter.stopAllClients).toHaveBeenCalledWith(4321);
     expect(codexSessionProviderAdapter.stopAllClients).toHaveBeenCalledTimes(1);
+    expect(providerCache.size).toBe(0);
   });
 
   it('still attempts Codex shutdown when Claude shutdown fails', async () => {
@@ -875,6 +1046,46 @@ describe('SessionService', () => {
       'session-1',
       'turn-1'
     );
+  });
+
+  it('invokes terminal turn callback for terminal Codex notifications', () => {
+    const onTerminalTurn = vi.fn();
+    sessionService.setOnCodexTerminalTurn(onTerminalTurn);
+
+    codexTestState.codexManagerHandlers?.onNotification?.({
+      sessionId: 'session-1',
+      method: 'turn/completed',
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+
+    expect(onTerminalTurn).toHaveBeenCalledWith('session-1');
+  });
+
+  it('avoids session DB lookup for thinking budget when provider is already known', async () => {
+    vi.mocked(codexSessionProviderAdapter.getClient).mockReturnValue(
+      unsafeCoerce({ sessionId: 'session-1', threadId: 'thread-1' })
+    );
+    vi.mocked(codexSessionProviderAdapter.setThinkingBudget).mockResolvedValue(undefined);
+
+    await sessionService.setSessionThinkingBudget('session-1', null);
+
+    expect(codexSessionProviderAdapter.setThinkingBudget).toHaveBeenCalledWith('session-1', null);
+    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
+  });
+
+  it('avoids session DB lookup when sending messages for known Codex sessions', async () => {
+    vi.mocked(codexSessionProviderAdapter.getClient).mockReturnValue(
+      unsafeCoerce({ sessionId: 'session-1', threadId: 'thread-1' })
+    );
+    vi.mocked(codexSessionProviderAdapter.sendMessage).mockResolvedValue(undefined);
+
+    await sessionService.sendSessionMessage('session-1', 'Hello Codex');
+
+    expect(codexSessionProviderAdapter.sendMessage).toHaveBeenCalledWith(
+      'session-1',
+      'Hello Codex'
+    );
+    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
   });
 
   it('persists runtime snapshots for translated Codex runtime deltas', () => {

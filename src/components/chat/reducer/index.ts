@@ -10,8 +10,8 @@
  * The state is designed to be used with useReducer for predictable updates.
  */
 
-import type { ChatMessage, WebSocketMessage } from '@/lib/claude-types';
-import { isWebSocketMessage, isWsAgentMessage } from '@/lib/claude-types';
+import type { ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
+import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';
@@ -170,6 +170,16 @@ function handleSessionsMessage(data: WebSocketMessage): ChatAction | null {
     return { type: 'WS_SESSIONS', payload: { sessions: data.sessions } };
   }
   return null;
+}
+
+function handleChatCapabilitiesMessage(data: WebSocketMessage): ChatAction | null {
+  if (!data.capabilities) {
+    return null;
+  }
+  return {
+    type: 'WS_CHAT_CAPABILITIES',
+    payload: { capabilities: data.capabilities },
+  };
 }
 
 function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | null {
@@ -413,6 +423,7 @@ const messageHandlers: MessageHandlerMap = {
   agent_message: handleClaudeMessageAction,
   error: handleErrorMessageAction,
   sessions: handleSessionsMessage,
+  chat_capabilities: handleChatCapabilitiesMessage,
   agent_metadata: null,
   permission_request: handlePermissionRequestMessage,
   user_question: handleUserQuestionMessage,

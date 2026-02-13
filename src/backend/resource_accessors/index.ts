@@ -1,3 +1,4 @@
+export * from './agent-session.accessor';
 export * from './claude-session.accessor';
 export * from './data-backup.accessor';
 export * from './decision-log.accessor';

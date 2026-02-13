@@ -133,6 +133,7 @@ function TabItem({ tab, isActive, onSelect, onClose }: TabItemProps) {
 
 interface SessionTabItemProps {
   label: string;
+  provider?: Session['provider'];
   isActive: boolean;
   sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
@@ -141,8 +142,28 @@ interface SessionTabItemProps {
   onClose?: () => void;
 }
 
+function getProviderLogoPaths(provider?: Session['provider']): {
+  light: string;
+  dark: string;
+  alt: string;
+} {
+  if (provider === 'CODEX') {
+    return {
+      light: '/logos/codex-light.svg',
+      dark: '/logos/codex-dark.svg',
+      alt: 'Codex',
+    };
+  }
+  return {
+    light: '/logos/claude-light.svg',
+    dark: '/logos/claude-dark.svg',
+    alt: 'Claude',
+  };
+}
+
 function SessionTabItem({
   label,
+  provider,
   isActive,
   sessionSummary,
   isCIFix,
@@ -150,26 +171,28 @@ function SessionTabItem({
   onSelect,
   onClose,
 }: SessionTabItemProps) {
+  const logo = getProviderLogoPaths(provider);
   return (
     <TabButton
       icon={
-        <StatusDot
-          sessionSummary={sessionSummary}
-          isCIFix={isCIFix}
-          persistedStatus={persistedStatus}
-        />
+        <span className="flex items-center gap-1">
+          <StatusDot
+            sessionSummary={sessionSummary}
+            isCIFix={isCIFix}
+            persistedStatus={persistedStatus}
+          />
+          <img src={logo.light} alt={logo.alt} className="h-3.5 w-3.5 shrink-0 dark:hidden" />
+          <img src={logo.dark} alt={logo.alt} className="hidden h-3.5 w-3.5 shrink-0 dark:block" />
+        </span>
       }
       label={label}
       isActive={isActive}
       onSelect={onSelect}
       onClose={onClose}
       truncate
+      iconSide="right"
     />
   );
-}
-
-function getSessionProviderLabel(provider?: Session['provider']): string {
-  return provider === 'CODEX' ? 'Codex' : 'Claude';
 }
 
 // =============================================================================
@@ -220,11 +243,11 @@ export function MainViewTabBar({
       {sessions?.map((session, index) => {
         const isSelected = session.id === currentSessionId;
         const baseLabel = session.name ?? `Chat ${index + 1}`;
-        const providerLabel = getSessionProviderLabel(session.provider);
         return (
           <SessionTabItem
             key={session.id}
-            label={`${baseLabel} (${providerLabel})`}
+            label={baseLabel}
+            provider={session.provider}
             isActive={isSelected && activeTabId === 'chat'}
             sessionSummary={sessionSummariesById?.get(session.id)}
             isCIFix={session.workflow === 'ci-fix'}

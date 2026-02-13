@@ -10,8 +10,8 @@ import {
   VirtualizedMessageList,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
-import type { CommandInfo, TokenStats } from '@/lib/claude-types';
-import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
+import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
+import { groupAdjacentToolCalls, isToolSequence } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
@@ -32,6 +32,7 @@ export interface ChatContentProps {
   stopChat: ReturnType<typeof useChatWebSocket>['stopChat'];
   inputRef: ReturnType<typeof useChatWebSocket>['inputRef'];
   chatSettings: ReturnType<typeof useChatWebSocket>['chatSettings'];
+  chatCapabilities: ReturnType<typeof useChatWebSocket>['chatCapabilities'];
   updateSettings: ReturnType<typeof useChatWebSocket>['updateSettings'];
   inputDraft: ReturnType<typeof useChatWebSocket>['inputDraft'];
   setInputDraft: ReturnType<typeof useChatWebSocket>['setInputDraft'];
@@ -180,6 +181,7 @@ export const ChatContent = memo(function ChatContent({
   stopChat,
   inputRef,
   chatSettings,
+  chatCapabilities,
   updateSettings,
   inputDraft,
   setInputDraft,
@@ -236,6 +238,7 @@ export const ChatContent = memo(function ChatContent({
   const stopping = sessionStatus.phase === 'stopping';
   const displayStartingState = shouldShowStartingState(sessionStatus.phase, autoStartPending);
   const loadingSession = sessionStatus.phase === 'loading';
+  const rewindEnabled = chatCapabilities.rewind.enabled;
 
   const permissionRequestId =
     pendingRequest.type === 'permission' ? pendingRequest.request.requestId : null;
@@ -287,7 +290,7 @@ export const ChatContent = memo(function ChatContent({
           onRemoveQueuedMessage={removeQueuedMessage}
           isCompacting={isCompacting}
           getUuidForMessageId={getUuidForMessageId}
-          onRewindToMessage={startRewindPreview}
+          onRewindToMessage={rewindEnabled ? startRewindPreview : undefined}
           initBanner={initBanner}
         />
       </div>
@@ -328,12 +331,13 @@ export const ChatContent = memo(function ChatContent({
         <ChatInput
           onSend={sendMessage}
           onStop={stopChat}
-          disabled={!connected}
+          disabled={!connected || loadingSession}
           running={running}
           stopping={stopping}
           inputRef={inputRef}
           placeholder={placeholder}
           settings={chatSettings}
+          capabilities={chatCapabilities}
           onSettingsChange={updateSettings}
           value={inputDraft}
           onChange={setInputDraft}

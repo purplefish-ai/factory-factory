@@ -7,6 +7,7 @@ interface SessionLike {
   name: string | null;
   workflow: string | null;
   model: string | null;
+  provider?: 'CLAUDE' | 'CODEX';
   status: DbSessionStatus;
 }
 
@@ -21,6 +22,7 @@ export function buildWorkspaceSessionSummaries(
       name: session.name,
       workflow: session.workflow,
       model: session.model,
+      provider: session.provider,
       persistedStatus: session.status,
       runtimePhase: runtime.phase,
       processState: runtime.processState,

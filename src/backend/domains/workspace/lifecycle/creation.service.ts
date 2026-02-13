@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
 import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { projectAccessor } from '@/backend/resource_accessors/project.accessor';
 import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
@@ -13,6 +13,10 @@ import type { createLogger } from '@/backend/services/logger.service';
 
 type ConfigService = typeof configService;
 type Logger = ReturnType<typeof createLogger>;
+const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
+  CLAUDE: 'sonnet',
+  CODEX: 'gpt-5',
+};
 
 /**
  * Workspace creation source discriminated union.
@@ -244,11 +248,12 @@ export class WorkspaceCreationService {
         provider === 'CLAUDE' && workspace?.worktreePath
           ? getClaudeProjectPath(workspace.worktreePath)
           : null;
-      await claudeSessionAccessor.create({
+      await agentSessionAccessor.create({
         workspaceId,
         workflow: DEFAULT_FOLLOWUP,
         name: 'Chat 1',
         provider,
+        model: DEFAULT_SESSION_MODEL_BY_PROVIDER[provider],
         claudeProjectPath,
       });
       return true;

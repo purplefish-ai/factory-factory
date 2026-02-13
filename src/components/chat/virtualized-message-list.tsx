@@ -3,8 +3,8 @@ import { Loader2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import { ThinkingCompletionProvider } from '@/components/agent-activity/message-renderers';
-import type { GroupedMessageItem } from '@/lib/claude-types';
-import { isStreamEventMessage, isToolSequence } from '@/lib/claude-types';
+import type { GroupedMessageItem } from '@/lib/chat-protocol';
+import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { CompactingIndicator } from './compacting-indicator';
 

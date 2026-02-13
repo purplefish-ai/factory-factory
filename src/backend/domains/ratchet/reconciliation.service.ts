@@ -1,7 +1,7 @@
 import { SessionStatus } from '@factory-factory/core';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration';
 import {
-  claudeSessionAccessor,
+  agentSessionAccessor,
   terminalSessionAccessor,
   workspaceAccessor,
 } from '@/backend/resource_accessors/index';
@@ -152,14 +152,14 @@ class ReconciliationService {
     }
 
     // Find Claude sessions that claim to be running
-    const sessionsWithPid = await claudeSessionAccessor.findWithPid();
+    const sessionsWithPid = await agentSessionAccessor.findWithPid();
 
     for (const session of sessionsWithPid) {
       if (session.claudeProcessPid) {
         const isRunning = this.isProcessRunning(session.claudeProcessPid);
         if (!isRunning) {
           // Process is not actually running, update the database
-          await claudeSessionAccessor.update(session.id, {
+          await agentSessionAccessor.update(session.id, {
             status: SessionStatus.IDLE,
             claudeProcessPid: null,
           });

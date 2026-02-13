@@ -3,8 +3,8 @@ import * as React from 'react';
 import { memo } from 'react';
 import { CompactBoundaryIndicator } from '@/components/chat/compact-boundary-indicator';
 import { MarkdownRenderer } from '@/components/ui/markdown';
-import type { ClaudeMessage, ClaudeStreamEvent, ContentBlockDelta } from '@/lib/claude-types';
-import { isTextContent, isThinkingContent } from '@/lib/claude-types';
+import type { ClaudeMessage, ClaudeStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
+import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { useIsThinkingInProgress } from './thinking-completion-context';
 

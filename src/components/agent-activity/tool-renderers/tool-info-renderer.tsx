@@ -11,13 +11,13 @@ import { memo } from 'react';
 import type { ToolCallInfo } from '@/components/agent-activity/types';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { ClaudeMessage, PairedToolCall, ToolSequence } from '@/lib/claude-types';
+import type { ClaudeMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
 import {
   extractToolInfo,
   extractToolResultInfo,
   isToolResultMessage,
   isToolUseMessage,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';

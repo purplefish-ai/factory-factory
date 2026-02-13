@@ -1,8 +1,8 @@
 import { Clock, Coins, Database, Globe, Layers, Zap } from 'lucide-react';
 
 import { Progress } from '@/components/ui/progress';
-import type { TokenStats } from '@/lib/claude-types';
-import { CONTEXT_CRITICAL_THRESHOLD, CONTEXT_WARNING_THRESHOLD } from '@/lib/claude-types';
+import type { TokenStats } from '@/lib/chat-protocol';
+import { CONTEXT_CRITICAL_THRESHOLD, CONTEXT_WARNING_THRESHOLD } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 
 interface UsageStatsPopoverProps {

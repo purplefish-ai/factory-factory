@@ -4,8 +4,8 @@
  */
 
 import { useMemo } from 'react';
-import type { ChatMessage, ClaudeMessage } from '@/lib/claude-types';
-import { isToolUseMessage } from '@/lib/claude-types';
+import type { ChatMessage, ClaudeMessage } from '@/lib/chat-protocol';
+import { isToolUseMessage } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
 
 export interface Todo {

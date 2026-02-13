@@ -16,6 +16,7 @@ import {
   codexAppServerManager,
 } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { configService } from '@/backend/services/config.service';
+import { createCodexChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionDeltaEvent } from '@/shared/claude';
 import type {
   CanonicalAgentMessageEvent,
@@ -406,7 +407,10 @@ export class CodexSessionProviderAdapter
     );
   }
 
-  getSessionProcess(_sessionId: string): ReturnType<CodexAppServerManager['getStatus']> {
+  getSessionProcess(sessionId: string): ReturnType<CodexAppServerManager['getStatus']> | undefined {
+    if (!this.clients.has(sessionId)) {
+      return undefined;
+    }
     return this.manager.getStatus();
   }
 
@@ -439,6 +443,10 @@ export class CodexSessionProviderAdapter
 
   getAllClients(): IterableIterator<[string, CodexClientHandle]> {
     return this.clients.entries();
+  }
+
+  getChatBarCapabilities(options?: { selectedModel?: string | null }) {
+    return createCodexChatBarCapabilities(options?.selectedModel ?? undefined);
   }
 
   async stopAllClients(): Promise<void> {

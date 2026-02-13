@@ -8,7 +8,7 @@ import {
 } from '@/backend/domains/session';
 import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
 import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
@@ -395,7 +395,7 @@ Start with Phase 1: Planning.`;
 
 async function startDefaultClaudeSession(workspaceId: string): Promise<string | null> {
   try {
-    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
       limit: 1,
     });
@@ -479,7 +479,7 @@ async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
-    const runningSessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+    const runningSessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
       status: SessionStatus.RUNNING,
       limit: 1,
     });
@@ -489,7 +489,7 @@ async function retryQueuedDispatchAfterWorkspaceReady(
       return;
     }
 
-    const idleSessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId, {
+    const idleSessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
       limit: 1,
     });

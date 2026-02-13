@@ -41,6 +41,46 @@ function toCommandInfoArray(value: unknown): CommandInfo[] | null {
   return commands.length > 0 ? normalizeCommands(commands) : null;
 }
 
+type SessionProvider = 'CLAUDE' | 'CODEX';
+type CachedSlashCommandsByProvider = Partial<Record<SessionProvider, CommandInfo[]>>;
+
+function toProviderCommandMap(value: unknown): CachedSlashCommandsByProvider | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const map: CachedSlashCommandsByProvider = {};
+  const record = value as Record<string, unknown>;
+  for (const provider of ['CLAUDE', 'CODEX'] as const) {
+    const commands = toCommandInfoArray(record[provider]);
+    if (commands) {
+      map[provider] = commands;
+    }
+  }
+
+  return Object.keys(map).length > 0 ? map : null;
+}
+
+function toProviderPayload(
+  commandsByProvider: CachedSlashCommandsByProvider
+): Prisma.InputJsonObject {
+  const entries = Object.entries(commandsByProvider)
+    .filter((entry): entry is [SessionProvider, CommandInfo[]] => Boolean(entry[1]))
+    .map(([provider, commands]) => [
+      provider,
+      commands.map(
+        (command) =>
+          ({
+            name: command.name,
+            description: command.description,
+            ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}),
+          }) satisfies Prisma.InputJsonObject
+      ),
+    ]);
+
+  return Object.fromEntries(entries) as Prisma.InputJsonObject;
+}
+
 function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {
   if (a.length !== b.length) {
     return false;
@@ -65,36 +105,49 @@ function areCommandsEqual(a: CommandInfo[], b: CommandInfo[]): boolean {
 }
 
 class SlashCommandCacheService {
-  async getCachedCommands(): Promise<CommandInfo[] | null> {
+  async getCachedCommands(provider: SessionProvider): Promise<CommandInfo[] | null> {
     const settings = await userSettingsAccessor.get();
-    return toCommandInfoArray(settings.cachedSlashCommands);
+    const commandsByProvider = toProviderCommandMap(settings.cachedSlashCommands);
+    const scoped = commandsByProvider?.[provider];
+    if (scoped) {
+      return scoped;
+    }
+
+    // Backward compatibility for legacy CLAUDE-only array payloads.
+    if (provider === 'CLAUDE') {
+      return toCommandInfoArray(settings.cachedSlashCommands);
+    }
+
+    return null;
   }
 
-  async setCachedCommands(commands: CommandInfo[]): Promise<void> {
+  async setCachedCommands(provider: SessionProvider, commands: CommandInfo[]): Promise<void> {
     if (commands.length === 0) {
       return;
     }
 
     const normalized = normalizeCommands(commands);
-    const payload = normalized.map(
-      (command) =>
-        ({
-          name: command.name,
-          description: command.description,
-          ...(command.argumentHint ? { argumentHint: command.argumentHint } : {}),
-        }) satisfies Prisma.InputJsonObject
-    ) as Prisma.InputJsonArray;
 
     try {
       const settings = await userSettingsAccessor.get();
-      const existing = toCommandInfoArray(settings.cachedSlashCommands);
+      const existingMap = toProviderCommandMap(settings.cachedSlashCommands) ?? {};
+      const legacyClaudeCommands = toCommandInfoArray(settings.cachedSlashCommands);
+      if (!existingMap.CLAUDE && legacyClaudeCommands) {
+        existingMap.CLAUDE = legacyClaudeCommands;
+      }
+      const existing = existingMap[provider] ?? null;
 
       if (existing && areCommandsEqual(existing, normalized)) {
         return;
       }
 
+      const nextPayload: CachedSlashCommandsByProvider = {
+        ...existingMap,
+        [provider]: normalized,
+      };
+
       await userSettingsAccessor.update({
-        cachedSlashCommands: payload,
+        cachedSlashCommands: toProviderPayload(nextPayload),
       });
     } catch (error) {
       logger.warn('Failed to update cached slash commands', {

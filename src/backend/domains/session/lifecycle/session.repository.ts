@@ -1,21 +1,24 @@
 import type { Project, Workspace } from '@prisma-gen/client';
-import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
+import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import {
-  claudeSessionAccessor,
+  agentSessionAccessor,
   projectAccessor,
   workspaceAccessor,
 } from '@/backend/resource_accessors/index';
 
 type SessionAccessor = {
-  findById(id: string): Promise<ClaudeSession | null>;
-  findByWorkspaceId(workspaceId: string): Promise<ClaudeSession[]>;
+  findById(id: string): Promise<AgentSessionRecord | null>;
+  findByWorkspaceId(workspaceId: string): Promise<AgentSessionRecord[]>;
   update(
     id: string,
     data: Partial<
-      Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'>
+      Pick<
+        AgentSessionRecord,
+        'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'
+      >
     >
-  ): Promise<ClaudeSession>;
-  delete(id: string): Promise<ClaudeSession>;
+  ): Promise<AgentSessionRecord>;
+  delete(id: string): Promise<AgentSessionRecord>;
 };
 
 type WorkspaceAccessor = {
@@ -30,16 +33,16 @@ type ProjectAccessor = {
 
 export class SessionRepository {
   constructor(
-    private readonly sessions: SessionAccessor = claudeSessionAccessor,
+    private readonly sessions: SessionAccessor = agentSessionAccessor,
     private readonly workspaces: WorkspaceAccessor = workspaceAccessor,
     private readonly projects: ProjectAccessor = projectAccessor
   ) {}
 
-  getSessionById(sessionId: string): Promise<ClaudeSession | null> {
+  getSessionById(sessionId: string): Promise<AgentSessionRecord | null> {
     return this.sessions.findById(sessionId);
   }
 
-  getSessionsByWorkspaceId(workspaceId: string): Promise<ClaudeSession[]> {
+  getSessionsByWorkspaceId(workspaceId: string): Promise<AgentSessionRecord[]> {
     return this.sessions.findByWorkspaceId(workspaceId);
   }
 
@@ -62,18 +65,24 @@ export class SessionRepository {
   updateSession(
     sessionId: string,
     data: Partial<
-      Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'>
+      Pick<
+        AgentSessionRecord,
+        'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'
+      >
     >
-  ): Promise<ClaudeSession> {
+  ): Promise<AgentSessionRecord> {
     return this.updateSessionWithGuards(sessionId, data);
   }
 
   private async updateSessionWithGuards(
     sessionId: string,
     data: Partial<
-      Pick<ClaudeSession, 'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'>
+      Pick<
+        AgentSessionRecord,
+        'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'
+      >
     >
-  ): Promise<ClaudeSession> {
+  ): Promise<AgentSessionRecord> {
     if (Object.hasOwn(data, 'claudeSessionId')) {
       const current = await this.sessions.findById(sessionId);
       if (!current) {
@@ -91,7 +100,7 @@ export class SessionRepository {
     return this.sessions.update(sessionId, data);
   }
 
-  deleteSession(sessionId: string): Promise<ClaudeSession> {
+  deleteSession(sessionId: string): Promise<AgentSessionRecord> {
     return this.sessions.delete(sessionId);
   }
 }

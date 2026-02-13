@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import type { ClaudeMessage, ToolSequence } from '@/lib/chat-protocol';
 import {
   SAMPLE_BASH_COMMANDS,
   SAMPLE_BASH_OUTPUTS,
   SAMPLE_FILE_CONTENTS,
   SAMPLE_FILE_PATHS,
 } from '@/lib/claude-fixtures';
-import type { ClaudeMessage, ToolSequence } from '@/lib/claude-types';
 import { ToolCallGroupRenderer, ToolInfoRenderer, ToolSequenceGroup } from './tool-renderers';
 import type { ToolCallInfo } from './types';
 

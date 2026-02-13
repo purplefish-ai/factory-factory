@@ -6,7 +6,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import type { CommandInfo } from '@/lib/claude-types';
+import type { CommandInfo } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 
 // =============================================================================

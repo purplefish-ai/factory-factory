@@ -13,8 +13,9 @@ import {
   InputGroupTextarea,
 } from '@/components/ui/input-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/claude-types';
+import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 import { ModelSelector } from './components/model-selector';
 import { QuickActionsDropdown } from './components/quick-actions-dropdown';
@@ -40,6 +41,7 @@ export interface ChatInputProps {
   className?: string;
   // Settings
   settings?: ChatSettings;
+  capabilities?: ChatBarCapabilities;
   onSettingsChange?: (settings: Partial<ChatSettings>) => void;
   // Called when textarea height changes (for scroll adjustment)
   onHeightChange?: () => void;
@@ -144,11 +146,124 @@ const FileUploadButton = memo(function FileUploadButton({
   );
 });
 
+interface LeftControlsVisibility {
+  selectedModel: string;
+  showModelSelector: boolean;
+  showThinkingToggle: boolean;
+  showPlanToggle: boolean;
+  showAttachments: boolean;
+  showUsageIndicator: boolean;
+}
+
+function deriveLeftControlsVisibility(
+  settings: ChatSettings | undefined,
+  capabilities: ChatBarCapabilities | undefined,
+  tokenStats: TokenStats | undefined
+): LeftControlsVisibility {
+  const showModelSelector =
+    capabilities?.model.enabled === true && (capabilities.model.options.length ?? 0) > 0;
+  const showThinkingToggle = capabilities?.thinking.enabled === true;
+  const showPlanToggle = capabilities?.planMode.enabled === true;
+  const showAttachments =
+    capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
+  const showUsageIndicator =
+    capabilities?.usageStats.enabled === true &&
+    capabilities.usageStats.contextWindow === true &&
+    tokenStats !== undefined;
+  const selectedModel =
+    settings?.selectedModel ??
+    capabilities?.model.selected ??
+    capabilities?.model.options[0]?.value ??
+    '';
+
+  return {
+    selectedModel,
+    showModelSelector,
+    showThinkingToggle,
+    showPlanToggle,
+    showAttachments,
+    showUsageIndicator,
+  };
+}
+
+const ModeToggles = memo(function ModeToggles({
+  showThinkingToggle,
+  showPlanToggle,
+  settings,
+  onThinkingChange,
+  onPlanModeChange,
+  running,
+  modLabel,
+  modifierHeld,
+}: {
+  showThinkingToggle: boolean;
+  showPlanToggle: boolean;
+  settings?: ChatSettings;
+  onThinkingChange: (enabled: boolean) => void;
+  onPlanModeChange: (enabled: boolean) => void;
+  running: boolean;
+  modLabel: string;
+  modifierHeld: boolean;
+}) {
+  if (!(showThinkingToggle || showPlanToggle)) {
+    return null;
+  }
+
+  return (
+    <>
+      {showThinkingToggle && (
+        <SettingsToggle
+          pressed={settings?.thinkingEnabled ?? false}
+          onPressedChange={onThinkingChange}
+          disabled={running}
+          icon={Brain}
+          label="Extended thinking mode"
+          ariaLabel="Toggle thinking mode"
+          shortcut={`${modLabel}+Shift+T`}
+          showShortcut={modifierHeld}
+        />
+      )}
+      {showPlanToggle && (
+        <SettingsToggle
+          pressed={settings?.planModeEnabled ?? false}
+          onPressedChange={onPlanModeChange}
+          disabled={running}
+          icon={MapIcon}
+          label="Plan mode"
+          ariaLabel="Toggle plan mode"
+          shortcut={`${modLabel}+Shift+P`}
+          showShortcut={modifierHeld}
+        />
+      )}
+    </>
+  );
+});
+
+const UsageIndicatorSection = memo(function UsageIndicatorSection({
+  showUsageIndicator,
+  tokenStats,
+}: {
+  showUsageIndicator: boolean;
+  tokenStats?: TokenStats;
+}) {
+  if (!(showUsageIndicator && tokenStats)) {
+    return null;
+  }
+
+  return (
+    <>
+      <div className="h-4 w-px bg-border" />
+      <ContextWindowIndicator tokenStats={tokenStats} />
+    </>
+  );
+});
+
 /**
  * Renders the left controls: model selector, toggles, file upload, and context indicator.
  */
 const LeftControls = memo(function LeftControls({
   settings,
+  capabilities,
   onModelChange,
   onThinkingChange,
   onPlanModeChange,
@@ -165,6 +280,7 @@ const LeftControls = memo(function LeftControls({
   tokenStats,
 }: {
   settings?: ChatSettings;
+  capabilities?: ChatBarCapabilities;
   onModelChange: (model: string) => void;
   onThinkingChange: (enabled: boolean) => void;
   onPlanModeChange: (enabled: boolean) => void;
@@ -180,44 +296,49 @@ const LeftControls = memo(function LeftControls({
   onQuickActionsOpenChange: (open: boolean) => void;
   tokenStats?: TokenStats;
 }) {
+  const {
+    selectedModel,
+    showModelSelector,
+    showThinkingToggle,
+    showPlanToggle,
+    showAttachments,
+    showUsageIndicator,
+  } = deriveLeftControlsVisibility(settings, capabilities, tokenStats);
+  const hasModeToggles = showThinkingToggle || showPlanToggle;
+
   return (
     <div className="flex items-center gap-1">
-      <ModelSelector
-        selectedModel={settings?.selectedModel ?? 'opus'}
-        onChange={onModelChange}
-        disabled={running}
-      />
-      <div className="h-4 w-px bg-border" />
-      <SettingsToggle
-        pressed={settings?.thinkingEnabled ?? false}
-        onPressedChange={onThinkingChange}
-        disabled={running}
-        icon={Brain}
-        label="Extended thinking mode"
-        ariaLabel="Toggle thinking mode"
-        shortcut={`${modLabel}+Shift+T`}
-        showShortcut={modifierHeld}
-      />
-      <SettingsToggle
-        pressed={settings?.planModeEnabled ?? false}
-        onPressedChange={onPlanModeChange}
-        disabled={running}
-        icon={MapIcon}
-        label="Plan mode"
-        ariaLabel="Toggle plan mode"
-        shortcut={`${modLabel}+Shift+P`}
-        showShortcut={modifierHeld}
-      />
-      <div className="h-4 w-px bg-border" />
-      <FileUploadButton
-        fileInputRef={fileInputRef}
-        onFileSelect={onFileSelect}
-        supportedImageTypes={supportedImageTypes}
+      {showModelSelector && (
+        <ModelSelector
+          selectedModel={selectedModel}
+          options={capabilities?.model.options ?? []}
+          onChange={onModelChange}
+          disabled={running}
+        />
+      )}
+      {showModelSelector && hasModeToggles && <div className="h-4 w-px bg-border" />}
+      <ModeToggles
+        showThinkingToggle={showThinkingToggle}
+        showPlanToggle={showPlanToggle}
+        settings={settings}
+        onThinkingChange={onThinkingChange}
+        onPlanModeChange={onPlanModeChange}
         running={running}
-        disabled={disabled}
         modLabel={modLabel}
         modifierHeld={modifierHeld}
       />
+      {hasModeToggles && showAttachments && <div className="h-4 w-px bg-border" />}
+      {showAttachments && (
+        <FileUploadButton
+          fileInputRef={fileInputRef}
+          onFileSelect={onFileSelect}
+          supportedImageTypes={supportedImageTypes}
+          running={running}
+          disabled={disabled}
+          modLabel={modLabel}
+          modifierHeld={modifierHeld}
+        />
+      )}
       <QuickActionsDropdown
         onAction={onQuickAction}
         disabled={disabled}
@@ -226,12 +347,7 @@ const LeftControls = memo(function LeftControls({
         shortcut={`${modLabel}+Shift+A`}
         showShortcut={modifierHeld}
       />
-      {tokenStats && (
-        <>
-          <div className="h-4 w-px bg-border" />
-          <ContextWindowIndicator tokenStats={tokenStats} />
-        </>
-      )}
+      <UsageIndicatorSection showUsageIndicator={showUsageIndicator} tokenStats={tokenStats} />
     </div>
   );
 });
@@ -312,6 +428,7 @@ export const ChatInput = memo(function ChatInput({
   placeholder = 'Type a message...',
   className,
   settings,
+  capabilities,
   onSettingsChange,
   onHeightChange,
   value,
@@ -352,6 +469,7 @@ export const ChatInput = memo(function ChatInput({
 
   // Slash commands hook
   const slash = useSlashCommands({
+    enabled: capabilities?.slashCommands.enabled === true,
     slashCommands,
     commandsLoaded: slashCommandsLoaded,
     inputRef: resolvedInputRef,
@@ -389,6 +507,7 @@ export const ChatInput = memo(function ChatInput({
     running,
     stopping,
     settings,
+    capabilities,
     attachments,
     setAttachments,
     delegateToSlashMenu: slash.delegateToSlashMenu,
@@ -509,6 +628,7 @@ export const ChatInput = memo(function ChatInput({
           {/* Left side: Model selector and toggles */}
           <LeftControls
             settings={settings}
+            capabilities={capabilities}
             onModelChange={actions.handleModelChange}
             onThinkingChange={actions.handleThinkingChange}
             onPlanModeChange={actions.handlePlanModeChange}

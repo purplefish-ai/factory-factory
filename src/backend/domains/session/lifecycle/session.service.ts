@@ -7,18 +7,27 @@ import { SessionManager } from '@/backend/domains/session/claude/session';
 import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
 import { parseTurnId } from '@/backend/domains/session/codex/payload-utils';
 import {
-  type ClaudeActiveProcessSummary,
   claudeSessionProviderAdapter,
   codexSessionProviderAdapter,
-  type SessionProviderAdapter,
+  type SessionProvider,
 } from '@/backend/domains/session/providers';
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
+import {
+  normalizeSessionModelForProvider,
+  resolveSessionModelForProvider,
+} from '@/backend/lib/session-model';
+import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import type {
+  ClaudeContentItem,
+  ClaudeMessage,
+  HistoryMessage,
+  SessionDeltaEvent,
+} from '@/shared/claude';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -31,18 +40,6 @@ import { sessionRepository } from './session.repository';
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
-type ActiveSessionProviderAdapter = SessionProviderAdapter<
-  ClaudeClient,
-  ClaudeClientOptions,
-  ClaudeRuntimeEventHandlers,
-  ClaudeMessage,
-  SessionDeltaEvent,
-  string | ClaudeContentItem[],
-  RewindFilesResponse,
-  RegisteredProcess,
-  ClaudeActiveProcessSummary
->;
-
 /**
  * Callback type for client creation hook.
  * Called after a ClaudeClient is created, allowing other services to set up
@@ -54,18 +51,23 @@ export type ClientCreatedCallback = (
   context: { workspaceId: string; workingDir: string }
 ) => void;
 
+export type CodexTerminalTurnCallback = (sessionId: string) => void | Promise<void>;
+type SessionAdapter = typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter;
+type LoadedSessionAdapter = {
+  session: AgentSessionRecord;
+  adapter: SessionAdapter;
+};
+
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
-  private readonly providerAdapter: ActiveSessionProviderAdapter;
+  private readonly claudeAdapter = claudeSessionProviderAdapter;
   private readonly codexAdapter = codexSessionProviderAdapter;
+  private readonly sessionProviderCache = new Map<string, SessionProvider>();
   private readonly codexEventTranslator = new CodexEventTranslator({
     userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
   });
-
-  private getClientWorkingState(client: { isWorking?: () => boolean }): boolean {
-    return typeof client.isWorking === 'function' ? client.isWorking() : false;
-  }
+  private onCodexTerminalTurn: CodexTerminalTurnCallback | null = null;
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
     if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
@@ -80,22 +82,90 @@ class SessionService {
     return Date.now() - updatedAtMs > STALE_LOADING_RUNTIME_MAX_AGE_MS;
   }
 
+  private cacheSessionProvider(sessionId: string, provider: SessionProvider): void {
+    this.sessionProviderCache.set(sessionId, provider);
+  }
+
+  private clearSessionProvider(sessionId: string): void {
+    this.sessionProviderCache.delete(sessionId);
+  }
+
+  private resolveAdapterForProvider(provider: SessionProvider) {
+    return provider === 'CODEX' ? this.codexAdapter : this.claudeAdapter;
+  }
+
+  private resolveKnownAdapterForSessionSync(sessionId: string): SessionAdapter | null {
+    if (
+      this.codexAdapter.getClient(sessionId) ||
+      this.codexAdapter.getPendingClient(sessionId) !== undefined ||
+      this.codexAdapter.isStopInProgress(sessionId)
+    ) {
+      return this.codexAdapter;
+    }
+
+    if (
+      this.claudeAdapter.getClient(sessionId) ||
+      this.claudeAdapter.getPendingClient(sessionId) !== undefined ||
+      this.claudeAdapter.isStopInProgress(sessionId)
+    ) {
+      return this.claudeAdapter;
+    }
+
+    const cached = this.sessionProviderCache.get(sessionId);
+    if (cached) {
+      return this.resolveAdapterForProvider(cached);
+    }
+
+    return null;
+  }
+
+  private resolveAdapterForSessionSync(sessionId: string) {
+    return this.resolveKnownAdapterForSessionSync(sessionId) ?? this.claudeAdapter;
+  }
+
+  private notifyCodexTerminalTurn(sessionId: string): void {
+    if (!this.onCodexTerminalTurn) {
+      return;
+    }
+
+    Promise.resolve(this.onCodexTerminalTurn(sessionId)).catch((error) => {
+      logger.warn('Codex terminal turn callback failed', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  private async loadSessionWithAdapter(sessionId: string): Promise<LoadedSessionAdapter> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    this.cacheSessionProvider(sessionId, session.provider);
+    return {
+      session,
+      adapter: this.resolveAdapterForProvider(session.provider),
+    };
+  }
+
   /**
    * Register a callback to be called when a client is created.
    * Used by chat handler to set up event forwarding without circular dependencies.
    */
   setOnClientCreated(callback: ClientCreatedCallback): void {
-    this.providerAdapter.setOnClientCreated(callback);
+    this.claudeAdapter.setOnClientCreated(callback);
+  }
+
+  setOnCodexTerminalTurn(callback: CodexTerminalTurnCallback): void {
+    this.onCodexTerminalTurn = callback;
   }
 
   constructor(options?: {
     repository?: SessionRepository;
     promptBuilder?: SessionPromptBuilder;
-    providerAdapter?: ActiveSessionProviderAdapter;
   }) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
-    this.providerAdapter = options?.providerAdapter ?? claudeSessionProviderAdapter;
     this.initializeCodexManagerHandlers();
   }
 
@@ -103,7 +173,8 @@ class SessionService {
     this.codexAdapter.getManager().setHandlers({
       onNotification: ({ sessionId, method, params }) => {
         const registry = this.codexAdapter.getManager().getRegistry();
-        if (this.isTerminalCodexTurnMethod(method)) {
+        const isTerminalTurn = this.isTerminalCodexTurnMethod(method);
+        if (isTerminalTurn) {
           registry.markTurnTerminal(sessionId, parseTurnId(params));
         }
 
@@ -114,6 +185,10 @@ class SessionService {
             sessionDomainService.setRuntimeSnapshot(sessionId, normalized.sessionRuntime, false);
           }
           sessionDomainService.emitDelta(sessionId, normalized);
+        }
+
+        if (isTerminalTurn) {
+          this.notifyCodexTerminalTurn(sessionId);
         }
       },
       onServerRequest: ({ sessionId, method, params, canonicalRequestId }) => {
@@ -188,33 +263,35 @@ class SessionService {
    * Uses getOrCreateClient() internally for unified lifecycle management with race protection.
    */
   async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    if (this.providerAdapter.isStopInProgress(sessionId)) {
+    const loaded = await this.loadSessionWithAdapter(sessionId);
+    const { session, adapter } = loaded;
+    if (adapter.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
     // Check if session is already running to prevent duplicate message sends
-    const existingClient = this.providerAdapter.getClient(sessionId);
+    const existingClient = adapter.getClient(sessionId);
     if (existingClient) {
       throw new Error('Session is already running');
     }
 
     // Use getOrCreateClient for race-protected creation
     // If concurrent starts happen, one will succeed and others will wait then fail the check above
-    await this.getOrCreateSessionClient(sessionId, {
-      permissionMode: 'bypassPermissions',
-    });
+    await this.getOrCreateSessionClient(
+      sessionId,
+      {
+        permissionMode: 'bypassPermissions',
+      },
+      loaded
+    );
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
     if (initialPrompt) {
-      await this.providerAdapter.sendMessage(sessionId, initialPrompt);
+      await this.sendSessionMessage(sessionId, initialPrompt);
     }
 
-    logger.info('Session started', { sessionId, provider: 'CLAUDE' });
+    logger.info('Session started', { sessionId, provider: session.provider });
   }
 
   /**
@@ -230,13 +307,20 @@ class SessionService {
    */
   async stopSession(
     sessionId: string,
-    options?: { cleanupTransientRatchetSession?: boolean }
+    options?: { cleanupTransientRatchetSession?: boolean; providerHint?: SessionProvider }
   ): Promise<void> {
-    if (this.providerAdapter.isStopInProgress(sessionId)) {
+    const session = await this.loadSessionForStop(sessionId);
+    const provider =
+      options?.providerHint ??
+      session?.provider ??
+      this.sessionProviderCache.get(sessionId) ??
+      'CLAUDE';
+    const adapter = this.resolveAdapterForProvider(provider);
+
+    if (adapter.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
-    const session = await this.loadSessionForStop(sessionId);
 
     const current = this.getRuntimeSnapshot(sessionId);
     sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -246,27 +330,31 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    await this.providerAdapter.stopClient(sessionId);
-    await this.updateStoppedSessionState(sessionId);
+    try {
+      await adapter.stopClient(sessionId);
+      await this.updateStoppedSessionState(sessionId);
 
-    sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
+      sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
 
-    // Manual stops can complete without an exit callback race; normalize state explicitly.
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: new Date().toISOString(),
-    });
+      // Manual stops can complete without an exit callback race; normalize state explicitly.
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
 
-    const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
-    await this.cleanupTransientRatchetOnStop(
-      session,
-      sessionId,
-      shouldCleanupTransientRatchetSession
-    );
+      const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
+      await this.cleanupTransientRatchetOnStop(
+        session,
+        sessionId,
+        shouldCleanupTransientRatchetSession
+      );
 
-    logger.info('Session stopped', { sessionId, provider: 'CLAUDE' });
+      logger.info('Session stopped', { sessionId, provider });
+    } finally {
+      this.clearSessionProvider(sessionId);
+    }
   }
 
   /**
@@ -279,9 +367,13 @@ class SessionService {
     await this.stopSession(sessionId, options);
   }
 
-  private async loadSessionForStop(sessionId: string): Promise<ClaudeSession | null> {
+  private async loadSessionForStop(sessionId: string): Promise<AgentSessionRecord | null> {
     try {
-      return await this.repository.getSessionById(sessionId);
+      const session = await this.repository.getSessionById(sessionId);
+      if (session) {
+        this.cacheSessionProvider(sessionId, session.provider);
+      }
+      return session;
     } catch (error) {
       logger.warn('Failed to load session before stop; continuing with process shutdown', {
         sessionId,
@@ -306,7 +398,7 @@ class SessionService {
   }
 
   private async cleanupTransientRatchetOnStop(
-    session: ClaudeSession | null,
+    session: AgentSessionRecord | null,
     sessionId: string,
     shouldCleanupTransientRatchetSession: boolean
   ): Promise<void> {
@@ -349,7 +441,10 @@ class SessionService {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
 
     for (const session of sessions) {
-      await this.stopWorkspaceSession(session, workspaceId);
+      await this.stopWorkspaceSession(
+        { id: session.id, status: session.status, provider: session.provider },
+        workspaceId
+      );
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
@@ -369,12 +464,15 @@ class SessionService {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
-    }
-  ): Promise<ClaudeClient> {
+    },
+    loadedSession?: LoadedSessionAdapter
+  ): Promise<unknown> {
+    const { session, adapter } = loadedSession ?? (await this.loadSessionWithAdapter(sessionId));
+
     // Check for existing client first - fast path
-    const existing = this.providerAdapter.getClient(sessionId);
+    const existing = adapter.getClient(sessionId);
     if (existing) {
-      const isWorking = this.getClientWorkingState(existing);
+      const isWorking = adapter.isSessionWorking(sessionId);
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -392,27 +490,22 @@ class SessionService {
     });
 
     try {
-      const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-        thinkingEnabled: options?.thinkingEnabled,
-        permissionMode: options?.permissionMode,
-        model: options?.model,
-      });
-
-      const client = await this.providerAdapter.getOrCreateClient(
-        sessionId,
-        clientOptions,
-        handlers,
-        context
-      );
+      const client =
+        session.provider === 'CODEX'
+          ? await this.createCodexClient(sessionId, options?.model, session)
+          : await this.createClaudeClient(sessionId, options, session);
 
       // Update DB with running status and PID
       // This is idempotent and safe even if called by concurrent callers
       await this.repository.updateSession(sessionId, {
         status: SessionStatus.RUNNING,
-        claudeProcessPid: client.getPid() ?? null,
+        claudeProcessPid:
+          session.provider === 'CODEX'
+            ? (this.codexAdapter.getManager().getStatus().pid ?? null)
+            : ((client as ClaudeClient).getPid?.() ?? null),
       });
 
-      const isWorking = this.getClientWorkingState(client);
+      const isWorking = adapter.isSessionWorking(sessionId);
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -442,7 +535,7 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
     }
-  ): Promise<ClaudeClient> {
+  ): Promise<unknown> {
     return await this.getOrCreateSessionClient(sessionId, options);
   }
 
@@ -453,21 +546,66 @@ class SessionService {
    * @returns The ClaudeClient if it exists and is running, undefined otherwise
    */
   getClient(sessionId: string): ClaudeClient | undefined {
-    return this.providerAdapter.getClient(sessionId);
+    return this.claudeAdapter.getClient(sessionId);
+  }
+
+  getSessionClient(sessionId: string): unknown | undefined {
+    return this.resolveAdapterForSessionSync(sessionId).getClient(sessionId);
   }
 
   toPublicMessageDelta(message: ClaudeMessage, order?: number): SessionDeltaEvent {
-    return this.providerAdapter.toPublicDeltaEvent(
-      this.providerAdapter.toCanonicalAgentMessage(message, order)
+    return this.claudeAdapter.toPublicDeltaEvent(
+      this.claudeAdapter.toCanonicalAgentMessage(message, order)
     );
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    await this.providerAdapter.setModel(sessionId, model);
+    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    const nextModel = resolveSessionModelForProvider(model, session.provider);
+    await adapter.setModel(sessionId, nextModel);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    await this.providerAdapter.setThinkingBudget(sessionId, maxTokens);
+    const adapter =
+      this.resolveKnownAdapterForSessionSync(sessionId) ??
+      (await this.loadSessionWithAdapter(sessionId)).adapter;
+    await adapter.setThinkingBudget(sessionId, maxTokens);
+  }
+
+  async sendSessionMessage(
+    sessionId: string,
+    content: string | ClaudeContentItem[]
+  ): Promise<void> {
+    const adapter = this.resolveKnownAdapterForSessionSync(sessionId);
+    if (adapter === this.codexAdapter) {
+      const normalizedText = this.toCodexTextContent(content);
+      await this.codexAdapter.sendMessage(sessionId, normalizedText);
+      return;
+    }
+
+    if (adapter === this.claudeAdapter) {
+      await this.claudeAdapter.sendMessage(sessionId, content);
+      return;
+    }
+
+    const { session } = await this.loadSessionWithAdapter(sessionId);
+    if (session.provider === 'CODEX') {
+      const normalizedText = this.toCodexTextContent(content);
+      await this.codexAdapter.sendMessage(sessionId, normalizedText);
+      return;
+    }
+    await this.claudeAdapter.sendMessage(sessionId, content);
+  }
+
+  async getSessionConversationHistory(
+    sessionId: string,
+    workingDir: string
+  ): Promise<HistoryMessage[]> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session || session.provider !== 'CLAUDE' || !session.claudeSessionId) {
+      return [];
+    }
+    return await SessionManager.getHistory(session.claudeSessionId, workingDir);
   }
 
   async rewindSessionFiles(
@@ -475,11 +613,12 @@ class SessionService {
     userMessageId: string,
     dryRun?: boolean
   ): Promise<RewindFilesResponse> {
-    return await this.providerAdapter.rewindFiles(sessionId, userMessageId, dryRun);
+    const { adapter } = await this.loadSessionWithAdapter(sessionId);
+    return (await adapter.rewindFiles(sessionId, userMessageId, dryRun)) as RewindFilesResponse;
   }
 
   respondToPermissionRequest(sessionId: string, requestId: string, allow: boolean): void {
-    this.providerAdapter.respondToPermission(sessionId, requestId, allow);
+    this.resolveAdapterForSessionSync(sessionId).respondToPermission(sessionId, requestId, allow);
   }
 
   respondToQuestionRequest(
@@ -487,17 +626,18 @@ class SessionService {
     requestId: string,
     answers: Record<string, string | string[]>
   ): void {
-    this.providerAdapter.respondToQuestion(sessionId, requestId, answers);
+    this.resolveAdapterForSessionSync(sessionId).respondToQuestion(sessionId, requestId, answers);
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
     const fallback = createInitialSessionRuntimeState();
     const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
     const base = persisted ?? fallback;
+    const adapter = this.resolveAdapterForSessionSync(sessionId);
 
-    const client = this.providerAdapter.getClient(sessionId);
+    const client = adapter.getClient(sessionId);
     if (client) {
-      const isWorking = this.getClientWorkingState(client);
+      const isWorking = adapter.isSessionWorking(sessionId);
       return {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -506,7 +646,7 @@ class SessionService {
       };
     }
 
-    if (this.providerAdapter.getPendingClient(sessionId) !== undefined) {
+    if (adapter.getPendingClient(sessionId) !== undefined) {
       return {
         phase: 'starting',
         processState: 'alive',
@@ -515,7 +655,7 @@ class SessionService {
       };
     }
 
-    if (this.providerAdapter.isStopInProgress(sessionId)) {
+    if (adapter.isStopInProgress(sessionId)) {
       return {
         ...base,
         phase: 'stopping',
@@ -536,6 +676,101 @@ class SessionService {
     }
 
     return base;
+  }
+
+  private async createClaudeClient(
+    sessionId: string,
+    options?: {
+      thinkingEnabled?: boolean;
+      permissionMode?: 'bypassPermissions' | 'plan';
+      model?: string;
+    },
+    session?: AgentSessionRecord
+  ): Promise<ClaudeClient> {
+    const { clientOptions, context, handlers } = await this.buildClientOptions(
+      sessionId,
+      {
+        thinkingEnabled: options?.thinkingEnabled,
+        permissionMode: options?.permissionMode,
+        model: options?.model,
+      },
+      session
+    );
+
+    return await this.claudeAdapter.getOrCreateClient(sessionId, clientOptions, handlers, context);
+  }
+
+  private async createCodexClient(
+    sessionId: string,
+    model?: string,
+    session?: AgentSessionRecord
+  ): Promise<unknown> {
+    const context = await this.loadCodexSessionContext(sessionId, session);
+    const requestedModel = normalizeSessionModelForProvider(model, 'CODEX');
+    const clientOptions = {
+      workingDir: context.workingDir,
+      sessionId,
+      model: requestedModel ?? context.model,
+    };
+    return await this.codexAdapter.getOrCreateClient(sessionId, clientOptions, {}, context);
+  }
+
+  private async loadCodexSessionContext(
+    sessionId: string,
+    preloadedSession?: AgentSessionRecord
+  ): Promise<{
+    workspaceId: string;
+    workingDir: string;
+    model: string;
+  }> {
+    const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const workspace = await this.repository.getWorkspaceById(session.workspaceId);
+    if (!workspace?.worktreePath) {
+      throw new Error(`Workspace or worktree not found for session: ${sessionId}`);
+    }
+
+    await this.repository.markWorkspaceHasHadSessions(session.workspaceId);
+    return {
+      workspaceId: session.workspaceId,
+      workingDir: workspace.worktreePath,
+      model: resolveSessionModelForProvider(session.model, 'CODEX'),
+    };
+  }
+
+  private toCodexTextContent(content: string | ClaudeContentItem[]): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    const chunks: string[] = [];
+    for (const item of content) {
+      switch (item.type) {
+        case 'text':
+          chunks.push(item.text);
+          break;
+        case 'thinking':
+          chunks.push(item.thinking);
+          break;
+        case 'image':
+          chunks.push('[Image attachment omitted for this provider]');
+          break;
+        case 'tool_result':
+          if (typeof item.content === 'string') {
+            chunks.push(item.content);
+          } else {
+            chunks.push(JSON.stringify(item.content));
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    return chunks.join('\n\n');
   }
 
   /**
@@ -578,6 +813,8 @@ class SessionService {
             sessionId,
             error: error instanceof Error ? error.message : String(error),
           });
+        } finally {
+          this.clearSessionProvider(sessionId);
         }
       },
       onError: (sessionId: string, error: Error) => {
@@ -599,28 +836,31 @@ class SessionService {
    * Returns a RegisteredProcess interface with status, lifecycle, and resource methods.
    */
   getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
-    return this.providerAdapter.getSessionProcess(sessionId);
+    return this.claudeAdapter.getSessionProcess(sessionId);
   }
 
   /**
    * Check if a session is running in memory
    */
   isSessionRunning(sessionId: string): boolean {
-    return this.providerAdapter.isSessionRunning(sessionId);
+    return this.resolveAdapterForSessionSync(sessionId).isSessionRunning(sessionId);
   }
 
   /**
    * Check if a session is actively working (not just alive, but processing)
    */
   isSessionWorking(sessionId: string): boolean {
-    return this.providerAdapter.isSessionWorking(sessionId);
+    return this.resolveAdapterForSessionSync(sessionId).isSessionWorking(sessionId);
   }
 
   /**
    * Check if any session in the given list is actively working
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
-    return this.providerAdapter.isAnySessionWorking(sessionIds);
+    return (
+      this.claudeAdapter.isAnySessionWorking(sessionIds) ||
+      this.codexAdapter.isAnySessionWorking(sessionIds)
+    );
   }
 
   /**
@@ -647,6 +887,13 @@ class SessionService {
     };
   }
 
+  async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
+    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    return adapter.getChatBarCapabilities({
+      selectedModel: resolveSessionModelForProvider(session.model, session.provider),
+    });
+  }
+
   /**
    * Get all active Claude processes for admin view
    */
@@ -658,7 +905,7 @@ class SessionService {
     resourceUsage: ResourceUsage | null;
     idleTimeMs: number;
   }> {
-    return this.providerAdapter.getAllActiveProcesses();
+    return this.claudeAdapter.getAllActiveProcesses();
   }
 
   getCodexManagerStatus(): ReturnType<CodexAppServerManager['getStatus']> {
@@ -676,7 +923,7 @@ class SessionService {
    * Returns an iterator of [sessionId, client] pairs.
    */
   getAllClients(): IterableIterator<[string, ClaudeClient]> {
-    return this.providerAdapter.getAllClients();
+    return this.claudeAdapter.getAllClients();
   }
 
   /**
@@ -687,7 +934,7 @@ class SessionService {
     let firstError: unknown = null;
 
     try {
-      await this.providerAdapter.stopAllClients(timeoutMs);
+      await this.claudeAdapter.stopAllClients(timeoutMs);
     } catch (error) {
       firstError = error;
       logger.error('Failed to stop Claude provider clients during shutdown', {
@@ -706,19 +953,24 @@ class SessionService {
       });
     }
 
+    this.sessionProviderCache.clear();
+
     if (firstError) {
       throw firstError instanceof Error ? firstError : new Error(String(firstError));
     }
   }
 
-  private shouldStopWorkspaceSession(session: { id: string; status: SessionStatus }): {
+  private shouldStopWorkspaceSession(
+    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
+    adapter: SessionAdapter
+  ): {
     shouldStop: boolean;
-    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>;
+    pendingClient: Promise<unknown> | undefined;
   } {
-    const pendingClient = this.providerAdapter.getPendingClient(session.id);
+    const pendingClient = adapter.getPendingClient(session.id);
     const shouldStop = Boolean(
       session.status === SessionStatus.RUNNING ||
-        this.providerAdapter.getSessionProcess(session.id) ||
+        adapter.isSessionRunning(session.id) ||
         pendingClient
     );
     return { shouldStop, pendingClient };
@@ -727,7 +979,7 @@ class SessionService {
   private async waitForPendingClient(
     workspaceId: string,
     sessionId: string,
-    pendingClient: ReturnType<ActiveSessionProviderAdapter['getPendingClient']>
+    pendingClient: Promise<unknown> | undefined
   ): Promise<void> {
     if (!pendingClient) {
       return;
@@ -735,7 +987,7 @@ class SessionService {
     try {
       await pendingClient;
     } catch (error) {
-      logger.warn('Pending Claude session failed to start before stop', {
+      logger.warn('Pending session failed to start before stop', {
         sessionId,
         workspaceId,
         error: error instanceof Error ? error.message : String(error),
@@ -744,10 +996,11 @@ class SessionService {
   }
 
   private async stopWorkspaceSession(
-    session: { id: string; status: SessionStatus },
+    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
     workspaceId: string
   ): Promise<void> {
-    const { shouldStop, pendingClient } = this.shouldStopWorkspaceSession(session);
+    const adapter = this.resolveAdapterForProvider(session.provider ?? 'CLAUDE');
+    const { shouldStop, pendingClient } = this.shouldStopWorkspaceSession(session, adapter);
     if (!shouldStop) {
       return;
     }
@@ -755,7 +1008,9 @@ class SessionService {
     await this.waitForPendingClient(workspaceId, session.id, pendingClient);
 
     try {
-      await this.stopSession(session.id);
+      await this.stopSession(session.id, {
+        providerHint: session.provider ?? 'CLAUDE',
+      });
     } catch (error) {
       logger.error('Failed to stop workspace session', {
         sessionId: session.id,
@@ -772,13 +1027,14 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       initialPrompt?: string;
-    }
+    },
+    session?: AgentSessionRecord
   ): Promise<{
     clientOptions: ClaudeClientOptions;
     context: { workspaceId: string; workingDir: string };
     handlers: ReturnType<SessionService['buildClientEventHandlers']>;
   }> {
-    const sessionContext = await this.loadSessionContext(sessionId);
+    const sessionContext = await this.loadSessionContext(sessionId, session);
     if (!sessionContext) {
       throw new Error(`Session not found: ${sessionId}`);
     }
@@ -800,7 +1056,7 @@ class SessionService {
       workingDir: sessionContext.workingDir,
       resumeClaudeSessionId: sessionContext.resumeClaudeSessionId,
       systemPrompt: sessionContext.systemPrompt,
-      model: options?.model ?? sessionContext.model,
+      model: resolveSessionModelForProvider(options?.model ?? sessionContext.model, 'CLAUDE'),
       permissionMode: options?.permissionMode ?? 'bypassPermissions',
       includePartialMessages: false,
       thinkingEnabled: options?.thinkingEnabled,
@@ -816,14 +1072,17 @@ class SessionService {
     };
   }
 
-  private async loadSessionContext(sessionId: string): Promise<{
+  private async loadSessionContext(
+    sessionId: string,
+    preloadedSession?: AgentSessionRecord
+  ): Promise<{
     workingDir: string;
     resumeClaudeSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
     workspaceId: string;
   } | null> {
-    const session = await this.repository.getSessionById(sessionId);
+    const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
     if (!session) {
       logger.warn('Session not found when getting options', { sessionId });
       return null;

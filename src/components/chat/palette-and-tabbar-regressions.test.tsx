@@ -21,7 +21,7 @@ import { createElement, createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { CommandInfo } from '@/lib/claude-types';
+import type { CommandInfo } from '@/lib/chat-protocol';
 import { type SessionData, SessionTabBar } from './session-tab-bar';
 import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
 

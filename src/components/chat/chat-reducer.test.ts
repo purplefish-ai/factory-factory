@@ -14,8 +14,9 @@ import type {
   SessionInfo,
   UserQuestionRequest,
   WebSocketMessage,
-} from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS, MessageState } from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
+import { DEFAULT_CHAT_SETTINGS, MessageState } from '@/lib/chat-protocol';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   type ChatAction,
@@ -40,6 +41,28 @@ function toQueuedMessagesMap(messages: QueuedMessage[]): Map<string, QueuedMessa
     map.set(msg.id, msg);
   }
   return map;
+}
+
+function createFullyEnabledCapabilities(
+  selectedModel = DEFAULT_CHAT_SETTINGS.selectedModel
+): ChatBarCapabilities {
+  return {
+    provider: 'CLAUDE',
+    model: {
+      enabled: true,
+      options: [
+        { value: 'opus', label: 'Opus' },
+        { value: 'sonnet', label: 'Sonnet' },
+      ],
+      selected: selectedModel,
+    },
+    thinking: { enabled: true, defaultBudget: 10_000 },
+    planMode: { enabled: true },
+    attachments: { enabled: true, kinds: ['image', 'text'] },
+    slashCommands: { enabled: true },
+    usageStats: { enabled: true, contextWindow: true },
+    rewind: { enabled: true },
+  };
 }
 
 function createTestToolUseMessage(toolUseId: string): ClaudeMessage {
@@ -1414,11 +1437,15 @@ describe('chatReducer', () => {
 
   describe('UPDATE_SETTINGS action', () => {
     it('should merge partial settings', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatCapabilities: createFullyEnabledCapabilities(),
+      };
       const action: ChatAction = {
         type: 'UPDATE_SETTINGS',
         payload: { thinkingEnabled: true },
       };
-      const newState = chatReducer(initialState, action);
+      const newState = chatReducer(state, action);
 
       expect(newState.chatSettings.thinkingEnabled).toBe(true);
       expect(newState.chatSettings.selectedModel).toBe(DEFAULT_CHAT_SETTINGS.selectedModel);
@@ -1426,11 +1453,15 @@ describe('chatReducer', () => {
     });
 
     it('should update multiple settings at once', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatCapabilities: createFullyEnabledCapabilities(),
+      };
       const action: ChatAction = {
         type: 'UPDATE_SETTINGS',
         payload: { selectedModel: 'sonnet', planModeEnabled: true },
       };
-      const newState = chatReducer(initialState, action);
+      const newState = chatReducer(state, action);
 
       expect(newState.chatSettings.selectedModel).toBe('sonnet');
       expect(newState.chatSettings.planModeEnabled).toBe(true);
@@ -1439,15 +1470,57 @@ describe('chatReducer', () => {
 
   describe('SET_SETTINGS action', () => {
     it('should replace entire settings object', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatCapabilities: createFullyEnabledCapabilities(),
+      };
       const newSettings: ChatSettings = {
         selectedModel: 'opus',
         thinkingEnabled: true,
         planModeEnabled: true,
       };
       const action: ChatAction = { type: 'SET_SETTINGS', payload: newSettings };
-      const newState = chatReducer(initialState, action);
+      const newState = chatReducer(state, action);
 
       expect(newState.chatSettings).toEqual(newSettings);
+    });
+  });
+
+  describe('WS_CHAT_CAPABILITIES action', () => {
+    it('stores capabilities and clamps unsupported settings', () => {
+      const state: ChatState = {
+        ...initialState,
+        chatSettings: {
+          selectedModel: 'sonnet',
+          thinkingEnabled: true,
+          planModeEnabled: true,
+        },
+        slashCommands: [{ name: '/help', description: 'Help' }],
+        slashCommandsLoaded: false,
+      };
+
+      const capabilities: ChatBarCapabilities = {
+        provider: 'CODEX',
+        model: { enabled: false, options: [] },
+        thinking: { enabled: false },
+        planMode: { enabled: true },
+        attachments: { enabled: false, kinds: [] },
+        slashCommands: { enabled: false },
+        usageStats: { enabled: false, contextWindow: false },
+        rewind: { enabled: false },
+      };
+
+      const action: ChatAction = {
+        type: 'WS_CHAT_CAPABILITIES',
+        payload: { capabilities },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.chatCapabilities).toEqual(capabilities);
+      expect(newState.chatSettings.thinkingEnabled).toBe(false);
+      expect(newState.chatSettings.planModeEnabled).toBe(true);
+      expect(newState.slashCommands).toEqual([]);
+      expect(newState.slashCommandsLoaded).toBe(true);
     });
   });
 
@@ -2765,6 +2838,7 @@ describe('Token Stats Accumulation', () => {
     it('merges settings updates', () => {
       const state = createInitialChatState({
         chatSettings: { selectedModel: 'opus', thinkingEnabled: false, planModeEnabled: false },
+        chatCapabilities: createFullyEnabledCapabilities(),
       });
       const action: ChatAction = {
         type: 'UPDATE_SETTINGS',

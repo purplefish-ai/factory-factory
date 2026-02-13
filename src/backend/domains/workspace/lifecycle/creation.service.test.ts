@@ -1,7 +1,8 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as worktreeLifecycleServiceModule from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
-import * as claudeSessionAccessorModule from '@/backend/resource_accessors/claude-session.accessor';
+import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
+import * as agentSessionAccessorModule from '@/backend/resource_accessors/agent-session.accessor';
 import * as projectAccessorModule from '@/backend/resource_accessors/project.accessor';
 import * as userSettingsAccessorModule from '@/backend/resource_accessors/user-settings.accessor';
 import * as workspaceAccessorModule from '@/backend/resource_accessors/workspace.accessor';
@@ -18,7 +19,7 @@ type Logger = ReturnType<typeof createLogger>;
 vi.mock('@/backend/resource_accessors/workspace.accessor');
 vi.mock('@/backend/resource_accessors/project.accessor');
 vi.mock('@/backend/resource_accessors/user-settings.accessor');
-vi.mock('@/backend/resource_accessors/claude-session.accessor');
+vi.mock('@/backend/resource_accessors/agent-session.accessor');
 vi.mock('@/backend/services/git-ops.service');
 vi.mock('@/backend/domains/workspace/worktree/worktree-lifecycle.service');
 
@@ -139,7 +140,7 @@ describe('WorkspaceCreationService', () => {
 
     vi.spyOn(workspaceAccessorModule.workspaceAccessor, 'create').mockResolvedValue(mockWorkspace);
 
-    vi.spyOn(claudeSessionAccessorModule.claudeSessionAccessor, 'create').mockResolvedValue({
+    vi.spyOn(agentSessionAccessorModule.agentSessionAccessor, 'create').mockResolvedValue({
       id: 'session-1',
       workspaceId: 'ws-123',
       workflow: 'feature',
@@ -383,11 +384,12 @@ describe('WorkspaceCreationService', () => {
         const result = await service.create(source);
 
         expect(result.defaultSessionCreated).toBe(true);
-        expect(claudeSessionAccessorModule.claudeSessionAccessor.create).toHaveBeenCalledWith({
+        expect(agentSessionAccessorModule.agentSessionAccessor.create).toHaveBeenCalledWith({
           workspaceId: 'ws-123',
           workflow: 'followup',
           name: 'Chat 1',
           provider: 'CLAUDE',
+          model: resolveSessionModelForProvider(undefined, 'CLAUDE'),
           claudeProjectPath: null,
         });
       });
@@ -404,11 +406,11 @@ describe('WorkspaceCreationService', () => {
         const result = await service.create(source);
 
         expect(result.defaultSessionCreated).toBe(false);
-        expect(claudeSessionAccessorModule.claudeSessionAccessor.create).not.toHaveBeenCalled();
+        expect(agentSessionAccessorModule.agentSessionAccessor.create).not.toHaveBeenCalled();
       });
 
       it('should handle default session creation failure gracefully', async () => {
-        vi.spyOn(claudeSessionAccessorModule.claudeSessionAccessor, 'create').mockRejectedValue(
+        vi.spyOn(agentSessionAccessorModule.agentSessionAccessor, 'create').mockRejectedValue(
           new Error('Session creation failed')
         );
 
@@ -452,9 +454,10 @@ describe('WorkspaceCreationService', () => {
           name: 'Test',
         });
 
-        expect(claudeSessionAccessorModule.claudeSessionAccessor.create).toHaveBeenCalledWith(
+        expect(agentSessionAccessorModule.agentSessionAccessor.create).toHaveBeenCalledWith(
           expect.objectContaining({
             provider: 'CODEX',
+            model: resolveSessionModelForProvider(undefined, 'CODEX'),
             claudeProjectPath: null,
           })
         );

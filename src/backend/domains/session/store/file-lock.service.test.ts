@@ -9,8 +9,8 @@ const mockLoggerDebug = vi.fn();
 const mockLoggerWarn = vi.fn();
 const mockLoggerError = vi.fn();
 
-vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
-  claudeSessionAccessor: {
+vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
+  agentSessionAccessor: {
     findById: (...args: unknown[]) => mockFindById(...args),
   },
 }));

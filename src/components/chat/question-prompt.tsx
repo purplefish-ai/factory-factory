@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { PromptCard } from '@/components/ui/prompt-card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
-import type { AskUserQuestion, UserQuestionRequest } from '@/lib/claude-types';
+import type { AskUserQuestion, UserQuestionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 
 // =============================================================================

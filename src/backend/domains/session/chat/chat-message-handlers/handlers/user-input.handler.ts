@@ -21,10 +21,9 @@ export function createUserInputHandler(): ChatMessageHandler<UserInputMessage> {
     const messageContent =
       typeof rawContent === 'string' ? rawContent : (rawContent as ClaudeContentItem[]);
 
-    const existingClient = sessionService.getClient(sessionId);
-    if (existingClient?.isRunning()) {
-      existingClient.sendMessage(messageContent).catch((error) => {
-        logger.error('Failed to send message to Claude', { sessionId, error });
+    if (sessionService.isSessionRunning(sessionId)) {
+      void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {
+        logger.error('Failed to send message to provider', { sessionId, error });
       });
       return;
     }
@@ -32,7 +31,7 @@ export function createUserInputHandler(): ChatMessageHandler<UserInputMessage> {
     ws.send(
       JSON.stringify({
         type: 'error',
-        message: 'No active Claude session. Use queue_message to queue messages.',
+        message: 'No active session. Use queue_message to queue messages.',
       })
     );
   };

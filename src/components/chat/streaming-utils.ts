@@ -7,8 +7,8 @@
  */
 
 import { z } from 'zod';
-import type { ClaudeMessage, ClaudeStreamEvent, InputJsonDelta } from '@/lib/claude-types';
-import { isStreamEventMessage } from '@/lib/claude-types';
+import type { ClaudeMessage, ClaudeStreamEvent, InputJsonDelta } from '@/lib/chat-protocol';
+import { isStreamEventMessage } from '@/lib/chat-protocol';
 import { createDebugLogger } from '@/lib/debug';
 import type { ChatAction } from './reducer';
 

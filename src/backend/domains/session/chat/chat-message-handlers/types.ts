@@ -1,5 +1,4 @@
 import type { WebSocket } from 'ws';
-import type { ClaudeClient } from '@/backend/domains/session/claude/index';
 import type { ChatMessageInput } from '@/shared/websocket';
 
 export interface ClientCreator {
@@ -10,7 +9,7 @@ export interface ClientCreator {
       planModeEnabled?: boolean;
       model?: string;
     }
-  ): Promise<ClaudeClient>;
+  ): Promise<unknown>;
 }
 
 export interface HandlerContext<T extends ChatMessageInput = ChatMessageInput> {

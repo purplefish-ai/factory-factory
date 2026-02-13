@@ -14,7 +14,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { createDebugLogger } from '@/lib/debug';
 import { loadAllSessionData } from './chat-persistence';
 import type { ChatAction } from './reducer';

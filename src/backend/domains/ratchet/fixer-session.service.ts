@@ -1,7 +1,7 @@
 import { SessionStatus } from '@factory-factory/core';
 import { SessionProvider } from '@prisma-gen/client';
 import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -78,7 +78,7 @@ class FixerSessionService {
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId,
     });
-    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
+    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
     const matching = sessions
       .filter(
         (s) =>
@@ -128,7 +128,7 @@ class FixerSessionService {
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId: input.workspaceId,
     });
-    const acquisition = await claudeSessionAccessor.acquireFixerSession({
+    const acquisition = await agentSessionAccessor.acquireFixerSession({
       workspaceId: input.workspaceId,
       workflow: input.workflow,
       sessionName: input.sessionName,

@@ -9,8 +9,8 @@ vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   },
 }));
 
-vi.mock('@/backend/resource_accessors/claude-session.accessor', () => ({
-  claudeSessionAccessor: {
+vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
+  agentSessionAccessor: {
     findByWorkspaceId: vi.fn(),
     acquireFixerSession: vi.fn(),
   },
@@ -38,7 +38,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
@@ -87,7 +87,7 @@ describe('FixerSessionService', () => {
 
   it('returns already_active when existing session is actively working', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
       outcome: 'existing',
       sessionId: 's1',
       status: SessionStatus.RUNNING,
@@ -108,7 +108,7 @@ describe('FixerSessionService', () => {
 
   it('sends message to running idle session when configured', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
       outcome: 'existing',
       sessionId: 's1',
       status: SessionStatus.RUNNING,
@@ -136,7 +136,7 @@ describe('FixerSessionService', () => {
 
   it('creates and starts a new session', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
       outcome: 'created',
       sessionId: 's-new',
     });
@@ -166,7 +166,7 @@ describe('FixerSessionService', () => {
     } as never);
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
     vi.mocked(configService.getMaxSessionsPerWorkspace).mockReturnValue(5);
-    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockResolvedValue({
+    vi.mocked(agentSessionAccessor.acquireFixerSession).mockResolvedValue({
       outcome: 'limit_reached',
     });
 
@@ -178,7 +178,7 @@ describe('FixerSessionService', () => {
       buildPrompt: () => 'prompt',
     });
 
-    expect(claudeSessionAccessor.acquireFixerSession).toHaveBeenCalledWith(
+    expect(agentSessionAccessor.acquireFixerSession).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: 'CODEX',
         claudeProjectPath: null,
@@ -188,7 +188,7 @@ describe('FixerSessionService', () => {
 
   it('deduplicates concurrent acquisition by workspace/workflow', async () => {
     vi.mocked(workspaceAccessor.findById).mockResolvedValue({ worktreePath: '/tmp/w' } as never);
-    vi.mocked(claudeSessionAccessor.acquireFixerSession).mockImplementation(async () => {
+    vi.mocked(agentSessionAccessor.acquireFixerSession).mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       return { outcome: 'created', sessionId: 's-new' };
     });
@@ -214,11 +214,11 @@ describe('FixerSessionService', () => {
     ]);
 
     expect(first).toEqual(second);
-    expect(claudeSessionAccessor.acquireFixerSession).toHaveBeenCalledTimes(1);
+    expect(agentSessionAccessor.acquireFixerSession).toHaveBeenCalledTimes(1);
   });
 
   it('returns latest active session for workflow', async () => {
-    vi.mocked(claudeSessionAccessor.findByWorkspaceId).mockResolvedValue([
+    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
       {
         id: 'old',
         workflow: 'ci-fix',

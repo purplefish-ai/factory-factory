@@ -15,7 +15,8 @@ import type {
   TokenStats,
   UserQuestionRequest,
   WebSocketMessage,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
+import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 // =============================================================================
 // State Types
@@ -120,6 +121,8 @@ export interface ChatState {
   pendingRequest: PendingRequest;
   /** Chat settings (model, thinking, plan mode) */
   chatSettings: ChatSettings;
+  /** Provider-owned capabilities for chat bar controls. */
+  chatCapabilities: ChatBarCapabilities;
   /**
    * Queued messages waiting to be sent.
    * Map from message ID to QueuedMessage - enforces uniqueness by design.
@@ -194,6 +197,7 @@ export type ChatAction =
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
   | { type: 'WS_USER_QUESTION'; payload: UserQuestionRequest }
   | { type: 'WS_PERMISSION_CANCELLED'; payload: { requestId: string } }
+  | { type: 'WS_CHAT_CAPABILITIES'; payload: { capabilities: ChatBarCapabilities } }
   // Session actions
   | { type: 'SESSION_SWITCH_START' }
   | { type: 'SESSION_LOADING_START' }

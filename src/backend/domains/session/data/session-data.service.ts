@@ -1,23 +1,70 @@
 import type { SessionStatus } from '@factory-factory/core';
 import type { SessionProvider, TerminalSession } from '@prisma-gen/client';
 import {
-  type ClaudeSession,
-  claudeSessionAccessor,
-} from '@/backend/resource_accessors/claude-session.accessor';
+  type AgentSessionRecord,
+  agentSessionAccessor,
+} from '@/backend/resource_accessors/agent-session.accessor';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 
 class SessionDataService {
-  // Claude sessions
+  // Agent sessions
 
+  findAgentSessionById(id: string) {
+    return agentSessionAccessor.findById(id);
+  }
+
+  findAgentSessionsByWorkspaceId(
+    workspaceId: string,
+    filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
+  ): Promise<AgentSessionRecord[]> {
+    return agentSessionAccessor.findByWorkspaceId(workspaceId, filters);
+  }
+
+  createAgentSession(data: {
+    workspaceId: string;
+    name?: string;
+    workflow: string;
+    model?: string;
+    provider?: SessionProvider;
+    claudeProjectPath?: string | null;
+  }): Promise<AgentSessionRecord> {
+    return agentSessionAccessor.create(data);
+  }
+
+  updateAgentSession(
+    id: string,
+    data: {
+      name?: string;
+      workflow?: string;
+      model?: string;
+      status?: SessionStatus;
+      provider?: SessionProvider;
+      claudeSessionId?: string | null;
+      claudeProjectPath?: string | null;
+      claudeProcessPid?: number | null;
+    }
+  ): Promise<AgentSessionRecord> {
+    return agentSessionAccessor.update(id, data);
+  }
+
+  deleteAgentSession(id: string): Promise<AgentSessionRecord> {
+    return agentSessionAccessor.delete(id);
+  }
+
+  findAgentSessionsWithPid(): Promise<AgentSessionRecord[]> {
+    return agentSessionAccessor.findWithPid();
+  }
+
+  // Legacy Claude-named aliases kept for compatibility while callers migrate.
   findClaudeSessionById(id: string) {
-    return claudeSessionAccessor.findById(id);
+    return this.findAgentSessionById(id);
   }
 
   findClaudeSessionsByWorkspaceId(
     workspaceId: string,
     filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
-  ): Promise<ClaudeSession[]> {
-    return claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
+  ): Promise<AgentSessionRecord[]> {
+    return this.findAgentSessionsByWorkspaceId(workspaceId, filters);
   }
 
   createClaudeSession(data: {
@@ -27,8 +74,8 @@ class SessionDataService {
     model?: string;
     provider?: SessionProvider;
     claudeProjectPath?: string | null;
-  }): Promise<ClaudeSession> {
-    return claudeSessionAccessor.create(data);
+  }): Promise<AgentSessionRecord> {
+    return this.createAgentSession(data);
   }
 
   updateClaudeSession(
@@ -43,16 +90,16 @@ class SessionDataService {
       claudeProjectPath?: string | null;
       claudeProcessPid?: number | null;
     }
-  ): Promise<ClaudeSession> {
-    return claudeSessionAccessor.update(id, data);
+  ): Promise<AgentSessionRecord> {
+    return this.updateAgentSession(id, data);
   }
 
-  deleteClaudeSession(id: string): Promise<ClaudeSession> {
-    return claudeSessionAccessor.delete(id);
+  deleteClaudeSession(id: string): Promise<AgentSessionRecord> {
+    return this.deleteAgentSession(id);
   }
 
-  findClaudeSessionsWithPid(): Promise<ClaudeSession[]> {
-    return claudeSessionAccessor.findWithPid();
+  findClaudeSessionsWithPid(): Promise<AgentSessionRecord[]> {
+    return this.findAgentSessionsWithPid();
   }
 
   // Terminal sessions

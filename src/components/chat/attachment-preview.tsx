@@ -2,7 +2,7 @@ import { FileText, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import type { MessageAttachment } from '@/lib/claude-types';
+import type { MessageAttachment } from '@/lib/chat-protocol';
 import { formatFileSize, formatLineCount, isTextAttachment } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 import { AttachmentViewerDialog } from './attachment-viewer-dialog';
