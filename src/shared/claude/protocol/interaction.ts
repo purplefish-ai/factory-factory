@@ -35,4 +35,10 @@ export interface PermissionRequest {
   timestamp: string;
   /** Plan content for ExitPlanMode requests (markdown) */
   planContent?: string | null;
+  /** ACP permission options for multi-option UI. When present, frontend renders option buttons. */
+  acpOptions?: Array<{
+    optionId: string;
+    name: string;
+    kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+  }>;
 }

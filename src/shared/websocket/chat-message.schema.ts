@@ -90,6 +90,8 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('permission_response'),
     requestId: z.string().min(1),
     allow: z.boolean(),
+    /** ACP permission option ID -- when present, takes precedence over boolean allow */
+    optionId: z.string().optional(),
   }),
 
   // Set the model

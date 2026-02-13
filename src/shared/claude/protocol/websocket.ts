@@ -101,6 +101,12 @@ interface WebSocketMessagePayloadByType {
     toolUseId?: string;
     toolInput?: Record<string, unknown>;
     planContent?: string | null;
+    /** ACP permission options -- when present, frontend renders multi-option buttons instead of binary Allow/Deny */
+    acpOptions?: Array<{
+      optionId: string;
+      name: string;
+      kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+    }>;
   };
   user_question: {
     requestId?: string;
