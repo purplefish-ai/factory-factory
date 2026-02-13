@@ -1,5 +1,6 @@
 import { SessionManager } from '@/backend/domains/session/claude/session';
 import type { ChatMessage } from '@/shared/claude';
+import { buildHydrateKey, type HydrateKeyInput } from './session-hydrate-key';
 import type { SessionStore } from './session-store.types';
 import {
   buildTranscriptFromHistory,
@@ -14,11 +15,8 @@ export class SessionHydrator {
     private readonly onParityTrace: (sessionId: string, data: Record<string, unknown>) => void
   ) {}
 
-  async ensureHydrated(
-    store: SessionStore,
-    options: { claudeSessionId: string | null; claudeProjectPath: string | null }
-  ): Promise<void> {
-    const hydrateKey = `${options.claudeSessionId ?? 'none'}::${options.claudeProjectPath ?? 'none'}`;
+  async ensureHydrated(store: SessionStore, options: HydrateKeyInput): Promise<void> {
+    const hydrateKey = buildHydrateKey(options);
     if (store.initialized && store.hydratedKey === hydrateKey) {
       return;
     }
