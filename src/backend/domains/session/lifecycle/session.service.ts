@@ -47,6 +47,8 @@ export type ClientCreatedCallback = (
   context: { workspaceId: string; workingDir: string }
 ) => void;
 
+export type CodexTerminalTurnCallback = (sessionId: string) => void | Promise<void>;
+
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
@@ -56,6 +58,7 @@ class SessionService {
   private readonly codexEventTranslator = new CodexEventTranslator({
     userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
   });
+  private onCodexTerminalTurn: CodexTerminalTurnCallback | null = null;
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
     if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
@@ -78,12 +81,9 @@ class SessionService {
     return provider === 'CODEX' ? this.codexAdapter : this.claudeAdapter;
   }
 
-  private resolveAdapterForSessionSync(sessionId: string) {
-    const cached = this.sessionProviderCache.get(sessionId);
-    if (cached) {
-      return this.resolveAdapterForProvider(cached);
-    }
-
+  private resolveKnownAdapterForSessionSync(
+    sessionId: string
+  ): typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter | null {
     if (
       this.codexAdapter.getClient(sessionId) ||
       this.codexAdapter.getPendingClient(sessionId) !== undefined ||
@@ -100,7 +100,29 @@ class SessionService {
       return this.claudeAdapter;
     }
 
-    return this.claudeAdapter;
+    const cached = this.sessionProviderCache.get(sessionId);
+    if (cached) {
+      return this.resolveAdapterForProvider(cached);
+    }
+
+    return null;
+  }
+
+  private resolveAdapterForSessionSync(sessionId: string) {
+    return this.resolveKnownAdapterForSessionSync(sessionId) ?? this.claudeAdapter;
+  }
+
+  private notifyCodexTerminalTurn(sessionId: string): void {
+    if (!this.onCodexTerminalTurn) {
+      return;
+    }
+
+    Promise.resolve(this.onCodexTerminalTurn(sessionId)).catch((error) => {
+      logger.warn('Codex terminal turn callback failed', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private async loadSessionWithAdapter(sessionId: string): Promise<{
@@ -126,6 +148,10 @@ class SessionService {
     this.claudeAdapter.setOnClientCreated(callback);
   }
 
+  setOnCodexTerminalTurn(callback: CodexTerminalTurnCallback): void {
+    this.onCodexTerminalTurn = callback;
+  }
+
   constructor(options?: {
     repository?: SessionRepository;
     promptBuilder?: SessionPromptBuilder;
@@ -139,7 +165,8 @@ class SessionService {
     this.codexAdapter.getManager().setHandlers({
       onNotification: ({ sessionId, method, params }) => {
         const registry = this.codexAdapter.getManager().getRegistry();
-        if (this.isTerminalCodexTurnMethod(method)) {
+        const isTerminalTurn = this.isTerminalCodexTurnMethod(method);
+        if (isTerminalTurn) {
           registry.markTurnTerminal(sessionId, parseTurnId(params));
         }
 
@@ -150,6 +177,10 @@ class SessionService {
             sessionDomainService.setRuntimeSnapshot(sessionId, normalized.sessionRuntime, false);
           }
           sessionDomainService.emitDelta(sessionId, normalized);
+        }
+
+        if (isTerminalTurn) {
+          this.notifyCodexTerminalTurn(sessionId);
         }
       },
       onServerRequest: ({ sessionId, method, params, canonicalRequestId }) => {
@@ -512,7 +543,9 @@ class SessionService {
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    const { adapter } = await this.loadSessionWithAdapter(sessionId);
+    const adapter =
+      this.resolveKnownAdapterForSessionSync(sessionId) ??
+      (await this.loadSessionWithAdapter(sessionId)).adapter;
     await adapter.setThinkingBudget(sessionId, maxTokens);
   }
 
@@ -520,6 +553,18 @@ class SessionService {
     sessionId: string,
     content: string | ClaudeContentItem[]
   ): Promise<void> {
+    const adapter = this.resolveKnownAdapterForSessionSync(sessionId);
+    if (adapter === this.codexAdapter) {
+      const normalizedText = this.toCodexTextContent(content);
+      await this.codexAdapter.sendMessage(sessionId, normalizedText);
+      return;
+    }
+
+    if (adapter === this.claudeAdapter) {
+      await this.claudeAdapter.sendMessage(sessionId, content);
+      return;
+    }
+
     const { session } = await this.loadSessionWithAdapter(sessionId);
     if (session.provider === 'CODEX') {
       const normalizedText = this.toCodexTextContent(content);

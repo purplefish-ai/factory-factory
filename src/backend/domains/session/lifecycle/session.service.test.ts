@@ -135,6 +135,7 @@ import { sessionService } from './session.service';
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionService.setOnCodexTerminalTurn(() => undefined);
     vi.mocked(claudeSessionProviderAdapter.getClient).mockReturnValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
@@ -920,6 +921,46 @@ describe('SessionService', () => {
       'session-1',
       'turn-1'
     );
+  });
+
+  it('invokes terminal turn callback for terminal Codex notifications', () => {
+    const onTerminalTurn = vi.fn();
+    sessionService.setOnCodexTerminalTurn(onTerminalTurn);
+
+    codexTestState.codexManagerHandlers?.onNotification?.({
+      sessionId: 'session-1',
+      method: 'turn/completed',
+      params: { threadId: 'thread-1', turnId: 'turn-1' },
+    });
+
+    expect(onTerminalTurn).toHaveBeenCalledWith('session-1');
+  });
+
+  it('avoids session DB lookup for thinking budget when provider is already known', async () => {
+    vi.mocked(codexSessionProviderAdapter.getClient).mockReturnValue(
+      unsafeCoerce({ sessionId: 'session-1', threadId: 'thread-1' })
+    );
+    vi.mocked(codexSessionProviderAdapter.setThinkingBudget).mockResolvedValue(undefined);
+
+    await sessionService.setSessionThinkingBudget('session-1', null);
+
+    expect(codexSessionProviderAdapter.setThinkingBudget).toHaveBeenCalledWith('session-1', null);
+    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
+  });
+
+  it('avoids session DB lookup when sending messages for known Codex sessions', async () => {
+    vi.mocked(codexSessionProviderAdapter.getClient).mockReturnValue(
+      unsafeCoerce({ sessionId: 'session-1', threadId: 'thread-1' })
+    );
+    vi.mocked(codexSessionProviderAdapter.sendMessage).mockResolvedValue(undefined);
+
+    await sessionService.sendSessionMessage('session-1', 'Hello Codex');
+
+    expect(codexSessionProviderAdapter.sendMessage).toHaveBeenCalledWith(
+      'session-1',
+      'Hello Codex'
+    );
+    expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
   });
 
   it('persists runtime snapshots for translated Codex runtime deltas', () => {

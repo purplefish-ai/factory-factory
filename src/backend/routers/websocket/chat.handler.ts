@@ -117,6 +117,10 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         chatMessageHandlerService.tryDispatchNextMessage(sessionId)
       );
     });
+
+    sessionService.setOnCodexTerminalTurn((sessionId) =>
+      chatMessageHandlerService.tryDispatchNextMessage(sessionId)
+    );
   }
 
   // ==========================================================================

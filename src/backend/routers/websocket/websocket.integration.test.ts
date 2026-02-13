@@ -231,6 +231,7 @@ function createChatAppContext(worktreeBaseDir: string) {
         getOrCreateSessionClient: vi.fn(),
         getSessionOptions: vi.fn(),
         setOnClientCreated: vi.fn(),
+        setOnCodexTerminalTurn: vi.fn(),
       },
     },
   });
