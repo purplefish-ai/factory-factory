@@ -55,9 +55,7 @@ describe('CodexModelCatalogService', () => {
         nextCursor: null,
       });
 
-    const service = new CodexModelCatalogService({
-      request,
-    } as never);
+    const service = new CodexModelCatalogService({ request });
 
     const models = await service.listModels({ forceRefresh: true });
 
@@ -87,9 +85,7 @@ describe('CodexModelCatalogService', () => {
       })
       .mockRejectedValueOnce(new Error('temporary failure'));
 
-    const service = new CodexModelCatalogService({
-      request,
-    } as never);
+    const service = new CodexModelCatalogService({ request });
 
     const first = await service.listModels({ forceRefresh: true });
     const second = await service.listModels({ forceRefresh: true });

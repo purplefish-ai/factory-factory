@@ -3,10 +3,6 @@ import {
   type CodexModel,
   CodexModelListResponseSchema,
 } from '@/backend/domains/session/codex/schemas';
-import {
-  type CodexAppServerManager,
-  codexAppServerManager,
-} from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('codex-model-catalog');
@@ -20,10 +16,14 @@ interface CachedModelList {
   models: CodexModel[];
 }
 
+export interface CodexModelCatalogRequester {
+  request(method: string, params?: unknown): Promise<unknown>;
+}
+
 export class CodexModelCatalogService {
   private cache: CachedModelList | null = null;
 
-  constructor(private readonly manager: CodexAppServerManager = codexAppServerManager) {}
+  constructor(private readonly requester: CodexModelCatalogRequester) {}
 
   invalidate(): void {
     this.cache = null;
@@ -64,7 +64,7 @@ export class CodexModelCatalogService {
     let pageCount = 0;
 
     do {
-      const rawResponse = await this.manager.request('model/list', {
+      const rawResponse = await this.requester.request('model/list', {
         limit: MODEL_LIST_PAGE_LIMIT,
         ...(cursor ? { cursor } : {}),
       });
@@ -109,5 +109,3 @@ function dedupeAndSortModels(models: CodexModel[]): CodexModel[] {
     return a.displayName.localeCompare(b.displayName);
   });
 }
-
-export const codexModelCatalogService = new CodexModelCatalogService();

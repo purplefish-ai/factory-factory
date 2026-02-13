@@ -56,6 +56,11 @@ function createFullyEnabledCapabilities(
       ],
       selected: selectedModel,
     },
+    reasoning: {
+      enabled: true,
+      options: [{ value: 'medium', label: 'Medium' }],
+      selected: 'medium',
+    },
     thinking: { enabled: true, defaultBudget: 10_000 },
     planMode: { enabled: true },
     attachments: { enabled: true, kinds: ['image', 'text'] },
@@ -164,6 +169,7 @@ describe('createInitialChatState', () => {
 
   it('should allow overrides for initial state', () => {
     const customSettings: ChatSettings = {
+      ...DEFAULT_CHAT_SETTINGS,
       selectedModel: 'sonnet',
       thinkingEnabled: true,
       planModeEnabled: true,
@@ -936,7 +942,12 @@ describe('chatReducer', () => {
             id: 'q-1',
             text: 'queued',
             timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
           },
         ]),
         toolUseIdToIndex: new Map([['tool-1', 0]]),
@@ -1396,7 +1407,12 @@ describe('chatReducer', () => {
         id: 'q-1',
         text: 'Hello',
         timestamp: '2024-01-01T00:00:00.000Z',
-        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
       };
       const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: queuedMessage };
       const newState = chatReducer(initialState, action);
@@ -1410,7 +1426,12 @@ describe('chatReducer', () => {
         id: 'q-1',
         text: 'First',
         timestamp: '2024-01-01T00:00:00.000Z',
-        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
       };
       const state: ChatState = {
         ...initialState,
@@ -1420,7 +1441,12 @@ describe('chatReducer', () => {
         id: 'q-2',
         text: 'Second',
         timestamp: '2024-01-01T00:00:01.000Z',
-        settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+        settings: {
+          selectedModel: null,
+          reasoningEffort: null,
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
       };
       const action: ChatAction = { type: 'ADD_TO_QUEUE', payload: newMessage };
       const newState = chatReducer(state, action);
@@ -1475,7 +1501,9 @@ describe('chatReducer', () => {
         chatCapabilities: createFullyEnabledCapabilities(),
       };
       const newSettings: ChatSettings = {
+        ...DEFAULT_CHAT_SETTINGS,
         selectedModel: 'opus',
+        reasoningEffort: 'medium',
         thinkingEnabled: true,
         planModeEnabled: true,
       };
@@ -1491,6 +1519,7 @@ describe('chatReducer', () => {
       const state: ChatState = {
         ...initialState,
         chatSettings: {
+          ...DEFAULT_CHAT_SETTINGS,
           selectedModel: 'sonnet',
           thinkingEnabled: true,
           planModeEnabled: true,
@@ -1502,6 +1531,7 @@ describe('chatReducer', () => {
       const capabilities: ChatBarCapabilities = {
         provider: 'CODEX',
         model: { enabled: false, options: [] },
+        reasoning: { enabled: false, options: [] },
         thinking: { enabled: false },
         planMode: { enabled: true },
         attachments: { enabled: false, kinds: [] },
@@ -1552,7 +1582,12 @@ describe('chatReducer', () => {
             timestamp: '2024-01-01T00:00:00.000Z',
           },
         },
-        chatSettings: { selectedModel: 'sonnet', thinkingEnabled: true, planModeEnabled: true },
+        chatSettings: {
+          ...DEFAULT_CHAT_SETTINGS,
+          selectedModel: 'sonnet',
+          thinkingEnabled: true,
+          planModeEnabled: true,
+        },
         toolUseIdToIndex: new Map([['tool-1', 0]]),
       };
 
@@ -1590,13 +1625,23 @@ describe('chatReducer', () => {
         ],
         sessionStatus: { phase: 'running' } as const,
         gitBranch: 'feature/test',
-        chatSettings: { selectedModel: 'sonnet', thinkingEnabled: true, planModeEnabled: false },
+        chatSettings: {
+          ...DEFAULT_CHAT_SETTINGS,
+          selectedModel: 'sonnet',
+          thinkingEnabled: true,
+          planModeEnabled: false,
+        },
         queuedMessages: toQueuedMessagesMap([
           {
             id: 'q-1',
             text: 'queued',
             timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
           },
         ]),
       };
@@ -1792,7 +1837,12 @@ describe('chatReducer', () => {
             id: 'msg-1',
             text: 'Queued',
             timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
           },
         ]),
       };
@@ -1817,7 +1867,12 @@ describe('chatReducer', () => {
             id: 'msg-1',
             text: 'Queued',
             timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
           },
         ]),
       };
@@ -1842,7 +1897,12 @@ describe('chatReducer', () => {
             id: 'msg-1',
             text: 'Queued',
             timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
           },
         ]),
       };
@@ -1881,7 +1941,12 @@ describe('chatReducer', () => {
             id: 'msg-1',
             text: 'Queued',
             timestamp: '2024-01-01T00:00:00.000Z',
-            settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
           },
         ]),
       };
@@ -2837,7 +2902,12 @@ describe('Token Stats Accumulation', () => {
 
     it('merges settings updates', () => {
       const state = createInitialChatState({
-        chatSettings: { selectedModel: 'opus', thinkingEnabled: false, planModeEnabled: false },
+        chatSettings: {
+          ...DEFAULT_CHAT_SETTINGS,
+          selectedModel: 'opus',
+          thinkingEnabled: false,
+          planModeEnabled: false,
+        },
         chatCapabilities: createFullyEnabledCapabilities(),
       });
       const action: ChatAction = {
