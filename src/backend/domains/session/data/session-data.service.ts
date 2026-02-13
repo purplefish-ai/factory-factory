@@ -7,20 +7,20 @@ import {
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 
 class SessionDataService {
-  // Claude sessions
+  // Agent sessions
 
-  findClaudeSessionById(id: string) {
+  findAgentSessionById(id: string) {
     return agentSessionAccessor.findById(id);
   }
 
-  findClaudeSessionsByWorkspaceId(
+  findAgentSessionsByWorkspaceId(
     workspaceId: string,
     filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
   ): Promise<AgentSessionRecord[]> {
     return agentSessionAccessor.findByWorkspaceId(workspaceId, filters);
   }
 
-  createClaudeSession(data: {
+  createAgentSession(data: {
     workspaceId: string;
     name?: string;
     workflow: string;
@@ -31,7 +31,7 @@ class SessionDataService {
     return agentSessionAccessor.create(data);
   }
 
-  updateClaudeSession(
+  updateAgentSession(
     id: string,
     data: {
       name?: string;
@@ -47,12 +47,59 @@ class SessionDataService {
     return agentSessionAccessor.update(id, data);
   }
 
-  deleteClaudeSession(id: string): Promise<AgentSessionRecord> {
+  deleteAgentSession(id: string): Promise<AgentSessionRecord> {
     return agentSessionAccessor.delete(id);
   }
 
-  findClaudeSessionsWithPid(): Promise<AgentSessionRecord[]> {
+  findAgentSessionsWithPid(): Promise<AgentSessionRecord[]> {
     return agentSessionAccessor.findWithPid();
+  }
+
+  // Legacy Claude-named aliases kept for compatibility while callers migrate.
+  findClaudeSessionById(id: string) {
+    return this.findAgentSessionById(id);
+  }
+
+  findClaudeSessionsByWorkspaceId(
+    workspaceId: string,
+    filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
+  ): Promise<AgentSessionRecord[]> {
+    return this.findAgentSessionsByWorkspaceId(workspaceId, filters);
+  }
+
+  createClaudeSession(data: {
+    workspaceId: string;
+    name?: string;
+    workflow: string;
+    model?: string;
+    provider?: SessionProvider;
+    claudeProjectPath?: string | null;
+  }): Promise<AgentSessionRecord> {
+    return this.createAgentSession(data);
+  }
+
+  updateClaudeSession(
+    id: string,
+    data: {
+      name?: string;
+      workflow?: string;
+      model?: string;
+      status?: SessionStatus;
+      provider?: SessionProvider;
+      claudeSessionId?: string | null;
+      claudeProjectPath?: string | null;
+      claudeProcessPid?: number | null;
+    }
+  ): Promise<AgentSessionRecord> {
+    return this.updateAgentSession(id, data);
+  }
+
+  deleteClaudeSession(id: string): Promise<AgentSessionRecord> {
+    return this.deleteAgentSession(id);
+  }
+
+  findClaudeSessionsWithPid(): Promise<AgentSessionRecord[]> {
+    return this.findAgentSessionsWithPid();
   }
 
   // Terminal sessions

@@ -8,7 +8,7 @@ import type {
   QueuedMessage,
   SessionInfo,
   TokenStats,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
@@ -207,7 +207,6 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     currentLoadRequestIdRef.current = loadRequestId;
     scheduleLoadRetry(loadGeneration, loadRequestId);
-    sendRef.current({ type: 'list_sessions' });
     sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
   }, [chat.dispatch, scheduleLoadRetry]);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ChatMessage } from '@/lib/claude-types';
+import type { ChatMessage } from '@/lib/chat-protocol';
 import { insertMessageByOrder } from './helpers';
 
 function makeUserMessage(id: string, order: number): ChatMessage {

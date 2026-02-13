@@ -1,4 +1,4 @@
-import type { ChatSettings } from '@/lib/claude-types';
+import type { ChatSettings } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 export function clampChatSettingsForCapabilities(

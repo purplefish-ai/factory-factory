@@ -43,7 +43,7 @@ export const sessionRouter = router({
     .query(async ({ ctx, input }) => {
       const { sessionService } = ctx.appContext.services;
       const { workspaceId, ...filters } = input;
-      const sessions = await sessionDataService.findClaudeSessionsByWorkspaceId(
+      const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(
         workspaceId,
         filters
       );
@@ -56,7 +56,7 @@ export const sessionRouter = router({
 
   // Get session by ID
   getSession: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const session = await sessionDataService.findClaudeSessionById(input.id);
+    const session = await sessionDataService.findAgentSessionById(input.id);
     if (!session) {
       throw new Error(`Session not found: ${input.id}`);
     }
@@ -78,7 +78,7 @@ export const sessionRouter = router({
       const { configService } = ctx.appContext.services;
       // Check per-workspace session limit
       const maxSessions = configService.getMaxSessionsPerWorkspace();
-      const existingSessions = await sessionDataService.findClaudeSessionsByWorkspaceId(
+      const existingSessions = await sessionDataService.findAgentSessionsByWorkspaceId(
         input.workspaceId
       );
 
@@ -98,7 +98,7 @@ export const sessionRouter = router({
         provider === SessionProvider.CLAUDE && workspace?.worktreePath
           ? SessionManager.getProjectPath(workspace.worktreePath)
           : null;
-      const session = await sessionDataService.createClaudeSession({
+      const session = await sessionDataService.createAgentSession({
         workspaceId: input.workspaceId,
         name: input.name,
         workflow: input.workflow,
@@ -122,7 +122,7 @@ export const sessionRouter = router({
     )
     .mutation(({ input }) => {
       const { id, ...updates } = input;
-      return sessionDataService.updateClaudeSession(id, updates);
+      return sessionDataService.updateAgentSession(id, updates);
     }),
 
   // Start a session
@@ -138,7 +138,7 @@ export const sessionRouter = router({
       await sessionService.startSession(input.id, {
         initialPrompt: input.initialPrompt,
       });
-      return sessionDataService.findClaudeSessionById(input.id);
+      return sessionDataService.findAgentSessionById(input.id);
     }),
 
   // Stop a session
@@ -149,7 +149,7 @@ export const sessionRouter = router({
       await sessionService.stopSession(input.id, {
         cleanupTransientRatchetSession: false,
       });
-      return sessionDataService.findClaudeSessionById(input.id);
+      return sessionDataService.findAgentSessionById(input.id);
     }),
 
   // Delete a session
@@ -163,7 +163,7 @@ export const sessionRouter = router({
       });
       // Clear any in-memory session store state
       sessionDomainService.clearSession(input.id);
-      return sessionDataService.deleteClaudeSession(input.id);
+      return sessionDataService.deleteAgentSession(input.id);
     }),
 
   // Terminal Sessions

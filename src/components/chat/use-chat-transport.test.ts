@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type ClaudeMessage, isWebSocketMessage } from '@/lib/claude-types';
+import { type ClaudeMessage, isWebSocketMessage } from '@/lib/chat-protocol';
 import { createToolInputAccumulatorState, handleToolInputStreaming } from './streaming-utils';
 
 describe('handleToolInputStreaming', () => {

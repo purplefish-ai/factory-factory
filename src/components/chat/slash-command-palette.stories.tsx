@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
 import { fn } from 'storybook/test';
-import type { CommandInfo } from '@/lib/claude-types';
+import type { CommandInfo } from '@/lib/chat-protocol';
 import { SlashCommandPalette } from './slash-command-palette';
 
 // Action handlers for Storybook

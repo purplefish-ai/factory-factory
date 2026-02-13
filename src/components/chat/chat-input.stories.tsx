@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
 import { fn } from 'storybook/test';
 
-import type { MessageAttachment } from '@/lib/claude-types';
+import type { MessageAttachment } from '@/lib/chat-protocol';
 import { ChatInput } from './chat-input/chat-input';
 
 // Action handler for Storybook

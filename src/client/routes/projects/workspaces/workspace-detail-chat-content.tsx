@@ -10,8 +10,8 @@ import {
   VirtualizedMessageList,
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
-import type { CommandInfo, TokenStats } from '@/lib/claude-types';
-import { groupAdjacentToolCalls, isToolSequence } from '@/lib/claude-types';
+import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
+import { groupAdjacentToolCalls, isToolSequence } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
@@ -331,7 +331,7 @@ export const ChatContent = memo(function ChatContent({
         <ChatInput
           onSend={sendMessage}
           onStop={stopChat}
-          disabled={!connected}
+          disabled={!connected || loadingSession}
           running={running}
           stopping={stopping}
           inputRef={inputRef}

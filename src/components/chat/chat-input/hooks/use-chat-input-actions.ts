@@ -3,7 +3,7 @@ import { useCallback, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import type { FileMentionKeyResult } from '@/components/chat/file-mention-palette';
 import type { SlashKeyResult } from '@/components/chat/slash-command-palette';
-import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
+import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 

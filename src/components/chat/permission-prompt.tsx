@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { PromptCard } from '@/components/ui/prompt-card';
-import type { PermissionRequest } from '@/lib/claude-types';
+import type { PermissionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { type PlanViewMode, usePlanViewMode } from './plan-view-preference';
 

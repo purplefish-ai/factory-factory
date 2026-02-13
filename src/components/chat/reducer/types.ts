@@ -15,7 +15,7 @@ import type {
   TokenStats,
   UserQuestionRequest,
   WebSocketMessage,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
 // =============================================================================

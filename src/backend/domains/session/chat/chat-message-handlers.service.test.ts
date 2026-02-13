@@ -22,7 +22,7 @@ const { mockSessionDomainService, mockSessionService, mockSessionDataService } =
     sendSessionMessage: vi.fn(),
   },
   mockSessionDataService: {
-    findClaudeSessionById: vi.fn(),
+    findAgentSessionById: vi.fn(),
   },
 }));
 
@@ -70,7 +70,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionService.sendSessionMessage.mockResolvedValue(undefined);
     mockSessionService.isSessionWorking.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
-    mockSessionDataService.findClaudeSessionById.mockResolvedValue({
+    mockSessionDataService.findAgentSessionById.mockResolvedValue({
       workspace: {
         status: 'READY',
         worktreePath: '/tmp/w1',
@@ -131,7 +131,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       endCompaction: vi.fn(),
     };
     mockSessionService.getSessionClient.mockReturnValue(client);
-    mockSessionDataService.findClaudeSessionById.mockRejectedValue(new Error('db down'));
+    mockSessionDataService.findAgentSessionById.mockRejectedValue(new Error('db down'));
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 

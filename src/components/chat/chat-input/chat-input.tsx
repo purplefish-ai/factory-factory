@@ -13,7 +13,7 @@ import {
   InputGroupTextarea,
 } from '@/components/ui/input-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/claude-types';
+import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
@@ -469,6 +469,7 @@ export const ChatInput = memo(function ChatInput({
 
   // Slash commands hook
   const slash = useSlashCommands({
+    enabled: capabilities?.slashCommands.enabled === true,
     slashCommands,
     commandsLoaded: slashCommandsLoaded,
     inputRef: resolvedInputRef,

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import type { TokenStats } from '@/lib/chat-protocol';
 import { createTokenStats } from '@/lib/claude-fixtures';
-import type { TokenStats } from '@/lib/claude-types';
 import { ContextWindowIndicator } from './context-window-indicator';
 
 const meta: Meta<typeof ContextWindowIndicator> = {

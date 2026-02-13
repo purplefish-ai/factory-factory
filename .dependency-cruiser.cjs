@@ -86,6 +86,14 @@ module.exports = {
       to: { path: '^src/shared/claude/' },
     },
     {
+      name: 'no-ui-importing-claude-types-facade',
+      severity: 'error',
+      comment:
+        'UI layers should import chat protocol helpers from src/lib/chat-protocol, not the Claude-named legacy alias.',
+      from: { path: '^src/(client|components|frontend)' },
+      to: { path: '^src/lib/claude-types\\.ts$' },
+    },
+    {
       name: 'frontend-trpc-only-imports-backend-trpc',
       severity: 'error',
       comment: 'src/frontend/lib/trpc.ts may only import backend tRPC types, not other backend modules',

@@ -4,14 +4,14 @@ import type {
   PendingInteractiveRequest,
   ToolUseContent,
   UserQuestionRequest,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
 import {
   getToolUseIdFromEvent,
   isStreamEventMessage,
   shouldPersistClaudeMessage,
   shouldSuppressDuplicateResultMessage,
   updateTokenStatsFromResult,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
 import { createDebugLogger } from '@/lib/debug';
 import type { ChatState, PendingRequest } from './types';
 

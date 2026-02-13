@@ -14,11 +14,16 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       return;
     }
 
-    const workspaceProjectPath = dbSession.workspace.worktreePath
-      ? SessionManager.getProjectPath(dbSession.workspace.worktreePath)
+    const shouldUseClaudeSessionFiles = dbSession.provider === 'CLAUDE';
+    const workspaceProjectPath =
+      shouldUseClaudeSessionFiles && dbSession.workspace.worktreePath
+        ? SessionManager.getProjectPath(dbSession.workspace.worktreePath)
+        : null;
+    let claudeProjectPath = shouldUseClaudeSessionFiles
+      ? (dbSession.claudeProjectPath ?? workspaceProjectPath)
       : null;
-    let claudeProjectPath = dbSession.claudeProjectPath ?? workspaceProjectPath;
     if (
+      shouldUseClaudeSessionFiles &&
       dbSession.claudeSessionId &&
       dbSession.claudeProjectPath &&
       workspaceProjectPath &&
@@ -38,7 +43,7 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
     await sessionDomainService.subscribe({
       sessionId,
       claudeProjectPath,
-      claudeSessionId: dbSession.claudeSessionId,
+      claudeSessionId: shouldUseClaudeSessionFiles ? dbSession.claudeSessionId : null,
       sessionRuntime,
       loadRequestId: message.loadRequestId,
     });

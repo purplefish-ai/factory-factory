@@ -82,7 +82,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     });
 
     // Set up event forwarding (idempotent - safe to call multiple times)
-    const session = await sessionDataService.findClaudeSessionById(dbSessionId);
+    const session = await sessionDataService.findAgentSessionById(dbSessionId);
     const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
     if (session?.provider === 'CLAUDE' && isClaudeClient(client)) {
       chatEventForwarderService.setupClientEvents(

@@ -2,7 +2,7 @@ import type { ClipboardEvent as ReactClipboardEvent, DragEvent as ReactDragEvent
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
-import type { MessageAttachment } from '@/lib/claude-types';
+import type { MessageAttachment } from '@/lib/chat-protocol';
 import {
   fileToAttachment,
   isSupportedImageType,

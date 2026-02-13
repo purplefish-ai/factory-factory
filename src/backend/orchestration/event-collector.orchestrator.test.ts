@@ -48,7 +48,7 @@ vi.mock('@/backend/domains/run-script', () => ({
 
 vi.mock('@/backend/domains/session', () => ({
   sessionDataService: {
-    findClaudeSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
+    findAgentSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
   },
   sessionService: {
     getRuntimeSnapshot: vi.fn().mockReturnValue({
@@ -536,7 +536,7 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-1' });
 
-    expect(sessionDataService.findClaudeSessionsByWorkspaceId).not.toHaveBeenCalled();
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
   it('workspace_idle only enqueues isWorking and does not refresh session summaries', () => {
@@ -549,7 +549,7 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-1' });
 
-    expect(sessionDataService.findClaudeSessionsByWorkspaceId).not.toHaveBeenCalled();
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
   it('workspace active transition performs one session summary query', () => {
@@ -572,22 +572,22 @@ describe('configureEventCollector', () => {
     sessionActivityHandler({ workspaceId: 'ws-1', sessionId: 's-1', isWorking: true });
     activeHandler({ workspaceId: 'ws-1' });
 
-    expect(sessionDataService.findClaudeSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
-    expect(sessionDataService.findClaudeSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledTimes(1);
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
   });
 
   it('session_activity_changed refreshes session summaries', async () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
-    vi.mocked(sessionDataService.findClaudeSessionsByWorkspaceId).mockResolvedValue([
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
       {
         id: 's-1',
         name: 'Chat 1',
         workflow: 'followup',
         model: 'claude-sonnet',
         status: 'IDLE',
-      } as Awaited<ReturnType<typeof sessionDataService.findClaudeSessionsByWorkspaceId>>[number],
+      } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
     ]);
 
     configureEventCollector();

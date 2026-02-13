@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
-import type { QueuedMessage } from '@/lib/claude-types';
+import type { QueuedMessage } from '@/lib/chat-protocol';
 import { QueuedMessages } from './queued-messages';
 
 const meta = {

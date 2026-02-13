@@ -2,13 +2,13 @@ import { Loader2 } from 'lucide-react';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/components/agent-activity/tool-renderers';
 import { MarkdownRenderer } from '@/components/ui/markdown';
-import type { ClaudeMessage } from '@/lib/claude-types';
+import type { ClaudeMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,
   isThinkingContent,
   isToolResultMessage,
   isToolUseMessage,
-} from '@/lib/claude-types';
+} from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import {
   ErrorRenderer,

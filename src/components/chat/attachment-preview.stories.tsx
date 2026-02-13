@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
 
-import type { MessageAttachment } from '@/lib/claude-types';
+import type { MessageAttachment } from '@/lib/chat-protocol';
 import { AttachmentPreview } from './attachment-preview';
 
 // Sample base64 image (1x1 red pixel PNG)

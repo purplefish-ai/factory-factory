@@ -1,6 +1,6 @@
 import { generateMessageId, handleClaudeMessage } from '@/components/chat/reducer/helpers';
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
-import type { ChatMessage, ClaudeMessage } from '@/lib/claude-types';
+import type { ChatMessage, ClaudeMessage } from '@/lib/chat-protocol';
 
 export function reduceMessageTransportSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {

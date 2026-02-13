@@ -107,6 +107,25 @@ describe('claudeSessionAccessor', () => {
     });
   });
 
+  it('defaults CODEX session model to gpt-5 when model is omitted', async () => {
+    mockAgentSession.create.mockResolvedValue(
+      buildAgentSession({ provider: SessionProvider.CODEX })
+    );
+
+    await claudeSessionAccessor.create({
+      workspaceId: 'workspace-1',
+      workflow: 'followup',
+      provider: SessionProvider.CODEX,
+    });
+
+    expect(mockAgentSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        model: 'gpt-5',
+        provider: SessionProvider.CODEX,
+      }),
+    });
+  });
+
   it('findById returns null when missing', async () => {
     mockAgentSession.findUnique.mockResolvedValue(null);
     const result = await claudeSessionAccessor.findById('missing');
@@ -285,6 +304,29 @@ describe('claudeSessionAccessor', () => {
         model: 'sonnet',
         provider: SessionProvider.CLAUDE,
         providerProjectPath: '/tmp/project',
+      }),
+    });
+  });
+
+  it('acquireFixerSession falls back to gpt-5 for CODEX when no recent model exists', async () => {
+    mockTransaction.agentSession.findFirst.mockResolvedValue(null);
+    mockTransaction.agentSession.findMany.mockResolvedValue([]);
+    mockTransaction.agentSession.create.mockResolvedValue({ id: 'new-session' });
+
+    await claudeSessionAccessor.acquireFixerSession({
+      workspaceId: 'workspace-1',
+      workflow: 'ratchet',
+      sessionName: 'Ratchet',
+      maxSessions: 5,
+      provider: SessionProvider.CODEX,
+      claudeProjectPath: null,
+    });
+
+    expect(mockTransaction.agentSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        model: 'gpt-5',
+        provider: SessionProvider.CODEX,
+        providerProjectPath: null,
       }),
     });
   });

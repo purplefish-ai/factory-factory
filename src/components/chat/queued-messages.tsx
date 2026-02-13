@@ -1,7 +1,7 @@
 import { Clock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import type { QueuedMessage } from '@/lib/claude-types';
+import type { QueuedMessage } from '@/lib/chat-protocol';
 
 interface QueuedMessagesProps {
   messages: QueuedMessage[];

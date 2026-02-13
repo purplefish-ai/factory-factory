@@ -39,19 +39,15 @@ export interface ChatBarCapabilities {
 export const EMPTY_CHAT_BAR_CAPABILITIES: ChatBarCapabilities = {
   provider: 'CLAUDE',
   model: {
-    enabled: true,
-    options: [
-      { value: 'opus', label: 'Opus' },
-      { value: 'sonnet', label: 'Sonnet' },
-    ],
-    selected: 'opus',
+    enabled: false,
+    options: [],
   },
-  thinking: { enabled: true, defaultBudget: DEFAULT_CLAUDE_THINKING_BUDGET },
-  planMode: { enabled: true },
-  attachments: { enabled: true, kinds: ['image', 'text'] },
-  slashCommands: { enabled: true },
-  usageStats: { enabled: true, contextWindow: true },
-  rewind: { enabled: true },
+  thinking: { enabled: false },
+  planMode: { enabled: false },
+  attachments: { enabled: false, kinds: [] },
+  slashCommands: { enabled: false },
+  usageStats: { enabled: false, contextWindow: false },
+  rewind: { enabled: false },
 };
 
 export function createClaudeChatBarCapabilities(selectedModel?: string): ChatBarCapabilities {

@@ -375,7 +375,7 @@ class ChatMessageHandlerService {
   private async evaluateDispatchGate(
     dbSessionId: string
   ): Promise<'allowed' | 'blocked' | 'manual_resume'> {
-    const session = await sessionDataService.findClaudeSessionById(dbSessionId);
+    const session = await sessionDataService.findAgentSessionById(dbSessionId);
     if (!session) {
       return 'blocked';
     }

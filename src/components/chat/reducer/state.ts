@@ -1,4 +1,4 @@
-import { createEmptyTokenStats, DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import { createEmptyTokenStats, DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { createInitialSessionRuntimeState } from '@/shared/session-runtime';
 import type { ChatState } from './types';

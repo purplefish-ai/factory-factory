@@ -3,8 +3,8 @@ import { Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
-import type { TokenStats } from '@/lib/claude-types';
-import { CONTEXT_CRITICAL_THRESHOLD, CONTEXT_WARNING_THRESHOLD } from '@/lib/claude-types';
+import type { TokenStats } from '@/lib/chat-protocol';
+import { CONTEXT_CRITICAL_THRESHOLD, CONTEXT_WARNING_THRESHOLD } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { UsageStatsPopover } from './usage-stats-popover';
 

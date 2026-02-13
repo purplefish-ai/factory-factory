@@ -10,8 +10,8 @@
  * The state is designed to be used with useReducer for predictable updates.
  */
 
-import type { ChatMessage, WebSocketMessage } from '@/lib/claude-types';
-import { isWebSocketMessage, isWsAgentMessage } from '@/lib/claude-types';
+import type { ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
+import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
 import { reduceMessageQueueSlice } from './slices/messages/queue';

@@ -14,8 +14,8 @@
  */
 
 import { useCallback } from 'react';
-import type { ChatSettings, MessageAttachment } from '@/lib/claude-types';
-import { DEFAULT_THINKING_BUDGET } from '@/lib/claude-types';
+import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
+import { DEFAULT_THINKING_BUDGET } from '@/lib/chat-protocol';
 import type {
   PermissionResponseMessage,
   QuestionResponseMessage,
@@ -150,7 +150,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   }, [send, dispatch, stateRef]);
 
   const clearChat = useCallback(() => {
-    // Stop any running Claude process
+    // Stop any running provider session process
     if (stateRef.current.sessionStatus.phase === 'running') {
       dispatch({ type: 'STOP_REQUESTED' });
       send({ type: 'stop' } as StopMessage);

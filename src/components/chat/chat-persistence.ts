@@ -12,8 +12,8 @@
  * Drafts use sessionStorage keyed by session ID.
  */
 
-import type { ChatSettings } from '@/lib/claude-types';
-import { DEFAULT_CHAT_SETTINGS } from '@/lib/claude-types';
+import type { ChatSettings } from '@/lib/chat-protocol';
+import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 
 // =============================================================================
 // Storage Keys

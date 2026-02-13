@@ -1,7 +1,7 @@
 // Components
 
 // Types
-export type { ChatMessage } from '@/lib/claude-types';
+export type { ChatMessage } from '@/lib/chat-protocol';
 export { AgentLiveDock } from './agent-live-dock';
 export type { ChatInputProps } from './chat-input/chat-input';
 export { ChatInput } from './chat-input/chat-input';

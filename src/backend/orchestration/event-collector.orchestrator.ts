@@ -181,7 +181,7 @@ async function refreshWorkspaceSessionSummaries(
     if (activeCoalescer !== coalescer) {
       return;
     }
-    const sessions = await sessionDataService.findClaudeSessionsByWorkspaceId(workspaceId);
+    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
     if (activeCoalescer !== coalescer) {
       return;
     }

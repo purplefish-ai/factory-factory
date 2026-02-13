@@ -60,6 +60,19 @@ type AgentSessionWithWorkspace = Prisma.AgentSessionGetPayload<{
   include: { workspace: true };
 }>;
 
+const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
+  [SessionProvider.CLAUDE]: 'sonnet',
+  [SessionProvider.CODEX]: 'gpt-5',
+};
+
+function resolveSessionModel(model: string | undefined, provider: SessionProvider): string {
+  const normalized = model?.trim();
+  if (normalized) {
+    return normalized;
+  }
+  return DEFAULT_SESSION_MODEL_BY_PROVIDER[provider];
+}
+
 function toLegacySession(session: AgentSession): ClaudeSession {
   const { providerSessionId, providerProjectPath, providerProcessPid, ...legacySession } = session;
 
@@ -82,14 +95,15 @@ function toLegacySessionWithWorkspace(
 
 class ClaudeSessionAccessor {
   create(data: CreateClaudeSessionInput): Promise<ClaudeSession> {
+    const provider = data.provider ?? SessionProvider.CLAUDE;
     return prisma.agentSession
       .create({
         data: {
           workspaceId: data.workspaceId,
           name: data.name,
           workflow: data.workflow,
-          model: data.model ?? 'sonnet',
-          provider: data.provider ?? SessionProvider.CLAUDE,
+          model: resolveSessionModel(data.model, provider),
+          provider,
           providerProjectPath: data.claudeProjectPath ?? null,
         },
       })
@@ -184,12 +198,13 @@ class ClaudeSessionAccessor {
    * Ensures limit checks and session creation are atomic.
    */
   acquireFixerSession(input: AcquireFixerSessionInput): Promise<FixerSessionAcquisition> {
+    const provider = input.provider ?? SessionProvider.CLAUDE;
     return prisma.$transaction(async (tx) => {
       const existingSession = await tx.agentSession.findFirst({
         where: {
           workspaceId: input.workspaceId,
           workflow: input.workflow,
-          provider: input.provider ?? SessionProvider.CLAUDE,
+          provider,
           status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
         },
         orderBy: { createdAt: 'desc' },
@@ -216,13 +231,13 @@ class ClaudeSessionAccessor {
         where: {
           workspaceId: input.workspaceId,
           workflow: { not: input.workflow },
-          provider: input.provider ?? SessionProvider.CLAUDE,
+          provider,
         },
         orderBy: { updatedAt: 'desc' },
         select: { model: true },
       });
 
-      const model = recentSession?.model ?? 'sonnet';
+      const model = resolveSessionModel(recentSession?.model, provider);
 
       const newSession = await tx.agentSession.create({
         data: {
@@ -231,7 +246,7 @@ class ClaudeSessionAccessor {
           name: input.sessionName,
           model,
           status: SessionStatus.IDLE,
-          provider: input.provider ?? SessionProvider.CLAUDE,
+          provider,
           providerProjectPath: input.claudeProjectPath,
         },
       });

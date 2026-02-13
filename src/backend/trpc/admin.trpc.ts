@@ -205,7 +205,7 @@ export const adminRouter = router({
     const activeTerminals = terminalService.getAllTerminals();
 
     // Get Claude sessions with PIDs from database for enriched info
-    const claudeSessionsWithPid = await sessionDataService.findClaudeSessionsWithPid();
+    const claudeSessionsWithPid = await sessionDataService.findAgentSessionsWithPid();
 
     // Get terminal sessions with PIDs from database
     const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();

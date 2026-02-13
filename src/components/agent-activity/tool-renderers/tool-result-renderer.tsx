@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { ToolResultContentValue } from '@/lib/claude-types';
+import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
