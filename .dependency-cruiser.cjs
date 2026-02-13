@@ -258,7 +258,7 @@ module.exports = {
       from: {
         path: '^src/backend/domains/session/',
         pathNot:
-          '^src/backend/domains/session/(runtime/|providers/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
+          '^src/backend/domains/session/(acp/|runtime/|providers/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/domains/session/runtime/' },
     },
