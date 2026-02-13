@@ -42,8 +42,10 @@ export class AcpEventTranslator {
       case 'usage_update':
         return this.translateUsageUpdate(update);
 
-      // Deferred to Phase 21 -- log-only
       case 'config_option_update':
+        return this.translateConfigOptionUpdate(update);
+
+      // Not yet translated -- log-only
       case 'current_mode_update':
       case 'session_info_update':
       case 'user_message_chunk':
@@ -255,6 +257,23 @@ export class AcpEventTranslator {
         .join('\n');
     }
     return JSON.stringify(content);
+  }
+
+  private translateConfigOptionUpdate(
+    update: Extract<SessionUpdate, { sessionUpdate: 'config_option_update' }>
+  ): SessionDeltaEvent[] {
+    const configOptions = (update as { configOptions?: unknown[] }).configOptions;
+    if (!Array.isArray(configOptions)) {
+      this.logger.warn('config_option_update: missing configOptions array', { update });
+      return [];
+    }
+
+    return [
+      {
+        type: 'config_options_update',
+        configOptions,
+      } as SessionDeltaEvent,
+    ];
   }
 
   private translateUsageUpdate(

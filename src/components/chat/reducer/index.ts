@@ -472,6 +472,7 @@ const messageHandlers: MessageHandlerMap = {
   user_message_uuid: handleUserMessageUuidMessage,
   rewind_files_preview: handleRewindFilesPreviewMessage,
   rewind_files_error: handleRewindFilesErrorMessage,
+  config_options_update: null,
 };
 
 /**

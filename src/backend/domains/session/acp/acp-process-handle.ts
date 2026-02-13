@@ -1,5 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
-import type { ClientSideConnection } from '@agentclientprotocol/sdk';
+import type { ClientSideConnection, SessionConfigOption } from '@agentclientprotocol/sdk';
 
 export class AcpProcessHandle {
   readonly connection: ClientSideConnection;
@@ -7,6 +7,7 @@ export class AcpProcessHandle {
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
   isPromptInFlight: boolean;
+  configOptions: SessionConfigOption[];
   readonly createdAt: Date;
 
   constructor(params: {
@@ -20,6 +21,7 @@ export class AcpProcessHandle {
     this.providerSessionId = params.providerSessionId;
     this.agentCapabilities = params.agentCapabilities;
     this.isPromptInFlight = false;
+    this.configOptions = [];
     this.createdAt = new Date();
   }
 

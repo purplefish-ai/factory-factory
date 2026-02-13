@@ -7,6 +7,8 @@ export interface AcpClientOptions {
   systemPrompt?: string;
   permissionMode?: string;
   sessionId: string; // FF database session ID for logging
+  /** Stored provider session ID for session resume via loadSession */
+  resumeProviderSessionId?: string;
 }
 
 export interface AcpSessionState {

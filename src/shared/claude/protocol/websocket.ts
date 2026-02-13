@@ -212,6 +212,17 @@ interface WebSocketMessagePayloadByType {
   chat_capabilities: {
     capabilities: ChatBarCapabilities;
   };
+  config_options_update: {
+    configOptions: Array<{
+      id: string;
+      name: string;
+      description?: string | null;
+      type: string;
+      category?: string | null;
+      currentValue: string;
+      options: unknown[];
+    }>;
+  };
 }
 
 /**
@@ -276,6 +287,7 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   rewind_files_preview: true,
   rewind_files_error: true,
   chat_capabilities: true,
+  config_options_update: true,
 };
 
 export const WEBSOCKET_MESSAGE_TYPES = Object.keys(

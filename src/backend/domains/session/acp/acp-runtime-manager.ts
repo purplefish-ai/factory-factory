@@ -200,24 +200,23 @@ export class AcpRuntimeManager
       agentCapabilities: initResult.agentCapabilities,
     });
 
-    // Create provider session
-    const sessionResult = await connection.newSession({
-      cwd: options.workingDir,
-      mcpServers: [],
-    });
-
-    logger.info('ACP session created', {
+    // Create or resume provider session
+    const agentCapabilities = initResult.agentCapabilities ?? {};
+    const sessionInfo = await this.createOrResumeSession(
+      connection,
       sessionId,
-      providerSessionId: sessionResult.sessionId,
-    });
+      options,
+      agentCapabilities
+    );
 
     // Build handle
     const handle = new AcpProcessHandle({
       connection,
       child,
-      providerSessionId: sessionResult.sessionId,
-      agentCapabilities: initResult.agentCapabilities ?? {},
+      providerSessionId: sessionInfo.providerSessionId,
+      agentCapabilities,
     });
+    handle.configOptions = sessionInfo.configOptions;
 
     // Store in sessions map
     this.sessions.set(sessionId, handle);
@@ -274,17 +273,67 @@ export class AcpRuntimeManager
     // Notify session ID handler
     if (handlers.onSessionId) {
       try {
-        await handlers.onSessionId(sessionId, sessionResult.sessionId);
+        await handlers.onSessionId(sessionId, handle.providerSessionId);
       } catch (error) {
         logger.warn('Failed to handle ACP session ID event', {
           sessionId,
-          providerSessionId: sessionResult.sessionId,
+          providerSessionId: handle.providerSessionId,
           error: error instanceof Error ? error.message : String(error),
         });
       }
     }
 
     return handle;
+  }
+
+  private async createOrResumeSession(
+    connection: ClientSideConnection,
+    sessionId: string,
+    options: AcpClientOptions,
+    agentCapabilities: Record<string, unknown>
+  ): Promise<{
+    providerSessionId: string;
+    configOptions: import('@agentclientprotocol/sdk').SessionConfigOption[];
+  }> {
+    const storedId = options.resumeProviderSessionId;
+    const canResume = agentCapabilities.loadSession === true && !!storedId;
+
+    if (canResume && storedId) {
+      try {
+        const loadResult = await connection.loadSession({
+          sessionId: storedId,
+          cwd: options.workingDir,
+          mcpServers: [],
+        });
+        logger.info('ACP session resumed via loadSession', {
+          sessionId,
+          providerSessionId: storedId,
+        });
+        return {
+          providerSessionId: storedId,
+          configOptions: loadResult.configOptions ?? [],
+        };
+      } catch (error) {
+        logger.warn('loadSession failed, falling back to newSession', {
+          sessionId,
+          storedProviderSessionId: storedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const sessionResult = await connection.newSession({
+      cwd: options.workingDir,
+      mcpServers: [],
+    });
+    logger.info('ACP session created', {
+      sessionId,
+      providerSessionId: sessionResult.sessionId,
+    });
+    return {
+      providerSessionId: sessionResult.sessionId,
+      configOptions: sessionResult.configOptions ?? [],
+    };
   }
 
   async stopClient(sessionId: string): Promise<void> {
@@ -373,6 +422,26 @@ export class AcpRuntimeManager
         sessionId: handle.providerSessionId,
       });
     }
+  }
+
+  async setConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<import('@agentclientprotocol/sdk').SessionConfigOption[]> {
+    const handle = this.sessions.get(sessionId);
+    if (!handle) {
+      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
+    }
+
+    const response = await handle.connection.setSessionConfigOption({
+      sessionId: handle.providerSessionId,
+      configId,
+      value,
+    });
+
+    handle.configOptions = response.configOptions;
+    return response.configOptions;
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
