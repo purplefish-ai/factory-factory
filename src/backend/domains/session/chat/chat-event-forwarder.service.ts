@@ -11,7 +11,7 @@
 
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
-import { WS_READY_STATE } from '@/backend/constants';
+import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import type { ClaudeClient } from '@/backend/domains/session/claude/index';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';

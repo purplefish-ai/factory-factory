@@ -18,7 +18,7 @@ import type {
   ToolDefinition,
   ToolResultContent,
   ToolUseContent,
-} from './claude-types';
+} from './chat-protocol';
 
 // =============================================================================
 // ID Generation

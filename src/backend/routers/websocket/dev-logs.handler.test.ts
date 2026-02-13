@@ -4,7 +4,7 @@ import type { Duplex } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
-import { WS_READY_STATE } from '@/backend/constants';
+import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { createDevLogsUpgradeHandler } from './dev-logs.handler';
 
 class MockWebSocket extends EventEmitter {

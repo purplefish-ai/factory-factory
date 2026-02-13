@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SnapshotUpdateInput } from '@/backend/services';
+import type { SnapshotUpdateInput } from '@/backend/services/workspace-snapshot-store.service';
 
 // ---------------------------------------------------------------------------
 // Mock store helper type
@@ -60,13 +60,16 @@ vi.mock('@/backend/domains/session', () => ({
   },
 }));
 
-vi.mock('@/backend/services', () => ({
+vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
   workspaceSnapshotStore: {
     upsert: vi.fn(),
     getByWorkspaceId: vi.fn(),
     getAllWorkspaceIds: vi.fn().mockReturnValue([]),
     remove: vi.fn(),
   },
+}));
+
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: vi.fn(),
     debug: vi.fn(),
@@ -80,7 +83,7 @@ import { ratchetService } from '@/backend/domains/ratchet';
 import { runScriptStateMachine } from '@/backend/domains/run-script';
 import { sessionDataService } from '@/backend/domains/session';
 import { workspaceActivityService, workspaceStateMachine } from '@/backend/domains/workspace';
-import { workspaceSnapshotStore } from '@/backend/services';
+import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 
 import {
   configureEventCollector,

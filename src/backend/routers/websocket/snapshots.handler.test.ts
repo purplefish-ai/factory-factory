@@ -4,8 +4,11 @@ import type { Duplex } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
-import { WS_READY_STATE } from '@/backend/constants';
-import type { SnapshotChangedEvent, SnapshotRemovedEvent } from '@/backend/services';
+import { WS_READY_STATE } from '@/backend/constants/websocket';
+import type {
+  SnapshotChangedEvent,
+  SnapshotRemovedEvent,
+} from '@/backend/services/workspace-snapshot-store.service';
 import { createSnapshotsUpgradeHandler, snapshotConnections } from './snapshots.handler';
 
 // ============================================================================
@@ -26,7 +29,7 @@ const { storeListeners, mockGetByProjectId, mockSendBadRequest } = vi.hoisted(()
   mockSendBadRequest: vi.fn(),
 }));
 
-vi.mock('@/backend/services', () => {
+vi.mock('@/backend/services/workspace-snapshot-store.service', () => {
   const { EventEmitter } = require('node:events');
   const emitter = new EventEmitter();
   const originalOn = emitter.on.bind(emitter);

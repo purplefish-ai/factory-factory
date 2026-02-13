@@ -7,7 +7,7 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket } from 'ws';
-import { WS_READY_STATE, type WsReadyState } from '@/backend/constants';
+import { WS_READY_STATE, type WsReadyState } from '@/backend/constants/websocket';
 import { ChatConnectionService, type ConnectionInfo } from './chat-connection.service';
 
 vi.mock('@/backend/domains/session/logging/session-file-logger.service', () => ({

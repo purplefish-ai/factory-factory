@@ -108,12 +108,44 @@ module.exports = {
       to: { path: '^src/shared/claude/' },
     },
     {
-      name: 'no-ui-importing-claude-types-facade',
+      name: 'no-importing-legacy-claude-types-facade',
       severity: 'error',
       comment:
-        'UI layers should import chat protocol helpers from src/lib/chat-protocol, not the Claude-named legacy alias.',
-      from: { path: '^src/(client|components|frontend)' },
+        'Import chat protocol helpers from src/lib/chat-protocol; the Claude-named facade was removed.',
+      from: { path: '^src/' },
       to: { path: '^src/lib/claude-types\\.ts$' },
+    },
+    {
+      name: 'no-importing-backend-constants-barrel',
+      severity: 'error',
+      comment:
+        'Import from concrete constants modules (e.g. constants/http, constants/websocket), not constants/index.',
+      from: { path: '^src/' },
+      to: { path: '^src/backend/constants/index\\.ts$' },
+    },
+    {
+      name: 'no-importing-backend-services-barrel',
+      severity: 'error',
+      comment:
+        'Import from concrete service modules, not services/index.',
+      from: { path: '^src/' },
+      to: { path: '^src/backend/services/index\\.ts$' },
+    },
+    {
+      name: 'no-importing-backend-orchestration-barrel',
+      severity: 'error',
+      comment:
+        'Import concrete orchestration modules directly, not orchestration/index.',
+      from: { path: '^src/' },
+      to: { path: '^src/backend/orchestration/index\\.ts$' },
+    },
+    {
+      name: 'no-importing-resource-accessors-index-barrel',
+      severity: 'error',
+      comment:
+        'Import concrete resource accessor modules directly, not resource_accessors/index.',
+      from: { path: '^src/' },
+      to: { path: '^src/backend/resource_accessors/index\\.ts$' },
     },
     {
       name: 'frontend-trpc-only-imports-backend-trpc',
@@ -152,7 +184,7 @@ module.exports = {
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/resource_accessors/(claude-session|agent-session)\\.accessor\\.ts$|^src/backend/resource_accessors/index\\.ts$|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/resource_accessors/(claude-session|agent-session)\\.accessor\\.ts$|^src/backend/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/resource_accessors/claude-session\\.accessor\\.ts$' },
     },

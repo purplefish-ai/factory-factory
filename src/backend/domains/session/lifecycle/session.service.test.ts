@@ -202,7 +202,7 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
     vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
 
-    await sessionService.startClaudeSession('session-1', { initialPrompt: 'Hello' });
+    await sessionService.startSession('session-1', { initialPrompt: 'Hello' });
 
     expect(sessionPromptBuilder.shouldInjectBranchRename).toHaveBeenCalledWith({
       branchName: 'auto-branch',
@@ -251,7 +251,7 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.getClient).mockReturnValue(client);
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
 
-    const result = await sessionService.getOrCreateClient('session-1');
+    const result = await sessionService.getOrCreateSessionClient('session-1');
 
     expect(result).toBe(client);
     expect(claudeSessionProviderAdapter.getOrCreateClient).not.toHaveBeenCalled();
@@ -301,7 +301,7 @@ describe('SessionService', () => {
 
     vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
 
-    const result = await sessionService.getOrCreateClient('session-1');
+    const result = await sessionService.getOrCreateSessionClient('session-1');
 
     expect(result).toBe(client);
     expect(claudeSessionProviderAdapter.getOrCreateClient).toHaveBeenCalledWith(
@@ -325,7 +325,7 @@ describe('SessionService', () => {
   it('skips stop when already stopping', async () => {
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(true);
 
-    await sessionService.stopClaudeSession('session-1');
+    await sessionService.stopSession('session-1');
 
     expect(claudeSessionProviderAdapter.stopClient).not.toHaveBeenCalled();
     expect(sessionRepository.updateSession).not.toHaveBeenCalled();
@@ -337,7 +337,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
     const clearQueuedWorkSpy = vi.spyOn(sessionDomainService, 'clearQueuedWork');
 
-    await sessionService.stopClaudeSession('session-1');
+    await sessionService.stopSession('session-1');
 
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
   });
@@ -354,7 +354,7 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.stopClient).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-    await sessionService.stopClaudeSession('session-1');
+    await sessionService.stopSession('session-1');
 
     expect(providerCache.has('session-1')).toBe(false);
   });
@@ -373,7 +373,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.clearRatchetActiveSession).mockResolvedValue();
     vi.mocked(sessionRepository.deleteSession).mockResolvedValue({} as never);
 
-    await sessionService.stopClaudeSession('session-1');
+    await sessionService.stopSession('session-1');
 
     expect(sessionRepository.clearRatchetActiveSession).toHaveBeenCalledWith(
       'workspace-1',
@@ -394,7 +394,7 @@ describe('SessionService', () => {
     );
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-    await sessionService.stopClaudeSession('session-2');
+    await sessionService.stopSession('session-2');
 
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
@@ -411,7 +411,7 @@ describe('SessionService', () => {
     );
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-    await sessionService.stopClaudeSession('session-3', {
+    await sessionService.stopSession('session-3', {
       cleanupTransientRatchetSession: false,
     });
 
@@ -429,7 +429,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.updateSession).mockRejectedValueOnce(new Error('missing row'));
     const clearQueuedWorkSpy = vi.spyOn(sessionDomainService, 'clearQueuedWork');
 
-    await expect(sessionService.stopClaudeSession('session-err')).resolves.toBeUndefined();
+    await expect(sessionService.stopSession('session-err')).resolves.toBeUndefined();
 
     expect(claudeSessionProviderAdapter.stopClient).toHaveBeenCalledWith('session-err');
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-err', { emitSnapshot: false });
@@ -471,7 +471,9 @@ describe('SessionService', () => {
     );
     const setRuntimeSnapshotSpy = vi.spyOn(sessionDomainService, 'setRuntimeSnapshot');
 
-    await expect(sessionService.getOrCreateClient('session-1')).rejects.toThrow('spawn failed');
+    await expect(sessionService.getOrCreateSessionClient('session-1')).rejects.toThrow(
+      'spawn failed'
+    );
 
     expect(setRuntimeSnapshotSpy).toHaveBeenCalledWith(
       'session-1',
@@ -488,7 +490,7 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(null);
     const setRuntimeSnapshotSpy = vi.spyOn(sessionDomainService, 'setRuntimeSnapshot');
 
-    await expect(sessionService.getOrCreateClient('session-1')).rejects.toThrow(
+    await expect(sessionService.getOrCreateSessionClient('session-1')).rejects.toThrow(
       'Session not found: session-1'
     );
 
@@ -565,7 +567,7 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
     vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
 
-    await sessionService.startClaudeSession('session-1');
+    await sessionService.startSession('session-1');
 
     // Extract the onExit handler passed to processManager.getOrCreateClient
     const handlers = vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mock
@@ -630,7 +632,7 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
     vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
 
-    await sessionService.startClaudeSession('session-2');
+    await sessionService.startSession('session-2');
 
     const handlers = vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mock
       .calls[0]![2] as {
@@ -768,7 +770,7 @@ describe('SessionService', () => {
 
     vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
 
-    await sessionService.getOrCreateClient('session-1');
+    await sessionService.getOrCreateSessionClient('session-1');
 
     expect(claudeSessionProviderAdapter.getOrCreateClient).toHaveBeenCalled();
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
@@ -822,7 +824,7 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
     vi.mocked(claudeSessionProviderAdapter.sendMessage).mockResolvedValue(undefined);
 
-    await sessionService.startClaudeSession('session-1', { initialPrompt: 'go' });
+    await sessionService.startSession('session-1', { initialPrompt: 'go' });
 
     expect(sessionRepository.getSessionById).toHaveBeenCalledTimes(1);
   });
@@ -867,7 +869,7 @@ describe('SessionService', () => {
     });
   });
 
-  it('getOrCreateClient and startClaudeSession produce identical DB state', async () => {
+  it('getOrCreateSessionClient and startSession produce identical DB state', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
     >({
@@ -913,7 +915,7 @@ describe('SessionService', () => {
     // Test getOrCreateClient path (WebSocket)
     vi.mocked(claudeSessionProviderAdapter.getClient).mockReturnValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
-    await sessionService.getOrCreateClient('session-1');
+    await sessionService.getOrCreateSessionClient('session-1');
 
     const getOrCreateCalls = vi.mocked(sessionRepository.updateSession).mock.calls;
 
@@ -932,8 +934,8 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
     vi.mocked(claudeSessionProviderAdapter.getOrCreateClient).mockResolvedValue(client);
 
-    // Test startClaudeSession path (tRPC)
-    await sessionService.startClaudeSession('session-1');
+    // Test startSession path (tRPC)
+    await sessionService.startSession('session-1');
 
     const startSessionCalls = vi.mocked(sessionRepository.updateSession).mock.calls;
 

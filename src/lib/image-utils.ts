@@ -1,4 +1,4 @@
-import type { MessageAttachment } from './claude-types';
+import type { MessageAttachment } from './chat-protocol';
 
 /**
  * Supported image MIME types for upload.

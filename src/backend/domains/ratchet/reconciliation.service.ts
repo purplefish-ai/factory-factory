@@ -1,10 +1,8 @@
 import { SessionStatus } from '@factory-factory/core';
-import { initializeWorkspaceWorktree } from '@/backend/orchestration';
-import {
-  agentSessionAccessor,
-  terminalSessionAccessor,
-  workspaceAccessor,
-} from '@/backend/resource_accessors/index';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
+import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
+import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { RatchetWorkspaceBridge } from './bridges';

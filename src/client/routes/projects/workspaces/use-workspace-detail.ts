@@ -4,9 +4,6 @@ import { toast } from 'sonner';
 
 import { trpc } from '@/frontend/lib/trpc';
 
-// Re-export useAutoScroll from shared hooks location
-export { useAutoScroll } from '@/hooks/use-auto-scroll';
-
 // =============================================================================
 // Helpers
 // =============================================================================

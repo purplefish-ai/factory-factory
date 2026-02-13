@@ -12,7 +12,7 @@
  *
  * Import rules (EVNT-07 + circular dep avoidance):
  * - Domain singletons and event constants from domain barrels
- * - Store from @/backend/services
+ * - Store from @/backend/services/workspace-snapshot-store.service
  * - NOT re-exported from orchestration/index.ts (circular dep risk)
  */
 
@@ -43,7 +43,11 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
-import { createLogger, type SnapshotUpdateInput, workspaceSnapshotStore } from '@/backend/services';
+import { createLogger } from '@/backend/services/logger.service';
+import {
+  type SnapshotUpdateInput,
+  workspaceSnapshotStore,
+} from '@/backend/services/workspace-snapshot-store.service';
 
 // ---------------------------------------------------------------------------
 // Types
