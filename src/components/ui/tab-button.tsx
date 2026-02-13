@@ -24,6 +24,8 @@ interface TabButtonProps {
   maxLabelWidth?: number;
   /** Additional class names */
   className?: string;
+  /** Position of the icon relative to label (default: left) */
+  iconSide?: 'left' | 'right';
 }
 
 // =============================================================================
@@ -43,6 +45,7 @@ export function TabButton({
   truncate = false,
   maxLabelWidth = 120,
   className,
+  iconSide = 'left',
 }: TabButtonProps) {
   const handleClose = useCallback(
     (e: React.MouseEvent) => {
@@ -61,6 +64,7 @@ export function TabButton({
     },
     [onSelect]
   );
+  const iconOnRight = iconSide === 'right';
 
   // Simple button variant (no close button, no keyboard handling)
   if (!(onClose || truncate)) {
@@ -76,8 +80,9 @@ export function TabButton({
           className
         )}
       >
-        {icon}
+        {!iconOnRight && icon}
         {label}
+        {iconOnRight && icon}
       </button>
     );
   }
@@ -101,13 +106,14 @@ export function TabButton({
         className
       )}
     >
-      {icon}
+      {!iconOnRight && icon}
       <span
         className={cn(truncate && 'truncate')}
         style={truncate ? { maxWidth: maxLabelWidth } : undefined}
       >
         {label}
       </span>
+      {iconOnRight && icon}
 
       {onClose && (
         <button

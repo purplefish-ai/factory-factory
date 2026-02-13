@@ -190,6 +190,7 @@ function SessionTabItem({
       onSelect={onSelect}
       onClose={onClose}
       truncate
+      iconSide="right"
     />
   );
 }

@@ -84,6 +84,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       isCompactingActive: vi.fn().mockReturnValue(false),
       startCompaction: vi.fn(),
       endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
     };
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionService.sendSessionMessage.mockRejectedValue(new Error('send failed'));
@@ -102,6 +103,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       isCompactingActive: vi.fn().mockReturnValue(false),
       startCompaction: vi.fn(),
       endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
     };
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionService.sendSessionMessage.mockRejectedValue(new Error('send failed'));
@@ -147,6 +149,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
       isCompactingActive: vi.fn().mockReturnValue(false),
       startCompaction: vi.fn(),
       endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
     };
     mockSessionService.getSessionClient.mockReturnValue(client);
     mockSessionDataService.findAgentSessionById.mockRejectedValue(new Error('db down'));

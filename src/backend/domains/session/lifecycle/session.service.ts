@@ -303,10 +303,14 @@ class SessionService {
    */
   async stopSession(
     sessionId: string,
-    options?: { cleanupTransientRatchetSession?: boolean }
+    options?: { cleanupTransientRatchetSession?: boolean; providerHint?: SessionProvider }
   ): Promise<void> {
     const session = await this.loadSessionForStop(sessionId);
-    const provider = session?.provider ?? this.sessionProviderCache.get(sessionId) ?? 'CLAUDE';
+    const provider =
+      options?.providerHint ??
+      session?.provider ??
+      this.sessionProviderCache.get(sessionId) ??
+      'CLAUDE';
     const adapter = this.resolveAdapterForProvider(provider);
 
     if (adapter.isStopInProgress(sessionId)) {
@@ -992,7 +996,9 @@ class SessionService {
     await this.waitForPendingClient(workspaceId, session.id, pendingClient);
 
     try {
-      await this.stopSession(session.id);
+      await this.stopSession(session.id, {
+        providerHint: session.provider ?? 'CLAUDE',
+      });
     } catch (error) {
       logger.error('Failed to stop workspace session', {
         sessionId: session.id,

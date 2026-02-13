@@ -52,6 +52,28 @@ module.exports = {
       to: { path: '^src/backend/routers' },
     },
     {
+      name: 'no-lib-importing-application-layers',
+      severity: 'error',
+      comment:
+        'Backend lib helpers should remain low-level and must not depend on domains, orchestration, routers, agents, or accessors',
+      from: { path: '^src/backend/lib' },
+      to: {
+        path: '^src/backend/(domains|orchestration|routers|trpc|agents|resource_accessors)/',
+      },
+    },
+    {
+      name: 'no-lib-importing-services-without-allowlist',
+      severity: 'error',
+      comment:
+        'Backend lib helpers should avoid service coupling. If a lib helper needs a service dependency, add an explicit allowlist entry.',
+      from: {
+        path: '^src/backend/lib',
+        pathNot:
+          '^src/backend/lib/(file-lock-mutex|session-summaries)\\.ts$|^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/services/' },
+    },
+    {
       name: 'no-mcp-routers-importing-agents',
       severity: 'error',
       // task.mcp.ts is exempted because it's the MCP endpoint for managing agent
@@ -133,6 +155,18 @@ module.exports = {
           '^src/backend/resource_accessors/(claude-session|agent-session)\\.accessor\\.ts$|^src/backend/resource_accessors/index\\.ts$|^src/backend/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/resource_accessors/claude-session\\.accessor\\.ts$' },
+    },
+    {
+      name: 'session-model-import-boundary',
+      severity: 'error',
+      comment:
+        'Session-model normalization is provider/session-specific and should only be consumed by the session domain and resource accessors.',
+      from: {
+        path: '^src/backend',
+        pathNot:
+          '^src/backend/(domains/session/|resource_accessors/)|^src/backend/lib/session-model\\.ts$|^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/lib/session-model\\.ts$' },
     },
     {
       name: 'only-allowlisted-orchestration-import-accessors',

@@ -41,6 +41,10 @@ interface ClaudeCompactionClient {
   endCompaction: () => void;
 }
 
+interface ThinkingBudgetClient {
+  setMaxThinkingTokens: (tokens: number | null) => Promise<void>;
+}
+
 function isClaudeCompactionClient(value: unknown): value is ClaudeCompactionClient {
   if (!value || typeof value !== 'object') {
     return false;
@@ -51,6 +55,14 @@ function isClaudeCompactionClient(value: unknown): value is ClaudeCompactionClie
     typeof candidate.startCompaction === 'function' &&
     typeof candidate.endCompaction === 'function'
   );
+}
+
+function isThinkingBudgetClient(value: unknown): value is ThinkingBudgetClient {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<ThinkingBudgetClient>;
+  return typeof candidate.setMaxThinkingTokens === 'function';
 }
 
 // ============================================================================
@@ -269,11 +281,11 @@ class ChatMessageHandlerService {
     client?: unknown
   ): Promise<void> {
     const isCompactCommand = this.isCompactCommand(msg.text);
-    const claudeClient = isClaudeCompactionClient(client) ? client : null;
+    const compactionClient = isClaudeCompactionClient(client) ? client : null;
 
-    // Only Claude sessions support thinking budgets. Keep this before state
-    // mutation so any provider errors can be safely requeued by the caller.
-    if (claudeClient) {
+    // Only clients that expose thinking-budget controls support this feature.
+    // Keep this before state mutation so provider errors can be safely requeued.
+    if (isThinkingBudgetClient(client)) {
       const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
       await sessionService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
     }
@@ -300,8 +312,8 @@ class ChatMessageHandlerService {
       },
     });
 
-    if (isCompactCommand && claudeClient) {
-      claudeClient.startCompaction();
+    if (isCompactCommand && compactionClient) {
+      compactionClient.startCompaction();
     }
 
     try {
@@ -313,8 +325,8 @@ class ChatMessageHandlerService {
         newState: MessageState.COMMITTED,
       });
     } catch (error) {
-      if (isCompactCommand && claudeClient) {
-        claudeClient.endCompaction();
+      if (isCompactCommand && compactionClient) {
+        compactionClient.endCompaction();
       }
       throw error;
     }

@@ -678,6 +678,30 @@ describe('SessionService', () => {
     expect(sessionRepository.getSessionById).not.toHaveBeenCalled();
   });
 
+  it('uses workspace provider hint when stopSession lookup fails', async () => {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionsByWorkspaceId>>>[number]
+    >({
+      id: 'session-codex-running',
+      workspaceId: 'workspace-1',
+      provider: 'CODEX',
+      status: SessionStatus.RUNNING,
+    });
+
+    vi.mocked(sessionRepository.getSessionsByWorkspaceId).mockResolvedValue([session]);
+    vi.mocked(codexSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
+    vi.mocked(codexSessionProviderAdapter.isSessionRunning).mockReturnValue(true);
+    vi.mocked(sessionRepository.getSessionById).mockRejectedValueOnce(new Error('db unavailable'));
+    vi.mocked(codexSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
+    vi.mocked(codexSessionProviderAdapter.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue(unsafeCoerce({}));
+
+    await sessionService.stopWorkspaceSessions('workspace-1');
+
+    expect(codexSessionProviderAdapter.stopClient).toHaveBeenCalledWith('session-codex-running');
+    expect(claudeSessionProviderAdapter.stopClient).not.toHaveBeenCalled();
+  });
+
   it('updates DB status when getOrCreateClient creates new client', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
