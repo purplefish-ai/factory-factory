@@ -193,8 +193,35 @@ describe('Codex schemas', () => {
       })
     ).toBe('hello from nested message');
 
+    expect(
+      parseNotificationTextWithSchema({
+        text: '',
+        delta: 'hello from delta',
+      })
+    ).toBe('hello from delta');
+
+    expect(
+      parseNotificationTextWithSchema({
+        text: 123,
+        chunk: 'hello from chunk',
+      })
+    ).toBe('hello from chunk');
+
     expect(parseToolCallNotificationWithSchema({ item: { id: 'tool-1', name: 'bash' } })).toEqual({
       toolUseId: 'tool-1',
+      toolName: 'bash',
+      input: {},
+    });
+
+    expect(
+      parseToolCallNotificationWithSchema({
+        toolUseId: '',
+        toolName: 'bash',
+        input: 'invalid',
+        item: { id: 'tool-2' },
+      })
+    ).toEqual({
+      toolUseId: 'tool-2',
       toolName: 'bash',
       input: {},
     });
@@ -210,6 +237,22 @@ describe('Codex schemas', () => {
       payload: {
         item: { toolUseId: 'tool-1' },
         output: 'done',
+      },
+    });
+
+    expect(
+      parseToolResultNotificationWithSchema({
+        toolUseId: '',
+        item: { toolUseId: 'tool-3' },
+        output: 42,
+      })
+    ).toEqual({
+      toolUseId: 'tool-3',
+      output: null,
+      payload: {
+        toolUseId: '',
+        item: { toolUseId: 'tool-3' },
+        output: 42,
       },
     });
   });

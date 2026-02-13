@@ -242,11 +242,26 @@ const CodexRequestParamSchemas = {
   'model/list': ModelListParamsSchema,
 } as const;
 
+const LooseOptionalNonEmptyStringSchema = z.preprocess(
+  (value) => (typeof value === 'string' && value.length > 0 ? value : undefined),
+  z.string().optional()
+);
+
+const LooseOptionalStringSchema = z.preprocess(
+  (value) => (typeof value === 'string' ? value : undefined),
+  z.string().optional()
+);
+
+const LooseOptionalRecordSchema = z.preprocess(
+  (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : undefined),
+  UnknownRecordSchema.optional()
+);
+
 const NotificationTextDirectSchema = z
   .object({
-    text: NonEmptyStringSchema.optional(),
-    delta: NonEmptyStringSchema.optional(),
-    chunk: NonEmptyStringSchema.optional(),
+    text: LooseOptionalNonEmptyStringSchema.optional(),
+    delta: LooseOptionalNonEmptyStringSchema.optional(),
+    chunk: LooseOptionalNonEmptyStringSchema.optional(),
   })
   .passthrough();
 
@@ -254,16 +269,16 @@ const NotificationTextNestedSchema = z
   .object({
     item: z
       .object({
-        text: NonEmptyStringSchema.optional(),
-        delta: NonEmptyStringSchema.optional(),
-        content: NonEmptyStringSchema.optional(),
+        text: LooseOptionalNonEmptyStringSchema.optional(),
+        delta: LooseOptionalNonEmptyStringSchema.optional(),
+        content: LooseOptionalNonEmptyStringSchema.optional(),
         message: z
           .object({
             content: z
               .array(
                 z
                   .object({
-                    text: NonEmptyStringSchema.optional(),
+                    text: LooseOptionalNonEmptyStringSchema.optional(),
                   })
                   .passthrough()
               )
@@ -279,13 +294,13 @@ const NotificationTextNestedSchema = z
 
 const ToolCallNotificationSchema = z
   .object({
-    toolUseId: NonEmptyStringSchema.optional(),
-    toolName: NonEmptyStringSchema.optional(),
-    input: UnknownRecordSchema.optional(),
+    toolUseId: LooseOptionalNonEmptyStringSchema.optional(),
+    toolName: LooseOptionalNonEmptyStringSchema.optional(),
+    input: LooseOptionalRecordSchema.optional(),
     item: z
       .object({
-        id: NonEmptyStringSchema.optional(),
-        name: NonEmptyStringSchema.optional(),
+        id: LooseOptionalNonEmptyStringSchema.optional(),
+        name: LooseOptionalNonEmptyStringSchema.optional(),
       })
       .passthrough()
       .optional(),
@@ -294,11 +309,11 @@ const ToolCallNotificationSchema = z
 
 const ToolResultNotificationSchema = z
   .object({
-    toolUseId: NonEmptyStringSchema.optional(),
-    output: z.string().optional(),
+    toolUseId: LooseOptionalNonEmptyStringSchema.optional(),
+    output: LooseOptionalStringSchema.optional(),
     item: z
       .object({
-        toolUseId: NonEmptyStringSchema.optional(),
+        toolUseId: LooseOptionalNonEmptyStringSchema.optional(),
       })
       .passthrough()
       .optional(),
