@@ -75,6 +75,7 @@ function handleMessageAsInteractiveResponse(
         timestamp,
         settings: {
           selectedModel: null,
+          reasoningEffort: null,
           thinkingEnabled: false,
           planModeEnabled: false,
         },

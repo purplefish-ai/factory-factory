@@ -60,6 +60,7 @@ function handleAcceptedState(
       attachments: userMessage.attachments,
       settings: userMessage.settings ?? {
         selectedModel: null,
+        reasoningEffort: null,
         thinkingEnabled: false,
         planModeEnabled: false,
       },
@@ -91,6 +92,7 @@ function handleAcceptedState(
     attachments: userMessage.attachments,
     settings: userMessage.settings ?? {
       selectedModel: null,
+      reasoningEffort: null,
       thinkingEnabled: false,
       planModeEnabled: false,
     },

@@ -68,5 +68,8 @@ export interface SessionProviderAdapter<
   getAllActiveProcesses(): TActiveProcessSummary[];
   getAllClients(): IterableIterator<[string, TClient]>;
   stopAllClients(timeoutMs?: number): Promise<void>;
-  getChatBarCapabilities(options?: { selectedModel?: string | null }): ChatBarCapabilities;
+  getChatBarCapabilities(options?: {
+    selectedModel?: string | null;
+    selectedReasoningEffort?: string | null;
+  }): Promise<ChatBarCapabilities>;
 }

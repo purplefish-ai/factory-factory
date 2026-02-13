@@ -36,6 +36,7 @@ interface UseChatInputActionsReturn {
   handleRemoveAttachment: (id: string) => void;
   handleQuickAction: (message: string) => void;
   handleModelChange: (model: string) => void;
+  handleReasoningChange: (effort: string) => void;
   handleThinkingChange: (pressed: boolean) => void;
   handlePlanModeChange: (pressed: boolean) => void;
   supportedImageTypes: readonly string[];
@@ -133,7 +134,11 @@ export function useChatInputActions({
   const imageAttachmentsEnabled =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
   const modelSelectorEnabled = capabilities?.model.enabled === true;
+  const reasoningSelectorEnabled = capabilities?.reasoning.enabled === true;
   const modelValues = new Set(capabilities?.model.options.map((option) => option.value) ?? []);
+  const reasoningValues = new Set(
+    capabilities?.reasoning.options.map((option) => option.value) ?? []
+  );
 
   const sendFromInput = useCallback(
     (inputElement: HTMLTextAreaElement | null) => {
@@ -379,6 +384,15 @@ export function useChatInputActions({
     [planModeEnabled, onSettingsChange]
   );
 
+  const handleReasoningChange = useCallback(
+    (effort: string) => {
+      if (reasoningSelectorEnabled && reasoningValues.has(effort)) {
+        onSettingsChange?.({ reasoningEffort: effort });
+      }
+    },
+    [reasoningSelectorEnabled, reasoningValues, onSettingsChange]
+  );
+
   return {
     fileInputRef,
     handleKeyDown,
@@ -387,6 +401,7 @@ export function useChatInputActions({
     handleRemoveAttachment,
     handleQuickAction,
     handleModelChange,
+    handleReasoningChange,
     handleThinkingChange,
     handlePlanModeChange,
     supportedImageTypes: SUPPORTED_IMAGE_TYPES,

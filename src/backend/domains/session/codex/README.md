@@ -62,7 +62,22 @@ rg -n "method\": \"(initialize|thread/start|thread/resume|thread/read|turn/start
   /tmp/codex-ts-schema/ClientNotification.ts
 ```
 
-## 5) Required verification run
+## 5) Schema drift snapshot harness
+
+Snapshot source file:
+- `src/backend/domains/session/codex/schema-snapshots/app-server-methods.snapshot.json`
+
+Commands:
+
+```bash
+pnpm check:codex-schema
+pnpm check:codex-schema:update
+```
+
+- `check:codex-schema` fails when generated methods differ from snapshot.
+- `check:codex-schema:update` refreshes snapshot after intentional `codex-cli` upgrade.
+
+## 6) Required verification run
 
 ```bash
 pnpm check --silent

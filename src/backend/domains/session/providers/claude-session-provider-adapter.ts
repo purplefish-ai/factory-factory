@@ -107,8 +107,11 @@ export class ClaudeSessionProviderAdapter
     return this.runtimeManager.stopAllClients(timeoutMs);
   }
 
-  getChatBarCapabilities(options?: { selectedModel?: string | null }) {
-    return createClaudeChatBarCapabilities(options?.selectedModel ?? undefined);
+  getChatBarCapabilities(options?: {
+    selectedModel?: string | null;
+    selectedReasoningEffort?: string | null;
+  }) {
+    return Promise.resolve(createClaudeChatBarCapabilities(options?.selectedModel ?? undefined));
   }
 
   async sendMessage(sessionId: string, content: string | ClaudeContentItem[]): Promise<void> {

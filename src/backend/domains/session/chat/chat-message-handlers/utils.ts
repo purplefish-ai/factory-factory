@@ -1,10 +1,17 @@
 import type { QueuedMessage } from '@/shared/claude';
 import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
-import { normalizeRequestedModel } from './constants';
+import { normalizeOptionalString } from './constants';
 
 export function getValidModel(message: StartMessageInput): string | undefined {
-  const requestedModel = message.selectedModel || message.model;
-  return normalizeRequestedModel(requestedModel);
+  const selectedModel = normalizeOptionalString(message.selectedModel);
+  if (selectedModel) {
+    return selectedModel;
+  }
+  return normalizeOptionalString(message.model);
+}
+
+export function getValidReasoningEffort(message: StartMessageInput): string | undefined {
+  return normalizeOptionalString(message.reasoningEffort);
 }
 
 export function buildQueuedMessage(
@@ -12,15 +19,16 @@ export function buildQueuedMessage(
   message: QueueMessageInput,
   text: string
 ): QueuedMessage {
-  const selectedModel = normalizeRequestedModel(message.settings?.selectedModel) ?? null;
+  const selectedModel = normalizeOptionalString(message.settings?.selectedModel) ?? null;
+  const reasoningEffort = normalizeOptionalString(message.settings?.reasoningEffort) ?? null;
 
   return {
     id,
     text,
     attachments: message.attachments,
     settings: message.settings
-      ? { ...message.settings, selectedModel }
-      : { selectedModel, thinkingEnabled: false, planModeEnabled: false },
+      ? { ...message.settings, selectedModel, reasoningEffort }
+      : { selectedModel, reasoningEffort, thinkingEnabled: false, planModeEnabled: false },
     timestamp: new Date().toISOString(),
   };
 }

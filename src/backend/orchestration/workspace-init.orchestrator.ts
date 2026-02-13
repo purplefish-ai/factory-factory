@@ -420,6 +420,7 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<string | 
         timestamp: new Date().toISOString(),
         settings: {
           selectedModel: session.model,
+          reasoningEffort: null,
           thinkingEnabled: false,
           planModeEnabled: false,
         },
@@ -443,6 +444,7 @@ async function startDefaultClaudeSession(workspaceId: string): Promise<string | 
             settings: {
               ...queued.settings,
               selectedModel: resolveSelectedModel(queued.settings.selectedModel),
+              reasoningEffort: queued.settings.reasoningEffort,
             },
           },
         });
