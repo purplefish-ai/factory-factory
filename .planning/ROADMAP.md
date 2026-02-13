@@ -26,7 +26,7 @@ See [v1.1 Roadmap Archive](milestones/v1.1-ROADMAP.md) for full phase details.
 
 **Milestone Goal:** Replace custom Claude NDJSON and Codex app-server protocols with a single ACP-only runtime using Zed's production adapters, unifying both providers under one subprocess-per-session model with native permission options, config controls, and event streaming.
 
-- [ ] **Phase 19: ACP Runtime Foundation** - Subprocess lifecycle, connection wiring, session create/prompt/cancel with streaming
+- [x] **Phase 19: ACP Runtime Foundation** - Subprocess lifecycle, connection wiring, session create/prompt/cancel with streaming (completed 2026-02-13)
 - [ ] **Phase 20: Event Translation + Permissions** - ACP event mapping to FF UI, permission option selection, tool call rendering
 - [ ] **Phase 21: Config Options + Unified Runtime** - Agent-driven config controls, capability gating, session load, unified runtime manager
 - [ ] **Phase 22: Cleanup + Polish** - Legacy protocol removal, ACP-focused tests, health reporting, contributor docs
@@ -46,8 +46,8 @@ See [v1.1 Roadmap Archive](milestones/v1.1-ROADMAP.md) for full phase details.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 19-01-PLAN.md -- ACP runtime module: types, process handle, client handler, runtime manager, unit tests
-- [ ] 19-02-PLAN.md -- Wire ACP into session service, barrel exports, end-to-end verification
+- [x] 19-01-PLAN.md -- ACP runtime module: types, process handle, client handler, runtime manager, unit tests
+- [x] 19-02-PLAN.md -- Wire ACP into session service, barrel exports, end-to-end verification
 
 ### Phase 20: Event Translation + Permissions
 **Goal**: ACP events render correctly in the FF frontend (tool calls, thoughts, plans, slash commands) and permission requests present the full ACP option set (allow_once, allow_always, reject_once, reject_always) end-to-end
@@ -105,11 +105,11 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 19. ACP Runtime Foundation | v1.2 | 0/2 | Planned | - |
+| 19. ACP Runtime Foundation | v1.2 | 2/2 | ✓ Complete | 2026-02-13 |
 | 20. Event Translation + Permissions | v1.2 | 0/TBD | Not started | - |
 | 21. Config Options + Unified Runtime | v1.2 | 0/TBD | Not started | - |
 | 22. Cleanup + Polish | v1.2 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-13 -- Phase 19 planned (2 plans)*
+*Last updated: 2026-02-13 -- Phase 19 complete (2/2 plans, verified)*
