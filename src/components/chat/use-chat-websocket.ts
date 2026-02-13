@@ -12,10 +12,12 @@ import type {
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
+  AcpPlanState,
   PendingMessageContent,
   PendingRequest,
   RewindPreviewState,
   SessionStatus,
+  ToolProgressInfo,
 } from './reducer';
 import { useChatState } from './use-chat-state';
 
@@ -73,6 +75,10 @@ export interface UseChatWebSocketReturn {
   tokenStats: TokenStats;
   // Rewind preview state (for confirmation dialog)
   rewindPreview: RewindPreviewState | null;
+  // ACP agent plan state for structured task list rendering
+  acpPlan: AcpPlanState | null;
+  // Tool progress map (includes ACP locations for click-to-open)
+  toolProgress: Map<string, ToolProgressInfo>;
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
@@ -261,6 +267,8 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     slashCommandsLoaded: chat.slashCommandsLoaded,
     tokenStats: chat.tokenStats,
     rewindPreview: chat.rewindPreview,
+    acpPlan: chat.acpPlan,
+    toolProgress: chat.toolProgress,
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,

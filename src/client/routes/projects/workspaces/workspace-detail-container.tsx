@@ -97,6 +97,8 @@ export function WorkspaceDetailContainer() {
     confirmRewind,
     cancelRewind,
     getUuidForMessageId,
+    acpPlan,
+    toolProgress,
     inputRef,
     messagesEndRef,
   } = useChatWebSocket({
@@ -274,6 +276,8 @@ export function WorkspaceDetailContainer() {
     confirmRewind,
     cancelRewind,
     getUuidForMessageId,
+    acpPlan,
+    toolProgress,
     autoStartPending: isIssueAutoStartPending,
     initBanner: workspaceInitStatus?.chatBanner ?? null,
   };

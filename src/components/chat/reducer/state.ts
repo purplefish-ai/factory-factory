@@ -24,6 +24,7 @@ function createBaseResetState(): Pick<
   | 'messageIdToUuid'
   | 'localUserMessageIds'
   | 'rewindPreview'
+  | 'acpPlan'
 > {
   // Note: slashCommands is intentionally NOT reset here.
   // - For CLEAR_CHAT: Commands persist because we're clearing messages in the same session.
@@ -49,6 +50,7 @@ function createBaseResetState(): Pick<
     messageIdToUuid: new Map(),
     localUserMessageIds: new Set(),
     rewindPreview: null,
+    acpPlan: null,
   };
 }
 
@@ -132,6 +134,7 @@ export function createInitialChatState(overrides?: Partial<ChatState>): ChatStat
     messageIdToUuid: new Map(),
     localUserMessageIds: new Set(),
     rewindPreview: null,
+    acpPlan: null,
     ...overrides,
   };
 }

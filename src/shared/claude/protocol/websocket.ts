@@ -143,6 +143,10 @@ interface WebSocketMessagePayloadByType {
     tool_name?: string;
     parent_tool_use_id?: string;
     elapsed_time_seconds?: number;
+    /** ACP tool call file locations for click-to-open rendering */
+    acpLocations?: Array<{ path: string; line?: number | null }>;
+    /** ACP tool kind (read, edit, execute, etc.) */
+    acpKind?: string;
   };
   tool_use_summary: {
     summary?: string;

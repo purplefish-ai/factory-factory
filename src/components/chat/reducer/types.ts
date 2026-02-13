@@ -69,10 +69,33 @@ export interface ProcessStatus {
   };
 }
 
+/** ACP tool call location for click-to-open */
+export interface AcpToolLocation {
+  path: string;
+  line?: number | null;
+}
+
+/** Individual entry in an ACP plan */
+export interface AcpPlanEntry {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  priority: 'high' | 'medium' | 'low';
+}
+
+/** ACP plan state -- latest full plan from agent */
+export interface AcpPlanState {
+  entries: AcpPlanEntry[];
+  updatedAt: string;
+}
+
 /** Tool progress tracking for long-running tool executions */
 export interface ToolProgressInfo {
   toolName: string;
   elapsedSeconds: number;
+  /** ACP tool call file locations for click-to-open rendering */
+  acpLocations?: AcpToolLocation[];
+  /** ACP tool kind (read, edit, execute, etc.) */
+  acpKind?: string;
 }
 
 /** Task notification from SDK (e.g., Task tool subagent updates) */
@@ -181,6 +204,8 @@ export interface ChatState {
   localUserMessageIds: Set<string>;
   /** Current rewind preview state (null when not showing rewind dialog) */
   rewindPreview: RewindPreviewState | null;
+  /** ACP agent plan -- latest plan state from ACP plan session updates */
+  acpPlan: AcpPlanState | null;
 }
 
 // =============================================================================
@@ -266,7 +291,13 @@ export type ChatAction =
   | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string } }
   | {
       type: 'SDK_TOOL_PROGRESS';
-      payload: { toolUseId: string; toolName: string; elapsedSeconds: number };
+      payload: {
+        toolUseId: string;
+        toolName: string;
+        elapsedSeconds: number;
+        acpLocations?: AcpToolLocation[];
+        acpKind?: string;
+      };
     }
   | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary?: string; precedingToolUseIds: string[] } }
   | { type: 'SDK_TASK_NOTIFICATION'; payload: { message: string } }
@@ -287,6 +318,8 @@ export type ChatAction =
   | { type: 'WS_SLASH_COMMANDS'; payload: { commands: CommandInfo[] } }
   // User message UUID tracking (for rewind functionality)
   | { type: 'USER_MESSAGE_UUID_RECEIVED'; payload: { uuid: string } }
+  // ACP plan updates
+  | { type: 'ACP_PLAN_UPDATE'; payload: { entries: AcpPlanEntry[] } }
   // Rewind files actions
   | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string; requestNonce: string } }
   | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }

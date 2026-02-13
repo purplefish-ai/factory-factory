@@ -27,10 +27,13 @@ import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
 import { createBaseResetState, createInitialChatState } from './state';
-import type { ChatAction, ChatState } from './types';
+import type { AcpToolLocation, ChatAction, ChatState } from './types';
 
 export { createInitialChatState };
 export type {
+  AcpPlanEntry,
+  AcpPlanState,
+  AcpToolLocation,
   ChatAction,
   ChatState,
   PendingMessageContent,
@@ -40,6 +43,7 @@ export type {
   RewindPreviewState,
   SessionStatus,
   TaskNotification,
+  ToolProgressInfo,
 } from './types';
 
 // =============================================================================
@@ -272,6 +276,9 @@ function handleToolProgressMessage(data: WebSocketMessage): ChatAction | null {
       toolUseId: data.tool_use_id,
       toolName: data.tool_name,
       elapsedSeconds: data.elapsed_time_seconds,
+      // Pass through ACP-specific fields from tool_progress WebSocket messages
+      acpLocations: (data as Record<string, unknown>).acpLocations as AcpToolLocation[] | undefined,
+      acpKind: (data as Record<string, unknown>).acpKind as string | undefined,
     },
   };
 }
@@ -375,9 +382,22 @@ function handleStatusUpdateMessage(data: WebSocketMessage): ChatAction {
 }
 
 function handleTaskNotificationMessage(data: WebSocketMessage): ChatAction | null {
-  return data.message
-    ? { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } }
-    : null;
+  if (!data.message) {
+    return null;
+  }
+  // Check if this is an ACP plan update (JSON message with type 'acp_plan')
+  try {
+    const parsed = JSON.parse(data.message);
+    if (parsed && parsed.type === 'acp_plan' && Array.isArray(parsed.entries)) {
+      return {
+        type: 'ACP_PLAN_UPDATE',
+        payload: { entries: parsed.entries },
+      };
+    }
+  } catch {
+    // Not JSON, treat as regular task notification
+  }
+  return { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } };
 }
 
 function handleSlashCommandsMessage(data: WebSocketMessage): ChatAction | null {
