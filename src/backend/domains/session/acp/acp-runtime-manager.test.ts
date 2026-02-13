@@ -597,7 +597,7 @@ describe('AcpClientHandler', () => {
     });
   });
 
-  it('sessionUpdate forwards agent_message_chunk events', async () => {
+  it('sessionUpdate forwards all events as acp_session_update wrapper', async () => {
     const onEvent = vi.fn();
 
     const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
@@ -611,12 +611,15 @@ describe('AcpClientHandler', () => {
     });
 
     expect(onEvent).toHaveBeenCalledWith('test-session', {
-      type: 'acp_agent_message_chunk',
-      content: { type: 'text', text: 'Hello' },
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Hello' },
+      },
     });
   });
 
-  it('sessionUpdate forwards tool_call events', async () => {
+  it('sessionUpdate forwards tool_call events as acp_session_update wrapper', async () => {
     const onEvent = vi.fn();
 
     const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
@@ -633,15 +636,18 @@ describe('AcpClientHandler', () => {
     });
 
     expect(onEvent).toHaveBeenCalledWith('test-session', {
-      type: 'acp_tool_call',
-      toolCallId: 'tc-1',
-      title: 'Read file',
-      kind: 'read',
-      status: 'in_progress',
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-1',
+        title: 'Read file',
+        kind: 'read',
+        status: 'in_progress',
+      },
     });
   });
 
-  it('sessionUpdate logs deferred events without forwarding', async () => {
+  it('sessionUpdate forwards all event types including previously deferred ones', async () => {
     const onEvent = vi.fn();
 
     const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
@@ -654,7 +660,13 @@ describe('AcpClientHandler', () => {
       },
     });
 
-    expect(onEvent).not.toHaveBeenCalled();
+    expect(onEvent).toHaveBeenCalledWith('test-session', {
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'agent_thought_chunk',
+        content: { type: 'text', text: 'thinking...' },
+      },
+    });
   });
 
   it('requestPermission auto-approves with allow_always option', async () => {

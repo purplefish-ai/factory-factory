@@ -11,6 +11,7 @@ import type {
 } from '@/backend/domains/session/runtime/provider-runtime-manager';
 import { createLogger } from '@/backend/services/logger.service';
 import { AcpClientHandler } from './acp-client-handler';
+import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpClientOptions } from './types';
 
@@ -18,6 +19,8 @@ const logger = createLogger('acp-runtime-manager');
 
 export type AcpRuntimeEventHandlers = RuntimeEventHandlers & {
   onAcpEvent?: (sessionId: string, event: unknown) => void;
+  /** Permission bridge to inject into AcpClientHandler for suspending requestPermission */
+  permissionBridge?: AcpPermissionBridge;
 };
 
 /**
@@ -175,9 +178,9 @@ export class AcpRuntimeManager
           logger.debug('ACP event received but no handler registered', { sessionId });
         };
 
-    // Create connection with client handler
+    // Create connection with client handler (inject permission bridge from handlers)
     const connection = new ClientSideConnection(
-      (_agent) => new AcpClientHandler(sessionId, onEvent, logger),
+      (_agent) => new AcpClientHandler(sessionId, onEvent, logger, handlers.permissionBridge),
       stream
     );
 

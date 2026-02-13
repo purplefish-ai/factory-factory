@@ -1,6 +1,11 @@
 import { SessionStatus } from '@factory-factory/core';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
-import { type AcpRuntimeEventHandlers, acpRuntimeManager } from '@/backend/domains/session/acp';
+import {
+  AcpEventTranslator,
+  AcpPermissionBridge,
+  type AcpRuntimeEventHandlers,
+  acpRuntimeManager,
+} from '@/backend/domains/session/acp';
 import type { RewindFilesResponse } from '@/backend/domains/session/claude';
 import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';
@@ -71,6 +76,8 @@ class SessionService {
   private readonly codexEventTranslator = new CodexEventTranslator({
     userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
   });
+  private readonly acpEventTranslator = new AcpEventTranslator(logger);
+  private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   private onCodexTerminalTurn: CodexTerminalTurnCallback | null = null;
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
@@ -140,62 +147,56 @@ class SessionService {
     });
   }
 
-  private setupAcpEventHandler(_sessionId: string): AcpRuntimeEventHandlers {
+  private setupAcpEventHandler(sessionId: string): AcpRuntimeEventHandlers {
+    const bridge = new AcpPermissionBridge();
+    this.acpPermissionBridges.set(sessionId, bridge);
+
     return {
+      permissionBridge: bridge,
       onAcpEvent: (sid: string, event: unknown) => {
-        // Minimal translation: forward ACP events to the delta pipeline
-        // The event object from AcpClientHandler already has type/content structure
         const typed = event as { type: string };
-        switch (typed.type) {
-          case 'acp_agent_message_chunk': {
-            const chunk = event as { type: string; content: ClaudeContentItem };
-            // Forward as agent_message for the chat UI
-            sessionDomainService.emitDelta(sid, {
-              type: 'agent_message',
-              data: {
-                type: 'assistant',
-                message: { role: 'assistant', content: [chunk.content] },
-              },
-            });
-            break;
+
+        if (typed.type === 'acp_session_update') {
+          const { update } = event as {
+            type: string;
+            update: import('@agentclientprotocol/sdk').SessionUpdate;
+          };
+          const deltas = this.acpEventTranslator.translateSessionUpdate(update);
+          for (const delta of deltas) {
+            sessionDomainService.emitDelta(sid, delta);
           }
-          case 'acp_tool_call': {
-            const tc = event as {
-              type: string;
-              toolCallId: string;
-              title: string;
-              kind?: string;
-              status?: string;
-            };
-            sessionDomainService.emitDelta(sid, {
-              type: 'agent_message',
-              data: {
-                type: 'stream_event',
-                event: {
-                  type: 'content_block_start',
-                  index: 0,
-                  content_block: {
-                    type: 'tool_use',
-                    id: tc.toolCallId,
-                    name: tc.title,
-                    input: {},
-                  },
-                },
-              },
-            });
-            break;
-          }
-          case 'acp_tool_call_update': {
-            const tcu = event as { type: string; toolCallId: string; status?: string };
-            sessionDomainService.emitDelta(sid, {
-              type: 'tool_progress',
-              tool_use_id: tcu.toolCallId,
-            });
-            break;
-          }
-          default:
-            // Other ACP events logged but not forwarded in Phase 19
-            break;
+          return;
+        }
+
+        if (typed.type === 'acp_permission_request') {
+          const { requestId, params } = event as {
+            type: string;
+            requestId: string;
+            params: import('@agentclientprotocol/sdk').RequestPermissionRequest;
+          };
+          // Emit permission_request delta with ACP options
+          sessionDomainService.emitDelta(sid, {
+            type: 'permission_request',
+            requestId,
+            toolName: params.toolCall.title ?? 'ACP Tool',
+            toolUseId: params.toolCall.toolCallId,
+            toolInput: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
+            acpOptions: params.options.map((o) => ({
+              optionId: o.optionId,
+              name: o.name,
+              kind: o.kind,
+            })),
+          });
+          // Also store as pending interactive request for session restore
+          sessionDomainService.setPendingInteractiveRequest(sid, {
+            requestId,
+            toolName: params.toolCall.title ?? 'ACP Tool',
+            toolUseId: params.toolCall.toolCallId,
+            input: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
+            planContent: null,
+            timestamp: new Date().toISOString(),
+          });
+          return;
         }
       },
       onSessionId: async (sid: string, providerSessionId: string) => {
@@ -214,6 +215,13 @@ class SessionService {
         }
       },
       onExit: async (sid: string, exitCode: number | null) => {
+        // Clean up permission bridge on exit
+        const b = this.acpPermissionBridges.get(sid);
+        if (b) {
+          b.cancelAll();
+          this.acpPermissionBridges.delete(sid);
+        }
+
         try {
           sessionDomainService.markProcessExit(sid, exitCode);
           const session = await this.repository.updateSession(sid, {
@@ -469,6 +477,13 @@ class SessionService {
     // stopSession handles both "cancel current prompt" and "terminate session".)
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     if (acpHandle || acpRuntimeManager.isStopInProgress(sessionId)) {
+      // Cancel pending ACP permissions before stopping the process
+      const acpBridge = this.acpPermissionBridges.get(sessionId);
+      if (acpBridge) {
+        acpBridge.cancelAll();
+        this.acpPermissionBridges.delete(sessionId);
+      }
+
       if (!acpRuntimeManager.isStopInProgress(sessionId)) {
         await acpRuntimeManager.stopClient(sessionId);
       }
@@ -891,6 +906,14 @@ class SessionService {
 
   respondToPermissionRequest(sessionId: string, requestId: string, allow: boolean): void {
     this.resolveAdapterForSessionSync(sessionId).respondToPermission(sessionId, requestId, allow);
+  }
+
+  respondToAcpPermission(sessionId: string, requestId: string, optionId: string): boolean {
+    const bridge = this.acpPermissionBridges.get(sessionId);
+    if (!bridge) {
+      return false;
+    }
+    return bridge.resolvePermission(requestId, optionId);
   }
 
   respondToQuestionRequest(
