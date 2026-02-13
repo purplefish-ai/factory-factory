@@ -2,6 +2,7 @@ import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-mes
 import { SessionManager } from '@/backend/domains/session/claude/session';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { buildHydrateKey } from '@/backend/domains/session/store/session-hydrate-key';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import type { LoadSessionMessage } from '@/shared/websocket';
@@ -64,8 +65,10 @@ async function hydrateCodexTranscriptIfAvailable(
   }
 
   sessionDomainService.setHydratedTranscript(sessionId, codexTranscript, {
-    // Matches the hydrator key derived from null claudeSessionId/projectPath.
-    hydratedKey: 'none::none',
+    hydratedKey: buildHydrateKey({
+      claudeSessionId: null,
+      claudeProjectPath: null,
+    }),
   });
 }
 
