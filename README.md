@@ -92,7 +92,8 @@ pnpm dev
 ```
 
 The server automatically:
-- Creates the data directory (`~/factory-factory/`)
+- Creates the data directory (`~/.factory-factory/`)
+- Migrates data from old `~/factory-factory/` if it exists
 - Runs database migrations
 - Finds available ports if defaults are in use
 - Opens your browser when ready
@@ -123,7 +124,7 @@ npx factory-factory@latest serve [options]
 Options:
   -p, --port <port>           Frontend port (default: 3000)
   --backend-port <port>       Backend port (default: 3001)
-  -d, --database-path <path>  SQLite database path (default: ~/factory-factory/data.db)
+  -d, --database-path <path>  SQLite database path (default: ~/.factory-factory/data.db)
   --host <host>               Host to bind to (default: localhost)
   --dev                       Development mode with hot reloading
   --no-open                   Don't open browser automatically

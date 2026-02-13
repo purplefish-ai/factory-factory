@@ -43,7 +43,7 @@ export function expandEnvVars(value: string, depth = 0): string {
  *
  * Priority:
  * 1. DATABASE_PATH environment variable (for Electron or explicit override)
- * 2. Default: ~/factory-factory/data.db (development default)
+ * 2. Default: ~/.factory-factory/data.db (development default)
  *
  * For Electron production, set DATABASE_PATH to app.getPath('userData')/data.db
  * before importing this module.
@@ -55,7 +55,7 @@ export function getDatabasePath(): string {
 
   // Default development path - expand any env vars in BASE_DIR (e.g., $USER)
   const rawBaseDir = process.env.BASE_DIR;
-  const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), 'factory-factory');
+  const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), '.factory-factory');
   return join(baseDir, 'data.db');
 }
 

@@ -345,7 +345,7 @@ function buildCodexAppServerConfig(): CodexAppServerConfig {
  * Get default base directory
  */
 function getDefaultBaseDir(): string {
-  return join(homedir(), 'factory-factory');
+  return join(homedir(), '.factory-factory');
 }
 
 /**
@@ -376,7 +376,7 @@ function loadSystemConfig(): SystemConfig {
     backendPort: Number.parseInt(process.env.BACKEND_PORT || '3001', 10),
     nodeEnv,
 
-    // Database (SQLite - defaults to ~/factory-factory/data.db)
+    // Database (SQLite - defaults to ~/.factory-factory/data.db)
     databasePath: process.env.DATABASE_PATH || join(baseDir, 'data.db'),
 
     // Default session profile
