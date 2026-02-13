@@ -146,10 +146,121 @@ const FileUploadButton = memo(function FileUploadButton({
   );
 });
 
+interface LeftControlsVisibility {
+  selectedModel: string;
+  showModelSelector: boolean;
+  showThinkingToggle: boolean;
+  showPlanToggle: boolean;
+  showAttachments: boolean;
+  showUsageIndicator: boolean;
+}
+
+function deriveLeftControlsVisibility(
+  settings: ChatSettings | undefined,
+  capabilities: ChatBarCapabilities | undefined,
+  tokenStats: TokenStats | undefined
+): LeftControlsVisibility {
+  const showModelSelector =
+    capabilities?.model.enabled === true && (capabilities.model.options.length ?? 0) > 0;
+  const showThinkingToggle = capabilities?.thinking.enabled === true;
+  const showPlanToggle = capabilities?.planMode.enabled === true;
+  const showAttachments =
+    capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
+  const showUsageIndicator =
+    capabilities?.usageStats.enabled === true &&
+    capabilities.usageStats.contextWindow === true &&
+    tokenStats !== undefined;
+  const selectedModel =
+    settings?.selectedModel ??
+    capabilities?.model.selected ??
+    capabilities?.model.options[0]?.value ??
+    '';
+
+  return {
+    selectedModel,
+    showModelSelector,
+    showThinkingToggle,
+    showPlanToggle,
+    showAttachments,
+    showUsageIndicator,
+  };
+}
+
+const ModeToggles = memo(function ModeToggles({
+  showThinkingToggle,
+  showPlanToggle,
+  settings,
+  onThinkingChange,
+  onPlanModeChange,
+  running,
+  modLabel,
+  modifierHeld,
+}: {
+  showThinkingToggle: boolean;
+  showPlanToggle: boolean;
+  settings?: ChatSettings;
+  onThinkingChange: (enabled: boolean) => void;
+  onPlanModeChange: (enabled: boolean) => void;
+  running: boolean;
+  modLabel: string;
+  modifierHeld: boolean;
+}) {
+  if (!(showThinkingToggle || showPlanToggle)) {
+    return null;
+  }
+
+  return (
+    <>
+      {showThinkingToggle && (
+        <SettingsToggle
+          pressed={settings?.thinkingEnabled ?? false}
+          onPressedChange={onThinkingChange}
+          disabled={running}
+          icon={Brain}
+          label="Extended thinking mode"
+          ariaLabel="Toggle thinking mode"
+          shortcut={`${modLabel}+Shift+T`}
+          showShortcut={modifierHeld}
+        />
+      )}
+      {showPlanToggle && (
+        <SettingsToggle
+          pressed={settings?.planModeEnabled ?? false}
+          onPressedChange={onPlanModeChange}
+          disabled={running}
+          icon={MapIcon}
+          label="Plan mode"
+          ariaLabel="Toggle plan mode"
+          shortcut={`${modLabel}+Shift+P`}
+          showShortcut={modifierHeld}
+        />
+      )}
+    </>
+  );
+});
+
+const UsageIndicatorSection = memo(function UsageIndicatorSection({
+  showUsageIndicator,
+  tokenStats,
+}: {
+  showUsageIndicator: boolean;
+  tokenStats?: TokenStats;
+}) {
+  if (!(showUsageIndicator && tokenStats)) {
+    return null;
+  }
+
+  return (
+    <>
+      <div className="h-4 w-px bg-border" />
+      <ContextWindowIndicator tokenStats={tokenStats} />
+    </>
+  );
+});
+
 /**
  * Renders the left controls: model selector, toggles, file upload, and context indicator.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Capability-driven UI intentionally has multiple conditionals.
 const LeftControls = memo(function LeftControls({
   settings,
   capabilities,
@@ -185,21 +296,15 @@ const LeftControls = memo(function LeftControls({
   onQuickActionsOpenChange: (open: boolean) => void;
   tokenStats?: TokenStats;
 }) {
-  const showModelSelector =
-    capabilities?.model.enabled === true && (capabilities.model.options.length ?? 0) > 0;
-  const showThinkingToggle = capabilities?.thinking.enabled === true;
-  const showPlanToggle = capabilities?.planMode.enabled === true;
-  const showAttachments =
-    capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
-  const showUsageIndicator =
-    capabilities?.usageStats.enabled === true &&
-    capabilities.usageStats.contextWindow === true &&
-    tokenStats !== undefined;
-  const selectedModel =
-    settings?.selectedModel ??
-    capabilities?.model.selected ??
-    capabilities?.model.options[0]?.value ??
-    '';
+  const {
+    selectedModel,
+    showModelSelector,
+    showThinkingToggle,
+    showPlanToggle,
+    showAttachments,
+    showUsageIndicator,
+  } = deriveLeftControlsVisibility(settings, capabilities, tokenStats);
+  const hasModeToggles = showThinkingToggle || showPlanToggle;
 
   return (
     <div className="flex items-center gap-1">
@@ -211,36 +316,18 @@ const LeftControls = memo(function LeftControls({
           disabled={running}
         />
       )}
-      {showModelSelector && (showThinkingToggle || showPlanToggle) && (
-        <div className="h-4 w-px bg-border" />
-      )}
-      {showThinkingToggle && (
-        <SettingsToggle
-          pressed={settings?.thinkingEnabled ?? false}
-          onPressedChange={onThinkingChange}
-          disabled={running}
-          icon={Brain}
-          label="Extended thinking mode"
-          ariaLabel="Toggle thinking mode"
-          shortcut={`${modLabel}+Shift+T`}
-          showShortcut={modifierHeld}
-        />
-      )}
-      {showPlanToggle && (
-        <SettingsToggle
-          pressed={settings?.planModeEnabled ?? false}
-          onPressedChange={onPlanModeChange}
-          disabled={running}
-          icon={MapIcon}
-          label="Plan mode"
-          ariaLabel="Toggle plan mode"
-          shortcut={`${modLabel}+Shift+P`}
-          showShortcut={modifierHeld}
-        />
-      )}
-      {(showThinkingToggle || showPlanToggle) && showAttachments && (
-        <div className="h-4 w-px bg-border" />
-      )}
+      {showModelSelector && hasModeToggles && <div className="h-4 w-px bg-border" />}
+      <ModeToggles
+        showThinkingToggle={showThinkingToggle}
+        showPlanToggle={showPlanToggle}
+        settings={settings}
+        onThinkingChange={onThinkingChange}
+        onPlanModeChange={onPlanModeChange}
+        running={running}
+        modLabel={modLabel}
+        modifierHeld={modifierHeld}
+      />
+      {hasModeToggles && showAttachments && <div className="h-4 w-px bg-border" />}
       {showAttachments && (
         <FileUploadButton
           fileInputRef={fileInputRef}
@@ -260,12 +347,7 @@ const LeftControls = memo(function LeftControls({
         shortcut={`${modLabel}+Shift+A`}
         showShortcut={modifierHeld}
       />
-      {showUsageIndicator && (
-        <>
-          <div className="h-4 w-px bg-border" />
-          <ContextWindowIndicator tokenStats={tokenStats as TokenStats} />
-        </>
-      )}
+      <UsageIndicatorSection showUsageIndicator={showUsageIndicator} tokenStats={tokenStats} />
     </div>
   );
 });
