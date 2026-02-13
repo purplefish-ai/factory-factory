@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 21 of 22 (Config Options + Unified Runtime)
-Plan: 0 of TBD (needs planning)
-Status: Phase 21 not yet planned
-Last activity: 2026-02-13 -- Phase 20 complete (integration bugs fixed during verification)
+Plan: 0 of 3 (planned, needs execution)
+Status: Phase 21 planned -- 3 plans in 3 waves
+Last activity: 2026-02-13 -- Phase 21 planning complete
 
 Progress: [██████░░░░] 50%
 
@@ -29,7 +29,7 @@ Progress: [██████░░░░] 50%
 |-------|-------|-------|----------|
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
 | 20. Event Translation + Permissions | 3/3 | 26min | 6min |
-| 21. Config Options + Unified Runtime | 0/TBD | -- | -- |
+| 21. Config Options + Unified Runtime | 0/3 | -- | -- |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
 
 *Updated after each plan completion*
@@ -100,5 +100,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Phase 20 complete, Phase 21 needs planning
+Stopped at: Phase 21 planned, ready for execution
 Resume file: None
