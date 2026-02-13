@@ -28,7 +28,7 @@ See [v1.1 Roadmap Archive](milestones/v1.1-ROADMAP.md) for full phase details.
 
 - [x] **Phase 19: ACP Runtime Foundation** - Subprocess lifecycle, connection wiring, session create/prompt/cancel with streaming (completed 2026-02-13)
 - [x] **Phase 20: Event Translation + Permissions** - ACP event mapping to FF UI, permission option selection, tool call rendering (completed 2026-02-13)
-- [ ] **Phase 21: Config Options + Unified Runtime** - Agent-driven config controls, capability gating, session load, unified runtime manager
+- [x] **Phase 21: Config Options + Unified Runtime** - Agent-driven config controls, capability gating, session load, unified runtime manager (completed 2026-02-13)
 - [ ] **Phase 22: Cleanup + Polish** - Legacy protocol removal, ACP-focused tests, health reporting, contributor docs
 
 ## Phase Details
@@ -79,9 +79,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 21-01-PLAN.md -- Backend config options lifecycle: parse, store, translate, set, and session resume
-- [ ] 21-02-PLAN.md -- Frontend config options UI: reducer state, WebSocket handling, and config selector components
-- [ ] 21-03-PLAN.md -- Unified AcpRuntimeManager: all new sessions use ACP, legacy manager usage removed
+- [x] 21-01-PLAN.md -- Backend config options lifecycle: parse, store, translate, set, and session resume
+- [x] 21-02-PLAN.md -- Frontend config options UI: reducer state, WebSocket handling, and config selector components
+- [x] 21-03-PLAN.md -- Unified AcpRuntimeManager: all new sessions use ACP, legacy manager usage removed
 
 ### Phase 22: Cleanup + Polish
 **Goal**: All legacy protocol code is deleted, ACP-focused integration tests replace superseded tests, and operational tooling reflects the new per-session process model
@@ -107,9 +107,9 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 19. ACP Runtime Foundation | v1.2 | 2/2 | ✓ Complete | 2026-02-13 |
 | 20. Event Translation + Permissions | v1.2 | 3/3 | ✓ Complete | 2026-02-13 |
-| 21. Config Options + Unified Runtime | v1.2 | 0/3 | Planned | - |
+| 21. Config Options + Unified Runtime | v1.2 | 3/3 | ✓ Complete | 2026-02-13 |
 | 22. Cleanup + Polish | v1.2 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-13 -- Phase 21 planned (3 plans in 3 waves)*
+*Last updated: 2026-02-13 -- Phase 21 complete (3/3 plans executed)*
