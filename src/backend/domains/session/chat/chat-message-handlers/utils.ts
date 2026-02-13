@@ -1,14 +1,17 @@
 import type { QueuedMessage } from '@/shared/claude';
 import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
-import { normalizeRequestedModel } from './constants';
+import { normalizeOptionalString, normalizeRequestedModel } from './constants';
 
 export function getValidModel(message: StartMessageInput): string | undefined {
-  const requestedModel = message.selectedModel || message.model;
-  return normalizeRequestedModel(requestedModel);
+  const selectedModel = normalizeRequestedModel(message.selectedModel);
+  if (selectedModel) {
+    return selectedModel;
+  }
+  return normalizeRequestedModel(message.model);
 }
 
 export function getValidReasoningEffort(message: StartMessageInput): string | undefined {
-  return normalizeRequestedModel(message.reasoningEffort);
+  return normalizeOptionalString(message.reasoningEffort);
 }
 
 export function buildQueuedMessage(
@@ -17,7 +20,7 @@ export function buildQueuedMessage(
   text: string
 ): QueuedMessage {
   const selectedModel = normalizeRequestedModel(message.settings?.selectedModel) ?? null;
-  const reasoningEffort = normalizeRequestedModel(message.settings?.reasoningEffort) ?? null;
+  const reasoningEffort = normalizeOptionalString(message.settings?.reasoningEffort) ?? null;
 
   return {
     id,
