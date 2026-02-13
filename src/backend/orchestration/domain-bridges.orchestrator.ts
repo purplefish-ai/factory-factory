@@ -40,7 +40,7 @@ import {
   workspaceQueryService,
   workspaceStateMachine,
 } from '@/backend/domains/workspace';
-import { workspaceSnapshotStore } from '@/backend/services';
+import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export function configureDomainBridges(): void {

@@ -55,7 +55,7 @@
     "check:codex-schema": "node scripts/check-codex-schema-drift.mjs",
     "check:codex-schema:update": "node scripts/check-codex-schema-drift.mjs --update",
     "check:fix": "biome check --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm --filter @factory-factory/core build && tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",

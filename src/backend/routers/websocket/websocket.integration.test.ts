@@ -39,7 +39,7 @@ let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeH
 
 let terminalConnections: typeof import('./terminal.handler').terminalConnections;
 let snapshotConnections: typeof import('./snapshots.handler').snapshotConnections;
-let workspaceSnapshotStore: typeof import('@/backend/services').workspaceSnapshotStore;
+let workspaceSnapshotStore: typeof import('@/backend/services/workspace-snapshot-store.service').workspaceSnapshotStore;
 
 let counter = 0;
 const openServers = new Set<WebSocketTestServer>();
@@ -58,8 +58,9 @@ beforeAll(async () => {
     await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
   ({ createChatUpgradeHandler } =
     await vi.importActual<typeof import('./chat.handler')>('./chat.handler'));
-  ({ workspaceSnapshotStore } =
-    await vi.importActual<typeof import('@/backend/services')>('@/backend/services'));
+  ({ workspaceSnapshotStore } = await vi.importActual<
+    typeof import('@/backend/services/workspace-snapshot-store.service')
+  >('@/backend/services/workspace-snapshot-store.service'));
 });
 
 afterEach(async () => {

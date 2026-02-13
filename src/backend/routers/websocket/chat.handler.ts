@@ -17,7 +17,7 @@ import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '@/backend/app-context';
-import { WS_READY_STATE } from '@/backend/constants';
+import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { ClaudeClient, ConnectionInfo } from '@/backend/domains/session';
 import { sessionDataService } from '@/backend/domains/session';
 import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
