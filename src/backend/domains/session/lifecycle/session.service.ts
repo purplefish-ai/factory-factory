@@ -1102,7 +1102,7 @@ class SessionService {
       mcpServers: {
         playwright: {
           command: 'npx',
-          args: ['@playwright/mcp@latest', '--viewport-size=1920,1080'],
+          args: ['@playwright/mcp@latest', '--headless', '--isolated', '--viewport-size=1920,1080'],
         },
       },
     });

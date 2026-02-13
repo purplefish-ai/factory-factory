@@ -9,7 +9,9 @@ const mocks = vi.hoisted(() => ({
   subscribe: vi.fn(),
   emitDelta: vi.fn(),
   setHydratedTranscript: vi.fn(),
+  consumeInitialMessage: vi.fn(),
   getCachedCommands: vi.fn(),
+  tryDispatchNextMessage: vi.fn(),
 }));
 
 vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
@@ -31,6 +33,7 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
     subscribe: mocks.subscribe,
     emitDelta: mocks.emitDelta,
     setHydratedTranscript: mocks.setHydratedTranscript,
+    consumeInitialMessage: mocks.consumeInitialMessage,
   },
 }));
 
@@ -82,7 +85,11 @@ describe('createLoadSessionHandler', () => {
       },
     ]);
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -121,7 +128,11 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.tryHydrateCodexTranscript.mockResolvedValue(null);
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,

@@ -154,27 +154,13 @@ class ChatMessageHandlerService {
         return;
       }
 
-      let client = sessionService.getSessionClient(dbSessionId);
-
-      // Auto-start: create client if needed, using the dequeued message's settings
-      if (!client) {
-        const started = await this.autoStartClientForQueue(dbSessionId, msg);
-        if (!started) {
-          // Re-queue the message at the front so it's not lost
-          sessionDomainService.requeueFront(dbSessionId, msg);
-          return;
-        }
-        client = sessionService.getSessionClient(dbSessionId);
-      }
-
-      const shouldRequeueReason = this.getRequeueReason(dbSessionId, client);
-      if (shouldRequeueReason) {
-        this.requeueWithReason(dbSessionId, msg, shouldRequeueReason);
+      const clientResult = await this.resolveClientForDispatch(dbSessionId, msg);
+      if (!clientResult) {
         return;
       }
 
       try {
-        await this.dispatchMessage(dbSessionId, msg, client);
+        await this.dispatchMessage(dbSessionId, msg, clientResult.client);
       } catch (error) {
         // If dispatch fails (e.g., setMaxThinkingTokens throws before state change),
         // the message is still in ACCEPTED state and can be safely requeued
@@ -193,6 +179,41 @@ class ChatMessageHandlerService {
     } finally {
       this.dispatchInProgress.set(dbSessionId, false);
     }
+  }
+
+  /**
+   * Resolve (or auto-start) the client for dispatching a queued message.
+   * Returns null if the message was requeued and dispatch should be skipped.
+   */
+  private async resolveClientForDispatch(
+    dbSessionId: string,
+    msg: QueuedMessage
+  ): Promise<{ client: unknown } | null> {
+    let client = sessionService.getSessionClient(dbSessionId);
+
+    // Auto-start: create client if needed, using the dequeued message's settings
+    let justAutoStarted = false;
+    if (!client) {
+      const started = await this.autoStartClientForQueue(dbSessionId, msg);
+      if (!started) {
+        sessionDomainService.requeueFront(dbSessionId, msg);
+        return null;
+      }
+      client = sessionService.getSessionClient(dbSessionId);
+      justAutoStarted = true;
+    }
+
+    // Skip requeue check when the client was just auto-started: the "working" state
+    // comes from the startup itself, not from a prior user message being processed.
+    if (!justAutoStarted) {
+      const shouldRequeueReason = this.getRequeueReason(dbSessionId, client);
+      if (shouldRequeueReason) {
+        this.requeueWithReason(dbSessionId, msg, shouldRequeueReason);
+        return null;
+      }
+    }
+
+    return { client };
   }
 
   /**

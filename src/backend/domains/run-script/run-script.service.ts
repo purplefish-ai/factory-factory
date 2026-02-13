@@ -93,6 +93,7 @@ export class RunScriptService {
         cwd: workspace.worktreePath,
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, BROWSER: 'none' },
       });
 
       const pid = childProcess.pid;
