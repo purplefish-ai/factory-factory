@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isCodexFileChangeApprovalMethod } from './interactive-methods';
 
 const NonEmptyStringSchema = z.string().min(1);
 const CodexRequestIdSchema = z.union([z.number(), z.string()]);
@@ -652,10 +653,9 @@ export function validateCodexApprovalResponseWithSchema(
   method: string,
   response: unknown
 ): CodexApprovalResponseValidationResult {
-  const schema =
-    method === 'item/fileChange/requestApproval'
-      ? CodexFileChangeRequestApprovalResponseSchema
-      : CodexCommandExecutionRequestApprovalResponseSchema;
+  const schema = isCodexFileChangeApprovalMethod(method)
+    ? CodexFileChangeRequestApprovalResponseSchema
+    : CodexCommandExecutionRequestApprovalResponseSchema;
   const parsed = schema.safeParse(response);
   if (parsed.success) {
     return { success: true, data: parsed.data };

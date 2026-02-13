@@ -116,6 +116,65 @@ describe('CodexSessionProviderAdapter', () => {
     expect(turnParams).not.toHaveProperty('model');
   });
 
+  it('does not revive a client when stop races with in-flight client creation', async () => {
+    const registry = new CodexSessionRegistry();
+    const threadStartDeferred = Promise.withResolvers<{ threadId: string }>();
+    let firstRequest = true;
+    const request = vi.fn().mockImplementation(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        return await threadStartDeferred.promise;
+      }
+      return { threadId: 'thread-2' };
+    });
+
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request,
+      stop: vi.fn().mockResolvedValue(undefined),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+    const creating = adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    await vi.waitFor(() => {
+      expect(request).toHaveBeenCalledTimes(1);
+    });
+    const stopping = adapter.stopClient('session-1');
+    threadStartDeferred.resolve({ threadId: 'thread-1' });
+
+    await expect(creating).rejects.toMatchObject({
+      code: 'CODEX_CLIENT_CREATION_CANCELLED',
+    });
+    await stopping;
+
+    expect(adapter.getClient('session-1')).toBeUndefined();
+    expect(registry.getSessionIdByThreadId('thread-1')).toBeNull();
+
+    const recreated = await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+    expect(recreated.threadId).toBe('thread-2');
+  });
+
   it('applies initial model preference from client options on first turn', async () => {
     const registry = new CodexSessionRegistry();
     const request = vi

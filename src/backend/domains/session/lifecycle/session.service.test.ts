@@ -1141,6 +1141,31 @@ describe('SessionService', () => {
     );
   });
 
+  it('explicitly rejects item/tool/call as intentionally unsupported', () => {
+    codexTestState.codexManagerHandlers?.onServerRequest?.({
+      sessionId: 'session-1',
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        callId: 'call-1',
+      },
+      canonicalRequestId: 'request-2',
+    });
+
+    expect(codexSessionProviderAdapter.rejectInteractiveRequest).toHaveBeenCalledWith(
+      'session-1',
+      'request-2',
+      expect.objectContaining({
+        message: expect.stringContaining('item/tool/call (intentionally disabled)'),
+        data: expect.objectContaining({
+          operation: 'item/tool/call',
+          reason: 'INTENTIONALLY_UNSUPPORTED',
+        }),
+      })
+    );
+  });
+
   it('maps provider message to public delta through adapter translation seam', () => {
     vi.mocked(claudeSessionProviderAdapter.toCanonicalAgentMessage).mockReturnValue({
       type: 'agent_message',

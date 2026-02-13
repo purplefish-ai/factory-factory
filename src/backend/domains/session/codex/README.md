@@ -53,10 +53,34 @@ Verify these first:
   - `item/fileChange/requestApproval`
 - `item/tool/requestUserInput` answer payload nesting.
 
+## 3.1) Interactive Method Support Policy
+
+Current interactive server-request handling in Factory Factory:
+- Supported approval requests:
+  - `item/commandExecution/requestApproval`
+  - `execCommandApproval` (legacy alias)
+  - `item/fileChange/requestApproval`
+  - `applyPatchApproval` (legacy alias)
+- Supported user-input requests:
+  - `item/tool/requestUserInput`
+  - `tool/requestUserInput` (legacy alias)
+- Intentionally unsupported:
+  - `item/tool/call`
+
+`item/tool/call` is intentionally rejected with `UNSUPPORTED_OPERATION` and
+`reason: "INTENTIONALLY_UNSUPPORTED"`; this is expected behavior until we add a
+full client-side dynamic tool-call execution path.
+
+Notes:
+- This is a deliberate product boundary, not an accidental schema gap.
+- Seeing `item/tool/call` produce `UNSUPPORTED_OPERATION` in logs/tests is expected.
+- If/when we support dynamic tool execution, update translator logic, schemas, and
+  this policy section in the same change.
+
 ## 4) Quick method scan command
 
 ```bash
-rg -n "method\": \"(initialize|thread/start|thread/resume|thread/read|turn/start|turn/interrupt|item/commandExecution/requestApproval|item/fileChange/requestApproval|item/tool/requestUserInput|initialized)\"" \
+rg -n "method\": \"(initialize|thread/start|thread/resume|thread/read|turn/start|turn/interrupt|item/commandExecution/requestApproval|execCommandApproval|item/fileChange/requestApproval|applyPatchApproval|item/tool/requestUserInput|item/tool/call|initialized)\"" \
   /tmp/codex-ts-schema/ClientRequest.ts \
   /tmp/codex-ts-schema/ServerRequest.ts \
   /tmp/codex-ts-schema/ClientNotification.ts

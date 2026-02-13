@@ -1,3 +1,4 @@
+import { mapCodexMessageToDelta } from '@/backend/domains/session/codex/codex-delta-mapper';
 import { CodexModelCatalogService } from '@/backend/domains/session/codex/codex-model-catalog.service';
 import {
   createUnsupportedOperationError,
@@ -88,6 +89,7 @@ export class CodexSessionProviderAdapter
   private readonly clients = new Map<string, CodexClientHandle>();
   private readonly pending = new Map<string, Promise<CodexClientHandle>>();
   private readonly stopping = new Set<string>();
+  private readonly lifecycleVersions = new Map<string, number>();
   private readonly preferredModels = new Map<string, string | undefined>();
   private readonly preferredReasoningEfforts = new Map<string, string | undefined>();
   private readonly manager: CodexAppServerManager;
@@ -143,8 +145,15 @@ export class CodexSessionProviderAdapter
       return await pendingClient;
     }
 
-    const createPromise = this.createClient(sessionId, options, context).finally(() => {
+    const expectedLifecycleVersion = this.getLifecycleVersion(sessionId);
+    const createPromise = this.createClient(
+      sessionId,
+      options,
+      context,
+      expectedLifecycleVersion
+    ).finally(() => {
       this.pending.delete(sessionId);
+      this.maybePruneLifecycleVersion(sessionId);
     });
     this.pending.set(sessionId, createPromise);
     return await createPromise;
@@ -160,6 +169,7 @@ export class CodexSessionProviderAdapter
 
   async stopClient(sessionId: string): Promise<void> {
     this.stopping.add(sessionId);
+    this.bumpLifecycleVersion(sessionId);
     let clearSessionError: unknown = null;
     try {
       await this.manager.getRegistry().clearSession(sessionId);
@@ -170,6 +180,7 @@ export class CodexSessionProviderAdapter
       this.preferredModels.delete(sessionId);
       this.preferredReasoningEfforts.delete(sessionId);
       this.stopping.delete(sessionId);
+      this.maybePruneLifecycleVersion(sessionId);
     }
 
     if (clearSessionError) {
@@ -323,138 +334,7 @@ export class CodexSessionProviderAdapter
       throw new Error(`Cannot map provider ${event.provider} to Codex websocket delta`);
     }
 
-    return this.mapCodexEventToDelta(event);
-  }
-
-  private mapCodexEventToDelta(
-    event: CanonicalAgentMessageEvent<CodexNativeMessage>
-  ): SessionDeltaEvent {
-    switch (event.kind) {
-      case 'assistant_text':
-        return this.createAssistantDelta(event.data.text ?? '', 'text', event.order);
-      case 'thinking':
-        return this.createAssistantDelta(event.data.text ?? '', 'thinking', event.order);
-      case 'tool_call':
-        return this.createToolCallDelta(event, event.order);
-      case 'tool_result':
-        return this.createToolResultDelta(event, event.order);
-      case 'completion':
-        return this.createCompletionDelta(event, event.order);
-      default:
-        return this.createProviderEventDelta(event, event.order);
-    }
-  }
-
-  private addOrder<T extends SessionDeltaEvent>(event: T, order?: number): T {
-    if (order === undefined) {
-      return event;
-    }
-    return { ...event, order } as T;
-  }
-
-  private createAssistantDelta(
-    text: string,
-    mode: 'text' | 'thinking',
-    order?: number
-  ): SessionDeltaEvent {
-    return this.addOrder(
-      {
-        type: 'agent_message',
-        data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content:
-              mode === 'text' ? [{ type: 'text', text }] : [{ type: 'thinking', thinking: text }],
-          },
-        },
-      },
-      order
-    );
-  }
-
-  private createToolCallDelta(
-    event: CanonicalAgentMessageEvent<CodexNativeMessage>,
-    order?: number
-  ): SessionDeltaEvent {
-    return this.addOrder(
-      {
-        type: 'agent_message',
-        data: {
-          type: 'stream_event',
-          event: {
-            type: 'content_block_start',
-            index: 0,
-            content_block: {
-              type: 'tool_use',
-              id: event.data.toolUseId ?? 'codex-tool',
-              name: event.data.toolName ?? 'codex_tool',
-              input: event.data.input ?? {},
-            },
-          },
-        },
-      },
-      order
-    );
-  }
-
-  private createToolResultDelta(
-    event: CanonicalAgentMessageEvent<CodexNativeMessage>,
-    order?: number
-  ): SessionDeltaEvent {
-    return this.addOrder(
-      {
-        type: 'agent_message',
-        data: {
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [
-              {
-                type: 'tool_result',
-                tool_use_id: event.data.toolUseId ?? 'codex-tool',
-                content: event.data.text ?? JSON.stringify(event.data.payload ?? {}),
-              },
-            ],
-          },
-        },
-      },
-      order
-    );
-  }
-
-  private createCompletionDelta(
-    event: CanonicalAgentMessageEvent<CodexNativeMessage>,
-    order?: number
-  ): SessionDeltaEvent {
-    return this.addOrder(
-      {
-        type: 'agent_message',
-        data: {
-          type: 'result',
-          result: event.data.payload ?? {},
-        },
-      },
-      order
-    );
-  }
-
-  private createProviderEventDelta(
-    event: CanonicalAgentMessageEvent<CodexNativeMessage>,
-    order?: number
-  ): SessionDeltaEvent {
-    return this.addOrder(
-      {
-        type: 'agent_message',
-        data: {
-          type: 'system',
-          subtype: 'status',
-          status: 'codex_provider_event',
-          result: event.data.payload ?? {},
-        },
-      },
-      order
-    );
+    return mapCodexMessageToDelta(event.data, event.order);
   }
 
   getSessionProcess(sessionId: string): ReturnType<CodexAppServerManager['getStatus']> | undefined {
@@ -522,10 +402,16 @@ export class CodexSessionProviderAdapter
   }
 
   async stopAllClients(): Promise<void> {
+    const sessionIds = new Set<string>([...this.clients.keys(), ...this.pending.keys()]);
+    for (const sessionId of sessionIds) {
+      this.stopping.add(sessionId);
+      this.bumpLifecycleVersion(sessionId);
+    }
+
     let firstCleanupError: unknown = null;
     let stopError: unknown = null;
     try {
-      for (const [sessionId] of this.clients) {
+      for (const sessionId of sessionIds) {
         try {
           await this.manager.getRegistry().clearSession(sessionId);
         } catch (error) {
@@ -538,6 +424,10 @@ export class CodexSessionProviderAdapter
       this.clients.clear();
       this.preferredModels.clear();
       this.preferredReasoningEfforts.clear();
+      for (const sessionId of sessionIds) {
+        this.stopping.delete(sessionId);
+        this.maybePruneLifecycleVersion(sessionId);
+      }
       try {
         await this.manager.stop();
       } catch (error) {
@@ -602,12 +492,15 @@ export class CodexSessionProviderAdapter
   private async createClient(
     sessionId: string,
     options: CodexClientOptions,
-    context: { workspaceId: string; workingDir: string }
+    context: { workspaceId: string; workingDir: string },
+    expectedLifecycleVersion: number
   ): Promise<CodexClientHandle> {
     await this.manager.ensureStarted();
+    this.assertCreationStillCurrent(sessionId, expectedLifecycleVersion, 'after_manager_start');
 
     const registry = this.manager.getRegistry();
     let threadId = await registry.resolveThreadId(sessionId);
+    this.assertCreationStillCurrent(sessionId, expectedLifecycleVersion, 'after_thread_resolve');
 
     if (!threadId) {
       const result = await this.sendRequest('thread/start', {
@@ -627,7 +520,12 @@ export class CodexSessionProviderAdapter
         });
       }
 
+      this.assertCreationStillCurrent(sessionId, expectedLifecycleVersion, 'before_thread_bind');
       await registry.setMappedThreadId(sessionId, threadId);
+      if (!this.isCreationStillCurrent(sessionId, expectedLifecycleVersion)) {
+        await this.clearSessionBindingAfterCancelledCreate(sessionId);
+        this.assertCreationStillCurrent(sessionId, expectedLifecycleVersion, 'after_thread_bind');
+      }
     } else {
       await this.sendRequest(
         'thread/resume',
@@ -636,8 +534,10 @@ export class CodexSessionProviderAdapter
         },
         { threadId }
       );
+      this.assertCreationStillCurrent(sessionId, expectedLifecycleVersion, 'after_thread_resume');
     }
 
+    this.assertCreationStillCurrent(sessionId, expectedLifecycleVersion, 'before_client_register');
     const client: CodexClientHandle = {
       sessionId,
       threadId,
@@ -700,6 +600,61 @@ export class CodexSessionProviderAdapter
     options?: CodexRequestOptions
   ): Promise<unknown> {
     return await this.manager.request(method, params, options);
+  }
+
+  private getLifecycleVersion(sessionId: string): number {
+    return this.lifecycleVersions.get(sessionId) ?? 0;
+  }
+
+  private bumpLifecycleVersion(sessionId: string): void {
+    this.lifecycleVersions.set(sessionId, this.getLifecycleVersion(sessionId) + 1);
+  }
+
+  private isCreationStillCurrent(sessionId: string, expectedLifecycleVersion: number): boolean {
+    return (
+      !this.stopping.has(sessionId) &&
+      this.getLifecycleVersion(sessionId) === expectedLifecycleVersion
+    );
+  }
+
+  private assertCreationStillCurrent(
+    sessionId: string,
+    expectedLifecycleVersion: number,
+    stage: string
+  ): void {
+    if (this.isCreationStillCurrent(sessionId, expectedLifecycleVersion)) {
+      return;
+    }
+    throw new SessionOperationError(`Codex client creation cancelled for session: ${sessionId}`, {
+      code: 'CODEX_CLIENT_CREATION_CANCELLED',
+      metadata: {
+        sessionId,
+        stage,
+      },
+      retryable: true,
+    });
+  }
+
+  private async clearSessionBindingAfterCancelledCreate(sessionId: string): Promise<void> {
+    try {
+      await this.manager.getRegistry().clearSession(sessionId);
+    } catch (error) {
+      logger.warn('Failed clearing session binding after cancelled Codex client create', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private maybePruneLifecycleVersion(sessionId: string): void {
+    if (
+      this.pending.has(sessionId) ||
+      this.clients.has(sessionId) ||
+      this.stopping.has(sessionId)
+    ) {
+      return;
+    }
+    this.lifecycleVersions.delete(sessionId);
   }
 }
 
