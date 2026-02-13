@@ -1,3 +1,7 @@
+export type { AcpClientOptions } from '../acp';
+export { AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from '../acp';
+// ACP runtime (Phase 19+)
+export type { AcpRuntimeEventHandlers } from '../acp/acp-runtime-manager';
 export type {
   ClaudeRuntimeCreatedCallback,
   ClaudeRuntimeEventHandlers,

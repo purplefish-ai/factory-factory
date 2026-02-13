@@ -1,4 +1,6 @@
 import { SessionStatus } from '@factory-factory/core';
+import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
+import { type AcpRuntimeEventHandlers, acpRuntimeManager } from '@/backend/domains/session/acp';
 import type { RewindFilesResponse } from '@/backend/domains/session/claude';
 import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';
@@ -135,6 +137,143 @@ class SessionService {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });
+    });
+  }
+
+  private setupAcpEventHandler(_sessionId: string): AcpRuntimeEventHandlers {
+    return {
+      onAcpEvent: (sid: string, event: unknown) => {
+        // Minimal translation: forward ACP events to the delta pipeline
+        // The event object from AcpClientHandler already has type/content structure
+        const typed = event as { type: string };
+        switch (typed.type) {
+          case 'acp_agent_message_chunk': {
+            const chunk = event as { type: string; content: ClaudeContentItem };
+            // Forward as agent_message for the chat UI
+            sessionDomainService.emitDelta(sid, {
+              type: 'agent_message',
+              data: {
+                type: 'assistant',
+                message: { role: 'assistant', content: [chunk.content] },
+              },
+            });
+            break;
+          }
+          case 'acp_tool_call': {
+            const tc = event as {
+              type: string;
+              toolCallId: string;
+              title: string;
+              kind?: string;
+              status?: string;
+            };
+            sessionDomainService.emitDelta(sid, {
+              type: 'agent_message',
+              data: {
+                type: 'stream_event',
+                event: {
+                  type: 'content_block_start',
+                  index: 0,
+                  content_block: {
+                    type: 'tool_use',
+                    id: tc.toolCallId,
+                    name: tc.title,
+                    input: {},
+                  },
+                },
+              },
+            });
+            break;
+          }
+          case 'acp_tool_call_update': {
+            const tcu = event as { type: string; toolCallId: string; status?: string };
+            sessionDomainService.emitDelta(sid, {
+              type: 'tool_progress',
+              tool_use_id: tcu.toolCallId,
+            });
+            break;
+          }
+          default:
+            // Other ACP events logged but not forwarded in Phase 19
+            break;
+        }
+      },
+      onSessionId: async (sid: string, providerSessionId: string) => {
+        try {
+          await this.repository.updateSession(sid, { claudeSessionId: providerSessionId });
+          logger.debug('Updated session with ACP providerSessionId', {
+            sessionId: sid,
+            providerSessionId,
+          });
+        } catch (error) {
+          logger.warn('Failed to update session with ACP providerSessionId', {
+            sessionId: sid,
+            providerSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      onExit: async (sid: string, exitCode: number | null) => {
+        try {
+          sessionDomainService.markProcessExit(sid, exitCode);
+          const session = await this.repository.updateSession(sid, {
+            status: SessionStatus.COMPLETED,
+            claudeProcessPid: null,
+          });
+          logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
+
+          await this.repository.clearRatchetActiveSession(session.workspaceId, sid);
+          if (session.workflow === 'ratchet') {
+            await this.repository.deleteSession(sid);
+            logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
+          }
+        } catch (error) {
+          logger.warn('Failed to update ACP session status on exit', {
+            sessionId: sid,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        } finally {
+          this.clearSessionProvider(sid);
+        }
+      },
+      onError: (sid: string, error: Error) => {
+        logger.error('ACP client error', {
+          sessionId: sid,
+          error: error.message,
+          stack: error.stack,
+        });
+      },
+    };
+  }
+
+  private async createAcpClient(
+    sessionId: string,
+    options?: {
+      model?: string;
+      permissionMode?: 'bypassPermissions' | 'plan';
+    },
+    session?: AgentSessionRecord
+  ): Promise<AcpProcessHandle> {
+    const sessionContext = await this.loadSessionContext(sessionId, session);
+    if (!sessionContext) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
+
+    const handlers = this.setupAcpEventHandler(sessionId);
+    const clientOptions: AcpClientOptions = {
+      provider: session?.provider ?? 'CLAUDE',
+      workingDir: sessionContext.workingDir,
+      model: options?.model ?? sessionContext.model,
+      systemPrompt: sessionContext.systemPrompt,
+      permissionMode: options?.permissionMode ?? 'bypassPermissions',
+      sessionId,
+    };
+
+    return await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
+      workspaceId: sessionContext.workspaceId,
+      workingDir: sessionContext.workingDir,
     });
   }
 
@@ -325,6 +464,33 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
+    // Check for ACP session first (RUNTIME-06: inherits wiring from stop.handler.ts
+    // and session.trpc.ts stopSession mutation -- no separate ACP cancel route needed.
+    // stopSession handles both "cancel current prompt" and "terminate session".)
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (acpHandle || acpRuntimeManager.isStopInProgress(sessionId)) {
+      if (!acpRuntimeManager.isStopInProgress(sessionId)) {
+        await acpRuntimeManager.stopClient(sessionId);
+      }
+      await this.updateStoppedSessionState(sessionId);
+      sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
+      await this.cleanupTransientRatchetOnStop(
+        session,
+        sessionId,
+        shouldCleanupTransientRatchetSession
+      );
+      logger.info('ACP session stopped', { sessionId });
+      this.clearSessionProvider(sessionId);
+      return;
+    }
+
     try {
       await adapter.stopClient(sessionId);
       await this.updateStoppedSessionState(sessionId);
@@ -450,6 +616,7 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       reasoningEffort?: string;
+      useAcp?: boolean;
     },
     loadedSession?: LoadedSessionAdapter
   ): Promise<unknown> {
@@ -466,6 +633,11 @@ class SessionService {
         updatedAt: new Date().toISOString(),
       });
       return existing;
+    }
+
+    // ACP runtime path (Phase 19: opt-in via useAcp flag)
+    if (options?.useAcp) {
+      return await this.getOrCreateAcpSessionClient(sessionId, options, session);
     }
 
     sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -526,6 +698,7 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       reasoningEffort?: string;
+      useAcp?: boolean;
     }
   ): Promise<unknown> {
     return await this.getOrCreateSessionClient(sessionId, options);
@@ -597,6 +770,22 @@ class SessionService {
       return;
     }
 
+    // Check for ACP session (RUNTIME-05: inherits wiring from user-input.handler.ts
+    // which calls this method for all providers -- no separate ACP route needed)
+    const acpClient = acpRuntimeManager.getClient(sessionId);
+    if (acpClient) {
+      const normalizedText =
+        typeof content === 'string' ? content : this.toCodexTextContent(content);
+      // Fire and forget -- prompt runs in background, events stream via callback
+      void this.sendAcpMessage(sessionId, normalizedText).catch((error) => {
+        logger.error('ACP prompt failed', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+      return;
+    }
+
     const { session } = await this.loadSessionWithAdapter(sessionId);
     if (session.provider === 'CODEX') {
       const normalizedText = this.toCodexTextContent(content);
@@ -604,6 +793,46 @@ class SessionService {
       return;
     }
     await this.claudeAdapter.sendMessage(sessionId, content);
+  }
+
+  /**
+   * Send a message via ACP runtime. Returns the stop reason from the prompt response.
+   * The prompt() call blocks until the turn completes; streaming events arrive
+   * concurrently via the AcpClientHandler.sessionUpdate callback.
+   */
+  async sendAcpMessage(sessionId: string, content: string): Promise<string> {
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: 'running',
+      processState: 'alive',
+      activity: 'WORKING',
+      updatedAt: new Date().toISOString(),
+    });
+
+    try {
+      const result = await acpRuntimeManager.sendPrompt(sessionId, content);
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'idle',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      return result.stopReason;
+    } catch (error) {
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'error',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel an ongoing ACP prompt mid-turn.
+   */
+  async cancelAcpPrompt(sessionId: string): Promise<void> {
+    await acpRuntimeManager.cancelPrompt(sessionId);
   }
 
   async getSessionConversationHistory(
@@ -719,6 +948,43 @@ class SessionService {
     }
 
     return base;
+  }
+
+  private async getOrCreateAcpSessionClient(
+    sessionId: string,
+    options: {
+      model?: string;
+      permissionMode?: 'bypassPermissions' | 'plan';
+    },
+    session: AgentSessionRecord
+  ): Promise<AcpProcessHandle> {
+    // Check for existing ACP client first
+    const existingAcp = acpRuntimeManager.getClient(sessionId);
+    if (existingAcp) {
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: existingAcp.isPromptInFlight ? 'running' : 'idle',
+        processState: 'alive',
+        activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      return existingAcp;
+    }
+
+    const handle = await this.createAcpClient(sessionId, options, session);
+
+    await this.repository.updateSession(sessionId, {
+      status: SessionStatus.RUNNING,
+      claudeProcessPid: handle.getPid() ?? null,
+    });
+
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: handle.isPromptInFlight ? 'running' : 'idle',
+      processState: 'alive',
+      activity: handle.isPromptInFlight ? 'WORKING' : 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
+
+    return handle;
   }
 
   private async createClaudeClient(
@@ -888,6 +1154,9 @@ class SessionService {
    * Check if a session is running in memory
    */
   isSessionRunning(sessionId: string): boolean {
+    if (acpRuntimeManager.isSessionRunning(sessionId)) {
+      return true;
+    }
     return this.resolveAdapterForSessionSync(sessionId).isSessionRunning(sessionId);
   }
 
@@ -895,6 +1164,9 @@ class SessionService {
    * Check if a session is actively working (not just alive, but processing)
    */
   isSessionWorking(sessionId: string): boolean {
+    if (acpRuntimeManager.isSessionWorking(sessionId)) {
+      return true;
+    }
     return this.resolveAdapterForSessionSync(sessionId).isSessionWorking(sessionId);
   }
 
@@ -904,7 +1176,8 @@ class SessionService {
   isAnySessionWorking(sessionIds: string[]): boolean {
     return (
       this.claudeAdapter.isAnySessionWorking(sessionIds) ||
-      this.codexAdapter.isAnySessionWorking(sessionIds)
+      this.codexAdapter.isAnySessionWorking(sessionIds) ||
+      acpRuntimeManager.isAnySessionWorking(sessionIds)
     );
   }
 
@@ -986,26 +1259,22 @@ class SessionService {
    * @param timeoutMs - Timeout for each client stop operation
    */
   async stopAllClients(timeoutMs = 5000): Promise<void> {
+    const stopOperations: Array<{ name: string; fn: () => Promise<void> }> = [
+      { name: 'Claude', fn: () => this.claudeAdapter.stopAllClients(timeoutMs) },
+      { name: 'Codex', fn: () => this.codexAdapter.stopAllClients() },
+      { name: 'ACP', fn: () => acpRuntimeManager.stopAllClients() },
+    ];
+
     let firstError: unknown = null;
-
-    try {
-      await this.claudeAdapter.stopAllClients(timeoutMs);
-    } catch (error) {
-      firstError = error;
-      logger.error('Failed to stop Claude provider clients during shutdown', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    try {
-      await this.codexAdapter.stopAllClients();
-    } catch (error) {
-      if (!firstError) {
-        firstError = error;
+    for (const op of stopOperations) {
+      try {
+        await op.fn();
+      } catch (error) {
+        firstError ??= error;
+        logger.error(`Failed to stop ${op.name} provider clients during shutdown`, {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
-      logger.error('Failed to stop Codex provider clients during shutdown', {
-        error: error instanceof Error ? error.message : String(error),
-      });
     }
 
     this.sessionProviderCache.clear();

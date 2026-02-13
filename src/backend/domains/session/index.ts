@@ -2,6 +2,9 @@
 // Public API for the session domain module.
 // Consumers should import from '@/backend/domains/session' only.
 
+// ACP runtime (Phase 19+)
+export type { AcpClientOptions, AcpRuntimeEventHandlers, AcpSessionState } from './acp';
+export { AcpClientHandler, AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from './acp';
 // Bridge interfaces for orchestration layer wiring
 export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
 export type { ConnectionInfo } from './chat/chat-connection.service';
@@ -77,5 +80,6 @@ export {
   claudeRuntimeManager,
   codexAppServerManager,
 } from './runtime';
+
 // Core domain service (in-memory state management)
 export { sessionDomainService } from './session-domain.service';
