@@ -110,7 +110,7 @@ describe('GitClient', () => {
       for (let i = 0; i < 100; i++) {
         names.add(client.generateBranchName());
       }
-      // All 100 names should be unique (extremely unlikely to have collisions)
+      // All 100 names should be unique.
       expect(names.size).toBe(100);
     });
 
