@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildHydrateKey } from '@/backend/domains/session/store/session-hydrate-key';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
@@ -94,7 +95,12 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.setHydratedTranscript).toHaveBeenCalledWith(
       'session-1',
       expect.any(Array),
-      expect.objectContaining({ hydratedKey: 'none::none' })
+      expect.objectContaining({
+        hydratedKey: buildHydrateKey({
+          claudeSessionId: null,
+          claudeProjectPath: null,
+        }),
+      })
     );
     expect(mocks.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
