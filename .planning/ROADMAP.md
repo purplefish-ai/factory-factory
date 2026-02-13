@@ -76,12 +76,12 @@ Plans:
   3. When the agent pushes a `config_options_update` notification, the UI reactively updates without user action
   4. Session resume via `session/load` works when the agent advertises `loadSession` capability, and the UI gracefully falls back to new session when the capability is absent
   5. Both Claude and Codex sessions use the same AcpRuntimeManager -- no provider-specific runtime code remains
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 21-01: TBD
-- [ ] 21-02: TBD
-- [ ] 21-03: TBD
+- [ ] 21-01-PLAN.md -- Backend config options lifecycle: parse, store, translate, set, and session resume
+- [ ] 21-02-PLAN.md -- Frontend config options UI: reducer state, WebSocket handling, and config selector components
+- [ ] 21-03-PLAN.md -- Unified AcpRuntimeManager: all new sessions use ACP, legacy manager usage removed
 
 ### Phase 22: Cleanup + Polish
 **Goal**: All legacy protocol code is deleted, ACP-focused integration tests replace superseded tests, and operational tooling reflects the new per-session process model
@@ -107,9 +107,9 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 19. ACP Runtime Foundation | v1.2 | 2/2 | ✓ Complete | 2026-02-13 |
 | 20. Event Translation + Permissions | v1.2 | 3/3 | ✓ Complete | 2026-02-13 |
-| 21. Config Options + Unified Runtime | v1.2 | 0/TBD | Not started | - |
+| 21. Config Options + Unified Runtime | v1.2 | 0/3 | Planned | - |
 | 22. Cleanup + Polish | v1.2 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-13 -- Phase 20 planned (3 plans in 3 waves)*
+*Last updated: 2026-02-13 -- Phase 21 planned (3 plans in 3 waves)*
