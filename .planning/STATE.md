@@ -10,24 +10,24 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 19 of 22 (ACP Runtime Foundation)
-Plan: 1 of 2 complete
-Status: Executing Phase 19
-Last activity: 2026-02-13 -- Completed 19-01 (ACP runtime module)
+Plan: 2 of 2 complete
+Status: Phase 19 Complete
+Last activity: 2026-02-13 -- Completed 19-02 (ACP session service integration)
 
-Progress: [██░░░░░░░░] 10%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v1.2)
-- Average duration: 13min
-- Total execution time: 13min
+- Total plans completed: 2 (v1.2)
+- Average duration: 9min
+- Total execution time: 18min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 19. ACP Runtime Foundation | 1/2 | 13min | 13min |
+| 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
 | 20. Event Translation + Permissions | 0/TBD | -- | -- |
 | 21. Config Options + Unified Runtime | 0/TBD | -- | -- |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
@@ -54,6 +54,12 @@ Phase 19-01 decisions:
 - ACP events prefixed with `acp_` to distinguish from legacy event types
 - Used actual SDK RequestPermissionOutcome format (plan had incorrect format)
 
+Phase 19-02 decisions:
+- ACP sessions detected at runtime via acpRuntimeManager.getClient() inside existing sendSessionMessage/stopSession -- no new API routes needed
+- ACP event types mapped to existing delta pipeline types (agent_message, content_block_start, tool_progress)
+- useAcp opt-in flag gates ACP session creation -- safe for production deployment
+- Fire-and-forget prompt dispatch pattern matching Codex precedent
+
 ### Pending Todos
 
 None.
@@ -65,5 +71,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed 19-01-PLAN.md (ACP runtime module)
+Stopped at: Completed 19-02-PLAN.md (ACP session service integration) -- Phase 19 complete
 Resume file: None
