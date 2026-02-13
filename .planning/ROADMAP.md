@@ -93,11 +93,12 @@ Plans:
   3. ACP-focused integration tests cover session start/prompt/cancel/stop, permission roundtrip, config option updates, and session load capability handling -- all passing
   4. Admin/health process reporting shows per-session ACP subprocess status instead of legacy singleton process info
   5. Contributor docs (AGENTS.md) reflect ACP-only architecture with no references to removed protocol code
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 22-01: TBD
-- [ ] 22-02: TBD
+- [ ] 22-01-PLAN.md -- Relocate SessionManager to session-file-reader.ts, refactor SessionService to ACP-only
+- [ ] 22-02-PLAN.md -- Delete legacy protocol stacks, fix consumer imports, clean config, update admin reporting
+- [ ] 22-03-PLAN.md -- Update AGENTS.md for ACP-only architecture, final verification sweep
 
 ## Progress
 
@@ -108,8 +109,8 @@ Plans:
 | 19. ACP Runtime Foundation | v1.2 | 2/2 | ✓ Complete | 2026-02-13 |
 | 20. Event Translation + Permissions | v1.2 | 3/3 | ✓ Complete | 2026-02-13 |
 | 21. Config Options + Unified Runtime | v1.2 | 3/3 | ✓ Complete | 2026-02-13 |
-| 22. Cleanup + Polish | v1.2 | 0/TBD | Not started | - |
+| 22. Cleanup + Polish | v1.2 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-13 -- Phase 21 complete (3/3 plans executed)*
+*Last updated: 2026-02-13 -- Phase 22 planned (3 plans)*
