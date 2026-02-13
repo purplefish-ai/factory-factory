@@ -117,6 +117,13 @@ class GitOpsService {
       worktreeBasePath: project.worktreeBasePath,
     });
 
+    // Check if this is a blank repository (no commits yet)
+    const isBlank = await gitClient.isBlankRepository();
+    if (isBlank) {
+      // Skip validation for blank repositories - the worktree creation will handle initialization
+      return;
+    }
+
     const normalizedBranch = this.normalizeBranchName(baseBranch);
 
     const branchExists = await gitClient.branchExists(normalizedBranch);
