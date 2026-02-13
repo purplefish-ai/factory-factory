@@ -10,25 +10,25 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 20 of 22 (Event Translation + Permissions)
-Plan: 1 of 3 complete
-Status: Phase 20 in progress (Plan 01 complete, Plan 02 next)
-Last activity: 2026-02-13 -- Completed 20-01 (Event Translator + Permission Bridge)
+Plan: 2 of 3 complete
+Status: Phase 20 in progress (Plan 02 complete, Plan 03 next)
+Last activity: 2026-02-13 -- Completed 20-02 (Event Translation + Permission Wiring)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [████░░░░░░] 38%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3 (v1.2)
-- Average duration: 8min
-- Total execution time: 23min
+- Total plans completed: 4 (v1.2)
+- Average duration: 7min
+- Total execution time: 28min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
-| 20. Event Translation + Permissions | 1/3 | 5min | 5min |
+| 20. Event Translation + Permissions | 2/3 | 10min | 5min |
 | 21. Config Options + Unified Runtime | 0/TBD | -- | -- |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
 
@@ -67,6 +67,13 @@ Phase 20-01 decisions:
 - AcpPermissionBridge stores resolve callback + original params for re-emit on session restore
 - Defensive translation pattern: never throw, log warnings, return empty arrays for malformed data
 
+Phase 20-02 decisions:
+- AcpClientHandler forwards raw SessionUpdate for centralized translation (no inline switch)
+- Permission bridge created per-session in setupAcpEventHandler, stored in Map on SessionService
+- Bridge cleanup in both stopSession ACP path and onExit handler prevents Promise leaks
+- ACP permission requests emit both delta event (UI) and setPendingInteractiveRequest (session restore)
+- WebSocket types extended with acpOptions and optionId as optional fields (backward-compatible)
+
 ### Pending Todos
 
 None.
@@ -78,5 +85,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed 20-01-PLAN.md (Event Translator + Permission Bridge)
+Stopped at: Completed 20-02-PLAN.md (Event Translation + Permission Wiring)
 Resume file: None
