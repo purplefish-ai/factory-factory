@@ -3,12 +3,12 @@ import path from 'node:path';
 import { z } from 'zod';
 import {
   type FileEntry,
-  getLanguageFromPath,
   isBinaryContent,
   isPathSafe,
   MAX_FILE_SIZE,
 } from '@/backend/lib/file-helpers';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
+import { getLanguageFromPath } from '@/lib/language-detection';
 import { getWorkspaceWithWorktree, getWorkspaceWithWorktreeOrThrow } from './workspace-helpers';
 
 const loggerName = 'workspace-files-trpc';

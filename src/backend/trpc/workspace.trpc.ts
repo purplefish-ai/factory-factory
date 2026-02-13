@@ -13,7 +13,8 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
-import { archiveWorkspace, initializeWorkspaceWorktree } from '@/backend/orchestration';
+import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';

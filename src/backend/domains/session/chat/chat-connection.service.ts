@@ -8,7 +8,7 @@
  */
 
 import type { WebSocket } from 'ws';
-import { WS_READY_STATE } from '@/backend/constants';
+import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';

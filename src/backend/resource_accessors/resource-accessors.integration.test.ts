@@ -38,17 +38,24 @@ beforeAll(async () => {
   db = await createIntegrationDatabase();
   prisma = db.prisma;
 
-  const accessorModule = await vi.importActual<typeof import('@/backend/resource_accessors')>(
-    '@/backend/resource_accessors'
-  );
-  ({
-    workspaceAccessor,
-    projectAccessor,
-    agentSessionAccessor,
-    terminalSessionAccessor,
-    userSettingsAccessor,
-    decisionLogAccessor,
-  } = accessorModule);
+  ({ workspaceAccessor } = await vi.importActual<
+    typeof import('@/backend/resource_accessors/workspace.accessor')
+  >('@/backend/resource_accessors/workspace.accessor'));
+  ({ projectAccessor } = await vi.importActual<
+    typeof import('@/backend/resource_accessors/project.accessor')
+  >('@/backend/resource_accessors/project.accessor'));
+  ({ agentSessionAccessor } = await vi.importActual<
+    typeof import('@/backend/resource_accessors/agent-session.accessor')
+  >('@/backend/resource_accessors/agent-session.accessor'));
+  ({ terminalSessionAccessor } = await vi.importActual<
+    typeof import('@/backend/resource_accessors/terminal-session.accessor')
+  >('@/backend/resource_accessors/terminal-session.accessor'));
+  ({ userSettingsAccessor } = await vi.importActual<
+    typeof import('@/backend/resource_accessors/user-settings.accessor')
+  >('@/backend/resource_accessors/user-settings.accessor'));
+  ({ decisionLogAccessor } = await vi.importActual<
+    typeof import('@/backend/resource_accessors/decision-log.accessor')
+  >('@/backend/resource_accessors/decision-log.accessor'));
 
   const gitClientModule = await vi.importActual<typeof import('@/backend/clients/git.client')>(
     '@/backend/clients/git.client'

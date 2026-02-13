@@ -26,12 +26,12 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 // Mock initializeWorkspaceWorktree
 const mockInitializeWorkspaceWorktree = vi.fn();
-vi.mock('@/backend/orchestration', () => ({
+vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
 }));
 
 // Import after mocks are set up
-import { workspaceAccessor } from '@/backend/resource_accessors/index';
+import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { reconciliationService } from './reconciliation.service';
 
 describe('ReconciliationService', () => {
