@@ -12,6 +12,7 @@ import type {
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
+  AcpConfigOption,
   AcpPlanState,
   PendingMessageContent,
   PendingRequest,
@@ -77,6 +78,8 @@ export interface UseChatWebSocketReturn {
   rewindPreview: RewindPreviewState | null;
   // ACP agent plan state for structured task list rendering
   acpPlan: AcpPlanState | null;
+  // ACP agent-provided config options for config selector UI
+  acpConfigOptions: AcpConfigOption[] | null;
   // Tool progress map (includes ACP locations for click-to-open)
   toolProgress: Map<string, ToolProgressInfo>;
   // Actions
@@ -93,6 +96,8 @@ export interface UseChatWebSocketReturn {
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  // ACP config option action
+  setConfigOption: (configId: string, value: string) => void;
   // Rewind files actions
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;
@@ -268,6 +273,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     tokenStats: chat.tokenStats,
     rewindPreview: chat.rewindPreview,
     acpPlan: chat.acpPlan,
+    acpConfigOptions: chat.acpConfigOptions,
     toolProgress: chat.toolProgress,
     // Actions from chat
     sendMessage: chat.sendMessage,
@@ -282,6 +288,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     resumeQueuedMessages: chat.resumeQueuedMessages,
     dismissTaskNotification: chat.dismissTaskNotification,
     clearTaskNotifications: chat.clearTaskNotifications,
+    setConfigOption: chat.setConfigOption,
     // Rewind files actions
     startRewindPreview: chat.startRewindPreview,
     confirmRewind: chat.confirmRewind,

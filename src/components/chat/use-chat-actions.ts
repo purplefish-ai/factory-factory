@@ -23,6 +23,7 @@ import type {
   RemoveQueuedMessageInput,
   ResumeQueuedMessagesInput,
   RewindFilesMessage,
+  SetConfigOptionMessage,
   SetModelMessage,
   StopMessage,
 } from '@/shared/websocket';
@@ -66,6 +67,7 @@ export interface UseChatActionsReturn {
   resumeQueuedMessages: () => void;
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  setConfigOption: (configId: string, value: string) => void;
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;
   cancelRewind: () => void;
@@ -280,6 +282,18 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
   }, [dispatch]);
 
+  const setConfigOption = useCallback(
+    (configId: string, value: string) => {
+      const msg: SetConfigOptionMessage = {
+        type: 'set_config_option',
+        configId,
+        value,
+      };
+      send(msg);
+    },
+    [send]
+  );
+
   // Rewind files actions
   const rewindEnabled = stateRef.current.chatCapabilities.rewind.enabled;
   const startRewindPreview = useCallback(
@@ -414,6 +428,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     resumeQueuedMessages,
     dismissTaskNotification,
     clearTaskNotifications,
+    setConfigOption,
     startRewindPreview,
     confirmRewind,
     cancelRewind,

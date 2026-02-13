@@ -67,6 +67,8 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  // ACP config option action
+  setConfigOption: (configId: string, value: string) => void;
   // Rewind files actions
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;

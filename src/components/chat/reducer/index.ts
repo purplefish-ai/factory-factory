@@ -31,6 +31,9 @@ import type { AcpToolLocation, ChatAction, ChatState } from './types';
 
 export { createInitialChatState };
 export type {
+  AcpConfigOption,
+  AcpConfigOptionGroup,
+  AcpConfigOptionValue,
   AcpPlanEntry,
   AcpPlanState,
   AcpToolLocation,
@@ -425,6 +428,17 @@ function handleRewindFilesPreviewMessage(data: WebSocketMessage): ChatAction {
   };
 }
 
+function handleConfigOptionsUpdateMessage(data: WebSocketMessage): ChatAction | null {
+  const configOptions = (data as Record<string, unknown>).configOptions;
+  if (!Array.isArray(configOptions)) {
+    return null;
+  }
+  return {
+    type: 'CONFIG_OPTIONS_UPDATE',
+    payload: { configOptions },
+  };
+}
+
 function handleRewindFilesErrorMessage(data: WebSocketMessage): ChatAction | null {
   return data.rewindError
     ? {
@@ -472,7 +486,7 @@ const messageHandlers: MessageHandlerMap = {
   user_message_uuid: handleUserMessageUuidMessage,
   rewind_files_preview: handleRewindFilesPreviewMessage,
   rewind_files_error: handleRewindFilesErrorMessage,
-  config_options_update: null,
+  config_options_update: handleConfigOptionsUpdateMessage,
 };
 
 /**

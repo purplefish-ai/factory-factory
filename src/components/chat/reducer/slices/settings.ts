@@ -1,5 +1,12 @@
 import { clampChatSettingsForCapabilities } from '@/components/chat/chat-settings';
-import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
+import type { AcpConfigOption, ChatAction, ChatState } from '@/components/chat/reducer/types';
+
+function handleConfigOptionsUpdate(
+  state: ChatState,
+  payload: { configOptions: AcpConfigOption[] }
+): ChatState {
+  return { ...state, acpConfigOptions: payload.configOptions };
+}
 
 export function reduceSettingsSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -16,6 +23,8 @@ export function reduceSettingsSlice(state: ChatState, action: ChatAction): ChatS
         ...state,
         chatSettings: clampChatSettingsForCapabilities(action.payload, state.chatCapabilities),
       };
+    case 'CONFIG_OPTIONS_UPDATE':
+      return handleConfigOptionsUpdate(state, action.payload);
     case 'WS_CHAT_CAPABILITIES': {
       const slashCommandsEnabled = action.payload.capabilities.slashCommands.enabled;
       return {

@@ -105,6 +105,30 @@ export interface TaskNotification {
   timestamp: string;
 }
 
+/** Individual config option value */
+export interface AcpConfigOptionValue {
+  value: string;
+  name: string;
+  description?: string;
+}
+
+/** Grouped config option values (for hierarchical option lists) */
+export interface AcpConfigOptionGroup {
+  group: string;
+  options: AcpConfigOptionValue[];
+}
+
+/** ACP agent-provided config option (model, mode, thought level, custom) */
+export interface AcpConfigOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: string;
+  category?: string | null;
+  currentValue: string;
+  options: Array<AcpConfigOptionValue | AcpConfigOptionGroup>;
+}
+
 /** Rewind preview state for displaying confirmation dialog */
 export interface RewindPreviewState {
   /** User message UUID we're rewinding to */
@@ -206,6 +230,8 @@ export interface ChatState {
   rewindPreview: RewindPreviewState | null;
   /** ACP agent plan -- latest plan state from ACP plan session updates */
   acpPlan: AcpPlanState | null;
+  /** ACP agent-provided config options (model, mode, thought level, custom) */
+  acpConfigOptions: AcpConfigOption[] | null;
 }
 
 // =============================================================================
@@ -320,6 +346,8 @@ export type ChatAction =
   | { type: 'USER_MESSAGE_UUID_RECEIVED'; payload: { uuid: string } }
   // ACP plan updates
   | { type: 'ACP_PLAN_UPDATE'; payload: { entries: AcpPlanEntry[] } }
+  // ACP config options update
+  | { type: 'CONFIG_OPTIONS_UPDATE'; payload: { configOptions: AcpConfigOption[] } }
   // Rewind files actions
   | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string; requestNonce: string } }
   | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }
