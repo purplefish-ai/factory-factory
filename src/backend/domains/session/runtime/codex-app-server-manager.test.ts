@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough, Writable } from 'node:stream';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { CodexAppServerManager } from './codex-app-server-manager';
 
@@ -86,10 +86,7 @@ function respondToInitialize(fake: FakeChildProcess): void {
 }
 
 describe('CodexAppServerManager', () => {
-  const originalApiKey = process.env.OPENAI_API_KEY;
-
   beforeEach(() => {
-    process.env.OPENAI_API_KEY = 'test-key';
     vi.restoreAllMocks();
   });
 
@@ -116,17 +113,6 @@ describe('CodexAppServerManager', () => {
 
     expect(lines.some((line) => line.method === 'initialized')).toBe(true);
     expect(manager.getStatus().state).toBe('ready');
-  });
-
-  it('fails fast when OPENAI_API_KEY is missing', async () => {
-    process.env.OPENAI_API_KEY = '';
-    const manager = new CodexAppServerManager();
-
-    await expect(manager.ensureStarted()).rejects.toThrow('missing_api_key');
-    expect(manager.getStatus()).toMatchObject({
-      state: 'unavailable',
-      unavailableReason: 'missing_api_key',
-    });
   });
 
   it('routes notifications by threadId with strict isolation', async () => {
@@ -287,6 +273,59 @@ describe('CodexAppServerManager', () => {
     );
   });
 
+  it('derives canonical request id from nested params.item.id', async () => {
+    const fake = new FakeChildProcess();
+    const onServerRequest = vi.fn();
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+      handlers: {
+        onServerRequest,
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    await manager.getRegistry().setMappedThreadId('session-1', 'thread-1');
+
+    fake.stdout.write(
+      `${JSON.stringify({
+        id: 90,
+        method: 'item/fileChange/requestApproval',
+        params: {
+          threadId: 'thread-1',
+          item: {
+            id: 'nested-item-id',
+          },
+        },
+      })}\n`
+    );
+
+    await vi.waitFor(() => {
+      expect(onServerRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canonicalRequestId: 'nested-item-id',
+        })
+      );
+    });
+
+    expect(
+      manager.getRegistry().getPendingInteractiveRequest('session-1', 'nested-item-id')
+    ).toEqual(
+      expect.objectContaining({
+        serverRequestId: 90,
+      })
+    );
+  });
+
   it('responds with JSON-RPC error when server request is missing threadId', async () => {
     const fake = new FakeChildProcess();
     const onServerRequest = vi.fn();
@@ -398,10 +437,102 @@ describe('CodexAppServerManager', () => {
     await started;
 
     await expect(
-      manager.request('thread/read', { threadId: 't1' }, { timeoutMs: 5, threadId: 't1' })
+      manager.request(
+        'thread/read',
+        { threadId: 't1', includeTurns: true },
+        { timeoutMs: 5, threadId: 't1' }
+      )
     ).rejects.toMatchObject({
       code: 'CODEX_REQUEST_TIMEOUT',
       retryable: true,
+    });
+  });
+
+  it('rejects requests with invalid params before writing to transport', async () => {
+    const fake = new FakeChildProcess();
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    const lineCountBefore = fake.stdin.getLines().length;
+    await expect(
+      manager.request('thread/read', { includeTurns: true }, { threadId: 'thread-1' })
+    ).rejects.toMatchObject({
+      code: 'CODEX_REQUEST_INVALID_PARAMS',
+    });
+
+    const linesAfter = fake.stdin.getLines();
+    expect(linesAfter.length).toBe(lineCountBefore);
+    expect(linesAfter.some((line) => line.includes('"method":"thread/read"'))).toBe(false);
+  });
+
+  it('normalizes malformed transport error payloads for failed requests', async () => {
+    const fake = new FakeChildProcess();
+    const manager = new CodexAppServerManager({
+      processFactory: {
+        spawn: vi.fn(() => fake),
+      },
+    });
+
+    const started = manager.ensureStarted();
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"initialize"'))).toBe(
+        true
+      );
+    });
+    respondToInitialize(fake);
+    await started;
+
+    const pending = manager.request(
+      'thread/read',
+      { threadId: 'thread-1', includeTurns: true },
+      { threadId: 'thread-1' }
+    );
+
+    await vi.waitFor(() => {
+      expect(fake.stdin.getLines().some((line) => line.includes('"method":"thread/read"'))).toBe(
+        true
+      );
+    });
+
+    const requestLine = fake.stdin
+      .getLines()
+      .map((line) => parseRpcLine(line))
+      .find((line) => line.method === 'thread/read');
+
+    if (!requestLine?.id) {
+      throw new Error('thread/read request not found in fake stdin');
+    }
+
+    fake.stdout.write(
+      `${JSON.stringify({
+        id: requestLine.id,
+        error: {
+          code: 'not-a-number',
+          message: '',
+        },
+      })}\n`
+    );
+
+    await expect(pending).rejects.toMatchObject({
+      code: 'CODEX_REQUEST_FAILED',
+      metadata: {
+        error: {
+          code: -1,
+          message: 'Unknown Codex app-server error',
+        },
+      },
     });
   });
 
@@ -425,7 +556,11 @@ describe('CodexAppServerManager', () => {
     fake.stdin.destroy();
 
     await expect(
-      manager.request('thread/read', { threadId: 'thread-1' }, { threadId: 'thread-1' })
+      manager.request(
+        'thread/read',
+        { threadId: 'thread-1', includeTurns: true },
+        { threadId: 'thread-1' }
+      )
     ).rejects.toMatchObject({
       code: 'CODEX_MANAGER_UNAVAILABLE',
       retryable: true,
@@ -451,7 +586,7 @@ describe('CodexAppServerManager', () => {
 
     const pending = manager.request(
       'thread/read',
-      { threadId: 'thread-1' },
+      { threadId: 'thread-1', includeTurns: true },
       { threadId: 'thread-1' }
     );
 
@@ -621,9 +756,5 @@ describe('CodexAppServerManager', () => {
     await started;
 
     expect(managerB.getStatus().state).toBe('ready');
-  });
-
-  afterEach(() => {
-    process.env.OPENAI_API_KEY = originalApiKey;
   });
 });

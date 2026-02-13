@@ -91,9 +91,12 @@ function isValidChatSettings(obj: unknown): obj is ChatSettings {
   if (typeof obj !== 'object' || obj === null) {
     return false;
   }
-  const settings = obj as ChatSettings;
+  const settings = obj as Partial<ChatSettings>;
   return (
     (settings.selectedModel === null || typeof settings.selectedModel === 'string') &&
+    (settings.reasoningEffort === undefined ||
+      settings.reasoningEffort === null ||
+      typeof settings.reasoningEffort === 'string') &&
     typeof settings.thinkingEnabled === 'boolean' &&
     typeof settings.planModeEnabled === 'boolean'
   );
@@ -116,7 +119,12 @@ export function loadSettings(sessionId: string | null): ChatSettings | null {
     if (!isValidChatSettings(parsed)) {
       return null;
     }
-    return parsed;
+    return {
+      selectedModel: parsed.selectedModel,
+      reasoningEffort: parsed.reasoningEffort ?? null,
+      thinkingEnabled: parsed.thinkingEnabled,
+      planModeEnabled: parsed.planModeEnabled,
+    };
   } catch {
     return null;
   }

@@ -29,6 +29,7 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
  */
 export interface ChatSettings {
   selectedModel: string;
+  reasoningEffort: string | null;
   thinkingEnabled: boolean;
   planModeEnabled: boolean;
 }
@@ -38,6 +39,7 @@ export interface ChatSettings {
  */
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   selectedModel: 'opus',
+  reasoningEffort: null,
   thinkingEnabled: false,
   planModeEnabled: false,
 };

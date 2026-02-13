@@ -20,6 +20,60 @@ describe('CodexEventTranslator', () => {
     ]);
   });
 
+  it('maps tool call and tool result notifications using normalized schema payloads', () => {
+    const translator = new CodexEventTranslator();
+
+    const toolCallEvents = translator.translateNotification('item/toolCall', {
+      item: {
+        id: 'tool-1',
+        name: 'bash',
+      },
+      input: {
+        command: 'ls -la',
+      },
+    });
+
+    expect(toolCallEvents[0]).toMatchObject({
+      type: 'agent_message',
+      data: {
+        type: 'stream_event',
+        event: {
+          content_block: {
+            type: 'tool_use',
+            id: 'tool-1',
+            name: 'bash',
+            input: {
+              command: 'ls -la',
+            },
+          },
+        },
+      },
+    });
+
+    const toolResultEvents = translator.translateNotification('item/toolResult', {
+      item: {
+        toolUseId: 'tool-1',
+      },
+      output: 'ok',
+    });
+
+    expect(toolResultEvents[0]).toMatchObject({
+      type: 'agent_message',
+      data: {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tool-1',
+              content: 'ok',
+            },
+          ],
+        },
+      },
+    });
+  });
+
   it('maps turn lifecycle notifications to canonical runtime updates', () => {
     const translator = new CodexEventTranslator();
 
@@ -105,6 +159,37 @@ describe('CodexEventTranslator', () => {
     expect(enabledEvent).toMatchObject({
       type: 'user_question',
       requestId: 'question-2',
+    });
+  });
+
+  it('normalizes malformed user input question payloads with safe defaults', () => {
+    const translator = new CodexEventTranslator({ userInputEnabled: true });
+    const event = translator.translateServerRequest('item/tool/requestUserInput', 'question-3', {
+      prompt: 'fallback prompt',
+      questions: [
+        {
+          header: '',
+          question: '',
+          options: [{ label: '', description: 1 }],
+        },
+      ],
+    });
+
+    expect(event).toEqual({
+      type: 'user_question',
+      requestId: 'question-3',
+      questions: [
+        {
+          header: 'Codex Input',
+          question: 'fallback prompt',
+          options: [
+            {
+              label: 'Option',
+              description: '',
+            },
+          ],
+        },
+      ],
     });
   });
 });

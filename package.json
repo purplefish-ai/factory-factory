@@ -52,6 +52,8 @@
     "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",
     "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
     "check:ownership": "node scripts/check-single-writer.mjs",
+    "check:codex-schema": "node scripts/check-codex-schema-drift.mjs",
+    "check:codex-schema:update": "node scripts/check-codex-schema-drift.mjs --update",
     "check:fix": "biome check --write .",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",

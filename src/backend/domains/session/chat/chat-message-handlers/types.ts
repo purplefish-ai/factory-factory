@@ -8,6 +8,7 @@ export interface ClientCreator {
       thinkingEnabled?: boolean;
       planModeEnabled?: boolean;
       model?: string;
+      reasoningEffort?: string;
     }
   ): Promise<unknown>;
 }

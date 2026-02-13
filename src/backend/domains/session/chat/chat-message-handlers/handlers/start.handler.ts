@@ -2,7 +2,10 @@ import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
 } from '@/backend/domains/session/chat/chat-message-handlers/types';
-import { getValidModel } from '@/backend/domains/session/chat/chat-message-handlers/utils';
+import {
+  getValidModel,
+  getValidReasoningEffort,
+} from '@/backend/domains/session/chat/chat-message-handlers/utils';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -31,6 +34,7 @@ export function createStartHandler(
       thinkingEnabled: message.thinkingEnabled,
       planModeEnabled: message.planModeEnabled,
       model: getValidModel(message),
+      reasoningEffort: getValidReasoningEffort(message),
     });
   };
 }

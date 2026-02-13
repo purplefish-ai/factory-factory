@@ -27,6 +27,7 @@ type Story = StoryObj<typeof meta>;
 
 const defaultSettings = {
   selectedModel: null,
+  reasoningEffort: null,
   thinkingEnabled: false,
   planModeEnabled: false,
 };

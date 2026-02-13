@@ -1,12 +1,19 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { z } from 'zod';
 import { CodexSessionRegistry } from '@/backend/domains/session/codex/codex-session-registry';
 import {
   CodexManagerUnavailableError,
   SessionOperationError,
 } from '@/backend/domains/session/codex/errors';
 import { asRecord, parseThreadId } from '@/backend/domains/session/codex/payload-utils';
+import {
+  CodexTransportEnvelopeSchema,
+  CodexTransportResponseSchema,
+  CodexTransportServerRequestSchema,
+  parseCanonicalRequestIdWithSchema,
+  parseTransportErrorWithSchema,
+  validateCodexRequestParamsWithSchema,
+} from '@/backend/domains/session/codex/schemas';
 import type {
   CodexManagerHandlers,
   CodexManagerServerRequestEvent,
@@ -14,9 +21,7 @@ import type {
   CodexProcessFactory,
   CodexRequestId,
   CodexRequestOptions,
-  CodexTransportError,
   CodexTransportRequest,
-  CodexTransportResponse,
   CodexUnavailableReason,
 } from '@/backend/domains/session/codex/types';
 import { configService } from '@/backend/services/config.service';
@@ -30,64 +35,6 @@ interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
-}
-
-const TransportEnvelopeSchema = z
-  .object({
-    id: z.union([z.number(), z.string()]).optional(),
-    method: z.string().optional(),
-    params: z.unknown().optional(),
-    result: z.unknown().optional(),
-    error: z.unknown().optional(),
-  })
-  .passthrough();
-
-function isResponse(message: unknown): message is CodexTransportResponse {
-  if (typeof message !== 'object' || message === null) {
-    return false;
-  }
-
-  return (
-    Object.hasOwn(message, 'id') &&
-    (Object.hasOwn(message, 'result') || Object.hasOwn(message, 'error'))
-  );
-}
-
-function isServerRequest(message: unknown): message is CodexTransportRequest {
-  if (typeof message !== 'object' || message === null) {
-    return false;
-  }
-
-  return Object.hasOwn(message, 'id') && Object.hasOwn(message, 'method') && !isResponse(message);
-}
-
-function parseError(error: unknown): CodexTransportError {
-  if (typeof error !== 'object' || error === null) {
-    return { code: -1, message: String(error) };
-  }
-
-  const typed = error as { code?: unknown; message?: unknown; data?: unknown };
-  return {
-    code: typeof typed.code === 'number' ? typed.code : -1,
-    message: typeof typed.message === 'string' ? typed.message : 'Unknown Codex app-server error',
-    ...(Object.hasOwn(typed, 'data') ? { data: typed.data } : {}),
-  };
-}
-
-function getCanonicalRequestId(serverRequestId: CodexRequestId, params: unknown): string {
-  const record = asRecord(params);
-  if (typeof record.requestId === 'string' && record.requestId.length > 0) {
-    return record.requestId;
-  }
-  if (typeof record.itemId === 'string' && record.itemId.length > 0) {
-    return record.itemId;
-  }
-  const item = asRecord(record.item);
-  if (typeof item.id === 'string' && item.id.length > 0) {
-    return item.id;
-  }
-
-  return `codex-request-${String(serverRequestId)}`;
 }
 
 const DEFAULT_PROCESS_FACTORY: CodexProcessFactory = {
@@ -149,11 +96,6 @@ export class CodexAppServerManager {
       return;
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      this.markUnavailable('missing_api_key');
-      throw new CodexManagerUnavailableError('missing_api_key');
-    }
-
     if (this.startPromise !== null) {
       await this.startPromise;
       return;
@@ -187,11 +129,22 @@ export class CodexAppServerManager {
     const id = this.requestId++;
     const timeoutMs =
       options?.timeoutMs ?? configService.getCodexAppServerConfig().requestTimeoutMs;
+    const validatedParams = validateCodexRequestParamsWithSchema(method, params);
+    if (!validatedParams.success) {
+      throw new SessionOperationError(`Codex request has invalid params for method: ${method}`, {
+        code: 'CODEX_REQUEST_INVALID_PARAMS',
+        metadata: {
+          method,
+          issues: validatedParams.issues,
+          ...(options?.threadId ? { threadId: options.threadId } : {}),
+        },
+      });
+    }
 
     const payload: CodexTransportRequest = {
       id,
       method,
-      ...(params === undefined ? {} : { params }),
+      ...(validatedParams.data === undefined ? {} : { params: validatedParams.data }),
     };
 
     return await new Promise<unknown>((resolve, reject) => {
@@ -307,8 +260,7 @@ export class CodexAppServerManager {
       }
 
       try {
-        const parsed = TransportEnvelopeSchema.parse(JSON.parse(line));
-        this.handleInbound(parsed);
+        this.handleInbound(JSON.parse(line));
       } catch (error) {
         logger.warn('Failed to parse Codex app-server line', {
           line,
@@ -388,21 +340,30 @@ export class CodexAppServerManager {
   }
 
   private handleInbound(message: unknown): void {
-    const record = asRecord(message);
-    if (isResponse(record)) {
-      this.handleResponse(record);
+    const envelope = CodexTransportEnvelopeSchema.safeParse(message);
+    if (!envelope.success) {
+      logger.debug('Dropping Codex message with invalid envelope', {
+        issues: envelope.error.issues,
+      });
       return;
     }
 
-    if (isServerRequest(record)) {
-      this.handleServerRequest(record);
+    const response = CodexTransportResponseSchema.safeParse(envelope.data);
+    if (response.success) {
+      this.handleResponse(response.data);
       return;
     }
 
-    const threadId = parseThreadId(record.params);
+    const serverRequest = CodexTransportServerRequestSchema.safeParse(envelope.data);
+    if (serverRequest.success) {
+      this.handleServerRequest(serverRequest.data);
+      return;
+    }
+
+    const threadId = parseThreadId(envelope.data.params);
     if (!threadId) {
       logger.debug('Dropping Codex notification without threadId', {
-        method: record.method,
+        method: envelope.data.method,
       });
       return;
     }
@@ -410,7 +371,7 @@ export class CodexAppServerManager {
     const sessionId = this.registry.getSessionIdByThreadId(threadId);
     if (!sessionId) {
       logger.warn('Dropping unroutable Codex notification', {
-        method: record.method,
+        method: envelope.data.method,
         threadId,
       });
       return;
@@ -419,12 +380,16 @@ export class CodexAppServerManager {
     this.handlers.onNotification?.({
       sessionId,
       threadId,
-      method: typeof record.method === 'string' ? record.method : 'unknown',
-      params: record.params,
+      method: envelope.data.method ?? 'unknown',
+      params: envelope.data.params,
     });
   }
 
-  private handleResponse(message: CodexTransportResponse): void {
+  private handleResponse(message: {
+    id: string | number;
+    result?: unknown;
+    error?: unknown;
+  }): void {
     if (typeof message.id !== 'number') {
       logger.warn('Received response with non-numeric request id', {
         requestId: message.id,
@@ -450,7 +415,7 @@ export class CodexAppServerManager {
           metadata: {
             method: pending.method,
             requestId: message.id,
-            error: parseError(message.error),
+            error: parseTransportErrorWithSchema(message.error),
             ...(pending.threadId ? { threadId: pending.threadId } : {}),
           },
         })
@@ -461,7 +426,11 @@ export class CodexAppServerManager {
     pending.resolve(message.result);
   }
 
-  private handleServerRequest(message: CodexTransportRequest): void {
+  private handleServerRequest(message: {
+    id: string | number;
+    method: string;
+    params?: unknown;
+  }): void {
     const threadId = parseThreadId(message.params);
     if (!threadId) {
       logger.warn('Dropping Codex server request without threadId', {
@@ -496,7 +465,7 @@ export class CodexAppServerManager {
       return;
     }
 
-    const requestId = getCanonicalRequestId(message.id, message.params);
+    const requestId = parseCanonicalRequestIdWithSchema(message.id, message.params);
     this.registry.addPendingInteractiveRequest({
       sessionId,
       threadId,
@@ -518,7 +487,10 @@ export class CodexAppServerManager {
   }
 
   private rejectServerRequest(
-    message: CodexTransportRequest,
+    message: {
+      id: CodexRequestId;
+      method: string;
+    },
     error: { code: number; message: string; data?: unknown }
   ): void {
     try {

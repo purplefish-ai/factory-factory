@@ -84,6 +84,7 @@ export function createQueueMessageHandler(
         settings: {
           ...queuedMsg.settings,
           selectedModel: resolveSelectedModel(queuedMsg.settings.selectedModel),
+          reasoningEffort: queuedMsg.settings.reasoningEffort,
         },
       },
     });

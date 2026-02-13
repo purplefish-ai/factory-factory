@@ -2,11 +2,7 @@ import type { SessionDeltaEvent } from '@/shared/claude';
 
 export type CodexManagerState = 'stopped' | 'starting' | 'ready' | 'degraded' | 'unavailable';
 
-export type CodexUnavailableReason =
-  | 'missing_api_key'
-  | 'spawn_failed'
-  | 'handshake_failed'
-  | 'process_exited';
+export type CodexUnavailableReason = 'spawn_failed' | 'handshake_failed' | 'process_exited';
 
 export interface CodexManagerStatus {
   state: CodexManagerState;

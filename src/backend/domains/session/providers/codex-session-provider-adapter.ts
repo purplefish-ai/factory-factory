@@ -1,3 +1,4 @@
+import { CodexModelCatalogService } from '@/backend/domains/session/codex/codex-model-catalog.service';
 import {
   createUnsupportedOperationError,
   SessionOperationError,
@@ -7,6 +8,11 @@ import {
   parseThreadId,
   parseTurnId,
 } from '@/backend/domains/session/codex/payload-utils';
+import {
+  CodexReasoningEffortSchema,
+  validateCodexApprovalResponseWithSchema,
+  validateCodexToolRequestUserInputResponseWithSchema,
+} from '@/backend/domains/session/codex/schemas';
 import type {
   CodexPendingInteractiveRequest,
   CodexRequestOptions,
@@ -16,6 +22,7 @@ import {
   codexAppServerManager,
 } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { configService } from '@/backend/services/config.service';
+import { createLogger } from '@/backend/services/logger.service';
 import { createCodexChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionDeltaEvent } from '@/shared/claude';
 import type {
@@ -27,12 +34,14 @@ export interface CodexClientOptions {
   workingDir: string;
   sessionId: string;
   model?: string;
+  reasoningEffort?: string;
 }
 
 export interface CodexClientHandle {
   sessionId: string;
   threadId: string;
   model?: string;
+  reasoningEffort?: string;
 }
 
 export interface CodexNativeMessage {
@@ -60,6 +69,8 @@ export interface CodexActiveProcessSummary {
   idleTimeMs: number;
 }
 
+const logger = createLogger('codex-session-provider-adapter');
+
 export class CodexSessionProviderAdapter
   implements
     SessionProviderAdapter<
@@ -78,6 +89,9 @@ export class CodexSessionProviderAdapter
   private readonly pending = new Map<string, Promise<CodexClientHandle>>();
   private readonly stopping = new Set<string>();
   private readonly preferredModels = new Map<string, string | undefined>();
+  private readonly preferredReasoningEfforts = new Map<string, string | undefined>();
+  private readonly manager: CodexAppServerManager;
+  private readonly modelCatalog: CodexModelCatalogService;
 
   private onClientCreated:
     | ((
@@ -87,7 +101,13 @@ export class CodexSessionProviderAdapter
       ) => void)
     | null = null;
 
-  constructor(private readonly manager: CodexAppServerManager = codexAppServerManager) {}
+  constructor(
+    manager: CodexAppServerManager = codexAppServerManager,
+    modelCatalog?: CodexModelCatalogService
+  ) {
+    this.manager = manager;
+    this.modelCatalog = modelCatalog ?? new CodexModelCatalogService(manager);
+  }
 
   getManager(): CodexAppServerManager {
     return this.manager;
@@ -148,6 +168,7 @@ export class CodexSessionProviderAdapter
     } finally {
       this.clients.delete(sessionId);
       this.preferredModels.delete(sessionId);
+      this.preferredReasoningEfforts.delete(sessionId);
       this.stopping.delete(sessionId);
     }
 
@@ -159,12 +180,14 @@ export class CodexSessionProviderAdapter
   async sendMessage(sessionId: string, content: string): Promise<void> {
     const client = this.requireClient(sessionId);
     const model = this.preferredModels.get(sessionId);
+    const reasoningEffort = this.preferredReasoningEfforts.get(sessionId);
     const result = await this.sendRequest(
       'turn/start',
       {
         threadId: client.threadId,
         input: [{ type: 'text', text: content, text_elements: [] }],
         ...(model ? { model } : {}),
+        ...(reasoningEffort ? { effort: reasoningEffort } : {}),
       },
       { threadId: client.threadId }
     );
@@ -189,6 +212,17 @@ export class CodexSessionProviderAdapter
     return Promise.resolve();
   }
 
+  setReasoningEffort(sessionId: string, effort?: string | null): Promise<void> {
+    this.requireClient(sessionId);
+    const parsed = CodexReasoningEffortSchema.safeParse(effort);
+    if (!parsed.success) {
+      this.preferredReasoningEfforts.delete(sessionId);
+      return Promise.resolve();
+    }
+    this.preferredReasoningEfforts.set(sessionId, parsed.data);
+    return Promise.resolve();
+  }
+
   setThinkingBudget(_sessionId: string, _tokens: number | null): Promise<void> {
     return Promise.reject(createUnsupportedOperationError('set_thinking_budget'));
   }
@@ -199,17 +233,22 @@ export class CodexSessionProviderAdapter
 
   respondToPermission(sessionId: string, requestId: string, allow: boolean): void {
     const pending = this.consumePendingRequest(sessionId, requestId);
+    const validation = validateCodexApprovalResponseWithSchema(pending.method, {
+      decision: allow ? 'accept' : 'decline',
+    });
+    if (!validation.success) {
+      throw new SessionOperationError('Codex approval response failed schema validation', {
+        code: 'CODEX_APPROVAL_RESPONSE_INVALID',
+        metadata: {
+          sessionId,
+          requestId,
+          method: pending.method,
+          issues: validation.issues,
+        },
+      });
+    }
 
-    this.manager.respond(
-      pending.serverRequestId,
-      allow
-        ? {
-            decision: 'accept',
-          }
-        : {
-            decision: 'decline',
-          }
-    );
+    this.manager.respond(pending.serverRequestId, validation.data);
   }
 
   respondToQuestion(
@@ -222,18 +261,29 @@ export class CodexSessionProviderAdapter
     }
 
     const pending = this.consumePendingRequest(sessionId, requestId);
-    const normalizedAnswers = Object.fromEntries(
-      Object.entries(answers).map(([questionId, value]) => [
-        questionId,
-        {
-          answers: Array.isArray(value) ? value : [value],
+    const responsePayload = {
+      answers: Object.fromEntries(
+        Object.entries(answers).map(([questionId, value]) => [
+          questionId,
+          {
+            answers: Array.isArray(value) ? value : [value],
+          },
+        ])
+      ),
+    };
+    const validation = validateCodexToolRequestUserInputResponseWithSchema(responsePayload);
+    if (!validation.success) {
+      throw new SessionOperationError('Codex question response failed schema validation', {
+        code: 'CODEX_QUESTION_RESPONSE_INVALID',
+        metadata: {
+          sessionId,
+          requestId,
+          issues: validation.issues,
         },
-      ])
-    );
+      });
+    }
 
-    this.manager.respond(pending.serverRequestId, {
-      answers: normalizedAnswers,
-    });
+    this.manager.respond(pending.serverRequestId, validation.data);
   }
 
   rejectInteractiveRequest(
@@ -445,8 +495,30 @@ export class CodexSessionProviderAdapter
     return this.clients.entries();
   }
 
-  getChatBarCapabilities(options?: { selectedModel?: string | null }) {
-    return createCodexChatBarCapabilities(options?.selectedModel ?? undefined);
+  getPreferredReasoningEffort(sessionId: string): string | undefined {
+    return this.preferredReasoningEfforts.get(sessionId);
+  }
+
+  async getChatBarCapabilities(options?: {
+    selectedModel?: string | null;
+    selectedReasoningEffort?: string | null;
+  }) {
+    try {
+      const models = await this.modelCatalog.listModels();
+      return createCodexChatBarCapabilities({
+        selectedModel: options?.selectedModel ?? undefined,
+        selectedReasoningEffort: options?.selectedReasoningEffort ?? null,
+        models,
+      });
+    } catch (error) {
+      logger.warn('Failed to load Codex model catalog for chat capabilities', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return createCodexChatBarCapabilities({
+        selectedModel: options?.selectedModel ?? undefined,
+        selectedReasoningEffort: options?.selectedReasoningEffort ?? null,
+      });
+    }
   }
 
   async stopAllClients(): Promise<void> {
@@ -465,6 +537,7 @@ export class CodexSessionProviderAdapter
     } finally {
       this.clients.clear();
       this.preferredModels.clear();
+      this.preferredReasoningEfforts.clear();
       try {
         await this.manager.stop();
       } catch (error) {
@@ -569,10 +642,17 @@ export class CodexSessionProviderAdapter
       sessionId,
       threadId,
       model: options.model,
+      reasoningEffort: options.reasoningEffort,
     };
 
     this.clients.set(sessionId, client);
     this.preferredModels.set(sessionId, options.model);
+    const parsedReasoningEffort = CodexReasoningEffortSchema.safeParse(options.reasoningEffort);
+    if (parsedReasoningEffort.success) {
+      this.preferredReasoningEfforts.set(sessionId, parsedReasoningEffort.data);
+    } else {
+      this.preferredReasoningEfforts.delete(sessionId);
+    }
     this.onClientCreated?.(sessionId, client, context);
 
     return client;
