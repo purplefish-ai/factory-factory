@@ -10,25 +10,25 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 20 of 22 (Event Translation + Permissions)
-Plan: 0 of 3 complete
-Status: Phase 20 Planned (3 plans, ready for execution)
-Last activity: 2026-02-13 -- Planned Phase 20 (3 plans across 3 waves)
+Plan: 1 of 3 complete
+Status: Phase 20 in progress (Plan 01 complete, Plan 02 next)
+Last activity: 2026-02-13 -- Completed 20-01 (Event Translator + Permission Bridge)
 
 Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (v1.2)
-- Average duration: 9min
-- Total execution time: 18min
+- Total plans completed: 3 (v1.2)
+- Average duration: 8min
+- Total execution time: 23min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
-| 20. Event Translation + Permissions | 0/3 | -- | -- |
+| 20. Event Translation + Permissions | 1/3 | 5min | 5min |
 | 21. Config Options + Unified Runtime | 0/TBD | -- | -- |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
 
@@ -60,6 +60,13 @@ Phase 19-02 decisions:
 - useAcp opt-in flag gates ACP session creation -- safe for production deployment
 - Fire-and-forget prompt dispatch pattern matching Codex precedent
 
+Phase 20-01 decisions:
+- AcpEventTranslator follows CodexEventTranslator stateless class pattern with switch on sessionUpdate discriminant
+- tool_call emits both content_block_start (rendering) and tool_progress (status/locations tracking) as two events
+- plan events use task_notification with JSON.stringify for structured data (frontend parses acp_plan type)
+- AcpPermissionBridge stores resolve callback + original params for re-emit on session restore
+- Defensive translation pattern: never throw, log warnings, return empty arrays for malformed data
+
 ### Pending Todos
 
 None.
@@ -71,5 +78,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Planned Phase 20 (3 plans created and verified)
+Stopped at: Completed 20-01-PLAN.md (Event Translator + Permission Bridge)
 Resume file: None
