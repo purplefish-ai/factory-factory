@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 21 of 22 (Config Options + Unified Runtime)
-Plan: 0 of 3 (planned, needs execution)
-Status: Phase 21 planned -- 3 plans in 3 waves
-Last activity: 2026-02-13 -- Phase 21 planning complete
+Plan: 1 of 3 (executing)
+Status: Phase 21 executing -- plan 01 complete
+Last activity: 2026-02-13 -- Plan 21-01 executed
 
 Progress: [██████░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5 (v1.2)
+- Total plans completed: 6 (v1.2)
 - Average duration: 7min
-- Total execution time: 35min
+- Total execution time: 42min
 
 **By Phase:**
 
@@ -29,7 +29,7 @@ Progress: [██████░░░░] 50%
 |-------|-------|-------|----------|
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
 | 20. Event Translation + Permissions | 3/3 | 26min | 6min |
-| 21. Config Options + Unified Runtime | 0/3 | -- | -- |
+| 21. Config Options + Unified Runtime | 1/3 | 7min | 7min |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
 
 *Updated after each plan completion*
@@ -89,6 +89,12 @@ Phase 20 integration fixes (post-verification):
 - Hydrator preserves in-memory transcript for ACP sessions (no JSONL wipe)
 - sendSessionMessage fast-path for known adapters
 
+Phase 21-01 decisions:
+- Loose configOptions type in WebSocket types (not importing SDK types into shared module)
+- Extracted createOrResumeSession helper to keep createClient under Biome cognitive complexity limit
+- Config options emit as config_options_update delta (not chat_capabilities) to keep systems parallel
+- setSessionModel/setSessionThinkingBudget find matching configOption by category, return silently if no match
+
 ### Pending Todos
 
 None.
@@ -100,5 +106,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Phase 21 planned, ready for execution
+Stopped at: Completed 21-01-PLAN.md
 Resume file: None
