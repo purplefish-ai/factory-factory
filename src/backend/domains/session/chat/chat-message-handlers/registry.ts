@@ -7,6 +7,7 @@ import { createQueueMessageHandler } from './handlers/queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './handlers/remove-queued-message.handler';
 import { createResumeQueuedMessagesHandler } from './handlers/resume-queued-messages.handler';
 import { createRewindFilesHandler } from './handlers/rewind-files.handler';
+import { createSetConfigOptionHandler } from './handlers/set-config-option.handler';
 import { createSetModelHandler } from './handlers/set-model.handler';
 import { createSetThinkingBudgetHandler } from './handlers/set-thinking-budget.handler';
 import { createStartHandler } from './handlers/start.handler';
@@ -38,6 +39,7 @@ export function createChatMessageHandlerRegistry(
     permission_response: createPermissionResponseHandler(),
     set_model: createSetModelHandler(),
     set_thinking_budget: createSetThinkingBudgetHandler(),
+    set_config_option: createSetConfigOptionHandler(),
     rewind_files: createRewindFilesHandler(),
   };
 }

@@ -11,6 +11,7 @@ export {
   type RemoveQueuedMessageInput,
   type ResumeQueuedMessagesInput,
   type RewindFilesMessage,
+  type SetConfigOptionMessage,
   type SetModelMessage,
   type SetThinkingBudgetMessage,
   type StartMessageInput,

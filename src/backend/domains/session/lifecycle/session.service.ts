@@ -335,12 +335,23 @@ class SessionService {
       systemPrompt: sessionContext.systemPrompt,
       permissionMode: options?.permissionMode ?? 'bypassPermissions',
       sessionId,
+      resumeProviderSessionId: session?.claudeSessionId ?? undefined,
     };
 
-    return await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
+    const handle = await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
       workspaceId: sessionContext.workspaceId,
       workingDir: sessionContext.workingDir,
     });
+
+    // Emit initial config options so the frontend receives them on session start
+    if (handle.configOptions.length > 0) {
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions: handle.configOptions,
+      } as SessionDeltaEvent);
+    }
+
+    return handle;
   }
 
   private async loadSessionWithAdapter(sessionId: string): Promise<LoadedSessionAdapter> {
@@ -804,8 +815,13 @@ class SessionService {
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    // ACP sessions manage model via config options (Phase 21), skip legacy adapter path
-    if (acpRuntimeManager.getClient(sessionId)) {
+    // ACP sessions manage model via config options -- find matching configOption by category
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (acpHandle) {
+      const modelOption = acpHandle.configOptions.find((o) => o.category === 'model');
+      if (modelOption && model) {
+        await this.setSessionConfigOption(sessionId, modelOption.id, model);
+      }
       return;
     }
     const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
@@ -831,14 +847,31 @@ class SessionService {
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    // ACP sessions manage thinking via config options (Phase 21), skip legacy adapter path
-    if (acpRuntimeManager.getClient(sessionId)) {
+    // ACP sessions manage thinking via config options -- find matching configOption by category
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (acpHandle) {
+      const thoughtOption = acpHandle.configOptions.find((o) => o.category === 'thought_level');
+      if (thoughtOption && maxTokens != null) {
+        await this.setSessionConfigOption(sessionId, thoughtOption.id, String(maxTokens));
+      }
       return;
     }
     const adapter =
       this.resolveKnownAdapterForSessionSync(sessionId) ??
       (await this.loadSessionWithAdapter(sessionId)).adapter;
     await adapter.setThinkingBudget(sessionId, maxTokens);
+  }
+
+  /**
+   * Set an ACP config option by ID. Calls the agent SDK and emits the
+   * authoritative config_options_update delta to all subscribers.
+   */
+  async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
+    const configOptions = await acpRuntimeManager.setConfigOption(sessionId, configId, value);
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'config_options_update',
+      configOptions,
+    } as SessionDeltaEvent);
   }
 
   async sendSessionMessage(

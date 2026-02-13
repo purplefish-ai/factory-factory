@@ -118,6 +118,13 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('resume_queued_messages'),
   }),
+
+  // Set an ACP config option (model, mode, thought level, etc.)
+  z.object({
+    type: z.literal('set_config_option'),
+    configId: z.string().min(1),
+    value: z.string().min(1),
+  }),
 ]);
 
 // ============================================================================
@@ -143,3 +150,4 @@ export type ResumeQueuedMessagesInput = Extract<
   ChatMessageInput,
   { type: 'resume_queued_messages' }
 >;
+export type SetConfigOptionMessage = Extract<ChatMessageInput, { type: 'set_config_option' }>;
