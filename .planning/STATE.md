@@ -2,16 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-12)
+See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
-**Current focus:** Planning next milestone
+**Current focus:** v1.2 ACP Cutover — defining requirements
 
 ## Current Position
 
-Phase: All complete (v1.0: 10 phases, v1.1: 8 phases)
-Status: Between milestones — v1.1 shipped, v1.2 not yet started
-Last activity: 2026-02-12 — v1.1 milestone archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-13 — Milestone v1.2 started
 
 ## Accumulated Context
 
@@ -30,6 +31,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-12
-Stopped at: v1.1 milestone archived, ready for next milestone
+Last session: 2026-02-13
+Stopped at: Starting v1.2 ACP Cutover milestone
 Resume file: None

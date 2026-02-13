@@ -32,7 +32,13 @@ Every domain object has exactly one owner module, and any operation touching tha
 
 ### Active
 
-(None — planning next milestone)
+- [ ] ACP runtime module in session domain for subprocess + connection management
+- [ ] ACP-only provider communication for both Claude and Codex sessions
+- [ ] ACP session lifecycle mapping (initialize, session/new, session/prompt, session/cancel, session/load, session/set_config_option)
+- [ ] ACP permission option selection replacing boolean permission UX
+- [ ] ACP configOptions-driven model/mode/reasoning controls
+- [ ] Legacy protocol removal (Claude NDJSON, Codex app-server)
+- [ ] ACP-focused integration tests
 
 ### Out of Scope
 
@@ -42,6 +48,19 @@ Every domain object has exactly one owner module, and any operation touching tha
 - Persistent snapshot (write to DB/disk) — derived cache, rebuild on restart is fast (~100ms)
 - Distributed pub/sub (Redis, NATS) — single-process Node.js server
 - Client-side snapshot computation — would duplicate server-side business logic
+
+## Current Milestone: v1.2 ACP Cutover
+
+**Goal:** Replace custom Claude NDJSON and Codex app-server protocols with ACP-only runtime using Zed's production adapters.
+
+**Target features:**
+- Single ACP client runtime in session domain (stdio subprocess + ClientSideConnection)
+- ACP as only provider communication contract for both Claude and Codex
+- Permission handling via ACP option selection end-to-end
+- Model/mode/reasoning controls via ACP configOptions
+- Full removal of legacy protocol code paths
+
+**GitHub issue:** #996
 
 ## Context
 
@@ -80,4 +99,4 @@ Every domain object has exactly one owner module, and any operation touching tha
 - **Architecture boundaries**: 18 dependency-cruiser rules, zero violations across 736 modules
 
 ---
-*Last updated: 2026-02-12 after v1.1 milestone*
+*Last updated: 2026-02-13 after v1.2 milestone start*
