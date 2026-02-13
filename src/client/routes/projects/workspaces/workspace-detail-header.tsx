@@ -45,8 +45,9 @@ import type {
   useWorkspaceData,
 } from './use-workspace-detail';
 
-const PROVIDER_OPTIONS = [
-  { value: 'WORKSPACE_DEFAULT', label: 'Workspace Default' },
+type SessionProviderValue = 'CLAUDE' | 'CODEX';
+
+const EXPLICIT_PROVIDER_OPTIONS = [
   { value: 'CLAUDE', label: 'Claude' },
   { value: 'CODEX', label: 'Codex' },
 ] as const;
@@ -56,6 +57,20 @@ function resolveProviderSelection(value: unknown): NewSessionProviderSelection {
     return value;
   }
   return 'WORKSPACE_DEFAULT';
+}
+
+function resolveEffectiveSessionProvider(
+  workspaceDefaultProvider: unknown,
+  userDefaultProvider: unknown
+): SessionProviderValue {
+  if (workspaceDefaultProvider === 'CLAUDE' || workspaceDefaultProvider === 'CODEX') {
+    return workspaceDefaultProvider;
+  }
+  return userDefaultProvider === 'CODEX' ? 'CODEX' : 'CLAUDE';
+}
+
+function getProviderLabel(provider: SessionProviderValue): string {
+  return provider === 'CODEX' ? 'Codex' : 'Claude';
 }
 
 function ToggleRightPanelButton() {
@@ -208,11 +223,17 @@ function NewSessionProviderSelect({
   selectedProvider,
   setSelectedProvider,
   disabled,
+  effectiveDefaultProvider,
 }: {
   selectedProvider: NewSessionProviderSelection;
   setSelectedProvider: React.Dispatch<React.SetStateAction<NewSessionProviderSelection>>;
   disabled: boolean;
+  effectiveDefaultProvider: SessionProviderValue;
 }) {
+  const triggerLabel = getProviderLabel(
+    selectedProvider === 'WORKSPACE_DEFAULT' ? effectiveDefaultProvider : selectedProvider
+  );
+
   return (
     <Select
       value={selectedProvider}
@@ -222,10 +243,13 @@ function NewSessionProviderSelect({
       disabled={disabled}
     >
       <SelectTrigger className="h-8 w-[148px] text-xs">
-        <SelectValue placeholder="New session provider" />
+        <span className="truncate">{triggerLabel}</span>
       </SelectTrigger>
       <SelectContent>
-        {PROVIDER_OPTIONS.map((option) => (
+        <SelectItem key="workspace-default-provider" value="WORKSPACE_DEFAULT">
+          Use default ({getProviderLabel(effectiveDefaultProvider)})
+        </SelectItem>
+        {EXPLICIT_PROVIDER_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}
           </SelectItem>
@@ -305,7 +329,8 @@ function WorkspaceProviderSettings({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROVIDER_OPTIONS.map((option) => (
+                <SelectItem value="WORKSPACE_DEFAULT">Workspace Default</SelectItem>
+                {EXPLICIT_PROVIDER_OPTIONS.map((option) => (
                   <SelectItem key={`default-${option.value}`} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -325,7 +350,8 @@ function WorkspaceProviderSettings({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROVIDER_OPTIONS.map((option) => (
+                <SelectItem value="WORKSPACE_DEFAULT">Workspace Default</SelectItem>
+                {EXPLICIT_PROVIDER_OPTIONS.map((option) => (
                   <SelectItem key={`ratchet-${option.value}`} value={option.value}>
                     {option.label}
                   </SelectItem>
@@ -387,6 +413,12 @@ export function WorkspaceHeader({
   isCreatingSession,
   hasChanges,
 }: WorkspaceHeaderProps) {
+  const { data: userSettings } = trpc.userSettings.get.useQuery();
+  const effectiveDefaultProvider = resolveEffectiveSessionProvider(
+    workspace.defaultSessionProvider,
+    userSettings?.defaultSessionProvider
+  );
+
   return (
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-2 px-2 py-1.5 md:px-4 md:py-2 border-b">
       <div className="flex items-center gap-2 md:gap-3 min-w-0">
@@ -406,6 +438,7 @@ export function WorkspaceHeader({
           selectedProvider={selectedProvider}
           setSelectedProvider={setSelectedProvider}
           disabled={isCreatingSession}
+          effectiveDefaultProvider={effectiveDefaultProvider}
         />
         <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />

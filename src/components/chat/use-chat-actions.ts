@@ -23,6 +23,7 @@ import type {
   RemoveQueuedMessageInput,
   ResumeQueuedMessagesInput,
   RewindFilesMessage,
+  SetModelMessage,
   StopMessage,
 } from '@/shared/websocket';
 import { persistSettings } from './chat-persistence';
@@ -77,6 +78,46 @@ export interface UseChatActionsReturn {
 
 function generateMessageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function maybeSendThinkingBudgetUpdate(
+  send: (message: unknown) => boolean,
+  settings: Partial<ChatSettings>,
+  thinkingEnabled: boolean
+): void {
+  if (!('thinkingEnabled' in settings && thinkingEnabled)) {
+    return;
+  }
+  const maxTokens = settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+  send({ type: 'set_thinking_budget', max_tokens: maxTokens });
+}
+
+function maybeSendModelUpdate(
+  send: (message: unknown) => boolean,
+  settings: Partial<ChatSettings>,
+  newSettings: ChatSettings,
+  capabilities: ChatState['chatCapabilities']
+): void {
+  const modelChanged = 'selectedModel' in settings;
+  const reasoningChanged = 'reasoningEffort' in settings;
+  if (!((modelChanged || reasoningChanged) && capabilities.model.enabled)) {
+    return;
+  }
+
+  const modelMessage: SetModelMessage = {
+    type: 'set_model',
+    model: newSettings.selectedModel,
+  };
+
+  if (capabilities.reasoning.enabled) {
+    if (reasoningChanged) {
+      modelMessage.reasoningEffort = newSettings.reasoningEffort;
+    } else if (modelChanged) {
+      modelMessage.reasoningEffort = null;
+    }
+  }
+
+  send(modelMessage);
 }
 
 // =============================================================================
@@ -200,12 +241,8 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         capabilities
       );
       persistSettings(dbSessionIdRef.current, newSettings);
-
-      // Send thinking budget update when thinkingEnabled changes
-      if ('thinkingEnabled' in settings && capabilities.thinking.enabled) {
-        const maxTokens = settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-        send({ type: 'set_thinking_budget', max_tokens: maxTokens });
-      }
+      maybeSendThinkingBudgetUpdate(send, settings, capabilities.thinking.enabled);
+      maybeSendModelUpdate(send, settings, newSettings, capabilities);
     },
     [send, dispatch, stateRef, dbSessionIdRef]
   );
