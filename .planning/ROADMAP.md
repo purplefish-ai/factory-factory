@@ -59,12 +59,12 @@ Plans:
   3. Plan updates from the agent render as a structured task view with per-task status indicators
   4. Permission requests present distinct option buttons (allow once, allow always, deny once, deny always) and the selected option flows back to the agent as an optionId
   5. Slash commands from the agent appear in the frontend command palette
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 20-01: TBD
-- [ ] 20-02: TBD
-- [ ] 20-03: TBD
+- [ ] 20-01-PLAN.md -- AcpEventTranslator and AcpPermissionBridge: isolated backend classes with unit tests
+- [ ] 20-02-PLAN.md -- Wire translator and bridge into session service, extend WebSocket types, permission handler routing
+- [ ] 20-03-PLAN.md -- Frontend: ACP multi-option permission UI, plan view component, visual verification
 
 ### Phase 21: Config Options + Unified Runtime
 **Goal**: Model, mode, and reasoning controls are driven entirely by agent-provided configOptions (not hardcoded), session resume works when the agent supports it, and a single AcpRuntimeManager serves both Claude and Codex providers
@@ -106,10 +106,10 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 19. ACP Runtime Foundation | v1.2 | 2/2 | ✓ Complete | 2026-02-13 |
-| 20. Event Translation + Permissions | v1.2 | 0/TBD | Not started | - |
+| 20. Event Translation + Permissions | v1.2 | 0/3 | Planned | - |
 | 21. Config Options + Unified Runtime | v1.2 | 0/TBD | Not started | - |
 | 22. Cleanup + Polish | v1.2 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-13 -- Phase 19 complete (2/2 plans, verified)*
+*Last updated: 2026-02-13 -- Phase 20 planned (3 plans in 3 waves)*
