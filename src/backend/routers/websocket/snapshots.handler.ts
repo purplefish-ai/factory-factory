@@ -10,14 +10,14 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '@/backend/app-context';
-import { WS_READY_STATE } from '@/backend/constants';
+import { WS_READY_STATE } from '@/backend/constants/websocket';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
   type SnapshotChangedEvent,
   type SnapshotRemovedEvent,
   workspaceSnapshotStore,
-} from '@/backend/services';
+} from '@/backend/services/workspace-snapshot-store.service';
 import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================

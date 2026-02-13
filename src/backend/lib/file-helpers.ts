@@ -65,12 +65,6 @@ export async function isPathSafe(worktreePath: string, filePath: string): Promis
 }
 
 /**
- * Get language from file extension for syntax highlighting.
- * Re-exported from shared module for backward compatibility.
- */
-export { getLanguageFromPath } from '@/lib/language-detection';
-
-/**
  * Check if content is binary by looking for null bytes
  */
 export function isBinaryContent(buffer: Buffer): boolean {

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SnapshotUpdateInput, WorkspaceSnapshotEntry } from '@/backend/services';
+import type {
+  SnapshotUpdateInput,
+  WorkspaceSnapshotEntry,
+} from '@/backend/services/workspace-snapshot-store.service';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 // ---------------------------------------------------------------------------
@@ -31,13 +34,16 @@ const mockLoggerWarn = vi.fn();
 const mockLoggerInfo = vi.fn();
 const mockLoggerError = vi.fn();
 
-vi.mock('@/backend/services', () => ({
+vi.mock('@/backend/services/workspace-snapshot-store.service', () => ({
   workspaceSnapshotStore: {
     upsert: (...args: unknown[]) => mockUpsert(...args),
     getByWorkspaceId: (...args: unknown[]) => mockGetByWorkspaceId(...args),
     getAllWorkspaceIds: () => mockGetAllWorkspaceIds(),
     remove: (...args: unknown[]) => mockRemove(...args),
   },
+}));
+
+vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     info: (...args: unknown[]) => mockLoggerInfo(...args),
     debug: vi.fn(),

@@ -7,7 +7,7 @@ import {
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/domains/workspace';
-import { initializeWorkspaceWorktree } from '@/backend/orchestration';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { createLogger } from '@/backend/services/logger.service';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
 

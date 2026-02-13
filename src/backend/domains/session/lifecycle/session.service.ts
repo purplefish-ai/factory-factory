@@ -260,7 +260,7 @@ class SessionService {
 
   /**
    * Start a session using the active provider adapter.
-   * Uses getOrCreateClient() internally for unified lifecycle management with race protection.
+   * Uses getOrCreateSessionClient() internally for unified lifecycle management with race protection.
    */
   async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
     const loaded = await this.loadSessionWithAdapter(sessionId);
@@ -292,13 +292,6 @@ class SessionService {
     }
 
     logger.info('Session started', { sessionId, provider: session.provider });
-  }
-
-  /**
-   * Backward-compatible Claude-named entrypoint used by existing public contracts.
-   */
-  async startClaudeSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
-    await this.startSession(sessionId, options);
   }
 
   /**
@@ -355,16 +348,6 @@ class SessionService {
     } finally {
       this.clearSessionProvider(sessionId);
     }
-  }
-
-  /**
-   * Backward-compatible Claude-named entrypoint used by existing public contracts.
-   */
-  async stopClaudeSession(
-    sessionId: string,
-    options?: { cleanupTransientRatchetSession?: boolean }
-  ): Promise<void> {
-    await this.stopSession(sessionId, options);
   }
 
   private async loadSessionForStop(sessionId: string): Promise<AgentSessionRecord | null> {

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getLanguageFromPath, isBinaryContent, isPathSafe, pathExists } from './file-helpers';
+import { getLanguageFromPath } from '@/lib/language-detection';
+import { isBinaryContent, isPathSafe, pathExists } from './file-helpers';
 
 // Mock fs/promises
 vi.mock('node:fs/promises', () => ({
