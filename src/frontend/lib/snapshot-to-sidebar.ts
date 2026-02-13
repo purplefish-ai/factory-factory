@@ -7,84 +7,135 @@
  * but only includes fields needed for mapping.
  */
 
-import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@factory-factory/core';
+import {
+  CIStatus,
+  KanbanColumn,
+  PRState,
+  RatchetState,
+  RunScriptStatus,
+  SessionStatus,
+} from '@factory-factory/core';
+import { z } from 'zod';
 import type { ServerWorkspace } from '@/frontend/components/use-workspace-list-state';
-import type { SessionSummary } from '@/shared/session-runtime';
-import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 // =============================================================================
 // Snapshot message types (client-side mirror of server messages)
 // =============================================================================
-
-export type WorkspaceSessionSummary = SessionSummary;
 
 /**
  * A workspace snapshot entry as sent by the /snapshots WebSocket endpoint.
  * Mirrors WorkspaceSnapshotEntry from the backend store but defined locally
  * to respect the frontend/backend build boundary.
  */
-export interface WorkspaceSnapshotEntry {
-  workspaceId: string;
-  projectId: string;
-  version: number;
-  computedAt: string;
-  source: string;
-  name: string;
-  status: string;
-  createdAt: string;
-  branchName: string | null;
-  prUrl: string | null;
-  prNumber: number | null;
-  prState: PRState;
-  prCiStatus: CIStatus;
-  prUpdatedAt: string | null;
-  ratchetEnabled: boolean;
-  ratchetState: RatchetState;
-  runScriptStatus: RunScriptStatus;
-  hasHadSessions: boolean;
-  isWorking: boolean;
-  pendingRequestType: 'plan_approval' | 'user_question' | null;
-  sessionSummaries: WorkspaceSessionSummary[];
-  gitStats: {
-    total: number;
-    additions: number;
-    deletions: number;
-    hasUncommitted: boolean;
-  } | null;
-  lastActivityAt: string | null;
-  sidebarStatus: WorkspaceSidebarStatus;
-  kanbanColumn: string | null;
-  flowPhase: string | null;
-  ciObservation: string | null;
-  ratchetButtonAnimated: boolean;
-  fieldTimestamps: Record<string, number>;
-}
+const SessionRuntimeLastExitSchema = z.object({
+  code: z.number().nullable(),
+  timestamp: z.string(),
+  unexpected: z.boolean(),
+});
+
+const WorkspaceSessionSummarySchema = z.object({
+  sessionId: z.string(),
+  name: z.string().nullable(),
+  workflow: z.string().nullable(),
+  model: z.string().nullable(),
+  provider: z.enum(['CLAUDE', 'CODEX']).optional(),
+  persistedStatus: z.nativeEnum(SessionStatus),
+  runtimePhase: z.enum(['loading', 'starting', 'running', 'idle', 'stopping', 'error']),
+  processState: z.enum(['unknown', 'alive', 'stopped']),
+  activity: z.enum(['WORKING', 'IDLE']),
+  updatedAt: z.string(),
+  lastExit: SessionRuntimeLastExitSchema.nullable(),
+});
+export type WorkspaceSessionSummary = z.infer<typeof WorkspaceSessionSummarySchema>;
+
+const WorkspaceGitStatsSchema = z.object({
+  total: z.number(),
+  additions: z.number(),
+  deletions: z.number(),
+  hasUncommitted: z.boolean(),
+});
+
+const WorkspaceSidebarStatusSchema = z.object({
+  activityState: z.enum(['WORKING', 'IDLE']),
+  ciState: z.enum(['NONE', 'RUNNING', 'FAILING', 'PASSING', 'UNKNOWN', 'MERGED']),
+});
+
+export const WorkspaceSnapshotEntrySchema = z.object({
+  workspaceId: z.string(),
+  projectId: z.string(),
+  version: z.number(),
+  computedAt: z.string(),
+  source: z.string(),
+  name: z.string(),
+  status: z.string(),
+  createdAt: z.string(),
+  branchName: z.string().nullable(),
+  prUrl: z.string().nullable(),
+  prNumber: z.number().nullable(),
+  prState: z.nativeEnum(PRState),
+  prCiStatus: z.nativeEnum(CIStatus),
+  prUpdatedAt: z.string().nullable(),
+  ratchetEnabled: z.boolean(),
+  ratchetState: z.nativeEnum(RatchetState),
+  runScriptStatus: z.nativeEnum(RunScriptStatus),
+  hasHadSessions: z.boolean(),
+  isWorking: z.boolean(),
+  pendingRequestType: z.enum(['plan_approval', 'user_question']).nullable(),
+  sessionSummaries: z.array(WorkspaceSessionSummarySchema),
+  gitStats: WorkspaceGitStatsSchema.nullable(),
+  lastActivityAt: z.string().nullable(),
+  sidebarStatus: WorkspaceSidebarStatusSchema,
+  kanbanColumn: z.nativeEnum(KanbanColumn).nullable(),
+  flowPhase: z
+    .enum(['NO_PR', 'CI_WAIT', 'RATCHET_VERIFY', 'RATCHET_FIXING', 'READY', 'MERGED'])
+    .nullable(),
+  ciObservation: z
+    .enum([
+      'NOT_FETCHED',
+      'NO_CHECKS',
+      'CHECKS_PENDING',
+      'CHECKS_FAILED',
+      'CHECKS_PASSED',
+      'CHECKS_UNKNOWN',
+    ])
+    .nullable(),
+  ratchetButtonAnimated: z.boolean(),
+  fieldTimestamps: z.record(z.string(), z.number()),
+});
+
+export type WorkspaceSnapshotEntry = z.infer<typeof WorkspaceSnapshotEntrySchema>;
 
 // =============================================================================
 // Server message discriminated union
 // =============================================================================
 
-export interface SnapshotFullMessage {
-  type: 'snapshot_full';
-  projectId: string;
-  entries: WorkspaceSnapshotEntry[];
-}
+const SnapshotFullMessageSchema = z.object({
+  type: z.literal('snapshot_full'),
+  projectId: z.string(),
+  entries: z.array(WorkspaceSnapshotEntrySchema),
+});
 
-export interface SnapshotChangedMessage {
-  type: 'snapshot_changed';
-  workspaceId: string;
-  entry: WorkspaceSnapshotEntry;
-}
+const SnapshotChangedMessageSchema = z.object({
+  type: z.literal('snapshot_changed'),
+  workspaceId: z.string(),
+  entry: WorkspaceSnapshotEntrySchema,
+});
 
-export interface SnapshotRemovedMessage {
-  type: 'snapshot_removed';
-  workspaceId: string;
-}
+const SnapshotRemovedMessageSchema = z.object({
+  type: z.literal('snapshot_removed'),
+  workspaceId: z.string(),
+});
 
-export type SnapshotServerMessage =
-  | SnapshotFullMessage
-  | SnapshotChangedMessage
-  | SnapshotRemovedMessage;
+export const SnapshotServerMessageSchema = z.discriminatedUnion('type', [
+  SnapshotFullMessageSchema,
+  SnapshotChangedMessageSchema,
+  SnapshotRemovedMessageSchema,
+]);
+
+export type SnapshotFullMessage = z.infer<typeof SnapshotFullMessageSchema>;
+export type SnapshotChangedMessage = z.infer<typeof SnapshotChangedMessageSchema>;
+export type SnapshotRemovedMessage = z.infer<typeof SnapshotRemovedMessageSchema>;
+export type SnapshotServerMessage = z.infer<typeof SnapshotServerMessageSchema>;
 
 // =============================================================================
 // Mapping function

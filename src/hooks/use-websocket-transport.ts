@@ -174,7 +174,10 @@ export function useWebSocketTransport(
 
     ws.onmessage = (event) => {
       try {
-        const data: unknown = JSON.parse(event.data as string);
+        if (typeof event.data !== 'string') {
+          return;
+        }
+        const data: unknown = JSON.parse(event.data);
         onMessageRef.current?.(data);
       } catch {
         // Silently ignore parse errors

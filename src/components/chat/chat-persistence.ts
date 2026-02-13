@@ -13,7 +13,8 @@
  */
 
 import type { ChatSettings } from '@/lib/chat-protocol';
-import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
+import { DEFAULT_CHAT_SETTINGS, resolveSelectedModel } from '@/lib/chat-protocol';
+import { ChatSettingsSchema } from '@/shared/websocket';
 
 // =============================================================================
 // Storage Keys
@@ -84,23 +85,13 @@ export function clearDraft(sessionId: string | null): void {
 // Settings Persistence
 // =============================================================================
 
-/**
- * Validate that an object has the required ChatSettings shape.
- */
-function isValidChatSettings(obj: unknown): obj is ChatSettings {
-  if (typeof obj !== 'object' || obj === null) {
-    return false;
-  }
-  const settings = obj as Partial<ChatSettings>;
-  return (
-    (settings.selectedModel === null || typeof settings.selectedModel === 'string') &&
-    (settings.reasoningEffort === undefined ||
-      settings.reasoningEffort === null ||
-      typeof settings.reasoningEffort === 'string') &&
-    typeof settings.thinkingEnabled === 'boolean' &&
-    typeof settings.planModeEnabled === 'boolean'
-  );
-}
+const PersistedChatSettingsSchema = ChatSettingsSchema.partial({ reasoningEffort: true }).transform(
+  (settings) => ({
+    ...settings,
+    selectedModel: resolveSelectedModel(settings.selectedModel),
+    reasoningEffort: settings.reasoningEffort ?? null,
+  })
+);
 
 /**
  * Load chat settings from sessionStorage for a specific session.
@@ -116,15 +107,11 @@ export function loadSettings(sessionId: string | null): ChatSettings | null {
       return null;
     }
     const parsed: unknown = JSON.parse(stored);
-    if (!isValidChatSettings(parsed)) {
+    const validated = PersistedChatSettingsSchema.safeParse(parsed);
+    if (!validated.success) {
       return null;
     }
-    return {
-      selectedModel: parsed.selectedModel,
-      reasoningEffort: parsed.reasoningEffort ?? null,
-      thinkingEnabled: parsed.thinkingEnabled,
-      planModeEnabled: parsed.planModeEnabled,
-    };
+    return validated.data;
   } catch {
     return null;
   }

@@ -1,5 +1,6 @@
 import type { Prisma, SessionProvider, UserSettings } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
 
 interface UpdateUserSettingsInput {
   preferredIde?: string;
@@ -14,6 +15,11 @@ interface UpdateUserSettingsInput {
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }
 export type WorkspaceOrderMap = Record<string, string[]>;
+
+function parseWorkspaceOrderMap(value: Prisma.JsonValue | null): WorkspaceOrderMap {
+  const parsed = workspaceOrderMapSchema.safeParse(value);
+  return parsed.success ? parsed.data : {};
+}
 
 class UserSettingsAccessor {
   /**
@@ -74,7 +80,7 @@ class UserSettingsAccessor {
    */
   async getWorkspaceOrder(projectId: string): Promise<string[]> {
     const settings = await this.get();
-    const orderMap = (settings.workspaceOrder as WorkspaceOrderMap) ?? {};
+    const orderMap = parseWorkspaceOrderMap(settings.workspaceOrder);
     return orderMap[projectId] ?? [];
   }
 
@@ -84,7 +90,7 @@ class UserSettingsAccessor {
   async updateWorkspaceOrder(projectId: string, workspaceIds: string[]): Promise<UserSettings> {
     const userId = 'default';
     const settings = await this.get();
-    const orderMap = (settings.workspaceOrder as WorkspaceOrderMap) ?? {};
+    const orderMap = parseWorkspaceOrderMap(settings.workspaceOrder);
 
     // Update the order for this project
     orderMap[projectId] = workspaceIds;

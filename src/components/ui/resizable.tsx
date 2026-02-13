@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import { useCallback, useMemo } from 'react';
 import type { Layout } from 'react-resizable-panels';
 import { Group, Panel, Separator } from 'react-resizable-panels';
+import { z } from 'zod';
 
 import { cn } from '@/lib/utils';
 
@@ -12,6 +13,8 @@ type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'
   /** Unique ID for persisting layout to localStorage */
   autoSaveId?: string;
 };
+
+const LayoutSchema = z.record(z.string(), z.number().finite());
 
 // Helper to load layout from localStorage synchronously
 function loadLayoutFromStorage(autoSaveId: string): Layout | undefined {
@@ -23,8 +26,10 @@ function loadLayoutFromStorage(autoSaveId: string): Layout | undefined {
     const stored = localStorage.getItem(`resizable-panels:${autoSaveId}`);
     if (stored) {
       const parsed: unknown = JSON.parse(stored);
-      // Layout is a simple object type from react-resizable-panels
-      return parsed as Layout;
+      const validated = LayoutSchema.safeParse(parsed);
+      if (validated.success) {
+        return validated.data;
+      }
     }
   } catch {
     // Ignore storage errors

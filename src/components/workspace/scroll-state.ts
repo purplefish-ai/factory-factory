@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type ScrollMode = 'code' | 'markdown' | 'chat';
 
 export interface ScrollState {
@@ -19,6 +21,17 @@ interface ScrollStoragePayload {
 const STORAGE_VERSION = 1;
 const STORAGE_KEY_SCROLL_PREFIX = 'workspace-panel-scroll-';
 
+const ScrollStateSchema = z.object({
+  top: z.number().finite().min(0),
+  left: z.number().finite().min(0),
+  stickToBottom: z.boolean().optional(),
+});
+
+const ScrollStoragePayloadSchema = z.object({
+  v: z.literal(STORAGE_VERSION),
+  states: z.record(z.string(), ScrollStateSchema),
+});
+
 export function makeScrollStorageKey(workspaceId: string): string {
   return `${STORAGE_KEY_SCROLL_PREFIX}${workspaceId}`;
 }
@@ -28,21 +41,7 @@ export function makeScrollStateKey(tabId: string, mode: ScrollMode): string {
 }
 
 function isValidScrollState(state: unknown): state is ScrollState {
-  if (typeof state !== 'object' || state === null) {
-    return false;
-  }
-  const candidate = state as Record<string, unknown>;
-  if ('stickToBottom' in candidate && typeof candidate.stickToBottom !== 'boolean') {
-    return false;
-  }
-  return (
-    typeof candidate.top === 'number' &&
-    Number.isFinite(candidate.top) &&
-    typeof candidate.left === 'number' &&
-    Number.isFinite(candidate.left) &&
-    candidate.top >= 0 &&
-    candidate.left >= 0
-  );
+  return ScrollStateSchema.safeParse(state).success;
 }
 
 function sanitizeScrollState(state: ScrollState): ScrollState {
@@ -63,16 +62,11 @@ export function loadScrollStateRecord(
       return {};
     }
     const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      (parsed as ScrollStoragePayload).v !== STORAGE_VERSION ||
-      typeof (parsed as ScrollStoragePayload).states !== 'object' ||
-      (parsed as ScrollStoragePayload).states === null
-    ) {
+    const validated = ScrollStoragePayloadSchema.safeParse(parsed);
+    if (!validated.success) {
       return {};
     }
-    const states = (parsed as ScrollStoragePayload).states;
+    const states = validated.data.states;
     const cleaned: Record<string, ScrollState> = {};
     for (const [key, value] of Object.entries(states)) {
       if (isValidScrollState(value)) {

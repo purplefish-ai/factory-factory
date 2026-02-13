@@ -8,7 +8,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { expandEnvVars } from '@/backend/lib/env';
-import { SERVICE_TIMEOUT_MS } from './constants';
+import { ConfigEnvSchema } from './env-schemas';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('config');
@@ -32,6 +32,7 @@ export interface SessionProfile {
  * Log levels for the logger service
  */
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+type ConfigEnv = ReturnType<typeof ConfigEnvSchema.parse>;
 
 /**
  * Logger configuration
@@ -200,34 +201,14 @@ function resolveModel(envVar: string | undefined, defaultModel: string): string 
 }
 
 /**
- * Resolve permission mode from environment variable
- */
-function resolvePermissionMode(
-  envVar: string | undefined,
-  defaultMode: PermissionMode
-): PermissionMode {
-  if (!envVar) {
-    return defaultMode;
-  }
-
-  const normalized = envVar.toLowerCase();
-  if (['strict', 'relaxed', 'yolo'].includes(normalized)) {
-    return normalized as PermissionMode;
-  }
-
-  logger.warn(`Unknown permission mode: ${envVar}, using default`);
-  return defaultMode;
-}
-
-/**
  * Build default session profile from environment
  */
-function buildDefaultSessionProfile(): SessionProfile {
+function buildDefaultSessionProfile(env: ConfigEnv): SessionProfile {
   const defaultModel = 'claude-sonnet-4-5-20250929';
 
   return {
-    model: resolveModel(process.env.DEFAULT_MODEL, defaultModel),
-    permissionMode: resolvePermissionMode(process.env.DEFAULT_PERMISSIONS, 'yolo'),
+    model: resolveModel(env.DEFAULT_MODEL, defaultModel),
+    permissionMode: env.DEFAULT_PERMISSIONS,
     maxTokens: 8192,
     temperature: 1.0,
   };
@@ -236,51 +217,44 @@ function buildDefaultSessionProfile(): SessionProfile {
 /**
  * Build logger configuration from environment
  */
-function buildLoggerConfig(nodeEnv: string): LoggerConfig {
-  const envLevel = process.env.LOG_LEVEL?.toLowerCase() as LogLevel | undefined;
-  const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug'];
-
+function buildLoggerConfig(nodeEnv: string, env: ConfigEnv): LoggerConfig {
   return {
-    level: validLevels.includes(envLevel as LogLevel) ? (envLevel as LogLevel) : 'info',
+    level: env.LOG_LEVEL,
     prettyPrint: nodeEnv !== 'production',
-    serviceName: process.env.SERVICE_NAME || 'factoryfactory',
+    serviceName: env.SERVICE_NAME,
   };
 }
 
 /**
  * Build rate limiter configuration from environment
  */
-function buildRateLimiterConfig(): RateLimiterConfig {
+function buildRateLimiterConfig(env: ConfigEnv): RateLimiterConfig {
   return {
-    claudeRequestsPerMinute: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_MINUTE || '60', 10),
-    claudeRequestsPerHour: Number.parseInt(process.env.CLAUDE_RATE_LIMIT_PER_HOUR || '1000', 10),
-    maxQueueSize: Number.parseInt(process.env.RATE_LIMIT_QUEUE_SIZE || '100', 10),
-    queueTimeoutMs: Number.parseInt(process.env.RATE_LIMIT_QUEUE_TIMEOUT_MS || '30000', 10),
+    claudeRequestsPerMinute: env.CLAUDE_RATE_LIMIT_PER_MINUTE,
+    claudeRequestsPerHour: env.CLAUDE_RATE_LIMIT_PER_HOUR,
+    maxQueueSize: env.RATE_LIMIT_QUEUE_SIZE,
+    queueTimeoutMs: env.RATE_LIMIT_QUEUE_TIMEOUT_MS,
   };
 }
 
 /**
  * Build notification configuration from environment
  */
-function buildNotificationConfig(): NotificationConfig {
+function buildNotificationConfig(env: ConfigEnv): NotificationConfig {
   return {
-    soundEnabled: process.env.NOTIFICATION_SOUND_ENABLED !== 'false',
-    pushEnabled: process.env.NOTIFICATION_PUSH_ENABLED !== 'false',
-    soundFile: process.env.NOTIFICATION_SOUND_FILE,
-    quietHoursStart: process.env.NOTIFICATION_QUIET_HOURS_START
-      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_START, 10)
-      : undefined,
-    quietHoursEnd: process.env.NOTIFICATION_QUIET_HOURS_END
-      ? Number.parseInt(process.env.NOTIFICATION_QUIET_HOURS_END, 10)
-      : undefined,
+    soundEnabled: env.NOTIFICATION_SOUND_ENABLED,
+    pushEnabled: env.NOTIFICATION_PUSH_ENABLED,
+    soundFile: env.NOTIFICATION_SOUND_FILE,
+    quietHoursStart: env.NOTIFICATION_QUIET_HOURS_START,
+    quietHoursEnd: env.NOTIFICATION_QUIET_HOURS_END,
   };
 }
 
 /**
  * Build CORS configuration from environment
  */
-function buildCorsConfig(): CorsConfig {
-  const originsEnv = process.env.CORS_ALLOWED_ORIGINS;
+function buildCorsConfig(env: ConfigEnv): CorsConfig {
+  const originsEnv = env.CORS_ALLOWED_ORIGINS;
   const defaultOrigins = ['http://localhost:3000', 'http://localhost:3001'];
 
   return {
@@ -291,53 +265,24 @@ function buildCorsConfig(): CorsConfig {
 /**
  * Build Claude process configuration from environment with validation
  */
-function buildClaudeProcessConfig(): ClaudeProcessConfig {
-  const envValue = process.env.CLAUDE_HUNG_TIMEOUT_MS;
-
-  if (!envValue) {
-    return { hungTimeoutMs: SERVICE_TIMEOUT_MS.configDefaultClaudeHung };
-  }
-
-  const parsed = Number.parseInt(envValue, 10);
-  if (Number.isNaN(parsed) || parsed <= 0) {
-    logger.warn(`Invalid CLAUDE_HUNG_TIMEOUT_MS value: ${envValue}, using default (60 minutes)`);
-    return { hungTimeoutMs: SERVICE_TIMEOUT_MS.configDefaultClaudeHung };
-  }
-
-  return { hungTimeoutMs: parsed };
+function buildClaudeProcessConfig(env: ConfigEnv): ClaudeProcessConfig {
+  return { hungTimeoutMs: env.CLAUDE_HUNG_TIMEOUT_MS };
 }
 
 /**
  * Build Codex app-server configuration from environment with validation.
  */
-function buildCodexAppServerConfig(): CodexAppServerConfig {
-  const command = process.env.CODEX_APP_SERVER_COMMAND || 'codex';
-  const argsEnv = process.env.CODEX_APP_SERVER_ARGS?.trim();
+function buildCodexAppServerConfig(env: ConfigEnv): CodexAppServerConfig {
+  const command = env.CODEX_APP_SERVER_COMMAND;
+  const argsEnv = env.CODEX_APP_SERVER_ARGS;
   const args = argsEnv && argsEnv.length > 0 ? argsEnv.split(/\s+/) : ['app-server'];
-
-  const requestTimeoutMs = Number.parseInt(
-    process.env.CODEX_APP_SERVER_REQUEST_TIMEOUT_MS ||
-      String(SERVICE_TIMEOUT_MS.codexAppServerRequest),
-    10
-  );
-  const handshakeTimeoutMs = Number.parseInt(
-    process.env.CODEX_APP_SERVER_HANDSHAKE_TIMEOUT_MS ||
-      String(SERVICE_TIMEOUT_MS.codexAppServerHandshake),
-    10
-  );
 
   return {
     command,
     args,
-    requestTimeoutMs:
-      Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0
-        ? requestTimeoutMs
-        : SERVICE_TIMEOUT_MS.codexAppServerRequest,
-    handshakeTimeoutMs:
-      Number.isFinite(handshakeTimeoutMs) && handshakeTimeoutMs > 0
-        ? handshakeTimeoutMs
-        : SERVICE_TIMEOUT_MS.codexAppServerHandshake,
-    requestUserInputEnabled: process.env.CODEX_REQUEST_USER_INPUT_ENABLED === 'true',
+    requestTimeoutMs: env.CODEX_APP_SERVER_REQUEST_TIMEOUT_MS,
+    handshakeTimeoutMs: env.CODEX_APP_SERVER_HANDSHAKE_TIMEOUT_MS,
+    requestUserInputEnabled: env.CODEX_REQUEST_USER_INPUT_ENABLED,
   };
 }
 
@@ -352,85 +297,83 @@ function getDefaultBaseDir(): string {
  * Load system configuration from environment
  */
 function loadSystemConfig(): SystemConfig {
+  const env = ConfigEnvSchema.parse(process.env);
   // Expand any environment variables in BASE_DIR (e.g., $USER, $HOME)
-  const rawBaseDir = process.env.BASE_DIR;
+  const rawBaseDir = env.BASE_DIR;
   const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : getDefaultBaseDir();
 
   // Expand any environment variables in WORKTREE_BASE_DIR
-  const rawWorktreeDir = process.env.WORKTREE_BASE_DIR;
+  const rawWorktreeDir = env.WORKTREE_BASE_DIR;
   const worktreeBaseDir = rawWorktreeDir
     ? expandEnvVars(rawWorktreeDir)
     : join(baseDir, 'worktrees');
 
-  const nodeEnv = (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development';
+  const nodeEnv = env.NODE_ENV;
 
   const config: SystemConfig = {
     // Directory paths
     baseDir,
     worktreeBaseDir,
     debugLogDir: join(baseDir, 'debug'),
-    wsLogsPath: process.env.WS_LOGS_PATH || join(process.cwd(), '.context', 'ws-logs'),
-    frontendStaticPath: process.env.FRONTEND_STATIC_PATH,
+    wsLogsPath: env.WS_LOGS_PATH ?? join(process.cwd(), '.context', 'ws-logs'),
+    frontendStaticPath: env.FRONTEND_STATIC_PATH,
 
     // Server settings
-    backendPort: Number.parseInt(process.env.BACKEND_PORT || '3001', 10),
+    backendPort: env.BACKEND_PORT,
     nodeEnv,
 
     // Database (SQLite - defaults to ~/factory-factory/data.db)
-    databasePath: process.env.DATABASE_PATH || join(baseDir, 'data.db'),
+    databasePath: env.DATABASE_PATH ?? join(baseDir, 'data.db'),
 
     // Default session profile
-    defaultSessionProfile: buildDefaultSessionProfile(),
+    defaultSessionProfile: buildDefaultSessionProfile(env),
 
     // Health check settings
-    healthCheckIntervalMs: Number.parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '300000', 10), // 5 minutes
+    healthCheckIntervalMs: env.HEALTH_CHECK_INTERVAL_MS, // 5 minutes
 
     // Session limits
-    maxSessionsPerWorkspace: Number.parseInt(process.env.MAX_SESSIONS_PER_WORKSPACE || '5', 10),
+    maxSessionsPerWorkspace: env.MAX_SESSIONS_PER_WORKSPACE,
 
     // Feature flags
     features: {
-      authentication: process.env.FEATURE_AUTHENTICATION === 'true',
-      metrics: process.env.FEATURE_METRICS === 'true',
-      errorTracking: process.env.FEATURE_ERROR_TRACKING === 'true',
+      authentication: env.FEATURE_AUTHENTICATION,
+      metrics: env.FEATURE_METRICS,
+      errorTracking: env.FEATURE_ERROR_TRACKING,
     },
 
     // Logger settings
-    logger: buildLoggerConfig(nodeEnv),
+    logger: buildLoggerConfig(nodeEnv, env),
 
     // Rate limiter settings
-    rateLimiter: buildRateLimiterConfig(),
+    rateLimiter: buildRateLimiterConfig(env),
 
     // Notification settings
-    notification: buildNotificationConfig(),
+    notification: buildNotificationConfig(env),
 
     // Claude process settings
-    claudeProcess: buildClaudeProcessConfig(),
+    claudeProcess: buildClaudeProcessConfig(env),
 
     // Codex app-server settings
-    codexAppServer: buildCodexAppServerConfig(),
+    codexAppServer: buildCodexAppServerConfig(env),
 
     // CORS settings
-    cors: buildCorsConfig(),
+    cors: buildCorsConfig(env),
 
     // Debug settings
     debug: {
-      chatWebSocket: process.env.DEBUG_CHAT_WS === 'true',
+      chatWebSocket: env.DEBUG_CHAT_WS,
     },
 
     // Event compression settings
     compression: {
-      enabled: process.env.EVENT_COMPRESSION_ENABLED !== 'false',
+      enabled: env.EVENT_COMPRESSION_ENABLED,
     },
 
     // Conversation rename settings
-    branchRenameMessageThreshold: Number.parseInt(
-      process.env.BRANCH_RENAME_MESSAGE_THRESHOLD || '2',
-      10
-    ),
+    branchRenameMessageThreshold: env.BRANCH_RENAME_MESSAGE_THRESHOLD,
 
     // App version
-    appVersion: process.env.npm_package_version || '0.1.0',
+    appVersion: env.npm_package_version ?? '0.1.0',
   };
 
   return config;

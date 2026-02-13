@@ -56,18 +56,18 @@ export interface MarkdownLoaderConfig<T> {
  * @param fieldParsers - Map of field names to parser functions
  * @returns Parsed frontmatter object and body content
  */
-export function parseFrontmatter<T extends Record<string, unknown>>(
+export function parseFrontmatter(
   content: string,
   fieldParsers: Record<string, (value: string) => unknown>
-): FrontmatterResult<T> {
+): FrontmatterResult<Record<string, unknown>> {
   const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
   const match = content.match(frontmatterRegex);
 
   if (!match) {
-    return { frontmatter: {} as T, body: content };
+    return { frontmatter: {}, body: content };
   }
 
-  const frontmatterText = match[1] as string;
+  const frontmatterText = match[1] ?? '';
   const body = content.slice(match[0].length);
   const frontmatter: Record<string, unknown> = {};
 
@@ -87,7 +87,7 @@ export function parseFrontmatter<T extends Record<string, unknown>>(
     }
   }
 
-  return { frontmatter: frontmatter as T, body };
+  return { frontmatter, body };
 }
 
 // =============================================================================
