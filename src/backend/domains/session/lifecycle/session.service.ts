@@ -48,6 +48,11 @@ export type ClientCreatedCallback = (
 ) => void;
 
 export type CodexTerminalTurnCallback = (sessionId: string) => void | Promise<void>;
+type SessionAdapter = typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter;
+type LoadedSessionAdapter = {
+  session: AgentSessionRecord;
+  adapter: SessionAdapter;
+};
 
 class SessionService {
   private readonly repository: SessionRepository;
@@ -81,9 +86,7 @@ class SessionService {
     return provider === 'CODEX' ? this.codexAdapter : this.claudeAdapter;
   }
 
-  private resolveKnownAdapterForSessionSync(
-    sessionId: string
-  ): typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter | null {
+  private resolveKnownAdapterForSessionSync(sessionId: string): SessionAdapter | null {
     if (
       this.codexAdapter.getClient(sessionId) ||
       this.codexAdapter.getPendingClient(sessionId) !== undefined ||
@@ -125,10 +128,7 @@ class SessionService {
     });
   }
 
-  private async loadSessionWithAdapter(sessionId: string): Promise<{
-    session: AgentSessionRecord;
-    adapter: typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter;
-  }> {
+  private async loadSessionWithAdapter(sessionId: string): Promise<LoadedSessionAdapter> {
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -255,7 +255,8 @@ class SessionService {
    * Uses getOrCreateClient() internally for unified lifecycle management with race protection.
    */
   async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
-    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    const loaded = await this.loadSessionWithAdapter(sessionId);
+    const { session, adapter } = loaded;
     if (adapter.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
@@ -268,9 +269,13 @@ class SessionService {
 
     // Use getOrCreateClient for race-protected creation
     // If concurrent starts happen, one will succeed and others will wait then fail the check above
-    await this.getOrCreateSessionClient(sessionId, {
-      permissionMode: 'bypassPermissions',
-    });
+    await this.getOrCreateSessionClient(
+      sessionId,
+      {
+        permissionMode: 'bypassPermissions',
+      },
+      loaded
+    );
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
@@ -443,9 +448,10 @@ class SessionService {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
-    }
+    },
+    loadedSession?: LoadedSessionAdapter
   ): Promise<unknown> {
-    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    const { session, adapter } = loadedSession ?? (await this.loadSessionWithAdapter(sessionId));
 
     // Check for existing client first - fast path
     const existing = adapter.getClient(sessionId);
@@ -470,8 +476,8 @@ class SessionService {
     try {
       const client =
         session.provider === 'CODEX'
-          ? await this.createCodexClient(sessionId, options?.model)
-          : await this.createClaudeClient(sessionId, options);
+          ? await this.createCodexClient(sessionId, options?.model, session)
+          : await this.createClaudeClient(sessionId, options, session);
 
       // Update DB with running status and PID
       // This is idempotent and safe even if called by concurrent callers
@@ -661,19 +667,28 @@ class SessionService {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
-    }
+    },
+    session?: AgentSessionRecord
   ): Promise<ClaudeClient> {
-    const { clientOptions, context, handlers } = await this.buildClientOptions(sessionId, {
-      thinkingEnabled: options?.thinkingEnabled,
-      permissionMode: options?.permissionMode,
-      model: options?.model,
-    });
+    const { clientOptions, context, handlers } = await this.buildClientOptions(
+      sessionId,
+      {
+        thinkingEnabled: options?.thinkingEnabled,
+        permissionMode: options?.permissionMode,
+        model: options?.model,
+      },
+      session
+    );
 
     return await this.claudeAdapter.getOrCreateClient(sessionId, clientOptions, handlers, context);
   }
 
-  private async createCodexClient(sessionId: string, model?: string): Promise<unknown> {
-    const context = await this.loadCodexSessionContext(sessionId);
+  private async createCodexClient(
+    sessionId: string,
+    model?: string,
+    session?: AgentSessionRecord
+  ): Promise<unknown> {
+    const context = await this.loadCodexSessionContext(sessionId, session);
     const clientOptions = {
       workingDir: context.workingDir,
       sessionId,
@@ -682,12 +697,15 @@ class SessionService {
     return await this.codexAdapter.getOrCreateClient(sessionId, clientOptions, {}, context);
   }
 
-  private async loadCodexSessionContext(sessionId: string): Promise<{
+  private async loadCodexSessionContext(
+    sessionId: string,
+    preloadedSession?: AgentSessionRecord
+  ): Promise<{
     workspaceId: string;
     workingDir: string;
     model: string;
   }> {
-    const session = await this.repository.getSessionById(sessionId);
+    const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
     }
@@ -920,7 +938,7 @@ class SessionService {
 
   private shouldStopWorkspaceSession(
     session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
-    adapter: typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter
+    adapter: SessionAdapter
   ): {
     shouldStop: boolean;
     pendingClient: Promise<unknown> | undefined;
@@ -928,7 +946,7 @@ class SessionService {
     const pendingClient = adapter.getPendingClient(session.id);
     const shouldStop = Boolean(
       session.status === SessionStatus.RUNNING ||
-        adapter.getSessionProcess(session.id) ||
+        adapter.isSessionRunning(session.id) ||
         pendingClient
     );
     return { shouldStop, pendingClient };
@@ -945,7 +963,7 @@ class SessionService {
     try {
       await pendingClient;
     } catch (error) {
-      logger.warn('Pending Claude session failed to start before stop', {
+      logger.warn('Pending session failed to start before stop', {
         sessionId,
         workspaceId,
         error: error instanceof Error ? error.message : String(error),
@@ -983,13 +1001,14 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       initialPrompt?: string;
-    }
+    },
+    session?: AgentSessionRecord
   ): Promise<{
     clientOptions: ClaudeClientOptions;
     context: { workspaceId: string; workingDir: string };
     handlers: ReturnType<SessionService['buildClientEventHandlers']>;
   }> {
-    const sessionContext = await this.loadSessionContext(sessionId);
+    const sessionContext = await this.loadSessionContext(sessionId, session);
     if (!sessionContext) {
       throw new Error(`Session not found: ${sessionId}`);
     }
@@ -1027,14 +1046,17 @@ class SessionService {
     };
   }
 
-  private async loadSessionContext(sessionId: string): Promise<{
+  private async loadSessionContext(
+    sessionId: string,
+    preloadedSession?: AgentSessionRecord
+  ): Promise<{
     workingDir: string;
     resumeClaudeSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
     workspaceId: string;
   } | null> {
-    const session = await this.repository.getSessionById(sessionId);
+    const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
     if (!session) {
       logger.warn('Session not found when getting options', { sessionId });
       return null;

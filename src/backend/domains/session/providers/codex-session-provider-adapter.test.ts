@@ -335,6 +335,40 @@ describe('CodexSessionProviderAdapter', () => {
     });
   });
 
+  it('returns process info only for sessions with active Codex clients', async () => {
+    const registry = new CodexSessionRegistry();
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request: vi.fn().mockResolvedValue({ threadId: 'thread-1' }),
+      stop: vi.fn(),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 42,
+        startedAt: null,
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    expect(adapter.getSessionProcess('session-1')).toBeUndefined();
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    expect(adapter.getSessionProcess('session-1')).toEqual(
+      expect.objectContaining({ state: 'ready', pid: 42 })
+    );
+    expect(adapter.getSessionProcess('session-missing')).toBeUndefined();
+  });
+
   it('maps permission and question responses back to server request ids', async () => {
     const registry = new CodexSessionRegistry();
     const manager = {

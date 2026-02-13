@@ -407,7 +407,10 @@ export class CodexSessionProviderAdapter
     );
   }
 
-  getSessionProcess(_sessionId: string): ReturnType<CodexAppServerManager['getStatus']> {
+  getSessionProcess(sessionId: string): ReturnType<CodexAppServerManager['getStatus']> | undefined {
+    if (!this.clients.has(sessionId)) {
+      return undefined;
+    }
     return this.manager.getStatus();
   }
 

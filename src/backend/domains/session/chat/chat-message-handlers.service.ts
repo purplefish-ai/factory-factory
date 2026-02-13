@@ -271,11 +271,12 @@ class ChatMessageHandlerService {
     const isCompactCommand = this.isCompactCommand(msg.text);
     const claudeClient = isClaudeCompactionClient(client) ? client : null;
 
-    // Set thinking budget first - this can throw and must complete before we
-    // change any state. If it fails, the message remains in ACCEPTED state
-    // and can be safely requeued by the caller.
-    const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
-    await sessionService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
+    // Only Claude sessions support thinking budgets. Keep this before state
+    // mutation so any provider errors can be safely requeued by the caller.
+    if (claudeClient) {
+      const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
+      await sessionService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
+    }
 
     sessionDomainService.markRunning(dbSessionId);
 

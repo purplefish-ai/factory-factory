@@ -124,6 +124,24 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
   });
 
+  it('skips thinking budget updates for non-Claude clients', async () => {
+    const codexMessage: QueuedMessage = {
+      ...queuedMessage,
+      settings: {
+        ...queuedMessage.settings,
+        thinkingEnabled: true,
+      },
+    };
+    mockSessionDomainService.dequeueNext.mockReturnValue(codexMessage);
+    mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.setSessionThinkingBudget).not.toHaveBeenCalled();
+    expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+    expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
+  });
+
   it('requeues message when dispatch gate evaluation throws', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
