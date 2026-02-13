@@ -27,7 +27,7 @@ See [v1.1 Roadmap Archive](milestones/v1.1-ROADMAP.md) for full phase details.
 **Milestone Goal:** Replace custom Claude NDJSON and Codex app-server protocols with a single ACP-only runtime using Zed's production adapters, unifying both providers under one subprocess-per-session model with native permission options, config controls, and event streaming.
 
 - [x] **Phase 19: ACP Runtime Foundation** - Subprocess lifecycle, connection wiring, session create/prompt/cancel with streaming (completed 2026-02-13)
-- [ ] **Phase 20: Event Translation + Permissions** - ACP event mapping to FF UI, permission option selection, tool call rendering
+- [x] **Phase 20: Event Translation + Permissions** - ACP event mapping to FF UI, permission option selection, tool call rendering (completed 2026-02-13)
 - [ ] **Phase 21: Config Options + Unified Runtime** - Agent-driven config controls, capability gating, session load, unified runtime manager
 - [ ] **Phase 22: Cleanup + Polish** - Legacy protocol removal, ACP-focused tests, health reporting, contributor docs
 
@@ -62,9 +62,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 20-01-PLAN.md -- AcpEventTranslator and AcpPermissionBridge: isolated backend classes with unit tests
-- [ ] 20-02-PLAN.md -- Wire translator and bridge into session service, extend WebSocket types, permission handler routing
-- [ ] 20-03-PLAN.md -- Frontend: ACP multi-option permission UI, plan view component, visual verification
+- [x] 20-01-PLAN.md -- AcpEventTranslator and AcpPermissionBridge: isolated backend classes with unit tests
+- [x] 20-02-PLAN.md -- Wire translator and bridge into session service, extend WebSocket types, permission handler routing
+- [x] 20-03-PLAN.md -- Frontend: ACP multi-option permission UI, plan view component, visual verification
 
 ### Phase 21: Config Options + Unified Runtime
 **Goal**: Model, mode, and reasoning controls are driven entirely by agent-provided configOptions (not hardcoded), session resume works when the agent supports it, and a single AcpRuntimeManager serves both Claude and Codex providers
@@ -106,7 +106,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 19. ACP Runtime Foundation | v1.2 | 2/2 | ✓ Complete | 2026-02-13 |
-| 20. Event Translation + Permissions | v1.2 | 0/3 | Planned | - |
+| 20. Event Translation + Permissions | v1.2 | 3/3 | ✓ Complete | 2026-02-13 |
 | 21. Config Options + Unified Runtime | v1.2 | 0/TBD | Not started | - |
 | 22. Cleanup + Polish | v1.2 | 0/TBD | Not started | - |
 
