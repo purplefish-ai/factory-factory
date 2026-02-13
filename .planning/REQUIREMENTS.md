@@ -77,42 +77,42 @@ Requirements for ACP-only cutover. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RUNTIME-01 | - | Pending |
-| RUNTIME-02 | - | Pending |
-| RUNTIME-03 | - | Pending |
-| RUNTIME-04 | - | Pending |
-| RUNTIME-05 | - | Pending |
-| RUNTIME-06 | - | Pending |
-| RUNTIME-07 | - | Pending |
-| RUNTIME-08 | - | Pending |
-| RUNTIME-09 | - | Pending |
-| EVENT-01 | - | Pending |
-| EVENT-02 | - | Pending |
-| EVENT-03 | - | Pending |
-| EVENT-04 | - | Pending |
-| EVENT-05 | - | Pending |
-| EVENT-06 | - | Pending |
-| EVENT-07 | - | Pending |
-| PERM-01 | - | Pending |
-| PERM-02 | - | Pending |
-| PERM-03 | - | Pending |
-| CONFIG-01 | - | Pending |
-| CONFIG-02 | - | Pending |
-| CONFIG-03 | - | Pending |
-| CONFIG-04 | - | Pending |
-| CONFIG-05 | - | Pending |
-| CLEAN-01 | - | Pending |
-| CLEAN-02 | - | Pending |
-| CLEAN-03 | - | Pending |
-| CLEAN-04 | - | Pending |
-| CLEAN-05 | - | Pending |
-| CLEAN-06 | - | Pending |
+| RUNTIME-01 | Phase 19 | Pending |
+| RUNTIME-02 | Phase 19 | Pending |
+| RUNTIME-03 | Phase 19 | Pending |
+| RUNTIME-04 | Phase 19 | Pending |
+| RUNTIME-05 | Phase 19 | Pending |
+| RUNTIME-06 | Phase 19 | Pending |
+| RUNTIME-07 | Phase 21 | Pending |
+| RUNTIME-08 | Phase 21 | Pending |
+| RUNTIME-09 | Phase 19 | Pending |
+| EVENT-01 | Phase 20 | Pending |
+| EVENT-02 | Phase 20 | Pending |
+| EVENT-03 | Phase 20 | Pending |
+| EVENT-04 | Phase 20 | Pending |
+| EVENT-05 | Phase 20 | Pending |
+| EVENT-06 | Phase 19 | Pending |
+| EVENT-07 | Phase 20 | Pending |
+| PERM-01 | Phase 20 | Pending |
+| PERM-02 | Phase 20 | Pending |
+| PERM-03 | Phase 20 | Pending |
+| CONFIG-01 | Phase 21 | Pending |
+| CONFIG-02 | Phase 21 | Pending |
+| CONFIG-03 | Phase 21 | Pending |
+| CONFIG-04 | Phase 21 | Pending |
+| CONFIG-05 | Phase 21 | Pending |
+| CLEAN-01 | Phase 22 | Pending |
+| CLEAN-02 | Phase 22 | Pending |
+| CLEAN-03 | Phase 22 | Pending |
+| CLEAN-04 | Phase 22 | Pending |
+| CLEAN-05 | Phase 22 | Pending |
+| CLEAN-06 | Phase 22 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 30 total
-- Mapped to phases: 0 (pending roadmap creation)
-- Unmapped: 30
+- Mapped to phases: 30
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-13*
-*Last updated: 2026-02-13 after initial definition*
+*Last updated: 2026-02-13 after roadmap creation -- all 30 requirements mapped to phases 19-22*
