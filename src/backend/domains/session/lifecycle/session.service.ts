@@ -86,6 +86,10 @@ class SessionService {
     this.sessionProviderCache.set(sessionId, provider);
   }
 
+  private clearSessionProvider(sessionId: string): void {
+    this.sessionProviderCache.delete(sessionId);
+  }
+
   private resolveAdapterForProvider(provider: SessionProvider) {
     return provider === 'CODEX' ? this.codexAdapter : this.claudeAdapter;
   }
@@ -326,27 +330,31 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    await adapter.stopClient(sessionId);
-    await this.updateStoppedSessionState(sessionId);
+    try {
+      await adapter.stopClient(sessionId);
+      await this.updateStoppedSessionState(sessionId);
 
-    sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
+      sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
 
-    // Manual stops can complete without an exit callback race; normalize state explicitly.
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: new Date().toISOString(),
-    });
+      // Manual stops can complete without an exit callback race; normalize state explicitly.
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
 
-    const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
-    await this.cleanupTransientRatchetOnStop(
-      session,
-      sessionId,
-      shouldCleanupTransientRatchetSession
-    );
+      const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
+      await this.cleanupTransientRatchetOnStop(
+        session,
+        sessionId,
+        shouldCleanupTransientRatchetSession
+      );
 
-    logger.info('Session stopped', { sessionId, provider });
+      logger.info('Session stopped', { sessionId, provider });
+    } finally {
+      this.clearSessionProvider(sessionId);
+    }
   }
 
   /**
@@ -805,6 +813,8 @@ class SessionService {
             sessionId,
             error: error instanceof Error ? error.message : String(error),
           });
+        } finally {
+          this.clearSessionProvider(sessionId);
         }
       },
       onError: (sessionId: string, error: Error) => {
@@ -942,6 +952,8 @@ class SessionService {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+
+    this.sessionProviderCache.clear();
 
     if (firstError) {
       throw firstError instanceof Error ? firstError : new Error(String(firstError));

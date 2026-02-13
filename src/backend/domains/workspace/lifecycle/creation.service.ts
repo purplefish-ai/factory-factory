@@ -13,6 +13,10 @@ import type { createLogger } from '@/backend/services/logger.service';
 
 type ConfigService = typeof configService;
 type Logger = ReturnType<typeof createLogger>;
+const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
+  CLAUDE: 'sonnet',
+  CODEX: 'gpt-5',
+};
 
 /**
  * Workspace creation source discriminated union.
@@ -249,6 +253,7 @@ export class WorkspaceCreationService {
         workflow: DEFAULT_FOLLOWUP,
         name: 'Chat 1',
         provider,
+        model: DEFAULT_SESSION_MODEL_BY_PROVIDER[provider],
         claudeProjectPath,
       });
       return true;

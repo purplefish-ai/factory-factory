@@ -135,6 +135,11 @@ import { sessionService } from './session.service';
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (
+      sessionService as unknown as {
+        sessionProviderCache: Map<string, unknown>;
+      }
+    ).sessionProviderCache.clear();
     sessionService.setOnCodexTerminalTurn(() => undefined);
     vi.mocked(claudeSessionProviderAdapter.getClient).mockReturnValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
@@ -335,6 +340,23 @@ describe('SessionService', () => {
     await sessionService.stopClaudeSession('session-1');
 
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
+  });
+
+  it('evicts cached provider after manual stop', async () => {
+    const providerCache = (
+      sessionService as unknown as {
+        sessionProviderCache: Map<string, unknown>;
+      }
+    ).sessionProviderCache;
+    providerCache.set('session-1', 'CLAUDE');
+
+    vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
+    vi.mocked(claudeSessionProviderAdapter.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    await sessionService.stopClaudeSession('session-1');
+
+    expect(providerCache.has('session-1')).toBe(false);
   });
 
   it('deletes ratchet session record during manual stop', async () => {
@@ -985,6 +1007,14 @@ describe('SessionService', () => {
   });
 
   it('stops both Claude and Codex providers during shutdown', async () => {
+    const providerCache = (
+      sessionService as unknown as {
+        sessionProviderCache: Map<string, unknown>;
+      }
+    ).sessionProviderCache;
+    providerCache.set('session-1', 'CLAUDE');
+    providerCache.set('session-2', 'CODEX');
+
     vi.mocked(claudeSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
     vi.mocked(codexSessionProviderAdapter.stopAllClients).mockResolvedValue(undefined);
 
@@ -992,6 +1022,7 @@ describe('SessionService', () => {
 
     expect(claudeSessionProviderAdapter.stopAllClients).toHaveBeenCalledWith(4321);
     expect(codexSessionProviderAdapter.stopAllClients).toHaveBeenCalledTimes(1);
+    expect(providerCache.size).toBe(0);
   });
 
   it('still attempts Codex shutdown when Claude shutdown fails', async () => {
