@@ -360,6 +360,67 @@ function IdeSettingsSection() {
   );
 }
 
+function ChatProviderDefaultsSection() {
+  const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const utils = trpc.useUtils();
+  const updateSettings = trpc.userSettings.update.useMutation({
+    onSuccess: () => {
+      toast.success('Chat defaults updated');
+      utils.userSettings.get.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Failed to update chat defaults: ${error.message}`);
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Chat Defaults</CardTitle>
+          <CardDescription>Default provider for new chats</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const currentProvider = settings?.defaultSessionProvider ?? 'CLAUDE';
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Chat Defaults</CardTitle>
+        <CardDescription>
+          Default provider used when a workspace defers provider selection
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <Label htmlFor="chat-default-provider">Default chat provider</Label>
+        <Select
+          value={currentProvider}
+          onValueChange={(value) => {
+            if (value === 'CLAUDE' || value === 'CODEX') {
+              updateSettings.mutate({ defaultSessionProvider: value });
+            }
+          }}
+          disabled={updateSettings.isPending}
+        >
+          <SelectTrigger id="chat-default-provider">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="CLAUDE">Claude</SelectItem>
+            <SelectItem value="CODEX">Codex</SelectItem>
+          </SelectContent>
+        </Select>
+      </CardContent>
+    </Card>
+  );
+}
+
 function RatchetSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
@@ -620,6 +681,7 @@ export default function AdminDashboardPage() {
         {/* User Settings */}
         <NotificationSettingsSection />
         <IdeSettingsSection />
+        <ChatProviderDefaultsSection />
 
         {/* Ratchet Settings (unified PR auto-progression system) */}
         <RatchetSettingsSection />

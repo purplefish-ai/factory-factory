@@ -147,6 +147,7 @@ const FileUploadButton = memo(function FileUploadButton({
 });
 
 interface LeftControlsVisibility {
+  provider: ChatBarCapabilities['provider'] | null;
   selectedModel: string;
   selectedReasoningEffort: string;
   showModelSelector: boolean;
@@ -184,8 +185,10 @@ function deriveLeftControlsVisibility(
     capabilities?.reasoning.selected ??
     capabilities?.reasoning.options[0]?.value ??
     '';
+  const provider = capabilities?.provider ?? null;
 
   return {
+    provider,
     selectedModel,
     selectedReasoningEffort,
     showModelSelector,
@@ -196,6 +199,55 @@ function deriveLeftControlsVisibility(
     showUsageIndicator,
   };
 }
+
+function getProviderLogo(provider: ChatBarCapabilities['provider'] | null): {
+  light: string;
+  dark: string;
+  alt: string;
+} {
+  if (provider === 'CODEX') {
+    return {
+      light: '/logos/codex-light.svg',
+      dark: '/logos/codex-dark.svg',
+      alt: 'Codex',
+    };
+  }
+  return {
+    light: '/logos/claude-light.svg',
+    dark: '/logos/claude-dark.svg',
+    alt: 'Claude',
+  };
+}
+
+const ProviderIndicator = memo(function ProviderIndicator({
+  provider,
+}: {
+  provider: ChatBarCapabilities['provider'] | null;
+}) {
+  if (!provider) {
+    return null;
+  }
+  const logo = getProviderLogo(provider);
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground">
+            <img src={logo.light} alt={logo.alt} className="h-3.5 w-3.5 shrink-0 dark:hidden" />
+            <img
+              src={logo.dark}
+              alt={logo.alt}
+              className="hidden h-3.5 w-3.5 shrink-0 dark:block"
+            />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>{logo.alt}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+});
 
 const ModeToggles = memo(function ModeToggles({
   showThinkingToggle,
@@ -310,6 +362,7 @@ const LeftControls = memo(function LeftControls({
   tokenStats?: TokenStats;
 }) {
   const {
+    provider,
     selectedModel,
     selectedReasoningEffort,
     showModelSelector,
@@ -323,6 +376,10 @@ const LeftControls = memo(function LeftControls({
 
   return (
     <div className="flex items-center gap-1">
+      <ProviderIndicator provider={provider} />
+      {(showModelSelector || showReasoningSelector || hasModeToggles) && (
+        <div className="h-4 w-px bg-border" />
+      )}
       {showModelSelector && (
         <ModelSelector
           selectedModel={selectedModel}

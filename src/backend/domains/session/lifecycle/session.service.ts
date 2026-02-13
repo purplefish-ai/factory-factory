@@ -934,12 +934,17 @@ class SessionService {
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
     const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    const selectedModel =
+      session.provider === 'CODEX'
+        ? (this.codexAdapter.getPreferredModel(sessionId) ??
+          resolveSessionModelForProvider(session.model, session.provider))
+        : resolveSessionModelForProvider(session.model, session.provider);
     const selectedReasoningEffort =
       session.provider === 'CODEX'
         ? (this.codexAdapter.getPreferredReasoningEffort(sessionId) ?? null)
         : null;
     return await adapter.getChatBarCapabilities({
-      selectedModel: resolveSessionModelForProvider(session.model, session.provider),
+      selectedModel,
       selectedReasoningEffort,
     });
   }

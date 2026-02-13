@@ -14,6 +14,13 @@ export function createSetModelHandler(): ChatMessageHandler<SetModelMessage> {
       if ('reasoningEffort' in message) {
         await sessionService.setSessionReasoningEffort(sessionId, message.reasoningEffort ?? null);
       }
+      const capabilities = await sessionService.getChatBarCapabilities(sessionId);
+      ws.send(
+        JSON.stringify({
+          type: 'chat_capabilities',
+          capabilities,
+        })
+      );
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Set model', {
           sessionId,

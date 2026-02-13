@@ -379,6 +379,10 @@ export class CodexSessionProviderAdapter
     return this.preferredReasoningEfforts.get(sessionId);
   }
 
+  getPreferredModel(sessionId: string): string | undefined {
+    return this.preferredModels.get(sessionId);
+  }
+
   async getChatBarCapabilities(options?: {
     selectedModel?: string | null;
     selectedReasoningEffort?: string | null;

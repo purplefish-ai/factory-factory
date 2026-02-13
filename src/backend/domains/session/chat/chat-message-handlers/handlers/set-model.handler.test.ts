@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   setSessionModel: vi.fn(),
   setSessionReasoningEffort: vi.fn(),
+  getChatBarCapabilities: vi.fn(),
 }));
 
 vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
   sessionService: {
     setSessionModel: mocks.setSessionModel,
     setSessionReasoningEffort: mocks.setSessionReasoningEffort,
+    getChatBarCapabilities: mocks.getChatBarCapabilities,
   },
 }));
 
@@ -19,6 +21,17 @@ describe('createSetModelHandler', () => {
     vi.clearAllMocks();
     mocks.setSessionModel.mockResolvedValue(undefined);
     mocks.setSessionReasoningEffort.mockResolvedValue(undefined);
+    mocks.getChatBarCapabilities.mockResolvedValue({
+      provider: 'CODEX',
+      model: { enabled: true, options: [], selected: 'gpt-5' },
+      reasoning: { enabled: false, options: [] },
+      thinking: { enabled: false },
+      planMode: { enabled: true },
+      attachments: { enabled: false, kinds: [] },
+      slashCommands: { enabled: false },
+      usageStats: { enabled: false, contextWindow: false },
+      rewind: { enabled: false },
+    });
   });
 
   it('applies model and reasoning effort when provided', async () => {
@@ -40,7 +53,23 @@ describe('createSetModelHandler', () => {
 
     expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
     expect(mocks.setSessionReasoningEffort).toHaveBeenCalledWith('session-1', 'high');
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'chat_capabilities',
+        capabilities: {
+          provider: 'CODEX',
+          model: { enabled: true, options: [], selected: 'gpt-5' },
+          reasoning: { enabled: false, options: [] },
+          thinking: { enabled: false },
+          planMode: { enabled: true },
+          attachments: { enabled: false, kinds: [] },
+          slashCommands: { enabled: false },
+          usageStats: { enabled: false, contextWindow: false },
+          rewind: { enabled: false },
+        },
+      })
+    );
   });
 
   it('does not update reasoning effort when field is omitted', async () => {
@@ -61,7 +90,8 @@ describe('createSetModelHandler', () => {
 
     expect(mocks.setSessionModel).toHaveBeenCalledWith('session-1', 'gpt-5.3-codex');
     expect(mocks.setSessionReasoningEffort).not.toHaveBeenCalled();
-    expect(ws.send).not.toHaveBeenCalled();
+    expect(mocks.getChatBarCapabilities).toHaveBeenCalledWith('session-1');
+    expect(ws.send).toHaveBeenCalledTimes(1);
   });
 
   it('sends websocket error when model update fails', async () => {
