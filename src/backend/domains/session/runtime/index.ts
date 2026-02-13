@@ -10,7 +10,9 @@ export type {
   ClaudeRuntimeCreatedCallback,
   ClaudeRuntimeEventHandlers,
 } from './claude-runtime-manager';
+/** @deprecated Phase 22 -- will be removed when legacy protocol code is deleted */
 export { ClaudeRuntimeManager, claudeRuntimeManager } from './claude-runtime-manager';
+/** @deprecated Phase 22 -- will be removed when legacy protocol code is deleted */
 export { CodexAppServerManager, codexAppServerManager } from './codex-app-server-manager';
 export type {
   ProviderRuntimeManager,

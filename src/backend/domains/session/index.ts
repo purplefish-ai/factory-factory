@@ -74,6 +74,7 @@ export type {
   RuntimeCreatedCallback,
   RuntimeEventHandlers,
 } from './runtime';
+/** @deprecated Phase 22 -- will be removed when legacy protocol code is deleted */
 export {
   ClaudeRuntimeManager,
   CodexAppServerManager,
