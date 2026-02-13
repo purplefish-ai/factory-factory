@@ -3,6 +3,16 @@ import { CodexSessionRegistry } from '@/backend/domains/session/codex/codex-sess
 import { configService } from '@/backend/services/config.service';
 import { CodexSessionProviderAdapter } from './codex-session-provider-adapter';
 
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('CodexSessionProviderAdapter', () => {
   it('starts a fresh thread after stop clears persisted mapping seam', async () => {
     const registry = new CodexSessionRegistry();
@@ -118,7 +128,7 @@ describe('CodexSessionProviderAdapter', () => {
 
   it('does not revive a client when stop races with in-flight client creation', async () => {
     const registry = new CodexSessionRegistry();
-    const threadStartDeferred = Promise.withResolvers<{ threadId: string }>();
+    const threadStartDeferred = createDeferred<{ threadId: string }>();
     let firstRequest = true;
     const request = vi.fn().mockImplementation(async () => {
       if (firstRequest) {
