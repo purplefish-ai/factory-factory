@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 21 of 22 (Config Options + Unified Runtime)
-Plan: 1 of 3 (executing)
-Status: Phase 21 executing -- plan 01 complete
-Last activity: 2026-02-13 -- Plan 21-01 executed
+Plan: 2 of 3 (executing)
+Status: Phase 21 executing -- plan 02 complete
+Last activity: 2026-02-13 -- Plan 21-02 executed
 
-Progress: [██████░░░░] 50%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6 (v1.2)
+- Total plans completed: 7 (v1.2)
 - Average duration: 7min
-- Total execution time: 42min
+- Total execution time: 48min
 
 **By Phase:**
 
@@ -29,7 +29,7 @@ Progress: [██████░░░░] 50%
 |-------|-------|-------|----------|
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
 | 20. Event Translation + Permissions | 3/3 | 26min | 6min |
-| 21. Config Options + Unified Runtime | 1/3 | 7min | 7min |
+| 21. Config Options + Unified Runtime | 2/3 | 13min | 6min |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
 
 *Updated after each plan completion*
@@ -95,6 +95,12 @@ Phase 21-01 decisions:
 - Config options emit as config_options_update delta (not chat_capabilities) to keep systems parallel
 - setSessionModel/setSessionThinkingBudget find matching configOption by category, return silently if no match
 
+Phase 21-02 decisions:
+- AcpConfigOption uses union type (AcpConfigOptionValue | AcpConfigOptionGroup) for flat and grouped option arrays
+- ACP config selectors fully replace legacy model/reasoning/thinking controls when acpConfigOptions present
+- No optimistic state update on setConfigOption -- wait for authoritative config_options_update from server
+- Props threaded through container -> chat content -> chat input chain (no context provider)
+
 ### Pending Todos
 
 None.
@@ -106,5 +112,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed 21-01-PLAN.md
+Stopped at: Completed 21-02-PLAN.md
 Resume file: None
