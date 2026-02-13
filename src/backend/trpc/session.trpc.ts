@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   SessionManager,
   sessionDataService,
+  sessionDomainService,
   sessionProviderResolverService,
 } from '@/backend/domains/session';
 import { workspaceDataService } from '@/backend/domains/workspace';
@@ -72,6 +73,7 @@ export const sessionRouter = router({
         workflow: z.string(),
         model: z.string().optional(),
         provider: z.nativeEnum(SessionProvider).optional(),
+        initialMessage: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -106,6 +108,9 @@ export const sessionRouter = router({
         provider,
         claudeProjectPath,
       });
+      if (input.initialMessage) {
+        sessionDomainService.storeInitialMessage(session.id, input.initialMessage);
+      }
       return session;
     }),
 

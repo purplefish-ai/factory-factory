@@ -32,6 +32,22 @@ class SessionDomainService {
   private readonly registry = new SessionStoreRegistry();
   private readonly publisher = new SessionPublisher();
   private readonly nowIso = () => new Date().toISOString();
+
+  /** In-memory store for initial messages to auto-enqueue on first load_session */
+  private readonly initialMessages = new Map<string, string>();
+
+  storeInitialMessage(sessionId: string, text: string): void {
+    this.initialMessages.set(sessionId, text);
+  }
+
+  consumeInitialMessage(sessionId: string): string | null {
+    const text = this.initialMessages.get(sessionId);
+    if (text !== undefined) {
+      this.initialMessages.delete(sessionId);
+      return text;
+    }
+    return null;
+  }
   private readonly parityLogger = this.publisher.getParityLogger();
 
   private readonly runtimeMachine = new SessionRuntimeMachine((sessionId, runtime) => {

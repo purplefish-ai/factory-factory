@@ -91,6 +91,7 @@ export class ClaudeProcess extends EventEmitter {
         ...process.env,
         FORCE_COLOR: '0',
         NO_COLOR: '1',
+        BROWSER: 'none',
       },
       detached: true,
     });

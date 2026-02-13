@@ -90,7 +90,6 @@ interface UseSessionManagementOptions {
   workspaceId: string;
   slug: string;
   sessions: ReturnType<typeof useWorkspaceData>['sessions'];
-  sendMessage: (text: string) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
   setSelectedDbSessionId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -98,8 +97,6 @@ interface UseSessionManagementOptions {
   selectedModel: string;
   /** Provider selection for newly created sessions */
   selectedProvider: NewSessionProviderSelection;
-  /** Whether the session is ready to receive messages (session_loaded received) */
-  isSessionReady: boolean;
 }
 
 export type { NewSessionProviderSelection };
@@ -128,6 +125,7 @@ export interface UseSessionManagementReturn {
       model: string;
       name: string;
       provider?: SessionProviderValue;
+      initialMessage?: string;
     },
     { id: string }
   >;
@@ -146,35 +144,14 @@ export function useSessionManagement({
   workspaceId,
   slug,
   sessions,
-  sendMessage,
   inputRef,
   selectedDbSessionId,
   setSelectedDbSessionId,
   selectedModel,
   selectedProvider,
-  isSessionReady,
 }: UseSessionManagementOptions): UseSessionManagementReturn {
   const navigate = useNavigate();
   const utils = trpc.useUtils();
-
-  // Ref to store pending quick action prompt (to send after session is ready)
-  const pendingQuickActionRef = useRef<{ dbSessionId: string; prompt: string } | null>(null);
-
-  // Effect to send pending quick action prompt when session is ready
-  // We track the previous isSessionReady value to detect the transition from false -> true
-  const wasSessionReadyRef = useRef(isSessionReady);
-  useEffect(() => {
-    const pending = pendingQuickActionRef.current;
-    const transitionedToReady = !wasSessionReadyRef.current && isSessionReady;
-
-    // Send pending prompt when session transitions from not-ready to ready
-    if (pending && pending.dbSessionId === selectedDbSessionId && transitionedToReady) {
-      pendingQuickActionRef.current = null;
-      sendMessage(pending.prompt);
-    }
-
-    wasSessionReadyRef.current = isSessionReady;
-  }, [selectedDbSessionId, sendMessage, isSessionReady]);
 
   const createSession = trpc.session.createSession.useMutation({
     onSuccess: (_data) => {
@@ -308,11 +285,16 @@ export function useSessionManagement({
     (name: string, prompt: string) => {
       const provider = resolveExplicitSessionProvider(selectedProvider);
       createSession.mutate(
-        { workspaceId, workflow: 'followup', name, model: selectedModel || undefined, provider },
+        {
+          workspaceId,
+          workflow: 'followup',
+          name,
+          model: selectedModel || undefined,
+          provider,
+          initialMessage: prompt,
+        },
         {
           onSuccess: (session) => {
-            // Store the pending prompt to be sent once the session state settles
-            pendingQuickActionRef.current = { dbSessionId: session.id, prompt };
             // Setting the new session ID triggers WebSocket reconnection automatically
             setSelectedDbSessionId(session.id);
           },
