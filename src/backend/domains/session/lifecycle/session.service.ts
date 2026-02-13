@@ -7,7 +7,7 @@ import {
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
 import type { RewindFilesResponse } from '@/backend/domains/session/claude';
-import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
+import type { ClaudeClient } from '@/backend/domains/session/claude/client';
 import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
@@ -19,13 +19,9 @@ import {
   codexSessionProviderAdapter,
   type SessionProvider,
 } from '@/backend/domains/session/providers';
-import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import {
-  normalizeSessionModelForProvider,
-  resolveSessionModelForProvider,
-} from '@/backend/lib/session-model';
+import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -701,13 +697,13 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       reasoningEffort?: string;
-      useAcp?: boolean;
     },
     loadedSession?: LoadedSessionAdapter
   ): Promise<unknown> {
     const { session, adapter } = loadedSession ?? (await this.loadSessionWithAdapter(sessionId));
 
-    // Check for existing client first - fast path
+    // Check for existing legacy client first - sessions already running via
+    // legacy managers need to continue working until they exit.
     const existing = adapter.getClient(sessionId);
     if (existing) {
       const isWorking = adapter.isSessionWorking(sessionId);
@@ -720,57 +716,8 @@ class SessionService {
       return existing;
     }
 
-    // ACP runtime path (Phase 19: opt-in via useAcp flag)
-    if (options?.useAcp) {
-      return await this.getOrCreateAcpSessionClient(sessionId, options, session);
-    }
-
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
-      phase: 'starting',
-      processState: 'alive',
-      activity: 'IDLE',
-      updatedAt: new Date().toISOString(),
-    });
-
-    try {
-      const client =
-        session.provider === 'CODEX'
-          ? await this.createCodexClient(
-              sessionId,
-              options?.model,
-              options?.reasoningEffort,
-              session
-            )
-          : await this.createClaudeClient(sessionId, options, session);
-
-      // Update DB with running status and PID
-      // This is idempotent and safe even if called by concurrent callers
-      await this.repository.updateSession(sessionId, {
-        status: SessionStatus.RUNNING,
-        claudeProcessPid:
-          session.provider === 'CODEX'
-            ? (this.codexAdapter.getManager().getStatus().pid ?? null)
-            : ((client as ClaudeClient).getPid?.() ?? null),
-      });
-
-      const isWorking = adapter.isSessionWorking(sessionId);
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: isWorking ? 'running' : 'idle',
-        processState: 'alive',
-        activity: isWorking ? 'WORKING' : 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-
-      return client;
-    } catch (error) {
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: 'error',
-        processState: 'stopped',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-      throw error;
-    }
+    // All new sessions use ACP runtime (Phase 21: unified runtime path)
+    return await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
   }
 
   /**
@@ -783,7 +730,6 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       reasoningEffort?: string;
-      useAcp?: boolean;
     }
   ): Promise<unknown> {
     return await this.getOrCreateSessionClient(sessionId, options);
@@ -1122,71 +1068,6 @@ class SessionService {
     return handle;
   }
 
-  private async createClaudeClient(
-    sessionId: string,
-    options?: {
-      thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
-      model?: string;
-    },
-    session?: AgentSessionRecord
-  ): Promise<ClaudeClient> {
-    const { clientOptions, context, handlers } = await this.buildClientOptions(
-      sessionId,
-      {
-        thinkingEnabled: options?.thinkingEnabled,
-        permissionMode: options?.permissionMode,
-        model: options?.model,
-      },
-      session
-    );
-
-    return await this.claudeAdapter.getOrCreateClient(sessionId, clientOptions, handlers, context);
-  }
-
-  private async createCodexClient(
-    sessionId: string,
-    model?: string,
-    reasoningEffort?: string,
-    session?: AgentSessionRecord
-  ): Promise<unknown> {
-    const context = await this.loadCodexSessionContext(sessionId, session);
-    const requestedModel = normalizeSessionModelForProvider(model, 'CODEX');
-    const clientOptions = {
-      workingDir: context.workingDir,
-      sessionId,
-      model: requestedModel ?? context.model,
-      reasoningEffort,
-    };
-    return await this.codexAdapter.getOrCreateClient(sessionId, clientOptions, {}, context);
-  }
-
-  private async loadCodexSessionContext(
-    sessionId: string,
-    preloadedSession?: AgentSessionRecord
-  ): Promise<{
-    workspaceId: string;
-    workingDir: string;
-    model: string;
-  }> {
-    const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    const workspace = await this.repository.getWorkspaceById(session.workspaceId);
-    if (!workspace?.worktreePath) {
-      throw new Error(`Workspace or worktree not found for session: ${sessionId}`);
-    }
-
-    await this.repository.markWorkspaceHasHadSessions(session.workspaceId);
-    return {
-      workspaceId: session.workspaceId,
-      workingDir: workspace.worktreePath,
-      model: resolveSessionModelForProvider(session.model, 'CODEX'),
-    };
-  }
-
   private toCodexTextContent(content: string | ClaudeContentItem[]): string {
     if (typeof content === 'string') {
       return content;
@@ -1217,60 +1098,6 @@ class SessionService {
     }
 
     return chunks.join('\n\n');
-  }
-
-  /**
-   * Internal: Set up handlers that update DB on client events.
-   */
-  private buildClientEventHandlers(): ClaudeRuntimeEventHandlers {
-    return {
-      onSessionId: async (sessionId: string, claudeSessionId: string) => {
-        try {
-          await this.repository.updateSession(sessionId, { claudeSessionId });
-          logger.debug('Updated session with claudeSessionId', { sessionId, claudeSessionId });
-        } catch (error) {
-          logger.warn('Failed to update session with claudeSessionId', {
-            sessionId,
-            claudeSessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      },
-      onExit: async (sessionId: string, exitCode: number | null) => {
-        try {
-          sessionDomainService.markProcessExit(sessionId, exitCode);
-          const session = await this.repository.updateSession(sessionId, {
-            status: SessionStatus.COMPLETED,
-            claudeProcessPid: null,
-          });
-          logger.debug('Updated session status to COMPLETED on exit', { sessionId });
-
-          // Eagerly clear stale ratchet fixer reference instead of waiting for next poll.
-          // The conditional update is a no-op if this session isn't the active fixer.
-          await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
-
-          // Ratchet fixer sessions are transient — delete the record to avoid clutter.
-          if (session.workflow === 'ratchet') {
-            await this.repository.deleteSession(sessionId);
-            logger.debug('Deleted transient ratchet session', { sessionId });
-          }
-        } catch (error) {
-          logger.warn('Failed to update session status on exit', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } finally {
-          this.clearSessionProvider(sessionId);
-        }
-      },
-      onError: (sessionId: string, error: Error) => {
-        logger.error('Claude client error', {
-          sessionId,
-          error: error.message,
-          stack: error.stack,
-        });
-      },
-    };
   }
 
   // ===========================================================================
@@ -1341,6 +1168,15 @@ class SessionService {
   }
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
+    // For ACP sessions, derive capabilities from stored configOptions rather
+    // than calling the legacy adapter. This provides accurate capabilities
+    // regardless of the underlying provider.
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (acpHandle && acpHandle.configOptions.length > 0) {
+      return this.buildAcpChatBarCapabilities(acpHandle);
+    }
+
+    // Fallback to legacy adapter path for non-ACP sessions
     const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
     const selectedModel =
       session.provider === 'CODEX'
@@ -1355,6 +1191,36 @@ class SessionService {
       selectedModel,
       selectedReasoningEffort,
     });
+  }
+
+  /**
+   * Build ChatBarCapabilities from ACP configOptions.
+   * Derives model and reasoning capabilities from agent-reported config options.
+   */
+  private buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {
+    const modelOption = handle.configOptions.find((o) => o.category === 'model');
+    const thoughtOption = handle.configOptions.find((o) => o.category === 'thought_level');
+
+    return {
+      provider: 'CLAUDE',
+      model: {
+        enabled: !!modelOption,
+        options: [],
+        ...(modelOption?.currentValue ? { selected: String(modelOption.currentValue) } : {}),
+      },
+      reasoning: {
+        enabled: false,
+        options: [],
+      },
+      thinking: {
+        enabled: !!thoughtOption,
+      },
+      planMode: { enabled: true },
+      attachments: { enabled: true, kinds: ['image', 'text'] },
+      slashCommands: { enabled: false },
+      usageStats: { enabled: false, contextWindow: false },
+      rewind: { enabled: false },
+    };
   }
 
   /**
@@ -1477,58 +1343,6 @@ class SessionService {
         error: error instanceof Error ? error.message : String(error),
       });
     }
-  }
-
-  private async buildClientOptions(
-    sessionId: string,
-    options?: {
-      thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
-      model?: string;
-      initialPrompt?: string;
-    },
-    session?: AgentSessionRecord
-  ): Promise<{
-    clientOptions: ClaudeClientOptions;
-    context: { workspaceId: string; workingDir: string };
-    handlers: ReturnType<SessionService['buildClientEventHandlers']>;
-  }> {
-    const sessionContext = await this.loadSessionContext(sessionId, session);
-    if (!sessionContext) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
-    const claudeProjectPath = SessionManager.getProjectPath(sessionContext.workingDir);
-    await this.repository.updateSession(sessionId, { claudeProjectPath });
-
-    const mcpConfig = JSON.stringify({
-      mcpServers: {
-        playwright: {
-          command: 'npx',
-          args: ['@playwright/mcp@latest', '--viewport-size=1920,1080'],
-        },
-      },
-    });
-
-    const clientOptions: ClaudeClientOptions = {
-      workingDir: sessionContext.workingDir,
-      resumeClaudeSessionId: sessionContext.resumeClaudeSessionId,
-      systemPrompt: sessionContext.systemPrompt,
-      model: resolveSessionModelForProvider(options?.model ?? sessionContext.model, 'CLAUDE'),
-      permissionMode: options?.permissionMode ?? 'bypassPermissions',
-      includePartialMessages: false,
-      thinkingEnabled: options?.thinkingEnabled,
-      initialPrompt: options?.initialPrompt,
-      mcpConfig,
-      sessionId,
-    };
-
-    return {
-      clientOptions,
-      context: { workspaceId: sessionContext.workspaceId, workingDir: sessionContext.workingDir },
-      handlers: this.buildClientEventHandlers(),
-    };
   }
 
   private async loadSessionContext(

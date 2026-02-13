@@ -75,13 +75,12 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       logger.info('[Chat WS] Getting or creating client via sessionService', { dbSessionId });
     }
 
-    // Delegate client lifecycle to sessionService
+    // Delegate client lifecycle to sessionService (all sessions use ACP runtime)
     const client = await sessionService.getOrCreateSessionClient(dbSessionId, {
       thinkingEnabled: options.thinkingEnabled,
       permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,
       reasoningEffort: options.reasoningEffort,
-      useAcp: true, // TEMP: Phase 20 testing — revert after verification
     });
 
     // Set up event forwarding (idempotent - safe to call multiple times)
