@@ -14,11 +14,16 @@ import {
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
+import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
-import type { ClaudeContentItem, ClaudeMessage, SessionDeltaEvent } from '@/shared/claude';
+import type {
+  ClaudeContentItem,
+  ClaudeMessage,
+  HistoryMessage,
+  SessionDeltaEvent,
+} from '@/shared/claude';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -99,7 +104,7 @@ class SessionService {
   }
 
   private async loadSessionWithAdapter(sessionId: string): Promise<{
-    session: ClaudeSession;
+    session: AgentSessionRecord;
     adapter: typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter;
   }> {
     const session = await this.repository.getSessionById(sessionId);
@@ -310,7 +315,7 @@ class SessionService {
     await this.stopSession(sessionId, options);
   }
 
-  private async loadSessionForStop(sessionId: string): Promise<ClaudeSession | null> {
+  private async loadSessionForStop(sessionId: string): Promise<AgentSessionRecord | null> {
     try {
       const session = await this.repository.getSessionById(sessionId);
       if (session) {
@@ -341,7 +346,7 @@ class SessionService {
   }
 
   private async cleanupTransientRatchetOnStop(
-    session: ClaudeSession | null,
+    session: AgentSessionRecord | null,
     sessionId: string,
     shouldCleanupTransientRatchetSession: boolean
   ): Promise<void> {
@@ -522,6 +527,17 @@ class SessionService {
       return;
     }
     await this.claudeAdapter.sendMessage(sessionId, content);
+  }
+
+  async getSessionConversationHistory(
+    sessionId: string,
+    workingDir: string
+  ): Promise<HistoryMessage[]> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session || session.provider !== 'CLAUDE' || !session.claudeSessionId) {
+      return [];
+    }
+    return await SessionManager.getHistory(session.claudeSessionId, workingDir);
   }
 
   async rewindSessionFiles(
@@ -858,7 +874,7 @@ class SessionService {
   }
 
   private shouldStopWorkspaceSession(
-    session: Pick<ClaudeSession, 'id' | 'status' | 'provider'>,
+    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
     adapter: typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter
   ): {
     shouldStop: boolean;
@@ -893,7 +909,7 @@ class SessionService {
   }
 
   private async stopWorkspaceSession(
-    session: Pick<ClaudeSession, 'id' | 'status' | 'provider'>,
+    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
     workspaceId: string
   ): Promise<void> {
     const adapter = this.resolveAdapterForProvider(session.provider ?? 'CLAUDE');

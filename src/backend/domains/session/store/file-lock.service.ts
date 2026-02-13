@@ -19,7 +19,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
@@ -201,7 +201,7 @@ export class FileLockService {
    */
   private async resolveWorkspaceContext(agentId: string): Promise<WorkspaceContext | null> {
     try {
-      const session = await claudeSessionAccessor.findById(agentId);
+      const session = await agentSessionAccessor.findById(agentId);
       if (!session?.workspace?.worktreePath) {
         return null;
       }

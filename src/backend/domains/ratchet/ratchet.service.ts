@@ -12,7 +12,7 @@ import { CIStatus, RatchetState, SessionStatus } from '@factory-factory/core';
 import type { SessionProvider } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
   SERVICE_CACHE_TTL_MS,
@@ -1032,7 +1032,7 @@ class RatchetService extends EventEmitter {
       workspaceId: workspace.id,
       workspace,
     });
-    const session = await claudeSessionAccessor.findById(workspace.ratchetActiveSessionId);
+    const session = await agentSessionAccessor.findById(workspace.ratchetActiveSessionId);
     if (!session) {
       await this.clearFailedRatchetDispatch(workspace, 'session not found in database');
       return null;
@@ -1093,7 +1093,7 @@ class RatchetService extends EventEmitter {
   }
 
   private async hasActiveSession(workspaceId: string): Promise<boolean> {
-    const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
+    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
     return sessions.some((session) => this.session.isSessionWorking(session.id));
   }
 

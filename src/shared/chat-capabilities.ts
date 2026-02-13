@@ -1,6 +1,5 @@
-import { DEFAULT_THINKING_BUDGET } from '@/shared/claude/protocol/models';
-
 export type ChatProvider = 'CLAUDE' | 'CODEX';
+const DEFAULT_CLAUDE_THINKING_BUDGET = 10_000;
 
 export interface ChatModelOption {
   value: string;
@@ -47,7 +46,7 @@ export const EMPTY_CHAT_BAR_CAPABILITIES: ChatBarCapabilities = {
     ],
     selected: 'opus',
   },
-  thinking: { enabled: true, defaultBudget: DEFAULT_THINKING_BUDGET },
+  thinking: { enabled: true, defaultBudget: DEFAULT_CLAUDE_THINKING_BUDGET },
   planMode: { enabled: true },
   attachments: { enabled: true, kinds: ['image', 'text'] },
   slashCommands: { enabled: true },
@@ -68,7 +67,7 @@ export function createClaudeChatBarCapabilities(selectedModel?: string): ChatBar
     },
     thinking: {
       enabled: true,
-      defaultBudget: DEFAULT_THINKING_BUDGET,
+      defaultBudget: DEFAULT_CLAUDE_THINKING_BUDGET,
     },
     planMode: {
       enabled: true,

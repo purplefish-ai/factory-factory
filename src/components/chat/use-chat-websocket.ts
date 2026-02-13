@@ -28,7 +28,7 @@ const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 export interface UseChatWebSocketOptions {
   /**
    * Database session ID (required).
-   * This is the primary key for the ClaudeSession record.
+   * This is the primary key for the agent session record.
    * Must be provided before connecting - the hook will not connect without it.
    */
   dbSessionId: string | null;

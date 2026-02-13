@@ -3,12 +3,12 @@ import { SessionManager } from '@/backend/domains/session/claude/session';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
-    const dbSession = await claudeSessionAccessor.findById(sessionId);
+    const dbSession = await agentSessionAccessor.findById(sessionId);
     if (!dbSession) {
       ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
       return;

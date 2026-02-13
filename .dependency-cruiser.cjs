@@ -78,6 +78,14 @@ module.exports = {
       to: { path: '^src/backend' },
     },
     {
+      name: 'no-ui-importing-provider-specific-shared-contracts',
+      severity: 'error',
+      comment:
+        'UI layers must consume provider-neutral shared contracts. Provider-specific shared protocols are backend-only.',
+      from: { path: '^src/(client|components|frontend)' },
+      to: { path: '^src/shared/claude/' },
+    },
+    {
       name: 'frontend-trpc-only-imports-backend-trpc',
       severity: 'error',
       comment: 'src/frontend/lib/trpc.ts may only import backend tRPC types, not other backend modules',
@@ -107,6 +115,18 @@ module.exports = {
       to: { path: '^src/backend/resource_accessors/' },
     },
     {
+      name: 'no-direct-claude-session-accessor-imports',
+      severity: 'error',
+      comment:
+        'Use agent-session.accessor at call sites; keep claude-session accessor behind that alias during migration.',
+      from: {
+        path: '^src/backend',
+        pathNot:
+          '^src/backend/resource_accessors/(claude-session|agent-session)\\.accessor\\.ts$|^src/backend/resource_accessors/index\\.ts$|^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/resource_accessors/claude-session\\.accessor\\.ts$' },
+    },
+    {
       name: 'only-allowlisted-orchestration-import-accessors',
       severity: 'error',
       comment:
@@ -125,6 +145,17 @@ module.exports = {
         'Shared contracts must stay framework/domain neutral and not depend on backend or UI layers',
       from: { path: '^src/shared' },
       to: { path: '^src/(backend|client|frontend|components)' },
+    },
+    {
+      name: 'no-shared-importing-provider-specific-shared-contracts',
+      severity: 'error',
+      comment:
+        'Provider-specific shared protocol trees should not be imported by provider-neutral shared contracts.',
+      from: {
+        path: '^src/shared',
+        pathNot: '^src/shared/claude/',
+      },
+      to: { path: '^src/shared/claude/' },
     },
     {
       name: 'no-backend-importing-ui-layers',
@@ -180,6 +211,17 @@ module.exports = {
           '^src/backend/domains/session/(codex/|providers/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/domains/session/codex/' },
+    },
+    {
+      name: 'non-session-modules-cannot-import-provider-runtime-internals',
+      severity: 'error',
+      comment:
+        'Provider runtime internals should remain inside the session domain. Other backend modules must use session-domain contracts.',
+      from: {
+        path: '^src/backend',
+        pathNot: '^src/backend/domains/session/|^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/domains/session/(claude|codex)/' },
     },
     {
       name: 'no-cross-domain-imports',

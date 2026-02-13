@@ -1,23 +1,23 @@
 import type { SessionStatus } from '@factory-factory/core';
 import type { SessionProvider, TerminalSession } from '@prisma-gen/client';
 import {
-  type ClaudeSession,
-  claudeSessionAccessor,
-} from '@/backend/resource_accessors/claude-session.accessor';
+  type AgentSessionRecord,
+  agentSessionAccessor,
+} from '@/backend/resource_accessors/agent-session.accessor';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 
 class SessionDataService {
   // Claude sessions
 
   findClaudeSessionById(id: string) {
-    return claudeSessionAccessor.findById(id);
+    return agentSessionAccessor.findById(id);
   }
 
   findClaudeSessionsByWorkspaceId(
     workspaceId: string,
     filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
-  ): Promise<ClaudeSession[]> {
-    return claudeSessionAccessor.findByWorkspaceId(workspaceId, filters);
+  ): Promise<AgentSessionRecord[]> {
+    return agentSessionAccessor.findByWorkspaceId(workspaceId, filters);
   }
 
   createClaudeSession(data: {
@@ -27,8 +27,8 @@ class SessionDataService {
     model?: string;
     provider?: SessionProvider;
     claudeProjectPath?: string | null;
-  }): Promise<ClaudeSession> {
-    return claudeSessionAccessor.create(data);
+  }): Promise<AgentSessionRecord> {
+    return agentSessionAccessor.create(data);
   }
 
   updateClaudeSession(
@@ -43,16 +43,16 @@ class SessionDataService {
       claudeProjectPath?: string | null;
       claudeProcessPid?: number | null;
     }
-  ): Promise<ClaudeSession> {
-    return claudeSessionAccessor.update(id, data);
+  ): Promise<AgentSessionRecord> {
+    return agentSessionAccessor.update(id, data);
   }
 
-  deleteClaudeSession(id: string): Promise<ClaudeSession> {
-    return claudeSessionAccessor.delete(id);
+  deleteClaudeSession(id: string): Promise<AgentSessionRecord> {
+    return agentSessionAccessor.delete(id);
   }
 
-  findClaudeSessionsWithPid(): Promise<ClaudeSession[]> {
-    return claudeSessionAccessor.findWithPid();
+  findClaudeSessionsWithPid(): Promise<AgentSessionRecord[]> {
+    return agentSessionAccessor.findWithPid();
   }
 
   // Terminal sessions

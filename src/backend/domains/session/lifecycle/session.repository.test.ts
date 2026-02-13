@@ -1,10 +1,10 @@
 import type { Project, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClaudeSession } from '@/backend/resource_accessors/claude-session.accessor';
+import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionRepository } from './session.repository';
 
-const createSession = (overrides?: Partial<ClaudeSession>): ClaudeSession =>
+const createSession = (overrides?: Partial<AgentSessionRecord>): AgentSessionRecord =>
   ({
     id: 's1',
     workspaceId: 'w1',
@@ -18,14 +18,14 @@ const createSession = (overrides?: Partial<ClaudeSession>): ClaudeSession =>
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     ...overrides,
-  }) as ClaudeSession;
+  }) as AgentSessionRecord;
 
 describe('SessionRepository', () => {
   const sessions = {
-    findById: vi.fn<() => Promise<ClaudeSession | null>>(),
-    findByWorkspaceId: vi.fn<() => Promise<ClaudeSession[]>>(),
-    update: vi.fn<() => Promise<ClaudeSession>>(),
-    delete: vi.fn<() => Promise<ClaudeSession>>(),
+    findById: vi.fn<() => Promise<AgentSessionRecord | null>>(),
+    findByWorkspaceId: vi.fn<() => Promise<AgentSessionRecord[]>>(),
+    update: vi.fn<() => Promise<AgentSessionRecord>>(),
+    delete: vi.fn<() => Promise<AgentSessionRecord>>(),
   };
 
   const workspaces = {

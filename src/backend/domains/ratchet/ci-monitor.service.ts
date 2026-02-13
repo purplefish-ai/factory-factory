@@ -7,7 +7,7 @@
 
 import { CIStatus, SessionStatus } from '@factory-factory/core';
 import pLimit from 'p-limit';
-import { claudeSessionAccessor } from '@/backend/resource_accessors/claude-session.accessor';
+import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
@@ -391,7 +391,7 @@ class CIMonitorService {
   ): Promise<boolean> {
     try {
       // Find the most recent running session for this workspace
-      const sessions = await claudeSessionAccessor.findByWorkspaceId(workspaceId);
+      const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
       const runningSession = sessions.find((s) => s.status === SessionStatus.RUNNING);
 
       if (!runningSession) {

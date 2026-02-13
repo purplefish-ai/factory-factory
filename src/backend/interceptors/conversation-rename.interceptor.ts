@@ -6,8 +6,6 @@
  * a more descriptive branch name.
  */
 
-import { SessionManager } from '@/backend/domains/session/claude';
-import { sessionDataService } from '@/backend/domains/session/data/session-data.service';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
 import { buildBranchRenameInstruction } from '@/backend/prompts/branch-rename';
@@ -58,12 +56,6 @@ export const conversationRenameInterceptor: ToolInterceptor = {
         return;
       }
 
-      // Get the current Claude session to access its claudeSessionId
-      const currentSession = await sessionDataService.findClaudeSessionById(context.sessionId);
-      if (!currentSession?.claudeSessionId) {
-        return;
-      }
-
       // Get workspace to check branch name
       const workspace = await workspaceDataService.findById(context.workspaceId);
       if (!workspace) {
@@ -78,11 +70,15 @@ export const conversationRenameInterceptor: ToolInterceptor = {
         return;
       }
 
-      // Read session history for this specific session
-      const history = await SessionManager.getHistory(
-        currentSession.claudeSessionId,
+      // Read history through session lifecycle service so provider-specific
+      // session internals remain encapsulated.
+      const history = await sessionService.getSessionConversationHistory(
+        context.sessionId,
         context.workingDir
       );
+      if (history.length === 0) {
+        return;
+      }
 
       // Count user messages
       const userMessageCount = countUserMessages(history);
