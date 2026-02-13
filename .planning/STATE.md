@@ -10,24 +10,24 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 19 of 22 (ACP Runtime Foundation)
-Plan: Ready to plan
-Status: Ready to plan Phase 19
-Last activity: 2026-02-13 -- v1.2 roadmap created (4 phases, 30 requirements mapped)
+Plan: 1 of 2 complete
+Status: Executing Phase 19
+Last activity: 2026-02-13 -- Completed 19-01 (ACP runtime module)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (v1.2)
-- Average duration: --
-- Total execution time: --
+- Total plans completed: 1 (v1.2)
+- Average duration: 13min
+- Total execution time: 13min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 19. ACP Runtime Foundation | 0/TBD | -- | -- |
+| 19. ACP Runtime Foundation | 1/2 | 13min | 13min |
 | 20. Event Translation + Permissions | 0/TBD | -- | -- |
 | 21. Config Options + Unified Runtime | 0/TBD | -- | -- |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
@@ -47,6 +47,13 @@ Key research findings affecting v1.2:
 - Permission model shifts from binary allow/deny to multi-option selection (allow_once/always, reject_once/reject_always)
 - Use prompt response (not notifications) as authoritative turn-complete signal to avoid event ordering inversion
 
+Phase 19-01 decisions:
+- Defined AcpProvider type inline to respect dependency-cruiser boundaries (not importing SessionProvider)
+- Updated dependency-cruiser to allow acp/ module to import runtime/ interfaces
+- ACP binary packages added to knip ignoreDependencies (runtime binaries, not JS imports)
+- ACP events prefixed with `acp_` to distinguish from legacy event types
+- Used actual SDK RequestPermissionOutcome format (plan had incorrect format)
+
 ### Pending Todos
 
 None.
@@ -58,5 +65,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: v1.2 roadmap created, ready to plan Phase 19
+Stopped at: Completed 19-01-PLAN.md (ACP runtime module)
 Resume file: None
