@@ -24,6 +24,10 @@ export function removeQueuedMessage(store: SessionStore, messageId: string): boo
   return true;
 }
 
+export function peekNext(store: SessionStore): QueuedMessage | undefined {
+  return store.queue[0];
+}
+
 export function dequeueNext(store: SessionStore): QueuedMessage | undefined {
   return store.queue.shift();
 }

@@ -132,6 +132,9 @@ class ChatMessageHandlerService {
    * Try to dispatch the next queued message to Claude.
    * Auto-starts the client if needed.
    * Uses a guard to prevent concurrent dispatch calls for the same session.
+   *
+   * The message stays in the queue (visible in snapshots) until we're ready
+   * to dispatch, so a page refresh during auto-start won't lose it.
    */
   async tryDispatchNextMessage(dbSessionId: string): Promise<void> {
     // Guard against concurrent dispatch calls for the same session
@@ -141,35 +144,30 @@ class ChatMessageHandlerService {
 
     this.dispatchInProgress.set(dbSessionId, true);
 
-    // Dequeue first to claim the message atomically before any async operations.
-    const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
-    if (!msg) {
-      this.dispatchInProgress.set(dbSessionId, false);
-      return;
-    }
-
     try {
-      const dispatchGate = await this.getDispatchGateSafely(dbSessionId, msg);
-      if (dispatchGate === 'blocked' || dispatchGate === 'manual_resume') {
+      // Peek first — message stays in queue (visible in snapshots during auto-start).
+      const peeked = sessionDomainService.peekNextMessage(dbSessionId);
+      if (!peeked) {
         return;
       }
 
-      let client = sessionService.getSessionClient(dbSessionId);
-
-      // Auto-start: create client if needed, using the dequeued message's settings
-      if (!client) {
-        const started = await this.autoStartClientForQueue(dbSessionId, msg);
-        if (!started) {
-          // Re-queue the message at the front so it's not lost
-          sessionDomainService.requeueFront(dbSessionId, msg);
-          return;
-        }
-        client = sessionService.getSessionClient(dbSessionId);
+      const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
+      if (dispatchGate !== 'allowed') {
+        return;
       }
 
-      const shouldRequeueReason = this.getRequeueReason(dbSessionId, client);
-      if (shouldRequeueReason) {
-        this.requeueWithReason(dbSessionId, msg, shouldRequeueReason);
+      const client = await this.ensureClientReady(dbSessionId, peeked);
+      if (!client) {
+        return;
+      }
+
+      if (this.getRequeueReason(dbSessionId, client)) {
+        return;
+      }
+
+      // NOW dequeue — client is ready, we're about to dispatch.
+      const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
+      if (!msg) {
         return;
       }
 
@@ -241,6 +239,25 @@ class ChatMessageHandlerService {
   // ============================================================================
   // Private: Dispatch Helpers
   // ============================================================================
+
+  /**
+   * Ensure a session client is ready for dispatch. Auto-starts if needed.
+   * Returns the client or undefined if startup failed.
+   */
+  private async ensureClientReady(
+    dbSessionId: string,
+    msg: QueuedMessage
+  ): Promise<unknown | undefined> {
+    let client = sessionService.getSessionClient(dbSessionId);
+    if (!client) {
+      const started = await this.autoStartClientForQueue(dbSessionId, msg);
+      if (!started) {
+        return undefined;
+      }
+      client = sessionService.getSessionClient(dbSessionId);
+    }
+    return client;
+  }
 
   /**
    * Auto-start a client for queue dispatch using settings from the provided message.
@@ -363,19 +380,6 @@ class ChatMessageHandlerService {
     return null;
   }
 
-  private requeueWithReason(
-    dbSessionId: string,
-    msg: QueuedMessage,
-    reason: 'working' | 'compacting' | 'stopped'
-  ): void {
-    if (DEBUG_CHAT_WS) {
-      logger.info('[Chat WS] Re-queueing message', { dbSessionId, reason });
-    } else if (reason === 'stopped') {
-      logger.warn('[Chat WS] Claude process has exited, re-queueing message', { dbSessionId });
-    }
-    sessionDomainService.requeueFront(dbSessionId, msg);
-  }
-
   private isCompactCommand(text: string): boolean {
     const trimmed = text.trim();
     return trimmed === '/compact' || trimmed.startsWith('/compact ');
@@ -409,23 +413,20 @@ class ChatMessageHandlerService {
     return this.manualDispatchResumed.get(dbSessionId) ? 'allowed' : 'manual_resume';
   }
 
-  private async getDispatchGateSafely(
-    dbSessionId: string,
-    msg: QueuedMessage
+  /**
+   * Evaluate dispatch gate without touching the queue.
+   * Message stays in queue — no requeue needed on block.
+   */
+  private async evaluateDispatchGateSafely(
+    dbSessionId: string
   ): Promise<'allowed' | 'blocked' | 'manual_resume'> {
     try {
-      const dispatchGate = await this.evaluateDispatchGate(dbSessionId);
-      if (dispatchGate === 'blocked' || dispatchGate === 'manual_resume') {
-        sessionDomainService.requeueFront(dbSessionId, msg);
-      }
-      return dispatchGate;
+      return await this.evaluateDispatchGate(dbSessionId);
     } catch (error) {
-      logger.error('[Chat WS] Failed to evaluate dispatch gate, re-queueing message', {
+      logger.error('[Chat WS] Failed to evaluate dispatch gate', {
         dbSessionId,
-        messageId: msg.id,
         error: error instanceof Error ? error.message : String(error),
       });
-      sessionDomainService.requeueFront(dbSessionId, msg);
       return 'blocked';
     }
   }

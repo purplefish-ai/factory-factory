@@ -81,6 +81,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,
       reasoningEffort: options.reasoningEffort,
+      useAcp: true, // TEMP: Phase 20 testing — revert after verification
     });
 
     // Set up event forwarding (idempotent - safe to call multiple times)

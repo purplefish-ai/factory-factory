@@ -1,5 +1,4 @@
 import { SessionManager } from '@/backend/domains/session/claude/session';
-import type { ChatMessage } from '@/shared/claude';
 import { buildHydrateKey, type HydrateKeyInput } from './session-hydrate-key';
 import type { SessionStore } from './session-store.types';
 import {
@@ -31,14 +30,12 @@ export class SessionHydrator {
     store.hydratingKey = hydrateKey;
 
     const hydratePromise = (async () => {
-      let transcript: ChatMessage[] = [];
-
       if (options.claudeSessionId && options.claudeProjectPath) {
         const history = await SessionManager.getHistoryFromProjectPath(
           options.claudeSessionId,
           options.claudeProjectPath
         );
-        transcript = buildTranscriptFromHistory(history);
+        const transcript = buildTranscriptFromHistory(history);
         transcript.sort(messageSort);
         this.onParityTrace(store.sessionId, {
           path: 'jsonl_hydrate',
@@ -48,13 +45,17 @@ export class SessionHydrator {
           transcriptCount: transcript.length,
           transcript: normalizeTranscript(transcript),
         });
-      }
 
-      if (store.hydrateGeneration !== generation) {
+        if (store.hydrateGeneration !== generation) {
+          return;
+        }
+
+        store.transcript = transcript;
+      } else if (store.hydrateGeneration !== generation) {
+        // No JSONL source (ACP or no project path) — preserve existing in-memory transcript
         return;
       }
 
-      store.transcript = transcript;
       setNextOrderFromTranscript(store);
       store.initialized = true;
       store.hydratedKey = hydrateKey;

@@ -111,9 +111,9 @@ export class AcpEventTranslator {
         data: {
           type: 'stream_event',
           event: {
-            type: 'content_block_start',
+            type: 'content_block_delta',
             index: 0,
-            content_block: { type: 'thinking', thinking: text },
+            delta: { type: 'thinking_delta', thinking: text },
           },
         },
       },
@@ -184,7 +184,30 @@ export class AcpEventTranslator {
       event.elapsed_time_seconds = 0;
     }
 
-    return [event as SessionDeltaEvent];
+    const events: SessionDeltaEvent[] = [event as SessionDeltaEvent];
+
+    // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
+    if (update.status === 'completed' || update.status === 'failed') {
+      events.push({
+        type: 'agent_message',
+        data: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: update.toolCallId,
+                content: this.extractContentText(update.content),
+                ...(update.status === 'failed' ? { is_error: true } : {}),
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    return events;
   }
 
   private translatePlan(
@@ -216,6 +239,22 @@ export class AcpEventTranslator {
         slashCommands,
       },
     ];
+  }
+
+  private extractContentText(content: unknown): string {
+    if (!content) {
+      return '';
+    }
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (Array.isArray(content)) {
+      return content
+        .filter((c): c is { type: 'text'; text: string } => c?.type === 'text')
+        .map((c) => c.text)
+        .join('\n');
+    }
+    return JSON.stringify(content);
   }
 
   private translateUsageUpdate(

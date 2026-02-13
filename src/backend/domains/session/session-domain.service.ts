@@ -11,6 +11,7 @@ import {
   clearQueuedWork,
   dequeueNext,
   enqueueMessage,
+  peekNext,
   removeQueuedMessage,
   requeueFront,
   setPendingInteractiveRequest,
@@ -24,6 +25,7 @@ import {
   injectCommittedUserMessage,
   messageSort,
   setNextOrderFromTranscript,
+  upsertTranscriptMessage,
 } from './store/session-transcript';
 
 const logger = createLogger('session-domain-service');
@@ -151,6 +153,11 @@ class SessionDomainService {
     return true;
   }
 
+  peekNextMessage(sessionId: string): QueuedMessage | undefined {
+    const store = this.registry.getOrCreate(sessionId);
+    return peekNext(store);
+  }
+
   dequeueNext(sessionId: string, options?: { emitSnapshot?: boolean }): QueuedMessage | undefined {
     const store = this.registry.getOrCreate(sessionId);
     const next = dequeueNext(store);
@@ -207,6 +214,21 @@ class SessionDomainService {
       onParityTrace: (data) => {
         this.parityLogger(sessionId, data);
       },
+    });
+  }
+
+  /**
+   * Upsert a Claude event at a specific order (for ACP text accumulation).
+   * Creates or replaces the transcript entry at the given order.
+   */
+  upsertClaudeEvent(sessionId: string, claudeMessage: ClaudeMessage, order: number): void {
+    const store = this.registry.getOrCreate(sessionId);
+    upsertTranscriptMessage(store, {
+      id: `${store.sessionId}-${order}`,
+      source: 'claude',
+      message: claudeMessage,
+      timestamp: claudeMessage.timestamp ?? this.nowIso(),
+      order,
     });
   }
 

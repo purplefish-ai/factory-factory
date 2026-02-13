@@ -91,10 +91,10 @@ describe('AcpEventTranslator', () => {
         data: {
           type: 'stream_event',
           event: {
-            type: 'content_block_start',
+            type: 'content_block_delta',
             index: 0,
-            content_block: {
-              type: 'thinking',
+            delta: {
+              type: 'thinking_delta',
               thinking: 'Let me think about this...',
             },
           },
@@ -229,21 +229,33 @@ describe('AcpEventTranslator', () => {
       expect((events[0] as Record<string, unknown>).elapsed_time_seconds).toBeUndefined();
     });
 
-    it('includes elapsed_time_seconds when status is completed', () => {
+    it('includes elapsed_time_seconds and tool_result when status is completed', () => {
       const { translator } = createTranslator();
       const update = {
         sessionUpdate: 'tool_call_update',
         toolCallId: 'tc-001',
         status: 'completed',
+        content: [{ type: 'text', text: 'done' }],
       } as unknown as SessionUpdate;
 
       const events = translator.translateSessionUpdate(update);
 
-      expect(events).toHaveLength(1);
+      expect(events).toHaveLength(2);
       expect((events[0] as Record<string, unknown>).elapsed_time_seconds).toBe(0);
+      // Second event is the tool_result for frontend pairing
+      expect(events[1]).toEqual({
+        type: 'agent_message',
+        data: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'tc-001', content: 'done' }],
+          },
+        },
+      });
     });
 
-    it('includes elapsed_time_seconds when status is failed', () => {
+    it('includes elapsed_time_seconds and error tool_result when status is failed', () => {
       const { translator } = createTranslator();
       const update = {
         sessionUpdate: 'tool_call_update',
@@ -253,8 +265,18 @@ describe('AcpEventTranslator', () => {
 
       const events = translator.translateSessionUpdate(update);
 
-      expect(events).toHaveLength(1);
+      expect(events).toHaveLength(2);
       expect((events[0] as Record<string, unknown>).elapsed_time_seconds).toBe(0);
+      expect(events[1]).toEqual({
+        type: 'agent_message',
+        data: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'tc-001', content: '', is_error: true }],
+          },
+        },
+      });
     });
 
     it('handles null fields with defaults (no throw)', () => {

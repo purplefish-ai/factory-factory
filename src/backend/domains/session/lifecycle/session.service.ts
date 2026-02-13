@@ -78,6 +78,8 @@ class SessionService {
   });
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
+  /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
+  private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
   private onCodexTerminalTurn: CodexTerminalTurnCallback | null = null;
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
@@ -163,39 +165,13 @@ class SessionService {
           };
           const deltas = this.acpEventTranslator.translateSessionUpdate(update);
           for (const delta of deltas) {
-            sessionDomainService.emitDelta(sid, delta);
+            this.handleAcpDelta(sid, delta);
           }
           return;
         }
 
         if (typed.type === 'acp_permission_request') {
-          const { requestId, params } = event as {
-            type: string;
-            requestId: string;
-            params: import('@agentclientprotocol/sdk').RequestPermissionRequest;
-          };
-          // Emit permission_request delta with ACP options
-          sessionDomainService.emitDelta(sid, {
-            type: 'permission_request',
-            requestId,
-            toolName: params.toolCall.title ?? 'ACP Tool',
-            toolUseId: params.toolCall.toolCallId,
-            toolInput: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
-            acpOptions: params.options.map((o) => ({
-              optionId: o.optionId,
-              name: o.name,
-              kind: o.kind,
-            })),
-          });
-          // Also store as pending interactive request for session restore
-          sessionDomainService.setPendingInteractiveRequest(sid, {
-            requestId,
-            toolName: params.toolCall.title ?? 'ACP Tool',
-            toolUseId: params.toolCall.toolCallId,
-            input: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
-            planContent: null,
-            timestamp: new Date().toISOString(),
-          });
+          this.handleAcpPermissionRequest(sid, event);
           return;
         }
       },
@@ -215,7 +191,8 @@ class SessionService {
         }
       },
       onExit: async (sid: string, exitCode: number | null) => {
-        // Clean up permission bridge on exit
+        // Clean up permission bridge and streaming state on exit
+        this.acpStreamState.delete(sid);
         const b = this.acpPermissionBridges.get(sid);
         if (b) {
           b.cancelAll();
@@ -252,6 +229,87 @@ class SessionService {
         });
       },
     };
+  }
+
+  /**
+   * Handle a single translated ACP delta: persist and emit agent_messages,
+   * accumulate text chunks, and forward non-message deltas.
+   */
+  private handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
+    if (delta.type !== 'agent_message') {
+      sessionDomainService.emitDelta(sid, delta);
+      return;
+    }
+
+    const data = (delta as { data: ClaudeMessage }).data;
+
+    // Text chunks: accumulate into single message, reuse same order
+    // so the frontend upserts rather than inserting a new bubble per chunk.
+    if (data.type === 'assistant') {
+      this.accumulateAcpText(sid, data);
+      return;
+    }
+
+    // Non-text agent_message (thinking, tool_use, result): reset text accumulator
+    this.acpStreamState.delete(sid);
+    // Persist to transcript + allocate order in one step
+    const order = sessionDomainService.appendClaudeEvent(sid, data);
+    sessionDomainService.emitDelta(sid, { ...delta, order });
+  }
+
+  /**
+   * Accumulate ACP assistant text chunks into a single message at a stable order.
+   */
+  private accumulateAcpText(sid: string, data: ClaudeMessage): void {
+    const content = data.message?.content;
+    const chunkText =
+      Array.isArray(content) && content[0]?.type === 'text'
+        ? (content[0] as { text: string }).text
+        : '';
+    let ss = this.acpStreamState.get(sid);
+    if (!ss) {
+      ss = { textOrder: sessionDomainService.allocateOrder(sid), accText: '' };
+      this.acpStreamState.set(sid, ss);
+    }
+    ss.accText += chunkText;
+    const accMsg: ClaudeMessage = {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: ss.accText }] },
+    };
+    sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.textOrder);
+    sessionDomainService.emitDelta(sid, {
+      type: 'agent_message',
+      data: accMsg,
+      order: ss.textOrder,
+    } as SessionDeltaEvent & { order: number });
+  }
+
+  private handleAcpPermissionRequest(sid: string, event: unknown): void {
+    const { requestId, params } = event as {
+      type: string;
+      requestId: string;
+      params: import('@agentclientprotocol/sdk').RequestPermissionRequest;
+    };
+    sessionDomainService.emitDelta(sid, {
+      type: 'permission_request',
+      requestId,
+      toolName: params.toolCall.title ?? 'ACP Tool',
+      toolUseId: params.toolCall.toolCallId,
+      toolInput: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
+      acpOptions: params.options.map((o) => ({
+        optionId: o.optionId,
+        name: o.name,
+        kind: o.kind,
+      })),
+    });
+    sessionDomainService.setPendingInteractiveRequest(sid, {
+      requestId,
+      toolName: params.toolCall.title ?? 'ACP Tool',
+      toolUseId: params.toolCall.toolCallId,
+      input: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
+      planContent: null,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   private async createAcpClient(
@@ -477,7 +535,8 @@ class SessionService {
     // stopSession handles both "cancel current prompt" and "terminate session".)
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     if (acpHandle || acpRuntimeManager.isStopInProgress(sessionId)) {
-      // Cancel pending ACP permissions before stopping the process
+      // Cancel pending ACP permissions and clean up streaming state
+      this.acpStreamState.delete(sessionId);
       const acpBridge = this.acpPermissionBridges.get(sessionId);
       if (acpBridge) {
         acpBridge.cancelAll();
@@ -730,6 +789,11 @@ class SessionService {
   }
 
   getSessionClient(sessionId: string): unknown | undefined {
+    // Check ACP runtime first (not managed by legacy adapters)
+    const acpClient = acpRuntimeManager.getClient(sessionId);
+    if (acpClient) {
+      return acpClient;
+    }
     return this.resolveAdapterForSessionSync(sessionId).getClient(sessionId);
   }
 
@@ -740,6 +804,10 @@ class SessionService {
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
+    // ACP sessions manage model via config options (Phase 21), skip legacy adapter path
+    if (acpRuntimeManager.getClient(sessionId)) {
+      return;
+    }
     const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
     const nextModel = resolveSessionModelForProvider(model, session.provider);
     await adapter.setModel(sessionId, nextModel);
@@ -763,6 +831,10 @@ class SessionService {
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
+    // ACP sessions manage thinking via config options (Phase 21), skip legacy adapter path
+    if (acpRuntimeManager.getClient(sessionId)) {
+      return;
+    }
     const adapter =
       this.resolveKnownAdapterForSessionSync(sessionId) ??
       (await this.loadSessionWithAdapter(sessionId)).adapter;
@@ -773,25 +845,20 @@ class SessionService {
     sessionId: string,
     content: string | ClaudeContentItem[]
   ): Promise<void> {
-    const adapter = this.resolveKnownAdapterForSessionSync(sessionId);
-    if (adapter === this.codexAdapter) {
+    // Fast path: if adapter is already known, skip DB lookup
+    const knownAdapter = this.resolveKnownAdapterForSessionSync(sessionId);
+    if (knownAdapter === this.codexAdapter) {
       const normalizedText = this.toCodexTextContent(content);
       await this.codexAdapter.sendMessage(sessionId, normalizedText);
       return;
     }
 
-    if (adapter === this.claudeAdapter) {
-      await this.claudeAdapter.sendMessage(sessionId, content);
-      return;
-    }
-
-    // Check for ACP session (RUNTIME-05: inherits wiring from user-input.handler.ts
-    // which calls this method for all providers -- no separate ACP route needed)
+    // Check for ACP session -- ACP sessions use CLAUDE provider but have
+    // no ClaudeClient, so adapter resolution would incorrectly route to claudeAdapter
     const acpClient = acpRuntimeManager.getClient(sessionId);
     if (acpClient) {
       const normalizedText =
         typeof content === 'string' ? content : this.toCodexTextContent(content);
-      // Fire and forget -- prompt runs in background, events stream via callback
       void this.sendAcpMessage(sessionId, normalizedText).catch((error) => {
         logger.error('ACP prompt failed', {
           sessionId,
@@ -801,6 +868,11 @@ class SessionService {
       return;
     }
 
+    // Claude adapter path (or fallback to DB lookup for unknown sessions)
+    if (knownAdapter === this.claudeAdapter) {
+      await this.claudeAdapter.sendMessage(sessionId, content);
+      return;
+    }
     const { session } = await this.loadSessionWithAdapter(sessionId);
     if (session.provider === 'CODEX') {
       const normalizedText = this.toCodexTextContent(content);
@@ -992,6 +1064,13 @@ class SessionService {
       });
       return existingAcp;
     }
+
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: 'starting',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
 
     const handle = await this.createAcpClient(sessionId, options, session);
 
