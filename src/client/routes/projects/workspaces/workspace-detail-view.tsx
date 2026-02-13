@@ -4,6 +4,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/componen
 import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { Loading } from '@/frontend/components/loading';
+import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import type {
   NewSessionProviderSelection,
   useSessionManagement,
@@ -30,8 +31,6 @@ interface HeaderProps {
   openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
   handleArchiveRequest: () => void;
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
-  selectedProvider: NewSessionProviderSelection;
-  setSelectedProvider: Dispatch<SetStateAction<NewSessionProviderSelection>>;
   running: boolean;
   isCreatingSession: boolean;
   hasChanges: boolean | undefined;
@@ -47,6 +46,9 @@ interface SessionTabsProps {
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
+  selectedProvider: NewSessionProviderSelection;
+  setSelectedProvider: Dispatch<SetStateAction<NewSessionProviderSelection>>;
+  effectiveDefaultProvider: SessionProviderValue;
 }
 
 interface ArchiveDialogProps {
@@ -123,8 +125,6 @@ export function WorkspaceDetailView({
         archivePending={header.archivePending}
         onArchiveRequest={header.handleArchiveRequest}
         handleQuickAction={header.handleQuickAction}
-        selectedProvider={header.selectedProvider}
-        setSelectedProvider={header.setSelectedProvider}
         running={header.running}
         isCreatingSession={header.isCreatingSession}
         hasChanges={header.hasChanges}
@@ -156,6 +156,9 @@ export function WorkspaceDetailView({
               onCloseSession={sessionTabs.handleCloseChatSession}
               maxSessions={sessionTabs.maxSessions}
               hasWorktreePath={sessionTabs.hasWorktreePath}
+              selectedProvider={sessionTabs.selectedProvider}
+              setSelectedProvider={sessionTabs.setSelectedProvider}
+              effectiveDefaultProvider={sessionTabs.effectiveDefaultProvider}
             >
               <ChatContent {...chat} />
             </WorkspaceContentView>

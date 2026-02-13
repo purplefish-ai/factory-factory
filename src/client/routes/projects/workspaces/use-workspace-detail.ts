@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { trpc } from '@/frontend/lib/trpc';
+import {
+  type NewSessionProviderSelection,
+  resolveExplicitSessionProvider,
+  type SessionProviderValue,
+} from '@/lib/session-provider-selection';
 
 // =============================================================================
 // Helpers
@@ -97,14 +102,8 @@ interface UseSessionManagementOptions {
   isSessionReady: boolean;
 }
 
-type SessionProviderValue = 'CLAUDE' | 'CODEX';
-export type NewSessionProviderSelection = SessionProviderValue | 'WORKSPACE_DEFAULT';
-
-export function resolveExplicitSessionProvider(
-  selectedProvider: NewSessionProviderSelection
-): SessionProviderValue | undefined {
-  return selectedProvider === 'WORKSPACE_DEFAULT' ? undefined : selectedProvider;
-}
+export type { NewSessionProviderSelection };
+export { resolveExplicitSessionProvider };
 
 /** Minimal mutation interface exposing only the properties we use */
 interface MutationLike<TInput, TOutput = unknown, TError = unknown> {
