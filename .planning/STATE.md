@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 20 of 22 (Event Translation + Permissions)
-Plan: 2 of 3 complete
-Status: Phase 20 in progress (Plan 02 complete, Plan 03 next)
-Last activity: 2026-02-13 -- Completed 20-02 (Event Translation + Permission Wiring)
+Plan: 3 of 3 (Tasks 1-2 complete, Task 3 checkpoint pending)
+Status: Phase 20 Plan 03 checkpoint -- awaiting human verification of frontend features
+Last activity: 2026-02-13 -- 20-03 Tasks 1-2 complete, checkpoint pending
 
 Progress: [████░░░░░░] 38%
 
@@ -28,7 +28,7 @@ Progress: [████░░░░░░] 38%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
-| 20. Event Translation + Permissions | 2/3 | 10min | 5min |
+| 20. Event Translation + Permissions | 2/3 (03 checkpoint) | 19min | 6min |
 | 21. Config Options + Unified Runtime | 0/TBD | -- | -- |
 | 22. Cleanup + Polish | 0/TBD | -- | -- |
 
@@ -74,6 +74,12 @@ Phase 20-02 decisions:
 - ACP permission requests emit both delta event (UI) and setPendingInteractiveRequest (session restore)
 - WebSocket types extended with acpOptions and optionId as optional fields (backward-compatible)
 
+Phase 20-03 decisions:
+- AcpPermissionPrompt in same file as PermissionPrompt with acpOptions guard routing
+- ACP plan updates parsed from task_notification JSON with acp_plan type discriminant
+- Tool progress acpLocations rendered as clickable buttons dispatching acp-open-file custom events
+- acpPlan and toolProgress surfaced through full hook chain to AgentLiveDock
+
 ### Pending Todos
 
 None.
@@ -85,5 +91,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed 20-02-PLAN.md (Event Translation + Permission Wiring)
+Stopped at: 20-03 Task 3 checkpoint (human-verify) -- Tasks 1-2 committed, awaiting visual verification
 Resume file: None
