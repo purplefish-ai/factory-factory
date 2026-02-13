@@ -1,6 +1,13 @@
 import type { SessionDeltaEvent } from '@/shared/claude';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { mapCodexMessageToDelta } from './codex-delta-mapper';
 import { createUnsupportedOperationError } from './errors';
+import {
+  CODEX_DYNAMIC_TOOL_CALL_METHOD,
+  isCodexCommandApprovalMethod,
+  isCodexFileChangeApprovalMethod,
+  isCodexUserInputMethod,
+} from './interactive-methods';
 import { asRecord } from './payload-utils';
 import {
   parseNotificationTextWithSchema,
@@ -26,15 +33,11 @@ function buildRuntimeUpdate(
 }
 
 function buildProviderEventMessage(method: string, params: unknown): SessionDeltaEvent {
-  return {
-    type: 'agent_message',
-    data: {
-      type: 'system',
-      subtype: 'status',
-      status: `codex:${method}`,
-      result: params,
-    },
-  };
+  return mapCodexMessageToDelta({
+    kind: 'provider_event',
+    providerStatus: `codex:${method}`,
+    payload: params,
+  });
 }
 
 function translateTurnLifecycle(method: string, params: unknown): SessionDeltaEvent[] | null {
@@ -87,110 +90,54 @@ export class CodexEventTranslator {
         return [buildProviderEventMessage(method, params)];
       }
 
-      return [
-        {
-          type: 'agent_message',
-          data: {
-            type: 'assistant',
-            message: {
-              role: 'assistant',
-              content: [
-                {
-                  type: 'thinking',
-                  thinking,
-                },
-              ],
-            },
-          },
-        },
-      ];
+      return [mapCodexMessageToDelta({ kind: 'thinking', text: thinking })];
     }
 
     if (method.includes('toolResult')) {
       const parsed = parseToolResultNotificationWithSchema(params);
       return [
-        {
-          type: 'agent_message',
-          data: {
-            type: 'user',
-            message: {
-              role: 'user',
-              content: [
-                {
-                  type: 'tool_result',
-                  tool_use_id: parsed.toolUseId,
-                  content: parsed.output ?? JSON.stringify(parsed.payload),
-                },
-              ],
-            },
-          },
-        },
+        mapCodexMessageToDelta({
+          kind: 'tool_result',
+          toolUseId: parsed.toolUseId,
+          text: parsed.output ?? undefined,
+          payload: parsed.payload,
+        }),
       ];
     }
 
     if (method.includes('toolCall')) {
       const parsed = parseToolCallNotificationWithSchema(params);
       return [
-        {
-          type: 'agent_message',
-          data: {
-            type: 'stream_event',
-            event: {
-              type: 'content_block_start',
-              index: 0,
-              content_block: {
-                type: 'tool_use',
-                id: parsed.toolUseId,
-                name: parsed.toolName,
-                input: parsed.input,
-              },
-            },
-          },
-        },
+        mapCodexMessageToDelta({
+          kind: 'tool_call',
+          toolUseId: parsed.toolUseId,
+          toolName: parsed.toolName,
+          input: parsed.input,
+        }),
       ];
     }
 
     const text = parseNotificationTextWithSchema(params);
     if (text) {
-      return [
-        {
-          type: 'agent_message',
-          data: {
-            type: 'assistant',
-            message: {
-              role: 'assistant',
-              content: [
-                {
-                  type: 'text',
-                  text,
-                },
-              ],
-            },
-          },
-        },
-      ];
+      return [mapCodexMessageToDelta({ kind: 'assistant_text', text })];
     }
 
     return [buildProviderEventMessage(method, params)];
   }
 
   translateServerRequest(method: string, requestId: string, params: unknown): SessionDeltaEvent {
-    if (
-      method === 'item/commandExecution/requestApproval' ||
-      method === 'item/fileChange/requestApproval'
-    ) {
+    if (isCodexCommandApprovalMethod(method) || isCodexFileChangeApprovalMethod(method)) {
       return {
         type: 'permission_request',
         requestId,
-        toolName:
-          method === 'item/commandExecution/requestApproval'
-            ? 'CodexCommandApproval'
-            : 'CodexFileChangeApproval',
+        toolName: isCodexCommandApprovalMethod(method)
+          ? 'CodexCommandApproval'
+          : 'CodexFileChangeApproval',
         toolInput: asRecord(params),
       };
     }
 
-    if (method === 'item/tool/requestUserInput' || method === 'tool/requestUserInput') {
+    if (isCodexUserInputMethod(method)) {
       if (!this.options?.userInputEnabled) {
         const error = createUnsupportedOperationError('question_response');
         return {
@@ -207,6 +154,18 @@ export class CodexEventTranslator {
         type: 'user_question',
         requestId,
         questions: parseUserInputQuestionsWithSchema(params),
+      };
+    }
+
+    if (method === CODEX_DYNAMIC_TOOL_CALL_METHOD) {
+      return {
+        type: 'error',
+        message: 'Unsupported Codex interactive request: item/tool/call (intentionally disabled)',
+        data: {
+          code: 'UNSUPPORTED_OPERATION',
+          operation: method,
+          reason: 'INTENTIONALLY_UNSUPPORTED',
+        },
       };
     }
 

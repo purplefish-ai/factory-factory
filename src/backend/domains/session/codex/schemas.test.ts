@@ -270,6 +270,28 @@ describe('Codex schemas', () => {
     });
 
     expect(
+      validateCodexApprovalResponseWithSchema('applyPatchApproval', {
+        decision: 'decline',
+      })
+    ).toEqual({
+      success: true,
+      data: {
+        decision: 'decline',
+      },
+    });
+
+    expect(
+      validateCodexApprovalResponseWithSchema('execCommandApproval', {
+        decision: 'accept',
+      })
+    ).toEqual({
+      success: true,
+      data: {
+        decision: 'accept',
+      },
+    });
+
+    expect(
       validateCodexToolRequestUserInputResponseWithSchema({
         answers: {
           question_1: {

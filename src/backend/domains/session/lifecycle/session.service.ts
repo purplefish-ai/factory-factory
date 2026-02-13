@@ -515,6 +515,21 @@ class SessionService {
   }
 
   /**
+   * Backward-compatible Claude-named entrypoint used by existing public contracts.
+   */
+  async getOrCreateClient(
+    sessionId: string,
+    options?: {
+      thinkingEnabled?: boolean;
+      permissionMode?: 'bypassPermissions' | 'plan';
+      model?: string;
+      reasoningEffort?: string;
+    }
+  ): Promise<unknown> {
+    return await this.getOrCreateSessionClient(sessionId, options);
+  }
+
+  /**
    * Get an existing ClaudeClient without creating one.
    *
    * @param sessionId - The database session ID

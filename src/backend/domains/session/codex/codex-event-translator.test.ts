@@ -131,6 +131,30 @@ describe('CodexEventTranslator', () => {
         toolName: 'CodexCommandApproval',
       })
     );
+
+    const legacyEvent = translator.translateServerRequest('execCommandApproval', 'approval-2', {
+      command: 'pnpm test',
+    });
+
+    expect(legacyEvent).toEqual(
+      expect.objectContaining({
+        type: 'permission_request',
+        requestId: 'approval-2',
+        toolName: 'CodexCommandApproval',
+      })
+    );
+
+    const patchEvent = translator.translateServerRequest('applyPatchApproval', 'approval-3', {
+      patch: '*** Begin Patch',
+    });
+
+    expect(patchEvent).toEqual(
+      expect.objectContaining({
+        type: 'permission_request',
+        requestId: 'approval-3',
+        toolName: 'CodexFileChangeApproval',
+      })
+    );
   });
 
   it('feature-flags user input requests and degrades to unsupported when disabled', () => {
@@ -190,6 +214,29 @@ describe('CodexEventTranslator', () => {
           ],
         },
       ],
+    });
+  });
+
+  it('documents item/tool/call as intentionally unsupported', () => {
+    const translator = new CodexEventTranslator({ userInputEnabled: true });
+    const event = translator.translateServerRequest('item/tool/call', 'tool-call-1', {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      callId: 'call-1',
+      tool: 'request_user_input',
+      arguments: {
+        prompt: 'hello',
+      },
+    });
+
+    expect(event).toEqual({
+      type: 'error',
+      message: 'Unsupported Codex interactive request: item/tool/call (intentionally disabled)',
+      data: {
+        code: 'UNSUPPORTED_OPERATION',
+        operation: 'item/tool/call',
+        reason: 'INTENTIONALLY_UNSUPPORTED',
+      },
     });
   });
 });
