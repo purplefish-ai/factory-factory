@@ -1,0 +1,234 @@
+import type { SessionUpdate } from '@agentclientprotocol/sdk';
+import type { createLogger } from '@/backend/services/logger.service';
+import type { SessionDeltaEvent } from '@/shared/claude';
+import type { CommandInfo } from '@/shared/claude/protocol/models';
+
+/**
+ * Stateless translator that maps ACP SessionUpdate variants to FF SessionDeltaEvent arrays.
+ *
+ * Modeled on CodexEventTranslator. Each ACP session update type is mapped to the
+ * appropriate FF delta event type(s) that the frontend already knows how to render.
+ *
+ * Error handling: Never throws. Malformed or missing data produces a warning log
+ * and returns an empty array, so one bad event does not break the pipeline.
+ */
+export class AcpEventTranslator {
+  private readonly logger: ReturnType<typeof createLogger>;
+
+  constructor(logger: ReturnType<typeof createLogger>) {
+    this.logger = logger;
+  }
+
+  translateSessionUpdate(update: SessionUpdate): SessionDeltaEvent[] {
+    switch (update.sessionUpdate) {
+      case 'agent_message_chunk':
+        return this.translateAgentMessageChunk(update);
+
+      case 'agent_thought_chunk':
+        return this.translateAgentThoughtChunk(update);
+
+      case 'tool_call':
+        return this.translateToolCall(update);
+
+      case 'tool_call_update':
+        return this.translateToolCallUpdate(update);
+
+      case 'plan':
+        return this.translatePlan(update);
+
+      case 'available_commands_update':
+        return this.translateAvailableCommands(update);
+
+      case 'usage_update':
+        return this.translateUsageUpdate(update);
+
+      // Deferred to Phase 21 -- log-only
+      case 'config_option_update':
+      case 'current_mode_update':
+      case 'session_info_update':
+      case 'user_message_chunk':
+        return [];
+
+      default:
+        this.logger.warn('Unknown ACP session update type', {
+          sessionUpdate: (update as { sessionUpdate: string }).sessionUpdate,
+        });
+        return [];
+    }
+  }
+
+  private translateAgentMessageChunk(
+    update: Extract<SessionUpdate, { sessionUpdate: 'agent_message_chunk' }>
+  ): SessionDeltaEvent[] {
+    if (!update.content) {
+      this.logger.warn('agent_message_chunk: missing content', { update });
+      return [];
+    }
+
+    if (update.content.type !== 'text') {
+      this.logger.warn('agent_message_chunk: non-text content type, skipping', {
+        contentType: update.content.type,
+      });
+      return [];
+    }
+
+    const text = (update.content as { type: 'text'; text: string }).text;
+
+    return [
+      {
+        type: 'agent_message',
+        data: {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text }],
+          },
+        },
+      },
+    ];
+  }
+
+  private translateAgentThoughtChunk(
+    update: Extract<SessionUpdate, { sessionUpdate: 'agent_thought_chunk' }>
+  ): SessionDeltaEvent[] {
+    if (!update.content) {
+      this.logger.warn('agent_thought_chunk: missing content', { update });
+      return [];
+    }
+
+    if (update.content.type !== 'text') {
+      this.logger.warn('agent_thought_chunk: non-text content type, skipping', {
+        contentType: update.content.type,
+      });
+      return [];
+    }
+
+    const text = (update.content as { type: 'text'; text: string }).text;
+
+    return [
+      {
+        type: 'agent_message',
+        data: {
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'thinking', thinking: text },
+          },
+        },
+      },
+    ];
+  }
+
+  private translateToolCall(
+    update: Extract<SessionUpdate, { sessionUpdate: 'tool_call' }>
+  ): SessionDeltaEvent[] {
+    if (!(update.toolCallId && update.title)) {
+      this.logger.warn('tool_call: missing toolCallId or title', {
+        toolCallId: update.toolCallId,
+        title: update.title,
+      });
+      return [];
+    }
+
+    const events: SessionDeltaEvent[] = [
+      {
+        type: 'agent_message',
+        data: {
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: {
+              type: 'tool_use',
+              id: update.toolCallId,
+              name: update.title,
+              input: (update.rawInput as Record<string, unknown>) ?? {},
+            },
+          },
+        },
+      },
+      {
+        type: 'tool_progress',
+        tool_use_id: update.toolCallId,
+        tool_name: update.title,
+        acpLocations: update.locations ?? [],
+        acpKind: update.kind ?? undefined,
+        acpStatus: update.status ?? undefined,
+      } as SessionDeltaEvent,
+    ];
+
+    return events;
+  }
+
+  private translateToolCallUpdate(
+    update: Extract<SessionUpdate, { sessionUpdate: 'tool_call_update' }>
+  ): SessionDeltaEvent[] {
+    if (!update.toolCallId) {
+      this.logger.warn('tool_call_update: missing toolCallId', { update });
+      return [];
+    }
+
+    const event: Record<string, unknown> = {
+      type: 'tool_progress',
+      tool_use_id: update.toolCallId,
+      tool_name: update.title ?? undefined,
+      acpStatus: update.status ?? undefined,
+      acpKind: update.kind ?? undefined,
+      acpLocations: update.locations ?? [],
+      acpContent: update.content ?? undefined,
+    };
+
+    // Signal completion to existing tool progress tracking
+    if (update.status === 'completed' || update.status === 'failed') {
+      event.elapsed_time_seconds = 0;
+    }
+
+    return [event as SessionDeltaEvent];
+  }
+
+  private translatePlan(
+    update: Extract<SessionUpdate, { sessionUpdate: 'plan' }>
+  ): SessionDeltaEvent[] {
+    return [
+      {
+        type: 'task_notification',
+        message: JSON.stringify({
+          type: 'acp_plan',
+          entries: update.entries ?? [],
+        }),
+      },
+    ];
+  }
+
+  private translateAvailableCommands(
+    update: Extract<SessionUpdate, { sessionUpdate: 'available_commands_update' }>
+  ): SessionDeltaEvent[] {
+    const slashCommands: CommandInfo[] = (update.availableCommands ?? []).map((cmd) => ({
+      name: cmd.name,
+      description: cmd.description,
+      argumentHint: cmd.input?.hint,
+    }));
+
+    return [
+      {
+        type: 'slash_commands',
+        slashCommands,
+      },
+    ];
+  }
+
+  private translateUsageUpdate(
+    update: Extract<SessionUpdate, { sessionUpdate: 'usage_update' }>
+  ): SessionDeltaEvent[] {
+    return [
+      {
+        type: 'agent_message',
+        data: {
+          type: 'result',
+          result: update,
+        },
+      },
+    ];
+  }
+}
