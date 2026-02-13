@@ -1,6 +1,7 @@
 import { SessionStatus } from '@factory-factory/core';
 import { type AgentSession, Prisma, SessionProvider, type Workspace } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
+import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 
 export type ClaudeSession = Omit<
   AgentSession,
@@ -60,19 +61,6 @@ type AgentSessionWithWorkspace = Prisma.AgentSessionGetPayload<{
   include: { workspace: true };
 }>;
 
-const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
-  [SessionProvider.CLAUDE]: 'sonnet',
-  [SessionProvider.CODEX]: 'gpt-5',
-};
-
-function resolveSessionModel(model: string | undefined, provider: SessionProvider): string {
-  const normalized = model?.trim();
-  if (normalized) {
-    return normalized;
-  }
-  return DEFAULT_SESSION_MODEL_BY_PROVIDER[provider];
-}
-
 function toLegacySession(session: AgentSession): ClaudeSession {
   const { providerSessionId, providerProjectPath, providerProcessPid, ...legacySession } = session;
 
@@ -102,7 +90,7 @@ class ClaudeSessionAccessor {
           workspaceId: data.workspaceId,
           name: data.name,
           workflow: data.workflow,
-          model: resolveSessionModel(data.model, provider),
+          model: resolveSessionModelForProvider(data.model, provider),
           provider,
           providerProjectPath: data.claudeProjectPath ?? null,
         },
@@ -237,7 +225,7 @@ class ClaudeSessionAccessor {
         select: { model: true },
       });
 
-      const model = resolveSessionModel(recentSession?.model, provider);
+      const model = resolveSessionModelForProvider(recentSession?.model, provider);
 
       const newSession = await tx.agentSession.create({
         data: {

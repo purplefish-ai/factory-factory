@@ -85,7 +85,29 @@ describe('claudeSessionAccessor', () => {
     expect(result.claudeProcessPid).toBeNull();
   });
 
-  it('respects explicit provider/model/path on create', async () => {
+  it('respects explicit provider/path and keeps compatible CODEX model', async () => {
+    mockAgentSession.create.mockResolvedValue(
+      buildAgentSession({ provider: SessionProvider.CODEX })
+    );
+
+    await claudeSessionAccessor.create({
+      workspaceId: 'workspace-1',
+      workflow: 'followup',
+      model: 'gpt-5-codex',
+      provider: SessionProvider.CODEX,
+      claudeProjectPath: '/tmp/custom',
+    });
+
+    expect(mockAgentSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        model: 'gpt-5-codex',
+        provider: SessionProvider.CODEX,
+        providerProjectPath: '/tmp/custom',
+      }),
+    });
+  });
+
+  it('falls back to gpt-5 when CODEX create model is Claude-only', async () => {
     mockAgentSession.create.mockResolvedValue(
       buildAgentSession({ provider: SessionProvider.CODEX })
     );
@@ -95,14 +117,12 @@ describe('claudeSessionAccessor', () => {
       workflow: 'followup',
       model: 'opus',
       provider: SessionProvider.CODEX,
-      claudeProjectPath: '/tmp/custom',
     });
 
     expect(mockAgentSession.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        model: 'opus',
+        model: 'gpt-5',
         provider: SessionProvider.CODEX,
-        providerProjectPath: '/tmp/custom',
       }),
     });
   });
@@ -122,6 +142,24 @@ describe('claudeSessionAccessor', () => {
       data: expect.objectContaining({
         model: 'gpt-5',
         provider: SessionProvider.CODEX,
+      }),
+    });
+  });
+
+  it('falls back to sonnet when CLAUDE create model is Codex-only', async () => {
+    mockAgentSession.create.mockResolvedValue(buildAgentSession());
+
+    await claudeSessionAccessor.create({
+      workspaceId: 'workspace-1',
+      workflow: 'followup',
+      model: 'gpt-5',
+      provider: SessionProvider.CLAUDE,
+    });
+
+    expect(mockAgentSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        model: 'sonnet',
+        provider: SessionProvider.CLAUDE,
       }),
     });
   });
@@ -256,7 +294,7 @@ describe('claudeSessionAccessor', () => {
     expect(result).toEqual({ outcome: 'limit_reached' });
   });
 
-  it('acquireFixerSession creates using recent model and explicit provider', async () => {
+  it('acquireFixerSession falls back when recent model is invalid for provider', async () => {
     mockTransaction.agentSession.findFirst
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ model: 'opus' });
@@ -277,7 +315,7 @@ describe('claudeSessionAccessor', () => {
         workspaceId: 'workspace-1',
         workflow: 'ratchet',
         name: 'Ratchet',
-        model: 'opus',
+        model: 'gpt-5',
         status: SessionStatus.IDLE,
         provider: SessionProvider.CODEX,
         providerProjectPath: null,

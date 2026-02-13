@@ -14,6 +14,10 @@ import {
 import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
 import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import {
+  normalizeSessionModelForProvider,
+  resolveSessionModelForProvider,
+} from '@/backend/lib/session-model';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -544,8 +548,9 @@ class SessionService {
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    const { adapter } = await this.loadSessionWithAdapter(sessionId);
-    await adapter.setModel(sessionId, model);
+    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
+    const nextModel = resolveSessionModelForProvider(model, session.provider);
+    await adapter.setModel(sessionId, nextModel);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
@@ -689,10 +694,11 @@ class SessionService {
     session?: AgentSessionRecord
   ): Promise<unknown> {
     const context = await this.loadCodexSessionContext(sessionId, session);
+    const requestedModel = normalizeSessionModelForProvider(model, 'CODEX');
     const clientOptions = {
       workingDir: context.workingDir,
       sessionId,
-      model: model ?? context.model,
+      model: requestedModel ?? context.model,
     };
     return await this.codexAdapter.getOrCreateClient(sessionId, clientOptions, {}, context);
   }
@@ -719,7 +725,7 @@ class SessionService {
     return {
       workspaceId: session.workspaceId,
       workingDir: workspace.worktreePath,
-      model: session.model,
+      model: resolveSessionModelForProvider(session.model, 'CODEX'),
     };
   }
 
@@ -869,7 +875,9 @@ class SessionService {
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
     const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
-    return adapter.getChatBarCapabilities({ selectedModel: session.model });
+    return adapter.getChatBarCapabilities({
+      selectedModel: resolveSessionModelForProvider(session.model, session.provider),
+    });
   }
 
   /**
@@ -1030,7 +1038,7 @@ class SessionService {
       workingDir: sessionContext.workingDir,
       resumeClaudeSessionId: sessionContext.resumeClaudeSessionId,
       systemPrompt: sessionContext.systemPrompt,
-      model: options?.model ?? sessionContext.model,
+      model: resolveSessionModelForProvider(options?.model ?? sessionContext.model, 'CLAUDE'),
       permissionMode: options?.permissionMode ?? 'bypassPermissions',
       includePartialMessages: false,
       thinkingEnabled: options?.thinkingEnabled,
