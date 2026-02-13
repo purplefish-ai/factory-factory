@@ -29,7 +29,7 @@ const ScrollStateSchema = z.object({
 
 const ScrollStoragePayloadSchema = z.object({
   v: z.literal(STORAGE_VERSION),
-  states: z.record(z.string(), ScrollStateSchema),
+  states: z.record(z.string(), z.unknown()),
 });
 
 export function makeScrollStorageKey(workspaceId: string): string {
@@ -38,10 +38,6 @@ export function makeScrollStorageKey(workspaceId: string): string {
 
 export function makeScrollStateKey(tabId: string, mode: ScrollMode): string {
   return `${tabId}:${mode}`;
-}
-
-function isValidScrollState(state: unknown): state is ScrollState {
-  return ScrollStateSchema.safeParse(state).success;
 }
 
 function sanitizeScrollState(state: ScrollState): ScrollState {
@@ -69,8 +65,9 @@ export function loadScrollStateRecord(
     const states = validated.data.states;
     const cleaned: Record<string, ScrollState> = {};
     for (const [key, value] of Object.entries(states)) {
-      if (isValidScrollState(value)) {
-        cleaned[key] = sanitizeScrollState(value);
+      const state = ScrollStateSchema.safeParse(value);
+      if (state.success) {
+        cleaned[key] = sanitizeScrollState(state.data);
       }
     }
     return cleaned;

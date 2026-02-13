@@ -14,7 +14,15 @@ type ResizablePanelGroupProps = Omit<ComponentProps<typeof Group>, 'orientation'
   autoSaveId?: string;
 };
 
-const LayoutSchema = z.record(z.string(), z.number().finite());
+function isLayout(value: unknown): value is Layout {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  return Object.values(value).every((entry) => typeof entry === 'number' && Number.isFinite(entry));
+}
+
+const LayoutSchema = z.custom<Layout>(isLayout);
 
 // Helper to load layout from localStorage synchronously
 function loadLayoutFromStorage(autoSaveId: string): Layout | undefined {
