@@ -43,12 +43,11 @@ See [v1.1 Roadmap Archive](milestones/v1.1-ROADMAP.md) for full phase details.
   3. Cancelling a prompt mid-turn halts the agent and returns a cancelled stop reason within the grace period
   4. Stopping a session terminates the subprocess cleanly (SIGTERM then SIGKILL) with no orphaned processes remaining
   5. All ACP protocol events are written to the session file log for debugging
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 19-01: TBD
-- [ ] 19-02: TBD
-- [ ] 19-03: TBD
+- [ ] 19-01-PLAN.md -- ACP runtime module: types, process handle, client handler, runtime manager, unit tests
+- [ ] 19-02-PLAN.md -- Wire ACP into session service, barrel exports, end-to-end verification
 
 ### Phase 20: Event Translation + Permissions
 **Goal**: ACP events render correctly in the FF frontend (tool calls, thoughts, plans, slash commands) and permission requests present the full ACP option set (allow_once, allow_always, reject_once, reject_always) end-to-end
@@ -106,11 +105,11 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 19. ACP Runtime Foundation | v1.2 | 0/TBD | Not started | - |
+| 19. ACP Runtime Foundation | v1.2 | 0/2 | Planned | - |
 | 20. Event Translation + Permissions | v1.2 | 0/TBD | Not started | - |
 | 21. Config Options + Unified Runtime | v1.2 | 0/TBD | Not started | - |
 | 22. Cleanup + Polish | v1.2 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-10*
-*Last updated: 2026-02-13 -- v1.2 ACP Cutover roadmap created*
+*Last updated: 2026-02-13 -- Phase 19 planned (2 plans)*
