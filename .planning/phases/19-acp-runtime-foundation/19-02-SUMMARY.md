@@ -75,7 +75,7 @@ Each task was committed atomically:
 1. **Task 1: Wire AcpRuntimeManager into session service and event pipeline** - `56b238a7` (feat)
 2. **Task 2: Verify ACP integration end-to-end** - Human verification checkpoint (approved)
 
-**Plan metadata:** (pending final docs commit)
+**Plan metadata:** `beefe17b` (docs: complete plan)
 
 ## Files Created/Modified
 - `src/backend/domains/session/lifecycle/session.service.ts` - Added ACP client creation, send, cancel, stop methods; ACP branches in getOrCreateSessionClient, sendSessionMessage, stopSession, stopAllClients; ACP checks in isSessionRunning/isSessionWorking/isAnySessionWorking; setupAcpEventHandler for delta pipeline wiring
