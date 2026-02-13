@@ -10,7 +10,7 @@
  * The state is designed to be used with useReducer for predictable updates.
  */
 
-import type { ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
+import type { ChatMessage, PermissionRequest, WebSocketMessage } from '@/lib/chat-protocol';
 import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
@@ -193,6 +193,10 @@ function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | nu
         timestamp: new Date().toISOString(),
         // Include plan content for ExitPlanMode requests
         planContent: data.planContent ?? null,
+        // Include ACP permission options for multi-option UI
+        acpOptions: (data as Record<string, unknown>).acpOptions as
+          | PermissionRequest['acpOptions']
+          | undefined,
       },
     };
   }

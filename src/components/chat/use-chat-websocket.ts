@@ -77,7 +77,7 @@ export interface UseChatWebSocketReturn {
   sendMessage: (text: string) => void;
   stopChat: () => void;
   clearChat: () => void;
-  approvePermission: (requestId: string, allow: boolean) => void;
+  approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   setInputDraft: (draft: string) => void;

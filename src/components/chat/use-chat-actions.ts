@@ -59,7 +59,7 @@ export interface UseChatActionsReturn {
   sendMessage: (text: string) => void;
   stopChat: () => void;
   clearChat: () => void;
-  approvePermission: (requestId: string, allow: boolean) => void;
+  approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   removeQueuedMessage: (id: string) => void;
@@ -204,13 +204,18 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   }, [send, dispatch, stateRef]);
 
   const approvePermission = useCallback(
-    (requestId: string, allow: boolean) => {
+    (requestId: string, allow: boolean, optionId?: string) => {
       // Validate requestId matches pending permission to prevent stale responses
       const { pendingRequest } = stateRef.current;
       if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const msg: PermissionResponseMessage = { type: 'permission_response', requestId, allow };
+      const msg: PermissionResponseMessage = {
+        type: 'permission_response',
+        requestId,
+        allow,
+        ...(optionId && { optionId }),
+      };
       send(msg);
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
     },
