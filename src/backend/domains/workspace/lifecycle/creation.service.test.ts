@@ -1,7 +1,6 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as worktreeLifecycleServiceModule from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
-import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import * as agentSessionAccessorModule from '@/backend/resource_accessors/agent-session.accessor';
 import * as projectAccessorModule from '@/backend/resource_accessors/project.accessor';
 import * as userSettingsAccessorModule from '@/backend/resource_accessors/user-settings.accessor';
@@ -389,7 +388,6 @@ describe('WorkspaceCreationService', () => {
           workflow: 'followup',
           name: 'Chat 1',
           provider: 'CLAUDE',
-          model: resolveSessionModelForProvider(undefined, 'CLAUDE'),
           claudeProjectPath: null,
         });
       });
@@ -457,7 +455,6 @@ describe('WorkspaceCreationService', () => {
         expect(agentSessionAccessorModule.agentSessionAccessor.create).toHaveBeenCalledWith(
           expect.objectContaining({
             provider: 'CODEX',
-            model: resolveSessionModelForProvider(undefined, 'CODEX'),
             claudeProjectPath: null,
           })
         );
