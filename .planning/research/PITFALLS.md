@@ -1,279 +1,461 @@
-# Pitfalls Research
+# Domain Pitfalls: ACP-Only Provider Runtime Cutover
 
-**Domain:** In-memory project snapshot service with event-driven deltas and WebSocket push
-**Researched:** 2026-02-11
-**Confidence:** HIGH (based on codebase analysis + established event-driven architecture patterns)
+**Domain:** Replacing custom Claude NDJSON + Codex app-server protocols with unified ACP stdio adapter
+**Researched:** 2026-02-13
+**Confidence:** HIGH for process lifecycle and event translation pitfalls (codebase evidence + established Node.js patterns), MEDIUM for ACP protocol edge cases (protocol is young, limited production war stories)
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Snapshot Store Leaks Memory on Workspace Lifecycle Transitions
+Mistakes that cause rewrites, data loss, or production outages.
+
+### Pitfall 1: Orphaned ACP Processes After FF Crash or SIGKILL
 
 **What goes wrong:**
-The snapshot store accumulates entries for workspaces that have been archived or deleted. The existing `WorkspaceActivityService` already tracks per-workspace state in a `Map<string, WorkspaceActivityState>` and has a `clearWorkspace()` method, but the archive orchestrator (`workspace-archive.orchestrator.ts`) does not call it -- it is only called in tests. A new snapshot store that mirrors this pattern will leak identically unless cleanup is wired at every lifecycle exit point.
+When Factory Factory crashes (unhandled exception, SIGKILL from OOM, or Electron force-quit), spawned ACP stdio subprocesses continue running indefinitely. The current Claude process manager spawns with `detached: true` (line 96 of `claude/process.ts`) to create process groups, and uses `process.kill(-pid, 'SIGKILL')` for cleanup (line 243). But this only works during graceful shutdown. If FF itself is killed with SIGKILL, the process group kill never executes. With process-per-session, 5 active sessions means 5 orphaned ACP processes, each consuming memory and potentially holding file locks on workspace directories.
 
 **Why it happens:**
-In-memory Maps in Node.js grow silently. There is no MaxListenersExceededWarning equivalent for Maps. Developers wire the "happy path" (create workspace -> populate snapshot) but forget the teardown paths: archive, delete, failed provisioning cleanup, and server restart recovery. The existing codebase has this exact pattern: `workspaceStates` in `activity.service.ts` has a `clearWorkspace` method, but the orchestration layer only clears it inconsistently.
+The existing `ClaudeProcess.killProcessGroup()` and `ClaudeRuntimeManager.stopAllClients()` rely on the Node.js process being alive to execute cleanup. There is no external reaper. The current system has this same risk with Claude CLI processes, but it is mitigated by the fact that Claude CLI processes are relatively self-terminating (they exit when stdin closes, which happens when the parent process dies). ACP adapters may or may not exhibit this behavior depending on the agent implementation.
 
-**How to avoid:**
-- Wire snapshot cleanup into `workspace-archive.orchestrator.ts` and any delete path as a hard requirement during implementation.
-- Add a periodic sweep (piggyback on the existing scheduler cadence) that removes snapshot entries for workspaces no longer in READY/PROVISIONING status.
-- Write a unit test that creates a snapshot, archives the workspace, and asserts the snapshot map no longer contains the entry.
-- Set a hard upper bound on snapshot store size (e.g., 500 entries) with LRU eviction as a safety net.
+**Consequences:**
+- Zombie ACP processes consuming memory (potentially 200-500MB each for agent processes)
+- File descriptor exhaustion on the host (each process holds stdio pipes + agent-internal FDs)
+- Workspace directory file locks preventing subsequent session starts
+- On Electron, users see "port already in use" or "file locked" errors on next app launch
 
-**Warning signs:**
-- `process.memoryUsage().heapUsed` grows monotonically over days without leveling off.
-- Snapshot store `.size` exceeds active workspace count by more than 20%.
-- No test covers the archive-clears-snapshot path.
+**Prevention:**
+- Record PIDs to a pidfile on disk (`~/.factory-factory/acp-processes.pid`) on spawn, remove on exit. On FF startup, check for stale pidfiles and kill any surviving processes.
+- Do NOT use `detached: true` for ACP processes. When the parent dies, non-detached children receive SIGHUP, which most processes handle by exiting. Detached processes survive parent death by design.
+- Register a `process.on('exit')` handler (which fires even on SIGINT/SIGTERM) that does a synchronous best-effort process group kill.
+- For Electron builds, use `app.on('before-quit')` to trigger graceful shutdown of all ACP processes before the Node.js process exits.
 
-**Phase to address:**
-Phase 1 (Core Snapshot Store). Define cleanup contract as part of the store interface from day one. Do not defer cleanup to a later phase.
+**Detection:**
+- `ps aux | grep acp` showing processes with no FF parent
+- Memory usage growing after FF restart without new sessions
+- File lock errors when starting sessions in workspaces that had active sessions before a crash
+
+**Phase to address:** Phase 1 (ACP Process Spawner). Process lifecycle must be correct from day one. Orphan cleanup cannot be deferred.
 
 ---
 
-### Pitfall 2: Event Ordering Races Between Mutation Sources
+### Pitfall 2: Permission Model Mismatch -- Boolean Allow/Deny vs. ACP Option Selection
 
 **What goes wrong:**
-Multiple mutation sources update the same workspace snapshot concurrently: the scheduler's PR sync, a user-triggered manual PR refresh via tRPC, the ratchet service's CI monitoring, and session lifecycle events from the chat event forwarder. Without a sequencing mechanism, a stale PR sync result that was initiated before a manual refresh can overwrite the newer manual refresh result. The existing codebase already demonstrates this risk: `prSnapshotService.refreshWorkspace()` is called from both the scheduler (`syncSinglePR`) and the workspace query service (`syncPRStatus`), with no coordination between them.
+The current Claude permission system is binary: `PermissionHandler.onCanUseTool()` returns either `{ behavior: 'allow', updatedInput: {} }` or `{ behavior: 'deny', message: '...' }` (see `permissions.ts` lines 64-77). The existing UI presents approve/deny buttons and the `respondToPermission()` method in `claude-session-provider-adapter.ts` (line 141) takes a boolean `allow` parameter.
+
+ACP's `session/request_permission` uses a fundamentally different model: the agent sends an array of `PermissionOption` objects, each with an `optionId`, `name` (display label), and `kind` (one of `allow_once`, `allow_always`, `reject_once`, `reject_always`). The response is an `optionId` string, not a boolean.
+
+Naively mapping this to the existing boolean model means losing `allow_always` and `reject_always` semantics. This breaks the core UX improvement of ACP permissions: once a user says "always allow Bash in this directory," they should not be asked again. If FF strips that to a one-time allow, the agent will re-prompt on every subsequent Bash invocation, making the tool unusable for automated workflows (ratchet auto-fix sessions).
 
 **Why it happens:**
-Each mutation source independently reads state, performs an async operation (e.g., GitHub API call), and writes back. The classic read-modify-write race. In-memory stores make this worse because there is no database-level optimistic locking to catch conflicts.
+The existing `DeferredHandler` and `ModeBasedHandler` classes in `permissions.ts` are designed around the binary model. The `PendingInteractiveRequest` type in the shared types only stores `requestId`, `toolName`, `toolUseId`, and `input`. There is no field for option arrays. The `permission_request` delta event type in `websocket.ts` (line 98-104) sends `toolName` and `toolInput` but no options.
 
-**How to avoid:**
-- Apply a version counter or timestamp to each snapshot field cluster (e.g., `prStateVersion`, `sessionStateVersion`). On write, compare-and-swap: reject the update if the version is stale.
-- Alternatively, use a single-writer pattern per field cluster: only the scheduler writes PR state, only the session event forwarder writes session state. The snapshot service becomes a reader that aggregates, never a writer that arbitrates.
-- For the reconciliation poll (safety-net), always treat poll results as lower priority than event-driven updates. Only apply poll results when `lastEventTimestamp < pollInitiatedAt`.
+**Consequences:**
+- Automated sessions (ratchet auto-fix) cannot benefit from `allow_always` and will be blocked by repeated permission prompts
+- Users are frustrated by permission fatigue -- approving the same tool repeatedly
+- The FF permission mode system (`bypassPermissions`, `acceptEdits`, `dontAsk`, `default`) has no clean mapping to ACP option selection
+- If the mapping is done wrong, security-sensitive denials (`reject_always`) are silently downgraded to `reject_once`
 
-**Warning signs:**
-- Workspace sidebar flickers between two states (e.g., CI_PASSING then CI_RUNNING then CI_PASSING again).
-- State reverts to an older value briefly before settling.
-- Logs show two snapshot updates for the same workspace within milliseconds.
+**Prevention:**
+- Design the new permission bridge to be option-aware from the start. The internal `PendingInteractiveRequest` must carry the full `PermissionOption[]` array from the agent.
+- Add a new `permission_request` delta event shape that includes `options: Array<{ optionId: string, name: string, kind: string }>`.
+- For automated sessions (ratchet), implement a permission strategy that maps FF's `bypassPermissions` mode to always selecting the `allow_always` option (if available) or `allow_once` as fallback.
+- For interactive sessions in `default` mode, present the full ACP option set in the UI. Do not reduce to boolean.
+- The `respondToPermission()` method must change from `(sessionId, requestId, allow: boolean)` to `(sessionId, requestId, optionId: string)`.
 
-**Phase to address:**
-Phase 1 (Core Snapshot Store). The store must define its concurrency model before any writers are connected.
+**Detection:**
+- Automated sessions getting stuck waiting for permission responses
+- Users reporting they have to approve the same tool multiple times per session
+- Permission response handler throwing "unknown optionId" errors
+
+**Phase to address:** Phase 2 (Event Translation Layer). The permission model is a UI + backend + protocol change that spans multiple layers. It must be designed holistically, not as a backend afterthought.
 
 ---
 
-### Pitfall 3: Breaking Domain Boundaries via Shared Event Types
+### Pitfall 3: Event Ordering Inversion During ACP-to-FF State Translation
 
 **What goes wrong:**
-The snapshot service needs data from all 6 domains (session state, workspace lifecycle, GitHub PR status, ratchet state, git changes, terminal state). The temptation is to define a shared event type that all domains emit, or to have the snapshot service import from domain internals. Either approach violates the existing `no-cross-domain-imports` rule enforced by dependency-cruiser, and creates coupling where domains must know about the snapshot service's data model.
+The existing event forwarder (`chat-event-forwarder.service.ts`) processes events sequentially from a single `ClaudeClient` EventEmitter. Events arrive in-order because they come from a single stdio readline stream. The forwarder makes assumptions about ordering: `tool_use` events always precede their corresponding `tool_result` events, `session_id` arrives before the first `stream` event, and `result` events mark the end of a turn.
 
-This codebase has a strict architectural pattern: domains export barrel files only, cross-domain coordination uses bridge interfaces wired in `domain-bridges.orchestrator.ts`. The snapshot service must follow this pattern or it will become the "god object" that couples everything together.
+ACP's `session/update` notifications have different ordering guarantees. The `session/prompt` method is a request-response pair where the response contains the `stopReason`, but `session/update` notifications arrive concurrently during the prompt. An agent may send `tool_call` updates, `agent_message_chunk` updates, and `config_option_update` notifications interleaved in ways that do not match Claude CLI's sequential NDJSON stream.
+
+The critical failure: if the ACP adapter translates `turn completed` into FF's `result` event, the `idle` handler in `chat-event-forwarder.service.ts` (line 286) fires and calls `onDispatchNextMessage()`, potentially sending the next queued message before the prompt response has been fully processed. This creates a race between "prompt response arrives" and "next message dispatched."
 
 **Why it happens:**
-Event-driven systems create a false sense of decoupling. The events themselves become a shared schema -- if domain A changes its event shape, the snapshot service breaks. This is "semantic coupling" through events, and it is the most common pitfall in event-driven architectures at scale (per Wix Engineering and Confluent's documented experiences).
+The existing Codex translator (`codex-event-translator.ts`) already deals with a similar problem -- it maps `turn/started`, `turn/completed`, `turn/interrupted` notifications to FF runtime state changes. But the Codex adapter uses a single shared process (app-server model), so it already has a serialization point (the `CodexAppServerManager.handleInbound()` method processes messages synchronously). An ACP process-per-session model means each session has its own independent event stream, and the events must be translated and applied atomically.
 
-**How to avoid:**
-- Place the snapshot service in `src/backend/services/` (infrastructure-level), not in a domain. It aggregates data but owns no domain logic.
-- Define snapshot bridge interfaces in each domain that the orchestration layer wires, exactly like the existing `RatchetSessionBridge`, `WorkspaceSessionBridge`, etc. The snapshot service never imports from domain barrels.
-- Each domain emits domain-native events (e.g., workspace domain emits `status_changed`, session domain emits `session_idle`). The orchestration layer translates these into snapshot updates. The snapshot service receives pre-mapped data, not raw domain events.
-- Run `pnpm dependency-cruiser` in CI to verify no cross-domain imports are introduced.
+**Consequences:**
+- Queued messages dispatched while the previous turn is still completing, causing the agent to receive overlapping prompts
+- Runtime state machine (`session-runtime-machine.ts`) receiving out-of-order phase transitions (e.g., `idle` -> `running` -> `idle` when it should be `running` -> `idle`)
+- UI showing flickering between WORKING and IDLE states
+- Transcript messages appearing out of order in the chat view
 
-**Warning signs:**
-- Import paths in the snapshot service contain `@/backend/domains/` (should only have `@/backend/services/`).
-- Snapshot service defines its own types that mirror domain types (duplicate type definitions).
-- A change in one domain's internal types causes snapshot service compilation failures.
-- dependency-cruiser violations appear in CI.
+**Prevention:**
+- The ACP event translator must maintain a per-session state machine that tracks whether a prompt is in-flight. The `session/prompt` response (not a notification) is the authoritative signal that a turn is complete.
+- Do not derive "idle" from notifications alone. Use the prompt response resolution as the single source of truth for turn completion.
+- Gate the `onDispatchNextMessage()` callback on the prompt response, not on a translated `result` event.
+- Add an integration test that sends a prompt, fires interleaved notifications, and verifies the session does not dispatch the next queued message until the prompt response resolves.
 
-**Phase to address:**
-Phase 1 (Architecture Design). The bridge interfaces must be defined before any event wiring begins. This is a design decision, not an implementation detail.
+**Detection:**
+- Log entries showing "dispatching next message" before "prompt response received" for the same session
+- UI chat showing user messages appearing between tool results from the same turn
+- Runtime state machine emitting `running` -> `idle` -> `running` in rapid succession (< 100ms)
+
+**Phase to address:** Phase 2 (Event Translation Layer). The translation layer is the most complex part of the cutover and the most likely to have ordering bugs.
 
 ---
 
-### Pitfall 4: WebSocket Reconnection Drops State Updates
+### Pitfall 4: stdin Buffer Deadlock on Large Prompt Payloads
 
 **What goes wrong:**
-When a client's WebSocket disconnects and reconnects (tab sleep, network blip, laptop lid close), events emitted during the disconnection window are lost. The client's UI shows stale state until the next polling cycle (if polling is kept) or indefinitely (if polling is removed). The existing chat WebSocket has this exact vulnerability: `chatConnectionService.forwardToSession()` simply skips sessions with no open connections, with no buffering or replay.
+The existing `ClaudeProtocol.sendRaw()` method (line 434 of `protocol.ts`) correctly handles backpressure: when `stdin.write()` returns `false`, it waits for the `drain` event before continuing. However, it does so with a single pending drain promise, meaning writes are serialized.
 
-The current system "solves" this through client-side polling (refetchInterval at 5-15s cadences across sidebar, Kanban, and workspace list). If the snapshot service replaces polling, this safety net disappears, and WebSocket gaps become directly visible to users.
+With ACP, the client may need to send a `session/prompt` request containing large content (base64-encoded images, long system prompts) while simultaneously needing to respond to a `session/request_permission` request from the agent. If the prompt write fills the stdin buffer and blocks on drain, the permission response cannot be sent. But the agent may be waiting for the permission response before it can continue processing, which means it will not read from its stdin (which is FF's stdout), which means the drain event never fires. This is a classic pipe buffer deadlock.
+
+The existing system avoids this because Claude CLI's NDJSON protocol is half-duplex in practice: FF sends a user message, then waits for the response. Control requests (permissions) come from the CLI and FF responds, but FF never initiates a new write while waiting for a previous write to drain.
+
+ACP is inherently full-duplex: the client can send prompts, config changes, and permission responses concurrently with the agent sending notifications and permission requests.
 
 **Why it happens:**
-WebSocket push is fire-and-forget by default. The server has no confirmation that the client received the message. During reconnection, there is a window where the connection is not yet established but events are being emitted. Mattermost documented this exact issue: without a `missedMessageListener`, their WebSocket client entered infinite reconnection loops.
+Node.js stdio pipe buffers are typically 64KB on macOS and 65KB on Linux. A single base64-encoded image can be 500KB+. The `stream.write()` call will buffer the entire payload in Node.js memory and return `false`, but the OS pipe buffer fills up and creates backpressure. If the agent-side pipe buffer also fills (because the agent is blocked waiting for a permission response), both sides are deadlocked.
 
-**How to avoid:**
-- Do NOT remove client-side polling in the same phase as adding WebSocket push. Keep polling as a fallback with a relaxed cadence (30-60s) while the WebSocket push path is proven reliable.
-- On WebSocket reconnect, the client must request a full snapshot (not just subscribe to deltas). The server should have a `getSnapshot(workspaceId)` endpoint that returns the current materialized state.
-- Include a monotonic version number in each snapshot push. On reconnect, the client sends its last-seen version. If the server's current version is higher, it sends a full snapshot.
-- Keep the reconciliation poll on the server side (~1 min cadence as planned) to heal any event delivery failures.
+**Consequences:**
+- Session appears to hang indefinitely -- no error, no timeout, just frozen
+- The hung process monitor will eventually kill the process after 30 minutes (the default `activityTimeoutMs`), but that is far too slow
+- Multiple sessions can deadlock simultaneously if they all have large prompts
 
-**Warning signs:**
-- Sidebar shows "working" but the session finished minutes ago.
-- Kanban board does not update after a laptop wake from sleep.
-- Users report they need to refresh the page to see current state.
-- No test covers the reconnect-then-resync flow.
+**Prevention:**
+- Implement a write queue that prioritizes protocol responses (permission responses, cancel notifications) over prompt requests. Protocol responses must never be blocked behind a pending prompt write.
+- Consider using separate write channels: one for request-response protocol messages and one for prompt content. ACP does not support this natively over stdio, but the write queue achieves the same effect.
+- Set a write timeout (e.g., 10 seconds) on any single `stdin.write()` call. If the write does not complete within the timeout, kill the process and report an error.
+- Reduce prompt payload size by using file references instead of inline content where possible.
 
-**Phase to address:**
-Phase 3 (WebSocket Integration). The reconnection protocol must be designed before the first WebSocket push message is sent. But do NOT remove polling until Phase 4 or later, after WebSocket push has been validated in production use.
+**Detection:**
+- Session stuck in "running" with no activity for > 30 seconds
+- `stdin.writableLength` growing monotonically (check via periodic monitoring)
+- Agent stderr showing "stdin buffer full" or similar backpressure warnings
+
+**Phase to address:** Phase 1 (ACP Process Spawner). The write path must be correct from the first prototype. A deadlock in the write path makes the entire system unusable.
 
 ---
 
-### Pitfall 5: Reconciliation Poll and Event-Driven Updates Fight Each Other
+### Pitfall 5: Capability-Gating Unstable Methods Without Version Awareness
 
 **What goes wrong:**
-The safety-net reconciliation poll runs every ~60 seconds and reads authoritative state from the database and external sources (GitHub API, git status). Event-driven updates arrive in real-time from domain mutations. If the reconciliation poll is not carefully coordinated with the event stream, the two sources oscillate: the event sets state to X, the poll (which started before the event) sets it back to the old state, then the next event sets it to X again. The UI flickers.
+ACP has several methods explicitly marked as unstable in the TypeScript SDK: `unstable_resumeSession`, `unstable_listSessions`, `unstable_forkSession`, `unstable_setSessionModel`. These methods may be removed or changed without notice. FF needs at least `unstable_setSessionModel` (for the model selector) and `unstable_resumeSession` (for session resume after process restart).
 
-This is particularly dangerous for fields derived from slow external calls. The existing `getProjectSummaryState()` method in `workspace-query.service.ts` already performs concurrent git stat operations and GitHub API calls that take 100-500ms each. A reconciliation poll doing similar work can easily return results that are stale relative to events that arrived during the poll execution.
+The pitfall is hard-coding calls to these methods without checking agent capabilities during initialization. When a new version of Claude Code (or another ACP agent) ships without these methods, the call fails at runtime. Worse, if the method signature changes (e.g., `unstable_setSessionModel` becomes `session/set_model` with different params), the existing call silently sends the wrong method name and gets a JSON-RPC "method not found" error.
 
 **Why it happens:**
-The reconciliation poll and event system have different temporal semantics. Events are point-in-time mutations. Polls are interval snapshots that sample state at poll-start-time but apply results at poll-end-time. The gap between start and end is where races live.
+During development, the team tests against a specific version of Claude Code that supports all unstable methods. The CI also pins a specific version. The failure only manifests when users update their Claude Code installation independently of FF.
 
-**How to avoid:**
-- Stamp each snapshot field with `updatedAt` timestamps. The reconciliation poll only overwrites a field if its data is newer than the field's current `updatedAt`.
-- Use a "dirty flag" approach: when an event updates a field, mark it as "recently updated." The reconciliation poll skips fields that were updated within the last N seconds (e.g., 30s).
-- Never let the reconciliation poll run synchronously with event application. Use a mutex or queue that serializes writes to the snapshot store.
-- Log when the reconciliation poll detects drift from the event-driven state -- this is the whole point of having a reconciliation poll, and the drift metrics inform whether event delivery is reliable.
+**Consequences:**
+- Model selector silently fails -- user changes model, no error shown, agent continues using previous model
+- Session resume fails, forcing a new session (losing conversation history)
+- Error messages are cryptic JSON-RPC errors that mean nothing to users
 
-**Warning signs:**
-- UI values flicker (briefly show old state then snap back to current state).
-- Reconciliation poll logs show frequent "correcting drift" messages for the same fields.
-- CPU usage spikes at the reconciliation interval (doing expensive work redundantly).
+**Prevention:**
+- During `initialize`, inspect the agent's `agentCapabilities` response. Build a capabilities map that tracks which unstable methods are available.
+- Before calling any unstable method, check the capabilities map. If the method is not available, degrade gracefully:
+  - `unstable_setSessionModel` not available: disable the model selector in the UI, show a tooltip explaining the agent does not support model switching
+  - `unstable_resumeSession` not available: fall back to `session/load` (if `loadSession` capability is present) or create a new session
+  - `unstable_listSessions` not available: disable the session picker
+  - `unstable_forkSession` not available: disable fork functionality
+- Log a warning (not error) when a capability is missing. This is expected behavior, not a bug.
+- When unstable methods graduate to stable (e.g., `unstable_setSessionModel` becomes `session/set_model`), support both method names with a capability check to determine which to use.
 
-**Phase to address:**
-Phase 2 (Event Wiring + Reconciliation). The reconciliation poll design must account for event timing from the start. The field-level timestamp approach should be baked into the snapshot store schema in Phase 1.
+**Detection:**
+- Users reporting "model selector does nothing" after updating Claude Code
+- JSON-RPC "method not found" errors in session logs
+- Session resume silently creating new sessions instead of continuing existing ones
+
+**Phase to address:** Phase 1 (ACP Process Spawner / Initialize). Capability checking must be built into the initialization flow, not bolted on later.
 
 ---
 
-### Pitfall 6: Git Stat Operations Block the Event Loop
+### Pitfall 6: Process-Per-Session Resource Exhaustion Under Load
 
 **What goes wrong:**
-The current `getProjectSummaryState()` method runs `gitOpsService.getWorkspaceGitStats()` for every workspace in parallel (limited to 3 concurrent). Each git stat operation spawns a child process (`git diff --stat`). With 20 active workspaces, the reconciliation poll spawns 20 git processes in batches of 3, which takes 2-5 seconds total. If this runs in the snapshot service's reconciliation loop, it blocks the event processing pipeline, causing event-driven updates to queue up and arrive in bursts.
+The current system has two models: Claude uses process-per-session (spawning a `claude` CLI process for each session), and Codex uses a shared app-server process (one process handling all sessions via multiplexed JSON-RPC). Moving to ACP means all providers use process-per-session.
+
+With the Codex shared-process model gone, a user with 10 workspaces each having 2 sessions (a primary and an auto-fix session) would have 20 ACP processes running simultaneously. Each process includes: the ACP adapter binary, the agent runtime (Claude Code, Codex CLI, etc.), any MCP servers the agent spawns, and associated memory for conversation context.
+
+The existing `ClaudeProcessMonitor` (in `monitoring.ts`) monitors memory per-process with a 10GB ceiling and uses `pidusage` for resource tracking. But it monitors individual processes, not aggregate resource consumption. Twenty processes each using 500MB is 10GB total -- within each process's individual limit but catastrophic for the system.
 
 **Why it happens:**
-Git operations are inherently expensive (child process spawn + filesystem reads). The existing code uses `pLimit(3)` to rate-limit, but the aggregate time is still significant. Moving this work into a snapshot service that also processes real-time events creates contention between the "fast path" (events) and the "slow path" (git stats).
+The current system rarely has more than 3-5 Claude processes active simultaneously because Codex sessions use the shared server. Ratchet auto-fix sessions are short-lived. The process-per-session count was low enough that aggregate monitoring was unnecessary.
 
-**How to avoid:**
-- Separate git stat collection into its own timer/worker that writes results to the snapshot store asynchronously. Never run git operations in the event processing path.
-- Use a longer cadence for git stat updates (30-60s) than for other reconciliation (PR status, session state).
-- Cache git stats aggressively. Git changes only happen when a session is actively working or the user is in a terminal. Use the session activity state to skip git stat collection for idle workspaces.
-- Consider using `fs.watch` on the workspace `.git` directory to trigger git stat refreshes on change, rather than polling.
+**Consequences:**
+- System runs out of memory, triggering OOM killer (which may kill FF itself, leading to Pitfall 1)
+- File descriptor exhaustion (each process uses ~10 FDs for stdio + internal operations; 20 processes = 200 FDs)
+- macOS launchd throttling: spawning too many processes too quickly triggers launchd's `spawn_via_launchd` throttle
+- Electron app becomes unresponsive as the host system swaps
 
-**Warning signs:**
-- Event processing latency spikes at regular intervals (matching the reconciliation cadence).
-- Git stat values update in bursts rather than smoothly.
-- Server CPU spikes at reconciliation intervals.
+**Prevention:**
+- Add an aggregate process limit (e.g., max 8 concurrent ACP processes). Queue additional session starts until a slot opens. The existing `session-queue.ts` pattern can be extended for this.
+- Add aggregate memory monitoring: sum `pidusage` results across all ACP processes. If total exceeds a threshold (e.g., 60% of system memory), refuse to spawn new processes and warn the user.
+- Implement idle process reaping: if a session has been idle for > 10 minutes and there are queued session starts waiting, gracefully stop the idle session's process (the session state is preserved; it just needs a new process to resume).
+- For ratchet auto-fix sessions, consider a pool of reusable ACP processes rather than spawn-per-fix. When an auto-fix session completes, return the process to the pool instead of killing it.
 
-**Phase to address:**
-Phase 2 (Reconciliation Design). Git stats should be a separate data pipeline feeding into the snapshot store, not part of the main reconciliation loop.
+**Detection:**
+- System memory usage > 80% with multiple ACP processes visible in Activity Monitor
+- New session starts failing with ENOMEM or EAGAIN errors
+- Existing sessions becoming slow or unresponsive as system swaps
+
+**Phase to address:** Phase 1 (ACP Process Spawner) for the aggregate limit. Phase 3 (Optimization) for idle reaping and process pooling.
 
 ---
 
-## Technical Debt Patterns
+## Moderate Pitfalls
 
-Shortcuts that seem reasonable but create long-term problems.
+### Pitfall 7: Config Option Synchronization Race Between UI and ACP Process
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Single monolithic snapshot object per workspace | Simple to reason about, one Map entry | As fields grow, every update serializes and sends the entire object over WebSocket. 20 workspaces x full snapshot = bandwidth waste | Never for production. Use field-level deltas from day one. |
-| Relying on `JSON.parse(JSON.stringify())` for deep cloning snapshots | Quick immutability guarantee | Silently drops `Date` objects, `undefined` values, and class instances. Causes subtle serialization bugs. | Never. Use structured clone or explicit field copying. |
-| Emitting events from domain services directly to the snapshot store | Fast to implement, skip bridge layer | Couples domains to snapshot service. Violates `no-cross-domain-imports`. Forces snapshot service changes when domain internals change. | Never in this codebase. The bridge pattern exists for exactly this reason. |
-| Sharing WebSocket connection between chat and snapshot push | One fewer WebSocket connection to manage | Chat messages and snapshot deltas compete for bandwidth. A burst of Claude output can delay snapshot updates. Connection lifecycle is tied to session selection. | Only acceptable if message priority/multiplexing is implemented. Separate channels are safer. |
-| Removing polling before WebSocket push is proven reliable | Cleaner code, fewer API calls | Silent data staleness when WebSocket fails. No fallback. Users see frozen UI. | Never in the initial release. Remove polling only after 2+ weeks of WebSocket push working without incidents. |
+**What goes wrong:**
+ACP's `session/set_config_option` returns the full set of config options and their current values, because changing one option may affect others. FF's current model sends fire-and-forget config changes: `ClaudeProtocol.sendSetModel()` (line 261 of `protocol.ts`) sends a message and does not wait for acknowledgment. `sendSetMaxThinkingTokens()` is similarly fire-and-forget.
 
-## Integration Gotchas
+If the user rapidly changes model then thinking budget, and the model change causes the thinking budget options to change (e.g., a model that does not support extended thinking), the second request may reference a thinking budget value that is no longer valid. The ACP agent would reject it, but FF has already updated its UI optimistically.
 
-Common mistakes when connecting to the existing system.
+**Prevention:**
+- Serialize config changes per session. Use a queue (similar to `pLimit(1)` in `ClaudeRuntimeManager`) that ensures only one config change is in-flight at a time.
+- Wait for the `session/set_config_option` response before sending the next config change.
+- On response, update the UI with the agent's authoritative config state, not the optimistically-set value.
+- Handle `config_option_update` notifications from the agent that may arrive asynchronously (e.g., when the agent auto-adjusts config based on context).
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Bridge wiring in `domain-bridges.orchestrator.ts` | Adding snapshot service wiring inline with existing bridges, creating a 300+ line file | Create a separate `snapshot-bridges.orchestrator.ts` that follows the same pattern. Import in `server.ts` alongside existing bridge configuration. |
-| Existing `chatConnectionService` for WebSocket push | Reusing chat connection service for snapshot broadcasts (it forwards by session ID, not workspace ID) | Create a dedicated snapshot connection service or add workspace-level broadcast to an existing service. Chat connections are scoped to sessions; snapshots are scoped to projects. |
-| `workspaceActivityService.on('workspace_idle')` | Subscribing directly from snapshot service (cross-domain import) | Wire through orchestration layer: activity service emits event -> bridge forwards to snapshot service -> snapshot updates store |
-| `prSnapshotService.applySnapshot()` | Calling snapshot store update directly after PR write (tight coupling to write path) | Use the existing bridge pattern: PR snapshot service calls `kanban.updateCachedKanbanColumn()` through its bridge. Similarly, add a bridge callback for project snapshot notification. |
-| Scheduler service PR sync | Running snapshot reconciliation in the same scheduler service | Create a dedicated reconciliation timer. The scheduler already has a single responsibility (PR sync). Adding snapshot reconciliation creates a second concern and makes shutdown coordination harder. |
-| Client-side React Query cache | Snapshot WebSocket updates conflict with React Query's `refetchInterval` cache | Use React Query's `queryClient.setQueryData()` to inject WebSocket-received data directly into the cache, replacing the polling-driven updates. Do not have both polling and WebSocket updating the same query key simultaneously. |
+**Detection:**
+- UI showing a model/thinking configuration that does not match what the agent is actually using
+- Config change requests returning errors that the UI does not display
+- Thinking budget selector showing options that are invalid for the current model
 
-## Performance Traps
+**Phase to address:** Phase 3 (Config Synchronization).
 
-Patterns that work at small scale but fail as usage grows.
+---
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Broadcasting full project snapshot to all clients on any workspace change | Works fine with 5 workspaces | Send per-workspace deltas, not full project snapshots. Client merges deltas into local state. | >15 workspaces per project, or >3 concurrent clients |
-| Running `git diff --stat` for all workspaces on every reconciliation | Acceptable at 5 workspaces with 3 concurrency | Only run git stats for workspaces with active sessions or recent terminal activity. Cache results for idle workspaces. | >10 workspaces, or workspaces with large repos (>1GB) |
-| Serializing entire snapshot Map to JSON on every WebSocket push | Invisible at small scale | Compute JSON delta from previous sent state. Only serialize changed fields. | >20 workspaces, each with multiple field updates per second |
-| Synchronous event handlers blocking the snapshot update path | Events process fast when there is one source | Use `setImmediate()` or microtask queue to batch rapid-fire events. Coalesce multiple updates to the same workspace within a tick. | Session working on a workspace with ratchet auto-fix enabled (generates rapid event bursts: session start -> PR push -> CI update -> review comment -> fixer dispatch) |
+### Pitfall 8: ACP Mode Categories Conflating Model, Mode, and Thought Level
 
-## Security Mistakes
+**What goes wrong:**
+ACP supports `session/set_mode` with mode categories: `mode`, `model`, `thought_level`, and custom `_`-prefixed variants. These are semantically distinct in ACP but map to three separate controls in FF's current UI: the model selector, the permission/execution mode selector, and the thinking budget slider.
 
-Domain-specific security issues beyond general web security.
+The pitfall is treating ACP modes as a flat list. A mode change of category `model` should update the model selector. A mode change of category `thought_level` should update the thinking slider. A mode change of category `mode` should update the execution mode. If these are conflated, changing the model might unexpectedly reset the thinking level, or changing the execution mode might switch the model.
 
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Broadcasting snapshot data to all WebSocket clients regardless of project access | Client A viewing project 1 receives snapshot updates for project 2 workspaces | Scope WebSocket subscriptions to project ID. Only send workspace snapshot data for workspaces within the client's subscribed project. |
-| Including sensitive git diff content in snapshot pushes | Terminal output or file contents leak to unintended UI consumers | Snapshot should contain aggregate stats (lines changed, files changed) never diff content. Git diff content stays in the workspace detail view only. |
-| Exposing internal session IDs or process state in snapshot events | Information leakage about system internals | Map internal states to user-facing enum values before including in snapshot. Never expose raw process PIDs or internal error stack traces. |
+**Prevention:**
+- Parse the `category` field on each mode and route to the appropriate UI control.
+- When `session/new` returns `modes` in its response, partition them by category and populate each UI control independently.
+- Handle `current_mode_update` notifications that may arrive when changing one category affects another (e.g., selecting a model that forces a specific thinking level).
 
-## UX Pitfalls
+**Detection:**
+- Changing model unexpectedly resets thinking budget in the UI
+- Mode selector showing model names mixed with execution modes
+- `session/set_mode` calls failing because the wrong modeId is sent for the category
 
-Common user experience mistakes in this domain.
+**Phase to address:** Phase 2 (Event Translation Layer) for mapping, Phase 3 for full UI integration.
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Optimistic snapshot updates that get reverted by reconciliation poll | User sees workspace move to DONE, then snap back to WAITING, then back to DONE. Trust in the UI erodes. | Never show optimistic state for derived fields (kanban column, CI status). Only show confirmed state from the snapshot store. |
-| Removing loading states when switching to event-driven updates | Sidebar appears instant but shows stale data for the first 100ms before the first event arrives | On initial page load or project switch, show a brief skeleton/shimmer until the first full snapshot is received via WebSocket. |
-| Replacing all polling simultaneously | One bug in the snapshot service breaks sidebar, Kanban, AND workspace list simultaneously | Migrate one consumer at a time. Start with sidebar (highest frequency, simplest data). Then Kanban. Then workspace list. Keep polling as fallback for unmigrated consumers. |
-| Snapshot updates arriving faster than React can render | UI janks as rapid-fire state changes trigger cascading re-renders | Throttle snapshot-to-React-state updates to 200ms intervals. Batch multiple rapid updates into a single render. |
+---
+
+### Pitfall 9: Stale Session Store After Process Restart Without Transcript Replay
+
+**What goes wrong:**
+When an ACP process dies unexpectedly and FF restarts it, the new process has no knowledge of the previous conversation. The current system handles this for Claude via `--resume <sessionId>` which tells Claude CLI to load its JSONL transcript from disk. For Codex, the `thread/read` method hydrates the session from the Codex server's state.
+
+With ACP, session restoration uses `session/load` (if the agent supports `loadSession` capability) or `unstable_resumeSession`. If the agent does not support either, the session state in FF's `SessionStore` (transcript, pending requests, queue) becomes orphaned -- it references a conversation the agent no longer knows about.
+
+The existing `handleProcessExit()` function in `session-process-exit.ts` resets the store (clears queue, transcript, pending requests) and then attempts to rehydrate from the Claude JSONL file. This works because Claude CLI writes transcript to disk. ACP agents may or may not persist session state externally.
+
+**Prevention:**
+- During initialization, check for `loadSession` capability. If absent, FF must persist enough session state locally to reconstruct the conversation on reconnect.
+- When an ACP process exits unexpectedly, do NOT immediately clear the store. Instead, attempt to restart the process and load the session. Only clear the store if session loading fails.
+- Implement a local session transcript log (similar to the existing `session-file-logger.service.ts`) that records ACP events in a format that can be replayed to a new session via `session/prompt` if native session loading is unavailable.
+- Surface session restoration failures to the user: "Session could not be restored. Start a new session?"
+
+**Detection:**
+- After process restart, agent responding as if it has no prior context
+- Chat UI showing previous messages but agent unaware of them
+- "Session not found" errors from `session/load` calls
+
+**Phase to address:** Phase 2 (Session Lifecycle). Session restoration is core to the UX.
+
+---
+
+### Pitfall 10: JSON-RPC ID Collision Between FF Requests and Agent Requests
+
+**What goes wrong:**
+ACP uses JSON-RPC 2.0 where both the client (FF) and agent can send requests with `id` fields. The current Codex app-server manager uses a simple incrementing integer for request IDs (`this.requestId++` on line 129 of `codex-app-server-manager.ts`). If the ACP agent also uses incrementing integers for its server-to-client requests (like `session/request_permission`), the IDs can collide. A response intended for a permission request might be matched to a prompt request, or vice versa.
+
+**Prevention:**
+- Use UUID strings for client-to-agent request IDs, not integers. The JSON-RPC 2.0 spec allows strings.
+- The existing `ClaudeProtocol` already uses `randomUUID()` for request IDs (line 141 of `protocol.ts`). Carry this pattern forward.
+- In the response handler, validate that the response `id` matches a known pending request before processing. The existing `pendingRequests` Map pattern handles this.
+- Never assume that an inbound message with an `id` field is a response. It could be a server-to-client request. Check for the presence of `method` to distinguish requests from responses.
+
+**Detection:**
+- Permission responses being swallowed (matched to a different pending request)
+- Prompt responses containing permission-related data
+- "Unknown request ID" warnings in logs
+
+**Phase to address:** Phase 1 (ACP Protocol Layer). ID management is fundamental to JSON-RPC correctness.
+
+---
+
+### Pitfall 11: `session/cancel` Notification Semantics vs. FF's Interrupt Model
+
+**What goes wrong:**
+FF's current interrupt model sends an `interrupt` control request via the NDJSON protocol (`ClaudeProtocol.sendInterrupt()` on line 241), then waits 5 seconds for the process to exit before force-killing (`ClaudeProcess.interrupt()` on line 202-228). This is a graceful-then-forceful shutdown.
+
+ACP's `session/cancel` is a notification (no response expected), and the agent is expected to stop LLM requests, abort tool invocations, and respond to the in-flight `session/prompt` request with `StopReason::Cancelled`. But the ACP spec does not define a timeout for how quickly the agent must respond to cancel.
+
+If FF sends `session/cancel` and then immediately force-kills the process (as the current 5-second timeout does), the agent may not have time to clean up. Conversely, if FF waits too long, the user perceives the cancel as broken.
+
+**Prevention:**
+- After sending `session/cancel`, wait for the in-flight `session/prompt` to resolve (with `stopReason: 'Cancelled'`) rather than using a fixed timeout.
+- Set a generous but bounded timeout (e.g., 15 seconds) for the prompt response after cancel. If the prompt does not resolve, escalate to SIGTERM then SIGKILL.
+- Do not kill the process just because cancel was requested. The user may want to send another prompt after cancelling the current one.
+- Track whether a cancel is "stop this prompt" (soft cancel -- keep process alive) vs. "stop this session" (hard cancel -- kill process). Map FF's "stop" button to soft cancel and FF's "stop session" action to hard cancel.
+
+**Detection:**
+- Agent process killed while writing a partial tool result, leaving workspace in inconsistent state
+- Cancel appearing to do nothing (prompt continues for 15+ seconds after cancel)
+- Process killed and session needs full restart just to cancel a prompt
+
+**Phase to address:** Phase 2 (Session Lifecycle).
+
+---
+
+## Minor Pitfalls
+
+### Pitfall 12: stderr Pollution From ACP Agent Contaminating Protocol Stream
+
+**What goes wrong:**
+ACP uses stdout for JSON-RPC messages. Some ACP agents log debug output to stderr, which is harmless. But if an agent (or a library it loads) accidentally writes to stdout, those bytes get mixed into the JSON-RPC stream and cause parse errors. The current `ClaudeProtocolIO` handles this by logging unparseable lines (line 512-526 of `protocol.ts`), but a malformed line can also corrupt a subsequent line if it splits a JSON message across a newline boundary.
+
+**Prevention:**
+- Use a robust NDJSON parser that can recover from malformed lines (the existing `processLine` approach of skipping unparseable lines is correct).
+- Buffer partial JSON: if a line does not parse as valid JSON, check if concatenating it with the next line produces valid JSON (handles the case where a log message splits a JSON-RPC message).
+- Redirect agent stderr to the session file logger for debugging, not to the FF process stderr.
+
+**Phase to address:** Phase 1 (ACP Protocol Layer).
+
+---
+
+### Pitfall 13: ACP SDK Version Drift Between FF and Agent
+
+**What goes wrong:**
+FF uses the `@agentclientprotocol/sdk` TypeScript package to implement the client side. The agent (Claude Code, Codex CLI) uses its own ACP implementation. If FF's SDK is newer than the agent's, FF may call methods the agent does not understand. If the agent's SDK is newer, it may send notifications FF does not handle.
+
+**Prevention:**
+- Pin the ACP SDK version in `package.json` and document the minimum agent version required.
+- During `initialize`, compare `protocolVersion` values. If they differ, log a warning and disable methods that may not be supported.
+- Handle unknown notification methods gracefully (log and ignore, do not throw).
+- Handle unknown fields in responses gracefully (Zod schemas with `.passthrough()` or `.strip()`).
+
+**Phase to address:** Phase 1 (initialization).
+
+---
+
+### Pitfall 14: Test Mocking Complexity for stdio-Based ACP Processes
+
+**What goes wrong:**
+The existing test suite mocks `ClaudeClient` and `ClaudeProcess` at the class level (see `claude-runtime-manager.test.ts`, `claude-session-provider-adapter.test.ts`). With ACP, tests need to mock a full JSON-RPC 2.0 conversation over stdio streams. This includes: initialization handshake, capability exchange, async notifications interleaved with responses, and bidirectional request flows (both client-to-agent and agent-to-client requests happening concurrently).
+
+Mocking this correctly is hard. Getting it wrong means tests pass but production breaks because the mock does not replicate real event ordering.
+
+**Prevention:**
+- Build a `MockAcpAgent` test utility that implements the server side of the ACP protocol over in-memory streams (using `PassThrough` streams from Node.js). This utility should support: scripted responses, async notification injection, configurable capability sets, and deliberate error injection.
+- Write the mock agent once and reuse it across all tests. Do not hand-craft JSON-RPC messages in each test.
+- Include at least one integration test that spawns a real ACP agent process (even if it is a minimal test agent) to verify the stdio transport works end-to-end.
+- For the event translator tests, use the existing Codex translator test patterns (`codex-event-translator.test.ts`) as a template -- they already test notification-to-delta mapping.
+
+**Phase to address:** Phase 1 (ACP Protocol Layer). The test infrastructure must exist before implementation begins.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| **Phase 1: ACP Process Spawner** | Orphaned processes after crash (Pitfall 1) | Pidfile + non-detached spawn + startup cleanup sweep |
+| **Phase 1: ACP Process Spawner** | stdin deadlock on large payloads (Pitfall 4) | Priority write queue separating protocol responses from prompt content |
+| **Phase 1: ACP Process Spawner** | Capability-gating unstable methods (Pitfall 5) | Check `agentCapabilities` during init, degrade gracefully per method |
+| **Phase 1: ACP Process Spawner** | Resource exhaustion under load (Pitfall 6) | Aggregate process limit, aggregate memory monitoring |
+| **Phase 2: Event Translation** | Event ordering inversion (Pitfall 3) | Use prompt response (not notifications) as turn-complete signal |
+| **Phase 2: Event Translation** | Permission model mismatch (Pitfall 2) | Carry full ACP options through to UI, do not reduce to boolean |
+| **Phase 2: Event Translation** | Mode category conflation (Pitfall 8) | Route ACP modes by category to correct UI controls |
+| **Phase 2: Session Lifecycle** | Stale store after process restart (Pitfall 9) | Check `loadSession` capability, persist local transcript as fallback |
+| **Phase 2: Session Lifecycle** | Cancel semantics mismatch (Pitfall 11) | Wait for prompt response after cancel, distinguish soft/hard cancel |
+| **Phase 3: Config Sync** | Config race conditions (Pitfall 7) | Serialize config changes per session, wait for response before next change |
+| **Phase 3: Optimization** | Process-per-session resource pressure (Pitfall 6) | Idle process reaping, process pool for auto-fix sessions |
+| **All phases** | Test mocking complexity (Pitfall 14) | Build `MockAcpAgent` utility in Phase 1, reuse everywhere |
+
+---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
+Things that appear complete but are missing critical pieces:
 
-- [ ] **Snapshot Store:** Often missing workspace cleanup on archive -- verify `archiveWorkspace()` calls snapshot store cleanup
-- [ ] **Snapshot Store:** Often missing cleanup on server restart -- verify store is empty on startup and rebuilds from DB, not from stale in-memory state
-- [ ] **Event Wiring:** Often missing error events -- verify that domain errors (failed PR fetch, crashed session) also trigger snapshot updates, not just success paths
-- [ ] **WebSocket Push:** Often missing reconnection protocol -- verify client requests full snapshot on reconnect, not just resubscribes to delta stream
-- [ ] **WebSocket Push:** Often missing multi-tab handling -- verify two browser tabs viewing the same project both receive updates correctly
-- [ ] **Reconciliation Poll:** Often missing drift logging -- verify the poll logs when it corrects event-driven state, as this metric indicates event reliability
-- [ ] **Reconciliation Poll:** Often missing shutdown coordination -- verify `schedulerService.stop()` pattern is replicated: wait for in-flight reconciliation before shutting down
-- [ ] **Client Migration:** Often missing stale polling removal -- verify old `refetchInterval` queries are removed after WebSocket consumer is proven working, not left running in parallel indefinitely
-- [ ] **Bridge Wiring:** Often missing from test setup -- verify integration tests mock/wire the snapshot bridges, not just unit tests of the store itself
-- [ ] **Type Safety:** Often missing Zod validation on WebSocket snapshot messages -- verify incoming snapshot events are validated on the client before applying to React state
+- [ ] **Process spawner:** Tests pass with mock, but no test verifies cleanup after `process.kill(process.pid, 'SIGKILL')` on the FF process itself
+- [ ] **Permission flow:** Happy path works, but no test verifies what happens when the user responds to a permission request after the agent has already cancelled it (race between user click and `permission_cancelled` notification)
+- [ ] **Event translator:** All ACP notification types are handled, but no test verifies behavior for unknown notification methods (should log and ignore, not crash)
+- [ ] **Session resume:** Resume works when agent supports `loadSession`, but no fallback tested for agents that do not advertise this capability
+- [ ] **Config sync:** Model change works, but no test verifies that a model change that invalidates the current thinking budget triggers a UI update to the thinking selector
+- [ ] **Cancel flow:** Cancel during idle works, but no test verifies cancel during a permission prompt (agent waiting for FF, FF sends cancel, agent should resolve prompt with Cancelled)
+- [ ] **Write path:** Normal-size messages work, but no test verifies behavior when a message exceeds the OS pipe buffer size (64KB+)
+- [ ] **Shutdown:** Graceful shutdown works, but no test verifies that all ACP processes are killed when Electron's `app.quit()` fires
+- [ ] **Provider removal:** ACP adapter is complete, but the old Claude NDJSON protocol files and Codex app-server files are still in the codebase (dead code)
+- [ ] **Aggregate monitoring:** Per-process monitoring works, but no aggregate memory or process count monitoring exists
+
+---
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
+When pitfalls occur despite prevention, how to recover:
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Memory leak in snapshot store | LOW | Deploy fix to add cleanup. Memory recovers on next server restart. No data loss since snapshots are derived. |
-| Event ordering race causes stale data | LOW | Reconciliation poll will self-correct within 60 seconds. Fix the race for future events. No permanent data corruption since snapshot is derived from authoritative DB. |
-| Domain boundary violation (cross-domain imports) | MEDIUM | Refactor to use bridge pattern. May require changes in multiple files. Run dependency-cruiser to find all violations. |
-| WebSocket reconnection drops events | LOW | Clients can refresh page as immediate workaround. Fix reconnection protocol. Reconciliation poll acts as safety net within 60 seconds. |
-| Reconciliation poll fights event updates (flickering) | MEDIUM | Add field-level timestamps immediately. May require snapshot store schema change. If timestamps were not included from Phase 1, this is a refactor. |
-| Git stat operations block event loop | MEDIUM | Move git stats to separate worker timer. Requires refactoring the reconciliation pipeline. Data is not lost, just delayed. |
+| Orphaned processes (1) | LOW | Kill manually (`pkill -f acp`). Deploy pidfile cleanup. No data loss since agent state is persisted by the agent. |
+| Permission model mismatch (2) | MEDIUM | Ship UI update to show ACP options. Requires frontend + backend changes. Automated sessions may need config change. |
+| Event ordering inversion (3) | MEDIUM | Fix translator ordering logic. Queued messages may have been sent prematurely -- no data loss but conversation context may be muddled. |
+| stdin deadlock (4) | LOW | Kill the stuck process (hung process monitor does this). Fix write queue prioritization. Session restarts cleanly. |
+| Unstable method breakage (5) | LOW | Feature degrades gracefully if capability checks are in place. Update SDK or method names. No data loss. |
+| Resource exhaustion (6) | MEDIUM | Reduce concurrent session limit. Kill idle processes. May require FF restart to recover memory. No data loss. |
+| Config race condition (7) | LOW | Config self-corrects on next response. User may need to re-set config. No lasting damage. |
+| Mode conflation (8) | LOW | UI shows wrong control state but agent has correct state. Fix UI routing. |
+| Stale session store (9) | HIGH | If local transcript fallback is missing and agent cannot restore session, conversation history is lost. This is the highest-risk pitfall for user data. |
+| JSON-RPC ID collision (10) | LOW | Fix ID generation. Any corrupted requests will have timed out and can be retried. |
+| Cancel semantics (11) | MEDIUM | If process was killed prematurely, workspace may have partial file changes. User can use git to recover. |
 
-## Pitfall-to-Phase Mapping
-
-How roadmap phases should address these pitfalls.
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Memory leak on workspace lifecycle | Phase 1: Core Store | Test: create snapshot -> archive workspace -> assert snapshot cleared. Monitor: snapshot store size < active workspace count + 10% buffer. |
-| Event ordering races | Phase 1: Core Store | Store schema includes field-level `updatedAt` timestamps. Write path has compare-and-swap or version check. Test: concurrent writes to same workspace do not regress state. |
-| Breaking domain boundaries | Phase 1: Architecture | dependency-cruiser passes with no new violations. Snapshot service has zero imports from `@/backend/domains/`. All domain data arrives via bridge interfaces. |
-| WebSocket reconnection drops | Phase 3: WebSocket Integration | Test: disconnect WebSocket -> emit events -> reconnect -> verify client receives full snapshot. Manual test: close laptop lid for 30s -> open -> verify UI is current. |
-| Reconciliation/event oscillation | Phase 2: Event Wiring | Reconciliation poll logs drift corrections. Drift corrections trend toward zero over time. No UI flickering observed in manual testing. |
-| Git stat blocking event loop | Phase 2: Reconciliation | Git stats run on separate timer. Event processing latency does not spike at reconciliation intervals. Profiling shows no event queue buildup during git stat collection. |
-| Removing polling too early | Phase 4+: Client Migration | Polling remains as fallback during Phase 3. Only removed per-consumer after 2+ weeks of successful WebSocket-only operation in development. |
-| Client-side render janking | Phase 3: Client Integration | Throttle WebSocket-to-state updates. Measure render time with React DevTools. No dropped frames during rapid event bursts. |
+---
 
 ## Sources
 
-- Codebase analysis: `src/backend/domains/workspace/lifecycle/activity.service.ts` (existing in-memory Map pattern with cleanup gap)
-- Codebase analysis: `src/backend/orchestration/domain-bridges.orchestrator.ts` (bridge wiring pattern to follow)
-- Codebase analysis: `src/backend/services/scheduler.service.ts` (existing reconciliation loop pattern)
-- Codebase analysis: `src/backend/domains/workspace/query/workspace-query.service.ts` (current polling-based state aggregation)
-- Codebase analysis: `src/backend/domains/session/chat/chat-connection.service.ts` (existing WebSocket forwarding pattern)
-- Codebase analysis: `src/backend/domains/github/pr-snapshot.service.ts` (existing snapshot-and-bridge pattern)
-- [Materialized View pattern - Azure Architecture Center](https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view)
-- [Event Driven Architecture - 5 Pitfalls to Avoid (Wix Engineering)](https://medium.com/wix-engineering/event-driven-architecture-5-pitfalls-to-avoid-b3ebf885bdb1)
-- [WebSocket Reconnect: Strategies for Reliable Communication](https://apidog.com/blog/websocket-reconnect/)
-- [How to Implement Reconnection Logic for WebSockets](https://oneuptime.com/blog/post/2026-01-27-websocket-reconnection/view)
-- [Common Memory Leak Patterns in Node.js](https://medium.com/@hemangibavasiya08/common-memory-leak-patterns-in-node-js-and-how-to-avoid-them-41c8944af604)
-- [Testing Event-Driven Systems (Confluent)](https://www.confluent.io/blog/testing-event-driven-systems/)
-- [Event Driven Architecture Done Right: How to Scale Systems with Quality in 2025](https://www.growin.com/blog/event-driven-architecture-scale-systems-2025/)
-- [Mattermost WebSocket reconnection issue #30388](https://github.com/mattermost/mattermost/issues/30388) (real-world missed-event bug)
+### Codebase Analysis
+- `src/backend/domains/session/claude/process.ts` -- Process lifecycle, detached spawn, process group kill pattern
+- `src/backend/domains/session/claude/protocol.ts` -- NDJSON protocol handler, backpressure handling, request/response correlation
+- `src/backend/domains/session/claude/permission-coordinator.ts` -- Current binary permission model
+- `src/backend/domains/session/claude/permissions.ts` -- Permission modes, auto-approve logic, DeferredHandler
+- `src/backend/domains/session/runtime/claude-runtime-manager.ts` -- Process-per-session management, creation locks
+- `src/backend/domains/session/runtime/codex-app-server-manager.ts` -- Shared-process model, JSON-RPC transport
+- `src/backend/domains/session/codex/codex-event-translator.ts` -- Event translation patterns (Codex -> FF)
+- `src/backend/domains/session/chat/chat-event-forwarder.service.ts` -- Event forwarding, idle handling, interactive requests
+- `src/backend/domains/session/store/session-process-exit.ts` -- Process exit cleanup and rehydration
+- `src/backend/domains/session/providers/claude-session-provider-adapter.ts` -- Provider adapter pattern
+- `src/shared/claude/protocol/websocket.ts` -- WebSocket message types and delta event shapes
+
+### ACP Protocol
+- [Agent Client Protocol - Overview](https://agentclientprotocol.com/protocol/overview) -- Core methods and lifecycle
+- [Agent Client Protocol - Schema](https://agentclientprotocol.com/protocol/schema) -- Full method signatures, permission options, config options, mode categories
+- [ACP TypeScript SDK - ClientSideConnection](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html) -- Unstable method signatures, capability API
+- [ACP GitHub Repository](https://github.com/agentclientprotocol/agent-client-protocol) -- Protocol specification
+- [Kiro ACP CLI Documentation](https://kiro.dev/docs/cli/acp/) -- Practical implementation guidance, session persistence, PATH caveats
+
+### Node.js Process Lifecycle
+- [Node.js Child Process Documentation](https://nodejs.org/api/child_process.html) -- Detached processes, process groups, stdio pipe behavior
+- [MCP Lifecycle Specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/lifecycle) -- stdio shutdown sequence (SIGTERM -> SIGKILL pattern)
+- [Killing process families with Node.js](https://medium.com/@almenon214/killing-processes-with-node-772ffdd19aad) -- Process group kill patterns
+
+### ACP Community
+- [Intro to Agent Client Protocol (ACP)](https://block.github.io/goose/blog/2025/10/24/intro-to-agent-client-protocol-acp/) -- Protocol design rationale
+- [ACP Explained - CodeStandUp](https://codestandup.com/posts/2025/agent-client-protocol-acp-explained/) -- Permission option model
+- [Cline ACP Implementation](https://deepwiki.com/cline/cline/12.5-agent-client-protocol-(acp)) -- Real-world ACP integration patterns
 
 ---
-*Pitfalls research for: In-memory project snapshot service with event-driven deltas*
-*Researched: 2026-02-11*
+*Pitfalls research for: ACP-only provider runtime cutover*
+*Researched: 2026-02-13*
