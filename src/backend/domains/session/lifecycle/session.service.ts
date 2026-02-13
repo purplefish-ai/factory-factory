@@ -5,6 +5,7 @@ import type { ResourceUsage } from '@/backend/domains/session/claude/process';
 import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
 import { SessionManager } from '@/backend/domains/session/claude/session';
 import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
+import { parseCodexThreadReadTranscript } from '@/backend/domains/session/codex/codex-thread-read-transcript';
 import { parseTurnId } from '@/backend/domains/session/codex/payload-utils';
 import {
   claudeSessionProviderAdapter,
@@ -23,6 +24,7 @@ import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
+  ChatMessage,
   ClaudeContentItem,
   ClaudeMessage,
   HistoryMessage,
@@ -598,6 +600,40 @@ class SessionService {
       return [];
     }
     return await SessionManager.getHistory(session.claudeSessionId, workingDir);
+  }
+
+  async tryHydrateCodexTranscript(sessionId: string): Promise<ChatMessage[] | null> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session || session.provider !== 'CODEX') {
+      return null;
+    }
+
+    const pending = this.codexAdapter.getPendingClient(sessionId);
+    if (pending) {
+      try {
+        await pending;
+      } catch (error) {
+        logger.debug('Pending Codex client creation failed during hydration', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!this.codexAdapter.getClient(sessionId)) {
+      return null;
+    }
+
+    try {
+      const threadReadPayload = await this.codexAdapter.hydrateSession(sessionId);
+      return parseCodexThreadReadTranscript(threadReadPayload);
+    } catch (error) {
+      logger.warn('Failed to hydrate Codex transcript from thread/read', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
   }
 
   async rewindSessionFiles(

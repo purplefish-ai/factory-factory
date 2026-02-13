@@ -1,5 +1,5 @@
 import { createLogger } from '@/backend/services/logger.service';
-import type { ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
+import type { ChatMessage, ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { SessionHydrator } from './store/session-hydrator';
@@ -22,6 +22,8 @@ import {
   appendClaudeEvent,
   commitSentUserMessageWithOrder,
   injectCommittedUserMessage,
+  messageSort,
+  setNextOrderFromTranscript,
 } from './store/session-transcript';
 
 const logger = createLogger('session-domain-service');
@@ -336,6 +338,24 @@ class SessionDomainService {
       nowMs: () => Date.now(),
     });
     this.publisher.forwardSnapshot(store, { reason: 'inject_user_message' });
+  }
+
+  setHydratedTranscript(
+    sessionId: string,
+    transcript: ChatMessage[],
+    options?: { hydratedKey?: string | null }
+  ): void {
+    const store = this.registry.getOrCreate(sessionId);
+    store.transcript = [...transcript].sort(messageSort);
+    setNextOrderFromTranscript(store);
+    store.initialized = true;
+    store.hydratePromise = null;
+    store.hydratingKey = null;
+    store.hydrateGeneration += 1;
+    if (options && Object.hasOwn(options, 'hydratedKey')) {
+      store.hydratedKey = options.hydratedKey ?? null;
+    }
+    store.lastHydratedAt = this.nowIso();
   }
 
   clearSession(sessionId: string): void {
