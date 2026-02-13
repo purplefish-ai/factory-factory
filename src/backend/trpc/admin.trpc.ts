@@ -30,6 +30,15 @@ export interface ParsedLogEntry {
   context: Record<string, unknown>;
 }
 
+const RawLogEntrySchema = z.object({
+  level: z.string(),
+  timestamp: z.string().optional(),
+  message: z.string().optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
+});
+
+type RawLogEntry = z.infer<typeof RawLogEntrySchema>;
+
 interface LogFilter {
   level?: string;
   search?: string;
@@ -48,21 +57,64 @@ function matchesTimestamp(timestamp: string | undefined, filter: LogFilter): boo
   return !(filter.untilMs && ts > filter.untilMs);
 }
 
-function matchesLogFilter(entry: Record<string, unknown>, filter: LogFilter): boolean {
+function matchesLogFilter(entry: RawLogEntry, filter: LogFilter): boolean {
   if (filter.level && entry.level !== filter.level) {
     return false;
   }
-  if (!matchesTimestamp(entry.timestamp as string | undefined, filter)) {
+  if (!matchesTimestamp(entry.timestamp, filter)) {
     return false;
   }
   if (filter.search) {
-    const msg = (entry.message as string)?.toLowerCase() ?? '';
-    const comp = (entry.context as Record<string, unknown>)?.component as string | undefined;
+    const msg = entry.message?.toLowerCase() ?? '';
+    const comp = typeof entry.context?.component === 'string' ? entry.context.component : undefined;
     if (!(msg.includes(filter.search) || comp?.toLowerCase().includes(filter.search))) {
       return false;
     }
   }
   return true;
+}
+
+function toParsedLogEntry(entry: RawLogEntry): ParsedLogEntry {
+  return {
+    level: entry.level,
+    timestamp: entry.timestamp ?? '',
+    message: entry.message ?? '',
+    component: typeof entry.context?.component === 'string' ? entry.context.component : '',
+    context: entry.context ?? {},
+  };
+}
+
+async function readFilteredLogEntries(
+  filePath: string,
+  filter: LogFilter
+): Promise<ParsedLogEntry[]> {
+  const filtered: ParsedLogEntry[] = [];
+  const rl = createInterface({
+    input: createReadStream(filePath, 'utf-8'),
+    crlfDelay: Number.POSITIVE_INFINITY,
+  });
+
+  for await (const line of rl) {
+    if (!line) {
+      continue;
+    }
+    try {
+      const rawEntry: unknown = JSON.parse(line);
+      const parsedEntry = RawLogEntrySchema.safeParse(rawEntry);
+      if (!parsedEntry.success) {
+        continue;
+      }
+      const entry = parsedEntry.data;
+      if (!matchesLogFilter(entry, filter)) {
+        continue;
+      }
+      filtered.push(toParsedLogEntry(entry));
+    } catch {
+      // skip malformed lines
+    }
+  }
+
+  return filtered;
 }
 
 export const adminRouter = router({
@@ -387,32 +439,9 @@ export const adminRouter = router({
         sinceMs: input.since ? new Date(input.since).getTime() : null,
         untilMs: input.until ? new Date(input.until).getTime() : null,
       };
-      const filtered: ParsedLogEntry[] = [];
+      let filtered: ParsedLogEntry[];
       try {
-        const rl = createInterface({
-          input: createReadStream(filePath, 'utf-8'),
-          crlfDelay: Number.POSITIVE_INFINITY,
-        });
-        for await (const line of rl) {
-          if (!line) {
-            continue;
-          }
-          try {
-            const entry = JSON.parse(line);
-            if (!matchesLogFilter(entry, filter)) {
-              continue;
-            }
-            filtered.push({
-              level: entry.level,
-              timestamp: entry.timestamp,
-              message: entry.message,
-              component: entry.context?.component ?? '',
-              context: entry.context ?? {},
-            });
-          } catch {
-            // skip malformed lines
-          }
-        }
+        filtered = await readFilteredLogEntries(filePath, filter);
       } catch {
         return { entries: [], total: 0, filePath };
       }

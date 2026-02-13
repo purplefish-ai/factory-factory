@@ -6,6 +6,7 @@
  */
 
 import { resolve } from 'node:path';
+import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import { createMarkdownLoader, parseFrontmatter } from './markdown-loader';
 
@@ -46,13 +47,13 @@ const QUICK_ACTIONS_DIR = resolve(import.meta.dirname, '../../..', 'prompts/quic
 // Frontmatter Parser
 // =============================================================================
 
-interface Frontmatter extends Record<string, unknown> {
-  name?: string;
-  description?: string;
-  type?: string;
-  icon?: string;
-  script?: string;
-}
+const QuickActionFrontmatterSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  type: z.string().optional(),
+  icon: z.string().optional(),
+  script: z.string().optional(),
+});
 
 // =============================================================================
 // Quick Action Loading
@@ -62,32 +63,34 @@ interface Frontmatter extends Record<string, unknown> {
  * Parse a single quick action file.
  */
 function parseQuickActionFile(filePath: string, content: string, id: string): QuickAction | null {
-  const { frontmatter, body } = parseFrontmatter<Frontmatter>(content, {
+  const { frontmatter, body } = parseFrontmatter(content, {
     name: (v) => v,
     description: (v) => v,
     type: (v) => v,
     icon: (v) => v,
     script: (v) => v,
   });
+  const parsedFrontmatter = QuickActionFrontmatterSchema.safeParse(frontmatter);
+  const normalizedFrontmatter = parsedFrontmatter.success ? parsedFrontmatter.data : {};
 
   // Validate and default the type
   let type: QuickActionType = 'agent';
-  if (frontmatter.type === 'script') {
+  if (normalizedFrontmatter.type === 'script') {
     type = 'script';
-  } else if (frontmatter.type && frontmatter.type !== 'agent') {
+  } else if (normalizedFrontmatter.type && normalizedFrontmatter.type !== 'agent') {
     logger.warn('Unknown quick action type, defaulting to agent', {
       filePath,
-      type: frontmatter.type,
+      type: normalizedFrontmatter.type,
     });
   }
 
   return {
     id,
-    name: frontmatter.name ?? id,
-    description: frontmatter.description ?? '',
+    name: normalizedFrontmatter.name ?? id,
+    description: normalizedFrontmatter.description ?? '',
     type,
-    icon: frontmatter.icon,
-    script: type === 'script' ? frontmatter.script : undefined,
+    icon: normalizedFrontmatter.icon,
+    script: type === 'script' ? normalizedFrontmatter.script : undefined,
     content: type === 'agent' ? body.trim() : undefined,
   };
 }

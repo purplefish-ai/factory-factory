@@ -1,19 +1,44 @@
 import { useCallback } from 'react';
+import { z } from 'zod';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+
+const TerminalDescriptorSchema = z.object({
+  id: z.string(),
+  createdAt: z.string(),
+  outputBuffer: z.string().optional(),
+});
+
+const TerminalMessageSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('output'),
+    data: z.string().optional(),
+    terminalId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('created'),
+    terminalId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('exit'),
+    terminalId: z.string().optional(),
+    exitCode: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal('error'),
+    message: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('terminal_list'),
+    terminals: z.array(TerminalDescriptorSchema).optional(),
+  }),
+]);
+
+type TerminalMessage = z.infer<typeof TerminalMessageSchema>;
 
 // =============================================================================
 // Types
 // =============================================================================
-
-interface TerminalMessage {
-  type: 'output' | 'created' | 'exit' | 'error' | 'terminal_list';
-  data?: string;
-  terminalId?: string;
-  exitCode?: number;
-  message?: string;
-  terminals?: Array<{ id: string; createdAt: string; outputBuffer?: string }>;
-}
 
 interface UseTerminalWebSocketOptions {
   workspaceId: string;
@@ -97,7 +122,11 @@ export function useTerminalWebSocket({
 
   const handleMessage = useCallback(
     (data: unknown) => {
-      const message = data as TerminalMessage;
+      const parsed = TerminalMessageSchema.safeParse(data);
+      if (!parsed.success) {
+        return;
+      }
+      const message: TerminalMessage = parsed.data;
       handleTerminalMessage(message, { onOutput, onCreated, onExit, onError, onTerminalList });
     },
     [onOutput, onCreated, onExit, onError, onTerminalList]

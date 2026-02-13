@@ -6,6 +6,7 @@
  */
 
 import { resolve } from 'node:path';
+import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import { createMarkdownLoader, parseFrontmatter } from './markdown-loader';
 
@@ -46,11 +47,11 @@ const WORKFLOWS_DIR = resolve(import.meta.dirname, '../../..', 'prompts/workflow
 // Frontmatter Parser
 // =============================================================================
 
-interface Frontmatter extends Record<string, unknown> {
-  name?: string;
-  description?: string;
-  expectsPR?: boolean;
-}
+const WorkflowFrontmatterSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().optional(),
+  expectsPR: z.boolean().optional(),
+});
 
 // =============================================================================
 // Workflow Loading
@@ -60,17 +61,19 @@ interface Frontmatter extends Record<string, unknown> {
  * Parse a single workflow file.
  */
 function parseWorkflowFile(_filePath: string, content: string, id: string): Workflow | null {
-  const { frontmatter, body } = parseFrontmatter<Frontmatter>(content, {
+  const { frontmatter, body } = parseFrontmatter(content, {
     name: (v) => v,
     description: (v) => v,
     expectsPR: (v) => v === 'true',
   });
+  const parsedFrontmatter = WorkflowFrontmatterSchema.safeParse(frontmatter);
+  const normalizedFrontmatter = parsedFrontmatter.success ? parsedFrontmatter.data : {};
 
   return {
     id,
-    name: frontmatter.name ?? id,
-    description: frontmatter.description ?? '',
-    expectsPR: frontmatter.expectsPR ?? false,
+    name: normalizedFrontmatter.name ?? id,
+    description: normalizedFrontmatter.description ?? '',
+    expectsPR: normalizedFrontmatter.expectsPR ?? false,
     content: body.trim(),
   };
 }

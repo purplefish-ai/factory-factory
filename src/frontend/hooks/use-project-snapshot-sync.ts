@@ -13,7 +13,7 @@ import { useCallback } from 'react';
 import { mapSnapshotEntryToKanbanWorkspace } from '@/frontend/lib/snapshot-to-kanban';
 import {
   mapSnapshotEntryToServerWorkspace,
-  type SnapshotServerMessage,
+  SnapshotServerMessageSchema,
   type WorkspaceSnapshotEntry,
 } from '@/frontend/lib/snapshot-to-sidebar';
 import { trpc } from '@/frontend/lib/trpc';
@@ -141,7 +141,11 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
 
   const handleMessage = useCallback(
     (data: unknown) => {
-      const message = data as SnapshotServerMessage;
+      const parsed = SnapshotServerMessageSchema.safeParse(data);
+      if (!parsed.success) {
+        return;
+      }
+      const message = parsed.data;
       // Use the raw setData with type assertions to bypass strict tRPC generic
       // inference. The mapped ServerWorkspace shape (with createdAt as Date) is
       // functionally identical to the tRPC-inferred shape, but TypeScript cannot

@@ -1,15 +1,18 @@
 import { useCallback, useRef, useState } from 'react';
+import { z } from 'zod';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+
+const DevLogsMessageSchema = z.object({
+  type: z.literal('output'),
+  data: z.string().optional(),
+});
+
+type DevLogsMessage = z.infer<typeof DevLogsMessageSchema>;
 
 // =============================================================================
 // Types
 // =============================================================================
-
-interface DevLogsMessage {
-  type: 'output';
-  data?: string;
-}
 
 interface UseDevLogsResult {
   connected: boolean;
@@ -45,7 +48,11 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
 
   const handleMessage = useCallback(
     (data: unknown) => {
-      const message = data as DevLogsMessage;
+      const parsed = DevLogsMessageSchema.safeParse(data);
+      if (!parsed.success) {
+        return;
+      }
+      const message: DevLogsMessage = parsed.data;
 
       if (message.type === 'output' && message.data) {
         setOutput((prev) => prev + message.data);

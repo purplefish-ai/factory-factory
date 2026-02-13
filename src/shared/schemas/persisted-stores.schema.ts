@@ -46,3 +46,11 @@ export type PersistedLockStore = z.infer<typeof persistedLockStoreSchema>;
 export const resumeWorkspaceIdsSchema = z.array(z.string());
 
 export type ResumeWorkspaceIds = z.infer<typeof resumeWorkspaceIdsSchema>;
+
+/**
+ * Schema for per-project workspace ordering cache in user settings.
+ * Maps project IDs to ordered workspace ID arrays.
+ */
+export const workspaceOrderMapSchema = z.record(z.string(), z.array(z.string()));
+
+export type WorkspaceOrderMap = z.infer<typeof workspaceOrderMapSchema>;

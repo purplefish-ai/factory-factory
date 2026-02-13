@@ -12,6 +12,7 @@ import { createWriteStream, existsSync, mkdirSync, type WriteStream } from 'node
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { expandEnvVars } from '@/backend/lib/env';
+import { LoggerEnvSchema } from './env-schemas';
 
 type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -158,14 +159,13 @@ export function getLogFilePath(): string {
  * Get default configuration from environment
  */
 function getDefaultConfig(): LoggerConfig {
-  const envLevel = process.env.LOG_LEVEL?.toLowerCase() as LogLevel | undefined;
-  const validLevels: LogLevel[] = ['error', 'warn', 'info', 'debug'];
+  const env = LoggerEnvSchema.parse(process.env);
 
   return {
-    level: validLevels.includes(envLevel as LogLevel) ? (envLevel as LogLevel) : 'info',
-    prettyPrint: process.env.NODE_ENV !== 'production',
+    level: env.LOG_LEVEL,
+    prettyPrint: env.NODE_ENV !== 'production',
     includeTimestamp: true,
-    serviceName: process.env.SERVICE_NAME || 'factoryfactory',
+    serviceName: env.SERVICE_NAME,
   };
 }
 

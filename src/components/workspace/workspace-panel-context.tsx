@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { z } from 'zod';
 
 import {
   getScrollStateFromRecord,
@@ -66,33 +67,28 @@ const CHAT_TAB: MainViewTab = {
   label: 'Chat',
 };
 
+const MainViewTabSchema = z
+  .object({
+    id: z.string(),
+    type: z.enum(['chat', 'file', 'diff', 'screenshot']),
+    path: z.string().optional(),
+    label: z.string(),
+  })
+  .superRefine((tab, context) => {
+    if ((tab.type === 'file' || tab.type === 'diff') && (!tab.path || tab.path.length === 0)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'File and diff tabs require a path',
+        path: ['path'],
+      });
+    }
+  });
+
+const MainViewTabsSchema = z.array(MainViewTabSchema);
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-function isValidTab(tab: unknown): tab is MainViewTab {
-  if (typeof tab !== 'object' || tab === null) {
-    return false;
-  }
-
-  const t = tab as Record<string, unknown>;
-  if (typeof t.id !== 'string') {
-    return false;
-  }
-  if (typeof t.label !== 'string') {
-    return false;
-  }
-  if (!['chat', 'file', 'diff', 'screenshot'].includes(t.type as string)) {
-    return false;
-  }
-
-  // For file/diff tabs, path must be a non-empty string
-  if ((t.type === 'file' || t.type === 'diff') && (typeof t.path !== 'string' || t.path === '')) {
-    return false;
-  }
-
-  return true;
-}
 
 function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
   if (typeof window === 'undefined') {
@@ -104,16 +100,17 @@ function loadTabsFromStorage(workspaceId: string): MainViewTab[] {
       return [CHAT_TAB];
     }
     const parsed: unknown = JSON.parse(stored);
-    // Validate that parsed data is an array of valid tabs
-    if (!(Array.isArray(parsed) && parsed.every(isValidTab))) {
+    const validated = MainViewTabsSchema.safeParse(parsed);
+    if (!validated.success) {
       return [CHAT_TAB];
     }
+    const tabs = validated.data;
     // Ensure chat tab is always first
-    const hasChat = parsed.some((tab) => tab.id === 'chat');
+    const hasChat = tabs.some((tab) => tab.id === 'chat');
     if (!hasChat) {
-      return [CHAT_TAB, ...parsed];
+      return [CHAT_TAB, ...tabs];
     }
-    return parsed;
+    return tabs;
   } catch {
     return [CHAT_TAB];
   }
