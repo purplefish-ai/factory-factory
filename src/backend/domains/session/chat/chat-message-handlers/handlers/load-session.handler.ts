@@ -6,6 +6,69 @@ import { slashCommandCacheService } from '@/backend/domains/session/store/slash-
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
+type PersistedSession = NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>;
+
+function shouldSwitchToWorkspaceProjectPath(
+  session: PersistedSession,
+  workspaceProjectPath: string | null
+): boolean {
+  return Boolean(
+    session.claudeSessionId &&
+      session.claudeProjectPath &&
+      workspaceProjectPath &&
+      session.claudeProjectPath !== workspaceProjectPath &&
+      !SessionManager.hasSessionFileFromProjectPath(
+        session.claudeSessionId,
+        session.claudeProjectPath
+      ) &&
+      SessionManager.hasSessionFileFromProjectPath(session.claudeSessionId, workspaceProjectPath)
+  );
+}
+
+function resolveClaudeHydrationContext(session: PersistedSession): {
+  claudeProjectPath: string | null;
+  claudeSessionId: string | null;
+} {
+  if (session.provider !== 'CLAUDE') {
+    return {
+      claudeProjectPath: null,
+      claudeSessionId: null,
+    };
+  }
+
+  const workspaceProjectPath = session.workspace.worktreePath
+    ? SessionManager.getProjectPath(session.workspace.worktreePath)
+    : null;
+
+  const claudeProjectPath = shouldSwitchToWorkspaceProjectPath(session, workspaceProjectPath)
+    ? workspaceProjectPath
+    : (session.claudeProjectPath ?? workspaceProjectPath);
+
+  return {
+    claudeProjectPath,
+    claudeSessionId: session.claudeSessionId,
+  };
+}
+
+async function hydrateCodexTranscriptIfAvailable(
+  sessionId: string,
+  provider: PersistedSession['provider']
+): Promise<void> {
+  if (provider !== 'CODEX') {
+    return;
+  }
+
+  const codexTranscript = await sessionService.tryHydrateCodexTranscript(sessionId);
+  if (!codexTranscript) {
+    return;
+  }
+
+  sessionDomainService.setHydratedTranscript(sessionId, codexTranscript, {
+    // Matches the hydrator key derived from null claudeSessionId/projectPath.
+    hydratedKey: 'none::none',
+  });
+}
+
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
     const dbSession = await agentSessionAccessor.findById(sessionId);
@@ -14,36 +77,14 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       return;
     }
 
-    const shouldUseClaudeSessionFiles = dbSession.provider === 'CLAUDE';
-    const workspaceProjectPath =
-      shouldUseClaudeSessionFiles && dbSession.workspace.worktreePath
-        ? SessionManager.getProjectPath(dbSession.workspace.worktreePath)
-        : null;
-    let claudeProjectPath = shouldUseClaudeSessionFiles
-      ? (dbSession.claudeProjectPath ?? workspaceProjectPath)
-      : null;
-    if (
-      shouldUseClaudeSessionFiles &&
-      dbSession.claudeSessionId &&
-      dbSession.claudeProjectPath &&
-      workspaceProjectPath &&
-      dbSession.claudeProjectPath !== workspaceProjectPath &&
-      !SessionManager.hasSessionFileFromProjectPath(
-        dbSession.claudeSessionId,
-        dbSession.claudeProjectPath
-      ) &&
-      SessionManager.hasSessionFileFromProjectPath(dbSession.claudeSessionId, workspaceProjectPath)
-    ) {
-      // Persisted path can become stale after worktree moves; prefer live workspace path when it
-      // clearly contains the session file.
-      claudeProjectPath = workspaceProjectPath;
-    }
+    const { claudeProjectPath, claudeSessionId } = resolveClaudeHydrationContext(dbSession);
+    await hydrateCodexTranscriptIfAvailable(sessionId, dbSession.provider);
 
     const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
       sessionId,
       claudeProjectPath,
-      claudeSessionId: shouldUseClaudeSessionFiles ? dbSession.claudeSessionId : null,
+      claudeSessionId,
       sessionRuntime,
       loadRequestId: message.loadRequestId,
     });
