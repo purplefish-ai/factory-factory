@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { FileMentionPalette } from '@/components/chat/file-mention-palette';
+import type { AcpConfigOption } from '@/components/chat/reducer';
 import { SlashCommandPalette } from '@/components/chat/slash-command-palette';
 import { ContextWindowIndicator } from '@/components/chat/usage-stats';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@
 import { cn } from '@/lib/utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 
+import { AcpConfigSelector } from './components/acp-config-selector';
 import { ModelSelector } from './components/model-selector';
 import { QuickActionsDropdown } from './components/quick-actions-dropdown';
 import { SettingsToggle } from './components/settings-toggle';
@@ -62,6 +64,10 @@ export interface ChatInputProps {
   tokenStats?: TokenStats;
   // Workspace ID for file mentions
   workspaceId?: string;
+  // ACP config options from agent
+  acpConfigOptions?: AcpConfigOption[] | null;
+  // Called when user selects an ACP config option value
+  onSetConfigOption?: (configId: string, value: string) => void;
 }
 
 // =============================================================================
@@ -324,6 +330,34 @@ const UsageIndicatorSection = memo(function UsageIndicatorSection({
 /**
  * Renders the left controls: model selector, toggles, file upload, and context indicator.
  */
+/**
+ * Renders ACP config option selectors when ACP config options are available.
+ */
+const AcpConfigControls = memo(function AcpConfigControls({
+  acpConfigOptions,
+  onSetConfigOption,
+  running,
+}: {
+  acpConfigOptions: AcpConfigOption[];
+  onSetConfigOption: (configId: string, value: string) => void;
+  running: boolean;
+}) {
+  return (
+    <>
+      {acpConfigOptions.map((option, idx) => (
+        <div key={option.id} className="flex items-center gap-1">
+          {idx > 0 && <div className="h-4 w-px bg-border" />}
+          <AcpConfigSelector
+            configOption={option}
+            onSelect={onSetConfigOption}
+            disabled={running}
+          />
+        </div>
+      ))}
+    </>
+  );
+});
+
 const LeftControls = memo(function LeftControls({
   settings,
   capabilities,
@@ -342,6 +376,8 @@ const LeftControls = memo(function LeftControls({
   quickActionsOpen,
   onQuickActionsOpenChange,
   tokenStats,
+  acpConfigOptions,
+  onSetConfigOption,
 }: {
   settings?: ChatSettings;
   capabilities?: ChatBarCapabilities;
@@ -360,6 +396,8 @@ const LeftControls = memo(function LeftControls({
   quickActionsOpen: boolean;
   onQuickActionsOpenChange: (open: boolean) => void;
   tokenStats?: TokenStats;
+  acpConfigOptions?: AcpConfigOption[] | null;
+  onSetConfigOption?: (configId: string, value: string) => void;
 }) {
   const {
     provider,
@@ -373,57 +411,72 @@ const LeftControls = memo(function LeftControls({
     showUsageIndicator,
   } = deriveLeftControlsVisibility(settings, capabilities, tokenStats);
   const hasModeToggles = showThinkingToggle || showPlanToggle;
+  const hasAcpConfigOptions =
+    acpConfigOptions != null && acpConfigOptions.length > 0 && onSetConfigOption != null;
 
   return (
     <div className="flex items-center gap-1">
       <ProviderIndicator provider={provider} />
-      {(showModelSelector || showReasoningSelector || hasModeToggles) && (
-        <div className="h-4 w-px bg-border" />
-      )}
-      {showModelSelector && (
-        <ModelSelector
-          selectedModel={selectedModel}
-          options={capabilities?.model.options ?? []}
-          onChange={onModelChange}
-          disabled={running}
-        />
-      )}
-      {showModelSelector && showReasoningSelector && <div className="h-4 w-px bg-border" />}
-      {showReasoningSelector && (
-        <ModelSelector
-          selectedModel={selectedReasoningEffort}
-          options={(capabilities?.reasoning.options ?? []).map((option) => ({
-            value: option.value,
-            label: option.label,
-          }))}
-          onChange={onReasoningChange}
-          disabled={running}
-        />
-      )}
-      {(showModelSelector || showReasoningSelector) && hasModeToggles && (
-        <div className="h-4 w-px bg-border" />
-      )}
-      <ModeToggles
-        showThinkingToggle={showThinkingToggle}
-        showPlanToggle={showPlanToggle}
-        settings={settings}
-        onThinkingChange={onThinkingChange}
-        onPlanModeChange={onPlanModeChange}
-        running={running}
-        modLabel={modLabel}
-        modifierHeld={modifierHeld}
-      />
-      {hasModeToggles && showAttachments && <div className="h-4 w-px bg-border" />}
-      {showAttachments && (
-        <FileUploadButton
-          fileInputRef={fileInputRef}
-          onFileSelect={onFileSelect}
-          supportedImageTypes={supportedImageTypes}
-          running={running}
-          disabled={disabled}
-          modLabel={modLabel}
-          modifierHeld={modifierHeld}
-        />
+      {hasAcpConfigOptions ? (
+        <>
+          <div className="h-4 w-px bg-border" />
+          <AcpConfigControls
+            acpConfigOptions={acpConfigOptions}
+            onSetConfigOption={onSetConfigOption}
+            running={running}
+          />
+        </>
+      ) : (
+        <>
+          {(showModelSelector || showReasoningSelector || hasModeToggles) && (
+            <div className="h-4 w-px bg-border" />
+          )}
+          {showModelSelector && (
+            <ModelSelector
+              selectedModel={selectedModel}
+              options={capabilities?.model.options ?? []}
+              onChange={onModelChange}
+              disabled={running}
+            />
+          )}
+          {showModelSelector && showReasoningSelector && <div className="h-4 w-px bg-border" />}
+          {showReasoningSelector && (
+            <ModelSelector
+              selectedModel={selectedReasoningEffort}
+              options={(capabilities?.reasoning.options ?? []).map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+              onChange={onReasoningChange}
+              disabled={running}
+            />
+          )}
+          {(showModelSelector || showReasoningSelector) && hasModeToggles && (
+            <div className="h-4 w-px bg-border" />
+          )}
+          <ModeToggles
+            showThinkingToggle={showThinkingToggle}
+            showPlanToggle={showPlanToggle}
+            settings={settings}
+            onThinkingChange={onThinkingChange}
+            onPlanModeChange={onPlanModeChange}
+            running={running}
+            modLabel={modLabel}
+            modifierHeld={modifierHeld}
+          />
+          {hasModeToggles && showAttachments && <div className="h-4 w-px bg-border" />}
+          {showAttachments && (
+            <FileUploadButton
+              fileInputRef={fileInputRef}
+              onFileSelect={onFileSelect}
+              supportedImageTypes={supportedImageTypes}
+              running={running}
+              disabled={disabled}
+              modLabel={modLabel}
+              modifierHeld={modifierHeld}
+            />
+          )}
+        </>
       )}
       <QuickActionsDropdown
         onAction={onQuickAction}
@@ -526,6 +579,8 @@ export const ChatInput = memo(function ChatInput({
   slashCommandsLoaded = false,
   tokenStats,
   workspaceId,
+  acpConfigOptions,
+  onSetConfigOption,
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
@@ -730,6 +785,8 @@ export const ChatInput = memo(function ChatInput({
             quickActionsOpen={quickActionsOpen}
             onQuickActionsOpenChange={setQuickActionsOpen}
             tokenStats={tokenStats}
+            acpConfigOptions={acpConfigOptions}
+            onSetConfigOption={onSetConfigOption}
           />
 
           {/* Right side: Sending indicator + Stop button (when running) + Send button */}

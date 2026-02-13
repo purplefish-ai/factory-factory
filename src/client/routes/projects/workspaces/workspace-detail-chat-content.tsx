@@ -54,6 +54,8 @@ export interface ChatContentProps {
   cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
   getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
   acpPlan: ReturnType<typeof useChatWebSocket>['acpPlan'];
+  acpConfigOptions: ReturnType<typeof useChatWebSocket>['acpConfigOptions'];
+  setConfigOption: ReturnType<typeof useChatWebSocket>['setConfigOption'];
   toolProgress: ReturnType<typeof useChatWebSocket>['toolProgress'];
   autoStartPending?: boolean;
   initBanner: WorkspaceInitBanner | null;
@@ -205,6 +207,8 @@ export const ChatContent = memo(function ChatContent({
   cancelRewind,
   getUuidForMessageId,
   acpPlan,
+  acpConfigOptions,
+  setConfigOption,
   toolProgress,
   autoStartPending = false,
   initBanner,
@@ -355,6 +359,8 @@ export const ChatContent = memo(function ChatContent({
           slashCommandsLoaded={slashCommandsLoaded}
           tokenStats={tokenStats}
           workspaceId={workspaceId}
+          acpConfigOptions={acpConfigOptions}
+          onSetConfigOption={setConfigOption}
         />
       </div>
 
