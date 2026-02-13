@@ -5,6 +5,7 @@ import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
+import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
 import {
   type NewSessionProviderSelection,
@@ -28,6 +29,7 @@ export function WorkspaceDetailContainer() {
     useWorkspaceData({ workspaceId: workspaceId });
 
   const { rightPanelVisible, activeTabId, clearScrollState } = useWorkspacePanel();
+  const { data: userSettings } = trpc.userSettings.get.useQuery();
 
   const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
     { workspaceId },
@@ -52,6 +54,10 @@ export function WorkspaceDetailContainer() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] =
     useState<NewSessionProviderSelection>('WORKSPACE_DEFAULT');
+  const effectiveDefaultProvider = resolveEffectiveSessionProvider(
+    workspace?.defaultSessionProvider,
+    userSettings?.defaultSessionProvider
+  );
 
   const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
@@ -289,8 +295,6 @@ export function WorkspaceDetailContainer() {
         openInIde,
         handleArchiveRequest,
         handleQuickAction,
-        selectedProvider,
-        setSelectedProvider,
         running: workspaceRunning,
         isCreatingSession: createSession.isPending,
         hasChanges,
@@ -305,6 +309,9 @@ export function WorkspaceDetailContainer() {
         handleCloseChatSession,
         maxSessions,
         hasWorktreePath: !!workspace?.worktreePath,
+        selectedProvider,
+        setSelectedProvider,
+        effectiveDefaultProvider,
       }}
       chat={chatViewModel}
       rightPanelVisible={rightPanelVisible}
