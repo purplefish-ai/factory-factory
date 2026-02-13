@@ -54,6 +54,7 @@ function createQueuedMessage(text: string): QueuedMessage {
     timestamp: new Date().toISOString(),
     settings: {
       selectedModel: null,
+      reasoningEffort: null,
       thinkingEnabled: false,
       planModeEnabled: false,
     },
@@ -134,6 +135,7 @@ function simulateDrainQueue(state: ChatState, _sessionId: string | null): DrainQ
   sentMessages.push({
     type: 'start',
     selectedModel: chatSettings.selectedModel,
+    reasoningEffort: chatSettings.reasoningEffort,
     thinkingEnabled: chatSettings.thinkingEnabled,
     planModeEnabled: chatSettings.planModeEnabled,
   });
@@ -312,6 +314,7 @@ describe('queue draining actions', () => {
 
   it('should send start message with current settings', () => {
     const settings: ChatSettings = {
+      ...DEFAULT_CHAT_SETTINGS,
       selectedModel: 'sonnet',
       thinkingEnabled: true,
       planModeEnabled: false,
@@ -430,6 +433,7 @@ describe('sendMessage pattern', () => {
       timestamp: new Date().toISOString(),
       settings: {
         selectedModel: null,
+        reasoningEffort: null,
         thinkingEnabled: false,
         planModeEnabled: false,
       },

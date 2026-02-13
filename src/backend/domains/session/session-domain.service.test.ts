@@ -642,6 +642,7 @@ describe('SessionDomainService', () => {
       timestamp: '2026-02-01T00:00:00.000Z',
       settings: {
         selectedModel: null,
+        reasoningEffort: null,
         thinkingEnabled: false,
         planModeEnabled: false,
       },
@@ -668,6 +669,7 @@ describe('SessionDomainService', () => {
       timestamp: '2026-02-01T00:00:00.000Z',
       settings: {
         selectedModel: null,
+        reasoningEffort: null,
         thinkingEnabled: false,
         planModeEnabled: false,
       },
@@ -690,6 +692,7 @@ describe('SessionDomainService', () => {
       timestamp: '2026-02-01T00:00:00.000Z',
       settings: {
         selectedModel: null,
+        reasoningEffort: null,
         thinkingEnabled: false,
         planModeEnabled: false,
       },
@@ -709,6 +712,7 @@ describe('SessionDomainService', () => {
       timestamp: '2026-02-01T00:00:00.000Z',
       settings: {
         selectedModel: null,
+        reasoningEffort: null,
         thinkingEnabled: false,
         planModeEnabled: false,
       },
@@ -926,7 +930,12 @@ describe('SessionDomainService', () => {
       id: 'u1',
       text: 'first question',
       timestamp: '2026-02-08T00:00:00.000Z',
-      settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
     });
     sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',
@@ -938,7 +947,12 @@ describe('SessionDomainService', () => {
       id: 'u2',
       text: 'second question',
       timestamp: '2026-02-08T00:00:02.000Z',
-      settings: { selectedModel: null, thinkingEnabled: false, planModeEnabled: false },
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
     });
     sessionDomainService.appendClaudeEvent('s1', {
       type: 'assistant',

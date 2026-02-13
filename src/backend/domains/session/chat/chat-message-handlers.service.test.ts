@@ -18,6 +18,8 @@ const { mockSessionDomainService, mockSessionService, mockSessionDataService } =
     getSessionClient: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
+    setSessionModel: vi.fn(),
+    setSessionReasoningEffort: vi.fn(),
     setSessionThinkingBudget: vi.fn(),
     sendSessionMessage: vi.fn(),
   },
@@ -51,6 +53,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     timestamp: '2026-02-01T00:00:00.000Z',
     settings: {
       selectedModel: null,
+      reasoningEffort: null,
       thinkingEnabled: false,
       planModeEnabled: false,
     },
@@ -67,6 +70,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessage);
     mockSessionDomainService.allocateOrder.mockReturnValue(0);
     mockSessionService.setSessionThinkingBudget.mockResolvedValue(undefined);
+    mockSessionService.setSessionModel.mockResolvedValue(undefined);
+    mockSessionService.setSessionReasoningEffort.mockResolvedValue(undefined);
     mockSessionService.sendSessionMessage.mockResolvedValue(undefined);
     mockSessionService.isSessionWorking.mockReturnValue(false);
     mockSessionService.isSessionRunning.mockReturnValue(true);
@@ -93,6 +98,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
     expect(mockSessionService.setSessionThinkingBudget).toHaveBeenCalledWith('s1', null);
+    expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
+    expect(mockSessionService.setSessionReasoningEffort).toHaveBeenCalledWith('s1', null);
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(mockSessionDomainService.markIdle).toHaveBeenCalledWith('s1', 'alive');
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
@@ -140,6 +147,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
     expect(mockSessionService.setSessionThinkingBudget).not.toHaveBeenCalled();
+    expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
+    expect(mockSessionService.setSessionReasoningEffort).toHaveBeenCalledWith('s1', null);
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
   });

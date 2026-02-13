@@ -2,37 +2,12 @@ import type { SessionDeltaEvent } from '@/shared/claude';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { createUnsupportedOperationError } from './errors';
 import { asRecord } from './payload-utils';
-
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-function extractText(params: unknown): string | null {
-  const record = asRecord(params);
-
-  const direct = asString(record.text) ?? asString(record.delta) ?? asString(record.chunk);
-  if (direct) {
-    return direct;
-  }
-
-  const item = asRecord(record.item);
-  const itemText = asString(item.text) ?? asString(item.delta) ?? asString(item.content);
-  if (itemText) {
-    return itemText;
-  }
-
-  const message = asRecord(item.message);
-  const content = Array.isArray(message.content) ? message.content : [];
-  for (const block of content) {
-    const blockRecord = asRecord(block);
-    const blockText = asString(blockRecord.text);
-    if (blockText) {
-      return blockText;
-    }
-  }
-
-  return null;
-}
+import {
+  parseNotificationTextWithSchema,
+  parseToolCallNotificationWithSchema,
+  parseToolResultNotificationWithSchema,
+  parseUserInputQuestionsWithSchema,
+} from './schemas';
 
 function buildRuntimeUpdate(
   phase: SessionRuntimeState['phase'],
@@ -107,7 +82,7 @@ export class CodexEventTranslator {
     }
 
     if (method.includes('thinking')) {
-      const thinking = extractText(params);
+      const thinking = parseNotificationTextWithSchema(params);
       if (!thinking) {
         return [buildProviderEventMessage(method, params)];
       }
@@ -132,9 +107,7 @@ export class CodexEventTranslator {
     }
 
     if (method.includes('toolResult')) {
-      const record = asRecord(params);
-      const toolUseId =
-        asString(record.toolUseId) ?? asString(asRecord(record.item).toolUseId) ?? 'codex-tool';
+      const parsed = parseToolResultNotificationWithSchema(params);
       return [
         {
           type: 'agent_message',
@@ -145,8 +118,8 @@ export class CodexEventTranslator {
               content: [
                 {
                   type: 'tool_result',
-                  tool_use_id: toolUseId,
-                  content: asString(record.output) ?? JSON.stringify(record),
+                  tool_use_id: parsed.toolUseId,
+                  content: parsed.output ?? JSON.stringify(parsed.payload),
                 },
               ],
             },
@@ -156,11 +129,7 @@ export class CodexEventTranslator {
     }
 
     if (method.includes('toolCall')) {
-      const record = asRecord(params);
-      const toolUseId =
-        asString(record.toolUseId) ?? asString(asRecord(record.item).id) ?? 'codex-tool';
-      const toolName =
-        asString(record.toolName) ?? asString(asRecord(record.item).name) ?? 'codex_tool';
+      const parsed = parseToolCallNotificationWithSchema(params);
       return [
         {
           type: 'agent_message',
@@ -171,9 +140,9 @@ export class CodexEventTranslator {
               index: 0,
               content_block: {
                 type: 'tool_use',
-                id: toolUseId,
-                name: toolName,
-                input: asRecord(record.input),
+                id: parsed.toolUseId,
+                name: parsed.toolName,
+                input: parsed.input,
               },
             },
           },
@@ -181,7 +150,7 @@ export class CodexEventTranslator {
       ];
     }
 
-    const text = extractText(params);
+    const text = parseNotificationTextWithSchema(params);
     if (text) {
       return [
         {
@@ -234,65 +203,10 @@ export class CodexEventTranslator {
         };
       }
 
-      const record = asRecord(params);
-      const rawQuestions = Array.isArray(record.questions) ? record.questions : [];
-      const questions =
-        rawQuestions.length > 0
-          ? rawQuestions.map((question) => {
-              const questionRecord = asRecord(question);
-              const rawOptions = Array.isArray(questionRecord.options)
-                ? questionRecord.options
-                : [];
-              const options =
-                rawOptions.length > 0
-                  ? rawOptions.map((option) => {
-                      const optionRecord = asRecord(option);
-                      return {
-                        label: asString(optionRecord.label) ?? 'Option',
-                        description: asString(optionRecord.description) ?? '',
-                      };
-                    })
-                  : [
-                      {
-                        label: 'Continue',
-                        description: 'Provide an answer and continue execution.',
-                      },
-                      {
-                        label: 'Cancel',
-                        description: 'Decline and stop this request.',
-                      },
-                    ];
-
-              return {
-                header: asString(questionRecord.header) ?? 'Codex Input',
-                question: asString(questionRecord.question) ?? 'Provide input',
-                options,
-              };
-            })
-          : [
-              {
-                header: 'Codex Input',
-                question:
-                  asString(record.prompt) ??
-                  asString(asRecord(record.item).prompt) ??
-                  'Provide input',
-                options: [
-                  {
-                    label: 'Continue',
-                    description: 'Provide an answer and continue execution.',
-                  },
-                  {
-                    label: 'Cancel',
-                    description: 'Decline and stop this request.',
-                  },
-                ],
-              },
-            ];
-
       return {
         type: 'user_question',
         requestId,
-        questions,
+        questions: parseUserInputQuestionsWithSchema(params),
       };
     }
 

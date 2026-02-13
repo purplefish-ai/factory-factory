@@ -87,6 +87,7 @@ vi.mock('@/backend/domains/session/providers', () => ({
     getAllActiveProcesses: vi.fn(),
     getAllClients: vi.fn(),
     stopAllClients: vi.fn(),
+    getChatBarCapabilities: vi.fn(),
   },
   codexSessionProviderAdapter: {
     getManager: vi.fn(() => ({
@@ -110,6 +111,7 @@ vi.mock('@/backend/domains/session/providers', () => ({
     stopClient: vi.fn(),
     sendMessage: vi.fn(),
     setModel: vi.fn(),
+    setReasoningEffort: vi.fn(),
     setThinkingBudget: vi.fn(),
     rewindFiles: vi.fn(),
     respondToPermission: vi.fn(),
@@ -121,6 +123,8 @@ vi.mock('@/backend/domains/session/providers', () => ({
     getAllClients: vi.fn(() => new Map().entries()),
     getAllActiveProcesses: vi.fn(() => []),
     stopAllClients: vi.fn(),
+    getPreferredReasoningEffort: vi.fn(),
+    getChatBarCapabilities: vi.fn(),
   },
 }));
 
@@ -145,10 +149,17 @@ describe('SessionService', () => {
     vi.mocked(claudeSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
     vi.mocked(claudeSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
     vi.mocked(claudeSessionProviderAdapter.isSessionWorking).mockReturnValue(false);
+    vi.mocked(claudeSessionProviderAdapter.getChatBarCapabilities).mockResolvedValue(
+      unsafeCoerce({ provider: 'CLAUDE' })
+    );
     vi.mocked(codexSessionProviderAdapter.getClient).mockReturnValue(undefined);
     vi.mocked(codexSessionProviderAdapter.getPendingClient).mockReturnValue(undefined);
     vi.mocked(codexSessionProviderAdapter.isStopInProgress).mockReturnValue(false);
     vi.mocked(codexSessionProviderAdapter.isSessionWorking).mockReturnValue(false);
+    vi.mocked(codexSessionProviderAdapter.getChatBarCapabilities).mockResolvedValue(
+      unsafeCoerce({ provider: 'CODEX' })
+    );
+    vi.mocked(codexSessionProviderAdapter.getPreferredReasoningEffort).mockReturnValue(undefined);
   });
 
   it('starts a session via process manager and updates DB state', async () => {

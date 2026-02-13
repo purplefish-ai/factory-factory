@@ -156,6 +156,7 @@ describe('settings persistence', () => {
 
     it('should return stored settings', () => {
       const settings: ChatSettings = {
+        ...DEFAULT_CHAT_SETTINGS,
         selectedModel: 'opus',
         thinkingEnabled: true,
         planModeEnabled: false,
@@ -192,6 +193,7 @@ describe('settings persistence', () => {
 
     it('should accept settings with default selectedModel', () => {
       const settings: ChatSettings = {
+        ...DEFAULT_CHAT_SETTINGS,
         selectedModel: 'opus',
         thinkingEnabled: false,
         planModeEnabled: true,
@@ -218,6 +220,7 @@ describe('settings persistence', () => {
 
     it('should persist settings as JSON', () => {
       const settings: ChatSettings = {
+        ...DEFAULT_CHAT_SETTINGS,
         selectedModel: 'sonnet',
         thinkingEnabled: true,
         planModeEnabled: false,
@@ -269,6 +272,7 @@ describe('settings persistence', () => {
 
     it('should return stored settings when valid', () => {
       const settings: ChatSettings = {
+        ...DEFAULT_CHAT_SETTINGS,
         selectedModel: 'opus',
         thinkingEnabled: true,
         planModeEnabled: true,
@@ -327,6 +331,7 @@ describe('session cleanup', () => {
 
     it('should return all stored data', () => {
       const settings: ChatSettings = {
+        ...DEFAULT_CHAT_SETTINGS,
         selectedModel: 'sonnet',
         thinkingEnabled: true,
         planModeEnabled: false,

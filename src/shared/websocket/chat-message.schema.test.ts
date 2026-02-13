@@ -18,6 +18,7 @@ describe('ChatMessageSchema', () => {
       ],
       settings: {
         selectedModel: 'opus',
+        reasoningEffort: null,
         thinkingEnabled: false,
         planModeEnabled: true,
       },
