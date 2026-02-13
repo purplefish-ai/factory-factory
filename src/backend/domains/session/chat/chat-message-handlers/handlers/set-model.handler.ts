@@ -11,14 +11,22 @@ export function createSetModelHandler(): ChatMessageHandler<SetModelMessage> {
   return async ({ ws, sessionId, message }) => {
     try {
       await sessionService.setSessionModel(sessionId, message.model);
+      if ('reasoningEffort' in message) {
+        await sessionService.setSessionReasoningEffort(sessionId, message.reasoningEffort ?? null);
+      }
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Set model', { sessionId, model: message.model });
+        logger.info('[Chat WS] Set model', {
+          sessionId,
+          model: message.model,
+          reasoningEffort: message.reasoningEffort,
+        });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to set model', {
         sessionId,
         model: message.model,
+        reasoningEffort: message.reasoningEffort,
         error: errorMessage,
       });
       sendWebSocketError(ws, `Failed to set model: ${errorMessage}`);

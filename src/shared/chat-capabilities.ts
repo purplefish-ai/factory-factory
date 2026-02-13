@@ -6,11 +6,33 @@ export interface ChatModelOption {
   label: string;
 }
 
+export interface ChatReasoningOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface CodexCapabilityModelInput {
+  model: string;
+  displayName: string;
+  isDefault: boolean;
+  defaultReasoningEffort: string;
+  supportedReasoningEfforts: Array<{
+    reasoningEffort: string;
+    description: string;
+  }>;
+}
+
 export interface ChatBarCapabilities {
   provider: ChatProvider;
   model: {
     enabled: boolean;
     options: ChatModelOption[];
+    selected?: string;
+  };
+  reasoning: {
+    enabled: boolean;
+    options: ChatReasoningOption[];
     selected?: string;
   };
   thinking: {
@@ -42,6 +64,10 @@ export const EMPTY_CHAT_BAR_CAPABILITIES: ChatBarCapabilities = {
     enabled: false,
     options: [],
   },
+  reasoning: {
+    enabled: false,
+    options: [],
+  },
   thinking: { enabled: false },
   planMode: { enabled: false },
   attachments: { enabled: false, kinds: [] },
@@ -60,6 +86,10 @@ export function createClaudeChatBarCapabilities(selectedModel?: string): ChatBar
         { value: 'sonnet', label: 'Sonnet' },
       ],
       ...(selectedModel ? { selected: selectedModel } : {}),
+    },
+    reasoning: {
+      enabled: false,
+      options: [],
     },
     thinking: {
       enabled: true,
@@ -85,14 +115,47 @@ export function createClaudeChatBarCapabilities(selectedModel?: string): ChatBar
   };
 }
 
-export function createCodexChatBarCapabilities(selectedModel?: string): ChatBarCapabilities {
-  const options = selectedModel ? [{ value: selectedModel, label: selectedModel }] : [];
+export function createCodexChatBarCapabilities(options?: {
+  selectedModel?: string;
+  selectedReasoningEffort?: string | null;
+  models?: CodexCapabilityModelInput[];
+}): ChatBarCapabilities {
+  const modelInputs = options?.models ?? [];
+
+  const modelOptions = modelInputs.map((model) => ({
+    value: model.model,
+    label: model.displayName,
+  }));
+
+  const selectedModelValue = resolveSelectedCodexModel(options?.selectedModel, modelInputs);
+  if (selectedModelValue && !modelOptions.some((option) => option.value === selectedModelValue)) {
+    modelOptions.unshift({ value: selectedModelValue, label: selectedModelValue });
+  }
+
+  const activeModel = modelInputs.find((model) => model.model === selectedModelValue);
+  const reasoningOptions =
+    activeModel?.supportedReasoningEfforts.map((effort) => ({
+      value: effort.reasoningEffort,
+      label: effort.reasoningEffort,
+      description: effort.description,
+    })) ?? [];
+  const selectedReasoning = resolveSelectedReasoningEffort(
+    options?.selectedReasoningEffort,
+    activeModel?.defaultReasoningEffort,
+    reasoningOptions
+  );
+
   return {
     provider: 'CODEX',
     model: {
-      enabled: options.length > 0,
-      options,
-      ...(selectedModel ? { selected: selectedModel } : {}),
+      enabled: modelOptions.length > 0,
+      options: modelOptions,
+      ...(selectedModelValue ? { selected: selectedModelValue } : {}),
+    },
+    reasoning: {
+      enabled: reasoningOptions.length > 0,
+      options: reasoningOptions,
+      ...(selectedReasoning ? { selected: selectedReasoning } : {}),
     },
     thinking: {
       enabled: false,
@@ -115,4 +178,41 @@ export function createCodexChatBarCapabilities(selectedModel?: string): ChatBarC
       enabled: false,
     },
   };
+}
+
+function resolveSelectedCodexModel(
+  selectedModel: string | undefined,
+  models: CodexCapabilityModelInput[]
+): string | undefined {
+  if (selectedModel && selectedModel.trim().length > 0) {
+    return selectedModel;
+  }
+
+  const defaultModel = models.find((model) => model.isDefault);
+  if (defaultModel) {
+    return defaultModel.model;
+  }
+
+  return models[0]?.model;
+}
+
+function resolveSelectedReasoningEffort(
+  selectedReasoningEffort: string | null | undefined,
+  defaultReasoningEffort: string | undefined,
+  options: ChatReasoningOption[]
+): string | undefined {
+  if (options.length === 0) {
+    return undefined;
+  }
+
+  const values = new Set(options.map((option) => option.value));
+  if (selectedReasoningEffort && values.has(selectedReasoningEffort)) {
+    return selectedReasoningEffort;
+  }
+
+  if (defaultReasoningEffort && values.has(defaultReasoningEffort)) {
+    return defaultReasoningEffort;
+  }
+
+  return options[0]?.value;
 }

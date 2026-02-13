@@ -24,6 +24,7 @@ export const AttachmentSchema = z.object({
 
 export const ChatSettingsSchema = z.object({
   selectedModel: z.string().nullable(),
+  reasoningEffort: z.string().nullable(),
   thinkingEnabled: z.boolean(),
   planModeEnabled: z.boolean(),
 });
@@ -42,6 +43,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     thinkingEnabled: z.boolean().optional(),
     planModeEnabled: z.boolean().optional(),
     selectedModel: z.string().nullable().optional(),
+    reasoningEffort: z.string().nullable().optional(),
     model: z.string().optional(),
   }),
 
@@ -94,6 +96,7 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_model'),
     model: z.string().optional(),
+    reasoningEffort: z.string().nullable().optional(),
   }),
 
   // Set thinking budget (max thinking tokens)

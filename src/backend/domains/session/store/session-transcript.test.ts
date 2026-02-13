@@ -56,6 +56,7 @@ describe('session-transcript', () => {
         timestamp: '2026-02-01T00:00:00.000Z',
         settings: {
           selectedModel: null,
+          reasoningEffort: null,
           thinkingEnabled: false,
           planModeEnabled: false,
         },

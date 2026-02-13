@@ -68,6 +68,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       thinkingEnabled?: boolean;
       planModeEnabled?: boolean;
       model?: string;
+      reasoningEffort?: string;
     }
   ): Promise<unknown> {
     if (DEBUG_CHAT_WS) {
@@ -79,6 +80,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       thinkingEnabled: options.thinkingEnabled,
       permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,
+      reasoningEffort: options.reasoningEffort,
     });
 
     // Set up event forwarding (idempotent - safe to call multiple times)

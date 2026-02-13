@@ -261,6 +261,7 @@ class ChatMessageHandlerService {
         thinkingEnabled: msg.settings.thinkingEnabled,
         planModeEnabled: msg.settings.planModeEnabled,
         model: msg.settings.selectedModel ?? undefined,
+        reasoningEffort: msg.settings.reasoningEffort ?? undefined,
       });
       return true;
     } catch (error) {
@@ -289,6 +290,11 @@ class ChatMessageHandlerService {
       const thinkingTokens = msg.settings.thinkingEnabled ? DEFAULT_THINKING_BUDGET : null;
       await sessionService.setSessionThinkingBudget(dbSessionId, thinkingTokens);
     }
+    await sessionService.setSessionModel(dbSessionId, msg.settings.selectedModel ?? undefined);
+    await sessionService.setSessionReasoningEffort(
+      dbSessionId,
+      msg.settings.reasoningEffort ?? null
+    );
 
     sessionDomainService.markRunning(dbSessionId);
 
@@ -307,6 +313,7 @@ class ChatMessageHandlerService {
         settings: {
           ...msg.settings,
           selectedModel: resolveSelectedModel(msg.settings.selectedModel),
+          reasoningEffort: msg.settings.reasoningEffort,
         },
         order,
       },

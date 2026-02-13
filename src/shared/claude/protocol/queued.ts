@@ -21,6 +21,7 @@ export interface QueuedMessage {
   attachments?: MessageAttachment[];
   settings: {
     selectedModel: string | null;
+    reasoningEffort: string | null;
     thinkingEnabled: boolean;
     planModeEnabled: boolean;
   };

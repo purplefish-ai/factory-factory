@@ -39,6 +39,7 @@ function createStore(): SessionStore {
         timestamp: '2026-02-01T00:00:02.000Z',
         settings: {
           selectedModel: null,
+          reasoningEffort: null,
           thinkingEnabled: false,
           planModeEnabled: false,
         },

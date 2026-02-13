@@ -447,6 +447,7 @@ class SessionService {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
+      reasoningEffort?: string;
     },
     loadedSession?: LoadedSessionAdapter
   ): Promise<unknown> {
@@ -475,7 +476,12 @@ class SessionService {
     try {
       const client =
         session.provider === 'CODEX'
-          ? await this.createCodexClient(sessionId, options?.model, session)
+          ? await this.createCodexClient(
+              sessionId,
+              options?.model,
+              options?.reasoningEffort,
+              session
+            )
           : await this.createClaudeClient(sessionId, options, session);
 
       // Update DB with running status and PID
@@ -532,6 +538,23 @@ class SessionService {
     const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
     const nextModel = resolveSessionModelForProvider(model, session.provider);
     await adapter.setModel(sessionId, nextModel);
+  }
+
+  async setSessionReasoningEffort(sessionId: string, effort: string | null): Promise<void> {
+    const adapter = this.resolveKnownAdapterForSessionSync(sessionId);
+    if (adapter === this.codexAdapter) {
+      await this.codexAdapter.setReasoningEffort(sessionId, effort);
+      return;
+    }
+    if (adapter === this.claudeAdapter) {
+      return;
+    }
+
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session || session.provider !== 'CODEX') {
+      return;
+    }
+    await this.codexAdapter.setReasoningEffort(sessionId, effort);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
@@ -672,6 +695,7 @@ class SessionService {
   private async createCodexClient(
     sessionId: string,
     model?: string,
+    reasoningEffort?: string,
     session?: AgentSessionRecord
   ): Promise<unknown> {
     const context = await this.loadCodexSessionContext(sessionId, session);
@@ -680,6 +704,7 @@ class SessionService {
       workingDir: context.workingDir,
       sessionId,
       model: requestedModel ?? context.model,
+      reasoningEffort,
     };
     return await this.codexAdapter.getOrCreateClient(sessionId, clientOptions, {}, context);
   }
@@ -858,8 +883,13 @@ class SessionService {
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
     const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
-    return adapter.getChatBarCapabilities({
+    const selectedReasoningEffort =
+      session.provider === 'CODEX'
+        ? (this.codexAdapter.getPreferredReasoningEffort(sessionId) ?? null)
+        : null;
+    return await adapter.getChatBarCapabilities({
       selectedModel: resolveSessionModelForProvider(session.model, session.provider),
+      selectedReasoningEffort,
     });
   }
 

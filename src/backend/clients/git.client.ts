@@ -162,6 +162,32 @@ export class GitClient {
 
     await fs.mkdir(this.worktreeBase, { recursive: true });
 
+    // Check if this is a blank repository (no commits yet)
+    const isBlank = await this.isBlankRepository();
+    if (isBlank) {
+      // For blank repositories, create an orphan branch
+      // Syntax: git worktree add --orphan -b <branch> <path>
+      const result = await gitCommandC(this.baseRepoPath, [
+        'worktree',
+        'add',
+        '--orphan',
+        '-b',
+        branchName,
+        worktreePath,
+      ]);
+      if (result.code !== 0) {
+        throw new Error(
+          `Failed to create worktree in blank repository: ${result.stderr || result.stdout}`
+        );
+      }
+
+      return {
+        name,
+        path: worktreePath,
+        branchName,
+      };
+    }
+
     // Normalize baseBranch: strip 'origin/' prefix if present since we'll add it back
     // This handles cases where callers pass 'origin/main' instead of 'main'
     const localBranchName = baseBranch.startsWith('origin/')
@@ -287,6 +313,14 @@ export class GitClient {
   async branchExists(branchName: string): Promise<boolean> {
     const result = await gitCommandC(this.baseRepoPath, ['rev-parse', '--verify', branchName]);
     return result.code === 0;
+  }
+
+  /**
+   * Check if the repository is blank (has no commits yet)
+   */
+  async isBlankRepository(): Promise<boolean> {
+    const result = await gitCommandC(this.baseRepoPath, ['rev-parse', '--verify', 'HEAD']);
+    return result.code !== 0;
   }
 
   async deleteWorktree(name: string): Promise<void> {

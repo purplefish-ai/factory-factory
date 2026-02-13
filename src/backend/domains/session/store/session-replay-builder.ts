@@ -46,6 +46,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
           attachments: message.attachments,
           settings: {
             selectedModel: resolveSelectedModel(DEFAULT_CHAT_SETTINGS.selectedModel),
+            reasoningEffort: DEFAULT_CHAT_SETTINGS.reasoningEffort,
             thinkingEnabled: DEFAULT_CHAT_SETTINGS.thinkingEnabled,
             planModeEnabled: DEFAULT_CHAT_SETTINGS.planModeEnabled,
           },
@@ -81,6 +82,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
         attachments: queued.attachments,
         settings: {
           selectedModel: resolveSelectedModel(queued.settings.selectedModel),
+          reasoningEffort: queued.settings.reasoningEffort,
           thinkingEnabled: queued.settings.thinkingEnabled,
           planModeEnabled: queued.settings.planModeEnabled,
         },

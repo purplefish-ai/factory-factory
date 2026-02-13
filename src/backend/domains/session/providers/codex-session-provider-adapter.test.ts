@@ -161,7 +161,7 @@ describe('CodexSessionProviderAdapter', () => {
     );
   });
 
-  it('supports set_model, send turn, interrupt, and hydrate operations', async () => {
+  it('supports set_model, set_reasoning_effort, send turn, interrupt, and hydrate operations', async () => {
     const registry = new CodexSessionRegistry();
     const request = vi
       .fn()
@@ -196,6 +196,7 @@ describe('CodexSessionProviderAdapter', () => {
     );
 
     await adapter.setModel('session-1', 'gpt-5');
+    await adapter.setReasoningEffort('session-1', 'high');
     await adapter.sendMessage('session-1', 'Hello from Codex');
     expect(adapter.isSessionWorking('session-1')).toBe(true);
 
@@ -211,6 +212,7 @@ describe('CodexSessionProviderAdapter', () => {
       expect.objectContaining({
         input: [{ type: 'text', text: 'Hello from Codex', text_elements: [] }],
         model: 'gpt-5',
+        effort: 'high',
       }),
       { threadId: 'thread-1' }
     );
@@ -267,6 +269,49 @@ describe('CodexSessionProviderAdapter', () => {
     });
 
     expect(adapter.isSessionWorking('session-1')).toBe(false);
+  });
+
+  it('omits turn effort when reasoning effort is invalid', async () => {
+    const registry = new CodexSessionRegistry();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce({ threadId: 'thread-1' }) // start
+      .mockResolvedValueOnce({ turnId: 'turn-1' }); // send
+
+    const manager = {
+      ensureStarted: vi.fn().mockResolvedValue(undefined),
+      request,
+      stop: vi.fn().mockResolvedValue(undefined),
+      respond: vi.fn(),
+      getRegistry: () => registry,
+      getStatus: vi.fn(() => ({
+        state: 'ready',
+        unavailableReason: null,
+        pid: 99,
+        startedAt: '2026-02-12T00:00:00.000Z',
+        restartCount: 0,
+        activeSessionCount: registry.getActiveSessionCount(),
+      })),
+    };
+
+    const adapter = new CodexSessionProviderAdapter(manager as never);
+
+    await adapter.getOrCreateClient(
+      'session-1',
+      { sessionId: 'session-1', workingDir: '/tmp/project' },
+      {},
+      { workspaceId: 'workspace-1', workingDir: '/tmp/project' }
+    );
+
+    await adapter.setReasoningEffort('session-1', 'ultra-high');
+    await adapter.sendMessage('session-1', 'Hello from Codex');
+
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      'turn/start',
+      expect.not.objectContaining({ effort: expect.anything() }),
+      { threadId: 'thread-1' }
+    );
   });
 
   it('does not mark session as working when turn already completed before response handling', async () => {

@@ -148,7 +148,9 @@ const FileUploadButton = memo(function FileUploadButton({
 
 interface LeftControlsVisibility {
   selectedModel: string;
+  selectedReasoningEffort: string;
   showModelSelector: boolean;
+  showReasoningSelector: boolean;
   showThinkingToggle: boolean;
   showPlanToggle: boolean;
   showAttachments: boolean;
@@ -162,6 +164,8 @@ function deriveLeftControlsVisibility(
 ): LeftControlsVisibility {
   const showModelSelector =
     capabilities?.model.enabled === true && (capabilities.model.options.length ?? 0) > 0;
+  const showReasoningSelector =
+    capabilities?.reasoning.enabled === true && (capabilities.reasoning.options.length ?? 0) > 0;
   const showThinkingToggle = capabilities?.thinking.enabled === true;
   const showPlanToggle = capabilities?.planMode.enabled === true;
   const showAttachments =
@@ -175,10 +179,17 @@ function deriveLeftControlsVisibility(
     capabilities?.model.selected ??
     capabilities?.model.options[0]?.value ??
     '';
+  const selectedReasoningEffort =
+    settings?.reasoningEffort ??
+    capabilities?.reasoning.selected ??
+    capabilities?.reasoning.options[0]?.value ??
+    '';
 
   return {
     selectedModel,
+    selectedReasoningEffort,
     showModelSelector,
+    showReasoningSelector,
     showThinkingToggle,
     showPlanToggle,
     showAttachments,
@@ -265,6 +276,7 @@ const LeftControls = memo(function LeftControls({
   settings,
   capabilities,
   onModelChange,
+  onReasoningChange,
   onThinkingChange,
   onPlanModeChange,
   running,
@@ -282,6 +294,7 @@ const LeftControls = memo(function LeftControls({
   settings?: ChatSettings;
   capabilities?: ChatBarCapabilities;
   onModelChange: (model: string) => void;
+  onReasoningChange: (effort: string) => void;
   onThinkingChange: (enabled: boolean) => void;
   onPlanModeChange: (enabled: boolean) => void;
   running: boolean;
@@ -298,7 +311,9 @@ const LeftControls = memo(function LeftControls({
 }) {
   const {
     selectedModel,
+    selectedReasoningEffort,
     showModelSelector,
+    showReasoningSelector,
     showThinkingToggle,
     showPlanToggle,
     showAttachments,
@@ -316,7 +331,21 @@ const LeftControls = memo(function LeftControls({
           disabled={running}
         />
       )}
-      {showModelSelector && hasModeToggles && <div className="h-4 w-px bg-border" />}
+      {showModelSelector && showReasoningSelector && <div className="h-4 w-px bg-border" />}
+      {showReasoningSelector && (
+        <ModelSelector
+          selectedModel={selectedReasoningEffort}
+          options={(capabilities?.reasoning.options ?? []).map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          onChange={onReasoningChange}
+          disabled={running}
+        />
+      )}
+      {(showModelSelector || showReasoningSelector) && hasModeToggles && (
+        <div className="h-4 w-px bg-border" />
+      )}
       <ModeToggles
         showThinkingToggle={showThinkingToggle}
         showPlanToggle={showPlanToggle}
@@ -630,6 +659,7 @@ export const ChatInput = memo(function ChatInput({
             settings={settings}
             capabilities={capabilities}
             onModelChange={actions.handleModelChange}
+            onReasoningChange={actions.handleReasoningChange}
             onThinkingChange={actions.handleThinkingChange}
             onPlanModeChange={actions.handlePlanModeChange}
             running={running}
