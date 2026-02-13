@@ -4,8 +4,9 @@ import { toast } from 'sonner';
 import type { FileMentionKeyResult } from '@/components/chat/file-mention-palette';
 import type { SlashKeyResult } from '@/components/chat/slash-command-palette';
 import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
-import { fileToAttachment, SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
+import { SUPPORTED_IMAGE_TYPES } from '@/lib/image-utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import { processFiles } from './file-processing';
 
 interface UseChatInputActionsOptions {
   onSend: (text: string) => void;
@@ -314,18 +315,14 @@ export function useChatInputActions({
         return;
       }
 
-      const newAttachments: MessageAttachment[] = [];
+      const { attachments: newAttachments, errors } = await processFiles(Array.from(files));
 
-      for (const file of Array.from(files)) {
-        try {
-          const attachment = await fileToAttachment(file);
-          newAttachments.push(attachment);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          toast.error(`Failed to upload ${file.name}: ${message}`);
-        }
+      // Show error toasts for failed files
+      for (const { fileName, message } of errors) {
+        toast.error(`Failed to upload ${fileName}: ${message}`);
       }
 
+      // Add successful attachments to state
       if (newAttachments.length > 0) {
         setAttachments((prev) => [...prev, ...newAttachments]);
       }
