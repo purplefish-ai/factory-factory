@@ -53,7 +53,7 @@
     "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
     "check:ownership": "node scripts/check-single-writer.mjs",
     "check:fix": "biome check --write .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm --filter @factory-factory/core build && tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
