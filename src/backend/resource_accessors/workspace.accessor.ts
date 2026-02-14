@@ -59,7 +59,6 @@ interface UpdateWorkspaceInput {
   ratchetSessionProvider?: Prisma.WorkspaceUpdateInput['ratchetSessionProvider'];
   ratchetState?: RatchetState;
   ratchetLastCheckedAt?: Date | null;
-  ratchetLastPushAt?: Date | null;
   ratchetActiveSessionId?: string | null;
   ratchetLastCiRunId?: string | null;
   // Activity tracking

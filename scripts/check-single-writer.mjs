@@ -22,7 +22,6 @@ const workspaceFieldOwners = {
   ratchetEnabled: new Set(['src/backend/domains/ratchet/ratchet.service.ts']),
   ratchetState: new Set(['src/backend/domains/ratchet/ratchet.service.ts']),
   ratchetLastCheckedAt: new Set(['src/backend/domains/ratchet/ratchet.service.ts']),
-  ratchetLastPushAt: new Set(['src/backend/domains/ratchet/ratchet.service.ts']),
   ratchetActiveSessionId: new Set(['src/backend/domains/ratchet/ratchet.service.ts']),
   ratchetLastCiRunId: new Set(['src/backend/domains/ratchet/ratchet.service.ts']),
 
