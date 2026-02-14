@@ -75,6 +75,7 @@ export function WorkspaceDetailContainer() {
     connected,
     sessionStatus,
     processStatus,
+    sessionRuntime,
     pendingRequest,
     chatSettings,
     chatCapabilities,
@@ -122,11 +123,37 @@ export function WorkspaceDetailContainer() {
     messages.some((message) => message.source === 'user') &&
     !messages.some((message) => message.source === 'agent');
 
-  const sessionSummariesById = useMemo(
-    () =>
-      new Map((workspace?.sessionSummaries ?? []).map((summary) => [summary.sessionId, summary])),
-    [workspace?.sessionSummaries]
-  );
+  const sessionSummariesById = useMemo(() => {
+    const summaries = new Map(
+      (workspace?.sessionSummaries ?? []).map((summary) => [summary.sessionId, summary])
+    );
+
+    if (!selectedDbSessionId) {
+      return summaries;
+    }
+
+    const selectedSession = sessions?.find((session) => session.id === selectedDbSessionId);
+    if (!selectedSession) {
+      return summaries;
+    }
+
+    const existingSummary = summaries.get(selectedDbSessionId);
+    summaries.set(selectedDbSessionId, {
+      sessionId: selectedDbSessionId,
+      name: existingSummary?.name ?? selectedSession.name ?? null,
+      workflow: existingSummary?.workflow ?? selectedSession.workflow ?? null,
+      model: existingSummary?.model ?? selectedSession.model ?? null,
+      provider: existingSummary?.provider ?? selectedSession.provider,
+      persistedStatus: existingSummary?.persistedStatus ?? selectedSession.status,
+      runtimePhase: sessionRuntime.phase,
+      processState: sessionRuntime.processState,
+      activity: sessionRuntime.activity,
+      updatedAt: sessionRuntime.updatedAt,
+      lastExit: sessionRuntime.lastExit ?? existingSummary?.lastExit ?? null,
+    });
+
+    return summaries;
+  }, [workspace?.sessionSummaries, selectedDbSessionId, sessions, sessionRuntime]);
   const workspaceRunning = useMemo(
     () =>
       Array.from(sessionSummariesById.values()).some(
