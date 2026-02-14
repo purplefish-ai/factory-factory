@@ -1,0 +1,244 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { codexSessionHistoryLoaderService } from './codex-session-history-loader.service';
+
+function writeSessionFile(params: {
+  codexHomeDir: string;
+  relativeDir: string;
+  fileName: string;
+  entries: Array<Record<string, unknown> | string>;
+}): string {
+  const sessionDir = join(params.codexHomeDir, 'sessions', params.relativeDir);
+  mkdirSync(sessionDir, { recursive: true });
+
+  const sessionFilePath = join(sessionDir, params.fileName);
+  const lines = params.entries.map((entry) =>
+    typeof entry === 'string' ? entry : JSON.stringify(entry)
+  );
+  writeFileSync(sessionFilePath, lines.join('\n'), 'utf-8');
+  return sessionFilePath;
+}
+
+describe('codexSessionHistoryLoaderService', () => {
+  let tempDir: string;
+  let originalCodexHome: string | undefined;
+  let originalCodexSessionsDir: string | undefined;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'ff-codex-history-'));
+    originalCodexHome = process.env.CODEX_HOME;
+    originalCodexSessionsDir = process.env.CODEX_SESSIONS_DIR;
+    process.env.CODEX_HOME = tempDir;
+    process.env.CODEX_SESSIONS_DIR = undefined;
+  });
+
+  afterEach(() => {
+    if (typeof originalCodexHome === 'string') {
+      process.env.CODEX_HOME = originalCodexHome;
+    } else {
+      process.env.CODEX_HOME = undefined;
+    }
+    if (typeof originalCodexSessionsDir === 'string') {
+      process.env.CODEX_SESSIONS_DIR = originalCodexSessionsDir;
+    } else {
+      process.env.CODEX_SESSIONS_DIR = undefined;
+    }
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('skips loading when providerSessionId is missing', async () => {
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId: null,
+      workingDir: '/tmp/work',
+    });
+
+    expect(result).toEqual({ status: 'skipped', reason: 'missing_provider_session_id' });
+  });
+
+  it('skips loading when providerSessionId is unsafe', async () => {
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId: '../../etc/passwd',
+      workingDir: '/tmp/work',
+    });
+
+    expect(result).toEqual({ status: 'skipped', reason: 'invalid_provider_session_id' });
+  });
+
+  it('loads and parses history from Codex session JSONL', async () => {
+    const providerSessionId = '019c5dad-78c4-7d02-8f3a-e5cb6f68ae5b';
+    const cwd = '/Users/test/project';
+    const filePath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        '{not-json}',
+        {
+          type: 'session_meta',
+          payload: {
+            id: providerSessionId,
+            cwd,
+          },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'user_message',
+            message: 'hello',
+          },
+        },
+        {
+          timestamp: '2026-02-14T00:00:02.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'agent_message',
+            message: 'hi',
+          },
+        },
+        {
+          timestamp: '2026-02-14T00:00:03.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'agent_reasoning',
+            text: 'ignore reasoning',
+          },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'user',
+        content: 'hello',
+        timestamp: '2026-02-14T00:00:01.000Z',
+      },
+      {
+        type: 'assistant',
+        content: 'hi',
+        timestamp: '2026-02-14T00:00:02.000Z',
+      },
+    ]);
+  });
+
+  it('prefers a matching cwd when multiple files have the same providerSessionId', async () => {
+    const providerSessionId = 'session-dup-1';
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/13',
+      fileName: `rollout-2026-02-13T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/other' },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from other cwd' },
+        },
+      ],
+    });
+    const expectedPath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: providerSessionId, cwd: '/Users/test/match' },
+        },
+        {
+          timestamp: '2026-02-14T00:00:02.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'from matching cwd' },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: '/Users/test/match',
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath: expectedPath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({
+      type: 'user',
+      content: 'from matching cwd',
+    });
+  });
+
+  it('returns not_found when session file does not exist', async () => {
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId: 'missing-session',
+      workingDir: '/Users/test/missing',
+    });
+
+    expect(result).toEqual({ status: 'not_found' });
+  });
+
+  it('uses non-epoch fallback timestamps when entries have invalid timestamps', async () => {
+    const providerSessionId = 'session-invalid-ts';
+    const cwd = '/Users/test/project';
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: {
+            id: providerSessionId,
+            cwd,
+          },
+        },
+        {
+          timestamp: 'not-a-date',
+          type: 'event_msg',
+          payload: {
+            type: 'user_message',
+            message: 'first',
+          },
+        },
+        {
+          type: 'event_msg',
+          payload: {
+            type: 'agent_message',
+            message: 'second',
+          },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    const firstTs = Date.parse(result.history[0]?.timestamp ?? '');
+    const secondTs = Date.parse(result.history[1]?.timestamp ?? '');
+    expect(firstTs).toBeGreaterThan(Date.parse('2000-01-01T00:00:00.000Z'));
+    expect(secondTs).toBeGreaterThanOrEqual(firstTs);
+  });
+});

@@ -1,5 +1,6 @@
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
 import { claudeSessionHistoryLoaderService } from '@/backend/domains/session/data/claude-session-history-loader.service';
+import { codexSessionHistoryLoaderService } from '@/backend/domains/session/data/codex-session-history-loader.service';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { buildTranscriptFromHistory } from '@/backend/domains/session/store/session-transcript';
@@ -71,7 +72,7 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       return;
     }
 
-    await hydrateClaudeHistoryIfNeeded(sessionId, dbSession);
+    await hydrateProviderHistoryIfNeeded(sessionId, dbSession);
 
     const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
@@ -106,11 +107,11 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
   };
 }
 
-async function hydrateClaudeHistoryIfNeeded(
+async function hydrateProviderHistoryIfNeeded(
   sessionId: string,
   dbSession: NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>
 ): Promise<void> {
-  if (dbSession.provider !== 'CLAUDE') {
+  if (dbSession.provider !== 'CLAUDE' && dbSession.provider !== 'CODEX') {
     return;
   }
 
@@ -131,8 +132,9 @@ async function hydrateClaudeHistoryIfNeeded(
   }
 
   if (!canAttemptHistoryHydration(sessionId)) {
-    logger.debug('Skipping Claude JSONL history hydration during retry cooldown', {
+    logger.debug('Skipping provider JSONL history hydration during retry cooldown', {
       sessionId,
+      provider: dbSession.provider,
       providerSessionId: dbSession.providerSessionId,
       retryAfterMs: HISTORY_READ_RETRY_COOLDOWN_MS,
     });
@@ -140,17 +142,24 @@ async function hydrateClaudeHistoryIfNeeded(
   }
 
   const loadStart = Date.now();
-  const loadResult = await claudeSessionHistoryLoaderService.loadSessionHistory({
-    providerSessionId: dbSession.providerSessionId,
-    workingDir: dbSession.workspace.worktreePath ?? '',
-  });
+  const loadResult =
+    dbSession.provider === 'CLAUDE'
+      ? await claudeSessionHistoryLoaderService.loadSessionHistory({
+          providerSessionId: dbSession.providerSessionId,
+          workingDir: dbSession.workspace.worktreePath ?? '',
+        })
+      : await codexSessionHistoryLoaderService.loadSessionHistory({
+          providerSessionId: dbSession.providerSessionId,
+          workingDir: dbSession.workspace.worktreePath ?? '',
+        });
 
   if (loadResult.status === 'loaded') {
     nextHistoryRetryAtBySession.delete(sessionId);
     const transcript = buildTranscriptFromHistory(loadResult.history);
     sessionDomainService.replaceTranscript(sessionId, transcript, { historySource: 'jsonl' });
-    logger.debug('Hydrated Claude transcript from JSONL history', {
+    logger.debug('Hydrated provider transcript from JSONL history', {
       sessionId,
+      provider: dbSession.provider,
       providerSessionId: dbSession.providerSessionId,
       filePath: loadResult.filePath,
       historyCount: loadResult.history.length,
@@ -162,8 +171,9 @@ async function hydrateClaudeHistoryIfNeeded(
 
   if (loadResult.status === 'error') {
     setHistoryRetryAt(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
-    logger.warn('Claude JSONL history hydration failed; keeping session eligible for retry', {
+    logger.warn('Provider JSONL history hydration failed; keeping session eligible for retry', {
       sessionId,
+      provider: dbSession.provider,
       providerSessionId: dbSession.providerSessionId,
       filePath: loadResult.filePath,
     });
@@ -172,8 +182,9 @@ async function hydrateClaudeHistoryIfNeeded(
 
   nextHistoryRetryAtBySession.delete(sessionId);
   sessionDomainService.markHistoryHydrated(sessionId, 'none');
-  logger.debug('Claude JSONL history not available; skipping runtime fallback hydration', {
+  logger.debug('Provider JSONL history not available; skipping runtime fallback hydration', {
     sessionId,
+    provider: dbSession.provider,
     providerSessionId: dbSession.providerSessionId,
     loadStatus: loadResult.status,
   });
