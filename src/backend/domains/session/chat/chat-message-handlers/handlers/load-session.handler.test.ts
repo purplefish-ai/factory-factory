@@ -61,12 +61,16 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { createLoadSessionHandler } from './load-session.handler';
+import {
+  createLoadSessionHandler,
+  resetHistoryRetryCooldownStateForTests,
+} from './load-session.handler';
 
 describe('createLoadSessionHandler', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    resetHistoryRetryCooldownStateForTests();
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
       processState: 'stopped',
@@ -265,6 +269,65 @@ describe('createLoadSessionHandler', () => {
     });
 
     expect(mocks.loadSessionHistory).toHaveBeenCalledTimes(1026);
+  });
+
+  it('evicts earliest-expiring retry entry when at capacity', async () => {
+    let nowMs = Date.parse('2026-02-14T00:00:10.000Z');
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    try {
+      mocks.findById.mockImplementation(async (sessionId: string) => ({
+        provider: 'CLAUDE',
+        status: 'IDLE',
+        model: 'claude-sonnet-4-5',
+        providerSessionId: `provider-${sessionId}`,
+        workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      }));
+      mocks.isHistoryHydrated.mockReturnValue(false);
+      mocks.loadSessionHistory.mockResolvedValue({
+        status: 'error',
+        reason: 'read_failed',
+        filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
+      });
+
+      const handler = createLoadSessionHandler();
+      const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
+      await handler({
+        ws: ws as never,
+        sessionId: 'retry-expiry-oldest',
+        workingDir: '/tmp/worktree',
+        message: { type: 'load_session' } as never,
+      });
+
+      nowMs = Date.parse('2026-02-14T00:00:00.000Z');
+      for (let i = 0; i < 1023; i += 1) {
+        await handler({
+          ws: ws as never,
+          sessionId: `retry-expiry-fill-${i}`,
+          workingDir: '/tmp/worktree',
+          message: { type: 'load_session' } as never,
+        });
+      }
+
+      await handler({
+        ws: ws as never,
+        sessionId: 'retry-expiry-trigger',
+        workingDir: '/tmp/worktree',
+        message: { type: 'load_session' } as never,
+      });
+
+      const loadCallsBeforeRecheck = mocks.loadSessionHistory.mock.calls.length;
+      await handler({
+        ws: ws as never,
+        sessionId: 'retry-expiry-oldest',
+        workingDir: '/tmp/worktree',
+        message: { type: 'load_session' } as never,
+      });
+
+      expect(mocks.loadSessionHistory.mock.calls.length).toBe(loadCallsBeforeRecheck);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 
   it('does not initialize CODEX sessions on passive load', async () => {

@@ -21,6 +21,22 @@ function pruneExpiredHistoryRetryEntries(now: number): void {
   }
 }
 
+function evictHistoryRetryEntryWithEarliestRetryAt(): void {
+  let sessionIdToEvict: string | undefined;
+  let earliestRetryAt = Number.POSITIVE_INFINITY;
+
+  for (const [trackedSessionId, retryAt] of nextHistoryRetryAtBySession) {
+    if (retryAt < earliestRetryAt) {
+      earliestRetryAt = retryAt;
+      sessionIdToEvict = trackedSessionId;
+    }
+  }
+
+  if (sessionIdToEvict) {
+    nextHistoryRetryAtBySession.delete(sessionIdToEvict);
+  }
+}
+
 function setHistoryRetryAt(sessionId: string, retryAt: number): void {
   const now = Date.now();
   pruneExpiredHistoryRetryEntries(now);
@@ -28,10 +44,7 @@ function setHistoryRetryAt(sessionId: string, retryAt: number): void {
     !nextHistoryRetryAtBySession.has(sessionId) &&
     nextHistoryRetryAtBySession.size >= MAX_TRACKED_HISTORY_RETRY_SESSIONS
   ) {
-    const oldestTrackedSessionId = nextHistoryRetryAtBySession.keys().next().value;
-    if (typeof oldestTrackedSessionId === 'string') {
-      nextHistoryRetryAtBySession.delete(oldestTrackedSessionId);
-    }
+    evictHistoryRetryEntryWithEarliestRetryAt();
   }
   nextHistoryRetryAtBySession.set(sessionId, retryAt);
 }
@@ -44,6 +57,10 @@ function canAttemptHistoryHydration(sessionId: string): boolean {
     return true;
   }
   return retryAt <= now;
+}
+
+export function resetHistoryRetryCooldownStateForTests(): void {
+  nextHistoryRetryAtBySession.clear();
 }
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
