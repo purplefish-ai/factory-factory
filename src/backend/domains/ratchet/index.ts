@@ -13,13 +13,6 @@ export type {
   RatchetStatusCheckInput,
   RatchetWorkspaceBridge,
 } from './bridges';
-
-export type { CIFailureDetails, CIFixResult } from './ci-fixer.service';
-// CI fixer
-export { ciFixerService } from './ci-fixer.service';
-
-// CI monitor (legacy, deprecated in favor of ratchet service)
-export { ciMonitorService } from './ci-monitor.service';
 export type {
   AcquireAndDispatchInput,
   AcquireAndDispatchResult,
