@@ -34,12 +34,76 @@ import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-contex
 // =============================================================================
 
 const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
+const STORAGE_KEY_CHANGES_VIEW_PREFIX = 'workspace-right-panel-changes-view-';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type TopPanelTab = 'unstaged' | 'diff-vs-main' | 'files' | 'tasks' | 'screenshots';
+type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots';
+type ChangesView = 'unstaged' | 'diff-vs-main';
+
+interface PersistedTopPanelState {
+  topTab: TopPanelTab;
+  changesView: ChangesView;
+}
+
+function parseStoredChangesView(value: string | null): ChangesView | null {
+  if (value === 'unstaged' || value === 'diff-vs-main') {
+    return value;
+  }
+  return null;
+}
+
+function parseStoredTopTab(value: string | null): TopPanelTab | null {
+  if (value === 'changes' || value === 'files' || value === 'tasks' || value === 'screenshots') {
+    return value;
+  }
+  return null;
+}
+
+function parseLegacyChangesView(value: string | null): ChangesView | null {
+  if (value === 'unstaged' || value === 'diff-vs-main') {
+    return value;
+  }
+  return null;
+}
+
+function loadPersistedTopPanelState(workspaceId: string): PersistedTopPanelState {
+  const defaultState: PersistedTopPanelState = { topTab: 'changes', changesView: 'unstaged' };
+
+  if (typeof window === 'undefined') {
+    return defaultState;
+  }
+
+  try {
+    const storedTop = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
+    const storedChangesView = localStorage.getItem(
+      `${STORAGE_KEY_CHANGES_VIEW_PREFIX}${workspaceId}`
+    );
+
+    const topTab = parseStoredTopTab(storedTop);
+    const changesView = parseStoredChangesView(storedChangesView);
+    if (topTab) {
+      return {
+        topTab,
+        changesView: changesView ?? defaultState.changesView,
+      };
+    }
+
+    const legacyChangesView = parseLegacyChangesView(storedTop);
+    if (legacyChangesView) {
+      return {
+        topTab: 'changes',
+        changesView: legacyChangesView,
+      };
+    }
+  } catch {
+    // Ignore storage errors
+  }
+
+  return defaultState;
+}
 
 // =============================================================================
 // Main Component
@@ -52,6 +116,119 @@ interface RightPanelProps {
   onTakeScreenshots?: () => void;
 }
 
+interface TopPanelAreaProps {
+  workspaceId: string;
+  messages: ChatMessage[];
+  activeTopTab: TopPanelTab;
+  activeChangesView: ChangesView;
+  onTopTabChange: (tab: TopPanelTab) => void;
+  onChangesViewChange: (view: ChangesView) => void;
+  onTakeScreenshots: () => void;
+}
+
+function TopPanelArea({
+  workspaceId,
+  messages,
+  activeTopTab,
+  activeChangesView,
+  onTopTabChange,
+  onChangesViewChange,
+  onTakeScreenshots,
+}: TopPanelAreaProps) {
+  const showChanges = activeTopTab === 'changes';
+  const showFiles = activeTopTab === 'files';
+  const showTasks = activeTopTab === 'tasks';
+  const showScreenshots = activeTopTab === 'screenshots';
+
+  const screenshotsButtonClassName = cn(
+    'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
+    showScreenshots
+      ? 'bg-background text-foreground shadow-sm border border-border'
+      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
+  );
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Tab bar */}
+      <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
+        <TabButton
+          label="Changes"
+          icon={<FileQuestion className="h-3.5 w-3.5" />}
+          isActive={showChanges}
+          onSelect={() => onTopTabChange('changes')}
+        />
+        <TabButton
+          label="Files"
+          icon={<Files className="h-3.5 w-3.5" />}
+          isActive={showFiles}
+          onSelect={() => onTopTabChange('files')}
+        />
+        <TabButton
+          label="Tasks"
+          icon={<ListTodo className="h-3.5 w-3.5" />}
+          isActive={showTasks}
+          onSelect={() => onTopTabChange('tasks')}
+        />
+
+        <div className="flex-1" />
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onTopTabChange('screenshots')}
+                className={screenshotsButtonClassName}
+                aria-label="Screenshots"
+              >
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Screenshots</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        {showChanges && (
+          <div className="h-full flex flex-col min-h-0">
+            <div className="flex items-center gap-0.5 p-1 bg-muted/30 border-b">
+              <TabButton
+                label="Unstaged"
+                icon={<FileQuestion className="h-3.5 w-3.5" />}
+                isActive={activeChangesView === 'unstaged'}
+                onSelect={() => onChangesViewChange('unstaged')}
+              />
+              <TabButton
+                label="Diff vs Main"
+                icon={<GitCompare className="h-3.5 w-3.5" />}
+                isActive={activeChangesView === 'diff-vs-main'}
+                onSelect={() => onChangesViewChange('diff-vs-main')}
+              />
+            </div>
+            <div className="flex-1 overflow-hidden">
+              {activeChangesView === 'unstaged' && (
+                <UnstagedChangesPanel workspaceId={workspaceId} />
+              )}
+              {activeChangesView === 'diff-vs-main' && (
+                <DiffVsMainPanel workspaceId={workspaceId} />
+              )}
+            </div>
+          </div>
+        )}
+        {showFiles && <FileBrowserPanel workspaceId={workspaceId} />}
+        {showTasks && <TodoPanelContainer messages={messages} />}
+        {showScreenshots && (
+          <ScreenshotsPanel workspaceId={workspaceId} onTakeScreenshots={onTakeScreenshots} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function RightPanel({
   workspaceId,
   className,
@@ -60,7 +237,8 @@ export function RightPanel({
 }: RightPanelProps) {
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
-  const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('unstaged');
+  const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('changes');
+  const [activeChangesView, setActiveChangesView] = useState<ChangesView>('unstaged');
   const { activeBottomTab, setActiveBottomTab } = useWorkspacePanel();
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
@@ -107,35 +285,41 @@ export function RightPanel({
     // Reset terminal tab state when workspace changes
     setTerminalTabState(null);
 
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    try {
-      const storedTop = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
-      if (
-        storedTop === 'unstaged' ||
-        storedTop === 'diff-vs-main' ||
-        storedTop === 'files' ||
-        storedTop === 'tasks' ||
-        storedTop === 'screenshots'
-      ) {
-        setActiveTopTab(storedTop);
-      }
-    } catch {
-      // Ignore storage errors
-    }
+    const persisted = loadPersistedTopPanelState(workspaceId);
+    setActiveTopTab(persisted.topTab);
+    setActiveChangesView(persisted.changesView);
   }, [workspaceId]);
 
-  // Persist tab selection to localStorage
-  const handleTabChange = (tab: TopPanelTab) => {
-    setActiveTopTab(tab);
-    try {
-      localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, tab);
-    } catch {
-      // Ignore storage errors
-    }
-  };
+  // Persist top-level tab selection to localStorage
+  const handleTopTabChange = useCallback(
+    (tab: TopPanelTab) => {
+      setActiveTopTab(tab);
+      try {
+        localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, tab);
+      } catch {
+        // Ignore storage errors
+      }
+    },
+    [workspaceId]
+  );
+
+  // Persist changes sub-view selection to localStorage
+  const handleChangesViewChange = useCallback(
+    (view: ChangesView) => {
+      setActiveChangesView(view);
+      try {
+        localStorage.setItem(`${STORAGE_KEY_CHANGES_VIEW_PREFIX}${workspaceId}`, view);
+      } catch {
+        // Ignore storage errors
+      }
+    },
+    [workspaceId]
+  );
+
+  const handleTakeScreenshots = useCallback(() => {
+    handleTopTabChange('screenshots');
+    onTakeScreenshots?.();
+  }, [handleTopTabChange, onTakeScreenshots]);
 
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {
@@ -149,11 +333,6 @@ export function RightPanel({
     [setActiveBottomTab]
   );
 
-  const handleTakeScreenshots = useCallback(() => {
-    setActiveTopTab('screenshots');
-    onTakeScreenshots?.();
-  }, [onTakeScreenshots]);
-
   return (
     <ResizablePanelGroup
       direction="vertical"
@@ -162,55 +341,15 @@ export function RightPanel({
     >
       {/* Top Panel: Git Status / File Browser */}
       <ResizablePanel defaultSize="60%" minSize="20%">
-        <div className="flex flex-col h-full min-h-0">
-          {/* Tab bar */}
-          <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
-            <TabButton
-              label="Unstaged"
-              icon={<FileQuestion className="h-3.5 w-3.5" />}
-              isActive={activeTopTab === 'unstaged'}
-              onSelect={() => handleTabChange('unstaged')}
-            />
-            <TabButton
-              label="Diff vs Main"
-              icon={<GitCompare className="h-3.5 w-3.5" />}
-              isActive={activeTopTab === 'diff-vs-main'}
-              onSelect={() => handleTabChange('diff-vs-main')}
-            />
-            <TabButton
-              label="Files"
-              icon={<Files className="h-3.5 w-3.5" />}
-              isActive={activeTopTab === 'files'}
-              onSelect={() => handleTabChange('files')}
-            />
-            <TabButton
-              label="Screenshots"
-              icon={<Camera className="h-3.5 w-3.5" />}
-              isActive={activeTopTab === 'screenshots'}
-              onSelect={() => handleTabChange('screenshots')}
-            />
-            <TabButton
-              label="Tasks"
-              icon={<ListTodo className="h-3.5 w-3.5" />}
-              isActive={activeTopTab === 'tasks'}
-              onSelect={() => handleTabChange('tasks')}
-            />
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
-            {activeTopTab === 'unstaged' && <UnstagedChangesPanel workspaceId={workspaceId} />}
-            {activeTopTab === 'diff-vs-main' && <DiffVsMainPanel workspaceId={workspaceId} />}
-            {activeTopTab === 'files' && <FileBrowserPanel workspaceId={workspaceId} />}
-            {activeTopTab === 'tasks' && <TodoPanelContainer messages={messages} />}
-            {activeTopTab === 'screenshots' && (
-              <ScreenshotsPanel
-                workspaceId={workspaceId}
-                onTakeScreenshots={handleTakeScreenshots}
-              />
-            )}
-          </div>
-        </div>
+        <TopPanelArea
+          workspaceId={workspaceId}
+          messages={messages}
+          activeTopTab={activeTopTab}
+          activeChangesView={activeChangesView}
+          onTopTabChange={handleTopTabChange}
+          onChangesViewChange={handleChangesViewChange}
+          onTakeScreenshots={handleTakeScreenshots}
+        />
       </ResizablePanel>
 
       <ResizableHandle direction="vertical" />
