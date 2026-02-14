@@ -526,6 +526,13 @@ class SessionService {
     return acpRuntimeManager.getClient(sessionId);
   }
 
+  getSessionConfigOptions(
+    sessionId: string
+  ): import('@agentclientprotocol/sdk').SessionConfigOption[] {
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    return acpHandle ? [...acpHandle.configOptions] : [];
+  }
+
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     if (acpHandle) {

@@ -2219,6 +2219,39 @@ describe('createActionFromWebSocketMessage', () => {
     expect(action).toBeNull();
   });
 
+  it('should convert config_options_update to CONFIG_OPTIONS_UPDATE action', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'config_options_update',
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'string',
+          category: 'model',
+          currentValue: 'sonnet',
+          options: [{ value: 'sonnet', name: 'Sonnet' }],
+        },
+      ],
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({
+      type: 'CONFIG_OPTIONS_UPDATE',
+      payload: {
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'string',
+            category: 'model',
+            currentValue: 'sonnet',
+            options: [{ value: 'sonnet', name: 'Sonnet' }],
+          },
+        ],
+      },
+    });
+  });
+
   it('should convert permission_request to WS_PERMISSION_REQUEST action', () => {
     const wsMessage: WebSocketMessage = {
       type: 'permission_request',

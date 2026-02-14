@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
   getChatBarCapabilities: vi.fn(),
+  getSessionConfigOptions: vi.fn(),
   subscribe: vi.fn(),
   emitDelta: vi.fn(),
   getCachedCommands: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
   sessionService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
     getChatBarCapabilities: mocks.getChatBarCapabilities,
+    getSessionConfigOptions: mocks.getSessionConfigOptions,
   },
 }));
 
@@ -58,6 +60,7 @@ describe('createLoadSessionHandler', () => {
       rewind: { enabled: false },
     });
     mocks.getCachedCommands.mockResolvedValue(null);
+    mocks.getSessionConfigOptions.mockReturnValue([]);
   });
 
   it('subscribes with no Claude hydration context for CODEX session', async () => {
@@ -106,6 +109,48 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
       type: 'slash_commands',
       slashCommands: [{ name: '/test', description: 'Test command' }],
+    });
+  });
+
+  it('emits config options when ACP session handle is active', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      workspace: { worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+    mocks.getSessionConfigOptions.mockReturnValue([
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'string',
+        category: 'model',
+        currentValue: 'sonnet',
+        options: [{ value: 'sonnet', name: 'Sonnet' }],
+      },
+    ]);
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'config_options_update',
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'string',
+          category: 'model',
+          currentValue: 'sonnet',
+          options: [{ value: 'sonnet', name: 'Sonnet' }],
+        },
+      ],
     });
   });
 });

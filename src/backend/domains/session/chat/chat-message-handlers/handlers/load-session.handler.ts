@@ -25,6 +25,13 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       type: 'chat_capabilities',
       capabilities: chatCapabilities,
     });
+    const configOptions = sessionService.getSessionConfigOptions(sessionId);
+    if (configOptions.length > 0) {
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions,
+      });
+    }
 
     await sendCachedSlashCommandsIfNeeded(sessionId, dbSession.provider);
   };

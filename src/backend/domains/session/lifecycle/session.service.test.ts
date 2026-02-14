@@ -552,6 +552,32 @@ describe('SessionService', () => {
     });
   });
 
+  it('returns ACP config options for active session handles', () => {
+    const configOptions = [
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'string',
+        category: 'model',
+        currentValue: 'sonnet',
+        options: [{ value: 'sonnet', name: 'Sonnet' }],
+      },
+    ];
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(
+      unsafeCoerce({
+        configOptions,
+      })
+    );
+
+    expect(sessionService.getSessionConfigOptions('session-1')).toEqual(configOptions);
+  });
+
+  it('returns empty config options when no ACP handle is active', () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+
+    expect(sessionService.getSessionConfigOptions('session-1')).toEqual([]);
+  });
+
   it('avoids redundant session DB lookups during startSession', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>

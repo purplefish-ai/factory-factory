@@ -292,6 +292,37 @@ describe('AcpRuntimeManager', () => {
 
       expect(callback).toHaveBeenCalledWith('session-1', handle, defaultContext());
     });
+
+    it('stores config options returned by ACP newSession', async () => {
+      setupSuccessfulSpawn();
+      const expectedConfigOptions = [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'string',
+          category: 'model',
+          currentValue: 'sonnet',
+          options: [
+            { value: 'sonnet', name: 'Sonnet' },
+            { value: 'opus', name: 'Opus' },
+          ],
+        },
+      ];
+      mockNewSession.mockResolvedValueOnce({
+        sessionId: 'provider-session-123',
+        configOptions: expectedConfigOptions,
+        modes: [],
+      });
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      expect(handle.configOptions).toEqual(expectedConfigOptions);
+    });
   });
 
   describe('stopClient', () => {
