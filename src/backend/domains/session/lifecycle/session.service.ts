@@ -1410,7 +1410,6 @@ class SessionService {
   async stopAllClients(_timeoutMs = 5000): Promise<void> {
     try {
       await acpRuntimeManager.stopAllClients();
-      acpTraceLogger.cleanup();
     } catch (error) {
       logger.error('Failed to stop ACP clients during shutdown', {
         error: error instanceof Error ? error.message : String(error),
