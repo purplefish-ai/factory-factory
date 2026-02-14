@@ -33,6 +33,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix symlink escape in isPathSafe (#917) (#1010)
+- Fix duplicate history replay after hydration (#1009)
+- Fix non-shell -c command previews (#1008)
+- Fix Run tool rendering in activity view (#1007)
+- Harden Claude history loader and bound retry cache (#1006)
 - Load session history without passive runtime startup (#1004)
 - Fix duplicate transcript injection from ACP user_message_chunk (#1003)
 - Fix session load/runtime UX and Codex chat-bar hydration (#1002)
