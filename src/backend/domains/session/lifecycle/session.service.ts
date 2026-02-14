@@ -49,6 +49,11 @@ class SessionService {
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
   private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
+  /**
+   * Suppress transcript-mutating ACP replay events for sessions whose transcript was
+   * already hydrated from on-disk history during passive load_session.
+   */
+  private readonly suppressAcpReplayForSession = new Set<string>();
   /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
   private workspaceBridge: SessionWorkspaceBridge | null = null;
   /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
@@ -124,6 +129,7 @@ class SessionService {
       onExit: async (sid: string, exitCode: number | null) => {
         // Clean up permission bridge, streaming state, and workspace mapping on exit
         this.acpStreamState.delete(sid);
+        this.suppressAcpReplayForSession.delete(sid);
         this.sessionToWorkspace.delete(sid);
         const b = this.acpPermissionBridges.get(sid);
         if (b) {
@@ -168,6 +174,16 @@ class SessionService {
    * accumulate text chunks, and forward non-message deltas.
    */
   private handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
+    this.maybeLiftReplaySuppression(sid);
+
+    if (
+      this.suppressAcpReplayForSession.has(sid) &&
+      delta.type !== 'config_options_update' &&
+      delta.type !== 'slash_commands'
+    ) {
+      return;
+    }
+
     // When configOptions change mid-session, sync the handle and re-emit capabilities
     if (delta.type === 'config_options_update') {
       const acpHandle = acpRuntimeManager.getClient(sid);
@@ -214,6 +230,10 @@ class SessionService {
    * Live sends are already committed by our send pipeline, so only inject replay chunks.
    */
   private handleAcpUserMessageChunk(sid: string, text: string): void {
+    this.maybeLiftReplaySuppression(sid);
+    if (this.suppressAcpReplayForSession.has(sid)) {
+      return;
+    }
     if (acpRuntimeManager.isSessionWorking(sid)) {
       return;
     }
@@ -330,6 +350,13 @@ class SessionService {
     this.sessionToWorkspace.set(sessionId, sessionContext.workspaceId);
 
     const handlers = this.setupAcpEventHandler(sessionId);
+    const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
+    if (shouldSuppressReplay) {
+      this.suppressAcpReplayForSession.add(sessionId);
+    } else {
+      this.suppressAcpReplayForSession.delete(sessionId);
+    }
+
     const clientOptions: AcpClientOptions = {
       provider: session?.provider ?? 'CLAUDE',
       workingDir: sessionContext.workingDir,
@@ -340,10 +367,16 @@ class SessionService {
       resumeProviderSessionId: session?.providerSessionId ?? undefined,
     };
 
-    const handle = await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
-      workspaceId: sessionContext.workspaceId,
-      workingDir: sessionContext.workingDir,
-    });
+    let handle: AcpProcessHandle;
+    try {
+      handle = await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
+        workspaceId: sessionContext.workspaceId,
+        workingDir: sessionContext.workingDir,
+      });
+    } catch (error) {
+      this.suppressAcpReplayForSession.delete(sessionId);
+      throw error;
+    }
 
     await this.persistAcpConfigSnapshot(sessionId, {
       provider: handle.provider as SessionProvider,
@@ -369,6 +402,31 @@ class SessionService {
     });
 
     return handle;
+  }
+
+  private shouldSuppressReplayDuringAcpResume(
+    sessionId: string,
+    session: AgentSessionRecord | undefined
+  ): boolean {
+    if (!session?.providerSessionId) {
+      return false;
+    }
+
+    if (!sessionDomainService.isHistoryHydrated(sessionId)) {
+      return false;
+    }
+
+    return sessionDomainService.getTranscriptSnapshot(sessionId).length > 0;
+  }
+
+  private maybeLiftReplaySuppression(sessionId: string): void {
+    if (!this.suppressAcpReplayForSession.has(sessionId)) {
+      return;
+    }
+    if (!acpRuntimeManager.isSessionWorking(sessionId)) {
+      return;
+    }
+    this.suppressAcpReplayForSession.delete(sessionId);
   }
 
   constructor(options?: {
@@ -438,6 +496,7 @@ class SessionService {
 
     // Cancel pending ACP permissions and clean up streaming state
     this.acpStreamState.delete(sessionId);
+    this.suppressAcpReplayForSession.delete(sessionId);
     const acpBridge = this.acpPermissionBridges.get(sessionId);
     if (acpBridge) {
       acpBridge.cancelAll();

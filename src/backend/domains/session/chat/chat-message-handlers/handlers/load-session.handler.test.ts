@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
-  loadSessionHistory: vi.fn(),
+  loadClaudeSessionHistory: vi.fn(),
+  loadCodexSessionHistory: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
   getChatBarCapabilities: vi.fn(),
   getSessionConfigOptionsWithFallback: vi.fn(),
@@ -23,7 +24,13 @@ vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
 
 vi.mock('@/backend/domains/session/data/claude-session-history-loader.service', () => ({
   claudeSessionHistoryLoaderService: {
-    loadSessionHistory: mocks.loadSessionHistory,
+    loadSessionHistory: mocks.loadClaudeSessionHistory,
+  },
+}));
+
+vi.mock('@/backend/domains/session/data/codex-session-history-loader.service', () => ({
+  codexSessionHistoryLoaderService: {
+    loadSessionHistory: mocks.loadCodexSessionHistory,
   },
 }));
 
@@ -92,7 +99,8 @@ describe('createLoadSessionHandler', () => {
     mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([]);
     mocks.getTranscriptSnapshot.mockReturnValue([]);
     mocks.isHistoryHydrated.mockReturnValue(true);
-    mocks.loadSessionHistory.mockResolvedValue({ status: 'not_found' });
+    mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
+    mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
   });
 
   it('hydrates Claude transcript from JSONL history', async () => {
@@ -104,7 +112,7 @@ describe('createLoadSessionHandler', () => {
       workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
-    mocks.loadSessionHistory.mockResolvedValue({
+    mocks.loadClaudeSessionHistory.mockResolvedValue({
       status: 'loaded',
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
       history: [
@@ -125,7 +133,7 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
 
-    expect(mocks.loadSessionHistory).toHaveBeenCalledWith({
+    expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledWith({
       providerSessionId: 'provider-session-1',
       workingDir: '/tmp/worktree',
     });
@@ -156,7 +164,7 @@ describe('createLoadSessionHandler', () => {
       workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
-    mocks.loadSessionHistory.mockResolvedValue({ status: 'not_found' });
+    mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
 
     const handler = createLoadSessionHandler();
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
@@ -179,7 +187,7 @@ describe('createLoadSessionHandler', () => {
       workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
-    mocks.loadSessionHistory.mockResolvedValue({
+    mocks.loadClaudeSessionHistory.mockResolvedValue({
       status: 'error',
       reason: 'read_failed',
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
@@ -208,7 +216,7 @@ describe('createLoadSessionHandler', () => {
       workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
-    mocks.loadSessionHistory.mockResolvedValue({
+    mocks.loadClaudeSessionHistory.mockResolvedValue({
       status: 'error',
       reason: 'read_failed',
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
@@ -229,7 +237,7 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledTimes(1);
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
   });
 
@@ -243,7 +251,7 @@ describe('createLoadSessionHandler', () => {
       workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
     }));
     mocks.isHistoryHydrated.mockReturnValue(false);
-    mocks.loadSessionHistory.mockResolvedValue({
+    mocks.loadClaudeSessionHistory.mockResolvedValue({
       status: 'error',
       reason: 'read_failed',
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
@@ -268,7 +276,7 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadSessionHistory).toHaveBeenCalledTimes(1026);
+    expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledTimes(1026);
   });
 
   it('evicts earliest-expiring retry entry when at capacity', async () => {
@@ -283,7 +291,7 @@ describe('createLoadSessionHandler', () => {
         workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
       }));
       mocks.isHistoryHydrated.mockReturnValue(false);
-      mocks.loadSessionHistory.mockResolvedValue({
+      mocks.loadClaudeSessionHistory.mockResolvedValue({
         status: 'error',
         reason: 'read_failed',
         filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
@@ -316,7 +324,7 @@ describe('createLoadSessionHandler', () => {
         message: { type: 'load_session' } as never,
       });
 
-      const loadCallsBeforeRecheck = mocks.loadSessionHistory.mock.calls.length;
+      const loadCallsBeforeRecheck = mocks.loadClaudeSessionHistory.mock.calls.length;
       await handler({
         ws: ws as never,
         sessionId: 'retry-expiry-oldest',
@@ -324,7 +332,7 @@ describe('createLoadSessionHandler', () => {
         message: { type: 'load_session' } as never,
       });
 
-      expect(mocks.loadSessionHistory.mock.calls.length).toBe(loadCallsBeforeRecheck);
+      expect(mocks.loadClaudeSessionHistory.mock.calls.length).toBe(loadCallsBeforeRecheck);
     } finally {
       dateNowSpy.mockRestore();
     }
@@ -348,8 +356,62 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadSessionHistory).not.toHaveBeenCalled();
+    expect(mocks.loadClaudeSessionHistory).not.toHaveBeenCalled();
+    expect(mocks.loadCodexSessionHistory).not.toHaveBeenCalled();
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+  });
+
+  it('hydrates CODEX transcript from JSONL history', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'IDLE',
+      model: 'gpt-5.3-codex',
+      providerSessionId: 'codex-provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadCodexSessionHistory.mockResolvedValue({
+      status: 'loaded',
+      filePath:
+        '/tmp/.codex/sessions/2026/02/14/rollout-2026-02-14T00-00-00-codex-provider-session-1.jsonl',
+      history: [
+        {
+          type: 'user',
+          content: 'hello from codex',
+          timestamp: '2026-02-14T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-codex-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session', loadRequestId: 'load-codex-1' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
+      providerSessionId: 'codex-provider-session-1',
+      workingDir: '/tmp/worktree',
+    });
+    expect(mocks.replaceTranscript).toHaveBeenCalledWith(
+      'session-codex-1',
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'user',
+          text: 'hello from codex',
+        }),
+      ]),
+      { historySource: 'jsonl' }
+    );
+    expect(mocks.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-codex-1',
+        loadRequestId: 'load-codex-1',
+      })
+    );
   });
 
   it('emits config options using fallback-aware session service method', async () => {

@@ -143,32 +143,58 @@ export class AcpEventTranslator {
       | undefined;
     const toolName = meta?.claudeCode?.toolName ?? update.title;
 
-    const events: AcpTranslatedDelta[] = [
-      {
-        type: 'agent_message',
-        data: {
-          type: 'stream_event',
-          event: {
-            type: 'content_block_start',
-            index: 0,
-            content_block: {
-              type: 'tool_use',
-              id: update.toolCallId,
-              name: toolName,
-              input: (update.rawInput as Record<string, unknown>) ?? {},
-            },
+    const events: AcpTranslatedDelta[] = [];
+    events.push({
+      type: 'agent_message',
+      data: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: update.toolCallId,
+            name: toolName,
+            input: (update.rawInput as Record<string, unknown>) ?? {},
           },
         },
       },
-      {
-        type: 'tool_progress',
-        tool_use_id: update.toolCallId,
-        tool_name: toolName,
-        acpLocations: update.locations ?? [],
-        acpKind: update.kind ?? undefined,
-        acpStatus: update.status ?? undefined,
-      },
-    ];
+    });
+
+    const toolProgress: Record<string, unknown> = {
+      type: 'tool_progress',
+      tool_use_id: update.toolCallId,
+      tool_name: toolName,
+      acpLocations: update.locations ?? [],
+      acpKind: update.kind ?? undefined,
+      acpStatus: update.status ?? undefined,
+    };
+    if (this.isTerminalToolStatus(update.status)) {
+      toolProgress.elapsed_time_seconds = 0;
+    }
+    events.push(toolProgress as AcpTranslatedDelta);
+
+    // Some adapters emit one-shot terminal tool_call events without a follow-up tool_call_update.
+    // Emit tool_result here so UI tool cards don't remain stuck in pending state.
+    if (this.isTerminalToolStatus(update.status)) {
+      events.push({
+        type: 'agent_message',
+        data: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: update.toolCallId,
+                content: this.extractToolOutputText(update.content, update.rawOutput),
+                ...(update.status === 'failed' ? { is_error: true } : {}),
+              },
+            ],
+          },
+        },
+      });
+    }
 
     return events;
   }
@@ -192,14 +218,14 @@ export class AcpEventTranslator {
     };
 
     // Signal completion to existing tool progress tracking
-    if (update.status === 'completed' || update.status === 'failed') {
+    if (this.isTerminalToolStatus(update.status)) {
       event.elapsed_time_seconds = 0;
     }
 
     const events: AcpTranslatedDelta[] = [event as AcpTranslatedDelta];
 
     // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
-    if (update.status === 'completed' || update.status === 'failed') {
+    if (this.isTerminalToolStatus(update.status)) {
       events.push({
         type: 'agent_message',
         data: {
@@ -210,7 +236,7 @@ export class AcpEventTranslator {
               {
                 type: 'tool_result',
                 tool_use_id: update.toolCallId,
-                content: this.extractContentText(update.content),
+                content: this.extractToolOutputText(update.content, update.rawOutput),
                 ...(update.status === 'failed' ? { is_error: true } : {}),
               },
             ],
@@ -253,6 +279,14 @@ export class AcpEventTranslator {
     ];
   }
 
+  private extractToolOutputText(content: unknown, rawOutput: unknown): string {
+    const contentText = this.extractContentText(content);
+    if (contentText.length > 0) {
+      return contentText;
+    }
+    return this.extractContentText(rawOutput);
+  }
+
   private extractContentText(content: unknown): string {
     if (!content) {
       return '';
@@ -267,6 +301,10 @@ export class AcpEventTranslator {
         .join('\n');
     }
     return JSON.stringify(content);
+  }
+
+  private isTerminalToolStatus(status: unknown): status is 'completed' | 'failed' {
+    return status === 'completed' || status === 'failed';
   }
 
   private translateConfigOptionUpdate(

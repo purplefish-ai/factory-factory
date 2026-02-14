@@ -201,6 +201,66 @@ describe('AcpEventTranslator', () => {
       const block = event.content_block as Record<string, unknown>;
       expect(block.input).toEqual({});
     });
+
+    it('emits terminal tool_result when tool_call status is completed', () => {
+      const { translator } = createTranslator();
+      const update = {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-003',
+        title: 'Run',
+        status: 'completed',
+        content: [{ type: 'text', text: 'done from tool_call' }],
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events).toHaveLength(3);
+      expect((events[1] as Record<string, unknown>).elapsed_time_seconds).toBe(0);
+      expect(events[2]).toEqual({
+        type: 'agent_message',
+        data: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [
+              { type: 'tool_result', tool_use_id: 'tc-003', content: 'done from tool_call' },
+            ],
+          },
+        },
+      });
+    });
+
+    it('falls back to rawOutput when terminal tool_call content is missing', () => {
+      const { translator } = createTranslator();
+      const update = {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'tc-004',
+        title: 'Run',
+        status: 'failed',
+        rawOutput: { error: 'boom' },
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events).toHaveLength(3);
+      expect(events[2]).toEqual({
+        type: 'agent_message',
+        data: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tc-004',
+                content: '{"error":"boom"}',
+                is_error: true,
+              },
+            ],
+          },
+        },
+      });
+    });
   });
 
   describe('tool_call_update', () => {
