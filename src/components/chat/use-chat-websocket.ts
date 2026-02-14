@@ -11,6 +11,7 @@ import type {
 } from '@/lib/chat-protocol';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import type {
   AcpConfigOption,
   AcpPlanState,
@@ -45,6 +46,8 @@ export interface UseChatWebSocketReturn {
   sessionStatus: SessionStatus;
   // Claude process status (alive vs stopped)
   processStatus: ReturnType<typeof useChatState>['processStatus'];
+  // Authoritative runtime snapshot for the selected session
+  sessionRuntime: SessionRuntimeState;
   gitBranch: string | null;
   availableSessions: SessionInfo[];
   // Pending interactive request (permission or user question)
@@ -255,6 +258,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     connected: transport.connected,
     sessionStatus: chat.sessionStatus,
     processStatus: chat.processStatus,
+    sessionRuntime: chat.sessionRuntime,
     gitBranch: chat.gitBranch,
     availableSessions: chat.availableSessions,
     pendingRequest: chat.pendingRequest,

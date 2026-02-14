@@ -72,7 +72,7 @@ export const MessageItem = memo(function MessageItem({
     return (
       <MessageWrapper>
         {/* Wrapper for positioning action buttons outside opacity container */}
-        <div className="group relative inline-block max-w-full">
+        <div className="group relative w-full max-w-full">
           {/* Action buttons group - positioned at top-right, outside opacity container */}
           <div
             className={cn(
@@ -153,8 +153,8 @@ export const MessageItem = memo(function MessageItem({
             )}
             {/* Text */}
             {message.text && (
-              <div className="relative inline-block max-w-full">
-                <div className="rounded bg-background border border-border px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
+              <div className="relative w-full max-w-full">
+                <div className="w-full rounded border border-border/70 bg-muted/35 px-3 py-2 break-words text-sm text-left whitespace-pre-wrap">
                   {userText}
                 </div>
               </div>

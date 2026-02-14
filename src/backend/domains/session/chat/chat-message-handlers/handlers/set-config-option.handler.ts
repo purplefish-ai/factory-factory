@@ -7,6 +7,35 @@ import { sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const candidate = error as { message?: unknown; code?: unknown; data?: unknown };
+    if (typeof candidate.message === 'string' && candidate.message.length > 0) {
+      return candidate.message;
+    }
+    if (typeof candidate.data !== 'undefined') {
+      try {
+        return JSON.stringify(candidate.data);
+      } catch {
+        // Fall through to generic object serialization
+      }
+    }
+    if (typeof candidate.code === 'number' || typeof candidate.code === 'string') {
+      return `ACP error (${String(candidate.code)})`;
+    }
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 export function createSetConfigOptionHandler(): ChatMessageHandler<SetConfigOptionMessage> {
   return async ({ ws, sessionId, message }) => {
     try {
@@ -19,7 +48,7 @@ export function createSetConfigOptionHandler(): ChatMessageHandler<SetConfigOpti
         });
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getErrorMessage(error);
       logger.error('[Chat WS] Failed to set config option', {
         sessionId,
         configId: message.configId,

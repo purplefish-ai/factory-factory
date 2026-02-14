@@ -60,36 +60,103 @@ export function useWorkspaceInitStatus(
 }
 
 const SESSION_TAB_STORAGE_PREFIX = 'workspace-selected-session-';
+const PENDING_SELECTION_GRACE_MS = 5000;
+
+interface ResolveSelectedSessionIdInput {
+  currentSelectedDbSessionId: string | null;
+  persistedSessionId: string | null;
+  initialDbSessionId: string | null;
+  sessionIds: string[];
+  pendingSelectionId?: string | null;
+  pendingSelectionSetAtMs?: number | null;
+  nowMs?: number;
+}
+
+export function resolveSelectedSessionId({
+  currentSelectedDbSessionId,
+  persistedSessionId,
+  initialDbSessionId,
+  sessionIds,
+  pendingSelectionId,
+  pendingSelectionSetAtMs,
+  nowMs = Date.now(),
+}: ResolveSelectedSessionIdInput): string | null {
+  if (sessionIds.length === 0) {
+    return currentSelectedDbSessionId;
+  }
+
+  const shouldPreservePendingSelection =
+    pendingSelectionId != null &&
+    currentSelectedDbSessionId === pendingSelectionId &&
+    !sessionIds.includes(pendingSelectionId) &&
+    pendingSelectionSetAtMs != null &&
+    nowMs - pendingSelectionSetAtMs < PENDING_SELECTION_GRACE_MS;
+  if (shouldPreservePendingSelection) {
+    return currentSelectedDbSessionId;
+  }
+
+  if (currentSelectedDbSessionId && sessionIds.includes(currentSelectedDbSessionId)) {
+    return currentSelectedDbSessionId;
+  }
+
+  if (persistedSessionId && sessionIds.includes(persistedSessionId)) {
+    return persistedSessionId;
+  }
+
+  if (initialDbSessionId && sessionIds.includes(initialDbSessionId)) {
+    return initialDbSessionId;
+  }
+
+  return sessionIds[0] ?? null;
+}
 
 export function useSelectedSessionId(
   workspaceId: string,
   initialDbSessionId: string | null,
   sessionIds: string[]
 ) {
+  const storageKey = `${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`;
+  const pendingSelectionRef = useRef<{ id: string | null; setAtMs: number | null }>({
+    id: null,
+    setAtMs: null,
+  });
+
   const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
-    const stored = localStorage.getItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`);
-    if (stored && sessionIds.includes(stored)) {
-      return stored;
-    }
-    return initialDbSessionId;
+    const stored = localStorage.getItem(storageKey);
+    return stored ?? initialDbSessionId;
   });
 
   useEffect(() => {
-    if (initialDbSessionId && selectedDbSessionId === null) {
-      setSelectedDbSessionIdRaw(initialDbSessionId);
+    const pending = pendingSelectionRef.current;
+    if (pending.id && sessionIds.includes(pending.id)) {
+      pendingSelectionRef.current = { id: null, setAtMs: null };
     }
-  }, [initialDbSessionId, selectedDbSessionId]);
+
+    const persistedSessionId = localStorage.getItem(storageKey);
+    const resolved = resolveSelectedSessionId({
+      currentSelectedDbSessionId: selectedDbSessionId,
+      persistedSessionId,
+      initialDbSessionId,
+      sessionIds,
+      pendingSelectionId: pendingSelectionRef.current.id,
+      pendingSelectionSetAtMs: pendingSelectionRef.current.setAtMs,
+    });
+    if (resolved !== selectedDbSessionId) {
+      setSelectedDbSessionIdRaw(resolved);
+    }
+  }, [initialDbSessionId, selectedDbSessionId, sessionIds, storageKey]);
 
   const setSelectedDbSessionId = useCallback(
     (id: string | null) => {
+      pendingSelectionRef.current = { id, setAtMs: id ? Date.now() : null };
       setSelectedDbSessionIdRaw(id);
       if (id) {
-        localStorage.setItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`, id);
+        localStorage.setItem(storageKey, id);
       } else {
-        localStorage.removeItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`);
+        localStorage.removeItem(storageKey);
       }
     },
-    [workspaceId]
+    [storageKey]
   );
 
   return { selectedDbSessionId, setSelectedDbSessionId };

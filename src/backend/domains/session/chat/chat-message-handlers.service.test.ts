@@ -174,4 +174,62 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
     expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
   });
+
+  it('rejects queued messages for archived workspaces instead of leaving them stuck', async () => {
+    chatMessageHandlerService.configure({
+      initPolicy: {
+        getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
+      },
+    });
+    mockSessionDataService.findAgentSessionById.mockResolvedValue({
+      workspace: {
+        status: 'ARCHIVED',
+        worktreePath: '/tmp/w1',
+        initErrorMessage: null,
+      },
+    });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionDomainService.dequeueNext).toHaveBeenCalledWith('s1', {
+      emitSnapshot: false,
+    });
+    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        type: 'message_state_changed',
+        id: 'm1',
+        newState: 'REJECTED',
+        errorMessage: expect.stringContaining('Workspace is archived'),
+      })
+    );
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps queued messages during temporary blocked states (e.g. provisioning)', async () => {
+    chatMessageHandlerService.configure({
+      initPolicy: {
+        getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'blocked' }),
+      },
+    });
+    mockSessionDataService.findAgentSessionById.mockResolvedValue({
+      workspace: {
+        status: 'PROVISIONING',
+        worktreePath: null,
+        initErrorMessage: null,
+      },
+    });
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        type: 'message_state_changed',
+        newState: 'REJECTED',
+      })
+    );
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+  });
 });

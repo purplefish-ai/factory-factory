@@ -11,6 +11,8 @@ const {
   mockPrompt,
   mockCancel,
   mockSetSessionConfigOption,
+  mockSetSessionMode,
+  mockSetSessionModel,
   mockNdJsonStream,
 } = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
@@ -19,6 +21,8 @@ const {
   mockPrompt: vi.fn(),
   mockCancel: vi.fn(),
   mockSetSessionConfigOption: vi.fn(),
+  mockSetSessionMode: vi.fn(),
+  mockSetSessionModel: vi.fn(),
   mockNdJsonStream: vi.fn().mockReturnValue({ writable: {}, readable: {} }),
 }));
 
@@ -36,6 +40,8 @@ vi.mock('@agentclientprotocol/sdk', () => {
     prompt = mockPrompt;
     cancel = mockCancel;
     setSessionConfigOption = mockSetSessionConfigOption;
+    setSessionMode = mockSetSessionMode;
+    unstable_setSessionModel = mockSetSessionModel;
 
     constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
       this.toClient = toClient;
@@ -168,6 +174,8 @@ function setupSuccessfulSpawn() {
   mockSetSessionConfigOption.mockResolvedValue({
     configOptions: defaultConfigOptions(),
   });
+  mockSetSessionMode.mockResolvedValue({});
+  mockSetSessionModel.mockResolvedValue({});
   return child;
 }
 
@@ -423,6 +431,58 @@ describe('AcpRuntimeManager', () => {
           defaultContext()
         )
       ).rejects.toThrow('did not include required configOptions');
+    });
+
+    it('derives required config options from models/modes when newSession omits configOptions', async () => {
+      setupSuccessfulSpawn();
+      mockNewSession.mockResolvedValueOnce({
+        sessionId: 'provider-session-123',
+        models: {
+          availableModels: [
+            { modelId: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
+            { modelId: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' },
+          ],
+          currentModelId: 'claude-opus-4-6',
+        },
+        modes: {
+          availableModes: [
+            { id: 'default', name: 'Default' },
+            { id: 'plan', name: 'Plan' },
+          ],
+          currentModeId: 'default',
+        },
+      });
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const modelOption = handle.configOptions.find((option) => option.category === 'model');
+      const modeOption = handle.configOptions.find((option) => option.category === 'mode');
+
+      expect(modelOption).toMatchObject({
+        id: 'model',
+        currentValue: 'claude-opus-4-6',
+      });
+      expect(modelOption?.options).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'claude-opus-4-6', name: 'Claude Opus 4.6' }),
+          expect.objectContaining({ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }),
+        ])
+      );
+      expect(modeOption).toMatchObject({
+        id: 'mode',
+        currentValue: 'default',
+      });
+      expect(modeOption?.options).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'default', name: 'Default' }),
+          expect.objectContaining({ value: 'plan', name: 'Plan' }),
+        ])
+      );
     });
 
     it('fails fast when ACP newSession omits required model/mode categories', async () => {
@@ -818,6 +878,134 @@ describe('AcpRuntimeManager', () => {
       await expect(manager.setConfigOption('session-1', 'mode', 'plan')).rejects.toThrow(
         'missing required config option categories: model, mode'
       );
+    });
+  });
+
+  describe('setSessionMode', () => {
+    it('calls ACP setSessionMode and updates cached mode currentValue', async () => {
+      setupSuccessfulSpawn();
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await manager.setSessionMode('session-1', 'plan');
+
+      expect(mockSetSessionMode).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        modeId: 'plan',
+      });
+      expect(handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+        'plan'
+      );
+    });
+
+    it('throws when setSessionMode call fails', async () => {
+      setupSuccessfulSpawn();
+      mockSetSessionMode.mockRejectedValueOnce(new Error('Invalid mode'));
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await expect(manager.setSessionMode('session-1', 'acceptEdits')).rejects.toThrow(
+        'Invalid mode'
+      );
+    });
+  });
+
+  describe('setSessionModel', () => {
+    it('uses unstable_setSessionModel for CLAUDE and updates cached model currentValue', async () => {
+      setupSuccessfulSpawn();
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await manager.setSessionModel('session-1', 'opus');
+
+      expect(mockSetSessionModel).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        modelId: 'opus',
+      });
+      expect(mockSetSessionConfigOption).not.toHaveBeenCalled();
+      expect(handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
+        'opus'
+      );
+    });
+
+    it('falls back to setSessionConfigOption when unstable_setSessionModel is unavailable', async () => {
+      setupSuccessfulSpawn();
+      mockSetSessionModel.mockRejectedValueOnce({ code: -32_601, message: 'Method not found' });
+      mockSetSessionConfigOption.mockResolvedValueOnce({
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            category: 'model',
+            currentValue: 'opus',
+            options: [
+              { value: 'sonnet', name: 'Sonnet' },
+              { value: 'opus', name: 'Opus' },
+            ],
+          },
+          {
+            id: 'mode',
+            name: 'Mode',
+            type: 'select',
+            category: 'mode',
+            currentValue: 'default',
+            options: [{ value: 'default', name: 'Default' }],
+          },
+        ],
+      });
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await manager.setSessionModel('session-1', 'opus');
+
+      expect(mockSetSessionModel).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        modelId: 'opus',
+      });
+      expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        configId: 'model',
+        value: 'opus',
+      });
+      expect(handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
+        'opus'
+      );
+    });
+
+    it('uses setSessionConfigOption path for CODEX model updates', async () => {
+      setupSuccessfulSpawn();
+      await manager.getOrCreateClient(
+        'session-1',
+        { ...defaultOptions(), provider: 'CODEX' },
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await manager.setSessionModel('session-1', 'gpt-5.2-codex');
+
+      expect(mockSetSessionModel).not.toHaveBeenCalled();
+      expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        configId: 'model',
+        value: 'gpt-5.2-codex',
+      });
     });
   });
 

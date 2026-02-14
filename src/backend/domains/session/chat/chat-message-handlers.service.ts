@@ -45,6 +45,11 @@ interface ThinkingBudgetClient {
   setMaxThinkingTokens: (tokens: number | null) => Promise<void>;
 }
 
+type DispatchGateResult =
+  | { policy: 'allowed' }
+  | { policy: 'manual_resume' }
+  | { policy: 'blocked'; permanent: boolean; reason: string | null };
+
 function isClaudeCompactionClient(value: unknown): value is ClaudeCompactionClient {
   if (!value || typeof value !== 'object') {
     return false;
@@ -152,7 +157,8 @@ class ChatMessageHandlerService {
       }
 
       const dispatchGate = await this.evaluateDispatchGateSafely(dbSessionId);
-      if (dispatchGate !== 'allowed') {
+      if (dispatchGate.policy !== 'allowed') {
+        this.handleBlockedDispatchGate(dbSessionId, dispatchGate);
         return;
       }
 
@@ -390,30 +396,79 @@ class ChatMessageHandlerService {
     return processAttachmentsAndBuildContent(msg.text, msg.attachments);
   }
 
-  private async evaluateDispatchGate(
-    dbSessionId: string
-  ): Promise<'allowed' | 'blocked' | 'manual_resume'> {
+  private handleBlockedDispatchGate(
+    dbSessionId: string,
+    dispatchGate: Exclude<DispatchGateResult, { policy: 'allowed' }>
+  ): void {
+    if (!(dispatchGate.policy === 'blocked' && dispatchGate.permanent)) {
+      return;
+    }
+
+    const blockedMessage = sessionDomainService.dequeueNext(dbSessionId, {
+      emitSnapshot: false,
+    });
+    if (!blockedMessage) {
+      return;
+    }
+
+    sessionDomainService.emitDelta(dbSessionId, {
+      type: 'message_state_changed',
+      id: blockedMessage.id,
+      newState: MessageState.REJECTED,
+      errorMessage:
+        dispatchGate.reason ?? 'Cannot send messages for this workspace in its current state.',
+    });
+  }
+
+  private getPermanentBlockedDispatchReason(workspace: {
+    status?: string | null;
+    worktreePath?: string | null;
+  }): string | null {
+    if (workspace.status === 'ARCHIVED') {
+      return 'Workspace is archived. Unarchive it before sending messages.';
+    }
+
+    if (workspace.status === 'FAILED' && !workspace.worktreePath) {
+      return 'Workspace setup failed before worktree creation. Retry setup before sending messages.';
+    }
+
+    return null;
+  }
+
+  private async evaluateDispatchGate(dbSessionId: string): Promise<DispatchGateResult> {
     const session = await sessionDataService.findAgentSessionById(dbSessionId);
     if (!session) {
-      return 'blocked';
+      return {
+        policy: 'blocked',
+        permanent: true,
+        reason: 'Session not found.',
+      };
     }
 
     const dispatchPolicy = this.initPolicy.getWorkspaceInitPolicy(session.workspace).dispatchPolicy;
     if (dispatchPolicy !== 'manual_resume') {
       this.manualDispatchResumed.delete(dbSessionId);
-      return dispatchPolicy;
+      if (dispatchPolicy === 'allowed') {
+        return { policy: 'allowed' };
+      }
+      const reason = this.getPermanentBlockedDispatchReason(session.workspace);
+      return {
+        policy: 'blocked',
+        permanent: !!reason,
+        reason,
+      };
     }
 
-    return this.manualDispatchResumed.get(dbSessionId) ? 'allowed' : 'manual_resume';
+    return this.manualDispatchResumed.get(dbSessionId)
+      ? { policy: 'allowed' }
+      : { policy: 'manual_resume' };
   }
 
   /**
    * Evaluate dispatch gate without touching the queue.
    * Message stays in queue — no requeue needed on block.
    */
-  private async evaluateDispatchGateSafely(
-    dbSessionId: string
-  ): Promise<'allowed' | 'blocked' | 'manual_resume'> {
+  private async evaluateDispatchGateSafely(dbSessionId: string): Promise<DispatchGateResult> {
     try {
       return await this.evaluateDispatchGate(dbSessionId);
     } catch (error) {
@@ -421,7 +476,11 @@ class ChatMessageHandlerService {
         dbSessionId,
         error: error instanceof Error ? error.message : String(error),
       });
-      return 'blocked';
+      return {
+        policy: 'blocked',
+        permanent: false,
+        reason: null,
+      };
     }
   }
 

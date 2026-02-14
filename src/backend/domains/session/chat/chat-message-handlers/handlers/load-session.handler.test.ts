@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getSessionConfigOptions: vi.fn(),
   subscribe: vi.fn(),
   emitDelta: vi.fn(),
+  getTranscriptSnapshot: vi.fn(),
   getCachedCommands: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
   sessionDomainService: {
     subscribe: mocks.subscribe,
     emitDelta: mocks.emitDelta,
+    getTranscriptSnapshot: mocks.getTranscriptSnapshot,
   },
 }));
 
@@ -64,6 +66,7 @@ describe('createLoadSessionHandler', () => {
     mocks.getCachedCommands.mockResolvedValue(null);
     mocks.getSessionConfigOptions.mockReturnValue([]);
     mocks.getOrCreateSessionClientFromRecord.mockResolvedValue({});
+    mocks.getTranscriptSnapshot.mockReturnValue([]);
   });
 
   it('subscribes with no Claude hydration context for CODEX session', async () => {
@@ -216,7 +219,7 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
-  it('skips eager runtime init for inactive sessions', async () => {
+  it('skips eager runtime init for inactive sessions without replay context', async () => {
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
       processState: 'stopped',
@@ -228,6 +231,138 @@ describe('createLoadSessionHandler', () => {
       status: 'IDLE',
       workspace: { worktreePath: '/tmp/worktree' },
       providerSessionId: null,
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).not.toHaveBeenCalled();
+  });
+
+  it('eagerly initializes inactive sessions when transcript is already hydrated', async () => {
+    mocks.getRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-02-13T00:00:00.000Z',
+    });
+    mocks.getTranscriptSnapshot.mockReturnValue([
+      {
+        id: 'm-1',
+        source: 'user',
+        text: 'hello',
+        timestamp: '2026-02-13T00:00:01.000Z',
+        order: 1,
+      },
+    ]);
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      workspace: { worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CLAUDE',
+        providerSessionId: null,
+      })
+    );
+  });
+
+  it('eagerly initializes inactive sessions when providerSessionId is present', async () => {
+    mocks.getRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-02-13T00:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'COMPLETED',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      providerSessionId: 'provider-session-1',
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CODEX',
+        providerSessionId: 'provider-session-1',
+      })
+    );
+  });
+
+  it('eagerly initializes inactive CODEX sessions to hydrate chat bar capabilities', async () => {
+    mocks.getRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-02-13T00:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'IDLE',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CODEX',
+        status: 'IDLE',
+      })
+    );
+  });
+
+  it('skips eager runtime init for archived workspaces even with providerSessionId', async () => {
+    mocks.getRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-02-13T00:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'COMPLETED',
+      workspace: { status: 'ARCHIVED', worktreePath: '/tmp/worktree' },
+      providerSessionId: 'provider-session-1',
       providerProjectPath: null,
     });
 

@@ -32,6 +32,7 @@ import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
+type ReplayUserMessageDelta = { type: 'user_message_chunk'; text: string };
 
 class SessionService {
   private readonly repository: SessionRepository;
@@ -81,6 +82,13 @@ class SessionService {
             type: string;
             update: import('@agentclientprotocol/sdk').SessionUpdate;
           };
+          if (update.sessionUpdate === 'user_message_chunk' && update.content.type === 'text') {
+            this.handleAcpDelta(sid, {
+              type: 'user_message_chunk',
+              text: update.content.text,
+            } as SessionDeltaEvent);
+            return;
+          }
           const deltas = this.acpEventTranslator.translateSessionUpdate(update);
           for (const delta of deltas) {
             this.handleAcpDelta(sid, delta as SessionDeltaEvent);
@@ -154,7 +162,15 @@ class SessionService {
    * Handle a single translated ACP delta: persist and emit agent_messages,
    * accumulate text chunks, and forward non-message deltas.
    */
-  private handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
+  private handleAcpDelta(sid: string, delta: SessionDeltaEvent | ReplayUserMessageDelta): void {
+    if (delta.type === 'user_message_chunk') {
+      const text = delta.text.trim();
+      if (text.length > 0) {
+        sessionDomainService.injectCommittedUserMessage(sid, text);
+      }
+      return;
+    }
+
     // When configOptions change mid-session, sync the handle and re-emit capabilities
     if (delta.type === 'config_options_update') {
       const acpHandle = acpRuntimeManager.getClient(sid);
@@ -629,7 +645,16 @@ class SessionService {
    * authoritative config_options_update delta to all subscribers.
    */
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
-    const configOptions = await acpRuntimeManager.setConfigOption(sessionId, configId, value);
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    const selectedOption = acpHandle?.configOptions.find((option) => option.id === configId);
+    const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
+    const isModelOption = configId === 'model' || selectedOption?.category === 'model';
+
+    const configOptions = isModeOption
+      ? await acpRuntimeManager.setSessionMode(sessionId, value)
+      : isModelOption
+        ? await acpRuntimeManager.setSessionModel(sessionId, value)
+        : await acpRuntimeManager.setConfigOption(sessionId, configId, value);
     sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
