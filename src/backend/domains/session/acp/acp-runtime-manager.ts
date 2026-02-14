@@ -592,7 +592,7 @@ export class AcpRuntimeManager {
       await Promise.race([exitPromise, timeoutPromise]);
 
       // Escalate to SIGKILL if still alive
-      if (handle.child.exitCode === null && !handle.child.killed) {
+      if (handle.child.exitCode === null) {
         logger.warn('ACP process did not exit after SIGTERM, escalating to SIGKILL', {
           sessionId,
           pid: handle.getPid(),

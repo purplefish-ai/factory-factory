@@ -89,8 +89,11 @@ function createMockChildProcess(): EventEmitter & {
   child.exitCode = null;
   child.killed = false;
   child.kill = vi.fn((signal?: string) => {
-    if (signal === 'SIGKILL') {
+    if (signal) {
+      // Match Node ChildProcess semantics: successful signal dispatch flips .killed
       child.killed = true;
+    }
+    if (signal === 'SIGKILL') {
       child.exitCode = 137;
       child.emit('exit', 137, 'SIGKILL');
     }

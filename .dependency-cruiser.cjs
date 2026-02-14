@@ -100,14 +100,6 @@ module.exports = {
       to: { path: '^src/backend' },
     },
     {
-      name: 'no-ui-importing-legacy-claude-contracts',
-      severity: 'error',
-      comment:
-        'UI must import shared protocol contracts from src/shared/acp-protocol, not src/shared/claude.',
-      from: { path: '^src/(client|components|frontend)' },
-      to: { path: '^src/shared/claude/' },
-    },
-    {
       name: 'no-importing-legacy-shared-claude-protocol',
       severity: 'error',
       comment:
@@ -227,14 +219,6 @@ module.exports = {
         'Shared contracts must stay framework/domain neutral and not depend on backend or UI layers',
       from: { path: '^src/shared' },
       to: { path: '^src/(backend|client|frontend|components)' },
-    },
-    {
-      name: 'no-shared-importing-legacy-claude-contracts',
-      severity: 'error',
-      comment:
-        'Shared contracts must not depend on legacy Claude-named protocol paths. Use shared/acp-protocol.',
-      from: { path: '^src/shared' },
-      to: { path: '^src/shared/claude/' },
     },
     {
       name: 'no-backend-importing-ui-layers',
