@@ -6,12 +6,6 @@ function createStore(): SessionStore {
   return {
     sessionId: 's1',
     initialized: true,
-    hydratePromise: null,
-    hydratingKey: null,
-    hydratedKey: null,
-    hydrateGeneration: 0,
-    lastKnownProjectPath: null,
-    lastKnownClaudeSessionId: null,
     transcript: [
       {
         id: 'u1',
@@ -60,7 +54,6 @@ function createStore(): SessionStore {
       updatedAt: '2026-02-01T00:00:04.000Z',
     },
     nextOrder: 2,
-    lastHydratedAt: null,
   };
 }
 

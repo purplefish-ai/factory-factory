@@ -7,12 +7,12 @@ import {
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
-import { SessionFileReader } from '@/backend/domains/session/data/session-file-reader';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type {
+  ChatMessage,
   ClaudeContentItem,
   ClaudeMessage,
   HistoryMessage,
@@ -679,15 +679,56 @@ class SessionService {
     await acpRuntimeManager.cancelPrompt(sessionId);
   }
 
-  async getSessionConversationHistory(
-    sessionId: string,
-    workingDir: string
-  ): Promise<HistoryMessage[]> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session || session.provider !== 'CLAUDE' || !session.claudeSessionId) {
+  getSessionConversationHistory(sessionId: string, _workingDir: string): HistoryMessage[] {
+    const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
+    return transcript.flatMap((entry) => this.mapTranscriptEntryToHistory(entry));
+  }
+
+  private mapTranscriptEntryToHistory(entry: ChatMessage): HistoryMessage[] {
+    if (entry.source === 'user') {
+      return entry.text
+        ? [
+            {
+              type: 'user',
+              content: entry.text,
+              timestamp: entry.timestamp,
+            },
+          ]
+        : [];
+    }
+
+    const message = entry.message;
+    if (!message || (message.type !== 'assistant' && message.type !== 'user')) {
       return [];
     }
-    return await SessionFileReader.getHistory(session.claudeSessionId, workingDir);
+
+    const content = this.extractMessageText(message);
+    if (!content) {
+      return [];
+    }
+
+    return [
+      {
+        type: message.type,
+        content,
+        timestamp: entry.timestamp,
+      },
+    ];
+  }
+
+  private extractMessageText(message: ClaudeMessage): string {
+    const content = message.message?.content;
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (!Array.isArray(content)) {
+      return '';
+    }
+    return content
+      .filter((item): item is Extract<ClaudeContentItem, { type: 'text' }> => item.type === 'text')
+      .map((item) => item.text)
+      .join('\n')
+      .trim();
   }
 
   respondToAcpPermission(sessionId: string, requestId: string, optionId: string): boolean {

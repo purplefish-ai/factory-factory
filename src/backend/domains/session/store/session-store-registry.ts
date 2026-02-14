@@ -12,18 +12,11 @@ export class SessionStoreRegistry {
       store = {
         sessionId,
         initialized: false,
-        hydratePromise: null,
-        hydratingKey: null,
-        hydratedKey: null,
-        hydrateGeneration: 0,
-        lastKnownProjectPath: null,
-        lastKnownClaudeSessionId: null,
         transcript: [],
         queue: [],
         pendingInteractiveRequest: null,
         runtime: createInitialSessionRuntimeState(),
         nextOrder: 0,
-        lastHydratedAt: null,
       };
       this.stores.set(sessionId, store);
     }

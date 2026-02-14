@@ -5,25 +5,6 @@ import { slashCommandCacheService } from '@/backend/domains/session/store/slash-
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
-type PersistedSession = NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>;
-
-function resolveClaudeHydrationContext(session: PersistedSession): {
-  claudeProjectPath: string | null;
-  claudeSessionId: string | null;
-} {
-  if (session.provider !== 'CLAUDE') {
-    return {
-      claudeProjectPath: null,
-      claudeSessionId: null,
-    };
-  }
-
-  return {
-    claudeProjectPath: session.claudeProjectPath ?? null,
-    claudeSessionId: session.claudeSessionId ?? null,
-  };
-}
-
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
     const dbSession = await agentSessionAccessor.findById(sessionId);
@@ -32,12 +13,9 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       return;
     }
 
-    const { claudeProjectPath, claudeSessionId } = resolveClaudeHydrationContext(dbSession);
     const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
       sessionId,
-      claudeProjectPath,
-      claudeSessionId,
       sessionRuntime,
       loadRequestId: message.loadRequestId,
     });

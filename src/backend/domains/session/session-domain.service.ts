@@ -2,7 +2,6 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { ChatMessage, ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import { SessionHydrator } from './store/session-hydrator';
 import { handleProcessExit } from './store/session-process-exit';
 import { SessionPublisher } from './store/session-publisher';
 import {
@@ -24,7 +23,6 @@ import {
   commitSentUserMessageWithOrder,
   injectCommittedUserMessage,
   messageSort,
-  setNextOrderFromTranscript,
   upsertTranscriptMessage,
 } from './store/session-transcript';
 
@@ -43,8 +41,6 @@ class SessionDomainService {
     });
   }, this.nowIso);
 
-  private readonly hydrator = new SessionHydrator(this.nowIso, this.parityLogger);
-
   private transitionRuntime(
     sessionId: string,
     updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'>
@@ -53,20 +49,16 @@ class SessionDomainService {
     this.runtimeMachine.markRuntime(store, updates);
   }
 
-  async subscribe(options: {
+  subscribe(options: {
     sessionId: string;
-    claudeProjectPath: string | null;
-    claudeSessionId: string | null;
     sessionRuntime: SessionRuntimeState;
     loadRequestId?: string;
-  }): Promise<void> {
-    const { sessionId, claudeProjectPath, claudeSessionId, sessionRuntime, loadRequestId } =
-      options;
+  }): void {
+    const { sessionId, sessionRuntime, loadRequestId } = options;
     const store = this.registry.getOrCreate(sessionId);
-    store.lastKnownProjectPath = claudeProjectPath;
-    store.lastKnownClaudeSessionId = claudeSessionId;
-
-    await this.hydrator.ensureHydrated(store, { claudeSessionId, claudeProjectPath });
+    if (!store.initialized) {
+      store.initialized = true;
+    }
 
     this.runtimeMachine.markRuntime(
       store,
@@ -278,13 +270,6 @@ class SessionDomainService {
       forwardSnapshot: (targetStore, options) => {
         this.publisher.forwardSnapshot(targetStore, options);
       },
-      ensureHydrated: (targetStore, options) => this.hydrator.ensureHydrated(targetStore, options),
-      onRehydrateError: (error) => {
-        logger.warn('Failed to rehydrate transcript after process exit', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      },
     });
   }
 
@@ -362,24 +347,6 @@ class SessionDomainService {
     this.publisher.forwardSnapshot(store, { reason: 'inject_user_message' });
   }
 
-  setHydratedTranscript(
-    sessionId: string,
-    transcript: ChatMessage[],
-    options?: { hydratedKey?: string | null }
-  ): void {
-    const store = this.registry.getOrCreate(sessionId);
-    store.transcript = [...transcript].sort(messageSort);
-    setNextOrderFromTranscript(store);
-    store.initialized = true;
-    store.hydratePromise = null;
-    store.hydratingKey = null;
-    store.hydrateGeneration += 1;
-    if (options && Object.hasOwn(options, 'hydratedKey')) {
-      store.hydratedKey = options.hydratedKey ?? null;
-    }
-    store.lastHydratedAt = this.nowIso();
-  }
-
   clearSession(sessionId: string): void {
     this.registry.clearSession(sessionId);
   }
@@ -394,6 +361,11 @@ class SessionDomainService {
 
   getQueueLength(sessionId: string): number {
     return this.registry.getQueueLength(sessionId);
+  }
+
+  getTranscriptSnapshot(sessionId: string): ChatMessage[] {
+    const store = this.registry.getOrCreate(sessionId);
+    return [...store.transcript].sort(messageSort);
   }
 }
 

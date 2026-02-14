@@ -11,12 +11,6 @@ function createStore(): SessionStore {
   return {
     sessionId: 's1',
     initialized: true,
-    hydratePromise: null,
-    hydratingKey: null,
-    hydratedKey: null,
-    hydrateGeneration: 0,
-    lastKnownProjectPath: null,
-    lastKnownClaudeSessionId: null,
     transcript: [],
     queue: [],
     pendingInteractiveRequest: null,
@@ -27,7 +21,6 @@ function createStore(): SessionStore {
       updatedAt: '2026-02-01T00:00:00.000Z',
     },
     nextOrder: 0,
-    lastHydratedAt: null,
   };
 }
 

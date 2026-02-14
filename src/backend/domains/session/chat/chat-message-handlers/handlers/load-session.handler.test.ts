@@ -80,8 +80,6 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
-        claudeSessionId: null,
-        claudeProjectPath: null,
         loadRequestId: 'load-1',
       })
     );
