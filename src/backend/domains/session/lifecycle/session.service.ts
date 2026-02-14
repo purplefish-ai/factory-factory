@@ -1,35 +1,26 @@
 import { SessionStatus } from '@factory-factory/core';
-import type { RewindFilesResponse } from '@/backend/domains/session/claude';
-import type { ClaudeClient, ClaudeClientOptions } from '@/backend/domains/session/claude/client';
-import type { ResourceUsage } from '@/backend/domains/session/claude/process';
-import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
-import { SessionManager } from '@/backend/domains/session/claude/session';
-import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
-import { parseCodexThreadReadTranscript } from '@/backend/domains/session/codex/codex-thread-read-transcript';
-import { parseTurnId } from '@/backend/domains/session/codex/payload-utils';
+import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
 import {
-  claudeSessionProviderAdapter,
-  codexSessionProviderAdapter,
-  type SessionProvider,
-} from '@/backend/domains/session/providers';
-import type { ClaudeRuntimeEventHandlers } from '@/backend/domains/session/runtime';
-import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
+  AcpEventTranslator,
+  AcpPermissionBridge,
+  type AcpRuntimeEventHandlers,
+  acpRuntimeManager,
+} from '@/backend/domains/session/acp';
+import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
+import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import {
-  normalizeSessionModelForProvider,
-  resolveSessionModelForProvider,
-} from '@/backend/lib/session-model';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
-import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
+  AgentContentItem,
+  AgentMessage,
+  AskUserQuestion,
   ChatMessage,
-  ClaudeContentItem,
-  ClaudeMessage,
   HistoryMessage,
   SessionDeltaEvent,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
+import { extractPlanText } from '@/shared/acp-protocol/plan-content';
+import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -42,34 +33,26 @@ import { sessionRepository } from './session.repository';
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
-/**
- * Callback type for client creation hook.
- * Called after a ClaudeClient is created, allowing other services to set up
- * event forwarding without creating circular dependencies.
- */
-export type ClientCreatedCallback = (
-  sessionId: string,
-  client: ClaudeClient,
-  context: { workspaceId: string; workingDir: string }
-) => void;
-
-export type CodexTerminalTurnCallback = (sessionId: string) => void | Promise<void>;
-type SessionAdapter = typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter;
-type LoadedSessionAdapter = {
-  session: AgentSessionRecord;
-  adapter: SessionAdapter;
-};
-
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
-  private readonly claudeAdapter = claudeSessionProviderAdapter;
-  private readonly codexAdapter = codexSessionProviderAdapter;
-  private readonly sessionProviderCache = new Map<string, SessionProvider>();
-  private readonly codexEventTranslator = new CodexEventTranslator({
-    userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
-  });
-  private onCodexTerminalTurn: CodexTerminalTurnCallback | null = null;
+  private readonly acpEventTranslator = new AcpEventTranslator(logger);
+  private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
+  /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
+  private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
+  /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
+  private workspaceBridge: SessionWorkspaceBridge | null = null;
+  /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
+  private readonly sessionToWorkspace = new Map<string, string>();
+
+  /**
+   * Configure cross-domain bridges. Called once at startup by orchestration layer.
+   */
+  configure(bridges: {
+    workspace: Pick<SessionWorkspaceBridge, 'markSessionRunning' | 'markSessionIdle'>;
+  }): void {
+    this.workspaceBridge = bridges.workspace as SessionWorkspaceBridge;
+  }
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
     if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
@@ -84,82 +67,269 @@ class SessionService {
     return Date.now() - updatedAtMs > STALE_LOADING_RUNTIME_MAX_AGE_MS;
   }
 
-  private cacheSessionProvider(sessionId: string, provider: SessionProvider): void {
-    this.sessionProviderCache.set(sessionId, provider);
-  }
+  private setupAcpEventHandler(sessionId: string): AcpRuntimeEventHandlers {
+    const bridge = new AcpPermissionBridge();
+    this.acpPermissionBridges.set(sessionId, bridge);
 
-  private clearSessionProvider(sessionId: string): void {
-    this.sessionProviderCache.delete(sessionId);
-  }
-
-  private resolveAdapterForProvider(provider: SessionProvider) {
-    return provider === 'CODEX' ? this.codexAdapter : this.claudeAdapter;
-  }
-
-  private resolveKnownAdapterForSessionSync(sessionId: string): SessionAdapter | null {
-    if (
-      this.codexAdapter.getClient(sessionId) ||
-      this.codexAdapter.getPendingClient(sessionId) !== undefined ||
-      this.codexAdapter.isStopInProgress(sessionId)
-    ) {
-      return this.codexAdapter;
-    }
-
-    if (
-      this.claudeAdapter.getClient(sessionId) ||
-      this.claudeAdapter.getPendingClient(sessionId) !== undefined ||
-      this.claudeAdapter.isStopInProgress(sessionId)
-    ) {
-      return this.claudeAdapter;
-    }
-
-    const cached = this.sessionProviderCache.get(sessionId);
-    if (cached) {
-      return this.resolveAdapterForProvider(cached);
-    }
-
-    return null;
-  }
-
-  private resolveAdapterForSessionSync(sessionId: string) {
-    return this.resolveKnownAdapterForSessionSync(sessionId) ?? this.claudeAdapter;
-  }
-
-  private notifyCodexTerminalTurn(sessionId: string): void {
-    if (!this.onCodexTerminalTurn) {
-      return;
-    }
-
-    Promise.resolve(this.onCodexTerminalTurn(sessionId)).catch((error) => {
-      logger.warn('Codex terminal turn callback failed', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
-  }
-
-  private async loadSessionWithAdapter(sessionId: string): Promise<LoadedSessionAdapter> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    this.cacheSessionProvider(sessionId, session.provider);
     return {
-      session,
-      adapter: this.resolveAdapterForProvider(session.provider),
+      permissionBridge: bridge,
+      onAcpEvent: (sid: string, event: unknown) => {
+        const typed = event as { type: string };
+
+        if (typed.type === 'acp_session_update') {
+          const { update } = event as {
+            type: string;
+            update: import('@agentclientprotocol/sdk').SessionUpdate;
+          };
+          const deltas = this.acpEventTranslator.translateSessionUpdate(update);
+          for (const delta of deltas) {
+            this.handleAcpDelta(sid, delta as SessionDeltaEvent);
+          }
+          return;
+        }
+
+        if (typed.type === 'acp_permission_request') {
+          this.handleAcpPermissionRequest(sid, event);
+          return;
+        }
+      },
+      onSessionId: async (sid: string, providerSessionId: string) => {
+        try {
+          await this.repository.updateSession(sid, { providerSessionId });
+          logger.debug('Updated session with ACP providerSessionId', {
+            sessionId: sid,
+            providerSessionId,
+          });
+        } catch (error) {
+          logger.warn('Failed to update session with ACP providerSessionId', {
+            sessionId: sid,
+            providerSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      onExit: async (sid: string, exitCode: number | null) => {
+        // Clean up permission bridge, streaming state, and workspace mapping on exit
+        this.acpStreamState.delete(sid);
+        this.sessionToWorkspace.delete(sid);
+        const b = this.acpPermissionBridges.get(sid);
+        if (b) {
+          b.cancelAll();
+          this.acpPermissionBridges.delete(sid);
+        }
+
+        try {
+          sessionDomainService.markProcessExit(sid, exitCode);
+          const session = await this.repository.updateSession(sid, {
+            status: SessionStatus.COMPLETED,
+          });
+          logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
+
+          await this.repository.clearRatchetActiveSession(session.workspaceId, sid);
+          if (session.workflow === 'ratchet') {
+            await this.repository.deleteSession(sid);
+            logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
+          }
+        } catch (error) {
+          logger.warn('Failed to update ACP session status on exit', {
+            sessionId: sid,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+      onError: (sid: string, error: Error) => {
+        logger.error('ACP client error', {
+          sessionId: sid,
+          error: error.message,
+          stack: error.stack,
+        });
+      },
+      onAcpLog: (sid: string, payload: Record<string, unknown>) => {
+        sessionFileLogger.log(sid, 'FROM_CLAUDE_CLI', payload);
+      },
     };
   }
 
   /**
-   * Register a callback to be called when a client is created.
-   * Used by chat handler to set up event forwarding without circular dependencies.
+   * Handle a single translated ACP delta: persist and emit agent_messages,
+   * accumulate text chunks, and forward non-message deltas.
    */
-  setOnClientCreated(callback: ClientCreatedCallback): void {
-    this.claudeAdapter.setOnClientCreated(callback);
+  private handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
+    // When configOptions change mid-session, sync the handle and re-emit capabilities
+    if (delta.type === 'config_options_update') {
+      const acpHandle = acpRuntimeManager.getClient(sid);
+      if (acpHandle) {
+        const { configOptions } = delta as { configOptions: unknown[] };
+        acpHandle.configOptions =
+          configOptions as import('@agentclientprotocol/sdk').SessionConfigOption[];
+        sessionDomainService.emitDelta(sid, delta);
+        sessionDomainService.emitDelta(sid, {
+          type: 'chat_capabilities',
+          capabilities: this.buildAcpChatBarCapabilities(acpHandle),
+        });
+        return;
+      }
+    }
+
+    if (delta.type !== 'agent_message') {
+      sessionDomainService.emitDelta(sid, delta);
+      return;
+    }
+
+    const data = (delta as { data: AgentMessage }).data;
+
+    // Text chunks: accumulate into single message, reuse same order
+    // so the frontend upserts rather than inserting a new bubble per chunk.
+    if (data.type === 'assistant') {
+      this.accumulateAcpText(sid, data);
+      return;
+    }
+
+    // Non-text agent_message (thinking, tool_use, result): reset text accumulator
+    this.acpStreamState.delete(sid);
+    // Persist to transcript + allocate order in one step
+    const order = sessionDomainService.appendClaudeEvent(sid, data);
+    sessionDomainService.emitDelta(sid, { ...delta, order });
   }
 
-  setOnCodexTerminalTurn(callback: CodexTerminalTurnCallback): void {
-    this.onCodexTerminalTurn = callback;
+  /**
+   * Accumulate ACP assistant text chunks into a single message at a stable order.
+   */
+  private accumulateAcpText(sid: string, data: AgentMessage): void {
+    const content = data.message?.content;
+    const chunkText =
+      Array.isArray(content) && content[0]?.type === 'text'
+        ? (content[0] as { text: string }).text
+        : '';
+    let ss = this.acpStreamState.get(sid);
+    if (!ss) {
+      ss = { textOrder: sessionDomainService.allocateOrder(sid), accText: '' };
+      this.acpStreamState.set(sid, ss);
+    }
+    ss.accText += chunkText;
+    const accMsg: AgentMessage = {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: ss.accText }] },
+    };
+    sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.textOrder);
+    sessionDomainService.emitDelta(sid, {
+      type: 'agent_message',
+      data: accMsg,
+      order: ss.textOrder,
+    } as SessionDeltaEvent & { order: number });
+  }
+
+  private handleAcpPermissionRequest(sid: string, event: unknown): void {
+    const { requestId, params } = event as {
+      type: string;
+      requestId: string;
+      params: import('@agentclientprotocol/sdk').RequestPermissionRequest;
+    };
+    const toolName = params.toolCall.title ?? 'ACP Tool';
+    const toolInput = (params.toolCall.rawInput as Record<string, unknown>) ?? {};
+    const acpOptions = params.options.map((o) => ({
+      optionId: o.optionId,
+      name: o.name,
+      kind: o.kind,
+    }));
+    const planContent = this.extractPlanContent(toolName, toolInput);
+
+    if (toolName === 'AskUserQuestion') {
+      const questions = this.extractAskUserQuestions(toolInput);
+      sessionDomainService.emitDelta(sid, {
+        type: 'user_question',
+        requestId,
+        questions,
+        acpOptions,
+      });
+    } else {
+      sessionDomainService.emitDelta(sid, {
+        type: 'permission_request',
+        requestId,
+        toolName,
+        toolUseId: params.toolCall.toolCallId,
+        toolInput,
+        planContent,
+        acpOptions,
+      });
+    }
+
+    sessionDomainService.setPendingInteractiveRequest(sid, {
+      requestId,
+      toolName,
+      toolUseId: params.toolCall.toolCallId,
+      input: toolInput,
+      planContent,
+      acpOptions,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  private extractAskUserQuestions(input: Record<string, unknown>): AskUserQuestion[] {
+    const questions = input.questions;
+    if (!Array.isArray(questions)) {
+      return [];
+    }
+    return questions as AskUserQuestion[];
+  }
+
+  private extractPlanContent(toolName: string, input: Record<string, unknown>): string | null {
+    if (toolName !== 'ExitPlanMode') {
+      return null;
+    }
+
+    return extractPlanText(input.plan);
+  }
+
+  private async createAcpClient(
+    sessionId: string,
+    options?: {
+      model?: string;
+      permissionMode?: 'bypassPermissions' | 'plan';
+    },
+    session?: AgentSessionRecord
+  ): Promise<AcpProcessHandle> {
+    const sessionContext = await this.loadSessionContext(sessionId, session);
+    if (!sessionContext) {
+      throw new Error(`Session context not ready: ${sessionId}`);
+    }
+
+    await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
+    this.sessionToWorkspace.set(sessionId, sessionContext.workspaceId);
+
+    const handlers = this.setupAcpEventHandler(sessionId);
+    const clientOptions: AcpClientOptions = {
+      provider: session?.provider ?? 'CLAUDE',
+      workingDir: sessionContext.workingDir,
+      model: options?.model ?? sessionContext.model,
+      systemPrompt: sessionContext.systemPrompt,
+      permissionMode: options?.permissionMode ?? 'bypassPermissions',
+      sessionId,
+      resumeProviderSessionId: session?.providerSessionId ?? undefined,
+    };
+
+    const handle = await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
+      workspaceId: sessionContext.workspaceId,
+      workingDir: sessionContext.workingDir,
+    });
+
+    // Emit initial config options so the frontend receives them on session start
+    if (handle.configOptions.length > 0) {
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions: handle.configOptions,
+      } as SessionDeltaEvent);
+    }
+
+    // Re-emit chat_capabilities now that the ACP handle exists.
+    // The initial load_session fires before the handle is ready, so the
+    // frontend would otherwise be stuck with EMPTY capabilities.
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'chat_capabilities',
+      capabilities: this.buildAcpChatBarCapabilities(handle),
+    });
+
+    return handle;
   }
 
   constructor(options?: {
@@ -168,123 +338,32 @@ class SessionService {
   }) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
-    this.initializeCodexManagerHandlers();
-  }
-
-  private initializeCodexManagerHandlers(): void {
-    this.codexAdapter.getManager().setHandlers({
-      onNotification: ({ sessionId, method, params }) => {
-        const registry = this.codexAdapter.getManager().getRegistry();
-        const isTerminalTurn = this.isTerminalCodexTurnMethod(method);
-        if (isTerminalTurn) {
-          registry.markTurnTerminal(sessionId, parseTurnId(params));
-        }
-
-        const translatedEvents = this.codexEventTranslator.translateNotification(method, params);
-        for (const event of translatedEvents) {
-          const normalized = this.normalizeCodexDeltaEvent(sessionId, event);
-          if (normalized.type === 'session_runtime_updated') {
-            sessionDomainService.setRuntimeSnapshot(sessionId, normalized.sessionRuntime, false);
-          }
-          sessionDomainService.emitDelta(sessionId, normalized);
-        }
-
-        if (isTerminalTurn) {
-          this.notifyCodexTerminalTurn(sessionId);
-        }
-      },
-      onServerRequest: ({ sessionId, method, params, canonicalRequestId }) => {
-        const event = this.codexEventTranslator.translateServerRequest(
-          method,
-          canonicalRequestId,
-          params
-        );
-
-        if (event.type === 'error') {
-          try {
-            this.codexAdapter.rejectInteractiveRequest(sessionId, canonicalRequestId, {
-              message: event.message,
-              data: event.data,
-            });
-          } catch (error) {
-            logger.warn('Failed responding to unsupported Codex interactive request', {
-              sessionId,
-              requestId: canonicalRequestId,
-              method,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-
-        sessionDomainService.emitDelta(sessionId, event);
-      },
-      onStatusChanged: (status) => {
-        if (status.state !== 'degraded' && status.state !== 'unavailable') {
-          return;
-        }
-        for (const [sessionId] of this.codexAdapter.getAllClients()) {
-          sessionDomainService.setRuntimeSnapshot(
-            sessionId,
-            {
-              phase: 'error',
-              processState: 'stopped',
-              activity: 'IDLE',
-              updatedAt: new Date().toISOString(),
-            },
-            true
-          );
-        }
-      },
-    });
-  }
-
-  private normalizeCodexDeltaEvent(sessionId: string, event: SessionDeltaEvent): SessionDeltaEvent {
-    if (event.type !== 'agent_message') {
-      return event;
-    }
-
-    const order = sessionDomainService.appendClaudeEvent(sessionId, event.data);
-    return {
-      ...event,
-      order,
-    };
-  }
-
-  private isTerminalCodexTurnMethod(method: string): boolean {
-    return (
-      method.startsWith('turn/completed') ||
-      method.startsWith('turn/finished') ||
-      method.startsWith('turn/interrupted') ||
-      method.startsWith('turn/cancelled') ||
-      method.startsWith('turn/failed')
-    );
   }
 
   /**
-   * Start a session using the active provider adapter.
-   * Uses getOrCreateSessionClient() internally for unified lifecycle management with race protection.
+   * Start a session using the ACP runtime.
    */
   async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
-    const loaded = await this.loadSessionWithAdapter(sessionId);
-    const { session, adapter } = loaded;
-    if (adapter.isStopInProgress(sessionId)) {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    if (acpRuntimeManager.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
     // Check if session is already running to prevent duplicate message sends
-    const existingClient = adapter.getClient(sessionId);
+    const existingClient = acpRuntimeManager.getClient(sessionId);
     if (existingClient) {
       throw new Error('Session is already running');
     }
 
-    // Use getOrCreateClient for race-protected creation
-    // If concurrent starts happen, one will succeed and others will wait then fail the check above
-    await this.getOrCreateSessionClient(
+    // Use getOrCreate for race-protected creation
+    await this.getOrCreateAcpSessionClient(
       sessionId,
-      {
-        permissionMode: 'bypassPermissions',
-      },
-      loaded
+      { permissionMode: 'bypassPermissions' },
+      session
     );
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
@@ -297,22 +376,15 @@ class SessionService {
   }
 
   /**
-   * Stop a session gracefully via the active provider adapter.
-   * All sessions use ClaudeClient for unified lifecycle management.
+   * Stop a session gracefully via the ACP runtime.
    */
   async stopSession(
     sessionId: string,
-    options?: { cleanupTransientRatchetSession?: boolean; providerHint?: SessionProvider }
+    options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
     const session = await this.loadSessionForStop(sessionId);
-    const provider =
-      options?.providerHint ??
-      session?.provider ??
-      this.sessionProviderCache.get(sessionId) ??
-      'CLAUDE';
-    const adapter = this.resolveAdapterForProvider(provider);
 
-    if (adapter.isStopInProgress(sessionId)) {
+    if (acpRuntimeManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
@@ -325,13 +397,28 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
+    // Cancel pending ACP permissions and clean up streaming state
+    this.acpStreamState.delete(sessionId);
+    const acpBridge = this.acpPermissionBridges.get(sessionId);
+    if (acpBridge) {
+      acpBridge.cancelAll();
+      this.acpPermissionBridges.delete(sessionId);
+    }
+
+    let stopClientFailed = false;
     try {
-      await adapter.stopClient(sessionId);
+      if (!acpRuntimeManager.isStopInProgress(sessionId)) {
+        await acpRuntimeManager.stopClient(sessionId);
+      }
+    } catch (error) {
+      stopClientFailed = true;
+      logger.warn('Error stopping ACP session runtime; continuing cleanup', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
       await this.updateStoppedSessionState(sessionId);
-
       sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
-
-      // Manual stops can complete without an exit callback race; normalize state explicitly.
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
         processState: 'stopped',
@@ -339,26 +426,26 @@ class SessionService {
         updatedAt: new Date().toISOString(),
       });
 
-      const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
-      await this.cleanupTransientRatchetOnStop(
-        session,
-        sessionId,
-        shouldCleanupTransientRatchetSession
-      );
+      if (!stopClientFailed) {
+        const shouldCleanupTransientRatchetSession =
+          options?.cleanupTransientRatchetSession ?? true;
+        await this.cleanupTransientRatchetOnStop(
+          session,
+          sessionId,
+          shouldCleanupTransientRatchetSession
+        );
+      }
 
-      logger.info('Session stopped', { sessionId, provider });
-    } finally {
-      this.clearSessionProvider(sessionId);
+      logger.info('ACP session stopped', {
+        sessionId,
+        ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
+      });
     }
   }
 
   private async loadSessionForStop(sessionId: string): Promise<AgentSessionRecord | null> {
     try {
-      const session = await this.repository.getSessionById(sessionId);
-      if (session) {
-        this.cacheSessionProvider(sessionId, session.provider);
-      }
-      return session;
+      return await this.repository.getSessionById(sessionId);
     } catch (error) {
       logger.warn('Failed to load session before stop; continuing with process shutdown', {
         sessionId,
@@ -372,7 +459,6 @@ class SessionService {
     try {
       await this.repository.updateSession(sessionId, {
         status: SessionStatus.IDLE,
-        claudeProcessPid: null,
       });
     } catch (error) {
       logger.warn('Failed to update session state during stop; continuing cleanup', {
@@ -426,10 +512,20 @@ class SessionService {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
 
     for (const session of sessions) {
-      await this.stopWorkspaceSession(
-        { id: session.id, status: session.status, provider: session.provider },
-        workspaceId
-      );
+      if (
+        session.status === SessionStatus.RUNNING ||
+        acpRuntimeManager.isSessionRunning(session.id)
+      ) {
+        try {
+          await this.stopSession(session.id);
+        } catch (error) {
+          logger.error('Failed to stop workspace session', {
+            sessionId: session.id,
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
@@ -450,77 +546,22 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       reasoningEffort?: string;
-    },
-    loadedSession?: LoadedSessionAdapter
+    }
   ): Promise<unknown> {
-    const { session, adapter } = loadedSession ?? (await this.loadSessionWithAdapter(sessionId));
-
-    // Check for existing client first - fast path
-    const existing = adapter.getClient(sessionId);
-    if (existing) {
-      const isWorking = adapter.isSessionWorking(sessionId);
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: isWorking ? 'running' : 'idle',
-        processState: 'alive',
-        activity: isWorking ? 'WORKING' : 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-      return existing;
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
     }
 
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
-      phase: 'starting',
-      processState: 'alive',
-      activity: 'IDLE',
-      updatedAt: new Date().toISOString(),
-    });
-
-    try {
-      const client =
-        session.provider === 'CODEX'
-          ? await this.createCodexClient(
-              sessionId,
-              options?.model,
-              options?.reasoningEffort,
-              session
-            )
-          : await this.createClaudeClient(sessionId, options, session);
-
-      // Update DB with running status and PID
-      // This is idempotent and safe even if called by concurrent callers
-      await this.repository.updateSession(sessionId, {
-        status: SessionStatus.RUNNING,
-        claudeProcessPid:
-          session.provider === 'CODEX'
-            ? (this.codexAdapter.getManager().getStatus().pid ?? null)
-            : ((client as ClaudeClient).getPid?.() ?? null),
-      });
-
-      const isWorking = adapter.isSessionWorking(sessionId);
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: isWorking ? 'running' : 'idle',
-        processState: 'alive',
-        activity: isWorking ? 'WORKING' : 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-
-      return client;
-    } catch (error) {
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: 'error',
-        processState: 'stopped',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-      throw error;
-    }
+    return await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
   }
 
   /**
-   * Backward-compatible Claude-named entrypoint used by existing public contracts.
+   * Reuses a preloaded session record to avoid redundant lookups and reduce
+   * races between separate reads during load_session initialization.
    */
-  async getOrCreateClient(
-    sessionId: string,
+  async getOrCreateSessionClientFromRecord(
+    session: AgentSessionRecord,
     options?: {
       thinkingEnabled?: boolean;
       permissionMode?: 'bypassPermissions' | 'plan';
@@ -528,269 +569,104 @@ class SessionService {
       reasoningEffort?: string;
     }
   ): Promise<unknown> {
-    return await this.getOrCreateSessionClient(sessionId, options);
-  }
-
-  /**
-   * Get an existing ClaudeClient without creating one.
-   *
-   * @param sessionId - The database session ID
-   * @returns The ClaudeClient if it exists and is running, undefined otherwise
-   */
-  getClient(sessionId: string): ClaudeClient | undefined {
-    return this.claudeAdapter.getClient(sessionId);
+    return await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
   }
 
   getSessionClient(sessionId: string): unknown | undefined {
-    return this.resolveAdapterForSessionSync(sessionId).getClient(sessionId);
+    return acpRuntimeManager.getClient(sessionId);
   }
 
-  toPublicMessageDelta(message: ClaudeMessage, order?: number): SessionDeltaEvent {
-    return this.claudeAdapter.toPublicDeltaEvent(
-      this.claudeAdapter.toCanonicalAgentMessage(message, order)
-    );
+  getSessionConfigOptions(
+    sessionId: string
+  ): import('@agentclientprotocol/sdk').SessionConfigOption[] {
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    return acpHandle ? [...acpHandle.configOptions] : [];
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
-    const nextModel = resolveSessionModelForProvider(model, session.provider);
-    await adapter.setModel(sessionId, nextModel);
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (acpHandle) {
+      const modelOption = acpHandle.configOptions.find((o) => o.category === 'model');
+      if (modelOption && model) {
+        const availableValues = this.getConfigOptionValues(modelOption);
+        if (availableValues.length > 0 && !availableValues.includes(model)) {
+          logger.debug('Skipping unsupported model for ACP session', {
+            sessionId,
+            provider: acpHandle.provider,
+            model,
+            availableValues,
+          });
+          return;
+        }
+        await this.setSessionConfigOption(sessionId, modelOption.id, model);
+      }
+      return;
+    }
+    // No ACP handle found -- session may not be running
+    logger.debug('No ACP handle for setSessionModel', { sessionId, model });
   }
 
-  async setSessionReasoningEffort(sessionId: string, effort: string | null): Promise<void> {
-    const adapter = this.resolveKnownAdapterForSessionSync(sessionId);
-    if (adapter === this.codexAdapter) {
-      await this.codexAdapter.setReasoningEffort(sessionId, effort);
-      return;
-    }
-    if (adapter === this.claudeAdapter) {
-      return;
-    }
-
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session || session.provider !== 'CODEX') {
-      return;
-    }
-    await this.codexAdapter.setReasoningEffort(sessionId, effort);
+  setSessionReasoningEffort(sessionId: string, _effort: string | null): void {
+    // ACP sessions do not support reasoning effort as a separate control.
+    // Reasoning is managed via config options when available.
+    logger.debug('setSessionReasoningEffort is a no-op for ACP sessions', { sessionId });
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    const adapter =
-      this.resolveKnownAdapterForSessionSync(sessionId) ??
-      (await this.loadSessionWithAdapter(sessionId)).adapter;
-    await adapter.setThinkingBudget(sessionId, maxTokens);
-  }
-
-  async sendSessionMessage(
-    sessionId: string,
-    content: string | ClaudeContentItem[]
-  ): Promise<void> {
-    const adapter = this.resolveKnownAdapterForSessionSync(sessionId);
-    if (adapter === this.codexAdapter) {
-      const normalizedText = this.toCodexTextContent(content);
-      await this.codexAdapter.sendMessage(sessionId, normalizedText);
-      return;
-    }
-
-    if (adapter === this.claudeAdapter) {
-      await this.claudeAdapter.sendMessage(sessionId, content);
-      return;
-    }
-
-    const { session } = await this.loadSessionWithAdapter(sessionId);
-    if (session.provider === 'CODEX') {
-      const normalizedText = this.toCodexTextContent(content);
-      await this.codexAdapter.sendMessage(sessionId, normalizedText);
-      return;
-    }
-    await this.claudeAdapter.sendMessage(sessionId, content);
-  }
-
-  async getSessionConversationHistory(
-    sessionId: string,
-    workingDir: string
-  ): Promise<HistoryMessage[]> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session || session.provider !== 'CLAUDE' || !session.claudeSessionId) {
-      return [];
-    }
-    return await SessionManager.getHistory(session.claudeSessionId, workingDir);
-  }
-
-  async tryHydrateCodexTranscript(sessionId: string): Promise<ChatMessage[] | null> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session || session.provider !== 'CODEX') {
-      return null;
-    }
-
-    const pending = this.codexAdapter.getPendingClient(sessionId);
-    if (pending) {
-      try {
-        await pending;
-      } catch (error) {
-        logger.debug('Pending Codex client creation failed during hydration', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (acpHandle) {
+      const thoughtOption = acpHandle.configOptions.find((o) => o.category === 'thought_level');
+      if (thoughtOption && maxTokens != null) {
+        await this.setSessionConfigOption(sessionId, thoughtOption.id, String(maxTokens));
       }
+      return;
     }
-
-    if (!this.codexAdapter.getClient(sessionId)) {
-      return null;
-    }
-
-    try {
-      const threadReadPayload = await this.codexAdapter.hydrateSession(sessionId);
-      return parseCodexThreadReadTranscript(threadReadPayload);
-    } catch (error) {
-      logger.warn('Failed to hydrate Codex transcript from thread/read', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
+    logger.debug('No ACP handle for setSessionThinkingBudget', { sessionId, maxTokens });
   }
 
-  async rewindSessionFiles(
-    sessionId: string,
-    userMessageId: string,
-    dryRun?: boolean
-  ): Promise<RewindFilesResponse> {
-    const { adapter } = await this.loadSessionWithAdapter(sessionId);
-    return (await adapter.rewindFiles(sessionId, userMessageId, dryRun)) as RewindFilesResponse;
+  /**
+   * Set an ACP config option by ID. Calls the agent SDK and emits the
+   * authoritative config_options_update delta to all subscribers.
+   */
+  async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
+    const configOptions = await acpRuntimeManager.setConfigOption(sessionId, configId, value);
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'config_options_update',
+      configOptions,
+    } as SessionDeltaEvent);
   }
 
-  respondToPermissionRequest(sessionId: string, requestId: string, allow: boolean): void {
-    this.resolveAdapterForSessionSync(sessionId).respondToPermission(sessionId, requestId, allow);
+  sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
+    const acpClient = acpRuntimeManager.getClient(sessionId);
+    if (acpClient) {
+      const normalizedText =
+        typeof content === 'string' ? content : this.normalizeContentToText(content);
+      return this.sendAcpMessage(sessionId, normalizedText).then(
+        () => {
+          // Prompt completed successfully -- no action needed
+        },
+        (error) => {
+          logger.error('ACP prompt failed', {
+            sessionId,
+            error:
+              error instanceof Error
+                ? error.message
+                : typeof error === 'object'
+                  ? JSON.stringify(error)
+                  : String(error),
+          });
+        }
+      );
+    }
+
+    logger.warn('No ACP client found for sendSessionMessage', { sessionId });
+    return Promise.resolve();
   }
 
-  respondToQuestionRequest(
-    sessionId: string,
-    requestId: string,
-    answers: Record<string, string | string[]>
-  ): void {
-    this.resolveAdapterForSessionSync(sessionId).respondToQuestion(sessionId, requestId, answers);
-  }
-
-  getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
-    const fallback = createInitialSessionRuntimeState();
-    const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
-    const base = persisted ?? fallback;
-    const adapter = this.resolveAdapterForSessionSync(sessionId);
-
-    const client = adapter.getClient(sessionId);
-    if (client) {
-      const isWorking = adapter.isSessionWorking(sessionId);
-      return {
-        phase: isWorking ? 'running' : 'idle',
-        processState: 'alive',
-        activity: isWorking ? 'WORKING' : 'IDLE',
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    if (adapter.getPendingClient(sessionId) !== undefined) {
-      return {
-        phase: 'starting',
-        processState: 'alive',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    if (adapter.isStopInProgress(sessionId)) {
-      return {
-        ...base,
-        phase: 'stopping',
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    // Defensive normalization for stale runtime snapshots: persisted loading
-    // can linger after reconnect churn even when no process exists.
-    if (this.isStaleLoadingRuntime(base)) {
-      return {
-        ...base,
-        phase: 'idle',
-        processState: 'stopped',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    return base;
-  }
-
-  private async createClaudeClient(
-    sessionId: string,
-    options?: {
-      thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
-      model?: string;
-    },
-    session?: AgentSessionRecord
-  ): Promise<ClaudeClient> {
-    const { clientOptions, context, handlers } = await this.buildClientOptions(
-      sessionId,
-      {
-        thinkingEnabled: options?.thinkingEnabled,
-        permissionMode: options?.permissionMode,
-        model: options?.model,
-      },
-      session
-    );
-
-    return await this.claudeAdapter.getOrCreateClient(sessionId, clientOptions, handlers, context);
-  }
-
-  private async createCodexClient(
-    sessionId: string,
-    model?: string,
-    reasoningEffort?: string,
-    session?: AgentSessionRecord
-  ): Promise<unknown> {
-    const context = await this.loadCodexSessionContext(sessionId, session);
-    const requestedModel = normalizeSessionModelForProvider(model, 'CODEX');
-    const clientOptions = {
-      workingDir: context.workingDir,
-      sessionId,
-      model: requestedModel ?? context.model,
-      reasoningEffort,
-    };
-    return await this.codexAdapter.getOrCreateClient(sessionId, clientOptions, {}, context);
-  }
-
-  private async loadCodexSessionContext(
-    sessionId: string,
-    preloadedSession?: AgentSessionRecord
-  ): Promise<{
-    workspaceId: string;
-    workingDir: string;
-    model: string;
-  }> {
-    const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    const workspace = await this.repository.getWorkspaceById(session.workspaceId);
-    if (!workspace?.worktreePath) {
-      throw new Error(`Workspace or worktree not found for session: ${sessionId}`);
-    }
-
-    await this.repository.markWorkspaceHasHadSessions(session.workspaceId);
-    return {
-      workspaceId: session.workspaceId,
-      workingDir: workspace.worktreePath,
-      model: resolveSessionModelForProvider(session.model, 'CODEX'),
-    };
-  }
-
-  private toCodexTextContent(content: string | ClaudeContentItem[]): string {
-    if (typeof content === 'string') {
-      return content;
-    }
-
+  /**
+   * Normalize AgentContentItem[] to a plain text string for ACP.
+   */
+  private normalizeContentToText(content: AgentContentItem[]): string {
     const chunks: string[] = [];
     for (const item of content) {
       switch (item.type) {
@@ -819,103 +695,231 @@ class SessionService {
   }
 
   /**
-   * Internal: Set up handlers that update DB on client events.
+   * Send a message via ACP runtime. Returns the stop reason from the prompt response.
+   * The prompt() call blocks until the turn completes; streaming events arrive
+   * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  private buildClientEventHandlers(): ClaudeRuntimeEventHandlers {
-    return {
-      onSessionId: async (sessionId: string, claudeSessionId: string) => {
-        try {
-          await this.repository.updateSession(sessionId, { claudeSessionId });
-          logger.debug('Updated session with claudeSessionId', { sessionId, claudeSessionId });
-        } catch (error) {
-          logger.warn('Failed to update session with claudeSessionId', {
-            sessionId,
-            claudeSessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      },
-      onExit: async (sessionId: string, exitCode: number | null) => {
-        try {
-          sessionDomainService.markProcessExit(sessionId, exitCode);
-          const session = await this.repository.updateSession(sessionId, {
-            status: SessionStatus.COMPLETED,
-            claudeProcessPid: null,
-          });
-          logger.debug('Updated session status to COMPLETED on exit', { sessionId });
+  async sendAcpMessage(sessionId: string, content: string): Promise<string> {
+    const workspaceId = this.sessionToWorkspace.get(sessionId);
 
-          // Eagerly clear stale ratchet fixer reference instead of waiting for next poll.
-          // The conditional update is a no-op if this session isn't the active fixer.
-          await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: 'running',
+      processState: 'alive',
+      activity: 'WORKING',
+      updatedAt: new Date().toISOString(),
+    });
 
-          // Ratchet fixer sessions are transient — delete the record to avoid clutter.
-          if (session.workflow === 'ratchet') {
-            await this.repository.deleteSession(sessionId);
-            logger.debug('Deleted transient ratchet session', { sessionId });
-          }
-        } catch (error) {
-          logger.warn('Failed to update session status on exit', {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        } finally {
-          this.clearSessionProvider(sessionId);
-        }
-      },
-      onError: (sessionId: string, error: Error) => {
-        logger.error('Claude client error', {
-          sessionId,
-          error: error.message,
-          stack: error.stack,
-        });
-      },
-    };
+    if (workspaceId && this.workspaceBridge) {
+      this.workspaceBridge.markSessionRunning(workspaceId, sessionId);
+    }
+
+    try {
+      const result = await acpRuntimeManager.sendPrompt(sessionId, content);
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'idle',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      return result.stopReason;
+    } catch (error) {
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'error',
+        processState: 'alive',
+        activity: 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      throw error;
+    } finally {
+      if (workspaceId && this.workspaceBridge) {
+        this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+      }
+    }
   }
-
-  // ===========================================================================
-  // Process Registry Access
-  // ===========================================================================
 
   /**
-   * Get an active Claude process from the global registry.
-   * Returns a RegisteredProcess interface with status, lifecycle, and resource methods.
+   * Cancel an ongoing ACP prompt mid-turn.
    */
-  getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
-    return this.claudeAdapter.getSessionProcess(sessionId);
+  async cancelAcpPrompt(sessionId: string): Promise<void> {
+    await acpRuntimeManager.cancelPrompt(sessionId);
   }
+
+  getSessionConversationHistory(sessionId: string, _workingDir: string): HistoryMessage[] {
+    const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
+    return transcript.flatMap((entry) => this.mapTranscriptEntryToHistory(entry));
+  }
+
+  private mapTranscriptEntryToHistory(entry: ChatMessage): HistoryMessage[] {
+    if (entry.source === 'user') {
+      return entry.text
+        ? [
+            {
+              type: 'user',
+              content: entry.text,
+              timestamp: entry.timestamp,
+            },
+          ]
+        : [];
+    }
+
+    const message = entry.message;
+    if (!message || (message.type !== 'assistant' && message.type !== 'user')) {
+      return [];
+    }
+
+    const content = this.extractMessageText(message);
+    if (!content) {
+      return [];
+    }
+
+    return [
+      {
+        type: message.type,
+        content,
+        timestamp: entry.timestamp,
+      },
+    ];
+  }
+
+  private extractMessageText(message: AgentMessage): string {
+    const content = message.message?.content;
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (!Array.isArray(content)) {
+      return '';
+    }
+    return content
+      .filter((item): item is Extract<AgentContentItem, { type: 'text' }> => item.type === 'text')
+      .map((item) => item.text)
+      .join('\n')
+      .trim();
+  }
+
+  respondToAcpPermission(sessionId: string, requestId: string, optionId: string): boolean {
+    const bridge = this.acpPermissionBridges.get(sessionId);
+    if (!bridge) {
+      return false;
+    }
+    return bridge.resolvePermission(requestId, optionId);
+  }
+
+  getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
+    const fallback = createInitialSessionRuntimeState();
+    const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
+    const base = persisted ?? fallback;
+
+    // Check ACP runtime
+    const acpClient = acpRuntimeManager.getClient(sessionId);
+    if (acpClient) {
+      const isWorking = acpRuntimeManager.isSessionWorking(sessionId);
+      return {
+        phase: isWorking ? 'running' : 'idle',
+        processState: 'alive',
+        activity: isWorking ? 'WORKING' : 'IDLE',
+        updatedAt: base.updatedAt,
+      };
+    }
+
+    if (acpRuntimeManager.isStopInProgress(sessionId)) {
+      return {
+        ...base,
+        phase: 'stopping',
+        updatedAt: base.updatedAt,
+      };
+    }
+
+    // Defensive normalization for stale runtime snapshots: persisted loading
+    // can linger after reconnect churn even when no process exists.
+    if (this.isStaleLoadingRuntime(base)) {
+      return {
+        ...base,
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: base.updatedAt,
+      };
+    }
+
+    return base;
+  }
+
+  private async getOrCreateAcpSessionClient(
+    sessionId: string,
+    options: {
+      model?: string;
+      permissionMode?: 'bypassPermissions' | 'plan';
+    },
+    session: AgentSessionRecord
+  ): Promise<AcpProcessHandle> {
+    // Check for existing ACP client first
+    const existingAcp = acpRuntimeManager.getClient(sessionId);
+    if (existingAcp) {
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: existingAcp.isPromptInFlight ? 'running' : 'idle',
+        processState: 'alive',
+        activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
+        updatedAt: new Date().toISOString(),
+      });
+      return existingAcp;
+    }
+
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: 'starting',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
+
+    const handle = await this.createAcpClient(sessionId, options, session);
+
+    await this.repository.updateSession(sessionId, {
+      status: SessionStatus.RUNNING,
+    });
+
+    sessionDomainService.setRuntimeSnapshot(sessionId, {
+      phase: handle.isPromptInFlight ? 'running' : 'idle',
+      processState: 'alive',
+      activity: handle.isPromptInFlight ? 'WORKING' : 'IDLE',
+      updatedAt: new Date().toISOString(),
+    });
+
+    return handle;
+  }
+
+  // ===========================================================================
+  // Query Methods
+  // ===========================================================================
 
   /**
    * Check if a session is running in memory
    */
   isSessionRunning(sessionId: string): boolean {
-    return this.resolveAdapterForSessionSync(sessionId).isSessionRunning(sessionId);
+    return acpRuntimeManager.isSessionRunning(sessionId);
   }
 
   /**
    * Check if a session is actively working (not just alive, but processing)
    */
   isSessionWorking(sessionId: string): boolean {
-    return this.resolveAdapterForSessionSync(sessionId).isSessionWorking(sessionId);
+    return acpRuntimeManager.isSessionWorking(sessionId);
   }
 
   /**
    * Check if any session in the given list is actively working
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
-    return (
-      this.claudeAdapter.isAnySessionWorking(sessionIds) ||
-      this.codexAdapter.isAnySessionWorking(sessionIds)
-    );
+    return acpRuntimeManager.isAnySessionWorking(sessionIds);
   }
 
   /**
-   * Get session options for creating a Claude client.
+   * Get session options for creating a client.
    * Loads the workflow prompt from the database session.
    * This is the single source of truth for session configuration.
    */
   async getSessionOptions(sessionId: string): Promise<{
     workingDir: string;
-    resumeClaudeSessionId: string | undefined;
+    resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
   } | null> {
@@ -926,213 +930,101 @@ class SessionService {
 
     return {
       workingDir: sessionContext.workingDir,
-      resumeClaudeSessionId: sessionContext.resumeClaudeSessionId,
+      resumeProviderSessionId: sessionContext.resumeProviderSessionId,
       systemPrompt: sessionContext.systemPrompt,
       model: sessionContext.model,
     };
   }
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
-    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
-    const selectedModel =
-      session.provider === 'CODEX'
-        ? (this.codexAdapter.getPreferredModel(sessionId) ??
-          resolveSessionModelForProvider(session.model, session.provider))
-        : resolveSessionModelForProvider(session.model, session.provider);
-    const selectedReasoningEffort =
-      session.provider === 'CODEX'
-        ? (this.codexAdapter.getPreferredReasoningEffort(sessionId) ?? null)
-        : null;
-    return await adapter.getChatBarCapabilities({
-      selectedModel,
-      selectedReasoningEffort,
+    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (!acpHandle) {
+      const session = await this.repository.getSessionById(sessionId);
+      if (session?.provider === 'CODEX') {
+        return {
+          ...EMPTY_CHAT_BAR_CAPABILITIES,
+          provider: 'CODEX',
+        };
+      }
+      return EMPTY_CHAT_BAR_CAPABILITIES;
+    }
+    return this.buildAcpChatBarCapabilities(acpHandle);
+  }
+
+  /**
+   * Build ChatBarCapabilities entirely from ACP configOptions.
+   * No hardcoded fallback — capabilities are derived from what the agent reports.
+   */
+  private buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {
+    const modelOption = handle.configOptions.find((o) => o.category === 'model');
+    const thoughtOption = handle.configOptions.find((o) => o.category === 'thought_level');
+
+    return {
+      provider: handle.provider === 'CODEX' ? 'CODEX' : 'CLAUDE',
+      model: {
+        enabled: !!modelOption,
+        options: [],
+        ...(modelOption?.currentValue ? { selected: String(modelOption.currentValue) } : {}),
+      },
+      reasoning: {
+        enabled: false,
+        options: [],
+      },
+      thinking: {
+        enabled: !!thoughtOption,
+      },
+      planMode: { enabled: true },
+      attachments: { enabled: true, kinds: ['image', 'text'] },
+      slashCommands: { enabled: false },
+      usageStats: { enabled: false, contextWindow: false },
+      rewind: { enabled: false },
+    };
+  }
+
+  private getConfigOptionValues(
+    option: import('@agentclientprotocol/sdk').SessionConfigOption
+  ): string[] {
+    return option.options.flatMap((entry) => {
+      if (typeof entry !== 'object' || entry === null) {
+        return [];
+      }
+      if ('value' in entry && typeof entry.value === 'string') {
+        return [entry.value];
+      }
+      if ('options' in entry && Array.isArray(entry.options)) {
+        return entry.options
+          .map((grouped) => grouped?.value)
+          .filter((value): value is string => typeof value === 'string');
+      }
+      return [];
     });
-  }
-
-  /**
-   * Get all active Claude processes for admin view
-   */
-  getAllActiveProcesses(): Array<{
-    sessionId: string;
-    pid: number | undefined;
-    status: string;
-    isRunning: boolean;
-    resourceUsage: ResourceUsage | null;
-    idleTimeMs: number;
-  }> {
-    return this.claudeAdapter.getAllActiveProcesses();
-  }
-
-  getCodexManagerStatus(): ReturnType<CodexAppServerManager['getStatus']> {
-    return this.codexAdapter.getManager().getStatus();
-  }
-
-  getAllCodexActiveProcesses(): ReturnType<
-    typeof codexSessionProviderAdapter.getAllActiveProcesses
-  > {
-    return this.codexAdapter.getAllActiveProcesses();
-  }
-
-  /**
-   * Get all active clients for cleanup purposes.
-   * Returns an iterator of [sessionId, client] pairs.
-   */
-  getAllClients(): IterableIterator<[string, ClaudeClient]> {
-    return this.claudeAdapter.getAllClients();
   }
 
   /**
    * Stop all active clients during shutdown.
-   * @param timeoutMs - Timeout for each client stop operation
+   * @param _timeoutMs - Timeout (unused, kept for API compatibility)
    */
-  async stopAllClients(timeoutMs = 5000): Promise<void> {
-    let firstError: unknown = null;
-
+  async stopAllClients(_timeoutMs = 5000): Promise<void> {
     try {
-      await this.claudeAdapter.stopAllClients(timeoutMs);
+      await acpRuntimeManager.stopAllClients();
     } catch (error) {
-      firstError = error;
-      logger.error('Failed to stop Claude provider clients during shutdown', {
+      logger.error('Failed to stop ACP clients during shutdown', {
         error: error instanceof Error ? error.message : String(error),
       });
-    }
-
-    try {
-      await this.codexAdapter.stopAllClients();
-    } catch (error) {
-      if (!firstError) {
-        firstError = error;
-      }
-      logger.error('Failed to stop Codex provider clients during shutdown', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    this.sessionProviderCache.clear();
-
-    if (firstError) {
-      throw firstError instanceof Error ? firstError : new Error(String(firstError));
+      throw error;
     }
   }
 
-  private shouldStopWorkspaceSession(
-    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
-    adapter: SessionAdapter
-  ): {
-    shouldStop: boolean;
-    pendingClient: Promise<unknown> | undefined;
-  } {
-    const pendingClient = adapter.getPendingClient(session.id);
-    const shouldStop = Boolean(
-      session.status === SessionStatus.RUNNING ||
-        adapter.isSessionRunning(session.id) ||
-        pendingClient
-    );
-    return { shouldStop, pendingClient };
-  }
-
-  private async waitForPendingClient(
-    workspaceId: string,
-    sessionId: string,
-    pendingClient: Promise<unknown> | undefined
-  ): Promise<void> {
-    if (!pendingClient) {
-      return;
-    }
-    try {
-      await pendingClient;
-    } catch (error) {
-      logger.warn('Pending session failed to start before stop', {
-        sessionId,
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async stopWorkspaceSession(
-    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
-    workspaceId: string
-  ): Promise<void> {
-    const adapter = this.resolveAdapterForProvider(session.provider ?? 'CLAUDE');
-    const { shouldStop, pendingClient } = this.shouldStopWorkspaceSession(session, adapter);
-    if (!shouldStop) {
-      return;
-    }
-
-    await this.waitForPendingClient(workspaceId, session.id, pendingClient);
-
-    try {
-      await this.stopSession(session.id, {
-        providerHint: session.provider ?? 'CLAUDE',
-      });
-    } catch (error) {
-      logger.error('Failed to stop workspace session', {
-        sessionId: session.id,
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async buildClientOptions(
-    sessionId: string,
-    options?: {
-      thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
-      model?: string;
-      initialPrompt?: string;
-    },
-    session?: AgentSessionRecord
-  ): Promise<{
-    clientOptions: ClaudeClientOptions;
-    context: { workspaceId: string; workingDir: string };
-    handlers: ReturnType<SessionService['buildClientEventHandlers']>;
-  }> {
-    const sessionContext = await this.loadSessionContext(sessionId, session);
-    if (!sessionContext) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-
-    await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
-    const claudeProjectPath = SessionManager.getProjectPath(sessionContext.workingDir);
-    await this.repository.updateSession(sessionId, { claudeProjectPath });
-
-    const mcpConfig = JSON.stringify({
-      mcpServers: {
-        playwright: {
-          command: 'npx',
-          args: ['@playwright/mcp@latest', '--viewport-size=1920,1080'],
-        },
-      },
-    });
-
-    const clientOptions: ClaudeClientOptions = {
-      workingDir: sessionContext.workingDir,
-      resumeClaudeSessionId: sessionContext.resumeClaudeSessionId,
-      systemPrompt: sessionContext.systemPrompt,
-      model: resolveSessionModelForProvider(options?.model ?? sessionContext.model, 'CLAUDE'),
-      permissionMode: options?.permissionMode ?? 'bypassPermissions',
-      includePartialMessages: false,
-      thinkingEnabled: options?.thinkingEnabled,
-      initialPrompt: options?.initialPrompt,
-      mcpConfig,
-      sessionId,
-    };
-
-    return {
-      clientOptions,
-      context: { workspaceId: sessionContext.workspaceId, workingDir: sessionContext.workingDir },
-      handlers: this.buildClientEventHandlers(),
-    };
-  }
+  // ===========================================================================
+  // Private Helpers
+  // ===========================================================================
 
   private async loadSessionContext(
     sessionId: string,
     preloadedSession?: AgentSessionRecord
   ): Promise<{
     workingDir: string;
-    resumeClaudeSessionId: string | undefined;
+    resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
     workspaceId: string;
@@ -1196,7 +1088,7 @@ class SessionService {
 
     return {
       workingDir: workspace.worktreePath,
-      resumeClaudeSessionId: session.claudeSessionId ?? undefined,
+      resumeProviderSessionId: session.providerSessionId ?? undefined,
       systemPrompt,
       model: session.model,
       workspaceId: workspace.id,

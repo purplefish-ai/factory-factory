@@ -47,7 +47,9 @@
     "tailwindcss-animate",
     "vaul",
     "@hookform/resolvers",
-    "geist"
+    "geist",
+    "@zed-industries/claude-code-acp",
+    "@zed-industries/codex-acp"
   ],
   "vitest": {
     "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]

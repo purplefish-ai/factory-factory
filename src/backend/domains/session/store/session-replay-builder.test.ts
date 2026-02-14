@@ -6,12 +6,6 @@ function createStore(): SessionStore {
   return {
     sessionId: 's1',
     initialized: true,
-    hydratePromise: null,
-    hydratingKey: null,
-    hydratedKey: null,
-    hydrateGeneration: 0,
-    lastKnownProjectPath: null,
-    lastKnownClaudeSessionId: null,
     transcript: [
       {
         id: 'u1',
@@ -22,7 +16,7 @@ function createStore(): SessionStore {
       },
       {
         id: 'c1',
-        source: 'claude',
+        source: 'agent',
         message: {
           type: 'assistant',
           message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
@@ -51,6 +45,10 @@ function createStore(): SessionStore {
       toolUseId: 'tool-1',
       input: { reason: 'x' },
       planContent: 'x',
+      acpOptions: [
+        { optionId: 'allow', name: 'Approve', kind: 'allow_once' },
+        { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+      ],
       timestamp: '2026-02-01T00:00:03.000Z',
     },
     runtime: {
@@ -60,7 +58,6 @@ function createStore(): SessionStore {
       updatedAt: '2026-02-01T00:00:04.000Z',
     },
     nextOrder: 2,
-    lastHydratedAt: null,
   };
 }
 
@@ -101,6 +98,10 @@ describe('session-replay-builder', () => {
           type: 'permission_request',
           requestId: 'req-1',
           toolName: 'ExitPlanMode',
+          acpOptions: [
+            { optionId: 'allow', name: 'Approve', kind: 'allow_once' },
+            { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+          ],
         }),
       ])
     );

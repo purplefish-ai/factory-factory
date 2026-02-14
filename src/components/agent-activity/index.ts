@@ -19,8 +19,8 @@ export { extractFileReferences, ToolCallGroupRenderer, ToolInfoRenderer } from '
 
 // Types
 export type {
+  AgentMessage,
   ChatMessage,
-  ClaudeMessage,
   FileReference,
   ToolCallGroup,
   ToolCallInfo,

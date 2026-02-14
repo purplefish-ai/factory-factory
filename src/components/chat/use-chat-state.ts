@@ -54,7 +54,7 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   sendMessage: (text: string) => void;
   stopChat: () => void;
   clearChat: () => void;
-  approvePermission: (requestId: string, allow: boolean) => void;
+  approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   // Additional state/actions
@@ -67,6 +67,8 @@ export interface UseChatStateReturn extends Omit<ChatState, 'queuedMessages'> {
   // Task notification actions
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  // ACP config option action
+  setConfigOption: (configId: string, value: string) => void;
   // Rewind files actions
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;
@@ -146,7 +148,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dispatch,
     stateRef,
     toolInputAccumulatorRef,
-    rewindTimeoutRef,
   });
 
   // =============================================================================

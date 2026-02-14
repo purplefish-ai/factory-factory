@@ -1,5 +1,5 @@
 import { SERVICE_LIMITS } from '@/backend/services/constants';
-import type { QueuedMessage } from '@/shared/claude';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionStore } from './session-store.types';
 
@@ -22,6 +22,10 @@ export function removeQueuedMessage(store: SessionStore, messageId: string): boo
   }
   store.queue.splice(idx, 1);
   return true;
+}
+
+export function peekNext(store: SessionStore): QueuedMessage | undefined {
+  return store.queue[0];
 }
 
 export function dequeueNext(store: SessionStore): QueuedMessage | undefined {

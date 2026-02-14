@@ -55,7 +55,7 @@ const mockSessionBridge: RatchetSessionBridge = {
   isSessionWorking: vi.fn(),
   stopSession: vi.fn(),
   startSession: vi.fn(),
-  getClient: vi.fn(),
+  sendSessionMessage: vi.fn(),
   injectCommittedUserMessage: vi.fn(),
 };
 

@@ -392,7 +392,7 @@ describe('resource accessors integration', () => {
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 3,
-        claudeProjectPath: '/tmp/worktree',
+        providerProjectPath: '/tmp/worktree',
       });
 
       expect(acquired).toEqual({
@@ -430,7 +430,7 @@ describe('resource accessors integration', () => {
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 2,
-        claudeProjectPath: null,
+        providerProjectPath: null,
       });
 
       expect(acquired).toEqual({ outcome: 'limit_reached' });
@@ -455,7 +455,7 @@ describe('resource accessors integration', () => {
         workflow: 'ci-fix',
         sessionName: 'CI Fixer',
         maxSessions: 5,
-        claudeProjectPath: '/tmp/worktree',
+        providerProjectPath: '/tmp/worktree',
       });
 
       expect(acquired.outcome).toBe('created');

@@ -16,7 +16,7 @@ import {
   WorkspaceStatus as PrismaWorkspaceStatus,
 } from '@factory-factory/core';
 import { describe, expect, it } from 'vitest';
-import { exportedClaudeSessionSchema, exportedWorkspaceSchemaV2 } from './export-data.schema';
+import { exportedAgentSessionSchema, exportedWorkspaceSchema } from './export-data.schema';
 
 type DefWithType = {
   def?: {
@@ -37,7 +37,7 @@ describe('Enum sync with Prisma schema', () => {
       enumSchema = enumSchema.def.innerType as DefWithType;
     }
 
-    // Handle union types (like runScriptStatus which is z.union([RunScriptStatus, z.literal('PAUSED')]))
+    // Handle union types if any enum is wrapped by a union in the future.
     if (enumSchema.def?.type === 'union') {
       const firstOption = enumSchema.def.options?.[0];
       if (!firstOption) {
@@ -55,51 +55,49 @@ describe('Enum sync with Prisma schema', () => {
   };
 
   it('WorkspaceStatus matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchemaV2.shape.status);
+    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.status);
     const prismaValues = Object.values(PrismaWorkspaceStatus);
     expect(zodValues).toEqual(prismaValues);
   });
 
   it('WorkspaceCreationSource matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchemaV2.shape.creationSource);
+    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.creationSource);
     const prismaValues = Object.values(PrismaWorkspaceCreationSource);
     expect(zodValues).toEqual(prismaValues);
   });
 
   it('RunScriptStatus matches Prisma', () => {
-    // Note: The schema uses a union with 'PAUSED' for backward compatibility
-    // We check the first option which should be the RunScriptStatus enum
-    const zodValues = getEnumOptions(exportedWorkspaceSchemaV2.shape.runScriptStatus);
+    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.runScriptStatus);
     const prismaValues = Object.values(PrismaRunScriptStatus);
     expect(zodValues).toEqual(prismaValues);
   });
 
   it('PRState matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchemaV2.shape.prState);
+    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.prState);
     const prismaValues = Object.values(PrismaPRState);
     expect(zodValues).toEqual(prismaValues);
   });
 
   it('CIStatus matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchemaV2.shape.prCiStatus);
+    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.prCiStatus);
     const prismaValues = Object.values(PrismaCIStatus);
     expect(zodValues).toEqual(prismaValues);
   });
 
   it('KanbanColumn matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchemaV2.shape.cachedKanbanColumn);
+    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.cachedKanbanColumn);
     const prismaValues = Object.values(PrismaKanbanColumn);
     expect(zodValues).toEqual(prismaValues);
   });
 
   it('RatchetState matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedWorkspaceSchemaV2.shape.ratchetState);
+    const zodValues = getEnumOptions(exportedWorkspaceSchema.shape.ratchetState);
     const prismaValues = Object.values(PrismaRatchetState);
     expect(zodValues).toEqual(prismaValues);
   });
 
   it('SessionStatus matches Prisma', () => {
-    const zodValues = getEnumOptions(exportedClaudeSessionSchema.shape.status);
+    const zodValues = getEnumOptions(exportedAgentSessionSchema.shape.status);
     const prismaValues = Object.values(PrismaSessionStatus);
     expect(zodValues).toEqual(prismaValues);
   });

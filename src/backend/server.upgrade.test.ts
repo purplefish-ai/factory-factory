@@ -58,12 +58,6 @@ vi.mock('@trpc/server/adapters/express', () => ({
   createExpressMiddleware: vi.fn(() => (_req: unknown, _res: unknown, next: () => void) => next()),
 }));
 
-vi.mock('@/backend/agents/process-adapter', () => ({
-  agentProcessAdapter: {
-    cleanup: vi.fn(),
-  },
-}));
-
 vi.mock('@/backend/db', () => ({
   prisma: {
     $disconnect: vi.fn(async () => undefined),

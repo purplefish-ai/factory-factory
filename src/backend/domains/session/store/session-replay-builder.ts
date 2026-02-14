@@ -5,7 +5,7 @@ import {
   QUEUED_MESSAGE_ORDER_BASE,
   type WebSocketMessage as ReplayEventMessage,
   resolveSelectedModel,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
 import type { SessionStore } from './session-store.types';
 import { messageSort } from './session-transcript';
 
@@ -97,6 +97,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
         requestId: store.pendingInteractiveRequest.requestId,
         questions: ((store.pendingInteractiveRequest.input as { questions?: unknown[] })
           .questions ?? []) as ReplayEventMessage['questions'],
+        acpOptions: store.pendingInteractiveRequest.acpOptions,
       });
     } else {
       replayEvents.push({
@@ -105,6 +106,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
         toolName: store.pendingInteractiveRequest.toolName,
         toolInput: store.pendingInteractiveRequest.input,
         planContent: store.pendingInteractiveRequest.planContent,
+        acpOptions: store.pendingInteractiveRequest.acpOptions,
       });
     }
   }

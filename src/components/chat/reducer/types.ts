@@ -1,8 +1,8 @@
 import type {
   ActiveHookInfo,
+  AgentMessage,
   ChatMessage,
   ChatSettings,
-  ClaudeMessage,
   CommandInfo,
   MessageAttachment,
   MessageState,
@@ -69,10 +69,33 @@ export interface ProcessStatus {
   };
 }
 
+/** ACP tool call location for click-to-open */
+export interface AcpToolLocation {
+  path: string;
+  line?: number | null;
+}
+
+/** Individual entry in an ACP plan */
+export interface AcpPlanEntry {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  priority: 'high' | 'medium' | 'low';
+}
+
+/** ACP plan state -- latest full plan from agent */
+export interface AcpPlanState {
+  entries: AcpPlanEntry[];
+  updatedAt: string;
+}
+
 /** Tool progress tracking for long-running tool executions */
 export interface ToolProgressInfo {
   toolName: string;
   elapsedSeconds: number;
+  /** ACP tool call file locations for click-to-open rendering */
+  acpLocations?: AcpToolLocation[];
+  /** ACP tool kind (read, edit, execute, etc.) */
+  acpKind?: string;
 }
 
 /** Task notification from SDK (e.g., Task tool subagent updates) */
@@ -80,6 +103,30 @@ export interface TaskNotification {
   id: string;
   message: string;
   timestamp: string;
+}
+
+/** Individual config option value */
+export interface AcpConfigOptionValue {
+  value: string;
+  name: string;
+  description?: string;
+}
+
+/** Grouped config option values (for hierarchical option lists) */
+export interface AcpConfigOptionGroup {
+  group: string;
+  options: AcpConfigOptionValue[];
+}
+
+/** ACP agent-provided config option (model, mode, thought level, custom) */
+export interface AcpConfigOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: string;
+  category?: string | null;
+  currentValue: string;
+  options: Array<AcpConfigOptionValue | AcpConfigOptionGroup>;
 }
 
 /** Rewind preview state for displaying confirmation dialog */
@@ -181,6 +228,10 @@ export interface ChatState {
   localUserMessageIds: Set<string>;
   /** Current rewind preview state (null when not showing rewind dialog) */
   rewindPreview: RewindPreviewState | null;
+  /** ACP agent plan -- latest plan state from ACP plan session updates */
+  acpPlan: AcpPlanState | null;
+  /** ACP agent-provided config options (model, mode, thought level, custom) */
+  acpConfigOptions: AcpConfigOption[] | null;
 }
 
 // =============================================================================
@@ -191,7 +242,7 @@ export type ChatAction =
   // WebSocket message actions
   | { type: 'SESSION_RUNTIME_SNAPSHOT'; payload: { sessionRuntime: SessionRuntimeState } }
   | { type: 'SESSION_RUNTIME_UPDATED'; payload: { sessionRuntime: SessionRuntimeState } }
-  | { type: 'WS_AGENT_MESSAGE'; payload: { message: ClaudeMessage; order: number } }
+  | { type: 'WS_AGENT_MESSAGE'; payload: { message: AgentMessage; order: number } }
   | { type: 'WS_ERROR'; payload: { message: string } }
   | { type: 'WS_SESSIONS'; payload: { sessions: SessionInfo[] } }
   | { type: 'WS_PERMISSION_REQUEST'; payload: PermissionRequest }
@@ -266,7 +317,13 @@ export type ChatAction =
   | { type: 'SDK_STATUS_UPDATE'; payload: { permissionMode?: string } }
   | {
       type: 'SDK_TOOL_PROGRESS';
-      payload: { toolUseId: string; toolName: string; elapsedSeconds: number };
+      payload: {
+        toolUseId: string;
+        toolName: string;
+        elapsedSeconds: number;
+        acpLocations?: AcpToolLocation[];
+        acpKind?: string;
+      };
     }
   | { type: 'SDK_TOOL_USE_SUMMARY'; payload: { summary?: string; precedingToolUseIds: string[] } }
   | { type: 'SDK_TASK_NOTIFICATION'; payload: { message: string } }
@@ -287,6 +344,10 @@ export type ChatAction =
   | { type: 'WS_SLASH_COMMANDS'; payload: { commands: CommandInfo[] } }
   // User message UUID tracking (for rewind functionality)
   | { type: 'USER_MESSAGE_UUID_RECEIVED'; payload: { uuid: string } }
+  // ACP plan updates
+  | { type: 'ACP_PLAN_UPDATE'; payload: { entries: AcpPlanEntry[] } }
+  // ACP config options update
+  | { type: 'CONFIG_OPTIONS_UPDATE'; payload: { configOptions: AcpConfigOption[] } }
   // Rewind files actions
   | { type: 'REWIND_PREVIEW_START'; payload: { userMessageId: string; requestNonce: string } }
   | { type: 'REWIND_PREVIEW_SUCCESS'; payload: { affectedFiles: string[]; userMessageId?: string } }

@@ -6,9 +6,9 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import type {
+  AgentMessage,
   ChatMessage,
   ChatSettings,
-  ClaudeMessage,
   PermissionRequest,
   QueuedMessage,
   SessionInfo,
@@ -70,7 +70,7 @@ function createFullyEnabledCapabilities(
   };
 }
 
-function createTestToolUseMessage(toolUseId: string): ClaudeMessage {
+function createTestToolUseMessage(toolUseId: string): AgentMessage {
   return {
     type: 'stream_event',
     event: {
@@ -86,7 +86,7 @@ function createTestToolUseMessage(toolUseId: string): ClaudeMessage {
   };
 }
 
-function createTestAssistantMessage(): ClaudeMessage {
+function createTestAssistantMessage(): AgentMessage {
   return {
     type: 'assistant',
     message: {
@@ -96,7 +96,7 @@ function createTestAssistantMessage(): ClaudeMessage {
   };
 }
 
-function createTestThinkingAssistantMessage(): ClaudeMessage {
+function createTestThinkingAssistantMessage(): AgentMessage {
   return {
     type: 'assistant',
     message: {
@@ -106,7 +106,7 @@ function createTestThinkingAssistantMessage(): ClaudeMessage {
   };
 }
 
-function createTestResultMessage(result?: unknown): ClaudeMessage {
+function createTestResultMessage(result?: unknown): AgentMessage {
   return {
     type: 'result',
     usage: { input_tokens: 100, output_tokens: 50 },
@@ -117,7 +117,7 @@ function createTestResultMessage(result?: unknown): ClaudeMessage {
   };
 }
 
-function createTestThinkingMessage(): ClaudeMessage {
+function createTestThinkingMessage(): AgentMessage {
   return {
     type: 'stream_event',
     event: {
@@ -131,7 +131,7 @@ function createTestThinkingMessage(): ClaudeMessage {
   };
 }
 
-function createTestToolResultMessage(toolUseId: string): ClaudeMessage {
+function createTestToolResultMessage(toolUseId: string): AgentMessage {
   return {
     type: 'user',
     message: {
@@ -330,7 +330,7 @@ describe('chatReducer', () => {
 
   describe('WS_AGENT_MESSAGE action', () => {
     it('should add assistant message with tool content to messages array', () => {
-      const claudeMsg: ClaudeMessage = {
+      const claudeMsg: AgentMessage = {
         type: 'assistant',
         message: {
           role: 'assistant',
@@ -344,7 +344,7 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.source).toBe('claude');
+      expect(newState.messages[0]!.source).toBe('agent');
       expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
@@ -357,7 +357,7 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.source).toBe('claude');
+      expect(newState.messages[0]!.source).toBe('agent');
       expect(newState.messages[0]!.message).toEqual(claudeMsg);
     });
 
@@ -457,7 +457,7 @@ describe('chatReducer', () => {
 
       expect(withResult.messages).toHaveLength(2);
       expect(withResult.messages[0]).toMatchObject({
-        source: 'claude',
+        source: 'agent',
         message: { type: 'assistant' },
       });
       expect(withResult.messages[1]).toMatchObject({ source: 'user', text: 'next question' });
@@ -586,7 +586,7 @@ describe('chatReducer', () => {
     });
 
     it('should not store text_delta stream events', () => {
-      const deltaMsg: ClaudeMessage = {
+      const deltaMsg: AgentMessage = {
         type: 'stream_event',
         event: {
           type: 'content_block_delta',
@@ -604,7 +604,7 @@ describe('chatReducer', () => {
     });
 
     it('should not store message_start stream events', () => {
-      const msgStartEvent: ClaudeMessage = {
+      const msgStartEvent: AgentMessage = {
         type: 'stream_event',
         event: {
           type: 'message_start',
@@ -621,7 +621,7 @@ describe('chatReducer', () => {
     });
 
     it('should not store user messages without tool_result content', () => {
-      const userMsg: ClaudeMessage = {
+      const userMsg: AgentMessage = {
         type: 'user',
         message: {
           role: 'user',
@@ -734,7 +734,7 @@ describe('chatReducer', () => {
       const newState = chatReducer(initialState, action);
 
       expect(newState.messages).toHaveLength(1);
-      expect(newState.messages[0]!.source).toBe('claude');
+      expect(newState.messages[0]!.source).toBe('agent');
       expect(newState.messages[0]!.message?.type).toBe('error');
       expect(newState.messages[0]!.message?.error).toBe('Connection failed');
     });
@@ -748,13 +748,13 @@ describe('chatReducer', () => {
     it('should update available sessions list', () => {
       const sessions: SessionInfo[] = [
         {
-          claudeSessionId: 'session-1',
+          providerSessionId: 'session-1',
           createdAt: '2024-01-01T00:00:00.000Z',
           modifiedAt: '2024-01-01T00:00:00.000Z',
           sizeBytes: 1024,
         },
         {
-          claudeSessionId: 'session-2',
+          providerSessionId: 'session-2',
           createdAt: '2024-01-02T00:00:00.000Z',
           modifiedAt: '2024-01-02T00:00:00.000Z',
           sizeBytes: 2048,
@@ -1074,7 +1074,7 @@ describe('chatReducer', () => {
       };
       expect(state.messages.length).toBe(2);
       expect(state.messages[0]!.id).toBe('earlier-msg');
-      expect(state.messages[1]!.source).toBe('claude'); // Tool use is now at index 1
+      expect(state.messages[1]!.source).toBe('agent'); // Tool use is now at index 1
 
       // Update should still work - it should detect stale index and do linear scan
       const updatedInput = { recovered: 'input' };
@@ -1715,7 +1715,7 @@ describe('chatReducer', () => {
     it('should replay onto a clean transcript to avoid duplicates on reconnect', () => {
       const existingMessage: ChatMessage = {
         id: 'old-msg',
-        source: 'claude',
+        source: 'agent',
         message: createTestResultMessage(),
         timestamp: '2024-01-01T00:00:00.000Z',
         order: 0,
@@ -2163,7 +2163,7 @@ describe('createActionFromWebSocketMessage', () => {
   });
 
   it('should convert agent_message to WS_AGENT_MESSAGE action', () => {
-    const claudeMsg: ClaudeMessage = {
+    const claudeMsg: AgentMessage = {
       type: 'assistant',
       message: { role: 'assistant', content: 'Hello!' },
     };
@@ -2200,7 +2200,7 @@ describe('createActionFromWebSocketMessage', () => {
   it('should convert sessions message to WS_SESSIONS action', () => {
     const sessions: SessionInfo[] = [
       {
-        claudeSessionId: 'session-1',
+        providerSessionId: 'session-1',
         createdAt: '2024-01-01T00:00:00.000Z',
         modifiedAt: '2024-01-01T00:00:00.000Z',
         sizeBytes: 1024,
@@ -2217,6 +2217,39 @@ describe('createActionFromWebSocketMessage', () => {
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action).toBeNull();
+  });
+
+  it('should convert config_options_update to CONFIG_OPTIONS_UPDATE action', () => {
+    const wsMessage: WebSocketMessage = {
+      type: 'config_options_update',
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'string',
+          category: 'model',
+          currentValue: 'sonnet',
+          options: [{ value: 'sonnet', name: 'Sonnet' }],
+        },
+      ],
+    };
+    const action = createActionFromWebSocketMessage(wsMessage);
+
+    expect(action).toEqual({
+      type: 'CONFIG_OPTIONS_UPDATE',
+      payload: {
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'string',
+            category: 'model',
+            currentValue: 'sonnet',
+            options: [{ value: 'sonnet', name: 'Sonnet' }],
+          },
+        ],
+      },
+    });
   });
 
   it('should convert permission_request to WS_PERMISSION_REQUEST action', () => {
@@ -2262,16 +2295,22 @@ describe('createActionFromWebSocketMessage', () => {
         options: [{ label: 'file1.txt', description: 'First file' }],
       },
     ];
+    const acpOptions = [
+      { optionId: 'opt-1', name: 'file1.txt', kind: 'allow_once' as const },
+      { optionId: 'opt-2', name: 'Cancel', kind: 'reject_once' as const },
+    ];
     const wsMessage: WebSocketMessage = {
       type: 'user_question',
       requestId: 'req-456',
       questions,
+      acpOptions,
     };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action?.type).toBe('WS_USER_QUESTION');
     expect((action as { payload: UserQuestionRequest }).payload.requestId).toBe('req-456');
     expect((action as { payload: UserQuestionRequest }).payload.questions).toEqual(questions);
+    expect((action as { payload: UserQuestionRequest }).payload.acpOptions).toEqual(acpOptions);
     expect((action as { payload: UserQuestionRequest }).payload.timestamp).toBeDefined();
   });
 
@@ -2679,7 +2718,7 @@ describe('Token Stats Accumulation', () => {
   it('should accumulate token stats from result messages', () => {
     const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
 
-    const resultMsg: ClaudeMessage = {
+    const resultMsg: AgentMessage = {
       type: 'result',
       usage: {
         input_tokens: 1000,
@@ -2715,7 +2754,7 @@ describe('Token Stats Accumulation', () => {
     let state: ChatState = { ...initialState, sessionStatus: { phase: 'running' } as const };
 
     // First result
-    const resultMsg1: ClaudeMessage = {
+    const resultMsg1: AgentMessage = {
       type: 'result',
       usage: { input_tokens: 1000, output_tokens: 500 },
       duration_ms: 2000,
@@ -2728,7 +2767,7 @@ describe('Token Stats Accumulation', () => {
     });
 
     // Second result
-    const resultMsg2: ClaudeMessage = {
+    const resultMsg2: AgentMessage = {
       type: 'result',
       usage: { input_tokens: 2000, output_tokens: 1000 },
       duration_ms: 3000,
@@ -2752,7 +2791,7 @@ describe('Token Stats Accumulation', () => {
   it('should extract context window from model_usage', () => {
     const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
 
-    const resultMsg: ClaudeMessage = {
+    const resultMsg: AgentMessage = {
       type: 'result',
       usage: { input_tokens: 1000, output_tokens: 500 },
       duration_ms: 2000,
@@ -2785,7 +2824,7 @@ describe('Token Stats Accumulation', () => {
   it('should not update token stats for non-result messages', () => {
     const state = { ...initialState, sessionStatus: { phase: 'running' } as const };
 
-    const assistantMsg: ClaudeMessage = {
+    const assistantMsg: AgentMessage = {
       type: 'assistant',
       message: {
         role: 'assistant',

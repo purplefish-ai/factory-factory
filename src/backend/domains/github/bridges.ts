@@ -15,9 +15,8 @@ export type GitHubFixerAcquireResult = AcquireAndDispatchResponse;
 /** Session capabilities needed by GitHub domain */
 export interface GitHubSessionBridge {
   isSessionWorking(sessionId: string): boolean;
-  getClient(
-    sessionId: string
-  ): { isRunning(): boolean; sendMessage(msg: string): Promise<void> } | null;
+  isSessionRunning(sessionId: string): boolean;
+  sendSessionMessage(sessionId: string, message: string): Promise<void>;
 }
 
 /** Fixer session capability needed by GitHub domain */

@@ -8,8 +8,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
   getSessionProviderLabel,
-  type NewSessionProviderSelection,
-  resolveProviderSelection,
   type SessionProviderValue,
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
@@ -192,9 +190,8 @@ interface MainViewTabBarProps {
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
-  selectedProvider: NewSessionProviderSelection;
-  setSelectedProvider: Dispatch<SetStateAction<NewSessionProviderSelection>>;
-  effectiveDefaultProvider: SessionProviderValue;
+  selectedProvider: SessionProviderValue;
+  setSelectedProvider: Dispatch<SetStateAction<SessionProviderValue>>;
 }
 
 export function MainViewTabBar({
@@ -209,7 +206,6 @@ export function MainViewTabBar({
   maxSessions,
   selectedProvider,
   setSelectedProvider,
-  effectiveDefaultProvider,
 }: MainViewTabBarProps) {
   const { tabs, activeTabId, selectTab, closeTab } = useWorkspacePanel();
 
@@ -220,10 +216,7 @@ export function MainViewTabBar({
   const sessionCount = sessions?.length ?? 0;
   const isAtLimit = maxSessions !== undefined && sessionCount >= maxSessions;
   const isButtonDisabled = disabled || isAtLimit;
-  const providerTriggerLabel =
-    selectedProvider === 'WORKSPACE_DEFAULT'
-      ? getSessionProviderLabel(effectiveDefaultProvider)
-      : getSessionProviderLabel(selectedProvider);
+  const providerTriggerLabel = getSessionProviderLabel(selectedProvider);
 
   return (
     <div
@@ -257,20 +250,17 @@ export function MainViewTabBar({
         <Select
           value={selectedProvider}
           onValueChange={(value) => {
-            setSelectedProvider(resolveProviderSelection(value));
+            setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
           }}
           disabled={isButtonDisabled}
         >
           <SelectTrigger
             aria-label="New session provider"
-            className="h-6 w-[144px] text-xs shrink-0"
+            className="h-6 w-[96px] text-xs shrink-0"
           >
             <span className="truncate">{providerTriggerLabel}</span>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="WORKSPACE_DEFAULT">
-              Use default ({getSessionProviderLabel(effectiveDefaultProvider)})
-            </SelectItem>
             {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}

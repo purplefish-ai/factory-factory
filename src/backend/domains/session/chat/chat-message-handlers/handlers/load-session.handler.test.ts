@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildHydrateKey } from '@/backend/domains/session/store/session-hydrate-key';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
+  getOrCreateSessionClientFromRecord: vi.fn(),
   getChatBarCapabilities: vi.fn(),
-  tryHydrateCodexTranscript: vi.fn(),
+  getSessionConfigOptions: vi.fn(),
   subscribe: vi.fn(),
   emitDelta: vi.fn(),
-  setHydratedTranscript: vi.fn(),
   getCachedCommands: vi.fn(),
 }));
 
@@ -21,8 +20,9 @@ vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
 vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
   sessionService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
+    getOrCreateSessionClientFromRecord: mocks.getOrCreateSessionClientFromRecord,
     getChatBarCapabilities: mocks.getChatBarCapabilities,
-    tryHydrateCodexTranscript: mocks.tryHydrateCodexTranscript,
+    getSessionConfigOptions: mocks.getSessionConfigOptions,
   },
 }));
 
@@ -30,7 +30,6 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
   sessionDomainService: {
     subscribe: mocks.subscribe,
     emitDelta: mocks.emitDelta,
-    setHydratedTranscript: mocks.setHydratedTranscript,
   },
 }));
 
@@ -63,24 +62,18 @@ describe('createLoadSessionHandler', () => {
       rewind: { enabled: false },
     });
     mocks.getCachedCommands.mockResolvedValue(null);
+    mocks.getSessionConfigOptions.mockReturnValue([]);
+    mocks.getOrCreateSessionClientFromRecord.mockResolvedValue({});
   });
 
-  it('hydrates CODEX transcript from thread/read before subscribe replay', async () => {
+  it('subscribes with no Claude hydration context for CODEX session', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CODEX',
+      status: 'RUNNING',
       workspace: { worktreePath: '/tmp/worktree' },
-      claudeSessionId: null,
-      claudeProjectPath: null,
+      providerSessionId: null,
+      providerProjectPath: null,
     });
-    mocks.tryHydrateCodexTranscript.mockResolvedValue([
-      {
-        id: 'codex-turn-1-item-1',
-        source: 'user',
-        text: 'hello',
-        timestamp: '2026-02-13T00:00:00.000Z',
-        order: 0,
-      },
-    ]);
 
     const handler = createLoadSessionHandler();
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
@@ -91,35 +84,28 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
 
-    expect(mocks.tryHydrateCodexTranscript).toHaveBeenCalledWith('session-1');
-    expect(mocks.setHydratedTranscript).toHaveBeenCalledWith(
-      'session-1',
-      expect.any(Array),
-      expect.objectContaining({
-        hydratedKey: buildHydrateKey({
-          claudeSessionId: null,
-          claudeProjectPath: null,
-        }),
-      })
-    );
     expect(mocks.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
-        claudeSessionId: null,
-        claudeProjectPath: null,
         loadRequestId: 'load-1',
+      })
+    );
+    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CODEX',
       })
     );
   });
 
-  it('skips transcript replacement when no CODEX hydration data is available', async () => {
+  it('emits cached slash commands when available', async () => {
     mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
+      provider: 'CLAUDE',
+      status: 'RUNNING',
       workspace: { worktreePath: '/tmp/worktree' },
-      claudeSessionId: null,
-      claudeProjectPath: null,
+      providerSessionId: null,
+      providerProjectPath: null,
     });
-    mocks.tryHydrateCodexTranscript.mockResolvedValue(null);
+    mocks.getCachedCommands.mockResolvedValue([{ name: '/test', description: 'Test command' }]);
 
     const handler = createLoadSessionHandler();
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
@@ -130,7 +116,130 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.setHydratedTranscript).not.toHaveBeenCalled();
-    expect(mocks.subscribe).toHaveBeenCalled();
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'slash_commands',
+      slashCommands: [{ name: '/test', description: 'Test command' }],
+    });
+  });
+
+  it('emits config options when ACP session handle is active', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'RUNNING',
+      workspace: { worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+    mocks.getSessionConfigOptions.mockReturnValue([
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'string',
+        category: 'model',
+        currentValue: 'sonnet',
+        options: [{ value: 'sonnet', name: 'Sonnet' }],
+      },
+    ]);
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'config_options_update',
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'string',
+          category: 'model',
+          currentValue: 'sonnet',
+          options: [{ value: 'sonnet', name: 'Sonnet' }],
+        },
+      ],
+    });
+  });
+
+  it('sends websocket error when runtime initialization fails', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'RUNNING',
+      workspace: { worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+    mocks.getOrCreateSessionClientFromRecord.mockRejectedValueOnce(new Error('boom'));
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to initialize session: boom',
+      })
+    );
+  });
+
+  it('skips eager runtime init until workspace worktree path exists', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'RUNNING',
+      workspace: { worktreePath: null },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).not.toHaveBeenCalled();
+    expect(ws.send).not.toHaveBeenCalledWith(
+      expect.stringContaining('Failed to initialize session')
+    );
+  });
+
+  it('skips eager runtime init for inactive sessions', async () => {
+    mocks.getRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-02-13T00:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      workspace: { worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).not.toHaveBeenCalled();
   });
 });

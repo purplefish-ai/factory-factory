@@ -86,7 +86,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-vi.mock('@/shared/claude', () => ({
+vi.mock('@/shared/acp-protocol', () => ({
   MessageState: { ACCEPTED: 'ACCEPTED' },
   resolveSelectedModel: vi.fn((m: string) => m ?? 'claude-sonnet'),
 }));

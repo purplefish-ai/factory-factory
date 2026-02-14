@@ -11,9 +11,14 @@ export function reduceToolingSlice(state: ChatState, action: ChatAction): ChatSt
       return { ...state, toolUseIdToIndex: newToolUseIdToIndex };
     }
     case 'SDK_TOOL_PROGRESS': {
-      const { toolUseId, toolName, elapsedSeconds } = action.payload;
+      const { toolUseId, toolName, elapsedSeconds, acpLocations, acpKind } = action.payload;
       const newToolProgress = new Map(state.toolProgress);
-      newToolProgress.set(toolUseId, { toolName, elapsedSeconds });
+      newToolProgress.set(toolUseId, {
+        toolName,
+        elapsedSeconds,
+        ...(acpLocations && { acpLocations }),
+        ...(acpKind && { acpKind }),
+      });
       return { ...state, toolProgress: newToolProgress };
     }
     case 'SDK_TOOL_USE_SUMMARY': {
@@ -28,6 +33,14 @@ export function reduceToolingSlice(state: ChatState, action: ChatAction): ChatSt
       return { ...state, isCompacting: true };
     case 'SDK_COMPACTING_END':
       return { ...state, isCompacting: false };
+    case 'ACP_PLAN_UPDATE':
+      return {
+        ...state,
+        acpPlan: {
+          entries: action.payload.entries,
+          updatedAt: new Date().toISOString(),
+        },
+      };
     default:
       return state;
   }

@@ -25,7 +25,6 @@ export interface UseChatTransportOptions {
   dispatch: React.Dispatch<ChatAction>;
   stateRef: React.MutableRefObject<ChatState>;
   toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>;
-  rewindTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
 }
 
 export interface UseChatTransportReturn {
@@ -56,30 +55,7 @@ function handleClaudeMessageWithStreaming(
 // =============================================================================
 
 export function useChatTransport(options: UseChatTransportOptions): UseChatTransportReturn {
-  const { dispatch, stateRef, toolInputAccumulatorRef, rewindTimeoutRef } = options;
-
-  /**
-   * Clears the rewind timeout if the response matches the current rewind request.
-   * Validates userMessageId to prevent stale responses from clearing the timeout.
-   */
-  const clearRewindTimeoutIfMatching = useCallback(
-    (wsMessage: WebSocketMessage) => {
-      if (wsMessage.type !== 'rewind_files_preview' && wsMessage.type !== 'rewind_files_error') {
-        return;
-      }
-      const currentUserMessageId = stateRef.current.rewindPreview?.userMessageId;
-      const responseUserMessageId = wsMessage.userMessageId;
-      // Only clear timeout if this response is for the current rewind request
-      if (
-        rewindTimeoutRef.current &&
-        (!responseUserMessageId || responseUserMessageId === currentUserMessageId)
-      ) {
-        clearTimeout(rewindTimeoutRef.current);
-        rewindTimeoutRef.current = null;
-      }
-    },
-    [rewindTimeoutRef, stateRef]
-  );
+  const { dispatch, toolInputAccumulatorRef } = options;
 
   const handleMessage = useCallback(
     (data: unknown) => {
@@ -116,9 +92,6 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
         return;
       }
 
-      // Clear rewind timeout when we receive rewind response for the current request
-      clearRewindTimeoutIfMatching(wsMessage);
-
       // Handle Claude messages specially for tool input streaming
       if (isWsAgentMessage(wsMessage)) {
         handleClaudeMessageWithStreaming(wsMessage, toolInputAccumulatorRef, dispatch);
@@ -130,7 +103,7 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
         dispatch(action);
       }
     },
-    [clearRewindTimeoutIfMatching, dispatch, toolInputAccumulatorRef]
+    [dispatch, toolInputAccumulatorRef]
   );
 
   return { handleMessage };

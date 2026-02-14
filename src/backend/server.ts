@@ -20,7 +20,6 @@ import { join } from 'node:path';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { agentProcessAdapter } from './agents/process-adapter';
 import { type AppContext, createAppContext } from './app-context';
 import { prisma } from './db';
 import { reconciliationService } from './domains/ratchet';
@@ -257,7 +256,6 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     await sessionService.stopAllClients(SHUTDOWN_TIMEOUT_MS);
 
     terminalService.cleanup();
-    agentProcessAdapter.cleanup();
     sessionFileLogger.cleanup();
     await rateLimiter.stop();
 

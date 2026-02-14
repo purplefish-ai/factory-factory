@@ -38,7 +38,6 @@ interface UseChatInputActionsReturn {
   handleModelChange: (model: string) => void;
   handleReasoningChange: (effort: string) => void;
   handleThinkingChange: (pressed: boolean) => void;
-  handlePlanModeChange: (pressed: boolean) => void;
   supportedImageTypes: readonly string[];
 }
 
@@ -129,7 +128,6 @@ export function useChatInputActions({
   delegateToFileMentionMenu,
 }: UseChatInputActionsOptions): UseChatInputActionsReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const planModeEnabled = capabilities?.planMode.enabled === true;
   const thinkingEnabled = capabilities?.thinking.enabled === true;
   const imageAttachmentsEnabled =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
@@ -159,16 +157,6 @@ export function useChatInputActions({
   const preSlashShortcuts = useMemo<ShortcutDefinition[]>(
     () => [
       {
-        key: 'Tab',
-        shift: true,
-        shouldHandle: () => !running,
-        action: () => {
-          if (planModeEnabled) {
-            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
-          }
-        },
-      },
-      {
         key: 'Enter',
         mod: true,
         shift: false,
@@ -177,17 +165,6 @@ export function useChatInputActions({
           onCloseSlashMenu?.();
           onCloseFileMentionMenu?.();
           sendFromInput(event.currentTarget);
-        },
-      },
-      {
-        key: 'p',
-        mod: true,
-        shift: true,
-        alt: false,
-        action: () => {
-          if (!running && planModeEnabled) {
-            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
-          }
         },
       },
       {
@@ -244,10 +221,8 @@ export function useChatInputActions({
       onStop,
       running,
       sendFromInput,
-      settings?.planModeEnabled,
       settings?.thinkingEnabled,
       stopping,
-      planModeEnabled,
       thinkingEnabled,
       imageAttachmentsEnabled,
     ]
@@ -268,10 +243,10 @@ export function useChatInputActions({
     [sendFromInput]
   );
 
-  // Handle key press for Enter to send and Shift+Tab for plan mode toggle
+  // Handle key press shortcuts before and after slash/file menus.
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      // Run pre-slash shortcuts first (e.g., Shift+Tab)
+      // Run pre-slash shortcuts first.
       if (runShortcuts(event, preSlashShortcuts)) {
         return;
       }
@@ -375,15 +350,6 @@ export function useChatInputActions({
     [thinkingEnabled, onSettingsChange]
   );
 
-  const handlePlanModeChange = useCallback(
-    (pressed: boolean) => {
-      if (planModeEnabled) {
-        onSettingsChange?.({ planModeEnabled: pressed });
-      }
-    },
-    [planModeEnabled, onSettingsChange]
-  );
-
   const handleReasoningChange = useCallback(
     (effort: string) => {
       if (reasoningSelectorEnabled && reasoningValues.has(effort)) {
@@ -403,7 +369,6 @@ export function useChatInputActions({
     handleModelChange,
     handleReasoningChange,
     handleThinkingChange,
-    handlePlanModeChange,
     supportedImageTypes: SUPPORTED_IMAGE_TYPES,
   };
 }

@@ -128,28 +128,23 @@ export const conversationRenameInterceptor: ToolInterceptor = {
           hasConversationSummary: !!conversationSummary,
         });
 
-        // Send the rename instruction as a user message
-        // The instruction contains <system_instruction> tags but is sent as user content
-        // This will prompt Claude to rename the branch with conversation context
-        const client = sessionService.getClient(context.sessionId);
-
-        if (client) {
-          logger.info('Sending branch rename instruction to Claude', {
+        if (!sessionService.isSessionRunning(context.sessionId)) {
+          logger.warn('Session not running; skipping branch rename instruction', {
             sessionId: context.sessionId,
           });
-
-          // Send the instruction (contains <system_instruction> XML tags)
-          client.sendMessage(renameInstruction).catch((error) => {
-            logger.warn('Failed to send rename instruction', {
-              sessionId: context.sessionId,
-              error,
-            });
-          });
-        } else {
-          logger.warn('Could not get Claude client to send rename instruction', {
-            sessionId: context.sessionId,
-          });
+          return;
         }
+
+        logger.info('Sending branch rename instruction to session', {
+          sessionId: context.sessionId,
+        });
+
+        sessionService.sendSessionMessage(context.sessionId, renameInstruction).catch((error) => {
+          logger.warn('Failed to send rename instruction', {
+            sessionId: context.sessionId,
+            error,
+          });
+        });
       }
     } catch (error) {
       logger.error('Error in conversation rename interceptor', {

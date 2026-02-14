@@ -1,4 +1,4 @@
-import type { QueuedMessage } from '@/shared/claude';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
 import { normalizeOptionalString } from './constants';
 

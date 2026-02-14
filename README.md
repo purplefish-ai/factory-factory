@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <strong>Run multiple Claude Code sessions in parallel with isolated git worktrees.</strong>
+  <strong>Run multiple ACP agent sessions in parallel with isolated git worktrees.</strong>
 </p>
 
 <p align="center">
-  Work on multiple features simultaneously, each in its own branch. Let AI agents progress PRs automatically.
+  Work on multiple features simultaneously, each in its own branch. Let ACP-connected agents progress PRs automatically.
 </p>
 
 <p align="center">
@@ -48,7 +48,8 @@
 **Prerequisites:**
 - Node.js 18+
 - GitHub CLI (`gh`) - authenticated
-- Claude Code - authenticated via `claude login`
+- Claude Code (for Claude provider) - authenticated via `claude login`
+- ChatGPT/Codex account (for Codex provider)
 
 ### Option 1: Run with npx (Recommended)
 
@@ -157,8 +158,9 @@ ff serve --database-path /path/to/data.db
 1. **Authenticate required tools:**
    ```bash
    gh auth login        # GitHub CLI
-   claude login         # Claude Code
+   claude login         # Claude provider (required for CLAUDE sessions)
    ```
+   For CODEX sessions, ensure your ChatGPT/Codex credentials are configured.
 
 2. **Run Factory Factory:**
    ```bash
@@ -169,7 +171,7 @@ ff serve --database-path /path/to/data.db
    - Open the web UI (automatically opens at http://localhost:3000)
    - Configure your project with a local git repository
    - Click "New Workspace" to create your first isolated worktree
-   - Start chatting with Claude Code!
+   - Start chatting with your selected ACP provider (CLAUDE or CODEX)
 
 ## Development
 
@@ -209,13 +211,14 @@ pnpm deps:check              # Check dependency rules
 ```
 Project (repository configuration)
     └── Workspace (isolated git worktree)
-            ├── Session (Claude Code chat session)
+            ├── Session (ACP provider session: CLAUDE or CODEX)
             └── Terminal (PTY terminal)
 ```
 
 **Key capabilities:**
 - **Isolated workspaces:** Each workspace gets its own git worktree and branch for true parallel development
-- **Real-time streaming:** WebSocket-based communication with Claude Code CLI
+- **Real-time streaming:** WebSocket-based communication with ACP adapter subprocesses
+- **ACP runtime:** Each session runs through ACP (`@agentclientprotocol/sdk`) and negotiates provider capabilities (models/modes/config options) at runtime
 - **Persistent sessions:** Resume and review previous conversations
 - **Terminal access:** Full PTY terminal per workspace
 - **GitHub integration:** Import issues, track PR state, automatic PR progression via Ratchet
@@ -229,7 +232,7 @@ Ratchet automatically moves pull requests toward merge by monitoring and fixing 
 
 - **Automatic monitoring:** Checks READY workspaces with open PRs every minute
 - **Smart PR classification:** Tracks PR state as `CI_RUNNING`, `CI_FAILED`, `REVIEW_PENDING`, `READY`, or `MERGED`
-- **Auto-fix agents:** Creates Claude sessions to automatically fix CI failures and address review comments
+- **Auto-fix agents:** Creates agent sessions to automatically fix CI failures and address review comments
 - **Conflict resolution:** Agents sync with main branch before applying fixes
 - **Configurable behavior:** Control CI fixes, review fixes, allowed reviewers, and auto-merge in Admin → Ratchet
 
@@ -258,18 +261,18 @@ Real-time visual project management with automatic column placement.
 
 One-click prompts for common workflows, fully customizable via markdown.
 
-- **Agent-driven:** Each action creates a new Claude session with a predefined prompt
+- **Agent-driven:** Each action creates a new ACP session with a predefined prompt
 - **Extensible:** Add custom actions by creating markdown files in `prompts/quick-actions/`
 - **Built-in actions:** Review code, simplify implementations, sync with main, rename branches, and more
 
 ## Security Considerations
 
-> **⚠️ Important:** Factory Factory runs Claude Code with automatic command execution enabled by default. Claude can execute bash commands, write and modify files, and perform operations without manual confirmation.
+> **⚠️ Important:** Factory Factory runs ACP adapters (for example Claude Code ACP and Codex ACP) with automatic command execution enabled by default. Agents can execute bash commands, write and modify files, and perform operations without manual confirmation.
 
 This design enables seamless parallel workflows, but you should understand:
 
 - **Workspace isolation:** Each workspace operates in its own git worktree with a dedicated branch
-- **Filesystem access:** Claude has full access to files within each workspace
+- **Filesystem access:** Active agent runtimes have full access to files within each workspace
 - **Automatic execution:** Commands run without approval prompts for uninterrupted operation
 - **System-level access:** Isolation is at the git worktree level, not containerized
 
@@ -307,6 +310,10 @@ gh auth login           # Login to GitHub
 claude login            # Authenticate Claude Code CLI
 claude --version        # Verify installation
 ```
+
+**Codex authentication/config issues:**
+- Verify your ChatGPT/Codex account can access the selected model.
+- Recreate the session and confirm provider-specific model options appear in the chat bar.
 
 ### Database Issues
 
@@ -346,9 +353,9 @@ ff serve --port 8080 --backend-port 8081
 - Ensure git worktree creation succeeded
 - Verify repository has no uncommitted changes
 
-**Claude not responding:**
-- Verify Claude Code is installed and authenticated
-- Check that `claude` command works in your terminal
+**Agent not responding:**
+- Verify the selected provider is installed/authenticated (Claude/Codex)
+- Check adapter/runtime errors in backend logs (`acp-runtime-manager`, `session`)
 - Review session logs for error messages
 
 **PR state not updating:**

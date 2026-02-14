@@ -36,7 +36,7 @@ class WorkspaceActivityService extends EventEmitter {
         this.emit('request_notification', {
           workspaceId,
           workspaceName: workspace.name,
-          sessionCount: workspace.claudeSessions.length,
+          sessionCount: workspace.agentSessions.length,
           finishedAt,
         });
       } catch (error) {

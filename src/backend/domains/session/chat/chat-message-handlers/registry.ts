@@ -1,12 +1,10 @@
 import type { ChatMessageInput } from '@/shared/websocket';
-import { createListSessionsHandler } from './handlers/list-sessions.handler';
 import { createLoadSessionHandler } from './handlers/load-session.handler';
 import { createPermissionResponseHandler } from './handlers/permission-response.handler';
-import { createQuestionResponseHandler } from './handlers/question-response.handler';
 import { createQueueMessageHandler } from './handlers/queue-message.handler';
 import { createRemoveQueuedMessageHandler } from './handlers/remove-queued-message.handler';
 import { createResumeQueuedMessagesHandler } from './handlers/resume-queued-messages.handler';
-import { createRewindFilesHandler } from './handlers/rewind-files.handler';
+import { createSetConfigOptionHandler } from './handlers/set-config-option.handler';
 import { createSetModelHandler } from './handlers/set-model.handler';
 import { createSetThinkingBudgetHandler } from './handlers/set-thinking-budget.handler';
 import { createStartHandler } from './handlers/start.handler';
@@ -26,7 +24,6 @@ export function createChatMessageHandlerRegistry(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandlerRegistry {
   return {
-    list_sessions: createListSessionsHandler(),
     start: createStartHandler(deps),
     user_input: createUserInputHandler(),
     queue_message: createQueueMessageHandler(deps),
@@ -34,10 +31,9 @@ export function createChatMessageHandlerRegistry(
     resume_queued_messages: createResumeQueuedMessagesHandler(deps),
     stop: createStopHandler(),
     load_session: createLoadSessionHandler(),
-    question_response: createQuestionResponseHandler(),
     permission_response: createPermissionResponseHandler(),
     set_model: createSetModelHandler(),
     set_thinking_budget: createSetThinkingBudgetHandler(),
-    rewind_files: createRewindFilesHandler(),
+    set_config_option: createSetConfigOptionHandler(),
   };
 }

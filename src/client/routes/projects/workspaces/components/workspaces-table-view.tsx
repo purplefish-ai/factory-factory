@@ -34,7 +34,7 @@ import { ViewModeToggle } from './view-mode-toggle';
 const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
 
 type WorkspaceWithSessions = Workspace & {
-  claudeSessions?: unknown[];
+  agentSessions?: unknown[];
 };
 
 function MobileWorkspaceCard({
@@ -195,7 +195,7 @@ export function WorkspacesTableView({
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {workspace.claudeSessions?.length ?? 0} sessions
+                    {workspace.agentSessions?.length ?? 0} sessions
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-sm">
                     {workspace.branchName || '-'}

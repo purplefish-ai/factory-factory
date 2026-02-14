@@ -50,7 +50,7 @@ export function configureDomainBridges(): void {
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
     stopSession: (id) => sessionService.stopSession(id),
     startSession: (id, opts) => sessionService.startSession(id, opts),
-    getClient: (id) => sessionService.getClient(id) ?? null,
+    sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),
   };
@@ -126,7 +126,8 @@ export function configureDomainBridges(): void {
   prReviewFixerService.configure({
     session: {
       isSessionWorking: (id) => sessionService.isSessionWorking(id),
-      getClient: (id) => sessionService.getClient(id) ?? null,
+      isSessionRunning: (id) => sessionService.isSessionRunning(id),
+      sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     },
     fixer: {
       acquireAndDispatch: (input) => fixerSessionService.acquireAndDispatch(input),
@@ -146,6 +147,13 @@ export function configureDomainBridges(): void {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
       markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
       on: (event, handler) => workspaceActivityService.on(event, handler),
+    },
+  });
+
+  sessionService.configure({
+    workspace: {
+      markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
+      markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
     },
   });
 

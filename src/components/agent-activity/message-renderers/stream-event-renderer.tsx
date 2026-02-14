@@ -3,7 +3,7 @@ import * as React from 'react';
 import { memo } from 'react';
 import { CompactBoundaryIndicator } from '@/components/chat/compact-boundary-indicator';
 import { MarkdownRenderer } from '@/components/ui/markdown';
-import type { ClaudeMessage, ClaudeStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
+import type { AgentMessage, AgentStreamEvent, ContentBlockDelta } from '@/lib/chat-protocol';
 import { isTextContent, isThinkingContent } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import { useIsThinkingInProgress } from './thinking-completion-context';
@@ -13,7 +13,7 @@ import { useIsThinkingInProgress } from './thinking-completion-context';
 // =============================================================================
 
 interface StreamEventRendererProps {
-  event: ClaudeStreamEvent;
+  event: AgentStreamEvent;
   /** The ID of the ChatMessage containing this event (for thinking completion tracking) */
   messageId?: string;
   className?: string;
@@ -168,7 +168,7 @@ export const ThinkingRenderer = memo(function ThinkingRenderer({
 // =============================================================================
 
 interface ErrorRendererProps {
-  message: ClaudeMessage;
+  message: AgentMessage;
   className?: string;
 }
 
@@ -199,7 +199,7 @@ export const ErrorRenderer = memo(function ErrorRenderer({
 // =============================================================================
 
 interface SystemMessageRendererProps {
-  message: ClaudeMessage;
+  message: AgentMessage;
   className?: string;
 }
 
@@ -248,7 +248,7 @@ export const SystemMessageRenderer = memo(function SystemMessageRenderer({
 // =============================================================================
 
 interface ResultRendererProps {
-  message: ClaudeMessage;
+  message: AgentMessage;
   className?: string;
 }
 

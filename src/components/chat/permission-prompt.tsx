@@ -6,6 +6,7 @@ import { MarkdownRenderer } from '@/components/ui/markdown';
 import { PromptCard } from '@/components/ui/prompt-card';
 import type { PermissionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { type PlanViewMode, usePlanViewMode } from './plan-view-preference';
 
 // =============================================================================
@@ -14,7 +15,7 @@ import { type PlanViewMode, usePlanViewMode } from './plan-view-preference';
 
 interface PermissionPromptProps {
   permission: PermissionRequest | null;
-  onApprove: (requestId: string, allow: boolean) => void;
+  onApprove: (requestId: string, allow: boolean, optionId?: string) => void;
 }
 
 // =============================================================================
@@ -63,6 +64,36 @@ function formatToolInput(input: Record<string, unknown>): string {
   } catch {
     return String(input);
   }
+}
+
+function resolvePlanContent(permission: PermissionRequest): string | null {
+  const fromField = extractPlanText(permission.planContent);
+  if (fromField) {
+    return fromField;
+  }
+
+  const fromInput = extractPlanText(permission.toolInput.plan);
+  if (fromInput) {
+    return fromInput;
+  }
+
+  if (typeof permission.planContent === 'string' && permission.planContent.length > 0) {
+    return permission.planContent;
+  }
+
+  if (typeof permission.toolInput.plan === 'string' && permission.toolInput.plan.length > 0) {
+    return permission.toolInput.plan;
+  }
+
+  if (typeof permission.toolInput.plan === 'object' && permission.toolInput.plan !== null) {
+    try {
+      return JSON.stringify(permission.toolInput.plan, null, 2);
+    } catch {
+      return String(permission.toolInput.plan);
+    }
+  }
+
+  return null;
 }
 
 // =============================================================================
@@ -125,7 +156,8 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
     return null;
   }
 
-  const { requestId, planContent } = permission;
+  const { requestId } = permission;
+  const planContent = resolvePlanContent(permission);
 
   const handleApprove = () => {
     onApprove(requestId, true);
@@ -196,6 +228,93 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
 }
 
 // =============================================================================
+// ACP Multi-Option Permission Component
+// =============================================================================
+
+/**
+ * Multi-option permission prompt for ACP sessions.
+ * Renders distinct buttons for each permission option (allow once, allow always,
+ * reject once, reject always) instead of the binary Allow/Deny UI.
+ */
+function AcpPermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
+  const firstButtonRef = useRef<HTMLButtonElement>(null);
+  const permissionRequestId = permission?.requestId;
+
+  useEffect(() => {
+    if (!permissionRequestId) {
+      return;
+    }
+    const timeoutId = setTimeout(() => firstButtonRef.current?.focus(), 100);
+    return () => clearTimeout(timeoutId);
+  }, [permissionRequestId]);
+
+  if (!permission?.acpOptions) {
+    return null;
+  }
+
+  const { requestId, toolName, toolInput, acpOptions } = permission;
+  const inputPreview = getInputPreview(toolInput);
+
+  // Group options: allow options first, then reject options
+  const allowOptions = acpOptions.filter((o) => o.kind.startsWith('allow'));
+  const rejectOptions = acpOptions.filter((o) => o.kind.startsWith('reject'));
+
+  const handleOptionClick = (optionId: string, kind: string) => {
+    const isAllow = kind.startsWith('allow');
+    onApprove(requestId, isAllow, optionId);
+  };
+
+  // Icon and color based on option kind
+  const getOptionStyle = (kind: string) => {
+    switch (kind) {
+      case 'allow_once':
+        return { variant: 'outline' as const, icon: ShieldCheck };
+      case 'allow_always':
+        return { variant: 'default' as const, icon: ShieldCheck };
+      case 'reject_once':
+        return { variant: 'outline' as const, icon: ShieldX };
+      case 'reject_always':
+        return { variant: 'destructive' as const, icon: ShieldX };
+      default:
+        return { variant: 'outline' as const, icon: ShieldCheck };
+    }
+  };
+
+  return (
+    <PromptCard
+      icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+      label={`Permission request for ${toolName}`}
+      actions={
+        <div className="flex flex-wrap gap-2">
+          {[...allowOptions, ...rejectOptions].map((option, index) => {
+            const style = getOptionStyle(option.kind);
+            const Icon = style.icon;
+            return (
+              <Button
+                key={option.optionId}
+                ref={index === 0 ? firstButtonRef : undefined}
+                variant={style.variant}
+                size="sm"
+                onClick={() => handleOptionClick(option.optionId, option.kind)}
+                className="gap-1.5"
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                {option.name}
+              </Button>
+            );
+          })}
+        </div>
+      }
+    >
+      <div className="text-sm font-medium">Permission: {toolName}</div>
+      <div className="text-xs text-muted-foreground mt-1 font-mono truncate" title={inputPreview}>
+        {inputPreview}
+      </div>
+    </PromptCard>
+  );
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -203,6 +322,7 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
  * Inline prompt for approving or denying tool permission requests.
  * Appears above the chat input as a compact card.
  * For ExitPlanMode requests, shows a specialized plan approval view.
+ * For ACP requests with acpOptions, shows multi-option permission buttons.
  */
 export function PermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
@@ -222,6 +342,11 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
 
   if (!permission) {
     return null;
+  }
+
+  // ACP multi-option permissions
+  if (permission.acpOptions && permission.acpOptions.length > 0) {
+    return <AcpPermissionPrompt permission={permission} onApprove={onApprove} />;
   }
 
   // Use specialized view for ExitPlanMode

@@ -1,194 +1,306 @@
-# Feature Research: In-Memory Project Snapshot Service
+# Feature Landscape: ACP-Only Cutover
 
-**Domain:** In-memory materialized view / state aggregation for real-time UI
-**Researched:** 2026-02-11
-**Confidence:** HIGH
+**Domain:** Agent communication protocol migration -- replacing custom provider protocols
+**Researched:** 2026-02-13
+**Confidence:** HIGH (primary sources: ACP specification, TypeScript SDK docs, Zed adapter repos, existing codebase)
 
 ## Context
 
-The snapshot service replaces three independent polling loops (sidebar at 2s, kanban at 15s, workspace list at 15s) that each hit the database and run git operations on every tick. The service maintains an in-memory projection of per-workspace state, updated via event-driven deltas, with WebSocket push to clients and a safety-net reconciliation poll.
+Factory Factory currently communicates with two AI providers through bespoke protocols:
+- **Claude:** Custom NDJSON bidirectional streaming over stdio (`ClaudeProtocol` class, `control_request`/`control_response` pattern)
+- **Codex:** Custom JSON-RPC app-server over stdio (`CodexAppServerManager`, `CodexSessionRegistry`, method-based approval flows)
 
-Today's `WorkspaceQueryService.getProjectSummaryState()` does a full database query + concurrent git stat operations for every workspace on every 2-second sidebar poll. The `listWithKanbanState()` does the same for kanban. This is the core problem being solved.
+The ACP (Agent Client Protocol) is a standardized JSON-RPC 2.0 protocol that both providers now support via Zed's production adapters (`@zed-industries/claude-code-acp` v0.16.1, `@zed-industries/codex-acp`). This cutover replaces both custom protocols with a single ACP client runtime.
 
-## Feature Landscape
+**Key insight from research:** ACP is not just a wire format change. It fundamentally changes three interaction contracts:
+1. **Permissions** shift from boolean allow/deny to multi-option selection (allow_once, allow_always, reject_once, reject_always)
+2. **Configuration** shifts from imperative commands (`sendSetModel`, `sendSetMaxThinkingTokens`) to declarative config options with categories (mode, model, thought_level)
+3. **Session identity** shifts from provider-specific session tracking to a unified `sessionId` returned by `session/new`
 
-### Table Stakes (Users Expect These)
+## Table Stakes
 
-These are non-negotiable. Without them, the snapshot service does not solve the existing problem.
+Features users expect. Missing = ACP cutover is incomplete or broken.
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **In-memory store keyed by workspace ID** | Core data structure. Without it there is no snapshot. | LOW | `Map<workspaceId, WorkspaceSnapshot>` scoped per project. Already clear from `getProjectSummaryState` return shape. |
-| **Event-driven delta ingestion** | Entire point is to avoid re-querying the DB on every poll. Must react to session start/stop, PR snapshot updates, ratchet state changes, workspace CRUD. | HIGH | Must wire into existing EventEmitter patterns (e.g., `workspaceActivityService` emits `workspace_active`/`workspace_idle`). Biggest implementation effort. |
-| **Single read endpoint for all consumers** | Sidebar, kanban, and workspace list must all read from the same snapshot, not three separate queries. Eliminates redundant work. | MEDIUM | Replaces `getProjectSummaryState` and `listWithKanbanState` with a single `getSnapshot(projectId)`. Consumers derive their view client-side. |
-| **WebSocket push on snapshot change** | Without push, clients still poll. The 2s sidebar poll is the main performance concern. Push eliminates it. | MEDIUM | Use tRPC subscriptions (SSE recommended by tRPC docs) or extend existing WebSocket infrastructure. Must scope to project ID so clients only receive updates for the project they are viewing. |
-| **Safety-net reconciliation poll** | Events can be missed (process restart, race conditions, git operations completing outside event flow). A periodic full reconciliation (~60s) catches drift. | MEDIUM | Runs the existing `getProjectSummaryState` logic but writes into the snapshot store instead of returning directly. Diff against current snapshot to detect drift. |
-| **Snapshot version counter** | Consumers must know if their local state is stale. Version monotonically increments on every mutation. Client can skip redundant re-renders if version unchanged. | LOW | Simple integer counter incremented on every store mutation. Included in every push event and read response. |
-| **Derived state computation (sidebar status, kanban column, flow state)** | Today these are computed in the query service. The snapshot must include derived state, not raw data, because clients depend on `sidebarStatus`, `kanbanColumn`, `flowPhase`, `ciObservation`. | MEDIUM | Reuse existing pure functions: `deriveWorkspaceSidebarStatus()`, `computeKanbanColumn()`, `deriveWorkspaceFlowState()`. Must re-derive when inputs change. |
-| **Full snapshot on client connect** | When a client first opens the app or switches projects, it needs the complete current state, not just deltas. | LOW | Standard pattern: on subscription init, send full snapshot. Subsequent messages are deltas. Aligned with tRPC `tracked()` event pattern. |
-| **Project-scoped snapshots** | The app is project-scoped. Snapshot store must maintain separate state per project. Only the active project's snapshot needs to be warm. | LOW | `Map<projectId, ProjectSnapshot>`. Lazy initialization on first access. |
+| Feature | Why Expected | Complexity | Dependencies |
+|---------|--------------|------------|--------------|
+| **ACP subprocess lifecycle per session** | Each FF session needs its own ACP adapter process (stdio). Replaces `ClaudeClient.create()` and `CodexAppServerManager.spawn()`. | MEDIUM | None -- foundational |
+| **ClientSideConnection wiring** | The `@agentclientprotocol/sdk` `ClientSideConnection` class manages JSON-RPC over stdio. Must instantiate with a `toClient` callback returning the FF client handler. Replaces `ClaudeProtocol.start()`. | MEDIUM | ACP subprocess lifecycle |
+| **initialize handshake** | Must call `connection.initialize()` with `protocolVersion`, `clientCapabilities` (fs, terminal), `clientInfo`. Agent responds with capabilities, config options, supported features. Replaces `protocol.sendInitialize()`. | LOW | ClientSideConnection wiring |
+| **session/new** | Creates an ACP session with `cwd` (workspace working directory) and optional `mcpServers`. Returns `sessionId` which becomes the `providerSessionId`. Replaces implicit session creation in Claude CLI and `thread/new` in Codex. | LOW | initialize handshake |
+| **session/prompt** | Sends user messages with content blocks (text, optional images). Returns `PromptResponse` with `stopReason`. Replaces `protocol.sendUserMessage()` and Codex `turn/create`. | MEDIUM | session/new |
+| **session/cancel** | Sends cancellation notification to halt ongoing prompt turn. Agent must return `cancelled` stop reason. Replaces `protocol.sendInterrupt()` and Codex abort. | LOW | session/prompt |
+| **session/update notification handling** | Must implement `Client.sessionUpdate()` callback to receive streaming updates: `agent_message_chunk`, `tool_call`, `tool_call_update`, `agent_thought_chunk`, `plan`, `config_options_update`, `current_mode_update`, `available_commands_update`, `user_message_chunk`. This is the main event translation surface. | HIGH | ClientSideConnection wiring |
+| **ACP event translation to FF delta events** | Map ACP `SessionUpdate` variants to existing FF WebSocket delta events (`agent_message`, `stream_event`, `tool_progress`, `tool_use_summary`, `system_init`, etc.) or define new ACP-native delta events. The frontend must still render correctly. | HIGH | session/update notification handling |
+| **Permission option selection (session/request_permission)** | Must implement `Client.requestPermission()` callback. ACP sends `toolCall` details + `options[]` array (each with `optionId`, `name`, `kind`). Kind values: `allow_once`, `allow_always`, `reject_once`, `reject_always`. Must return `{ outcome: 'selected', optionId }` or `{ outcome: 'cancelled' }`. Replaces boolean allow/deny `ControlResponseBody`. | HIGH | session/update notification handling |
+| **Frontend permission UI update** | Current UI shows allow/deny buttons for tool permissions. Must change to render ACP permission options (potentially 4 choices: allow once, allow always, reject once, reject always). Each option has a `name` from the agent. | MEDIUM | Permission option selection |
+| **configOptions-driven model/mode/reasoning controls** | After `session/new` and via `config_options_update` notifications, agent provides `configOptions[]` array. Each option has `id`, `name`, `category` (mode, model, thought_level, or custom), `type: "select"`, `currentValue`, `options[]`. Must render in UI and call `connection.setSessionConfigOption()` on user selection. Replaces `protocol.sendSetModel()`, `protocol.sendSetMaxThinkingTokens()`, and `protocol.sendSetPermissionMode()`. | HIGH | session/new, session/update notification handling |
+| **Frontend config option UI** | Replace provider-specific model/reasoning dropdowns with generic config option selectors driven by ACP `configOptions` array. Group by category. Respect option ordering (higher priority first). | MEDIUM | configOptions-driven controls |
+| **Tool call status rendering** | ACP tool calls have `status` lifecycle: `pending` -> `in_progress` -> `completed`/`failed`. Each has `toolCallId`, `title`, `kind` (read, edit, delete, execute, think, fetch, other), content, and file locations. Must render these in the chat UI. Replaces Claude `tool_use`/`tool_result` content blocks and Codex tool notifications. | MEDIUM | session/update notification handling |
+| **Process management (stop/kill)** | Must cleanly terminate ACP subprocess on session stop. Handle process exit events. Update session runtime state. Replaces `ClaudeClient.stop()`/`ClaudeClient.kill()` and `CodexAppServerManager` shutdown. | MEDIUM | ACP subprocess lifecycle |
+| **Provider launch config** | Must know which binary to spawn for each provider: `claude-code-acp` (npm) or `codex-acp` (npm, platform-specific binary). Store pinned versions. Pass required env vars (`ANTHROPIC_API_KEY` for Claude, `CODEX_API_KEY`/`OPENAI_API_KEY` for Codex). | LOW | None |
+| **Legacy code removal** | Remove: `ClaudeProtocol` class, `ClaudeProtocolIO`, `ClaudePermissionCoordinator`, `ClaudeClient` (current), `CodexAppServerManager`, `CodexSessionRegistry`, `CodexEventTranslator`, `CodexDeltaMapper`, Codex schema snapshots, interactive method sets, all associated tests. | HIGH | All above features working |
+| **Session file logging for ACP events** | Must continue logging ACP events to session file logger for debugging. Replaces current `sessionFileLogger.log(dbSessionId, 'FROM_CLAUDE_CLI', ...)` calls. | LOW | session/update notification handling |
 
-### Differentiators (Competitive Advantage)
+## Differentiators
 
-Not required for the service to function, but improve debuggability, performance, or developer experience.
+Features that set the ACP cutover apart from a naive protocol swap. Not strictly required for parity, but valuable.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Debug metadata per workspace** | `{ version, computedAt, lastEventSource, lastEventType }` on each workspace entry. Invaluable for diagnosing "why does the sidebar show X?" without log diving. | LOW | Add metadata fields to snapshot entries. Populate on every mutation. Zero runtime cost beyond a few extra fields. |
-| **Snapshot-level debug metadata** | `{ snapshotVersion, lastReconciliationAt, lastReconciliationDriftCount, eventsSinceLastReconciliation }` at the project snapshot level. Answers "is the snapshot service healthy?" | LOW | Aggregate counters. Expose via admin/debug endpoint. |
-| **Delta-only push (not full snapshot)** | Instead of pushing the full project snapshot on every change, push only the workspace(s) that changed. Reduces WebSocket payload from O(n workspaces) to O(1) per event. | MEDIUM | Requires diffing before/after state for changed workspaces. Complexity is in correctly identifying which fields changed and serializing a minimal delta. |
-| **Coalesced/debounced push** | When multiple events fire in quick succession (e.g., session starts + git status updates), coalesce into a single push after a short debounce window (~100-200ms). Prevents push storms. | LOW | `setTimeout` + dirty flag pattern. Standard debounce. Prevents N events from causing N WebSocket messages in rapid succession. |
-| **Event source tagging** | Each snapshot mutation records which event caused it (e.g., `session_active`, `pr_snapshot_updated`, `reconciliation`, `workspace_created`). Enables debugging and metrics. | LOW | String tag on each mutation. Stored in debug metadata. |
-| **Warm/cold project lifecycle** | Only maintain snapshot in memory for projects with active WebSocket subscribers. Evict after N minutes of no subscribers. Prevents memory waste for projects nobody is viewing. | MEDIUM | Reference counting on WebSocket subscriptions per project. Timer-based eviction. Reconstruct from DB on next access. |
-| **Reconciliation drift logging** | When the safety-net reconciliation finds drift (snapshot differs from DB truth), log what drifted and why. Over time this reveals which event paths are unreliable. | LOW | Compare old vs new snapshot during reconciliation. Log any fields that changed with their before/after values. |
-| **Optimistic client-side merge** | Client can apply mutations optimistically (e.g., "archive workspace" removes it from local list immediately) and reconcile when server push confirms. | LOW | This is a client-side concern, not server-side. Already partially implemented in `useWorkspaceListState` with optimistic creating/archiving states. Snapshot push just makes reconciliation cleaner. |
-| **Subscription filtering by consumer type** | Allow clients to subscribe to only the fields they need (sidebar needs different fields than kanban). Reduces payload further. | HIGH | Over-engineering for current scale. Three consumers need slightly different views of the same data but the full snapshot is small (~20 workspaces * ~500 bytes = ~10KB). Not worth the complexity. |
+| Feature | Value Proposition | Complexity | Dependencies |
+|---------|-------------------|------------|--------------|
+| **session/load (resume previous session)** | ACP supports loading a previous session by ID. Agent replays full history via `session/update` notifications before returning. Enables session resume without FF-side transcript replay. Must capability-gate (`agentCapabilities.loadSession`). | MEDIUM | session/new, capability negotiation |
+| **unstable_listSessions** | List available sessions with metadata. Could power a "resume session" picker. Unstable API -- must be capability-gated and gracefully degrade. | LOW | session/load |
+| **Unified runtime manager** | Instead of `ClaudeRuntimeManager` + `CodexAppServerManager`, a single `AcpRuntimeManager` that manages ACP subprocess lifecycle for both providers. Reduces code duplication. | MEDIUM | ACP subprocess lifecycle |
+| **Config option update reactivity** | When the agent pushes `config_options_update` (e.g., model falls back, mode changes), the UI updates immediately without user action. Current UI does not have this -- model/mode are set-and-forget. | LOW | configOptions-driven controls |
+| **Tool call file location tracking** | ACP tool calls can report affected file paths with line numbers via `locations` field. Could enable "follow along" file highlighting or click-to-open. | LOW | Tool call status rendering |
+| **Agent thought rendering** | ACP streams `agent_thought_chunk` updates separately from message content. Could render thinking/reasoning in a collapsible section. | LOW | session/update notification handling |
+| **Plan rendering** | ACP streams `plan` updates with task entries and status. Could render a structured plan view. | LOW | session/update notification handling |
+| **Slash command forwarding** | ACP supports `available_commands_update` notifications to advertise slash commands. Can replace current initialize-time command extraction. | LOW | session/update notification handling |
+| **Capability-gated features** | Agent advertises capabilities during `initialize` (`loadSession`, `promptCapabilities.image/audio`, `mcp.http/sse`). Use these to conditionally show UI features. | LOW | initialize handshake |
+| **Health reporting for per-session processes** | Current admin/health surfaces report on Claude process registry and Codex manager status. Must update for ACP-per-session model where each session has its own PID. | MEDIUM | ACP subprocess lifecycle, process management |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+## Anti-Features
 
-Features to explicitly NOT build. These seem appealing but create problems in this context.
+Features to explicitly NOT build in this cutover.
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **Persistent snapshot (write to DB/disk)** | "What if the server restarts? We lose the snapshot." | The snapshot is a derived cache, not a source of truth. DB + git are the source of truth. Persisting the cache adds write amplification, stale data risk, and migration burden. Rebuilding from DB on startup is fast (~100ms for 20 workspaces). | Rebuild from DB on startup. The reconciliation poll logic already does this. First access triggers a full build. |
-| **Distributed pub/sub (Redis, NATS)** | "What about multiple server instances?" | This is a single-user desktop/local app. There is one server process. Adding Redis/NATS adds infrastructure, operational complexity, and latency for zero benefit. | In-process `EventEmitter` is correct for single-process Node.js. |
-| **Event sourcing / event log persistence** | "Store all events for replay and auditing." | Massive over-engineering. The snapshot is a simple read cache. Events are ephemeral triggers, not a source of truth. The DB already has audit fields (`updatedAt`, `stateComputedAt`). Event log adds storage, complexity, and a new data model to maintain. | Debug metadata (source tagging, drift logging) provides sufficient observability without event persistence. |
-| **Client-side snapshot computation** | "Just send raw data to the client and let it compute derived state." | Duplicates business logic (kanban column derivation, flow state, sidebar status) across server and client. Creates version skew risk. Existing pure functions are server-side TypeScript. | Keep derived state computation server-side in the snapshot service. Ship the computed result to clients. |
-| **Per-field subscription granularity** | "Subscribe to just `isWorking` changes for workspace X." | The full workspace snapshot is ~500 bytes. The full project snapshot is ~10KB for 20 workspaces. Network cost is negligible. Per-field subscriptions add subscription management complexity, potential missed updates, and make the server track per-client subscription state. | Push the full changed workspace snapshot on each mutation. Client ignores fields it does not use. |
-| **Cross-project snapshot** | "Show state of all projects at once in a dashboard." | Only one project is active at a time in the current UI. Building a cross-project view adds N-project memory footprint, N-project reconciliation, and a UI that does not exist. | When/if a cross-project dashboard is needed, aggregate lazily from per-project snapshots. |
-| **Snapshot diffing with JSON Patch (RFC 6902)** | "Use standard JSON Patch for deltas." | Adds a dependency, requires both sides to understand the patch format, and is harder to debug than sending the full changed workspace object. JSON Patch makes sense for large documents; our workspace objects are tiny. | Send the full updated `WorkspaceSnapshot` for each changed workspace. Simple, debuggable, negligible overhead. |
-| **Real-time git stats in snapshot** | "Update git stats on every file save." | Git stat operations (`git diff --stat`) take 50-200ms per workspace and shell out to git. Running these on every event would overwhelm the system. The current approach of including them in the reconciliation poll (every 60s) is correct. | Git stats update during reconciliation only. Events that indicate git activity (session idle, PR push) can trigger a targeted git stat refresh for that one workspace. |
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **Backward compatibility shim for legacy protocols** | Issue #996 explicitly states "pre-release breaking change, no backward compatibility required." Maintaining both protocols doubles testing and complexity. | Remove legacy code paths entirely. |
+| **Custom `set_thinking_budget` control** | Explicitly out of scope per #996. ACP `configOptions` with `category: "thought_level"` replaces this. | Use ACP configOptions with thought_level category. |
+| **Custom `rewind_files` support** | Explicitly out of scope per #996. This was a Claude-specific control request. | Drop the feature. Rewind is not part of ACP. |
+| **Keeping legacy WebSocket message contracts** | Issue #996 allows user-visible behavior changes where they simplify architecture. | Define ACP-native delta event shapes. Frontend adapts. |
+| **MCP server passthrough configuration** | ACP supports `mcpServers` in `session/new` for connecting agent-side MCP servers. FF does not need to proxy this. | Pass through if useful, but do not build UI for configuring agent MCP servers. |
+| **Remote/HTTP agent transport** | ACP supports remote agents via HTTP/SSE. FF runs agents as local subprocesses. | Stdio only. Do not implement HTTP transport. |
+| **unstable_resumeSession / unstable_forkSession** | These are unstable ACP methods. Too risky to depend on for a cutover milestone. | Skip entirely. If needed later, add as capability-gated features. |
+| **Authentication flow** | ACP has an `authenticate` method for agents that require auth. Claude-code-acp uses env vars directly. Codex-acp handles auth differently. | Env vars for API keys. Do not build an in-app auth flow for ACP adapters. |
+| **Per-field subscription filtering for config updates** | Over-engineering. ConfigOptions arrays are small. | Push full configOptions on every update. |
+| **Terminal management via ACP** | ACP defines `terminal/create`, `terminal/output`, etc. for client-managed terminals. FF already has its own terminal domain. Codex-acp runs terminals internally (non-PTY mode). | Do not implement ACP terminal client methods. Agents manage their own terminals. |
+| **File system operations via ACP** | ACP defines `fs/read_text_file`, `fs/write_text_file` as client capabilities. Claude-code-acp uses its own built-in MCP server. Codex handles files internally. | Declare `fs` capabilities as false in `clientCapabilities`. Agents handle files internally. |
 
 ## Feature Dependencies
 
 ```
-[In-memory store]
+[Provider launch config]
     |
-    +--requires--> [Project-scoped snapshots]
-    |
-    +--requires--> [Derived state computation]
-    |                   |
-    |                   +--uses--> deriveWorkspaceSidebarStatus()
-    |                   +--uses--> computeKanbanColumn()
-    |                   +--uses--> deriveWorkspaceFlowState()
-    |
-    +--enables--> [Single read endpoint]
-    |                 |
-    |                 +--enables--> [Full snapshot on client connect]
-    |
-    +--enables--> [Event-driven delta ingestion]
-    |                 |
-    |                 +--enables--> [WebSocket push on change]
-    |                 |                 |
-    |                 |                 +--enhances--> [Delta-only push]
-    |                 |                 +--enhances--> [Coalesced/debounced push]
-    |                 |
-    |                 +--enhances--> [Event source tagging]
-    |                 +--enhances--> [Debug metadata per workspace]
-    |
-    +--enables--> [Snapshot version counter]
-    |
-    +--enables--> [Safety-net reconciliation poll]
+    +--enables--> [ACP subprocess lifecycle]
                       |
-                      +--enhances--> [Reconciliation drift logging]
-                      +--enhances--> [Snapshot-level debug metadata]
+                      +--enables--> [ClientSideConnection wiring]
+                      |                 |
+                      |                 +--enables--> [initialize handshake]
+                      |                                   |
+                      |                                   +--enables--> [session/new]
+                      |                                   |                 |
+                      |                                   |                 +--enables--> [session/prompt]
+                      |                                   |                 |                 |
+                      |                                   |                 |                 +--enables--> [session/cancel]
+                      |                                   |                 |
+                      |                                   |                 +--enables--> [configOptions-driven controls]
+                      |                                   |                                   |
+                      |                                   |                                   +--enables--> [Frontend config option UI]
+                      |                                   |
+                      |                                   +--enables--> [Capability-gated features]
+                      |
+                      +--enables--> [session/update notification handling]
+                      |                 |
+                      |                 +--enables--> [ACP event translation to FF deltas]
+                      |                 |                 |
+                      |                 |                 +--enables--> [Tool call status rendering]
+                      |                 |                 +--enables--> [Agent thought rendering]
+                      |                 |                 +--enables--> [Plan rendering]
+                      |                 |                 +--enables--> [Slash command forwarding]
+                      |                 |
+                      |                 +--enables--> [Permission option selection]
+                      |                 |                 |
+                      |                 |                 +--enables--> [Frontend permission UI update]
+                      |                 |
+                      |                 +--enables--> [Config option update reactivity]
+                      |                 |
+                      |                 +--enables--> [Session file logging]
+                      |
+                      +--enables--> [Process management (stop/kill)]
+                      |                 |
+                      |                 +--enables--> [Health reporting]
+                      |
+                      +--enables--> [Unified runtime manager]
 
-[WebSocket push on change] --enhances--> [Warm/cold project lifecycle]
+[session/load] --requires--> [session/new] + [Capability-gated features]
+[unstable_listSessions] --requires--> [session/load]
+
+[Legacy code removal] --requires--> ALL table stakes features working
 ```
 
-### Dependency Notes
+### Critical Path
 
-- **In-memory store requires Project-scoped snapshots:** The store must be scoped per project because `getProjectSummaryState` is project-scoped and clients view one project at a time.
-- **In-memory store requires Derived state computation:** Consumers depend on derived fields (`sidebarStatus`, `kanbanColumn`, `flowPhase`). Without these, the snapshot does not replace existing endpoints.
-- **Event-driven delta ingestion enables WebSocket push:** You cannot push changes if you do not know when changes happen. Events trigger both store mutation and push.
-- **Safety-net reconciliation enables Drift logging:** Drift can only be detected during reconciliation when comparing snapshot state to DB truth.
-- **Delta-only push enhances WebSocket push:** Optimization layer on top of basic push. Not needed initially (full snapshot push is fine at current scale).
-- **Warm/cold lifecycle enhances WebSocket push:** Only relevant once push is implemented. Prevents memory waste from snapshots with no subscribers.
+The dependency chain has a clear critical path:
 
-## MVP Definition
+1. Provider launch config + ACP subprocess lifecycle (foundation)
+2. ClientSideConnection wiring + initialize handshake (protocol bootstrap)
+3. session/new + session/prompt (basic interaction)
+4. session/update notification handling + event translation (streaming content)
+5. Permission option selection + config options (interactive features)
+6. Frontend updates (permission UI, config option UI)
+7. Legacy code removal (cleanup)
 
-### Launch With (v1)
+Steps 3-5 can partially overlap because `session/update` handling is needed to verify `session/prompt` works end-to-end.
 
-Minimum viable snapshot service. Replaces polling with event-driven updates.
+## MVP Recommendation
 
-- [ ] **In-memory store** (keyed by workspace ID, scoped per project) -- the foundation
-- [ ] **Derived state computation** -- reuse existing pure functions so consumers get the same data shape
-- [ ] **Snapshot version counter** -- enables clients to detect staleness and skip no-op re-renders
-- [ ] **Single read endpoint** -- replaces `getProjectSummaryState` and `listWithKanbanState` with one call
-- [ ] **Full snapshot on client connect** -- clients get current state immediately
-- [ ] **Event-driven delta ingestion** (session activity, workspace CRUD, PR snapshot updates, ratchet state changes) -- the core event wiring
-- [ ] **Safety-net reconciliation poll** (~60s) -- catches any missed events
-- [ ] **Debug metadata per workspace** (`computedAt`, `lastEventSource`) -- cheap to add, expensive to add later
+### Phase 1: ACP Runtime Foundation
 
-### Add After Validation (v1.x)
+Build the core ACP runtime that can start a session and send/receive a single prompt. Validates the entire subprocess + ClientSideConnection + JSON-RPC pipeline end-to-end.
 
-Features to add once the core snapshot service is working and event coverage is validated.
+1. **Provider launch config** -- binary paths, env vars, pinned versions
+2. **ACP subprocess lifecycle** -- spawn, stdio wiring, exit handling
+3. **ClientSideConnection wiring** -- `toClient` callback, stream setup
+4. **initialize handshake** -- capability exchange
+5. **session/new** -- create session with cwd
+6. **session/prompt + session/cancel** -- basic interaction loop
+7. **session/update notification handling** -- receive and log all update types
+8. **Session file logging** -- debug observability from day one
 
-- [ ] **WebSocket push on change** -- add tRPC subscription or extend existing WS infrastructure; trigger: once polling is confirmed eliminated via read endpoint
-- [ ] **Coalesced/debounced push** -- add once WebSocket push is live and push storms are observed
-- [ ] **Reconciliation drift logging** -- add once reconciliation is running and drift patterns need to be understood
-- [ ] **Snapshot-level debug metadata** -- add once the admin page needs a "snapshot health" view
-- [ ] **Event source tagging** -- add alongside delta ingestion or shortly after
+**Validation:** Can start a Claude ACP session, send a prompt, receive streamed response, see it logged.
 
-### Future Consideration (v2+)
+### Phase 2: Event Translation + Permissions
 
-Features to defer until the snapshot service is proven and scale concerns emerge.
+Make the ACP events visible in the FF frontend and handle interactive flows.
 
-- [ ] **Delta-only push** -- only needed if full-snapshot push proves too chatty (unlikely at <50 workspaces per project)
-- [ ] **Warm/cold project lifecycle** -- only needed if memory usage becomes a concern (unlikely for single-user app)
-- [ ] **Subscription filtering by consumer type** -- only needed if payload size becomes a concern (unlikely at current scale)
-- [ ] **Optimistic client-side merge** -- client-side concern; partially exists already in `useWorkspaceListState`
+1. **ACP event translation to FF delta events** -- map SessionUpdate variants
+2. **Permission option selection** -- implement Client.requestPermission()
+3. **Frontend permission UI update** -- render option choices
+4. **Tool call status rendering** -- show tool lifecycle in chat
+5. **Process management** -- clean stop/kill
 
-## Feature Prioritization Matrix
+**Validation:** Can interact with Claude via ACP with permission prompts working in UI.
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| In-memory store | HIGH | LOW | P1 |
-| Project-scoped snapshots | HIGH | LOW | P1 |
-| Derived state computation | HIGH | MEDIUM | P1 |
-| Snapshot version counter | HIGH | LOW | P1 |
-| Single read endpoint | HIGH | MEDIUM | P1 |
-| Full snapshot on client connect | HIGH | LOW | P1 |
-| Event-driven delta ingestion | HIGH | HIGH | P1 |
-| Safety-net reconciliation poll | HIGH | MEDIUM | P1 |
-| Debug metadata per workspace | MEDIUM | LOW | P1 |
-| WebSocket push on change | HIGH | MEDIUM | P2 |
-| Coalesced/debounced push | MEDIUM | LOW | P2 |
-| Event source tagging | LOW | LOW | P2 |
-| Reconciliation drift logging | MEDIUM | LOW | P2 |
-| Snapshot-level debug metadata | LOW | LOW | P2 |
-| Delta-only push | MEDIUM | MEDIUM | P3 |
-| Warm/cold project lifecycle | LOW | MEDIUM | P3 |
+### Phase 3: Config Options + Second Provider
 
-**Priority key:**
-- P1: Must have for launch -- the snapshot service is not functional without these
-- P2: Should have, add when possible -- improves observability and performance
-- P3: Nice to have, future consideration -- optimizations for scale we do not yet have
+Add configuration controls and bring Codex online through the same ACP runtime.
 
-## Comparison: Current Architecture vs Snapshot Service
+1. **configOptions-driven model/mode/reasoning controls** -- parse, store, send
+2. **Frontend config option UI** -- render selectors by category
+3. **Config option update reactivity** -- handle agent-pushed changes
+4. **Codex ACP adapter integration** -- same runtime, different binary
+5. **Unified runtime manager** -- single manager for both providers
 
-| Aspect | Current (Polling) | Snapshot Service |
-|--------|-------------------|------------------|
-| Sidebar data freshness | 2s poll interval | Near-instant via event + push |
-| Kanban data freshness | 15s poll interval | Near-instant via event + push |
-| DB queries per sidebar poll | 1 query + N git operations | 0 (reads from memory) |
-| DB queries per kanban poll | 1 query + N computations | 0 (reads from memory) |
-| Server CPU per sidebar tick | O(workspaces) per tick | O(1) per event |
-| Network payload per update | Full response every 2s | Only changed workspaces |
-| State consistency across views | Each view can show different state at same moment | All views read same snapshot |
-| Debugging "why does UI show X?" | Check logs, reproduce timing | Inspect snapshot + debug metadata |
+**Validation:** Both providers work through ACP. Config options control model/reasoning for both.
+
+### Phase 4: Cleanup + Polish
+
+Remove legacy code and add differentiator features.
+
+1. **Legacy code removal** -- protocol stacks, old handlers, old tests
+2. **session/load** -- capability-gated session resume
+3. **Health reporting** -- admin surfaces for per-session processes
+4. **Capability-gated features** -- conditional UI based on agent capabilities
+
+**Defer:** `unstable_listSessions`, `unstable_resumeSession`, `unstable_forkSession`, file location tracking, terminal client methods.
+
+## ACP Protocol Reference
+
+### Lifecycle Sequence
+
+```
+Client                              Agent (claude-code-acp / codex-acp)
+  |                                    |
+  |--- initialize ------------------>  |  (version, capabilities, clientInfo)
+  |<-- InitializeResponse -----------  |  (version, capabilities, agentInfo, configOptions)
+  |                                    |
+  |--- session/new ----------------->  |  (cwd, mcpServers?)
+  |<-- NewSessionResponse -----------  |  (sessionId)
+  |                                    |
+  |--- session/prompt -------------->  |  (sessionId, content[])
+  |<== session/update ==============  |  (agent_message_chunk, tool_call, ...)
+  |<== session/request_permission ==  |  (toolCall, options[])
+  |--- RequestPermissionResponse --->  |  (outcome: selected, optionId)
+  |<== session/update ==============  |  (tool_call_update, more chunks)
+  |<-- PromptResponse ---------------  |  (stopReason: end_turn)
+  |                                    |
+  |--- session/set_config_option --->  |  (configId, value)
+  |<-- SetConfigOptionResponse ------  |  (full configOptions[])
+  |                                    |
+  |=== session/cancel =============>  |  (notification, no response)
+```
+
+### SessionUpdate Variants
+
+| Variant | Purpose | Maps to FF |
+|---------|---------|------------|
+| `agent_message_chunk` | Streamed text content | `stream_event` (content_block_start/delta) |
+| `agent_thought_chunk` | Reasoning/thinking content | `stream_event` (thinking blocks) |
+| `tool_call` | New tool invocation | `tool_use` + `stream_event` |
+| `tool_call_update` | Status/result change on tool | `tool_progress` / `tool_use_summary` |
+| `plan` | Structured plan with tasks | New delta event type |
+| `config_options_update` | Config option changes | New delta event type |
+| `current_mode_update` | Session mode changed | `status_update` |
+| `available_commands_update` | Slash commands | `slash_commands` |
+| `user_message_chunk` | History replay (session/load) | `agent_message` |
+
+### Permission Option Kinds
+
+| Kind | Meaning | UI Treatment |
+|------|---------|-------------|
+| `allow_once` | Allow this one time | Primary action button |
+| `allow_always` | Allow and remember | Secondary action button |
+| `reject_once` | Reject this one time | Reject button |
+| `reject_always` | Reject and remember | Secondary reject button |
+
+### ConfigOption Categories
+
+| Category | Controls | Current FF Equivalent |
+|----------|----------|----------------------|
+| `mode` | Session operating mode (ask, architect, code) | `sendSetPermissionMode()` |
+| `model` | Model selection | `sendSetModel()` |
+| `thought_level` | Reasoning/thinking budget | `sendSetMaxThinkingTokens()` |
+| Custom (`_prefix`) | Agent-specific options | None |
+
+### ConfigOption Structure
+
+```typescript
+interface ConfigOption {
+  id: string;            // Used in setSessionConfigOption
+  name: string;          // Human-readable label
+  description?: string;  // Tooltip text
+  category?: 'mode' | 'model' | 'thought_level' | string;
+  type: 'select';        // Only type currently supported
+  currentValue: string;  // Active selection
+  options: Array<{
+    value: string;       // ID sent back to agent
+    name: string;        // Display label
+    description?: string;
+  }>;
+}
+```
+
+## Complexity Assessment
+
+| Feature Area | Complexity | Rationale |
+|-------------|------------|-----------|
+| ACP subprocess + connection | MEDIUM | Standard child_process + JSON-RPC, but must handle backpressure, error recovery, and clean shutdown |
+| Event translation | HIGH | Many SessionUpdate variants, each needs mapping to FF delta events. Two-way contract (ACP types -> FF types). Most code volume. |
+| Permission UI change | HIGH | Fundamental UX change from boolean to multi-option. Affects chat handlers, WebSocket messages, frontend components, and pending request store. |
+| Config option system | HIGH | Replaces three separate imperative controls (model, mode, thinking) with a single declarative system. New UI components, new state management, new WebSocket events. |
+| Legacy removal | HIGH | Large surface area (~20 files). Must verify all call sites are migrated before removal. Risk of missed references. |
+| session/load | MEDIUM | Conceptually simple but must handle history replay stream and capability gating. |
+| Unified runtime manager | MEDIUM | Refactor of existing pattern. Two provider-specific managers become one generic manager. |
 
 ## Sources
 
-- Codebase analysis: `WorkspaceQueryService.getProjectSummaryState()`, `KanbanStateService`, `WorkspaceActivityService`, `ChatConnectionService`, sidebar polling at 2s, kanban polling at 15s (HIGH confidence -- direct code inspection)
-- [tRPC Subscriptions documentation](https://trpc.io/docs/server/subscriptions) -- SSE recommended, `tracked()` for reconnection (HIGH confidence -- official docs)
-- [Materialized View Pattern](https://medium.com/design-microservices-architecture-with-patterns/materialized-view-pattern-f29ea249f8f8) -- CQRS read model patterns (MEDIUM confidence)
-- [Guide to Projections and Read Models](https://event-driven.io/en/projections_and_read_models_in_event_driven_architecture/) -- idempotency, rebuild strategies (MEDIUM confidence)
-- [Cache Invalidation Strategies](https://leapcell.io/blog/cache-invalidation-strategies-time-based-vs-event-driven) -- hybrid TTL + event-driven approach (MEDIUM confidence)
-- [Synchronizing state with WebSockets and JSON Patch](https://cetra3.github.io/blog/synchronising-with-websocket/) -- delta sync patterns (MEDIUM confidence)
-- [HN discussion: WebSocket data architecture](https://news.ycombinator.com/item?id=26963959) -- idempotent vs incremental updates tradeoffs (LOW confidence -- community discussion)
-- [Snapshots in Event Sourcing](https://www.kurrent.io/blog/snapshots-in-event-sourcing) -- schema versioning for snapshots (MEDIUM confidence)
+- [Agent Client Protocol specification](https://agentclientprotocol.com/protocol/overview) -- protocol overview, session lifecycle, tool calls, permissions (HIGH confidence)
+- [ACP Initialization spec](https://agentclientprotocol.com/protocol/initialization) -- capability negotiation, version exchange (HIGH confidence)
+- [ACP Prompt Turn spec](https://agentclientprotocol.com/protocol/prompt-turn) -- prompt flow, stop reasons, cancellation (HIGH confidence)
+- [ACP Session Config Options](https://agentclientprotocol.com/protocol/session-config-options) -- config option structure, categories, set flow (HIGH confidence)
+- [ACP Tool Calls spec](https://agentclientprotocol.com/protocol/tool-calls) -- permission requests, option kinds, status lifecycle (HIGH confidence)
+- [ACP Session Modes](https://agentclientprotocol.com/protocol/session-modes) -- mode switching, deprecation toward configOptions (HIGH confidence)
+- [ACP Session Setup](https://agentclientprotocol.com/protocol/session-setup) -- session/new, session/load parameters and responses (HIGH confidence)
+- [ACP Schema](https://agentclientprotocol.com/protocol/schema) -- full type definitions (HIGH confidence)
+- [ClientSideConnection API](https://agentclientprotocol.github.io/typescript-sdk/classes/ClientSideConnection.html) -- TypeScript SDK v0.14.1 (HIGH confidence)
+- [claude-code-acp repository](https://github.com/zed-industries/claude-code-acp) -- adapter architecture, permission hierarchy, event translation (HIGH confidence)
+- [codex-acp repository](https://github.com/zed-industries/codex-acp) -- Rust adapter, terminal handling, auth methods (MEDIUM confidence)
+- [Zed blog: Claude Code via ACP](https://zed.dev/blog/claude-code-via-acp) -- adapter design rationale (MEDIUM confidence)
+- [Zed blog: Codex is Live](https://zed.dev/blog/codex-is-live-in-zed) -- Codex terminal architecture (MEDIUM confidence)
+- [DeepWiki: claude-code-acp](https://deepwiki.com/zed-industries/claude-code-acp) -- detailed architecture, type mappings, permission system (MEDIUM confidence)
+- Factory Factory codebase: `src/backend/domains/session/` -- existing protocol stack, permissions, event forwarding, runtime managers (HIGH confidence -- direct inspection)
+- GitHub issue #996 -- scope definition, acceptance criteria (HIGH confidence)
 
 ---
-*Feature research for: In-memory project snapshot service*
-*Researched: 2026-02-11*
+*Feature research for: ACP-Only Cutover (v1.2)*
+*Researched: 2026-02-13*

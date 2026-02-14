@@ -5,11 +5,6 @@ export interface FixerLogger {
   error(message: string, error: Error, meta?: Record<string, unknown>): void;
 }
 
-export interface FixerClient {
-  isRunning(): boolean;
-  sendMessage(message: string): Promise<void>;
-}
-
 export interface AcquireAndDispatchRequest {
   workspaceId: string;
   workflow: string;
@@ -136,7 +131,8 @@ export async function notifyFixWorkflowSession(params: {
   workspaceId: string;
   workflow: string;
   getActiveSession: (workspaceId: string, workflow: string) => Promise<{ id: string } | null>;
-  getClient: (sessionId: string) => FixerClient | null;
+  isSessionRunning: (sessionId: string) => boolean;
+  sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
   message: string;
   logger: FixerLogger;
   successLogMessage: string;
@@ -146,7 +142,8 @@ export async function notifyFixWorkflowSession(params: {
     workspaceId,
     workflow,
     getActiveSession,
-    getClient,
+    isSessionRunning,
+    sendSessionMessage,
     message,
     logger,
     successLogMessage,
@@ -157,12 +154,11 @@ export async function notifyFixWorkflowSession(params: {
     return false;
   }
 
-  const client = getClient(session.id);
-  if (!client?.isRunning()) {
+  if (!isSessionRunning(session.id)) {
     return false;
   }
 
-  client.sendMessage(message).catch((error) => {
+  sendSessionMessage(session.id, message).catch((error) => {
     logger.warn(failureLogMessage, { workspaceId, error });
   });
 

@@ -89,7 +89,7 @@ function createMockWorkspace(overrides: Record<string, unknown> = {}): Record<st
     ratchetEnabled: true,
     ratchetState: 'IDLE',
     runScriptStatus: 'IDLE',
-    claudeSessions: [
+    agentSessions: [
       {
         id: 'cs-1',
         name: 'Chat 1',
@@ -473,7 +473,7 @@ describe('SnapshotReconciliationService', () => {
       const ws = createMockWorkspace({
         id: 'ws-1',
         worktreePath: null,
-        claudeSessions: [
+        agentSessions: [
           {
             id: 'cs-1',
             name: 'Chat 1',
@@ -506,7 +506,7 @@ describe('SnapshotReconciliationService', () => {
       const ws = createMockWorkspace({
         id: 'ws-1',
         worktreePath: null,
-        claudeSessions: [
+        agentSessions: [
           {
             id: 'cs-1',
             name: 'Chat 1',

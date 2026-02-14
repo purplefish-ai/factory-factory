@@ -3,7 +3,9 @@ import { ToolSequenceGroup } from '@/components/agent-activity/tool-renderers';
 import { Badge } from '@/components/ui/badge';
 import type { ToolSequence } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { AcpPlanView } from './acp-plan-view';
 import { LatestThinking } from './latest-thinking';
+import type { AcpPlanState, ToolProgressInfo } from './reducer/types';
 
 interface AgentLiveDockProps {
   workspaceId: string;
@@ -13,6 +15,10 @@ interface AgentLiveDockProps {
   permissionMode: string | null;
   latestThinking: string | null;
   latestToolSequence: ToolSequence | null;
+  /** ACP agent plan state for structured task list rendering */
+  acpPlan?: AcpPlanState | null;
+  /** Tool progress map for ACP location rendering */
+  toolProgress?: Map<string, ToolProgressInfo>;
   className?: string;
 }
 
@@ -98,6 +104,8 @@ export const AgentLiveDock = memo(function AgentLiveDock({
   permissionMode,
   latestThinking,
   latestToolSequence,
+  acpPlan,
+  toolProgress,
   className,
 }: AgentLiveDockProps) {
   const skipNextPersistRef = useRef(false);
@@ -175,8 +183,9 @@ export const AgentLiveDock = memo(function AgentLiveDock({
       }
     : null;
 
+  const hasAcpPlan = acpPlan != null && acpPlan.entries.length > 0;
   const hasThinking = latestThinking !== null && (running || stopping || Boolean(permissionMode));
-  const hasContent = hasThinking || Boolean(mostRecentToolSequence);
+  const hasContent = hasThinking || Boolean(mostRecentToolSequence) || hasAcpPlan;
   const { label, tone } = getPhaseLabel({ running, starting, stopping, permissionMode });
 
   if (!(hasContent || running || starting || stopping || permissionMode)) {
@@ -212,6 +221,42 @@ export const AgentLiveDock = memo(function AgentLiveDock({
                 toolDetailsClassName="overflow-y-auto"
                 toolDetailsMaxHeight={toolDetailsMaxHeight}
               />
+              {/* ACP tool progress locations */}
+              {toolProgress && toolProgress.size > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  {[...toolProgress.entries()].map(([toolUseId, progress]) =>
+                    progress.acpLocations && progress.acpLocations.length > 0 ? (
+                      <div key={`tp-${toolUseId}`} className="flex flex-wrap gap-1">
+                        {progress.acpLocations.map((loc, i) => (
+                          <button
+                            key={`${loc.path}-${loc.line ?? ''}-${i}`}
+                            type="button"
+                            className="text-[10px] text-blue-500 hover:text-blue-600 hover:underline font-mono truncate max-w-[200px]"
+                            title={loc.line ? `${loc.path}:${loc.line}` : loc.path}
+                            onClick={() => {
+                              window.dispatchEvent(
+                                new CustomEvent('acp-open-file', {
+                                  detail: { path: loc.path, line: loc.line },
+                                })
+                              );
+                            }}
+                          >
+                            {loc.path.split('/').pop()}
+                            {loc.line ? `:${loc.line}` : ''}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {hasAcpPlan && acpPlan && (
+            <div className="space-y-1">
+              <div className="text-[10px] font-medium text-muted-foreground">Agent plan</div>
+              <AcpPlanView entries={acpPlan.entries} />
             </div>
           )}
 

@@ -2,23 +2,33 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-12)
+See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
 **Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: All complete (v1.0: 10 phases, v1.1: 8 phases)
-Status: Between milestones — v1.1 shipped, v1.2 not yet started
-Last activity: 2026-02-12 — v1.1 milestone archived
+Phase: N/A (between milestones)
+Plan: N/A
+Status: v1.2 ACP Cutover archived — ready for next milestone
+Last activity: 2026-02-14 -- Milestone v1.2 archived
+
+Progress: Between milestones
+
+## Performance Metrics
+
+**Velocity (v1.2):**
+- Total plans completed: 11
+- Average duration: 8min
+- Total execution time: 92min
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-14 decisions recorded across v1.0 and v1.1.
+20 decisions recorded across v1.0, v1.1, and v1.2.
 
 ### Pending Todos
 
@@ -30,6 +40,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-12
-Stopped at: v1.1 milestone archived, ready for next milestone
+Last session: 2026-02-14
+Stopped at: v1.2 milestone archived
 Resume file: None

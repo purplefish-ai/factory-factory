@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/components/agent-activity/tool-renderers';
 import { MarkdownRenderer } from '@/components/ui/markdown';
-import type { ClaudeMessage } from '@/lib/chat-protocol';
+import type { AgentMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,
   isThinkingContent,
@@ -23,8 +23,8 @@ import {
 // =============================================================================
 
 interface AssistantMessageRendererProps {
-  message: ClaudeMessage;
-  /** The ID of the ChatMessage containing this ClaudeMessage (for thinking completion tracking) */
+  message: AgentMessage;
+  /** The ID of the ChatMessage containing this AgentMessage (for thinking completion tracking) */
   messageId?: string;
   className?: string;
 }
@@ -98,7 +98,7 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
 // =============================================================================
 
 interface ToolCallRendererProps {
-  message: ClaudeMessage;
+  message: AgentMessage;
   className?: string;
 }
 

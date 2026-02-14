@@ -10,7 +10,7 @@
  * The state is designed to be used with useReducer for predictable updates.
  */
 
-import type { ChatMessage, WebSocketMessage } from '@/lib/chat-protocol';
+import type { ChatMessage, PermissionRequest, WebSocketMessage } from '@/lib/chat-protocol';
 import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
 import { generateMessageId } from './helpers';
 import { reduceMessageCompactSlice } from './slices/messages/compact';
@@ -27,10 +27,16 @@ import { reduceSettingsSlice } from './slices/settings';
 import { reduceSystemSlice } from './slices/system';
 import { reduceToolingSlice } from './slices/tooling';
 import { createBaseResetState, createInitialChatState } from './state';
-import type { ChatAction, ChatState } from './types';
+import type { AcpToolLocation, ChatAction, ChatState } from './types';
 
 export { createInitialChatState };
 export type {
+  AcpConfigOption,
+  AcpConfigOptionGroup,
+  AcpConfigOptionValue,
+  AcpPlanEntry,
+  AcpPlanState,
+  AcpToolLocation,
   ChatAction,
   ChatState,
   PendingMessageContent,
@@ -40,6 +46,7 @@ export type {
   RewindPreviewState,
   SessionStatus,
   TaskNotification,
+  ToolProgressInfo,
 } from './types';
 
 // =============================================================================
@@ -193,6 +200,10 @@ function handlePermissionRequestMessage(data: WebSocketMessage): ChatAction | nu
         timestamp: new Date().toISOString(),
         // Include plan content for ExitPlanMode requests
         planContent: data.planContent ?? null,
+        // Include ACP permission options for multi-option UI
+        acpOptions: (data as Record<string, unknown>).acpOptions as
+          | PermissionRequest['acpOptions']
+          | undefined,
       },
     };
   }
@@ -206,6 +217,7 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
       payload: {
         requestId: data.requestId,
         questions: data.questions,
+        ...(Array.isArray(data.acpOptions) ? { acpOptions: data.acpOptions } : {}),
         timestamp: new Date().toISOString(),
       },
     };
@@ -268,6 +280,9 @@ function handleToolProgressMessage(data: WebSocketMessage): ChatAction | null {
       toolUseId: data.tool_use_id,
       toolName: data.tool_name,
       elapsedSeconds: data.elapsed_time_seconds,
+      // Pass through ACP-specific fields from tool_progress WebSocket messages
+      acpLocations: (data as Record<string, unknown>).acpLocations as AcpToolLocation[] | undefined,
+      acpKind: (data as Record<string, unknown>).acpKind as string | undefined,
     },
   };
 }
@@ -371,9 +386,22 @@ function handleStatusUpdateMessage(data: WebSocketMessage): ChatAction {
 }
 
 function handleTaskNotificationMessage(data: WebSocketMessage): ChatAction | null {
-  return data.message
-    ? { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } }
-    : null;
+  if (!data.message) {
+    return null;
+  }
+  // Check if this is an ACP plan update (JSON message with type 'acp_plan')
+  try {
+    const parsed = JSON.parse(data.message);
+    if (parsed && parsed.type === 'acp_plan' && Array.isArray(parsed.entries)) {
+      return {
+        type: 'ACP_PLAN_UPDATE',
+        payload: { entries: parsed.entries },
+      };
+    }
+  } catch {
+    // Not JSON, treat as regular task notification
+  }
+  return { type: 'SDK_TASK_NOTIFICATION', payload: { message: data.message } };
 }
 
 function handleSlashCommandsMessage(data: WebSocketMessage): ChatAction | null {
@@ -386,28 +414,15 @@ function handleUserMessageUuidMessage(data: WebSocketMessage): ChatAction | null
   return data.uuid ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } } : null;
 }
 
-function handleRewindFilesPreviewMessage(data: WebSocketMessage): ChatAction {
-  // If dryRun is false, this is the actual rewind completion
-  if (data.dryRun === false) {
-    return { type: 'REWIND_SUCCESS', payload: { userMessageId: data.userMessageId } };
+function handleConfigOptionsUpdateMessage(data: WebSocketMessage): ChatAction | null {
+  const configOptions = (data as Record<string, unknown>).configOptions;
+  if (!Array.isArray(configOptions)) {
+    return null;
   }
-  // Otherwise, this is a preview (dry run) response
   return {
-    type: 'REWIND_PREVIEW_SUCCESS',
-    payload: {
-      affectedFiles: data.affectedFiles ?? [],
-      userMessageId: data.userMessageId,
-    },
+    type: 'CONFIG_OPTIONS_UPDATE',
+    payload: { configOptions },
   };
-}
-
-function handleRewindFilesErrorMessage(data: WebSocketMessage): ChatAction | null {
-  return data.rewindError
-    ? {
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: data.rewindError, userMessageId: data.userMessageId },
-      }
-    : null;
 }
 
 // Handler map for WebSocket message types
@@ -446,8 +461,7 @@ const messageHandlers: MessageHandlerMap = {
   workspace_notification_request: null,
   slash_commands: handleSlashCommandsMessage,
   user_message_uuid: handleUserMessageUuidMessage,
-  rewind_files_preview: handleRewindFilesPreviewMessage,
-  rewind_files_error: handleRewindFilesErrorMessage,
+  config_options_update: handleConfigOptionsUpdateMessage,
 };
 
 /**

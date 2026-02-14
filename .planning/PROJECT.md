@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A developer tool that manages workspaces with AI agents, GitHub integration, CI monitoring, and auto-fix capabilities. The backend has 6 domain modules under `src/backend/domains/` with an orchestration layer for cross-domain coordination. Project-level UI surfaces (sidebar, Kanban, workspace list) display real-time workspace state via WebSocket-pushed snapshots.
+A developer tool that manages workspaces with AI agents, GitHub integration, CI monitoring, and auto-fix capabilities. The backend has 6 domain modules under `src/backend/domains/` with an orchestration layer for cross-domain coordination. All agent sessions use the Agent Client Protocol (ACP) via subprocess-per-session model with native permission options, config controls, and event streaming. Project-level UI surfaces display real-time workspace state via WebSocket-pushed snapshots.
 
 ## Core Value
 
@@ -29,6 +29,13 @@ Every domain object has exactly one owner module, and any operation touching tha
 - ✓ Safety-net reconciliation poll (~1 min cadence) — v1.1
 - ✓ Sidebar, Kanban, and workspace list consume single snapshot query — v1.1
 - ✓ Debug metadata on each snapshot entry (version, computedAt, source) — v1.1
+- ✓ ACP runtime module in session domain (subprocess + ClientSideConnection) — v1.2
+- ✓ ACP-only provider communication for both Claude and Codex sessions — v1.2
+- ✓ ACP session lifecycle (initialize, session/new, session/prompt, session/cancel, session/load, session/set_config_option) — v1.2
+- ✓ ACP permission option selection (allow once/always, deny once/always) replacing boolean UX — v1.2
+- ✓ ACP configOptions-driven model/mode/reasoning controls — v1.2
+- ✓ Legacy protocol removal (Claude NDJSON + Codex app-server deleted, ~50 files, 17K lines) — v1.2
+- ✓ ACP-focused integration tests (1905 tests passing) — v1.2
 
 ### Active
 
@@ -42,15 +49,18 @@ Every domain object has exactly one owner module, and any operation touching tha
 - Persistent snapshot (write to DB/disk) — derived cache, rebuild on restart is fast (~100ms)
 - Distributed pub/sub (Redis, NATS) — single-process Node.js server
 - Client-side snapshot computation — would duplicate server-side business logic
+- Backward compatibility with old WebSocket message contracts — pre-release breaking change per #996
+- Legacy provider wire implementations behind flags — doubles maintenance surface
+- Remote/HTTP agent transport — FF runs agents as local subprocesses, stdio only
 
 ## Context
 
-**Current state:** The backend has 6 domain modules in `src/backend/domains/` (session, workspace, github, ratchet, terminal, run-script), each with barrel-file encapsulation. Cross-domain flows use bridge interfaces wired at startup via `src/backend/orchestration/domain-bridges.ts`. Infrastructure services (logger, config, scheduler, port, health, snapshot store, etc.) remain in `src/backend/services/`. All imports use domain barrel paths. 18 dependency-cruiser rules enforce boundaries.
+**Current state:** Shipped v1.2 with 114,651 LOC TypeScript across 6 domain modules. All agent sessions use ACP subprocess model via `@agentclientprotocol/sdk`. Session domain has subdirectories: `acp/` (runtime manager, process handles, event translation, permissions), `lifecycle/` (session service, hydrator), `chat/` (message handling, event forwarding), `data/` (file reader, JSONL persistence), `store/` (in-memory state), `logging/`.
 
-**Snapshot service:** Sidebar, Kanban, and workspace list read from a single WebSocket-pushed snapshot instead of independent polling loops. Event-driven updates flow through an orchestration-layer event collector with 150ms coalescing. A 60-second safety-net reconciliation catches missed events and computes git stats. 32 v1.1 requirements satisfied, 2064 tests passing.
+**ACP architecture:** Each session spawns an adapter subprocess (`claude-code-acp` or `codex-acp`) with stdio-based JSON-RPC. AcpEventTranslator maps 11 SessionUpdate variants to FF delta events. AcpPermissionBridge suspends SDK callbacks pending user multi-option selection. Agent-provided configOptions drive model/mode/reasoning UI selectors.
 
-**Tech stack:** TypeScript, Express, tRPC, Prisma, Vitest, Biome, dependency-cruiser
-**Test suite:** 2064 tests across 111 files
+**Tech stack:** TypeScript, Express, tRPC, Prisma, Vitest, Biome, dependency-cruiser, @agentclientprotocol/sdk
+**Test suite:** 1905 tests across 123 files
 **Architecture docs:** `AGENTS.md`, `.planning/codebase/ARCHITECTURE.md`
 
 ## Key Decisions
@@ -71,13 +81,21 @@ Every domain object has exactly one owner module, and any operation touching tha
 | State-only agent status in snapshot | Keep snapshot lightweight; details via workspace detail view | ✓ Good — simple idle/busy/waiting/needs-attention state |
 | 150ms trailing-edge debounce for coalescing | Midpoint of 100-200ms requirement, balances latency vs dedup | ✓ Good — effective burst handling |
 | Field-level timestamps for concurrent updates | Prevents reconciliation from overwriting newer event-driven data | ✓ Good — clean concurrent update safety |
+| ACP subprocess per session (not singleton) | Aligns with ACP model, isolates sessions, clean lifecycle | ✓ Good — no shared state between sessions |
+| Non-detached spawn for orphan prevention | Children receive SIGHUP on parent death | ✓ Good — no orphan processes |
+| Prompt response as turn-complete signal | Avoids event ordering inversion from notification-based detection | ✓ Good — reliable turn completion |
+| AcpEventTranslator stateless pattern | Switch on sessionUpdate discriminant, returns delta arrays | ✓ Good — easy to extend, testable |
+| Permission bridge with Promise suspension | Async SDK callbacks wait for user input via stored resolve callbacks | ✓ Good — clean async permission lifecycle |
+| Agent-authoritative config options | UI renders what agent reports, no hardcoded options | ✓ Good — adapts to different agent capabilities |
+| Unified AcpRuntimeManager (no provider-specific managers) | Single code path for all providers | ✓ Good — eliminated duplication |
+| Deprecated stubs for incremental migration | 12 SessionService stubs preserved during Phase 22 cleanup | ⚠️ Revisit — stubs should be removed when consumers migrate |
 
 ## Constraints
 
-- **Backward compatibility**: All tRPC endpoints continue to work identically — validated by 2064 tests
+- **Backward compatibility**: All tRPC endpoints continue to work identically — validated by 1905 tests
 - **Test parity**: All existing tests pass; new co-located tests added per domain
 - **AppContext**: `app-context.ts` references domain modules via barrel imports
-- **Architecture boundaries**: 18 dependency-cruiser rules, zero violations across 736 modules
+- **Architecture boundaries**: dependency-cruiser rules enforce domain boundaries, zero violations
 
 ---
-*Last updated: 2026-02-12 after v1.1 milestone*
+*Last updated: 2026-02-14 after v1.2 milestone*

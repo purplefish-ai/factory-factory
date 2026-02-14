@@ -5,14 +5,16 @@
 export {
   type ChatMessageInput,
   ChatMessageSchema,
+  type LoadSessionMessage,
   type PermissionResponseMessage,
-  type QuestionResponseMessage,
   type QueueMessageInput,
   type RemoveQueuedMessageInput,
-  type RewindFilesMessage,
+  type ResumeQueuedMessagesInput,
+  type SetConfigOptionMessage,
   type SetModelMessage,
   type SetThinkingBudgetMessage,
   type StartMessageInput,
+  type StopMessage,
   type UserInputMessage,
 } from '@/shared/websocket';
 

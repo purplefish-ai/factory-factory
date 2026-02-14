@@ -5,11 +5,7 @@ import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/comp
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { Loading } from '@/frontend/components/loading';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
-import type {
-  NewSessionProviderSelection,
-  useSessionManagement,
-  useWorkspaceData,
-} from './use-workspace-detail';
+import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceHeader } from './workspace-detail-header';
@@ -46,9 +42,8 @@ interface SessionTabsProps {
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
-  selectedProvider: NewSessionProviderSelection;
-  setSelectedProvider: Dispatch<SetStateAction<NewSessionProviderSelection>>;
-  effectiveDefaultProvider: SessionProviderValue;
+  selectedProvider: SessionProviderValue;
+  setSelectedProvider: Dispatch<SetStateAction<SessionProviderValue>>;
 }
 
 interface ArchiveDialogProps {
@@ -158,7 +153,6 @@ export function WorkspaceDetailView({
               hasWorktreePath={sessionTabs.hasWorktreePath}
               selectedProvider={sessionTabs.selectedProvider}
               setSelectedProvider={sessionTabs.setSelectedProvider}
-              effectiveDefaultProvider={sessionTabs.effectiveDefaultProvider}
             >
               <ChatContent {...chat} />
             </WorkspaceContentView>

@@ -2,12 +2,7 @@ import { SessionStatus } from '@factory-factory/core';
 import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import {
-  SessionManager,
-  sessionDataService,
-  sessionProviderResolverService,
-} from '@/backend/domains/session';
-import { workspaceDataService } from '@/backend/domains/workspace';
+import { sessionDataService, sessionProviderResolverService } from '@/backend/domains/session';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { publicProcedure, router } from './trpc';
 
@@ -93,18 +88,12 @@ export const sessionRouter = router({
         workspaceId: input.workspaceId,
         explicitProvider: input.provider,
       });
-      const workspace = await workspaceDataService.findById(input.workspaceId);
-      const claudeProjectPath =
-        provider === SessionProvider.CLAUDE && workspace?.worktreePath
-          ? SessionManager.getProjectPath(workspace.worktreePath)
-          : null;
       const session = await sessionDataService.createAgentSession({
         workspaceId: input.workspaceId,
         name: input.name,
         workflow: input.workflow,
         model: input.model,
         provider,
-        claudeProjectPath,
       });
       return session;
     }),
@@ -117,7 +106,6 @@ export const sessionRouter = router({
         name: z.string().optional(),
         workflow: z.string().optional(),
         model: z.string().optional(),
-        claudeSessionId: z.string().optional(),
       })
     )
     .mutation(({ input }) => {

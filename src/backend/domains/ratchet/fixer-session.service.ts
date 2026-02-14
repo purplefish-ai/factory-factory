@@ -1,6 +1,4 @@
 import { SessionStatus } from '@factory-factory/core';
-import { SessionProvider } from '@prisma-gen/client';
-import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
@@ -104,7 +102,7 @@ class FixerSessionService {
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
       }
 
-      const acquisitionResult = await this.acquireSessionDecision(input, workspace.worktreePath);
+      const acquisitionResult = await this.acquireSessionDecision(input);
 
       if (acquisitionResult.action === 'limit_reached') {
         return { status: 'skipped', reason: 'Workspace session limit reached' };
@@ -122,8 +120,7 @@ class FixerSessionService {
   }
 
   private async acquireSessionDecision(
-    input: AcquireAndDispatchInput,
-    worktreePath: string
+    input: AcquireAndDispatchInput
   ): Promise<SessionAcquisitionDecision> {
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId: input.workspaceId,
@@ -134,8 +131,7 @@ class FixerSessionService {
       sessionName: input.sessionName,
       maxSessions: configService.getMaxSessionsPerWorkspace(),
       provider,
-      claudeProjectPath:
-        provider === SessionProvider.CLAUDE ? getClaudeProjectPath(worktreePath) : null,
+      providerProjectPath: null,
     });
 
     if (acquisition.outcome === 'limit_reached') {
@@ -244,14 +240,13 @@ class FixerSessionService {
   }
 
   private async sendMessageSafely(sessionId: string, prompt: string): Promise<boolean> {
-    const client = this.session.getClient(sessionId);
-    if (!client) {
-      logger.warn('Could not send fixer message because no client was found', { sessionId });
+    if (!this.session.isSessionRunning(sessionId)) {
+      logger.warn('Could not send fixer message because session is not running', { sessionId });
       return false;
     }
 
     try {
-      await client.sendMessage(prompt);
+      await this.session.sendSessionMessage(sessionId, prompt);
       return true;
     } catch (error) {
       logger.warn('Failed to send fixer message', {

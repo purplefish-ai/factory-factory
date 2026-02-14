@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { HistoryMessage } from '@/shared/claude';
+import type { HistoryMessage } from '@/shared/acp-protocol';
 import {
+  type AgentMessage,
   type ChatMessage,
-  type ClaudeMessage,
   type QueuedMessage,
-  shouldPersistClaudeMessage,
+  shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
 import type { SessionStore } from './session-store.types';
 
 export function messageSort(a: ChatMessage, b: ChatMessage): number {
@@ -30,7 +30,7 @@ function buildDeterministicHistoryId(historyMsg: HistoryMessage, index: number):
   return `history-${index}-${digest}`;
 }
 
-function historyToClaudeMessage(msg: HistoryMessage): ClaudeMessage {
+function historyToClaudeMessage(msg: HistoryMessage): AgentMessage {
   const assertNever = (value: never): never => {
     throw new Error(`Unhandled history message type: ${JSON.stringify(value)}`);
   };
@@ -134,7 +134,7 @@ export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessa
     ) {
       transcript.push({
         id: messageId,
-        source: 'claude',
+        source: 'agent',
         message: historyToClaudeMessage(historyMsg),
         timestamp: historyMsg.timestamp,
         order,
@@ -166,9 +166,12 @@ export function setNextOrderFromTranscript(store: SessionStore): void {
   store.nextOrder = maxOrder + 1;
 }
 
-function hasPersistedToolUseStart(store: SessionStore, toolUseId: string): boolean {
-  return store.transcript.some((entry) => {
-    if (entry.source !== 'claude' || !entry.message || entry.message.type !== 'stream_event') {
+function findPersistedToolUseStart(
+  store: SessionStore,
+  toolUseId: string
+): ChatMessage | undefined {
+  return store.transcript.find((entry) => {
+    if (entry.source !== 'agent' || !entry.message || entry.message.type !== 'stream_event') {
       return false;
     }
     const event = entry.message.event;
@@ -181,34 +184,37 @@ function hasPersistedToolUseStart(store: SessionStore, toolUseId: string): boole
 
 export function appendClaudeEvent(
   store: SessionStore,
-  claudeMessage: ClaudeMessage,
+  claudeMessage: AgentMessage,
   options: {
     nowIso: () => string;
     onParityTrace: (data: Record<string, unknown>) => void;
   }
 ): number {
-  const order = store.nextOrder;
-  store.nextOrder += 1;
-
+  // When the ACP adapter sends progressive enrichment for the same tool call
+  // (same toolCallId, updated title/input), upsert the existing transcript
+  // entry and return its original order so the frontend updates in place
+  // instead of creating a second tool call.
   if (claudeMessage.type === 'stream_event') {
     const event = claudeMessage.event;
-    if (
-      event &&
-      event.type === 'content_block_start' &&
-      event.content_block.type === 'tool_use' &&
-      hasPersistedToolUseStart(store, event.content_block.id)
-    ) {
-      options.onParityTrace({
-        path: 'live_stream_filtered',
-        reason: 'duplicate_tool_use_start_suppressed',
-        order,
-        claudeMessage,
-      });
-      return order;
+    if (event && event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+      const existing = findPersistedToolUseStart(store, event.content_block.id);
+      if (existing) {
+        existing.message = claudeMessage;
+        options.onParityTrace({
+          path: 'live_stream_upserted',
+          reason: 'duplicate_tool_use_start_enriched',
+          order: existing.order,
+          claudeMessage,
+        });
+        return existing.order;
+      }
     }
   }
 
-  const shouldPersist = shouldPersistClaudeMessage(claudeMessage);
+  const order = store.nextOrder;
+  store.nextOrder += 1;
+
+  const shouldPersist = shouldPersistAgentMessage(claudeMessage);
   const isDuplicateResult = shouldSuppressDuplicateResultMessage(store.transcript, claudeMessage);
   if (!shouldPersist || isDuplicateResult) {
     options.onParityTrace({
@@ -222,7 +228,7 @@ export function appendClaudeEvent(
 
   const entry: ChatMessage = {
     id: `${store.sessionId}-${order}`,
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: claudeMessage.timestamp ?? options.nowIso(),
     order,
@@ -302,7 +308,7 @@ function normalizeTranscriptMessage(message: ChatMessage): Record<string, unknow
   }
 
   return {
-    source: 'claude',
+    source: 'agent',
     order: message.order,
     message: message.message,
   };

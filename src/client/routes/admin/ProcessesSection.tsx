@@ -46,7 +46,7 @@ export function ProcessesSectionSkeleton() {
           Active Processes
           <Skeleton className="h-5 w-16 ml-2" />
         </CardTitle>
-        <CardDescription>Claude and Terminal processes currently running</CardDescription>
+        <CardDescription>Agent and Terminal processes currently running</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
@@ -67,9 +67,9 @@ export interface ProcessesSectionProps {
 }
 
 export function ProcessesSection({ processes }: ProcessesSectionProps) {
-  const hasClaudeProcesses = processes?.claude && processes.claude.length > 0;
+  const hasAgentProcesses = processes?.agent && processes.agent.length > 0;
   const hasTerminalProcesses = processes?.terminal && processes.terminal.length > 0;
-  const hasNoProcesses = !(hasClaudeProcesses || hasTerminalProcesses);
+  const hasNoProcesses = !(hasAgentProcesses || hasTerminalProcesses);
   const [stoppingSessionIds, setStoppingSessionIds] = useState<Set<string>>(new Set());
 
   const { data: maxSessions } = trpc.session.getMaxSessionsPerWorkspace.useQuery();
@@ -105,10 +105,10 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
 
   // Calculate the highest session count per workspace
   const maxSessionsPerWorkspace =
-    processes?.claude && processes.claude.length > 0
+    processes?.agent && processes.agent.length > 0
       ? Math.max(
           ...Object.values(
-            processes.claude.reduce(
+            processes.agent.reduce(
               (acc, process) => {
                 acc[process.workspaceId] = (acc[process.workspaceId] || 0) + 1;
                 return acc;
@@ -127,7 +127,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
           {processes?.summary && (
             <>
               <Badge variant="secondary" className="ml-2">
-                {processes.summary.totalClaude} Claude sessions
+                {processes.summary.totalAgent} Agent sessions
               </Badge>
               {maxSessions !== undefined && maxSessionsPerWorkspace > 0 && (
                 <Badge
@@ -140,16 +140,16 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
             </>
           )}
         </CardTitle>
-        <CardDescription>Claude and Terminal processes currently running</CardDescription>
+        <CardDescription>Agent and Terminal processes currently running</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {hasNoProcesses && <p className="text-muted-foreground text-sm">No active processes</p>}
 
-        {hasClaudeProcesses && (
+        {hasAgentProcesses && (
           <div>
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
               <Bot className="w-4 h-4" />
-              Claude Processes ({processes.claude.length})
+              Agent Sessions ({processes.agent.length})
             </h4>
             <div className="border rounded-md">
               <Table>
@@ -165,7 +165,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {processes.claude.map((process) => (
+                  {processes.agent.map((process) => (
                     <TableRow key={process.sessionId}>
                       <TableCell>
                         <div className="flex flex-col">

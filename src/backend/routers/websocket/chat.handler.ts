@@ -18,8 +18,7 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import type { ClaudeClient, ConnectionInfo } from '@/backend/domains/session';
-import { sessionDataService } from '@/backend/domains/session';
+import type { ConnectionInfo } from '@/backend/domains/session';
 import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
 import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
@@ -47,20 +46,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   // Client Creation
   // ==========================================================================
 
-  function isClaudeClient(client: unknown): client is ClaudeClient {
-    if (!client || typeof client !== 'object') {
-      return false;
-    }
-    const candidate = client as Partial<ClaudeClient>;
-    return (
-      typeof candidate.sendMessage === 'function' &&
-      typeof candidate.getInitializeResponse === 'function'
-    );
-  }
-
   /**
-   * Get or create a ClaudeClient by delegating to sessionService.
-   * Sets up event forwarding for WebSocket connections.
+   * Get or create a session client by delegating to sessionService.
+   * All sessions use ACP runtime; event forwarding is handled by AcpClientHandler.
    */
   async function getOrCreateChatClient(
     dbSessionId: string,
@@ -75,28 +63,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       logger.info('[Chat WS] Getting or creating client via sessionService', { dbSessionId });
     }
 
-    // Delegate client lifecycle to sessionService
+    // Delegate client lifecycle to sessionService (all sessions use ACP runtime)
     const client = await sessionService.getOrCreateSessionClient(dbSessionId, {
       thinkingEnabled: options.thinkingEnabled,
       permissionMode: options.planModeEnabled ? 'plan' : 'bypassPermissions',
       model: options.model,
       reasoningEffort: options.reasoningEffort,
     });
-
-    // Set up event forwarding (idempotent - safe to call multiple times)
-    const session = await sessionDataService.findAgentSessionById(dbSessionId);
-    const sessionOpts = await sessionService.getSessionOptions(dbSessionId);
-    if (session?.provider === 'CLAUDE' && isClaudeClient(client)) {
-      chatEventForwarderService.setupClientEvents(
-        dbSessionId,
-        client,
-        {
-          workspaceId: session?.workspaceId ?? 'unknown',
-          workingDir: sessionOpts?.workingDir ?? '',
-        },
-        () => chatMessageHandlerService.tryDispatchNextMessage(dbSessionId)
-      );
-    }
 
     return client;
   }
@@ -111,18 +84,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     chatMessageHandlerService.setClientCreator({
       getOrCreate: getOrCreateChatClient,
     });
-
-    // Register callback for event forwarding when clients are created
-    // This ensures event forwarding is set up even for sessions started without WebSocket
-    sessionService.setOnClientCreated((sessionId, client, context) => {
-      chatEventForwarderService.setupClientEvents(sessionId, client, context, () =>
-        chatMessageHandlerService.tryDispatchNextMessage(sessionId)
-      );
-    });
-
-    sessionService.setOnCodexTerminalTurn((sessionId) =>
-      chatMessageHandlerService.tryDispatchNextMessage(sessionId)
-    );
   }
 
   // ==========================================================================

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { QueuedMessage } from '@/shared/claude';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 
 const { mockSessionDomainService, mockSessionService, mockSessionDataService } = vi.hoisted(() => ({
   mockSessionDomainService: {
+    peekNextMessage: vi.fn(),
     dequeueNext: vi.fn(),
     requeueFront: vi.fn(),
     markError: vi.fn(),
@@ -67,6 +68,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         getWorkspaceInitPolicy: () => ({ dispatchPolicy: 'allowed' }),
       },
     });
+    mockSessionDomainService.peekNextMessage.mockReturnValue(queuedMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(queuedMessage);
     mockSessionDomainService.allocateOrder.mockReturnValue(0);
     mockSessionService.setSessionThinkingBudget.mockResolvedValue(undefined);
@@ -130,7 +132,8 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1');
-    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+    // Message was never dequeued — stays in queue
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
   });
 
   it('skips thinking budget updates for non-Claude clients', async () => {
@@ -141,6 +144,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
         thinkingEnabled: true,
       },
     };
+    mockSessionDomainService.peekNextMessage.mockReturnValue(codexMessage);
     mockSessionDomainService.dequeueNext.mockReturnValue(codexMessage);
     mockSessionService.getSessionClient.mockReturnValue({ sessionId: 's1', threadId: 't1' });
 
@@ -153,7 +157,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
   });
 
-  it('requeues message when dispatch gate evaluation throws', async () => {
+  it('leaves message in queue when dispatch gate evaluation throws', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
       startCompaction: vi.fn(),
@@ -165,7 +169,9 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
-    expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+    // Message was never dequeued, so no requeueFront needed
+    expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
     expect(mockSessionDomainService.markRunning).not.toHaveBeenCalled();
   });
 });

@@ -31,3 +31,20 @@
 
 ---
 
+
+## v1.2 ACP Cutover (Shipped: 2026-02-14)
+
+**Phases completed:** 4 phases (19-22), 11 plans
+**Timeline:** 1 day (2026-02-13)
+**Files changed:** 143 (+10,556 / -17,597)
+
+**Key accomplishments:**
+- Built complete ACP runtime module (`src/backend/domains/session/acp/`) with subprocess lifecycle, ClientSideConnection wiring, streaming event pipeline, and non-detached orphan prevention
+- Implemented AcpEventTranslator mapping all 11 SessionUpdate variants to FF delta events, plus AcpPermissionBridge with multi-option permission UI (allow once/always, deny once/always)
+- Added agent-driven config options lifecycle: configOptions parsed from agent, rendered as reactive frontend selectors, set_config_option round-trip with authoritative server response
+- Unified both Claude and Codex providers under single AcpRuntimeManager — all new sessions route through ACP exclusively
+- Deleted ~50 legacy protocol files (~17K lines): claude/, codex/, providers/ directories, legacy runtime managers, and obsolete config knobs
+- 1905 tests passing, zero stale references, clean typecheck/build/lint/deps across entire codebase
+
+---
+

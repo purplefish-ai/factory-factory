@@ -101,7 +101,7 @@ export const workspaceRouter = router({
       throw new Error(`Workspace not found: ${input.id}`);
     }
     const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-    const sessionSummaries = buildWorkspaceSessionSummaries(workspace.claudeSessions ?? [], (id) =>
+    const sessionSummaries = buildWorkspaceSessionSummaries(workspace.agentSessions ?? [], (id) =>
       sessionService.getRuntimeSnapshot(id)
     );
     const isSessionWorking = hasWorkingSessionSummary(sessionSummaries);

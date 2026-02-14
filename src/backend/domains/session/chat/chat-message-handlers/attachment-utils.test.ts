@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { MessageAttachment } from '@/shared/claude';
+import type { MessageAttachment } from '@/shared/acp-protocol';
 import { resolveAttachmentContentType } from './attachment-utils';
 
 function createAttachment(overrides: Partial<MessageAttachment> = {}): MessageAttachment {

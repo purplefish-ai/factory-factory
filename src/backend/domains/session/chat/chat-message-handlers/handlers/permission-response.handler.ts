@@ -9,12 +9,21 @@ const logger = createLogger('chat-message-handlers');
 
 export function createPermissionResponseHandler(): ChatMessageHandler<PermissionResponseMessage> {
   return ({ ws, sessionId, message }) => {
-    const { requestId, allow } = message;
+    const { requestId, optionId } = message;
 
     try {
-      sessionService.respondToPermissionRequest(sessionId, requestId, allow);
+      // ACP permission response -- route through bridge
+      const resolved = sessionService.respondToAcpPermission(sessionId, requestId, optionId);
+      if (!resolved) {
+        sendWebSocketError(ws, 'No pending ACP permission request found for this request ID');
+        return;
+      }
       if (DEBUG_CHAT_WS) {
-        logger.info('[Chat WS] Responded to permission request', { sessionId, requestId, allow });
+        logger.info('[Chat WS] Responded to permission request', {
+          sessionId,
+          requestId,
+          optionId,
+        });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

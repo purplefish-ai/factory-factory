@@ -12,7 +12,7 @@ type SessionAccessor = {
     data: Partial<
       Pick<
         AgentSessionRecord,
-        'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'
+        'status' | 'providerProcessPid' | 'providerSessionId' | 'providerProjectPath'
       >
     >
   ): Promise<AgentSessionRecord>;
@@ -65,7 +65,7 @@ export class SessionRepository {
     data: Partial<
       Pick<
         AgentSessionRecord,
-        'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'
+        'status' | 'providerProcessPid' | 'providerSessionId' | 'providerProjectPath'
       >
     >
   ): Promise<AgentSessionRecord> {
@@ -77,20 +77,20 @@ export class SessionRepository {
     data: Partial<
       Pick<
         AgentSessionRecord,
-        'status' | 'claudeProcessPid' | 'claudeSessionId' | 'claudeProjectPath'
+        'status' | 'providerProcessPid' | 'providerSessionId' | 'providerProjectPath'
       >
     >
   ): Promise<AgentSessionRecord> {
-    if (Object.hasOwn(data, 'claudeSessionId')) {
+    if (Object.hasOwn(data, 'providerSessionId')) {
       const current = await this.sessions.findById(sessionId);
       if (!current) {
         throw new Error(`Session not found: ${sessionId}`);
       }
-      const currentSessionId = current.claudeSessionId;
-      const nextSessionId = data.claudeSessionId ?? null;
+      const currentSessionId = current.providerSessionId;
+      const nextSessionId = data.providerSessionId ?? null;
       if (currentSessionId && nextSessionId !== currentSessionId) {
         throw new Error(
-          `claudeSessionId is immutable for session ${sessionId}: ${currentSessionId} -> ${String(nextSessionId)}`
+          `providerSessionId is immutable for session ${sessionId}: ${currentSessionId} -> ${String(nextSessionId)}`
         );
       }
     }

@@ -1,6 +1,5 @@
 import { SessionStatus } from '@factory-factory/core';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
-import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
@@ -149,26 +148,7 @@ class ReconciliationService {
       return;
     }
 
-    // Find Claude sessions that claim to be running
-    const sessionsWithPid = await agentSessionAccessor.findWithPid();
-
-    for (const session of sessionsWithPid) {
-      if (session.claudeProcessPid) {
-        const isRunning = this.isProcessRunning(session.claudeProcessPid);
-        if (!isRunning) {
-          // Process is not actually running, update the database
-          await agentSessionAccessor.update(session.id, {
-            status: SessionStatus.IDLE,
-            claudeProcessPid: null,
-          });
-          logger.info('Marked orphaned session as idle', {
-            sessionId: session.id,
-          });
-        }
-      }
-    }
-
-    // Same for terminal sessions
+    // Terminal sessions are still PID-tracked and may become orphaned.
     const terminalSessionsWithPid = await terminalSessionAccessor.findWithPid();
 
     for (const session of terminalSessionsWithPid) {

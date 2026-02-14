@@ -18,11 +18,10 @@ import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { DEFAULT_THINKING_BUDGET } from '@/lib/chat-protocol';
 import type {
   PermissionResponseMessage,
-  QuestionResponseMessage,
   QueueMessageInput,
   RemoveQueuedMessageInput,
   ResumeQueuedMessagesInput,
-  RewindFilesMessage,
+  SetConfigOptionMessage,
   SetModelMessage,
   StopMessage,
 } from '@/shared/websocket';
@@ -36,7 +35,11 @@ import type { ChatAction, ChatState } from './reducer';
 
 type QueueMessageRequest = QueueMessageInput;
 type RemoveQueuedMessageRequest = RemoveQueuedMessageInput;
-type RewindFilesRequest = RewindFilesMessage;
+type AcpPermissionOption = {
+  optionId: string;
+  name: string;
+  kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+};
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
@@ -59,13 +62,14 @@ export interface UseChatActionsReturn {
   sendMessage: (text: string) => void;
   stopChat: () => void;
   clearChat: () => void;
-  approvePermission: (requestId: string, allow: boolean) => void;
+  approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
   updateSettings: (settings: Partial<ChatSettings>) => void;
   removeQueuedMessage: (id: string) => void;
   resumeQueuedMessages: () => void;
   dismissTaskNotification: (id: string) => void;
   clearTaskNotifications: () => void;
+  setConfigOption: (configId: string, value: string) => void;
   startRewindPreview: (userMessageUuid: string) => void;
   confirmRewind: () => void;
   cancelRewind: () => void;
@@ -118,6 +122,63 @@ function maybeSendModelUpdate(
   }
 
   send(modelMessage);
+}
+
+function findOptionIdByDecision(
+  options: AcpPermissionOption[] | undefined,
+  allow: boolean
+): string | undefined {
+  if (!options || options.length === 0) {
+    return undefined;
+  }
+
+  const preferred = options.find((option) =>
+    allow ? option.kind.startsWith('allow') : option.kind.startsWith('reject')
+  );
+  return preferred?.optionId ?? options[0]?.optionId;
+}
+
+function getLegacyPermissionOptionId(toolName: string, allow: boolean): string {
+  // Claude ExitPlanMode uses "default" (approve) and "plan" (reject).
+  if (toolName === 'ExitPlanMode') {
+    return allow ? 'default' : 'plan';
+  }
+  // Generic ACP tools conventionally use "allow" / "reject".
+  return allow ? 'allow' : 'reject';
+}
+
+function flattenAnswerValues(answers: Record<string, string | string[]>): string[] {
+  const values: string[] = [];
+  for (const value of Object.values(answers)) {
+    if (Array.isArray(value)) {
+      values.push(...value);
+      continue;
+    }
+    if (value) {
+      values.push(value);
+    }
+  }
+  return values;
+}
+
+function findQuestionOptionId(
+  options: AcpPermissionOption[] | undefined,
+  answers: Record<string, string | string[]>
+): string | undefined {
+  if (!options || options.length === 0) {
+    return undefined;
+  }
+
+  const selected = new Set(flattenAnswerValues(answers).map((v) => v.trim().toLowerCase()));
+  if (selected.size > 0) {
+    const matched = options.find((option) => selected.has(option.name.trim().toLowerCase()));
+    if (matched) {
+      return matched.optionId;
+    }
+  }
+
+  // Fallback to first allow option (or first option if no allow kinds).
+  return findOptionIdByDecision(options, true);
 }
 
 // =============================================================================
@@ -204,13 +265,21 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   }, [send, dispatch, stateRef]);
 
   const approvePermission = useCallback(
-    (requestId: string, allow: boolean) => {
+    (requestId: string, allow: boolean, optionId?: string) => {
       // Validate requestId matches pending permission to prevent stale responses
       const { pendingRequest } = stateRef.current;
       if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const msg: PermissionResponseMessage = { type: 'permission_response', requestId, allow };
+      const resolvedOptionId =
+        optionId ??
+        findOptionIdByDecision(pendingRequest.request.acpOptions, allow) ??
+        getLegacyPermissionOptionId(pendingRequest.request.toolName, allow);
+      const msg: PermissionResponseMessage = {
+        type: 'permission_response',
+        requestId,
+        optionId: resolvedOptionId,
+      };
       send(msg);
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
     },
@@ -224,7 +293,12 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const msg: QuestionResponseMessage = { type: 'question_response', requestId, answers };
+      const optionId = findQuestionOptionId(pendingRequest.request.acpOptions, answers) ?? 'allow';
+      const msg: PermissionResponseMessage = {
+        type: 'permission_response',
+        requestId,
+        optionId,
+      };
       send(msg);
       dispatch({ type: 'QUESTION_RESPONSE' });
     },
@@ -275,6 +349,18 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     dispatch({ type: 'CLEAR_TASK_NOTIFICATIONS' });
   }, [dispatch]);
 
+  const setConfigOption = useCallback(
+    (configId: string, value: string) => {
+      const msg: SetConfigOptionMessage = {
+        type: 'set_config_option',
+        configId,
+        value,
+      };
+      send(msg);
+    },
+    [send]
+  );
+
   // Rewind files actions
   const rewindEnabled = stateRef.current.chatCapabilities.rewind.enabled;
   const startRewindPreview = useCallback(
@@ -298,37 +384,12 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         payload: { userMessageId: userMessageUuid, requestNonce },
       });
 
-      // Send dry run request to get affected files
-      const msg: RewindFilesRequest = {
-        type: 'rewind_files',
-        userMessageId: userMessageUuid,
-        dryRun: true,
-      };
-      const sent = send(msg);
-
-      // Check if message was sent successfully
-      if (!sent) {
-        dispatch({
-          type: 'REWIND_PREVIEW_ERROR',
-          payload: {
-            error: 'Not connected to server. Please check your connection and try again.',
-            requestNonce,
-          },
-        });
-        return;
-      }
-
-      // Set timeout to handle case where response never arrives
-      // Capture nonce in closure to ensure late timeouts are filtered correctly
-      rewindTimeoutRef.current = setTimeout(() => {
-        dispatch({
-          type: 'REWIND_PREVIEW_ERROR',
-          payload: { error: 'Request timed out. Please try again.', requestNonce },
-        });
-        rewindTimeoutRef.current = null;
-      }, 30_000); // 30 second timeout
+      dispatch({
+        type: 'REWIND_PREVIEW_ERROR',
+        payload: { error: 'Rewind is not supported in ACP runtime.', requestNonce },
+      });
     },
-    [send, dispatch, rewindEnabled, rewindTimeoutRef]
+    [dispatch, rewindEnabled, rewindTimeoutRef]
   );
 
   const confirmRewind = useCallback(() => {
@@ -350,36 +411,14 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     // Mark as executing (keep dialog open with loading state for actual rewind)
     dispatch({ type: 'REWIND_EXECUTING' });
 
-    // Send actual rewind request (not dry run)
-    const msg: RewindFilesRequest = {
-      type: 'rewind_files',
-      userMessageId: rewindPreview.userMessageId,
-      dryRun: false,
-    };
-    const sent = send(msg);
-
-    if (!sent) {
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: {
-          error: 'Not connected to server. Please check your connection and try again.',
-          requestNonce: rewindPreview.requestNonce,
-        },
-      });
-      return;
-    }
-
-    // Set timeout to handle case where response never arrives
-    // Capture nonce in closure to ensure late timeouts are filtered correctly
-    const nonce = rewindPreview.requestNonce;
-    rewindTimeoutRef.current = setTimeout(() => {
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: 'Request timed out. Please try again.', requestNonce: nonce },
-      });
-      rewindTimeoutRef.current = null;
-    }, 30_000); // 30 second timeout
-  }, [send, dispatch, rewindEnabled, stateRef, rewindTimeoutRef]);
+    dispatch({
+      type: 'REWIND_PREVIEW_ERROR',
+      payload: {
+        error: 'Rewind is not supported in ACP runtime.',
+        requestNonce: rewindPreview.requestNonce,
+      },
+    });
+  }, [dispatch, rewindEnabled, stateRef, rewindTimeoutRef]);
 
   const cancelRewind = useCallback(() => {
     // Clear the timeout when canceling
@@ -409,6 +448,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     resumeQueuedMessages,
     dismissTaskNotification,
     clearTaskNotifications,
+    setConfigOption,
     startRewindPreview,
     confirmRewind,
     cancelRewind,

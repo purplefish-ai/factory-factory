@@ -34,9 +34,6 @@ export const ChatSettingsSchema = z.object({
 // ============================================================================
 
 export const ChatMessageSchema = z.discriminatedUnion('type', [
-  // List sessions - no session required
-  z.object({ type: z.literal('list_sessions') }),
-
   // Start a session
   z.object({
     type: z.literal('start'),
@@ -78,18 +75,12 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     loadRequestId: z.string().min(1).optional(),
   }),
 
-  // Answer a question from AskUserQuestion tool
-  z.object({
-    type: z.literal('question_response'),
-    requestId: z.string().min(1),
-    answers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
-  }),
-
   // Respond to a permission request
   z.object({
     type: z.literal('permission_response'),
     requestId: z.string().min(1),
-    allow: z.boolean(),
+    /** ACP permission option ID selected by the user */
+    optionId: z.string().min(1),
   }),
 
   // Set the model
@@ -105,16 +96,16 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     max_tokens: z.number().nullable(),
   }),
 
-  // Rewind files to a previous state
-  z.object({
-    type: z.literal('rewind_files'),
-    userMessageId: z.string().min(1),
-    dryRun: z.boolean().optional(),
-  }),
-
   // Resume dispatching queued messages after a manual pause.
   z.object({
     type: z.literal('resume_queued_messages'),
+  }),
+
+  // Set an ACP config option (model, mode, thought level, etc.)
+  z.object({
+    type: z.literal('set_config_option'),
+    configId: z.string().min(1),
+    value: z.string().min(1),
   }),
 ]);
 
@@ -125,19 +116,17 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
 export type ChatMessageInput = z.infer<typeof ChatMessageSchema>;
 
 // Narrow types for specific message types
-export type ListSessionsMessage = Extract<ChatMessageInput, { type: 'list_sessions' }>;
 export type StartMessageInput = Extract<ChatMessageInput, { type: 'start' }>;
 export type UserInputMessage = Extract<ChatMessageInput, { type: 'user_input' }>;
 export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message' }>;
 export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove_queued_message' }>;
 export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;
 export type LoadSessionMessage = Extract<ChatMessageInput, { type: 'load_session' }>;
-export type QuestionResponseMessage = Extract<ChatMessageInput, { type: 'question_response' }>;
 export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permission_response' }>;
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
 export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;
-export type RewindFilesMessage = Extract<ChatMessageInput, { type: 'rewind_files' }>;
 export type ResumeQueuedMessagesInput = Extract<
   ChatMessageInput,
   { type: 'resume_queued_messages' }
 >;
+export type SetConfigOptionMessage = Extract<ChatMessageInput, { type: 'set_config_option' }>;

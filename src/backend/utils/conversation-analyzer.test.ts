@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { HistoryMessage } from '@/shared/claude';
+import type { HistoryMessage } from '@/shared/acp-protocol';
 import { countUserMessages, extractKeyTopics } from './conversation-analyzer';
 
 describe('conversation-analyzer', () => {

@@ -7,11 +7,11 @@
  */
 
 import type {
+  AgentMessage,
   AgentMetadata,
+  AgentStreamEvent,
   AskUserQuestion,
   ChatMessage,
-  ClaudeMessage,
-  ClaudeStreamEvent,
   PermissionRequest,
   SessionInfo,
   TokenStats,
@@ -168,7 +168,7 @@ export function createUserMessage(text: string, order?: number): ChatMessage {
  * Creates an assistant chat message with text content.
  */
 export function createAssistantMessage(text: string, order?: number): ChatMessage {
-  const claudeMessage: ClaudeMessage = {
+  const claudeMessage: AgentMessage = {
     type: 'assistant',
     timestamp: generateTimestamp(),
     message: {
@@ -179,7 +179,7 @@ export function createAssistantMessage(text: string, order?: number): ChatMessag
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -202,13 +202,13 @@ export function createToolUseMessage(
     input,
   };
 
-  const event: ClaudeStreamEvent = {
+  const event: AgentStreamEvent = {
     type: 'content_block_start',
     index: 0,
     content_block: toolUseContent,
   };
 
-  const claudeMessage: ClaudeMessage = {
+  const claudeMessage: AgentMessage = {
     type: 'stream_event',
     timestamp: generateTimestamp(),
     event,
@@ -216,7 +216,7 @@ export function createToolUseMessage(
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -239,13 +239,13 @@ export function createToolResultMessage(
     is_error: isError,
   };
 
-  const event: ClaudeStreamEvent = {
+  const event: AgentStreamEvent = {
     type: 'content_block_start',
     index: 0,
     content_block: toolResultContent,
   };
 
-  const claudeMessage: ClaudeMessage = {
+  const claudeMessage: AgentMessage = {
     type: 'stream_event',
     timestamp: generateTimestamp(),
     event,
@@ -253,7 +253,7 @@ export function createToolResultMessage(
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -263,8 +263,8 @@ export function createToolResultMessage(
 /**
  * Creates a stream event chat message.
  */
-export function createStreamEventMessage(event: ClaudeStreamEvent, order?: number): ChatMessage {
-  const claudeMessage: ClaudeMessage = {
+export function createStreamEventMessage(event: AgentStreamEvent, order?: number): ChatMessage {
+  const claudeMessage: AgentMessage = {
     type: 'stream_event',
     timestamp: generateTimestamp(),
     event,
@@ -272,7 +272,7 @@ export function createStreamEventMessage(event: ClaudeStreamEvent, order?: numbe
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -285,7 +285,7 @@ export function createStreamEventMessage(event: ClaudeStreamEvent, order?: numbe
 export function createResultMessage(stats: Partial<TokenStats> = {}, order?: number): ChatMessage {
   const fullStats = createTokenStats(stats);
 
-  const claudeMessage: ClaudeMessage = {
+  const claudeMessage: AgentMessage = {
     type: 'result',
     timestamp: generateTimestamp(),
     usage: {
@@ -299,7 +299,7 @@ export function createResultMessage(stats: Partial<TokenStats> = {}, order?: num
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -310,7 +310,7 @@ export function createResultMessage(stats: Partial<TokenStats> = {}, order?: num
  * Creates an error chat message.
  */
 export function createErrorMessage(error: string, order?: number): ChatMessage {
-  const claudeMessage: ClaudeMessage = {
+  const claudeMessage: AgentMessage = {
     type: 'error',
     timestamp: generateTimestamp(),
     error,
@@ -319,7 +319,7 @@ export function createErrorMessage(error: string, order?: number): ChatMessage {
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -330,7 +330,7 @@ export function createErrorMessage(error: string, order?: number): ChatMessage {
  * Creates a thinking content chat message.
  */
 export function createThinkingMessage(thinking: string, order?: number): ChatMessage {
-  const event: ClaudeStreamEvent = {
+  const event: AgentStreamEvent = {
     type: 'content_block_start',
     index: 0,
     content_block: {
@@ -339,7 +339,7 @@ export function createThinkingMessage(thinking: string, order?: number): ChatMes
     },
   };
 
-  const claudeMessage: ClaudeMessage = {
+  const claudeMessage: AgentMessage = {
     type: 'stream_event',
     timestamp: generateTimestamp(),
     event,
@@ -347,7 +347,7 @@ export function createThinkingMessage(thinking: string, order?: number): ChatMes
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -362,7 +362,7 @@ export function createSystemMessage(
   tools?: ToolDefinition[],
   order?: number
 ): ChatMessage {
-  const claudeMessage: ClaudeMessage = {
+  const claudeMessage: AgentMessage = {
     type: 'system',
     timestamp: generateTimestamp(),
     subtype: 'init',
@@ -374,7 +374,7 @@ export function createSystemMessage(
 
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: generateTimestamp(),
     order: order ?? fixtureOrderCounter++,
@@ -515,7 +515,7 @@ export function createAgentMetadata(overrides: Partial<AgentMetadata> = {}): Age
 export function createSessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
   const now = new Date();
   return {
-    claudeSessionId: overrides.claudeSessionId ?? `session-${Date.now()}`,
+    providerSessionId: overrides.providerSessionId ?? `session-${Date.now()}`,
     createdAt: overrides.createdAt ?? now.toISOString(),
     modifiedAt: overrides.modifiedAt ?? now.toISOString(),
     sizeBytes: overrides.sizeBytes ?? 15_360,

@@ -93,11 +93,11 @@ interface UseSessionManagementOptions {
   sendMessage: (text: string) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
-  setSelectedDbSessionId: React.Dispatch<React.SetStateAction<string | null>>;
+  setSelectedDbSessionId: (id: string | null) => void;
   /** Selected model from chat settings */
   selectedModel: string;
   /** Provider selection for newly created sessions */
-  selectedProvider: NewSessionProviderSelection;
+  selectedProvider: SessionProviderValue;
   /** Whether the session is ready to receive messages (session_loaded received) */
   isSessionReady: boolean;
 }
@@ -276,13 +276,15 @@ export function useSessionManagement({
 
   const handleNewChat = useCallback(() => {
     const name = getNextChatName();
-    const provider = resolveExplicitSessionProvider(selectedProvider);
+    const provider = selectedProvider;
+    // Only pass the Claude model selection for Claude sessions; Codex uses its own model defaults.
+    const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
 
     createSession.mutate(
       {
         workspaceId,
         workflow: 'followup',
-        model: selectedModel || undefined,
+        model,
         name,
         provider,
       },
@@ -306,9 +308,10 @@ export function useSessionManagement({
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
-      const provider = resolveExplicitSessionProvider(selectedProvider);
+      const provider = selectedProvider;
+      const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
       createSession.mutate(
-        { workspaceId, workflow: 'followup', name, model: selectedModel || undefined, provider },
+        { workspaceId, workflow: 'followup', name, model, provider },
         {
           onSuccess: (session) => {
             // Store the pending prompt to be sent once the session state settles

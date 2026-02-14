@@ -13,8 +13,6 @@ describe('createChatUpgradeHandler', () => {
       handleMessage: vi.fn(),
     };
     const sessionService = {
-      setOnClientCreated: vi.fn(),
-      setOnCodexTerminalTurn: vi.fn(),
       getOrCreateClient: vi.fn(),
       getOrCreateSessionClient: vi.fn(),
       getSessionOptions: vi.fn(),
@@ -67,7 +65,5 @@ describe('createChatUpgradeHandler', () => {
     expect(socket.destroy).toHaveBeenCalledTimes(1);
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(chatMessageHandlerService.setClientCreator).toHaveBeenCalledTimes(1);
-    expect(sessionService.setOnClientCreated).toHaveBeenCalledTimes(1);
-    expect(sessionService.setOnCodexTerminalTurn).toHaveBeenCalledTimes(1);
   });
 });

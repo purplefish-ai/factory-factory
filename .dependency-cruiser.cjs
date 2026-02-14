@@ -100,11 +100,11 @@ module.exports = {
       to: { path: '^src/backend' },
     },
     {
-      name: 'no-ui-importing-provider-specific-shared-contracts',
+      name: 'no-importing-legacy-shared-claude-protocol',
       severity: 'error',
       comment:
-        'UI layers must consume provider-neutral shared contracts. Provider-specific shared protocols are backend-only.',
-      from: { path: '^src/(client|components|frontend)' },
+        'Import shared protocol contracts from src/shared/acp-protocol, not src/shared/claude.',
+      from: { path: '^src/' },
       to: { path: '^src/shared/claude/' },
     },
     {
@@ -221,17 +221,6 @@ module.exports = {
       to: { path: '^src/(backend|client|frontend|components)' },
     },
     {
-      name: 'no-shared-importing-provider-specific-shared-contracts',
-      severity: 'error',
-      comment:
-        'Provider-specific shared protocol trees should not be imported by provider-neutral shared contracts.',
-      from: {
-        path: '^src/shared',
-        pathNot: '^src/shared/claude/',
-      },
-      to: { path: '^src/shared/claude/' },
-    },
-    {
       name: 'no-backend-importing-ui-layers',
       severity: 'error',
       comment: 'Backend domain/application layers should not depend on UI modules',
@@ -254,48 +243,28 @@ module.exports = {
       name: 'session-runtime-import-boundary',
       severity: 'error',
       comment:
-        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session providers/lifecycle entry points.',
+        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session acp/lifecycle entry points.',
       from: {
         path: '^src/backend/domains/session/',
         pathNot:
-          '^src/backend/domains/session/(runtime/|providers/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
+          '^src/backend/domains/session/(acp/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/domains/session/runtime/' },
     },
     {
-      name: 'session-provider-import-boundary',
+      name: 'acp-no-external-imports',
       severity: 'error',
       comment:
-        'Session provider adapters are internal orchestration seams and should be consumed only from lifecycle/chat forwarding entry points.',
+        'ACP internals must stay isolated from app code; only ACP internals and the logger service are allowed.',
       from: {
-        path: '^src/backend/domains/session/',
+        path: '^src/backend/domains/session/acp/',
+        pathNot: '^src/backend/domains/session/acp/.*\\.test\\.ts$',
+      },
+      to: {
+        path: '^src/',
         pathNot:
-          '^src/backend/domains/session/(providers/|lifecycle/)|^src/backend/domains/session/chat/chat-event-forwarder\\.service\\.ts$|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
+          '^src/backend/domains/session/acp/|^src/backend/domains/session/acp$|^src/backend/services/logger.service.ts$',
       },
-      to: { path: '^src/backend/domains/session/providers/' },
-    },
-    {
-      name: 'session-codex-import-boundary',
-      severity: 'error',
-      comment:
-        'Codex runtime internals are encapsulated under session codex/provider/runtime seams and should not be imported directly by unrelated session modules.',
-      from: {
-        path: '^src/backend/domains/session/',
-        pathNot:
-          '^src/backend/domains/session/(codex/|providers/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/domains/session/codex/' },
-    },
-    {
-      name: 'non-session-modules-cannot-import-provider-runtime-internals',
-      severity: 'error',
-      comment:
-        'Provider runtime internals should remain inside the session domain. Other backend modules must use session-domain contracts.',
-      from: {
-        path: '^src/backend',
-        pathNot: '^src/backend/domains/session/|^src/backend/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/domains/session/(claude|codex)/' },
     },
     {
       name: 'no-cross-domain-imports',

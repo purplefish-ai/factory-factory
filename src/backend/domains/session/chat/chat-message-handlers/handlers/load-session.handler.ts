@@ -1,76 +1,12 @@
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
-import { SessionManager } from '@/backend/domains/session/claude/session';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { buildHydrateKey } from '@/backend/domains/session/store/session-hydrate-key';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
+import { createLogger } from '@/backend/services/logger.service';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
-type PersistedSession = NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>;
-
-function shouldSwitchToWorkspaceProjectPath(
-  session: PersistedSession,
-  workspaceProjectPath: string | null
-): boolean {
-  return Boolean(
-    session.claudeSessionId &&
-      session.claudeProjectPath &&
-      workspaceProjectPath &&
-      session.claudeProjectPath !== workspaceProjectPath &&
-      !SessionManager.hasSessionFileFromProjectPath(
-        session.claudeSessionId,
-        session.claudeProjectPath
-      ) &&
-      SessionManager.hasSessionFileFromProjectPath(session.claudeSessionId, workspaceProjectPath)
-  );
-}
-
-function resolveClaudeHydrationContext(session: PersistedSession): {
-  claudeProjectPath: string | null;
-  claudeSessionId: string | null;
-} {
-  if (session.provider !== 'CLAUDE') {
-    return {
-      claudeProjectPath: null,
-      claudeSessionId: null,
-    };
-  }
-
-  const workspaceProjectPath = session.workspace.worktreePath
-    ? SessionManager.getProjectPath(session.workspace.worktreePath)
-    : null;
-
-  const claudeProjectPath = shouldSwitchToWorkspaceProjectPath(session, workspaceProjectPath)
-    ? workspaceProjectPath
-    : (session.claudeProjectPath ?? workspaceProjectPath);
-
-  return {
-    claudeProjectPath,
-    claudeSessionId: session.claudeSessionId,
-  };
-}
-
-async function hydrateCodexTranscriptIfAvailable(
-  sessionId: string,
-  provider: PersistedSession['provider']
-): Promise<void> {
-  if (provider !== 'CODEX') {
-    return;
-  }
-
-  const codexTranscript = await sessionService.tryHydrateCodexTranscript(sessionId);
-  if (!codexTranscript) {
-    return;
-  }
-
-  sessionDomainService.setHydratedTranscript(sessionId, codexTranscript, {
-    hydratedKey: buildHydrateKey({
-      claudeSessionId: null,
-      claudeProjectPath: null,
-    }),
-  });
-}
+const logger = createLogger('load-session-handler');
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
@@ -80,23 +16,49 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       return;
     }
 
-    const { claudeProjectPath, claudeSessionId } = resolveClaudeHydrationContext(dbSession);
-    await hydrateCodexTranscriptIfAvailable(sessionId, dbSession.provider);
-
     const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
       sessionId,
-      claudeProjectPath,
-      claudeSessionId,
       sessionRuntime,
       loadRequestId: message.loadRequestId,
     });
+
+    const shouldEagerInit =
+      Boolean(dbSession.workspace.worktreePath) &&
+      (dbSession.status === 'RUNNING' || sessionRuntime.processState === 'alive');
+
+    if (shouldEagerInit) {
+      try {
+        // Active runtime sessions should have live provider state negotiated
+        // immediately so model/mode capabilities are accurate in the chat bar.
+        await sessionService.getOrCreateSessionClientFromRecord(dbSession);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        ws.send(
+          JSON.stringify({ type: 'error', message: `Failed to initialize session: ${detail}` })
+        );
+      }
+    } else {
+      logger.debug('Skipping eager ACP runtime init for inactive session', {
+        sessionId,
+        status: dbSession.status,
+        processState: sessionRuntime.processState,
+        hasWorktreePath: Boolean(dbSession.workspace.worktreePath),
+      });
+    }
 
     const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);
     sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',
       capabilities: chatCapabilities,
     });
+    const configOptions = sessionService.getSessionConfigOptions(sessionId);
+    if (configOptions.length > 0) {
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions,
+      });
+    }
 
     await sendCachedSlashCommandsIfNeeded(sessionId, dbSession.provider);
   };
