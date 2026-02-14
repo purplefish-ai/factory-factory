@@ -161,6 +161,22 @@ class SessionService {
    * accumulate text chunks, and forward non-message deltas.
    */
   private handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
+    // When configOptions change mid-session, sync the handle and re-emit capabilities
+    if (delta.type === 'config_options_update') {
+      const acpHandle = acpRuntimeManager.getClient(sid);
+      if (acpHandle) {
+        const { configOptions } = delta as { configOptions: unknown[] };
+        acpHandle.configOptions =
+          configOptions as import('@agentclientprotocol/sdk').SessionConfigOption[];
+        sessionDomainService.emitDelta(sid, delta);
+        sessionDomainService.emitDelta(sid, {
+          type: 'chat_capabilities',
+          capabilities: this.buildAcpChatBarCapabilities(acpHandle),
+        });
+        return;
+      }
+    }
+
     if (delta.type !== 'agent_message') {
       sessionDomainService.emitDelta(sid, delta);
       return;
@@ -276,6 +292,14 @@ class SessionService {
         configOptions: handle.configOptions,
       } as SessionDeltaEvent);
     }
+
+    // Re-emit chat_capabilities now that the ACP handle exists.
+    // The initial load_session fires before the handle is ready, so the
+    // frontend would otherwise be stuck with EMPTY capabilities.
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'chat_capabilities',
+      capabilities: this.buildAcpChatBarCapabilities(handle),
+    });
 
     return handle;
   }
