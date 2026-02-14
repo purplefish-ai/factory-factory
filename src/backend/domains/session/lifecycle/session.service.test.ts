@@ -87,7 +87,7 @@ describe('SessionService', () => {
       workflow: 'default',
       model: 'sonnet',
       provider: 'CLAUDE',
-      claudeSessionId: null,
+      providerSessionId: null,
     });
 
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
@@ -163,7 +163,7 @@ describe('SessionService', () => {
       workflow: 'default',
       model: 'sonnet',
       provider: 'CLAUDE',
-      claudeSessionId: null,
+      providerSessionId: null,
     });
 
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
@@ -307,7 +307,7 @@ describe('SessionService', () => {
       workflow: 'default',
       model: 'sonnet',
       provider: 'CLAUDE',
-      claudeSessionId: null,
+      providerSessionId: null,
     } as unknown as NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>;
 
     const workspace = {
@@ -362,7 +362,7 @@ describe('SessionService', () => {
       status: SessionStatus.IDLE,
       workflow: 'default',
       model: 'sonnet',
-      claudeSessionId: null,
+      providerSessionId: null,
     });
 
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
@@ -383,7 +383,7 @@ describe('SessionService', () => {
       workflow: 'ratchet',
       model: 'sonnet',
       provider: 'CLAUDE',
-      claudeSessionId: null,
+      providerSessionId: null,
     });
 
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
@@ -453,7 +453,7 @@ describe('SessionService', () => {
       workflow: 'default',
       model: 'sonnet',
       provider: 'CLAUDE',
-      claudeSessionId: null,
+      providerSessionId: null,
     });
 
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
@@ -511,7 +511,7 @@ describe('SessionService', () => {
       workflow: 'default',
       model: 'sonnet',
       provider: 'CLAUDE',
-      claudeSessionId: null,
+      providerSessionId: null,
     });
 
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
@@ -562,7 +562,7 @@ describe('SessionService', () => {
       workflow: 'default',
       model: 'sonnet',
       provider: 'CLAUDE',
-      claudeSessionId: null,
+      providerSessionId: null,
     });
 
     const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({

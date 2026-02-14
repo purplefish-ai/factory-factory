@@ -13,7 +13,7 @@ export function createOptimisticWorkspaceCacheData(workspace: Workspace) {
   return {
     ...workspace,
     sessionSummaries: [],
-    claudeSessions: [],
+    agentSessions: [],
     terminalSessions: [],
     sidebarStatus: {
       activityState: 'IDLE' as const,

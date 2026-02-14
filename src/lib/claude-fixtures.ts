@@ -515,7 +515,7 @@ export function createAgentMetadata(overrides: Partial<AgentMetadata> = {}): Age
 export function createSessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
   const now = new Date();
   return {
-    claudeSessionId: overrides.claudeSessionId ?? `session-${Date.now()}`,
+    providerSessionId: overrides.providerSessionId ?? `session-${Date.now()}`,
     createdAt: overrides.createdAt ?? now.toISOString(),
     modifiedAt: overrides.modifiedAt ?? now.toISOString(),
     sizeBytes: overrides.sizeBytes ?? 15_360,

@@ -393,7 +393,7 @@ Start with Phase 1: Planning.`;
   }
 }
 
-async function startDefaultClaudeSession(workspaceId: string): Promise<string | null> {
+async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
   try {
     const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
       status: SessionStatus.IDLE,
@@ -565,7 +565,7 @@ export async function initializeWorkspaceWorktree(
 
     // Start Claude session eagerly - runs in parallel with setup scripts.
     // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
-    const claudeSessionPromise = startDefaultClaudeSession(workspaceId).catch((error) => {
+    const agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
       logger.error('Failed to start default Claude session', {
         workspaceId,
         error: error instanceof Error ? error.message : String(error),
@@ -580,7 +580,7 @@ export async function initializeWorkspaceWorktree(
       factoryConfig
     );
     if (factorySetupResult.ran) {
-      const startedSessionId = await claudeSessionPromise;
+      const startedSessionId = await agentSessionPromise;
       if (factorySetupResult.success) {
         await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
       }
@@ -593,7 +593,7 @@ export async function initializeWorkspaceWorktree(
       worktreeInfo.worktreePath
     );
     if (projectSetupResult.ran) {
-      const startedSessionId = await claudeSessionPromise;
+      const startedSessionId = await agentSessionPromise;
       if (projectSetupResult.success) {
         await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
       }
@@ -602,7 +602,7 @@ export async function initializeWorkspaceWorktree(
 
     // No setup scripts ran, mark ready
     await workspaceStateMachine.markReady(workspaceId);
-    const startedSessionId = await claudeSessionPromise;
+    const startedSessionId = await agentSessionPromise;
     await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
   } catch (error) {
     await handleWorkspaceInitFailure(workspaceId, error as Error);

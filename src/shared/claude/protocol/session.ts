@@ -2,11 +2,10 @@ import type { ClaudeContentItem, ToolResultContentValue } from './content';
 import type { MessageAttachment } from './queued';
 
 /**
- * Session info from list_sessions.
- * claudeSessionId is the Claude CLI session ID (filename in ~/.claude/projects/).
+ * Session info from ACP session listing.
  */
 export interface SessionInfo {
-  claudeSessionId: string;
+  providerSessionId: string;
   createdAt: string;
   modifiedAt: string;
   sizeBytes: number;

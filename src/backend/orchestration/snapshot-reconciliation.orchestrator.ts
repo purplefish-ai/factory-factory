@@ -227,8 +227,8 @@ export class SnapshotReconciliationService {
       { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null
     >
   ): SnapshotUpdateInput {
-    const sessionIds = [...(ws.claudeSessions?.map((s) => s.id) ?? [])];
-    const sessionSummaries = buildWorkspaceSessionSummaries(ws.claudeSessions ?? [], (sessionId) =>
+    const sessionIds = [...(ws.agentSessions?.map((s) => s.id) ?? [])];
+    const sessionSummaries = buildWorkspaceSessionSummaries(ws.agentSessions ?? [], (sessionId) =>
       this.bridges.session.getRuntimeSnapshot(sessionId)
     );
     const isWorking = hasWorkingSessionSummary(sessionSummaries);
@@ -236,7 +236,7 @@ export class SnapshotReconciliationService {
 
     // Compute lastActivityAt from session timestamps
     const sessionDates = [
-      ...(ws.claudeSessions?.map((s) => s.updatedAt) ?? []),
+      ...(ws.agentSessions?.map((s) => s.updatedAt) ?? []),
       ...(ws.terminalSessions?.map((s) => s.updatedAt) ?? []),
     ].filter(Boolean) as Date[];
 

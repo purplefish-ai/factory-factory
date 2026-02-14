@@ -64,8 +64,8 @@ describe('createLoadSessionHandler', () => {
     mocks.findById.mockResolvedValue({
       provider: 'CODEX',
       workspace: { worktreePath: '/tmp/worktree' },
-      claudeSessionId: null,
-      claudeProjectPath: null,
+      providerSessionId: null,
+      providerProjectPath: null,
     });
 
     const handler = createLoadSessionHandler();
@@ -89,8 +89,8 @@ describe('createLoadSessionHandler', () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
       workspace: { worktreePath: '/tmp/worktree' },
-      claudeSessionId: null,
-      claudeProjectPath: null,
+      providerSessionId: null,
+      providerProjectPath: null,
     });
     mocks.getCachedCommands.mockResolvedValue([{ name: '/test', description: 'Test command' }]);
 

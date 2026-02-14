@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
-    findById: vi.fn().mockResolvedValue({ name: 'Test Workspace', claudeSessions: [] }),
+    findById: vi.fn().mockResolvedValue({ name: 'Test Workspace', agentSessions: [] }),
   },
 }));
 

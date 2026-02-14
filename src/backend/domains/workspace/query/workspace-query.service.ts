@@ -180,7 +180,7 @@ class WorkspaceQueryService {
       workspaces: workspaces.map((w) => {
         const flowState = flowStateByWorkspace.get(w.id);
         const sessionDates = [
-          ...(w.claudeSessions?.map((s) => s.updatedAt) ?? []),
+          ...(w.agentSessions?.map((s) => s.updatedAt) ?? []),
           ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
         ].filter(Boolean) as Date[];
         const lastActivityAt =

@@ -29,7 +29,7 @@ export function useWorkspaceInitStatus(
     const prevStatus = prevInitStatusRef.current;
 
     // Invalidate workspace data when worktree becomes available so worktreePath,
-    // claudeSessions, etc. refresh immediately and the chat UI can connect.
+    // agentSessions, etc. refresh immediately and the chat UI can connect.
     if (hasWorktreePath && !prevHasWorktreePathRef.current) {
       utils.workspace.get.invalidate({ id: workspaceId });
     }

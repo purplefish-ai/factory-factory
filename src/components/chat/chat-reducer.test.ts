@@ -748,13 +748,13 @@ describe('chatReducer', () => {
     it('should update available sessions list', () => {
       const sessions: SessionInfo[] = [
         {
-          claudeSessionId: 'session-1',
+          providerSessionId: 'session-1',
           createdAt: '2024-01-01T00:00:00.000Z',
           modifiedAt: '2024-01-01T00:00:00.000Z',
           sizeBytes: 1024,
         },
         {
-          claudeSessionId: 'session-2',
+          providerSessionId: 'session-2',
           createdAt: '2024-01-02T00:00:00.000Z',
           modifiedAt: '2024-01-02T00:00:00.000Z',
           sizeBytes: 2048,
@@ -2200,7 +2200,7 @@ describe('createActionFromWebSocketMessage', () => {
   it('should convert sessions message to WS_SESSIONS action', () => {
     const sessions: SessionInfo[] = [
       {
-        claudeSessionId: 'session-1',
+        providerSessionId: 'session-1',
         createdAt: '2024-01-01T00:00:00.000Z',
         modifiedAt: '2024-01-01T00:00:00.000Z',
         sizeBytes: 1024,

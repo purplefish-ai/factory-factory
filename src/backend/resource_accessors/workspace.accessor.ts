@@ -103,9 +103,7 @@ type WorkspaceForRatchet = {
   prReviewLastCheckedAt: Date | null;
 };
 
-export type WorkspaceWithSessions = Omit<WorkspaceWithAgentSessions, 'agentSessions'> & {
-  claudeSessions: WorkspaceWithAgentSessions['agentSessions'];
-};
+export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
 
 // Type for Workspace with project included
 type WorkspaceWithProject = Prisma.WorkspaceGetPayload<{
@@ -117,43 +115,9 @@ type WorkspaceWithAgentSessionsAndProject = Prisma.WorkspaceGetPayload<{
 }>;
 
 // Type for Workspace with sessions and project included (used by reconciliation)
-export type WorkspaceWithSessionsAndProject = Omit<
-  WorkspaceWithAgentSessionsAndProject,
-  'agentSessions'
-> & {
-  claudeSessions: WorkspaceWithAgentSessionsAndProject['agentSessions'];
-};
+export type WorkspaceWithSessionsAndProject = WorkspaceWithAgentSessionsAndProject;
 
 class WorkspaceAccessor {
-  private mapWithSessions(
-    workspace: WorkspaceWithAgentSessions | null
-  ): WorkspaceWithSessions | null {
-    if (!workspace) {
-      return null;
-    }
-    const { agentSessions, ...rest } = workspace;
-    return { ...rest, claudeSessions: agentSessions };
-  }
-
-  private mapWithSessionsList(workspaces: WorkspaceWithAgentSessions[]): WorkspaceWithSessions[] {
-    return workspaces.map((workspace) => {
-      const { agentSessions, ...rest } = workspace;
-      return { ...rest, claudeSessions: agentSessions };
-    });
-  }
-
-  private mapWithSessionsAndProjectList(
-    workspaces: WorkspaceWithAgentSessionsAndProject[]
-  ): WorkspaceWithSessionsAndProject[] {
-    return workspaces.map((workspace) => {
-      const { agentSessions, ...rest } = workspace;
-      return {
-        ...rest,
-        claudeSessions: agentSessions,
-      };
-    });
-  }
-
   create(data: CreateWorkspaceInput): Promise<Workspace> {
     return prisma.workspace.create({
       data: {
@@ -174,15 +138,13 @@ class WorkspaceAccessor {
   }
 
   findById(id: string): Promise<WorkspaceWithSessions | null> {
-    return prisma.workspace
-      .findUnique({
-        where: { id },
-        include: {
-          agentSessions: true,
-          terminalSessions: true,
-        },
-      })
-      .then((workspace) => this.mapWithSessions(workspace));
+    return prisma.workspace.findUnique({
+      where: { id },
+      include: {
+        agentSessions: true,
+        terminalSessions: true,
+      },
+    });
   }
 
   /**
@@ -252,18 +214,16 @@ class WorkspaceAccessor {
       where.cachedKanbanColumn = filters.kanbanColumn;
     }
 
-    return prisma.workspace
-      .findMany({
-        where,
-        take: filters?.limit,
-        skip: filters?.offset,
-        orderBy: { updatedAt: 'desc' },
-        include: {
-          agentSessions: true,
-          terminalSessions: true,
-        },
-      })
-      .then((workspaces) => this.mapWithSessionsList(workspaces));
+    return prisma.workspace.findMany({
+      where,
+      take: filters?.limit,
+      skip: filters?.offset,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        agentSessions: true,
+        terminalSessions: true,
+      },
+    });
   }
 
   /**
@@ -271,17 +231,15 @@ class WorkspaceAccessor {
    * Used by the reconciliation service for single-query fetch of all workspace data.
    */
   findAllNonArchivedWithSessionsAndProject(): Promise<WorkspaceWithSessionsAndProject[]> {
-    return prisma.workspace
-      .findMany({
-        where: { status: { not: 'ARCHIVED' } },
-        include: {
-          agentSessions: true,
-          terminalSessions: true,
-          project: true,
-        },
-        orderBy: { updatedAt: 'desc' },
-      })
-      .then((workspaces) => this.mapWithSessionsAndProjectList(workspaces));
+    return prisma.workspace.findMany({
+      where: { status: { not: 'ARCHIVED' } },
+      include: {
+        agentSessions: true,
+        terminalSessions: true,
+        project: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   update(id: string, data: UpdateWorkspaceInput): Promise<Workspace> {

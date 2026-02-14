@@ -5,7 +5,7 @@ type WorkspaceSessionSource = { id: string };
 
 export interface WorkspaceRuntimeStateSource extends WorkspaceFlowStateSource {
   id: string;
-  claudeSessions?: WorkspaceSessionSource[] | null;
+  agentSessions?: WorkspaceSessionSource[] | null;
 }
 
 export interface WorkspaceRuntimeState {
@@ -19,7 +19,7 @@ export function deriveWorkspaceRuntimeState(
   workspace: WorkspaceRuntimeStateSource,
   resolveSessionWorking: (sessionIds: string[], workspaceId: string) => boolean
 ): WorkspaceRuntimeState {
-  const sessionIds = workspace.claudeSessions?.map((session) => session.id) ?? [];
+  const sessionIds = workspace.agentSessions?.map((session) => session.id) ?? [];
   const isSessionWorking = resolveSessionWorking(sessionIds, workspace.id);
   const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
 
