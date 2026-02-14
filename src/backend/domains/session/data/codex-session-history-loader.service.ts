@@ -227,15 +227,17 @@ async function resolveSessionFilePath(
   );
   withMtime.sort((left, right) => right.mtimeMs - left.mtimeMs);
 
+  const metaByPath = new Map<string, { id?: string; cwd?: string } | null>();
   for (const candidate of withMtime) {
     const meta = await parseSessionMeta(candidate.candidatePath);
+    metaByPath.set(candidate.candidatePath, meta);
     if (meta?.id === providerSessionId && meta.cwd === workingDir) {
       return candidate.candidatePath;
     }
   }
 
   for (const candidate of withMtime) {
-    const meta = await parseSessionMeta(candidate.candidatePath);
+    const meta = metaByPath.get(candidate.candidatePath) ?? null;
     if (meta?.id === providerSessionId) {
       return candidate.candidatePath;
     }
