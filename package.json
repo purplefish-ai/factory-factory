@@ -1,9 +1,12 @@
 {
   "name": "factory-factory",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Workspace-based coding environment for running multiple Claude Code and Codex sessions in parallel",
   "private": false,
   "license": "MIT",
+  "engines": {
+    "node": "^20.19 || ^22.12 || >=24.0"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/purplefish-ai/factory-factory.git"
@@ -81,8 +84,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@factory-factory/core": "file:packages/core",
     "@hookform/resolvers": "^5.2.2",
-    "@prisma/adapter-better-sqlite3": "^7.3.0",
-    "@prisma/client": "^7.3.0",
+    "@prisma/adapter-better-sqlite3": "7.3.0",
+    "@prisma/client": "7.3.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -138,7 +141,7 @@
     "open": "^11.0.0",
     "p-limit": "^7.2.0",
     "pidusage": "^4.0.1",
-    "prisma": "^7.3.0",
+    "prisma": "7.3.0",
     "react": "^19.2.4",
     "react-day-picker": "^9.13.0",
     "react-dom": "^19.2.4",
@@ -225,7 +228,7 @@
     "lint-staged": "^16.2.7",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.6",
-    "prisma": "^7.3.0",
+    "prisma": "7.3.0",
     "storybook": "10.2.4",
     "supertest": "^7.2.2",
     "tailwindcss": "^4.1.18",

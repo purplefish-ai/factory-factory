@@ -15,6 +15,10 @@ jobs:
   publish:
     name: Build and Publish
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["20", "22"]
     permissions:
       contents: write
       id-token: write
@@ -29,7 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version }}
           cache: "pnpm"
           registry-url: "https://registry.npmjs.org"
 
@@ -39,26 +43,44 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Verify Prisma versions are pinned
+        run: |
+          node -e 'const p=require("./package.json"); const adapter=p.dependencies?.["@prisma/adapter-better-sqlite3"]; const client=p.dependencies?.["@prisma/client"]; const prismaDep=p.dependencies?.prisma; const prismaDev=p.devDependencies?.prisma; const pinned=v=>typeof v==="string"&&!/^[~^]/.test(v); if(!pinned(adapter)) throw new Error(`@prisma/adapter-better-sqlite3 must be pinned exactly, got ${adapter}`); if(!pinned(client)) throw new Error(`@prisma/client must be pinned exactly, got ${client}`); if(!pinned(prismaDep)) throw new Error(`dependencies.prisma must be pinned exactly, got ${prismaDep}`); if(!pinned(prismaDev)) throw new Error(`devDependencies.prisma must be pinned exactly, got ${prismaDev}`); if(adapter!==client||client!==prismaDep||prismaDep!==prismaDev) throw new Error(`Prisma versions must match: @prisma/adapter-better-sqlite3=${adapter}, @prisma/client=${client}, dependencies.prisma=${prismaDep}, devDependencies.prisma=${prismaDev}`);'
+
       - name: Run tests
         run: pnpm test
 
       - name: Build
         run: pnpm build
 
+      - name: Pack npm tarball
+        run: npm pack --silent
+
+      - name: Smoke test packed artifact with npm install
+        run: |
+          set -euo pipefail
+          ROOT_DIR="$PWD"
+          TARBALL=$(ls factory-factory-*.tgz | head -n1)
+          TMPDIR=$(mktemp -d)
+          cd "$TMPDIR"
+          npm init -y >/dev/null 2>&1
+          npm install "$ROOT_DIR/$TARBALL"
+          npx --yes ff db:migrate --database-path "$TMPDIR/test.db"
+
       - name: Publish to npm (dry run)
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
         run: npm publish --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to npm
-        if: ${{ github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true') }}
+        if: ${{ matrix.node-version == '20' && (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true')) }}
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create and push tag
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           git config user.name "github-actions[bot]"
