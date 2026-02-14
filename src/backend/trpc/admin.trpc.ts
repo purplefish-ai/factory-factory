@@ -271,7 +271,7 @@ export const adminRouter = router({
 
     // Build enriched agent process list from DB sessions
     const dbSessionIds = new Set(agentSessionsWithPid.map((s) => s.id));
-    const claudeProcesses = agentSessionsWithPid.map((session) => {
+    const agentProcesses = agentSessionsWithPid.map((session) => {
       const memProcess = activeAcpProcesses.find((p) => p.sessionId === session.id);
       const workspace = workspaceMap.get(session.workspaceId);
       return {
@@ -304,7 +304,7 @@ export const adminRouter = router({
           pid: memProcess.pid,
           status: memProcess.status,
         });
-        claudeProcesses.push({
+        agentProcesses.push({
           sessionId: memProcess.sessionId,
           workspaceId: 'unknown',
           workspaceName: 'Unknown (orphan)',
@@ -350,12 +350,12 @@ export const adminRouter = router({
     });
 
     return {
-      claude: claudeProcesses,
+      agent: agentProcesses,
       terminal: terminalProcesses,
       summary: {
-        totalClaude: claudeProcesses.length,
+        totalAgent: agentProcesses.length,
         totalTerminal: terminalProcesses.length,
-        total: claudeProcesses.length + terminalProcesses.length,
+        total: agentProcesses.length + terminalProcesses.length,
       },
     };
   }),
