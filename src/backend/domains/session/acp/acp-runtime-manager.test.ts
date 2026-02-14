@@ -209,6 +209,38 @@ describe('AcpRuntimeManager', () => {
       expect(handle.getPid()).toBe(12_345);
     });
 
+    it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Intentionally unresolved so startup failure wins Promise.race.
+          })
+      );
+
+      const handlers = defaultHandlers();
+      const createPromise = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        handlers,
+        defaultContext()
+      );
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalledTimes(1);
+      });
+
+      const spawnError = Object.assign(new Error('spawn claude-code-acp ENOENT'), {
+        code: 'ENOENT',
+      });
+      child.emit('error', spawnError);
+
+      await expect(createPromise).rejects.toThrow(
+        /Failed to spawn ACP adapter ".*": spawn claude-code-acp ENOENT/
+      );
+      expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
+    });
+
     it('returns existing handle if session already exists and is running', async () => {
       setupSuccessfulSpawn();
 

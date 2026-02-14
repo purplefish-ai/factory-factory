@@ -66,6 +66,15 @@ type AcpErrorLogDetails = {
   data?: unknown;
 };
 
+function normalizeUnknownError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function createAcpSpawnError(binaryPath: string, error: unknown): Error {
+  const normalized = normalizeUnknownError(error);
+  return new Error(`Failed to spawn ACP adapter "${binaryPath}": ${normalized.message}`);
+}
+
 function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
   if (error instanceof Error) {
     return { message: error.message };
@@ -328,6 +337,16 @@ export class AcpRuntimeManager {
       detached: false,
     });
 
+    // Capture startup spawn errors immediately (e.g. ENOENT) so they reject
+    // client creation cleanly instead of surfacing as uncaught process errors.
+    let startupErrorListener: ((error: unknown) => void) | null = null;
+    const startupError = new Promise<never>((_, reject) => {
+      startupErrorListener = (error: unknown) => reject(createAcpSpawnError(binaryPath, error));
+      child.once('error', startupErrorListener);
+    });
+
+    this.wireChildErrorHandler(child, sessionId, handlers);
+
     // Wire stderr to session log hook
     child.stderr?.on('data', (chunk: Buffer) => {
       handlers.onAcpLog?.(options.sessionId, {
@@ -360,32 +379,44 @@ export class AcpRuntimeManager {
       stream
     );
 
-    // Initialize handshake
-    const initResult = await connection.initialize({
-      protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: {},
-      clientInfo: {
-        name: 'factory-factory',
-        title: 'Factory Factory',
-        version: '1.2.0',
-      },
-    });
+    let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
+    let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
 
-    logger.info('ACP connection initialized', {
-      sessionId,
-      agentCapabilities: initResult.agentCapabilities,
-    });
+    try {
+      // Initialize handshake
+      initResult = await Promise.race([
+        connection.initialize({
+          protocolVersion: PROTOCOL_VERSION,
+          clientCapabilities: {},
+          clientInfo: {
+            name: 'factory-factory',
+            title: 'Factory Factory',
+            version: '1.2.0',
+          },
+        }),
+        startupError,
+      ]);
 
-    // Create or resume provider session
-    const agentCapabilities = initResult.agentCapabilities ?? {};
-    const sessionInfo = await this.createOrResumeSession(
-      connection,
-      sessionId,
-      options,
-      agentCapabilities
-    );
+      logger.info('ACP connection initialized', {
+        sessionId,
+        agentCapabilities: initResult.agentCapabilities,
+      });
+
+      // Create or resume provider session
+      const agentCapabilities = initResult.agentCapabilities ?? {};
+      sessionInfo = await Promise.race([
+        this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
+        startupError,
+      ]);
+    } finally {
+      if (startupErrorListener) {
+        child.removeListener('error', startupErrorListener);
+        startupErrorListener = null;
+      }
+    }
 
     // Build handle
+    const agentCapabilities = initResult.agentCapabilities ?? {};
     const handle = new AcpProcessHandle({
       connection,
       child,
@@ -398,7 +429,17 @@ export class AcpRuntimeManager {
     // Store in sessions map
     this.sessions.set(sessionId, handle);
 
-    // Wire child exit handler
+    this.wireChildExitHandler(sessionId, child, handlers);
+    await this.notifyClientCreated(sessionId, handle, context, handlers);
+
+    return handle;
+  }
+
+  private wireChildExitHandler(
+    sessionId: string,
+    child: ChildProcess,
+    handlers: AcpRuntimeEventHandlers
+  ): void {
     child.on('exit', async (code) => {
       this.sessions.delete(sessionId);
       this.pendingCreation.delete(sessionId);
@@ -419,10 +460,39 @@ export class AcpRuntimeManager {
         }
       }
     });
+  }
 
-    // Wire child error handler
+  private async notifyClientCreated(
+    sessionId: string,
+    handle: AcpProcessHandle,
+    context: { workspaceId: string; workingDir: string },
+    handlers: AcpRuntimeEventHandlers
+  ): Promise<void> {
+    if (this.onClientCreatedCallback) {
+      this.onClientCreatedCallback(sessionId, handle, context);
+    }
+
+    if (handlers.onSessionId) {
+      try {
+        await handlers.onSessionId(sessionId, handle.providerSessionId);
+      } catch (error) {
+        logger.warn('Failed to handle ACP session ID event', {
+          sessionId,
+          providerSessionId: handle.providerSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  private wireChildErrorHandler(
+    child: ChildProcess,
+    sessionId: string,
+    handlers: AcpRuntimeEventHandlers
+  ): void {
+    // Route runtime child-process errors through the domain error callback.
     child.on('error', async (error) => {
-      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      const normalizedError = normalizeUnknownError(error);
       if (handlers.onError) {
         try {
           await handlers.onError(sessionId, normalizedError);
@@ -441,26 +511,6 @@ export class AcpRuntimeManager {
         });
       }
     });
-
-    // Notify callback
-    if (this.onClientCreatedCallback) {
-      this.onClientCreatedCallback(sessionId, handle, context);
-    }
-
-    // Notify session ID handler
-    if (handlers.onSessionId) {
-      try {
-        await handlers.onSessionId(sessionId, handle.providerSessionId);
-      } catch (error) {
-        logger.warn('Failed to handle ACP session ID event', {
-          sessionId,
-          providerSessionId: handle.providerSessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    return handle;
   }
 
   private async createOrResumeSession(
