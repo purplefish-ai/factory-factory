@@ -131,7 +131,9 @@ export const conversationRenameInterceptor: ToolInterceptor = {
         // Send the rename instruction as a user message
         // The instruction contains <system_instruction> tags but is sent as user content
         // This will prompt Claude to rename the branch with conversation context
-        const client = sessionService.getClient(context.sessionId);
+        const client = sessionService.getClient(context.sessionId) as
+          | { sendMessage: (msg: string) => Promise<void> }
+          | undefined;
 
         if (client) {
           logger.info('Sending branch rename instruction to Claude', {
@@ -139,7 +141,7 @@ export const conversationRenameInterceptor: ToolInterceptor = {
           });
 
           // Send the instruction (contains <system_instruction> XML tags)
-          client.sendMessage(renameInstruction).catch((error) => {
+          client.sendMessage(renameInstruction).catch((error: unknown) => {
             logger.warn('Failed to send rename instruction', {
               sessionId: context.sessionId,
               error,

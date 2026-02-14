@@ -115,9 +115,11 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     // Register callback for event forwarding when clients are created
     // This ensures event forwarding is set up even for sessions started without WebSocket
     sessionService.setOnClientCreated((sessionId, client, context) => {
-      chatEventForwarderService.setupClientEvents(sessionId, client, context, () =>
-        chatMessageHandlerService.tryDispatchNextMessage(sessionId)
-      );
+      if (isClaudeClient(client)) {
+        chatEventForwarderService.setupClientEvents(sessionId, client, context, () =>
+          chatMessageHandlerService.tryDispatchNextMessage(sessionId)
+        );
+      }
     });
 
     sessionService.setOnCodexTerminalTurn((sessionId) =>

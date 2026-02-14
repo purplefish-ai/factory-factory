@@ -28,11 +28,16 @@ function handleMessageAsInteractiveResponse(
   text: string,
   pendingRequest: { requestId: string; toolName: string; input: Record<string, unknown> }
 ): boolean {
-  const client = sessionService.getClient(sessionId);
-  if (!client) {
+  const rawClient = sessionService.getClient(sessionId);
+  if (!rawClient) {
     // No active client, can't respond to interactive request
     return false;
   }
+
+  const client = rawClient as {
+    answerQuestion: (requestId: string, answers: Record<string, string>) => void;
+    denyInteractiveRequest: (requestId: string, reason: string) => void;
+  };
 
   // Only handle known interactive request types
   if (!isInteractiveResponseTool(pendingRequest.toolName)) {

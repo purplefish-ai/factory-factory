@@ -6,24 +6,9 @@ import {
   type AcpRuntimeEventHandlers,
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
-import type { RewindFilesResponse } from '@/backend/domains/session/claude';
-import type { ClaudeClient } from '@/backend/domains/session/claude/client';
-import type { ResourceUsage } from '@/backend/domains/session/claude/process';
-import type { RegisteredProcess } from '@/backend/domains/session/claude/registry';
-import { SessionManager } from '@/backend/domains/session/claude/session';
-import { CodexEventTranslator } from '@/backend/domains/session/codex/codex-event-translator';
-import { parseCodexThreadReadTranscript } from '@/backend/domains/session/codex/codex-thread-read-transcript';
-import { parseTurnId } from '@/backend/domains/session/codex/payload-utils';
-import {
-  claudeSessionProviderAdapter,
-  codexSessionProviderAdapter,
-  type SessionProvider,
-} from '@/backend/domains/session/providers';
-import type { CodexAppServerManager } from '@/backend/domains/session/runtime/codex-app-server-manager';
+import { SessionFileReader } from '@/backend/domains/session/data/session-file-reader';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
-import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type {
@@ -46,37 +31,22 @@ const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
 /**
- * Callback type for client creation hook.
- * Called after a ClaudeClient is created, allowing other services to set up
- * event forwarding without creating circular dependencies.
+ * @deprecated Legacy callback type -- kept for API compatibility during migration.
+ * Will be removed in Plan 02 when consumers are updated.
  */
 export type ClientCreatedCallback = (
   sessionId: string,
-  client: ClaudeClient,
+  client: unknown,
   context: { workspaceId: string; workingDir: string }
 ) => void;
-
-export type CodexTerminalTurnCallback = (sessionId: string) => void | Promise<void>;
-type SessionAdapter = typeof claudeSessionProviderAdapter | typeof codexSessionProviderAdapter;
-type LoadedSessionAdapter = {
-  session: AgentSessionRecord;
-  adapter: SessionAdapter;
-};
 
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
-  private readonly claudeAdapter = claudeSessionProviderAdapter;
-  private readonly codexAdapter = codexSessionProviderAdapter;
-  private readonly sessionProviderCache = new Map<string, SessionProvider>();
-  private readonly codexEventTranslator = new CodexEventTranslator({
-    userInputEnabled: configService.getCodexAppServerConfig().requestUserInputEnabled,
-  });
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
   private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
-  private onCodexTerminalTurn: CodexTerminalTurnCallback | null = null;
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
     if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
@@ -89,60 +59,6 @@ class SessionService {
     }
 
     return Date.now() - updatedAtMs > STALE_LOADING_RUNTIME_MAX_AGE_MS;
-  }
-
-  private cacheSessionProvider(sessionId: string, provider: SessionProvider): void {
-    this.sessionProviderCache.set(sessionId, provider);
-  }
-
-  private clearSessionProvider(sessionId: string): void {
-    this.sessionProviderCache.delete(sessionId);
-  }
-
-  private resolveAdapterForProvider(provider: SessionProvider) {
-    return provider === 'CODEX' ? this.codexAdapter : this.claudeAdapter;
-  }
-
-  private resolveKnownAdapterForSessionSync(sessionId: string): SessionAdapter | null {
-    if (
-      this.codexAdapter.getClient(sessionId) ||
-      this.codexAdapter.getPendingClient(sessionId) !== undefined ||
-      this.codexAdapter.isStopInProgress(sessionId)
-    ) {
-      return this.codexAdapter;
-    }
-
-    if (
-      this.claudeAdapter.getClient(sessionId) ||
-      this.claudeAdapter.getPendingClient(sessionId) !== undefined ||
-      this.claudeAdapter.isStopInProgress(sessionId)
-    ) {
-      return this.claudeAdapter;
-    }
-
-    const cached = this.sessionProviderCache.get(sessionId);
-    if (cached) {
-      return this.resolveAdapterForProvider(cached);
-    }
-
-    return null;
-  }
-
-  private resolveAdapterForSessionSync(sessionId: string) {
-    return this.resolveKnownAdapterForSessionSync(sessionId) ?? this.claudeAdapter;
-  }
-
-  private notifyCodexTerminalTurn(sessionId: string): void {
-    if (!this.onCodexTerminalTurn) {
-      return;
-    }
-
-    Promise.resolve(this.onCodexTerminalTurn(sessionId)).catch((error) => {
-      logger.warn('Codex terminal turn callback failed', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    });
   }
 
   private setupAcpEventHandler(sessionId: string): AcpRuntimeEventHandlers {
@@ -213,8 +129,6 @@ class SessionService {
             sessionId: sid,
             error: error instanceof Error ? error.message : String(error),
           });
-        } finally {
-          this.clearSessionProvider(sid);
         }
       },
       onError: (sid: string, error: Error) => {
@@ -350,153 +264,38 @@ class SessionService {
     return handle;
   }
 
-  private async loadSessionWithAdapter(sessionId: string): Promise<LoadedSessionAdapter> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session) {
-      throw new Error(`Session not found: ${sessionId}`);
-    }
-    this.cacheSessionProvider(sessionId, session.provider);
-    return {
-      session,
-      adapter: this.resolveAdapterForProvider(session.provider),
-    };
-  }
-
-  /**
-   * Register a callback to be called when a client is created.
-   * Used by chat handler to set up event forwarding without circular dependencies.
-   */
-  setOnClientCreated(callback: ClientCreatedCallback): void {
-    this.claudeAdapter.setOnClientCreated(callback);
-  }
-
-  setOnCodexTerminalTurn(callback: CodexTerminalTurnCallback): void {
-    this.onCodexTerminalTurn = callback;
-  }
-
   constructor(options?: {
     repository?: SessionRepository;
     promptBuilder?: SessionPromptBuilder;
   }) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
-    this.initializeCodexManagerHandlers();
-  }
-
-  private initializeCodexManagerHandlers(): void {
-    this.codexAdapter.getManager().setHandlers({
-      onNotification: ({ sessionId, method, params }) => {
-        const registry = this.codexAdapter.getManager().getRegistry();
-        const isTerminalTurn = this.isTerminalCodexTurnMethod(method);
-        if (isTerminalTurn) {
-          registry.markTurnTerminal(sessionId, parseTurnId(params));
-        }
-
-        const translatedEvents = this.codexEventTranslator.translateNotification(method, params);
-        for (const event of translatedEvents) {
-          const normalized = this.normalizeCodexDeltaEvent(sessionId, event);
-          if (normalized.type === 'session_runtime_updated') {
-            sessionDomainService.setRuntimeSnapshot(sessionId, normalized.sessionRuntime, false);
-          }
-          sessionDomainService.emitDelta(sessionId, normalized);
-        }
-
-        if (isTerminalTurn) {
-          this.notifyCodexTerminalTurn(sessionId);
-        }
-      },
-      onServerRequest: ({ sessionId, method, params, canonicalRequestId }) => {
-        const event = this.codexEventTranslator.translateServerRequest(
-          method,
-          canonicalRequestId,
-          params
-        );
-
-        if (event.type === 'error') {
-          try {
-            this.codexAdapter.rejectInteractiveRequest(sessionId, canonicalRequestId, {
-              message: event.message,
-              data: event.data,
-            });
-          } catch (error) {
-            logger.warn('Failed responding to unsupported Codex interactive request', {
-              sessionId,
-              requestId: canonicalRequestId,
-              method,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-
-        sessionDomainService.emitDelta(sessionId, event);
-      },
-      onStatusChanged: (status) => {
-        if (status.state !== 'degraded' && status.state !== 'unavailable') {
-          return;
-        }
-        for (const [sessionId] of this.codexAdapter.getAllClients()) {
-          sessionDomainService.setRuntimeSnapshot(
-            sessionId,
-            {
-              phase: 'error',
-              processState: 'stopped',
-              activity: 'IDLE',
-              updatedAt: new Date().toISOString(),
-            },
-            true
-          );
-        }
-      },
-    });
-  }
-
-  private normalizeCodexDeltaEvent(sessionId: string, event: SessionDeltaEvent): SessionDeltaEvent {
-    if (event.type !== 'agent_message') {
-      return event;
-    }
-
-    const order = sessionDomainService.appendClaudeEvent(sessionId, event.data);
-    return {
-      ...event,
-      order,
-    };
-  }
-
-  private isTerminalCodexTurnMethod(method: string): boolean {
-    return (
-      method.startsWith('turn/completed') ||
-      method.startsWith('turn/finished') ||
-      method.startsWith('turn/interrupted') ||
-      method.startsWith('turn/cancelled') ||
-      method.startsWith('turn/failed')
-    );
   }
 
   /**
-   * Start a session using the active provider adapter.
-   * Uses getOrCreateSessionClient() internally for unified lifecycle management with race protection.
+   * Start a session using the ACP runtime.
    */
   async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
-    const loaded = await this.loadSessionWithAdapter(sessionId);
-    const { session, adapter } = loaded;
-    if (adapter.isStopInProgress(sessionId)) {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    if (acpRuntimeManager.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
     // Check if session is already running to prevent duplicate message sends
-    const existingClient = adapter.getClient(sessionId);
+    const existingClient = acpRuntimeManager.getClient(sessionId);
     if (existingClient) {
       throw new Error('Session is already running');
     }
 
-    // Use getOrCreateClient for race-protected creation
-    // If concurrent starts happen, one will succeed and others will wait then fail the check above
-    await this.getOrCreateSessionClient(
+    // Use getOrCreate for race-protected creation
+    await this.getOrCreateAcpSessionClient(
       sessionId,
-      {
-        permissionMode: 'bypassPermissions',
-      },
-      loaded
+      { permissionMode: 'bypassPermissions' },
+      session
     );
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
@@ -509,22 +308,15 @@ class SessionService {
   }
 
   /**
-   * Stop a session gracefully via the active provider adapter.
-   * All sessions use ClaudeClient for unified lifecycle management.
+   * Stop a session gracefully via the ACP runtime.
    */
   async stopSession(
     sessionId: string,
-    options?: { cleanupTransientRatchetSession?: boolean; providerHint?: SessionProvider }
+    options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
     const session = await this.loadSessionForStop(sessionId);
-    const provider =
-      options?.providerHint ??
-      session?.provider ??
-      this.sessionProviderCache.get(sessionId) ??
-      'CLAUDE';
-    const adapter = this.resolveAdapterForProvider(provider);
 
-    if (adapter.isStopInProgress(sessionId)) {
+    if (acpRuntimeManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
@@ -537,19 +329,15 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    // Check for ACP session first (RUNTIME-06: inherits wiring from stop.handler.ts
-    // and session.trpc.ts stopSession mutation -- no separate ACP cancel route needed.
-    // stopSession handles both "cancel current prompt" and "terminate session".)
-    const acpHandle = acpRuntimeManager.getClient(sessionId);
-    if (acpHandle || acpRuntimeManager.isStopInProgress(sessionId)) {
-      // Cancel pending ACP permissions and clean up streaming state
-      this.acpStreamState.delete(sessionId);
-      const acpBridge = this.acpPermissionBridges.get(sessionId);
-      if (acpBridge) {
-        acpBridge.cancelAll();
-        this.acpPermissionBridges.delete(sessionId);
-      }
+    // Cancel pending ACP permissions and clean up streaming state
+    this.acpStreamState.delete(sessionId);
+    const acpBridge = this.acpPermissionBridges.get(sessionId);
+    if (acpBridge) {
+      acpBridge.cancelAll();
+      this.acpPermissionBridges.delete(sessionId);
+    }
 
+    try {
       if (!acpRuntimeManager.isStopInProgress(sessionId)) {
         await acpRuntimeManager.stopClient(sessionId);
       }
@@ -561,51 +349,26 @@ class SessionService {
         activity: 'IDLE',
         updatedAt: new Date().toISOString(),
       });
+
       const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
       await this.cleanupTransientRatchetOnStop(
         session,
         sessionId,
         shouldCleanupTransientRatchetSession
       );
+
       logger.info('ACP session stopped', { sessionId });
-      this.clearSessionProvider(sessionId);
-      return;
-    }
-
-    try {
-      await adapter.stopClient(sessionId);
-      await this.updateStoppedSessionState(sessionId);
-
-      sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
-
-      // Manual stops can complete without an exit callback race; normalize state explicitly.
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: 'idle',
-        processState: 'stopped',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-
-      const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
-      await this.cleanupTransientRatchetOnStop(
-        session,
+    } catch (error) {
+      logger.warn('Error stopping ACP session', {
         sessionId,
-        shouldCleanupTransientRatchetSession
-      );
-
-      logger.info('Session stopped', { sessionId, provider });
-    } finally {
-      this.clearSessionProvider(sessionId);
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   private async loadSessionForStop(sessionId: string): Promise<AgentSessionRecord | null> {
     try {
-      const session = await this.repository.getSessionById(sessionId);
-      if (session) {
-        this.cacheSessionProvider(sessionId, session.provider);
-      }
-      return session;
+      return await this.repository.getSessionById(sessionId);
     } catch (error) {
       logger.warn('Failed to load session before stop; continuing with process shutdown', {
         sessionId,
@@ -673,10 +436,20 @@ class SessionService {
     const sessions = await this.repository.getSessionsByWorkspaceId(workspaceId);
 
     for (const session of sessions) {
-      await this.stopWorkspaceSession(
-        { id: session.id, status: session.status, provider: session.provider },
-        workspaceId
-      );
+      if (
+        session.status === SessionStatus.RUNNING ||
+        acpRuntimeManager.isSessionRunning(session.id)
+      ) {
+        try {
+          await this.stopSession(session.id);
+        } catch (error) {
+          logger.error('Failed to stop workspace session', {
+            sessionId: session.id,
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     logger.info('Stopped all workspace sessions', { workspaceId, count: sessions.length });
@@ -697,26 +470,13 @@ class SessionService {
       permissionMode?: 'bypassPermissions' | 'plan';
       model?: string;
       reasoningEffort?: string;
-    },
-    loadedSession?: LoadedSessionAdapter
+    }
   ): Promise<unknown> {
-    const { session, adapter } = loadedSession ?? (await this.loadSessionWithAdapter(sessionId));
-
-    // Check for existing legacy client first - sessions already running via
-    // legacy managers need to continue working until they exit.
-    const existing = adapter.getClient(sessionId);
-    if (existing) {
-      const isWorking = adapter.isSessionWorking(sessionId);
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
-        phase: isWorking ? 'running' : 'idle',
-        processState: 'alive',
-        activity: isWorking ? 'WORKING' : 'IDLE',
-        updatedAt: new Date().toISOString(),
-      });
-      return existing;
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // All new sessions use ACP runtime (Phase 21: unified runtime path)
     return await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
   }
 
@@ -735,33 +495,11 @@ class SessionService {
     return await this.getOrCreateSessionClient(sessionId, options);
   }
 
-  /**
-   * Get an existing ClaudeClient without creating one.
-   *
-   * @param sessionId - The database session ID
-   * @returns The ClaudeClient if it exists and is running, undefined otherwise
-   */
-  getClient(sessionId: string): ClaudeClient | undefined {
-    return this.claudeAdapter.getClient(sessionId);
-  }
-
   getSessionClient(sessionId: string): unknown | undefined {
-    // Check ACP runtime first (not managed by legacy adapters)
-    const acpClient = acpRuntimeManager.getClient(sessionId);
-    if (acpClient) {
-      return acpClient;
-    }
-    return this.resolveAdapterForSessionSync(sessionId).getClient(sessionId);
-  }
-
-  toPublicMessageDelta(message: ClaudeMessage, order?: number): SessionDeltaEvent {
-    return this.claudeAdapter.toPublicDeltaEvent(
-      this.claudeAdapter.toCanonicalAgentMessage(message, order)
-    );
+    return acpRuntimeManager.getClient(sessionId);
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    // ACP sessions manage model via config options -- find matching configOption by category
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     if (acpHandle) {
       const modelOption = acpHandle.configOptions.find((o) => o.category === 'model');
@@ -770,30 +508,17 @@ class SessionService {
       }
       return;
     }
-    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
-    const nextModel = resolveSessionModelForProvider(model, session.provider);
-    await adapter.setModel(sessionId, nextModel);
+    // No ACP handle found -- session may not be running
+    logger.debug('No ACP handle for setSessionModel', { sessionId, model });
   }
 
-  async setSessionReasoningEffort(sessionId: string, effort: string | null): Promise<void> {
-    const adapter = this.resolveKnownAdapterForSessionSync(sessionId);
-    if (adapter === this.codexAdapter) {
-      await this.codexAdapter.setReasoningEffort(sessionId, effort);
-      return;
-    }
-    if (adapter === this.claudeAdapter) {
-      return;
-    }
-
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session || session.provider !== 'CODEX') {
-      return;
-    }
-    await this.codexAdapter.setReasoningEffort(sessionId, effort);
+  setSessionReasoningEffort(sessionId: string, _effort: string | null): void {
+    // ACP sessions do not support reasoning effort as a separate control.
+    // Reasoning is managed via config options when available.
+    logger.debug('setSessionReasoningEffort is a no-op for ACP sessions', { sessionId });
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    // ACP sessions manage thinking via config options -- find matching configOption by category
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     if (acpHandle) {
       const thoughtOption = acpHandle.configOptions.find((o) => o.category === 'thought_level');
@@ -802,10 +527,7 @@ class SessionService {
       }
       return;
     }
-    const adapter =
-      this.resolveKnownAdapterForSessionSync(sessionId) ??
-      (await this.loadSessionWithAdapter(sessionId)).adapter;
-    await adapter.setThinkingBudget(sessionId, maxTokens);
+    logger.debug('No ACP handle for setSessionThinkingBudget', { sessionId, maxTokens });
   }
 
   /**
@@ -820,45 +542,57 @@ class SessionService {
     } as SessionDeltaEvent);
   }
 
-  async sendSessionMessage(
-    sessionId: string,
-    content: string | ClaudeContentItem[]
-  ): Promise<void> {
-    // Fast path: if adapter is already known, skip DB lookup
-    const knownAdapter = this.resolveKnownAdapterForSessionSync(sessionId);
-    if (knownAdapter === this.codexAdapter) {
-      const normalizedText = this.toCodexTextContent(content);
-      await this.codexAdapter.sendMessage(sessionId, normalizedText);
-      return;
-    }
-
-    // Check for ACP session -- ACP sessions use CLAUDE provider but have
-    // no ClaudeClient, so adapter resolution would incorrectly route to claudeAdapter
+  sendSessionMessage(sessionId: string, content: string | ClaudeContentItem[]): Promise<void> {
     const acpClient = acpRuntimeManager.getClient(sessionId);
     if (acpClient) {
       const normalizedText =
-        typeof content === 'string' ? content : this.toCodexTextContent(content);
-      void this.sendAcpMessage(sessionId, normalizedText).catch((error) => {
-        logger.error('ACP prompt failed', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      });
-      return;
+        typeof content === 'string' ? content : this.normalizeContentToText(content);
+      return this.sendAcpMessage(sessionId, normalizedText).then(
+        () => {
+          // Prompt completed successfully -- no action needed
+        },
+        (error) => {
+          logger.error('ACP prompt failed', {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      );
     }
 
-    // Claude adapter path (or fallback to DB lookup for unknown sessions)
-    if (knownAdapter === this.claudeAdapter) {
-      await this.claudeAdapter.sendMessage(sessionId, content);
-      return;
+    logger.warn('No ACP client found for sendSessionMessage', { sessionId });
+    return Promise.resolve();
+  }
+
+  /**
+   * Normalize ClaudeContentItem[] to a plain text string for ACP.
+   */
+  private normalizeContentToText(content: ClaudeContentItem[]): string {
+    const chunks: string[] = [];
+    for (const item of content) {
+      switch (item.type) {
+        case 'text':
+          chunks.push(item.text);
+          break;
+        case 'thinking':
+          chunks.push(item.thinking);
+          break;
+        case 'image':
+          chunks.push('[Image attachment omitted for this provider]');
+          break;
+        case 'tool_result':
+          if (typeof item.content === 'string') {
+            chunks.push(item.content);
+          } else {
+            chunks.push(JSON.stringify(item.content));
+          }
+          break;
+        default:
+          break;
+      }
     }
-    const { session } = await this.loadSessionWithAdapter(sessionId);
-    if (session.provider === 'CODEX') {
-      const normalizedText = this.toCodexTextContent(content);
-      await this.codexAdapter.sendMessage(sessionId, normalizedText);
-      return;
-    }
-    await this.claudeAdapter.sendMessage(sessionId, content);
+
+    return chunks.join('\n\n');
   }
 
   /**
@@ -909,54 +643,16 @@ class SessionService {
     if (!session || session.provider !== 'CLAUDE' || !session.claudeSessionId) {
       return [];
     }
-    return await SessionManager.getHistory(session.claudeSessionId, workingDir);
+    return await SessionFileReader.getHistory(session.claudeSessionId, workingDir);
   }
 
-  async tryHydrateCodexTranscript(sessionId: string): Promise<ChatMessage[] | null> {
-    const session = await this.repository.getSessionById(sessionId);
-    if (!session || session.provider !== 'CODEX') {
-      return null;
-    }
-
-    const pending = this.codexAdapter.getPendingClient(sessionId);
-    if (pending) {
-      try {
-        await pending;
-      } catch (error) {
-        logger.debug('Pending Codex client creation failed during hydration', {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    if (!this.codexAdapter.getClient(sessionId)) {
-      return null;
-    }
-
-    try {
-      const threadReadPayload = await this.codexAdapter.hydrateSession(sessionId);
-      return parseCodexThreadReadTranscript(threadReadPayload);
-    } catch (error) {
-      logger.warn('Failed to hydrate Codex transcript from thread/read', {
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    }
-  }
-
-  async rewindSessionFiles(
-    sessionId: string,
-    userMessageId: string,
-    dryRun?: boolean
-  ): Promise<RewindFilesResponse> {
-    const { adapter } = await this.loadSessionWithAdapter(sessionId);
-    return (await adapter.rewindFiles(sessionId, userMessageId, dryRun)) as RewindFilesResponse;
-  }
-
-  respondToPermissionRequest(sessionId: string, requestId: string, allow: boolean): void {
-    this.resolveAdapterForSessionSync(sessionId).respondToPermission(sessionId, requestId, allow);
+  respondToPermissionRequest(sessionId: string, requestId: string, _allow: boolean): void {
+    // Legacy permission response -- no longer supported for ACP sessions.
+    // ACP permissions are handled via respondToAcpPermission with optionId.
+    logger.debug('respondToPermissionRequest is a no-op (legacy adapter removed)', {
+      sessionId,
+      requestId,
+    });
   }
 
   respondToAcpPermission(sessionId: string, requestId: string, optionId: string): boolean {
@@ -970,20 +666,24 @@ class SessionService {
   respondToQuestionRequest(
     sessionId: string,
     requestId: string,
-    answers: Record<string, string | string[]>
+    _answers: Record<string, string | string[]>
   ): void {
-    this.resolveAdapterForSessionSync(sessionId).respondToQuestion(sessionId, requestId, answers);
+    // Legacy question response -- no longer supported for ACP sessions.
+    logger.debug('respondToQuestionRequest is a no-op (legacy adapter removed)', {
+      sessionId,
+      requestId,
+    });
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
     const fallback = createInitialSessionRuntimeState();
     const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
     const base = persisted ?? fallback;
-    const adapter = this.resolveAdapterForSessionSync(sessionId);
 
-    const client = adapter.getClient(sessionId);
-    if (client) {
-      const isWorking = adapter.isSessionWorking(sessionId);
+    // Check ACP runtime
+    const acpClient = acpRuntimeManager.getClient(sessionId);
+    if (acpClient) {
+      const isWorking = acpRuntimeManager.isSessionWorking(sessionId);
       return {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -992,16 +692,7 @@ class SessionService {
       };
     }
 
-    if (adapter.getPendingClient(sessionId) !== undefined) {
-      return {
-        phase: 'starting',
-        processState: 'alive',
-        activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    if (adapter.isStopInProgress(sessionId)) {
+    if (acpRuntimeManager.isStopInProgress(sessionId)) {
       return {
         ...base,
         phase: 'stopping',
@@ -1068,83 +759,33 @@ class SessionService {
     return handle;
   }
 
-  private toCodexTextContent(content: string | ClaudeContentItem[]): string {
-    if (typeof content === 'string') {
-      return content;
-    }
-
-    const chunks: string[] = [];
-    for (const item of content) {
-      switch (item.type) {
-        case 'text':
-          chunks.push(item.text);
-          break;
-        case 'thinking':
-          chunks.push(item.thinking);
-          break;
-        case 'image':
-          chunks.push('[Image attachment omitted for this provider]');
-          break;
-        case 'tool_result':
-          if (typeof item.content === 'string') {
-            chunks.push(item.content);
-          } else {
-            chunks.push(JSON.stringify(item.content));
-          }
-          break;
-        default:
-          break;
-      }
-    }
-
-    return chunks.join('\n\n');
-  }
-
   // ===========================================================================
-  // Process Registry Access
+  // Query Methods
   // ===========================================================================
-
-  /**
-   * Get an active Claude process from the global registry.
-   * Returns a RegisteredProcess interface with status, lifecycle, and resource methods.
-   */
-  getClaudeProcess(sessionId: string): RegisteredProcess | undefined {
-    return this.claudeAdapter.getSessionProcess(sessionId);
-  }
 
   /**
    * Check if a session is running in memory
    */
   isSessionRunning(sessionId: string): boolean {
-    if (acpRuntimeManager.isSessionRunning(sessionId)) {
-      return true;
-    }
-    return this.resolveAdapterForSessionSync(sessionId).isSessionRunning(sessionId);
+    return acpRuntimeManager.isSessionRunning(sessionId);
   }
 
   /**
    * Check if a session is actively working (not just alive, but processing)
    */
   isSessionWorking(sessionId: string): boolean {
-    if (acpRuntimeManager.isSessionWorking(sessionId)) {
-      return true;
-    }
-    return this.resolveAdapterForSessionSync(sessionId).isSessionWorking(sessionId);
+    return acpRuntimeManager.isSessionWorking(sessionId);
   }
 
   /**
    * Check if any session in the given list is actively working
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
-    return (
-      this.claudeAdapter.isAnySessionWorking(sessionIds) ||
-      this.codexAdapter.isAnySessionWorking(sessionIds) ||
-      acpRuntimeManager.isAnySessionWorking(sessionIds)
-    );
+    return acpRuntimeManager.isAnySessionWorking(sessionIds);
   }
 
   /**
-   * Get session options for creating a Claude client.
+   * Get session options for creating a client.
    * Loads the workflow prompt from the database session.
    * This is the single source of truth for session configuration.
    */
@@ -1167,30 +808,24 @@ class SessionService {
     };
   }
 
-  async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
-    // For ACP sessions, derive capabilities from stored configOptions rather
-    // than calling the legacy adapter. This provides accurate capabilities
-    // regardless of the underlying provider.
+  getChatBarCapabilities(sessionId: string): ChatBarCapabilities {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     if (acpHandle && acpHandle.configOptions.length > 0) {
       return this.buildAcpChatBarCapabilities(acpHandle);
     }
 
-    // Fallback to legacy adapter path for non-ACP sessions
-    const { session, adapter } = await this.loadSessionWithAdapter(sessionId);
-    const selectedModel =
-      session.provider === 'CODEX'
-        ? (this.codexAdapter.getPreferredModel(sessionId) ??
-          resolveSessionModelForProvider(session.model, session.provider))
-        : resolveSessionModelForProvider(session.model, session.provider);
-    const selectedReasoningEffort =
-      session.provider === 'CODEX'
-        ? (this.codexAdapter.getPreferredReasoningEffort(sessionId) ?? null)
-        : null;
-    return await adapter.getChatBarCapabilities({
-      selectedModel,
-      selectedReasoningEffort,
-    });
+    // Default capabilities when no ACP handle is available
+    return {
+      provider: 'CLAUDE',
+      model: { enabled: false, options: [] },
+      reasoning: { enabled: false, options: [] },
+      thinking: { enabled: false },
+      planMode: { enabled: true },
+      attachments: { enabled: true, kinds: ['image', 'text'] },
+      slashCommands: { enabled: false },
+      usageStats: { enabled: false, contextWindow: false },
+      rewind: { enabled: false },
+    };
   }
 
   /**
@@ -1224,126 +859,117 @@ class SessionService {
   }
 
   /**
-   * Get all active Claude processes for admin view
+   * Stop all active clients during shutdown.
+   * @param _timeoutMs - Timeout (unused, kept for API compatibility)
    */
+  async stopAllClients(_timeoutMs = 5000): Promise<void> {
+    try {
+      await acpRuntimeManager.stopAllClients();
+    } catch (error) {
+      logger.error('Failed to stop ACP clients during shutdown', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  // ===========================================================================
+  // Deprecated Stubs (kept for API compatibility during Phase 22 migration)
+  // Will be removed in Plan 02 when consumers are updated.
+  // ===========================================================================
+
+  /** @deprecated No-op -- legacy ClaudeClient event forwarding removed. */
+  setOnClientCreated(_callback: ClientCreatedCallback): void {
+    // No-op: ACP sessions use setupAcpEventHandler for event wiring
+  }
+
+  /** @deprecated No-op -- Codex terminal turn callback removed. */
+  setOnCodexTerminalTurn(_callback: (sessionId: string) => void | Promise<void>): void {
+    // No-op: Codex sessions are no longer supported
+  }
+
+  /** @deprecated Always returns undefined -- ClaudeClient no longer managed. */
+  getClient(_sessionId: string): unknown {
+    return undefined;
+  }
+
+  /** @deprecated Returns a minimal delta -- legacy ClaudeAdapter translation removed. */
+  toPublicMessageDelta(message: ClaudeMessage, order?: number): SessionDeltaEvent {
+    return {
+      type: 'agent_message',
+      data: message,
+      ...(order !== undefined ? { order } : {}),
+    } as SessionDeltaEvent;
+  }
+
+  /** @deprecated Always returns null -- Codex transcript hydration removed. */
+  tryHydrateCodexTranscript(_sessionId: string): ChatMessage[] | null {
+    return null;
+  }
+
+  /** @deprecated Returns empty response -- legacy rewind files removed. */
+  rewindSessionFiles(
+    _sessionId: string,
+    _userMessageId: string,
+    _dryRun?: boolean
+  ): { affected_files?: string[] } {
+    return { affected_files: [] };
+  }
+
+  /** @deprecated Always returns undefined -- ClaudeProcess registry removed. */
+  getClaudeProcess(_sessionId: string): undefined {
+    return undefined;
+  }
+
+  /** @deprecated Returns empty array -- legacy ClaudeProcess monitoring removed. */
   getAllActiveProcesses(): Array<{
     sessionId: string;
     pid: number | undefined;
     status: string;
     isRunning: boolean;
-    resourceUsage: ResourceUsage | null;
+    resourceUsage: { cpu: number; memory: number } | null;
     idleTimeMs: number;
   }> {
-    return this.claudeAdapter.getAllActiveProcesses();
+    return [];
   }
 
-  getCodexManagerStatus(): ReturnType<CodexAppServerManager['getStatus']> {
-    return this.codexAdapter.getManager().getStatus();
-  }
-
-  getAllCodexActiveProcesses(): ReturnType<
-    typeof codexSessionProviderAdapter.getAllActiveProcesses
-  > {
-    return this.codexAdapter.getAllActiveProcesses();
-  }
-
-  /**
-   * Get all active clients for cleanup purposes.
-   * Returns an iterator of [sessionId, client] pairs.
-   */
-  getAllClients(): IterableIterator<[string, ClaudeClient]> {
-    return this.claudeAdapter.getAllClients();
-  }
-
-  /**
-   * Stop all active clients during shutdown.
-   * @param timeoutMs - Timeout for each client stop operation
-   */
-  async stopAllClients(timeoutMs = 5000): Promise<void> {
-    const stopOperations: Array<{ name: string; fn: () => Promise<void> }> = [
-      { name: 'Claude', fn: () => this.claudeAdapter.stopAllClients(timeoutMs) },
-      { name: 'Codex', fn: () => this.codexAdapter.stopAllClients() },
-      { name: 'ACP', fn: () => acpRuntimeManager.stopAllClients() },
-    ];
-
-    let firstError: unknown = null;
-    for (const op of stopOperations) {
-      try {
-        await op.fn();
-      } catch (error) {
-        firstError ??= error;
-        logger.error(`Failed to stop ${op.name} provider clients during shutdown`, {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    this.sessionProviderCache.clear();
-
-    if (firstError) {
-      throw firstError instanceof Error ? firstError : new Error(String(firstError));
-    }
-  }
-
-  private shouldStopWorkspaceSession(
-    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
-    adapter: SessionAdapter
-  ): {
-    shouldStop: boolean;
-    pendingClient: Promise<unknown> | undefined;
+  /** @deprecated Returns empty status -- Codex app-server monitoring removed. */
+  getCodexManagerStatus(): {
+    state: string;
+    unavailableReason: string | null;
+    pid: number | null;
+    startedAt: string | null;
+    restartCount: number;
+    activeSessionCount: number;
   } {
-    const pendingClient = adapter.getPendingClient(session.id);
-    const shouldStop = Boolean(
-      session.status === SessionStatus.RUNNING ||
-        adapter.isSessionRunning(session.id) ||
-        pendingClient
-    );
-    return { shouldStop, pendingClient };
+    return {
+      state: 'stopped',
+      unavailableReason: null,
+      pid: null,
+      startedAt: null,
+      restartCount: 0,
+      activeSessionCount: 0,
+    };
   }
 
-  private async waitForPendingClient(
-    workspaceId: string,
-    sessionId: string,
-    pendingClient: Promise<unknown> | undefined
-  ): Promise<void> {
-    if (!pendingClient) {
-      return;
-    }
-    try {
-      await pendingClient;
-    } catch (error) {
-      logger.warn('Pending session failed to start before stop', {
-        sessionId,
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  /** @deprecated Returns empty array -- Codex process monitoring removed. */
+  getAllCodexActiveProcesses(): Array<{
+    sessionId: string;
+    threadId: string;
+    isRunning: boolean;
+    createdAt: Date;
+  }> {
+    return [];
   }
 
-  private async stopWorkspaceSession(
-    session: Pick<AgentSessionRecord, 'id' | 'status' | 'provider'>,
-    workspaceId: string
-  ): Promise<void> {
-    const adapter = this.resolveAdapterForProvider(session.provider ?? 'CLAUDE');
-    const { shouldStop, pendingClient } = this.shouldStopWorkspaceSession(session, adapter);
-    if (!shouldStop) {
-      return;
-    }
-
-    await this.waitForPendingClient(workspaceId, session.id, pendingClient);
-
-    try {
-      await this.stopSession(session.id, {
-        providerHint: session.provider ?? 'CLAUDE',
-      });
-    } catch (error) {
-      logger.error('Failed to stop workspace session', {
-        sessionId: session.id,
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  /** @deprecated Returns empty iterator -- legacy ClaudeClient map removed. */
+  getAllClients(): IterableIterator<[string, unknown]> {
+    return new Map<string, unknown>().entries();
   }
+
+  // ===========================================================================
+  // Private Helpers
+  // ===========================================================================
 
   private async loadSessionContext(
     sessionId: string,
