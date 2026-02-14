@@ -91,11 +91,18 @@ function parseCodexHistoryMessage(
   entry: CodexHistoryEntry,
   timestamp: string
 ): HistoryMessage | null {
-  if (entry.type !== 'event_msg') {
-    return null;
+  const eventMessage = parseCodexEventMessage(entry, timestamp);
+  if (eventMessage) {
+    return eventMessage;
   }
+  return parseCodexResponseItemMessage(entry, timestamp);
+}
 
-  if (!isRecord(entry.payload)) {
+function parseCodexEventMessage(
+  entry: CodexHistoryEntry,
+  timestamp: string
+): HistoryMessage | null {
+  if (entry.type !== 'event_msg' || !isRecord(entry.payload)) {
     return null;
   }
 
@@ -118,6 +125,86 @@ function parseCodexHistoryMessage(
       type: 'assistant',
       content: message,
       timestamp,
+    };
+  }
+
+  return null;
+}
+
+function normalizeCodexFunctionArgs(argumentsValue: unknown): Record<string, unknown> {
+  if (isRecord(argumentsValue)) {
+    return argumentsValue;
+  }
+
+  if (typeof argumentsValue !== 'string') {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(argumentsValue);
+    if (isRecord(parsed)) {
+      return parsed;
+    }
+    return { rawArguments: argumentsValue };
+  } catch {
+    return { rawArguments: argumentsValue };
+  }
+}
+
+function normalizeCodexFunctionOutput(output: unknown): string {
+  if (typeof output === 'string') {
+    return output;
+  }
+  if (output === undefined || output === null) {
+    return '';
+  }
+  try {
+    return JSON.stringify(output);
+  } catch {
+    return String(output);
+  }
+}
+
+function parseCodexResponseItemMessage(
+  entry: CodexHistoryEntry,
+  timestamp: string
+): HistoryMessage | null {
+  if (entry.type !== 'response_item' || !isRecord(entry.payload)) {
+    return null;
+  }
+
+  const payloadType = entry.payload.type;
+  if (payloadType === 'function_call') {
+    const toolName = entry.payload.name;
+    const toolId = entry.payload.call_id;
+    if (
+      typeof toolName !== 'string' ||
+      toolName.trim().length === 0 ||
+      typeof toolId !== 'string' ||
+      toolId.trim().length === 0
+    ) {
+      return null;
+    }
+    return {
+      type: 'tool_use',
+      content: '',
+      timestamp,
+      toolName,
+      toolId,
+      toolInput: normalizeCodexFunctionArgs(entry.payload.arguments),
+    };
+  }
+
+  if (payloadType === 'function_call_output') {
+    const toolId = entry.payload.call_id;
+    if (typeof toolId !== 'string' || toolId.trim().length === 0) {
+      return null;
+    }
+    return {
+      type: 'tool_result',
+      content: normalizeCodexFunctionOutput(entry.payload.output),
+      timestamp,
+      toolId,
     };
   }
 
@@ -243,7 +330,7 @@ async function resolveSessionFilePath(
     }
   }
 
-  return withMtime[0]?.candidatePath ?? null;
+  return null;
 }
 
 class CodexSessionHistoryLoaderService {

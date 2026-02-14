@@ -106,6 +106,25 @@ describe('codexSessionHistoryLoaderService', () => {
             text: 'ignore reasoning',
           },
         },
+        {
+          timestamp: '2026-02-14T00:00:04.000Z',
+          type: 'response_item',
+          payload: {
+            type: 'function_call',
+            name: 'exec_command',
+            call_id: 'call-1',
+            arguments: '{"cmd":"git status --short"}',
+          },
+        },
+        {
+          timestamp: '2026-02-14T00:00:05.000Z',
+          type: 'response_item',
+          payload: {
+            type: 'function_call_output',
+            call_id: 'call-1',
+            output: 'M package.json',
+          },
+        },
       ],
     });
 
@@ -129,6 +148,70 @@ describe('codexSessionHistoryLoaderService', () => {
         type: 'assistant',
         content: 'hi',
         timestamp: '2026-02-14T00:00:02.000Z',
+      },
+      {
+        type: 'tool_use',
+        content: '',
+        timestamp: '2026-02-14T00:00:04.000Z',
+        toolName: 'exec_command',
+        toolId: 'call-1',
+        toolInput: { cmd: 'git status --short' },
+      },
+      {
+        type: 'tool_result',
+        content: 'M package.json',
+        timestamp: '2026-02-14T00:00:05.000Z',
+        toolId: 'call-1',
+      },
+    ]);
+  });
+
+  it('records raw function args when response_item arguments are not valid JSON objects', async () => {
+    const providerSessionId = 'session-fn-args';
+    const cwd = '/Users/test/project';
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: {
+            id: providerSessionId,
+            cwd,
+          },
+        },
+        {
+          timestamp: '2026-02-14T00:00:04.000Z',
+          type: 'response_item',
+          payload: {
+            type: 'function_call',
+            name: 'exec_command',
+            call_id: 'call-2',
+            arguments: 'not-json',
+          },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'tool_use',
+        content: '',
+        timestamp: '2026-02-14T00:00:04.000Z',
+        toolName: 'exec_command',
+        toolId: 'call-2',
+        toolInput: { rawArguments: 'not-json' },
       },
     ]);
   });
@@ -182,6 +265,33 @@ describe('codexSessionHistoryLoaderService', () => {
       type: 'user',
       content: 'from matching cwd',
     });
+  });
+
+  it('returns not_found when candidate filename matches but session_meta id does not', async () => {
+    const providerSessionId = 'session-meta-mismatch';
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/14',
+      fileName: `rollout-2026-02-14T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: { id: 'different-session-id', cwd: '/Users/test/project' },
+        },
+        {
+          timestamp: '2026-02-14T00:00:01.000Z',
+          type: 'event_msg',
+          payload: { type: 'user_message', message: 'wrong session transcript' },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: '/Users/test/project',
+    });
+
+    expect(result).toEqual({ status: 'not_found' });
   });
 
   it('returns not_found when session file does not exist', async () => {
