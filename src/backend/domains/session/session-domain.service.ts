@@ -28,6 +28,7 @@ import {
   commitSentUserMessageWithOrder,
   injectCommittedUserMessage,
   messageSort,
+  setNextOrderFromTranscript,
   upsertTranscriptMessage,
 } from './store/session-transcript';
 
@@ -371,6 +372,36 @@ class SessionDomainService {
   getTranscriptSnapshot(sessionId: string): ChatMessage[] {
     const store = this.registry.getOrCreate(sessionId);
     return [...store.transcript].sort(messageSort);
+  }
+
+  isHistoryHydrated(sessionId: string): boolean {
+    const store = this.registry.getOrCreate(sessionId);
+    return store.historyHydrated === true;
+  }
+
+  markHistoryHydrated(
+    sessionId: string,
+    source: 'jsonl' | 'acp_fallback' | 'none',
+    options?: { hydratedAt?: string }
+  ): void {
+    const store = this.registry.getOrCreate(sessionId);
+    store.historyHydrated = true;
+    store.historyHydrationSource = source;
+    store.historyHydratedAt = options?.hydratedAt ?? this.nowIso();
+  }
+
+  replaceTranscript(
+    sessionId: string,
+    transcript: ChatMessage[],
+    options?: { historySource?: 'jsonl' | 'acp_fallback' | 'none' }
+  ): void {
+    const store = this.registry.getOrCreate(sessionId);
+    store.transcript = [...transcript].sort(messageSort);
+    setNextOrderFromTranscript(store);
+
+    if (options?.historySource) {
+      this.markHistoryHydrated(sessionId, options.historySource);
+    }
   }
 }
 

@@ -719,6 +719,63 @@ describe('SessionService', () => {
     expect(sessionService.getSessionConfigOptions('session-1')).toEqual([]);
   });
 
+  it('returns cached config options when no ACP handle is active', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        provider: 'CLAUDE',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'CLAUDE',
+            providerSessionId: 'provider-session-1',
+            capturedAt: '2026-02-14T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'model',
+                name: 'Model',
+                type: 'select',
+                category: 'model',
+                currentValue: 'claude-sonnet-4-5',
+                options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
+              },
+            ],
+          },
+        },
+      })
+    );
+
+    await expect(sessionService.getSessionConfigOptionsWithFallback('session-1')).resolves.toEqual([
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'claude-sonnet-4-5',
+        options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
+      },
+    ]);
+  });
+
+  it('returns empty Claude capabilities when no ACP handle or cached snapshot exists', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-claude',
+        provider: 'CLAUDE',
+        model: 'claude-sonnet-4-5',
+        providerMetadata: null,
+      })
+    );
+
+    const capabilities = await sessionService.getChatBarCapabilities('session-claude');
+
+    expect(capabilities.provider).toBe('CLAUDE');
+    expect(capabilities.model.enabled).toBe(false);
+    expect(capabilities.model.selected).toBeUndefined();
+    expect(capabilities.model.options).toEqual([]);
+  });
+
   it('returns CODEX provider fallback capabilities when no ACP handle is active', async () => {
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(

@@ -1,3 +1,4 @@
+import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import { SessionStatus } from '@factory-factory/core';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
 import {
@@ -33,6 +34,14 @@ import { sessionRepository } from './session.repository';
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 type ReplayUserMessageDelta = { type: 'user_message_chunk'; text: string };
+type SessionProvider = 'CLAUDE' | 'CODEX';
+type StoredAcpConfigSnapshot = {
+  provider: SessionProvider;
+  providerSessionId: string;
+  capturedAt: string;
+  configOptions: SessionConfigOption[];
+  observedModelId?: string;
+};
 
 class SessionService {
   private readonly repository: SessionRepository;
@@ -176,8 +185,12 @@ class SessionService {
       const acpHandle = acpRuntimeManager.getClient(sid);
       if (acpHandle) {
         const { configOptions } = delta as { configOptions: unknown[] };
-        acpHandle.configOptions =
-          configOptions as import('@agentclientprotocol/sdk').SessionConfigOption[];
+        acpHandle.configOptions = configOptions as SessionConfigOption[];
+        void this.persistAcpConfigSnapshot(sid, {
+          provider: acpHandle.provider as SessionProvider,
+          providerSessionId: acpHandle.providerSessionId,
+          configOptions: acpHandle.configOptions,
+        });
         sessionDomainService.emitDelta(sid, delta);
         sessionDomainService.emitDelta(sid, {
           type: 'chat_capabilities',
@@ -327,6 +340,13 @@ class SessionService {
     const handle = await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
       workspaceId: sessionContext.workspaceId,
       workingDir: sessionContext.workingDir,
+    });
+
+    await this.persistAcpConfigSnapshot(sessionId, {
+      provider: handle.provider as SessionProvider,
+      providerSessionId: handle.providerSessionId,
+      configOptions: handle.configOptions,
+      existingMetadata: session?.providerMetadata ?? undefined,
     });
 
     // Emit initial config options so the frontend receives them on session start
@@ -592,11 +612,28 @@ class SessionService {
     return acpRuntimeManager.getClient(sessionId);
   }
 
-  getSessionConfigOptions(
-    sessionId: string
-  ): import('@agentclientprotocol/sdk').SessionConfigOption[] {
+  getSessionConfigOptions(sessionId: string): SessionConfigOption[] {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     return acpHandle ? [...acpHandle.configOptions] : [];
+  }
+
+  async getSessionConfigOptionsWithFallback(sessionId: string): Promise<SessionConfigOption[]> {
+    const liveConfigOptions = this.getSessionConfigOptions(sessionId);
+    if (liveConfigOptions.length > 0) {
+      return liveConfigOptions;
+    }
+
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      return [];
+    }
+
+    const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    if (cachedSnapshot && cachedSnapshot.provider === session.provider) {
+      return [...cachedSnapshot.configOptions];
+    }
+
+    return [];
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
@@ -659,6 +696,14 @@ class SessionService {
       type: 'config_options_update',
       configOptions,
     } as SessionDeltaEvent);
+    const acpHandleAfterUpdate = acpRuntimeManager.getClient(sessionId);
+    if (acpHandleAfterUpdate) {
+      await this.persistAcpConfigSnapshot(sessionId, {
+        provider: acpHandleAfterUpdate.provider as SessionProvider,
+        providerSessionId: acpHandleAfterUpdate.providerSessionId,
+        configOptions: configOptions,
+      });
+    }
   }
 
   sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
@@ -963,17 +1008,32 @@ class SessionService {
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
-    if (!acpHandle) {
-      const session = await this.repository.getSessionById(sessionId);
-      if (session?.provider === 'CODEX') {
-        return {
-          ...EMPTY_CHAT_BAR_CAPABILITIES,
-          provider: 'CODEX',
-        };
-      }
+    if (acpHandle) {
+      return this.buildAcpChatBarCapabilities(acpHandle);
+    }
+
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
       return EMPTY_CHAT_BAR_CAPABILITIES;
     }
-    return this.buildAcpChatBarCapabilities(acpHandle);
+
+    const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    if (cachedSnapshot && cachedSnapshot.provider === session.provider) {
+      return this.buildCapabilitiesFromConfigOptions(
+        session.provider,
+        cachedSnapshot.configOptions,
+        cachedSnapshot.observedModelId
+      );
+    }
+
+    if (session.provider === 'CODEX') {
+      return {
+        ...EMPTY_CHAT_BAR_CAPABILITIES,
+        provider: 'CODEX',
+      };
+    }
+
+    return EMPTY_CHAT_BAR_CAPABILITIES;
   }
 
   /**
@@ -981,15 +1041,31 @@ class SessionService {
    * No hardcoded fallback — capabilities are derived from what the agent reports.
    */
   private buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {
-    const modelOption = handle.configOptions.find((o) => o.category === 'model');
-    const thoughtOption = handle.configOptions.find((o) => o.category === 'thought_level');
+    return this.buildCapabilitiesFromConfigOptions(
+      handle.provider as SessionProvider,
+      handle.configOptions
+    );
+  }
+
+  private buildCapabilitiesFromConfigOptions(
+    provider: SessionProvider,
+    configOptions: SessionConfigOption[],
+    fallbackModel?: string
+  ): ChatBarCapabilities {
+    const modelOption = configOptions.find((o) => o.category === 'model');
+    const thoughtOption = configOptions.find((o) => o.category === 'thought_level');
+    const selectedModel = modelOption?.currentValue
+      ? String(modelOption.currentValue)
+      : (fallbackModel ?? undefined);
+    const modelOptions = this.buildModelOptions(modelOption, selectedModel);
+    const isCodexProvider = provider === 'CODEX';
 
     return {
-      provider: handle.provider === 'CODEX' ? 'CODEX' : 'CLAUDE',
+      provider,
       model: {
-        enabled: !!modelOption,
-        options: [],
-        ...(modelOption?.currentValue ? { selected: String(modelOption.currentValue) } : {}),
+        enabled: modelOptions.length > 0,
+        options: modelOptions,
+        ...(selectedModel ? { selected: selectedModel } : {}),
       },
       reasoning: {
         enabled: false,
@@ -999,16 +1075,32 @@ class SessionService {
         enabled: !!thoughtOption,
       },
       planMode: { enabled: true },
-      attachments: { enabled: true, kinds: ['image', 'text'] },
+      attachments: isCodexProvider
+        ? { enabled: false, kinds: [] }
+        : { enabled: true, kinds: ['image', 'text'] },
       slashCommands: { enabled: false },
       usageStats: { enabled: false, contextWindow: false },
       rewind: { enabled: false },
     };
   }
 
-  private getConfigOptionValues(
-    option: import('@agentclientprotocol/sdk').SessionConfigOption
-  ): string[] {
+  private buildModelOptions(
+    modelOption: SessionConfigOption | undefined,
+    selectedModel: string | undefined
+  ): Array<{ value: string; label: string }> {
+    if (!modelOption) {
+      return selectedModel ? [{ value: selectedModel, label: selectedModel }] : [];
+    }
+
+    const uniqueValues = new Set<string>(this.getConfigOptionValues(modelOption));
+    if (selectedModel) {
+      uniqueValues.add(selectedModel);
+    }
+
+    return Array.from(uniqueValues).map((value) => ({ value, label: value }));
+  }
+
+  private getConfigOptionValues(option: SessionConfigOption): string[] {
     return option.options.flatMap((entry) => {
       if (typeof entry !== 'object' || entry === null) {
         return [];
@@ -1043,6 +1135,111 @@ class SessionService {
   // ===========================================================================
   // Private Helpers
   // ===========================================================================
+
+  private async persistAcpConfigSnapshot(
+    sessionId: string,
+    params: {
+      provider: SessionProvider;
+      providerSessionId: string;
+      configOptions: SessionConfigOption[];
+      existingMetadata?: unknown;
+    }
+  ): Promise<void> {
+    if (params.configOptions.length === 0) {
+      return;
+    }
+
+    const configOptionsForStorage = this.cloneConfigOptionsForStorage(params.configOptions);
+    const observedModelId = this.resolveObservedModel(configOptionsForStorage);
+    const metadataSource =
+      params.existingMetadata ??
+      (await this.repository.getSessionById(sessionId))?.providerMetadata ??
+      null;
+
+    const metadataRecord = this.toMetadataRecord(metadataSource);
+    const snapshot: StoredAcpConfigSnapshot = {
+      provider: params.provider,
+      providerSessionId: params.providerSessionId,
+      capturedAt: new Date().toISOString(),
+      configOptions: configOptionsForStorage,
+      ...(observedModelId ? { observedModelId } : {}),
+    };
+
+    const nextMetadata: Record<string, unknown> = {
+      ...metadataRecord,
+      acpConfigSnapshot: snapshot,
+    };
+    if (observedModelId) {
+      nextMetadata.observedModelId = observedModelId;
+    }
+
+    try {
+      await this.repository.updateSession(sessionId, {
+        providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
+      });
+    } catch (error) {
+      logger.warn('Failed persisting ACP config snapshot to session metadata', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private cloneConfigOptionsForStorage(
+    configOptions: SessionConfigOption[]
+  ): SessionConfigOption[] {
+    try {
+      return structuredClone(configOptions);
+    } catch {
+      return configOptions;
+    }
+  }
+
+  private toMetadataRecord(metadata: unknown): Record<string, unknown> {
+    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+      return {};
+    }
+    return { ...(metadata as Record<string, unknown>) };
+  }
+
+  private extractAcpConfigSnapshot(metadata: unknown): StoredAcpConfigSnapshot | null {
+    const record = this.toMetadataRecord(metadata);
+    const snapshot = record.acpConfigSnapshot;
+    if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) {
+      return null;
+    }
+
+    const candidate = snapshot as Record<string, unknown>;
+    const provider = candidate.provider;
+    const providerSessionId = candidate.providerSessionId;
+    const configOptions = candidate.configOptions;
+    const observedModelId = candidate.observedModelId;
+
+    if (provider !== 'CLAUDE' && provider !== 'CODEX') {
+      return null;
+    }
+    if (typeof providerSessionId !== 'string' || providerSessionId.length === 0) {
+      return null;
+    }
+    if (!Array.isArray(configOptions)) {
+      return null;
+    }
+
+    return {
+      provider,
+      providerSessionId,
+      capturedAt:
+        typeof candidate.capturedAt === 'string' ? candidate.capturedAt : new Date(0).toISOString(),
+      configOptions: configOptions as SessionConfigOption[],
+      ...(typeof observedModelId === 'string' ? { observedModelId } : {}),
+    };
+  }
+
+  private resolveObservedModel(configOptions: SessionConfigOption[]): string | undefined {
+    const modelOption = configOptions.find((option) => option.category === 'model');
+    const currentValue = modelOption?.currentValue;
+    return currentValue ? String(currentValue) : undefined;
+  }
 
   private async loadSessionContext(
     sessionId: string,
