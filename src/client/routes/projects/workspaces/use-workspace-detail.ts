@@ -183,11 +183,7 @@ export function useSessionManagement({
       utils.session.listSessions.invalidate({ workspaceId });
     },
   });
-  const startSession = trpc.session.startSession.useMutation({
-    onError: (error) => {
-      toast.error(error.message || 'Failed to start session');
-    },
-  });
+  const startSession = trpc.session.startSession.useMutation();
 
   const deleteSession = trpc.session.deleteSession.useMutation({
     onMutate: async ({ id }) => {
@@ -295,10 +291,21 @@ export function useSessionManagement({
       },
       {
         onSuccess: (session) => {
-          startSession.mutate({ id: session.id, initialPrompt: '' });
-          // Setting the new session ID triggers WebSocket reconnection automatically
-          setSelectedDbSessionId(session.id);
-          setTimeout(() => inputRef.current?.focus(), 0);
+          const previousSessionId = selectedDbSessionId;
+          startSession.mutate(
+            { id: session.id, initialPrompt: '' },
+            {
+              onSuccess: () => {
+                // Setting the new session ID triggers WebSocket reconnection automatically
+                setSelectedDbSessionId(session.id);
+                setTimeout(() => inputRef.current?.focus(), 0);
+              },
+              onError: (error) => {
+                toast.error(error.message || 'Failed to start session');
+                setSelectedDbSessionId(previousSessionId);
+              },
+            }
+          );
         },
       }
     );
@@ -307,6 +314,7 @@ export function useSessionManagement({
     workspaceId,
     getNextChatName,
     startSession,
+    selectedDbSessionId,
     setSelectedDbSessionId,
     inputRef,
     selectedModel,

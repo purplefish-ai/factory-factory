@@ -439,6 +439,7 @@ class ClaudeSessionHistoryLoaderService {
       });
     } finally {
       reader.close();
+      stream.destroy();
     }
 
     return history;
