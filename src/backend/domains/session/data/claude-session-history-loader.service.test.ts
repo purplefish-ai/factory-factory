@@ -60,6 +60,15 @@ describe('claudeSessionHistoryLoaderService', () => {
     expect(result).toEqual({ status: 'skipped', reason: 'missing_provider_session_id' });
   });
 
+  it('skips loading when providerSessionId is unsafe', async () => {
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId: '../../etc/passwd',
+      workingDir: '/tmp/work',
+    });
+
+    expect(result).toEqual({ status: 'skipped', reason: 'invalid_provider_session_id' });
+  });
+
   it('loads and parses history from Claude session JSONL', async () => {
     const providerSessionId = 'provider-session-1';
     const cwd = '/Users/test/project';

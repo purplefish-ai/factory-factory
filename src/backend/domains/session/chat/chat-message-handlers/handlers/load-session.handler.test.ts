@@ -52,6 +52,15 @@ vi.mock('@/backend/domains/session/store/slash-command-cache.service', () => ({
   },
 }));
 
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 import { createLoadSessionHandler } from './load-session.handler';
 
 describe('createLoadSessionHandler', () => {
@@ -218,6 +227,44 @@ describe('createLoadSessionHandler', () => {
 
     expect(mocks.loadSessionHistory).toHaveBeenCalledTimes(1);
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+  });
+
+  it('evicts oldest retry entries to keep retry tracking bounded', async () => {
+    vi.useFakeTimers();
+    mocks.findById.mockImplementation(async (sessionId: string) => ({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: `provider-${sessionId}`,
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    }));
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadSessionHistory.mockResolvedValue({
+      status: 'error',
+      reason: 'read_failed',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+
+    for (let i = 0; i <= 1024; i += 1) {
+      await handler({
+        ws: ws as never,
+        sessionId: `retry-cap-${i}`,
+        workingDir: '/tmp/worktree',
+        message: { type: 'load_session' } as never,
+      });
+    }
+
+    await handler({
+      ws: ws as never,
+      sessionId: 'retry-cap-0',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadSessionHistory).toHaveBeenCalledTimes(1026);
   });
 
   it('does not initialize CODEX sessions on passive load', async () => {

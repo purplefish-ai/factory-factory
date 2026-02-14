@@ -10,18 +10,40 @@ import type { LoadSessionMessage } from '@/shared/websocket';
 
 const logger = createLogger('load-session-handler');
 const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
+const MAX_TRACKED_HISTORY_RETRY_SESSIONS = 1024;
 const nextHistoryRetryAtBySession = new Map<string, number>();
 
+function pruneExpiredHistoryRetryEntries(now: number): void {
+  for (const [trackedSessionId, retryAt] of nextHistoryRetryAtBySession) {
+    if (retryAt <= now) {
+      nextHistoryRetryAtBySession.delete(trackedSessionId);
+    }
+  }
+}
+
+function setHistoryRetryAt(sessionId: string, retryAt: number): void {
+  const now = Date.now();
+  pruneExpiredHistoryRetryEntries(now);
+  if (
+    !nextHistoryRetryAtBySession.has(sessionId) &&
+    nextHistoryRetryAtBySession.size >= MAX_TRACKED_HISTORY_RETRY_SESSIONS
+  ) {
+    const oldestTrackedSessionId = nextHistoryRetryAtBySession.keys().next().value;
+    if (typeof oldestTrackedSessionId === 'string') {
+      nextHistoryRetryAtBySession.delete(oldestTrackedSessionId);
+    }
+  }
+  nextHistoryRetryAtBySession.set(sessionId, retryAt);
+}
+
 function canAttemptHistoryHydration(sessionId: string): boolean {
+  const now = Date.now();
+  pruneExpiredHistoryRetryEntries(now);
   const retryAt = nextHistoryRetryAtBySession.get(sessionId);
   if (!retryAt) {
     return true;
   }
-  if (retryAt <= Date.now()) {
-    nextHistoryRetryAtBySession.delete(sessionId);
-    return true;
-  }
-  return false;
+  return retryAt <= now;
 }
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
@@ -122,7 +144,7 @@ async function hydrateClaudeHistoryIfNeeded(
   }
 
   if (loadResult.status === 'error') {
-    nextHistoryRetryAtBySession.set(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
+    setHistoryRetryAt(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
     logger.warn('Claude JSONL history hydration failed; keeping session eligible for retry', {
       sessionId,
       providerSessionId: dbSession.providerSessionId,
