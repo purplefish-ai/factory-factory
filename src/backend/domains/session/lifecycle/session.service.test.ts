@@ -218,7 +218,7 @@ describe('SessionService', () => {
     });
   });
 
-  it('persists replayed user_message_chunk events from ACP session updates', async () => {
+  it('ignores user_message_chunk events from ACP session updates', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
     >({
@@ -273,7 +273,7 @@ describe('SessionService', () => {
       },
     });
 
-    expect(injectUserMessageSpy).toHaveBeenCalledWith('session-1', 'ping');
+    expect(injectUserMessageSpy).not.toHaveBeenCalled();
   });
 
   it('creates client from preloaded session without re-querying session row', async () => {
