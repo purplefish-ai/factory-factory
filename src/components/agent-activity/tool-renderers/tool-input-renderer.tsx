@@ -162,7 +162,11 @@ const RunToolRenderer = memo(function RunToolRenderer({
       : null;
   const fallback =
     commandPreview ??
-    (typeof commandValue === 'string' ? commandValue : JSON.stringify(commandValue ?? '', null, 2));
+    (typeof commandValue === 'string'
+      ? commandValue
+      : commandValue != null
+        ? JSON.stringify(commandValue, null, 2)
+        : '(no command)');
 
   const additionalParams = Object.fromEntries(
     Object.entries(input).filter(([key]) => !['command', 'description', 'cwd'].includes(key))

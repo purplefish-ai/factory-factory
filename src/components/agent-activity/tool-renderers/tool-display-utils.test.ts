@@ -10,6 +10,8 @@ describe('tool-display-utils', () => {
     it('detects run tool names with command suffixes', () => {
       expect(isRunLikeToolName('Run cat > /tmp/pr-body.md')).toBe(true);
       expect(isRunLikeToolName('run git push origin main')).toBe(true);
+      expect(isRunLikeToolName('Run')).toBe(true);
+      expect(isRunLikeToolName('RunScript')).toBe(false);
       expect(isRunLikeToolName('Bash')).toBe(false);
     });
   });
