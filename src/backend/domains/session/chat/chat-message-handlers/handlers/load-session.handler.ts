@@ -23,9 +23,18 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       loadRequestId: message.loadRequestId,
     });
 
+    const hasWorktreePath = Boolean(dbSession.workspace.worktreePath);
+    const hasResumableProviderSession = Boolean(dbSession.providerSessionId);
+    const transcriptCount = sessionDomainService.getTranscriptSnapshot(sessionId).length;
+    const hasHydratedTranscript = transcriptCount > 0;
+    const isWorkspaceArchived = dbSession.workspace.status === 'ARCHIVED';
     const shouldEagerInit =
-      Boolean(dbSession.workspace.worktreePath) &&
-      (dbSession.status === 'RUNNING' || sessionRuntime.processState === 'alive');
+      hasWorktreePath &&
+      !isWorkspaceArchived &&
+      (dbSession.status === 'RUNNING' ||
+        sessionRuntime.processState === 'alive' ||
+        hasResumableProviderSession ||
+        hasHydratedTranscript);
 
     if (shouldEagerInit) {
       try {
@@ -39,11 +48,15 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
         );
       }
     } else {
-      logger.debug('Skipping eager ACP runtime init for inactive session', {
+      logger.debug('Skipping eager ACP runtime init on session load', {
         sessionId,
         status: dbSession.status,
         processState: sessionRuntime.processState,
-        hasWorktreePath: Boolean(dbSession.workspace.worktreePath),
+        hasWorktreePath,
+        hasResumableProviderSession,
+        hasHydratedTranscript,
+        transcriptCount,
+        isWorkspaceArchived,
       });
     }
 

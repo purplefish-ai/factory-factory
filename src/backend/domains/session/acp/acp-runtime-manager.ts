@@ -4,12 +4,13 @@ import { Readable, Writable } from 'node:stream';
 import {
   ClientSideConnection,
   type LoadSessionResponse,
-  type NewSessionResponse,
   ndJsonStream,
   PROTOCOL_VERSION,
   type SessionConfigOption,
   type SessionConfigSelectGroup,
   type SessionConfigSelectOption,
+  type SessionModelState,
+  type SessionModeState,
 } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
@@ -110,6 +111,11 @@ function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
   return { message: String(error) };
 }
 
+function isMethodNotFoundError(error: unknown): boolean {
+  const details = getAcpErrorLogDetails(error);
+  return details.code === -32_601 || details.message.includes('Method not found');
+}
+
 const REQUIRED_CONFIG_CATEGORIES = ['model', 'mode'] as const;
 
 function isNonEmptyString(value: unknown): value is string {
@@ -182,17 +188,132 @@ function normalizeSessionConfigOptions(
   provider: string,
   configOptions: SessionConfigOption[]
 ): SessionConfigOption[] {
-  return provider === 'CLAUDE' ? normalizeClaudeConfigOptions(configOptions) : configOptions;
+  const providerNormalized =
+    provider === 'CLAUDE' ? normalizeClaudeConfigOptions(configOptions) : configOptions;
+  return providerNormalized.map((configOption) => {
+    if (configOption.category || (configOption.id !== 'model' && configOption.id !== 'mode')) {
+      return configOption;
+    }
+    return {
+      ...configOption,
+      category: configOption.id,
+    };
+  });
+}
+
+type SessionResultWithFallbackState = {
+  configOptions?: SessionConfigOption[] | null;
+  models?: SessionModelState | null;
+  modes?: SessionModeState | null;
+};
+
+function resolveModelConfigOption(
+  models: SessionModelState | null | undefined
+): SessionConfigOption | null {
+  if (!(models && Array.isArray(models.availableModels))) {
+    return null;
+  }
+
+  const options = models.availableModels
+    .filter((entry) => isNonEmptyString(entry.modelId))
+    .map((entry) => ({
+      value: entry.modelId,
+      name: isNonEmptyString(entry.name) ? entry.name : entry.modelId,
+      ...(isNonEmptyString(entry.description) ? { description: entry.description } : {}),
+    }));
+  if (options.length === 0) {
+    return null;
+  }
+
+  const preferredValue = isNonEmptyString(models.currentModelId) ? models.currentModelId : null;
+  const currentValue =
+    (preferredValue && options.some((option) => option.value === preferredValue)
+      ? preferredValue
+      : options[0]?.value) ?? null;
+  if (!currentValue) {
+    return null;
+  }
+
+  return {
+    id: 'model',
+    name: 'Model',
+    type: 'select',
+    category: 'model',
+    currentValue,
+    options,
+  };
+}
+
+function resolveModeConfigOption(
+  modes: SessionModeState | null | undefined
+): SessionConfigOption | null {
+  if (!(modes && Array.isArray(modes.availableModes))) {
+    return null;
+  }
+
+  const options = modes.availableModes
+    .filter((entry) => isNonEmptyString(entry.id))
+    .map((entry) => ({
+      value: entry.id,
+      name: isNonEmptyString(entry.name) ? entry.name : entry.id,
+      ...(isNonEmptyString(entry.description) ? { description: entry.description } : {}),
+    }));
+  if (options.length === 0) {
+    return null;
+  }
+
+  const preferredValue = isNonEmptyString(modes.currentModeId) ? modes.currentModeId : null;
+  const currentValue =
+    (preferredValue && options.some((option) => option.value === preferredValue)
+      ? preferredValue
+      : options[0]?.value) ?? null;
+  if (!currentValue) {
+    return null;
+  }
+
+  return {
+    id: 'mode',
+    name: 'Mode',
+    type: 'select',
+    category: 'mode',
+    currentValue,
+    options,
+  };
+}
+
+function fallbackSessionConfigOptions(
+  sessionResult: Pick<SessionResultWithFallbackState, 'models' | 'modes'>
+): SessionConfigOption[] {
+  const fallbackOptions: SessionConfigOption[] = [];
+  const modelOption = resolveModelConfigOption(sessionResult.models);
+  if (modelOption) {
+    fallbackOptions.push(modelOption);
+  }
+  const modeOption = resolveModeConfigOption(sessionResult.modes);
+  if (modeOption) {
+    fallbackOptions.push(modeOption);
+  }
+  return fallbackOptions;
 }
 
 function requireSessionConfigOptions(
   provider: string,
   sessionSource: 'newSession' | 'loadSession' | 'setSessionConfigOption',
-  sessionResult: Pick<NewSessionResponse | LoadSessionResponse, 'configOptions'>
+  sessionResult: SessionResultWithFallbackState
 ): SessionConfigOption[] {
-  const configOptions = Array.isArray(sessionResult.configOptions)
-    ? sessionResult.configOptions
-    : [];
+  let configOptions = Array.isArray(sessionResult.configOptions) ? sessionResult.configOptions : [];
+
+  if (sessionSource !== 'setSessionConfigOption') {
+    const fallbackOptions = fallbackSessionConfigOptions(sessionResult);
+    if (configOptions.length === 0 && fallbackOptions.length > 0) {
+      logger.warn('ACP session response missing configOptions; deriving from models/modes', {
+        provider,
+        sessionSource,
+      });
+      configOptions = fallbackOptions;
+    }
+  }
+
   if (configOptions.length === 0) {
     throw new Error(
       `ACP ${provider} ${sessionSource} response did not include required configOptions`
@@ -693,6 +814,78 @@ export class AcpRuntimeManager {
       });
       throw error;
     }
+  }
+
+  async setSessionMode(sessionId: string, modeId: string): Promise<SessionConfigOption[]> {
+    const handle = this.sessions.get(sessionId);
+    if (!handle) {
+      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
+    }
+
+    try {
+      await handle.connection.setSessionMode({
+        sessionId: handle.providerSessionId,
+        modeId,
+      });
+
+      handle.configOptions = handle.configOptions.map((option) =>
+        option.category === 'mode' ? { ...option, currentValue: modeId } : option
+      );
+
+      return [...handle.configOptions];
+    } catch (error) {
+      logger.warn('setSessionMode failed', {
+        sessionId,
+        modeId,
+        provider: handle.provider,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  async setSessionModel(sessionId: string, modelId: string): Promise<SessionConfigOption[]> {
+    const handle = this.sessions.get(sessionId);
+    if (!handle) {
+      throw new Error(`No ACP session found for sessionId: ${sessionId}`);
+    }
+
+    const applyModelToCache = (): SessionConfigOption[] => {
+      handle.configOptions = handle.configOptions.map((option) =>
+        option.category === 'model' ? { ...option, currentValue: modelId } : option
+      );
+      return [...handle.configOptions];
+    };
+
+    if (handle.provider === 'CLAUDE') {
+      try {
+        await handle.connection.unstable_setSessionModel({
+          sessionId: handle.providerSessionId,
+          modelId,
+        });
+        return applyModelToCache();
+      } catch (error) {
+        if (!isMethodNotFoundError(error)) {
+          logger.warn('setSessionModel failed', {
+            sessionId,
+            modelId,
+            provider: handle.provider,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
+        logger.warn(
+          'unstable_setSessionModel unavailable, falling back to setSessionConfigOption',
+          {
+            sessionId,
+            modelId,
+            provider: handle.provider,
+          }
+        );
+      }
+    }
+
+    return await this.setConfigOption(sessionId, 'model', modelId);
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
