@@ -116,7 +116,7 @@ describe('SessionDomainService', () => {
     );
   });
 
-  it('markProcessExit clears queue and transcript then emits reset snapshot', () => {
+  it('markProcessExit clears queue but preserves transcript for reload', () => {
     sessionDomainService.enqueue('s1', {
       id: 'q1',
       text: 'queued',
@@ -148,7 +148,7 @@ describe('SessionDomainService', () => {
         processState: 'stopped',
         activity: 'IDLE',
       }),
-      messages: [],
+      messages: [expect.objectContaining({ source: 'user', text: 'before-exit' })],
     });
   });
 

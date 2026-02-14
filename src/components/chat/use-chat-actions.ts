@@ -138,6 +138,15 @@ function findOptionIdByDecision(
   return preferred?.optionId ?? options[0]?.optionId;
 }
 
+function getLegacyPermissionOptionId(toolName: string, allow: boolean): string {
+  // Claude ExitPlanMode uses "default" (approve) and "plan" (reject).
+  if (toolName === 'ExitPlanMode') {
+    return allow ? 'default' : 'plan';
+  }
+  // Generic ACP tools conventionally use "allow" / "reject".
+  return allow ? 'allow' : 'reject';
+}
+
 function flattenAnswerValues(answers: Record<string, string | string[]>): string[] {
   const values: string[] = [];
   for (const value of Object.values(answers)) {
@@ -263,10 +272,9 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         return;
       }
       const resolvedOptionId =
-        optionId ?? findOptionIdByDecision(pendingRequest.request.acpOptions, allow);
-      if (!resolvedOptionId) {
-        return;
-      }
+        optionId ??
+        findOptionIdByDecision(pendingRequest.request.acpOptions, allow) ??
+        getLegacyPermissionOptionId(pendingRequest.request.toolName, allow);
       const msg: PermissionResponseMessage = {
         type: 'permission_response',
         requestId,

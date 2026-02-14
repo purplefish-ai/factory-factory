@@ -23,8 +23,6 @@ export function handleProcessExit(options: {
 
   store.queue = [];
   store.pendingInteractiveRequest = null;
-  store.transcript = [];
-  store.nextOrder = 0;
   store.initialized = false;
 
   markRuntime(store, {

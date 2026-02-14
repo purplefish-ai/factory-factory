@@ -256,7 +256,7 @@ export function MainViewTabBar({
         >
           <SelectTrigger
             aria-label="New session provider"
-            className="h-6 w-[144px] text-xs shrink-0"
+            className="h-6 w-[96px] text-xs shrink-0"
           >
             <span className="truncate">{providerTriggerLabel}</span>
           </SelectTrigger>
