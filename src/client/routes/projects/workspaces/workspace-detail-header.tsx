@@ -39,6 +39,7 @@ import {
 import { trpc } from '@/frontend/lib/trpc';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
+  getWorkspaceDefaultOptionLabel,
   type NewSessionProviderSelection,
   resolveProviderSelection,
 } from '@/lib/session-provider-selection';
@@ -206,6 +207,7 @@ function WorkspaceProviderSettings({
   const [ratchetProvider, setRatchetProvider] = useState<NewSessionProviderSelection>(
     resolveProviderSelection(workspace.ratchetSessionProvider)
   );
+  const { data: userSettings } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
 
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
@@ -229,6 +231,15 @@ function WorkspaceProviderSettings({
   const currentRatchetProvider = resolveProviderSelection(workspace.ratchetSessionProvider);
   const isDirty =
     defaultProvider !== currentDefaultProvider || ratchetProvider !== currentRatchetProvider;
+  const userDefaultProvider = userSettings?.defaultSessionProvider;
+  const defaultWorkspaceLabel = getWorkspaceDefaultOptionLabel(
+    'WORKSPACE_DEFAULT',
+    userDefaultProvider
+  );
+  const ratchetWorkspaceLabel = getWorkspaceDefaultOptionLabel(
+    defaultProvider,
+    userDefaultProvider
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -262,7 +273,7 @@ function WorkspaceProviderSettings({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="WORKSPACE_DEFAULT">Workspace Default</SelectItem>
+                <SelectItem value="WORKSPACE_DEFAULT">{defaultWorkspaceLabel}</SelectItem>
                 {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
                   <SelectItem key={`default-${option.value}`} value={option.value}>
                     {option.label}
@@ -283,7 +294,7 @@ function WorkspaceProviderSettings({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="WORKSPACE_DEFAULT">Workspace Default</SelectItem>
+                <SelectItem value="WORKSPACE_DEFAULT">{ratchetWorkspaceLabel}</SelectItem>
                 {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
                   <SelectItem key={`ratchet-${option.value}`} value={option.value}>
                     {option.label}
