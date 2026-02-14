@@ -413,21 +413,6 @@ function handleUserMessageUuidMessage(data: WebSocketMessage): ChatAction | null
   return data.uuid ? { type: 'USER_MESSAGE_UUID_RECEIVED', payload: { uuid: data.uuid } } : null;
 }
 
-function handleRewindFilesPreviewMessage(data: WebSocketMessage): ChatAction {
-  // If dryRun is false, this is the actual rewind completion
-  if (data.dryRun === false) {
-    return { type: 'REWIND_SUCCESS', payload: { userMessageId: data.userMessageId } };
-  }
-  // Otherwise, this is a preview (dry run) response
-  return {
-    type: 'REWIND_PREVIEW_SUCCESS',
-    payload: {
-      affectedFiles: data.affectedFiles ?? [],
-      userMessageId: data.userMessageId,
-    },
-  };
-}
-
 function handleConfigOptionsUpdateMessage(data: WebSocketMessage): ChatAction | null {
   const configOptions = (data as Record<string, unknown>).configOptions;
   if (!Array.isArray(configOptions)) {
@@ -437,15 +422,6 @@ function handleConfigOptionsUpdateMessage(data: WebSocketMessage): ChatAction | 
     type: 'CONFIG_OPTIONS_UPDATE',
     payload: { configOptions },
   };
-}
-
-function handleRewindFilesErrorMessage(data: WebSocketMessage): ChatAction | null {
-  return data.rewindError
-    ? {
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: data.rewindError, userMessageId: data.userMessageId },
-      }
-    : null;
 }
 
 // Handler map for WebSocket message types
@@ -484,8 +460,6 @@ const messageHandlers: MessageHandlerMap = {
   workspace_notification_request: null,
   slash_commands: handleSlashCommandsMessage,
   user_message_uuid: handleUserMessageUuidMessage,
-  rewind_files_preview: handleRewindFilesPreviewMessage,
-  rewind_files_error: handleRewindFilesErrorMessage,
   config_options_update: handleConfigOptionsUpdateMessage,
 };
 

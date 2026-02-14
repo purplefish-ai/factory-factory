@@ -148,7 +148,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dispatch,
     stateRef,
     toolInputAccumulatorRef,
-    rewindTimeoutRef,
   });
 
   // =============================================================================

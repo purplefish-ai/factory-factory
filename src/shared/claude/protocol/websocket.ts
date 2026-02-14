@@ -52,10 +52,6 @@ interface WebSocketMessageCommon {
   permissionMode?: string;
   slashCommands?: CommandInfo[];
   uuid?: string;
-  userMessageId?: string;
-  dryRun?: boolean;
-  affectedFiles?: string[];
-  rewindError?: string;
   workspaceId?: string;
   workspaceName?: string;
   sessionCount?: number;
@@ -200,15 +196,6 @@ interface WebSocketMessagePayloadByType {
   user_message_uuid: {
     uuid?: string;
   };
-  rewind_files_preview: {
-    userMessageId?: string;
-    dryRun?: boolean;
-    affectedFiles?: string[];
-  };
-  rewind_files_error: {
-    userMessageId?: string;
-    rewindError?: string;
-  };
   chat_capabilities: {
     capabilities: ChatBarCapabilities;
   };
@@ -284,8 +271,6 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   workspace_notification_request: true,
   slash_commands: true,
   user_message_uuid: true,
-  rewind_files_preview: true,
-  rewind_files_error: true,
   chat_capabilities: true,
   config_options_update: true,
 };
