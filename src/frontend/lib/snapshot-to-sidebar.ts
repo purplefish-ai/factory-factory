@@ -80,7 +80,7 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   runScriptStatus: z.nativeEnum(RunScriptStatus),
   hasHadSessions: z.boolean(),
   isWorking: z.boolean(),
-  pendingRequestType: z.enum(['plan_approval', 'user_question']).nullable(),
+  pendingRequestType: z.enum(['plan_approval', 'user_question', 'permission_request']).nullable(),
   sessionSummaries: z.array(WorkspaceSessionSummarySchema),
   gitStats: WorkspaceGitStatsSchema.nullable(),
   lastActivityAt: z.string().nullable(),

@@ -86,6 +86,12 @@ describe('mapSnapshotEntryToKanbanWorkspace', () => {
     expect(result.pendingRequestType).toBe('plan_approval');
   });
 
+  it('maps generic permission_request pending state', () => {
+    const entry = makeEntry({ pendingRequestType: 'permission_request' });
+    const result = mapSnapshotEntryToKanbanWorkspace(entry);
+    expect(result.pendingRequestType).toBe('permission_request');
+  });
+
   it('merges missing-from-snapshot fields from existing cache entry', () => {
     const entry = makeEntry();
     const existing = {

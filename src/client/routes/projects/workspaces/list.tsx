@@ -62,7 +62,7 @@ export default function WorkspacesListPage() {
   );
 
   // Only fetch list data when in list view
-  const { data: workspaces, isLoading } = trpc.workspace.list.useQuery(
+  const { data: workspaces, isLoading } = trpc.workspace.listWithRuntimeState.useQuery(
     {
       projectId: project?.id ?? '',
       status: statusFilter !== 'all' ? (statusFilter as WorkspaceStatus) : undefined,
@@ -93,6 +93,7 @@ export default function WorkspacesListPage() {
 
       rememberResumeWorkspace(workspace.id);
       utils.workspace.list.invalidate({ projectId: project.id });
+      utils.workspace.listWithRuntimeState.invalidate({ projectId: project.id });
       utils.workspace.getProjectSummaryState.invalidate({ projectId: project.id });
       setResumeOpen(false);
       void navigate(`/projects/${slug}/workspaces/${workspace.id}`);

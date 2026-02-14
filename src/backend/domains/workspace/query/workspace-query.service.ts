@@ -27,12 +27,16 @@ const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
  * Determine the pending request type for a workspace based on its active sessions.
  * Returns 'plan_approval' if any session has a pending ExitPlanMode request,
  * 'user_question' if any session has a pending AskUserQuestion request,
+ * 'permission_request' for any other pending modal permission request,
  * or null if no pending requests.
  */
 function computePendingRequestType(
   sessionIds: string[],
   pendingRequests: Map<string, { toolName: string }>
-): 'plan_approval' | 'user_question' | null {
+): 'plan_approval' | 'user_question' | 'permission_request' | null {
+  let hasUserQuestion = false;
+  let hasPermissionRequest = false;
+
   for (const sessionId of sessionIds) {
     const request = pendingRequests.get(sessionId);
     if (!request) {
@@ -43,8 +47,17 @@ function computePendingRequestType(
       return 'plan_approval';
     }
     if (request.toolName === 'AskUserQuestion') {
-      return 'user_question';
+      hasUserQuestion = true;
+      continue;
     }
+    hasPermissionRequest = true;
+  }
+
+  if (hasUserQuestion) {
+    return 'user_question';
+  }
+  if (hasPermissionRequest) {
+    return 'permission_request';
   }
   return null;
 }
@@ -112,7 +125,10 @@ class WorkspaceQueryService {
       string,
       ReturnType<typeof deriveWorkspaceRuntimeState>['flowState']
     >();
-    const pendingRequestByWorkspace = new Map<string, 'plan_approval' | 'user_question' | null>();
+    const pendingRequestByWorkspace = new Map<
+      string,
+      'plan_approval' | 'user_question' | 'permission_request' | null
+    >();
     for (const workspace of workspaces) {
       const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
         this.session.isAnySessionWorking(sessionIds)
@@ -273,6 +289,37 @@ class WorkspaceQueryService {
         return workspace.kanbanColumn !== null;
       })
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+
+  async listWithRuntimeState(input: {
+    projectId: string;
+    status?: WorkspaceStatus;
+    limit?: number;
+    offset?: number;
+  }) {
+    const { projectId, ...filters } = input;
+
+    const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, filters);
+
+    // Get all pending requests from active sessions
+    const allPendingRequests = this.session.getAllPendingRequests();
+
+    return workspaces.map((workspace) => {
+      const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
+        this.session.isAnySessionWorking(sessionIds)
+      );
+
+      const pendingRequestType = computePendingRequestType(
+        runtimeState.sessionIds,
+        allPendingRequests
+      );
+
+      return {
+        ...workspace,
+        isWorking: runtimeState.isWorking,
+        pendingRequestType,
+      };
+    });
   }
 
   async refreshFactoryConfigs(projectId: string) {

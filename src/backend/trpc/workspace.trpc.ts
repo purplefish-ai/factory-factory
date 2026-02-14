@@ -94,6 +94,18 @@ export const workspaceRouter = router({
     )
     .query(({ input }) => workspaceQueryService.listWithKanbanState(input)),
 
+  // List workspaces with runtime state (for table view)
+  listWithRuntimeState: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        status: z.nativeEnum(WorkspaceStatus).optional(),
+        limit: z.number().min(1).max(100).optional(),
+        offset: z.number().min(0).optional(),
+      })
+    )
+    .query(({ input }) => workspaceQueryService.listWithRuntimeState(input)),
+
   // Get workspace by ID
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
     const workspace = await workspaceDataService.findById(input.id);

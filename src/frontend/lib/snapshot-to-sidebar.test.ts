@@ -102,6 +102,12 @@ describe('mapSnapshotEntryToServerWorkspace', () => {
     expect(result.pendingRequestType).toBe('plan_approval');
   });
 
+  it('passes through generic permission_request pending state', () => {
+    const entry = makeEntry({ pendingRequestType: 'permission_request' });
+    const result = mapSnapshotEntryToServerWorkspace(entry);
+    expect(result.pendingRequestType).toBe('permission_request');
+  });
+
   it('passes through sessionSummaries', () => {
     const entry = makeEntry({
       sessionSummaries: [

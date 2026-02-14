@@ -1,18 +1,12 @@
 import type { Workspace } from '@prisma-gen/browser';
-import {
-  Archive,
-  FileCheck,
-  GitBranch,
-  GitPullRequest,
-  MessageCircleQuestion,
-  Play,
-} from 'lucide-react';
+import { Archive, GitBranch, GitPullRequest, Play } from 'lucide-react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
+import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -23,7 +17,7 @@ export interface WorkspaceWithKanban extends Workspace {
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   isArchived?: boolean;
-  pendingRequestType?: 'plan_approval' | 'user_question' | null;
+  pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
 }
 
 interface KanbanCardProps {
@@ -63,29 +57,6 @@ function CardStatusIndicator({
   }
 
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
-}
-
-function PendingRequestBadge({ type }: { type: 'plan_approval' | 'user_question' }) {
-  if (type === 'plan_approval') {
-    return (
-      <Badge
-        variant="outline"
-        className="text-[10px] gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
-      >
-        <FileCheck className="h-2.5 w-2.5" />
-        Plan Approval Needed
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="outline"
-      className="text-[10px] gap-1 bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30"
-    >
-      <MessageCircleQuestion className="h-2.5 w-2.5" />
-      Question Waiting
-    </Badge>
-  );
 }
 
 function CardMetadataRow({
@@ -164,6 +135,8 @@ export function KanbanCard({
         className={cn(
           'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
           workspace.isWorking && 'border-brand/50 bg-brand/5',
+          workspace.pendingRequestType &&
+            'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
           isArchived && 'opacity-60 border-dashed'
         )}
       >
