@@ -3,6 +3,7 @@ import { memo } from 'react';
 import type { Todo } from '@/components/chat/use-todo-tracker';
 import { TodoItem } from '@/components/shared';
 import { calculateTodoProgress } from '@/lib/todo-utils';
+import { extractCommandPreviewFromInput, isRunLikeToolName } from './tool-display-utils';
 
 // =============================================================================
 // Constants
@@ -142,6 +143,77 @@ const TodoWriteToolRenderer = memo(function TodoWriteToolRenderer({
 });
 
 // =============================================================================
+// Run Tool Renderer
+// =============================================================================
+
+/**
+ * Renders Run tool calls with command-focused formatting.
+ */
+const RunToolRenderer = memo(function RunToolRenderer({
+  input,
+}: {
+  input: Record<string, unknown>;
+}) {
+  const commandPreview = extractCommandPreviewFromInput(input);
+  const commandValue = input.command;
+  const invocationArgs =
+    Array.isArray(commandValue) && commandValue.every((arg) => typeof arg === 'string')
+      ? commandValue
+      : null;
+  const fallback =
+    commandPreview ??
+    (typeof commandValue === 'string'
+      ? commandValue
+      : commandValue != null
+        ? JSON.stringify(commandValue, null, 2)
+        : '(no command)');
+
+  const additionalParams = Object.fromEntries(
+    Object.entries(input).filter(([key]) => !['command', 'description', 'cwd'].includes(key))
+  );
+
+  return (
+    <div className="space-y-1 w-0 min-w-full">
+      <div className="rounded bg-muted px-1.5 py-1 font-mono">
+        <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words">
+          {truncateContent(fallback, TOOL_INPUT_CONTENT_TRUNCATE)}
+        </pre>
+      </div>
+
+      {typeof input.cwd === 'string' && input.cwd.length > 0 && (
+        <div className="text-[10px] text-muted-foreground">cwd: {input.cwd}</div>
+      )}
+
+      {typeof input.description === 'string' && input.description.length > 0 && (
+        <div className="text-[10px] text-muted-foreground">{input.description}</div>
+      )}
+
+      {invocationArgs && (
+        <details className="text-xs">
+          <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
+            Invocation args
+          </summary>
+          <pre className="mt-1 text-xs overflow-x-auto rounded bg-muted px-1.5 py-1">
+            {JSON.stringify(invocationArgs, null, 2)}
+          </pre>
+        </details>
+      )}
+
+      {Object.keys(additionalParams).length > 0 && (
+        <details className="text-xs">
+          <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
+            Additional parameters
+          </summary>
+          <pre className="mt-1 text-xs overflow-x-auto rounded bg-muted px-1.5 py-1">
+            {JSON.stringify(additionalParams, null, 2)}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+});
+
+// =============================================================================
 // Tool Input Renderer
 // =============================================================================
 
@@ -162,6 +234,12 @@ export const ToolInputRenderer = memo(function ToolInputRenderer({
   // Special rendering for TodoWrite tool
   if (name === 'TodoWrite') {
     return <TodoWriteToolRenderer input={input} />;
+  }
+
+  // Run tool labels may include command text in the name.
+  // Prefer rendering from structured input to keep headers concise.
+  if (isRunLikeToolName(name)) {
+    return <RunToolRenderer input={input} />;
   }
 
   // Special rendering for common tools

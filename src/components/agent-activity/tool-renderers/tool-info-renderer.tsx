@@ -19,6 +19,7 @@ import {
   isToolUseMessage,
 } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { getDisplayToolName } from './tool-display-utils';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';
 
@@ -48,6 +49,7 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
     if (!toolInfo) {
       return null;
     }
+    const displayName = getDisplayToolName(toolInfo.name, toolInfo.input);
 
     return (
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -64,7 +66,9 @@ export const ToolInfoRenderer = memo(function ToolInfoRenderer({
               ) : (
                 <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
-              <span className="font-mono text-xs">{toolInfo.name}</span>
+              <span className="font-mono text-xs flex-1 min-w-0 truncate" title={toolInfo.name}>
+                {displayName}
+              </span>
               {isPending ? (
                 <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
                   Running...
@@ -276,7 +280,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         {displayCalls.map((call, index) => (
           <React.Fragment key={call.id}>
             <span className={call.status === 'error' ? 'text-destructive' : undefined}>
-              {call.name}
+              {getDisplayToolName(call.name, call.input, { summary: true })}
             </span>
             {index < displayCalls.length - 1 && ', '}
           </React.Fragment>
@@ -297,7 +301,7 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             )}
             <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="text-xs">
+            <span className="text-xs min-w-0 flex-1 truncate">
               {pairedCalls.length} tools: {formatToolNames()}
             </span>
             <span className="ml-auto flex gap-1 text-xs">{renderStatusIndicators()}</span>
@@ -353,6 +357,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
 
   const isPending = call.status === 'pending';
   const isError = call.status === 'error';
+  const displayName = getDisplayToolName(call.name, call.input);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -376,7 +381,9 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
             ) : (
               <CheckCircle className="h-4 w-4 shrink-0 text-success" />
             )}
-            <span className="font-mono text-xs">{call.name}</span>
+            <span className="font-mono text-xs flex-1 min-w-0 truncate" title={call.name}>
+              {displayName}
+            </span>
             {isPending ? (
               <Badge variant="outline" className="ml-auto text-[10px] px-1 py-0 animate-pulse">
                 Running...
@@ -497,6 +504,7 @@ interface ToolCallItemProps {
 
 const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const displayName = getDisplayToolName(toolCall.name, toolCall.input);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -507,7 +515,9 @@ const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps)
           ) : (
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}
-          <span className="font-mono text-xs">{toolCall.name}</span>
+          <span className="font-mono text-xs flex-1 min-w-0 truncate" title={toolCall.name}>
+            {displayName}
+          </span>
           {toolCall.result && (
             <span className="ml-auto">
               {toolCall.result.isError ? (
