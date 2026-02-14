@@ -14,6 +14,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import {
   type ChatBarCapabilities,
   createClaudeChatBarCapabilities,
+  createCodexChatBarCapabilities,
 } from '@/shared/chat-capabilities';
 import type {
   ChatMessage,
@@ -573,7 +574,12 @@ class SessionService {
         (error) => {
           logger.error('ACP prompt failed', {
             sessionId,
-            error: error instanceof Error ? error.message : String(error),
+            error:
+              error instanceof Error
+                ? error.message
+                : typeof error === 'object'
+                  ? JSON.stringify(error)
+                  : String(error),
           });
         }
       );
@@ -843,10 +849,11 @@ class SessionService {
       return this.buildAcpChatBarCapabilities(acpHandle);
     }
 
-    // Fall back to known Claude model options when ACP configOptions are empty
-    const selectedModel = acpHandle?.configOptions.find((o) => o.category === 'model')
-      ?.currentValue as string | undefined;
-    return createClaudeChatBarCapabilities(selectedModel);
+    // Fall back to known model options when ACP configOptions are empty
+    if (acpHandle?.provider === 'CODEX') {
+      return createCodexChatBarCapabilities();
+    }
+    return createClaudeChatBarCapabilities();
   }
 
   /**

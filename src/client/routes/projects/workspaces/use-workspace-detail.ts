@@ -93,7 +93,7 @@ interface UseSessionManagementOptions {
   sendMessage: (text: string) => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   selectedDbSessionId: string | null;
-  setSelectedDbSessionId: React.Dispatch<React.SetStateAction<string | null>>;
+  setSelectedDbSessionId: (id: string | null) => void;
   /** Selected model from chat settings */
   selectedModel: string;
   /** Provider selection for newly created sessions */

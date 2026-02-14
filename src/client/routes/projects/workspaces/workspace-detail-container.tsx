@@ -48,8 +48,11 @@ export function WorkspaceDetailContainer() {
     }
   }, [workspaceId, workspaceInitStatus?.phase]);
 
+  const sessionIds = useMemo(() => sessions?.map((s) => s.id) ?? [], [sessions]);
   const { selectedDbSessionId, setSelectedDbSessionId } = useSelectedSessionId(
-    initialDbSessionId ?? null
+    workspaceId,
+    initialDbSessionId ?? null,
+    sessionIds
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] =

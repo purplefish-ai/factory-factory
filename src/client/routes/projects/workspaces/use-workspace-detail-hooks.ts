@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trpc } from '@/frontend/lib/trpc';
 
@@ -59,14 +59,38 @@ export function useWorkspaceInitStatus(
   };
 }
 
-export function useSelectedSessionId(initialDbSessionId: string | null) {
-  const [selectedDbSessionId, setSelectedDbSessionId] = useState<string | null>(null);
+const SESSION_TAB_STORAGE_PREFIX = 'workspace-selected-session-';
+
+export function useSelectedSessionId(
+  workspaceId: string,
+  initialDbSessionId: string | null,
+  sessionIds: string[]
+) {
+  const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
+    const stored = localStorage.getItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`);
+    if (stored && sessionIds.includes(stored)) {
+      return stored;
+    }
+    return initialDbSessionId;
+  });
 
   useEffect(() => {
     if (initialDbSessionId && selectedDbSessionId === null) {
-      setSelectedDbSessionId(initialDbSessionId);
+      setSelectedDbSessionIdRaw(initialDbSessionId);
     }
   }, [initialDbSessionId, selectedDbSessionId]);
+
+  const setSelectedDbSessionId = useCallback(
+    (id: string | null) => {
+      setSelectedDbSessionIdRaw(id);
+      if (id) {
+        localStorage.setItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`, id);
+      } else {
+        localStorage.removeItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`);
+      }
+    },
+    [workspaceId]
+  );
 
   return { selectedDbSessionId, setSelectedDbSessionId };
 }
