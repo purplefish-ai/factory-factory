@@ -1,6 +1,4 @@
 import { SessionStatus } from '@factory-factory/core';
-import { SessionProvider } from '@prisma-gen/client';
-import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
@@ -104,7 +102,7 @@ class FixerSessionService {
         return { status: 'skipped', reason: 'Workspace not ready (no worktree path)' };
       }
 
-      const acquisitionResult = await this.acquireSessionDecision(input, workspace.worktreePath);
+      const acquisitionResult = await this.acquireSessionDecision(input);
 
       if (acquisitionResult.action === 'limit_reached') {
         return { status: 'skipped', reason: 'Workspace session limit reached' };
@@ -122,8 +120,7 @@ class FixerSessionService {
   }
 
   private async acquireSessionDecision(
-    input: AcquireAndDispatchInput,
-    worktreePath: string
+    input: AcquireAndDispatchInput
   ): Promise<SessionAcquisitionDecision> {
     const provider = await ratchetProviderResolverService.resolveRatchetProvider({
       workspaceId: input.workspaceId,
@@ -134,8 +131,7 @@ class FixerSessionService {
       sessionName: input.sessionName,
       maxSessions: configService.getMaxSessionsPerWorkspace(),
       provider,
-      claudeProjectPath:
-        provider === SessionProvider.CLAUDE ? getClaudeProjectPath(worktreePath) : null,
+      claudeProjectPath: null,
     });
 
     if (acquisition.outcome === 'limit_reached') {

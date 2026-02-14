@@ -150,7 +150,6 @@ describe('SessionService', () => {
     );
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.RUNNING,
-      claudeProcessPid: 123,
     });
   });
 
@@ -214,7 +213,6 @@ describe('SessionService', () => {
     );
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.RUNNING,
-      claudeProcessPid: 456,
     });
   });
 
@@ -437,7 +435,6 @@ describe('SessionService', () => {
 
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
-      claudeProcessPid: null,
     });
     expect(sessionRepository.clearRatchetActiveSession).toHaveBeenCalledWith(
       'workspace-1',
@@ -500,7 +497,6 @@ describe('SessionService', () => {
 
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-2', {
       status: SessionStatus.COMPLETED,
-      claudeProcessPid: null,
     });
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
@@ -553,7 +549,6 @@ describe('SessionService', () => {
     expect(acpRuntimeManager.getOrCreateClient).toHaveBeenCalled();
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.RUNNING,
-      claudeProcessPid: 999,
     });
   });
 

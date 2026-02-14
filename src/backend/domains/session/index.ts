@@ -14,9 +14,6 @@ export type { EventForwarderContext } from './chat/chat-event-forwarder.service'
 export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
 export { chatMessageHandlerService } from './chat/chat-message-handlers.service';
 export { sessionDataService } from './data/session-data.service';
-export type { SessionInfo } from './data/session-file-reader';
-// Session data access
-export { SessionFileReader, SessionFileReader as SessionManager } from './data/session-file-reader';
 export { sessionProviderResolverService } from './data/session-provider-resolver.service';
 export { sessionPromptBuilder } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';

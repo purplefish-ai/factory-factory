@@ -1,7 +1,6 @@
 import type { Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { worktreeLifecycleService } from '@/backend/domains/workspace/worktree/worktree-lifecycle.service';
-import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { projectAccessor } from '@/backend/resource_accessors/project.accessor';
@@ -225,7 +224,7 @@ export class WorkspaceCreationService {
   }
 
   /**
-   * Provision default Claude session for workspace if max sessions > 0.
+   * Provision default session for workspace if max sessions > 0.
    * Returns true if session was created, false otherwise.
    */
   private async provisionDefaultSession(
@@ -239,17 +238,12 @@ export class WorkspaceCreationService {
     }
 
     try {
-      const workspace = await workspaceAccessor.findById(workspaceId);
-      const claudeProjectPath =
-        provider === 'CLAUDE' && workspace?.worktreePath
-          ? getClaudeProjectPath(workspace.worktreePath)
-          : null;
       await agentSessionAccessor.create({
         workspaceId,
         workflow: DEFAULT_FOLLOWUP,
         name: 'Chat 1',
         provider,
-        claudeProjectPath,
+        claudeProjectPath: null,
       });
       return true;
     } catch (error) {

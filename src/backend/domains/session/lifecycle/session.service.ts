@@ -119,7 +119,6 @@ class SessionService {
           sessionDomainService.markProcessExit(sid, exitCode);
           const session = await this.repository.updateSession(sid, {
             status: SessionStatus.COMPLETED,
-            claudeProcessPid: null,
           });
           logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
 
@@ -411,7 +410,6 @@ class SessionService {
     try {
       await this.repository.updateSession(sessionId, {
         status: SessionStatus.IDLE,
-        claudeProcessPid: null,
       });
     } catch (error) {
       logger.warn('Failed to update session state during stop; continuing cleanup', {
@@ -810,7 +808,6 @@ class SessionService {
 
     await this.repository.updateSession(sessionId, {
       status: SessionStatus.RUNNING,
-      claudeProcessPid: handle.getPid() ?? null,
     });
 
     sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -855,7 +852,7 @@ class SessionService {
    */
   async getSessionOptions(sessionId: string): Promise<{
     workingDir: string;
-    resumeClaudeSessionId: string | undefined;
+    resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
   } | null> {
@@ -866,7 +863,7 @@ class SessionService {
 
     return {
       workingDir: sessionContext.workingDir,
-      resumeClaudeSessionId: sessionContext.resumeClaudeSessionId,
+      resumeProviderSessionId: sessionContext.resumeProviderSessionId,
       systemPrompt: sessionContext.systemPrompt,
       model: sessionContext.model,
     };
@@ -934,7 +931,7 @@ class SessionService {
     preloadedSession?: AgentSessionRecord
   ): Promise<{
     workingDir: string;
-    resumeClaudeSessionId: string | undefined;
+    resumeProviderSessionId: string | undefined;
     systemPrompt: string | undefined;
     model: string;
     workspaceId: string;
@@ -998,7 +995,7 @@ class SessionService {
 
     return {
       workingDir: workspace.worktreePath,
-      resumeClaudeSessionId: session.claudeSessionId ?? undefined,
+      resumeProviderSessionId: session.claudeSessionId ?? undefined,
       systemPrompt,
       model: session.model,
       workspaceId: workspace.id,

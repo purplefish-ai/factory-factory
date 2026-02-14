@@ -230,11 +230,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const msg = { type: 'question_response', requestId, answers };
-      send(msg);
+      void answers;
       dispatch({ type: 'QUESTION_RESPONSE' });
     },
-    [send, dispatch, stateRef]
+    [dispatch, stateRef]
   );
 
   const updateSettings = useCallback(
@@ -316,37 +315,12 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         payload: { userMessageId: userMessageUuid, requestNonce },
       });
 
-      // Send dry run request to get affected files
-      const msg = {
-        type: 'rewind_files',
-        userMessageId: userMessageUuid,
-        dryRun: true,
-      };
-      const sent = send(msg);
-
-      // Check if message was sent successfully
-      if (!sent) {
-        dispatch({
-          type: 'REWIND_PREVIEW_ERROR',
-          payload: {
-            error: 'Not connected to server. Please check your connection and try again.',
-            requestNonce,
-          },
-        });
-        return;
-      }
-
-      // Set timeout to handle case where response never arrives
-      // Capture nonce in closure to ensure late timeouts are filtered correctly
-      rewindTimeoutRef.current = setTimeout(() => {
-        dispatch({
-          type: 'REWIND_PREVIEW_ERROR',
-          payload: { error: 'Request timed out. Please try again.', requestNonce },
-        });
-        rewindTimeoutRef.current = null;
-      }, 30_000); // 30 second timeout
+      dispatch({
+        type: 'REWIND_PREVIEW_ERROR',
+        payload: { error: 'Rewind is not supported in ACP runtime.', requestNonce },
+      });
     },
-    [send, dispatch, rewindEnabled, rewindTimeoutRef]
+    [dispatch, rewindEnabled, rewindTimeoutRef]
   );
 
   const confirmRewind = useCallback(() => {
@@ -368,36 +342,14 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     // Mark as executing (keep dialog open with loading state for actual rewind)
     dispatch({ type: 'REWIND_EXECUTING' });
 
-    // Send actual rewind request (not dry run)
-    const msg = {
-      type: 'rewind_files',
-      userMessageId: rewindPreview.userMessageId,
-      dryRun: false,
-    };
-    const sent = send(msg);
-
-    if (!sent) {
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: {
-          error: 'Not connected to server. Please check your connection and try again.',
-          requestNonce: rewindPreview.requestNonce,
-        },
-      });
-      return;
-    }
-
-    // Set timeout to handle case where response never arrives
-    // Capture nonce in closure to ensure late timeouts are filtered correctly
-    const nonce = rewindPreview.requestNonce;
-    rewindTimeoutRef.current = setTimeout(() => {
-      dispatch({
-        type: 'REWIND_PREVIEW_ERROR',
-        payload: { error: 'Request timed out. Please try again.', requestNonce: nonce },
-      });
-      rewindTimeoutRef.current = null;
-    }, 30_000); // 30 second timeout
-  }, [send, dispatch, rewindEnabled, stateRef, rewindTimeoutRef]);
+    dispatch({
+      type: 'REWIND_PREVIEW_ERROR',
+      payload: {
+        error: 'Rewind is not supported in ACP runtime.',
+        requestNonce: rewindPreview.requestNonce,
+      },
+    });
+  }, [dispatch, rewindEnabled, stateRef, rewindTimeoutRef]);
 
   const cancelRewind = useCallback(() => {
     // Clear the timeout when canceling

@@ -3,7 +3,6 @@ import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/domains/session';
-import { workspaceDataService } from '@/backend/domains/workspace';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { publicProcedure, router } from './trpc';
 
@@ -89,7 +88,6 @@ export const sessionRouter = router({
         workspaceId: input.workspaceId,
         explicitProvider: input.provider,
       });
-      await workspaceDataService.findById(input.workspaceId);
       const session = await sessionDataService.createAgentSession({
         workspaceId: input.workspaceId,
         name: input.name,
