@@ -11,11 +11,7 @@ import { SessionFileReader } from '@/backend/domains/session/data/session-file-r
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
-import {
-  type ChatBarCapabilities,
-  createClaudeChatBarCapabilities,
-  createCodexChatBarCapabilities,
-} from '@/shared/chat-capabilities';
+import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type {
   ChatMessage,
   ClaudeContentItem,
@@ -845,20 +841,15 @@ class SessionService {
 
   getChatBarCapabilities(sessionId: string): ChatBarCapabilities {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
-    if (acpHandle && acpHandle.configOptions.length > 0) {
-      return this.buildAcpChatBarCapabilities(acpHandle);
+    if (!acpHandle) {
+      return EMPTY_CHAT_BAR_CAPABILITIES;
     }
-
-    // Fall back to known model options when ACP configOptions are empty
-    if (acpHandle?.provider === 'CODEX') {
-      return createCodexChatBarCapabilities();
-    }
-    return createClaudeChatBarCapabilities();
+    return this.buildAcpChatBarCapabilities(acpHandle);
   }
 
   /**
-   * Build ChatBarCapabilities from ACP configOptions.
-   * Derives model and reasoning capabilities from agent-reported config options.
+   * Build ChatBarCapabilities entirely from ACP configOptions.
+   * No hardcoded fallback — capabilities are derived from what the agent reports.
    */
   private buildAcpChatBarCapabilities(handle: AcpProcessHandle): ChatBarCapabilities {
     const modelOption = handle.configOptions.find((o) => o.category === 'model');
