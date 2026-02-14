@@ -108,17 +108,7 @@ class SlashCommandCacheService {
   async getCachedCommands(provider: SessionProvider): Promise<CommandInfo[] | null> {
     const settings = await userSettingsAccessor.get();
     const commandsByProvider = toProviderCommandMap(settings.cachedSlashCommands);
-    const scoped = commandsByProvider?.[provider];
-    if (scoped) {
-      return scoped;
-    }
-
-    // Backward compatibility for legacy CLAUDE-only array payloads.
-    if (provider === 'CLAUDE') {
-      return toCommandInfoArray(settings.cachedSlashCommands);
-    }
-
-    return null;
+    return commandsByProvider?.[provider] ?? null;
   }
 
   async setCachedCommands(provider: SessionProvider, commands: CommandInfo[]): Promise<void> {
@@ -131,10 +121,6 @@ class SlashCommandCacheService {
     try {
       const settings = await userSettingsAccessor.get();
       const existingMap = toProviderCommandMap(settings.cachedSlashCommands) ?? {};
-      const legacyClaudeCommands = toCommandInfoArray(settings.cachedSlashCommands);
-      if (!existingMap.CLAUDE && legacyClaudeCommands) {
-        existingMap.CLAUDE = legacyClaudeCommands;
-      }
       const existing = existingMap[provider] ?? null;
 
       if (existing && areCommandsEqual(existing, normalized)) {

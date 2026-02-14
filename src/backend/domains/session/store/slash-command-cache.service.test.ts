@@ -25,14 +25,12 @@ describe('slashCommandCacheService', () => {
     ]);
   });
 
-  it('falls back to legacy CLAUDE array cache format', async () => {
+  it('returns null for malformed cache payloads', async () => {
     vi.mocked(userSettingsAccessor.get).mockResolvedValue({
       cachedSlashCommands: [{ name: '/help', description: 'Help' }],
     } as never);
 
-    await expect(slashCommandCacheService.getCachedCommands('CLAUDE')).resolves.toEqual([
-      { name: '/help', description: 'Help', argumentHint: undefined },
-    ]);
+    await expect(slashCommandCacheService.getCachedCommands('CLAUDE')).resolves.toBeNull();
     await expect(slashCommandCacheService.getCachedCommands('CODEX')).resolves.toBeNull();
   });
 });
