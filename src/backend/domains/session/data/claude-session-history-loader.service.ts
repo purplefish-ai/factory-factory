@@ -46,7 +46,8 @@ type ClaudeSessionHistoryEntry = z.infer<typeof ClaudeHistoryEntrySchema>;
 export type ClaudeSessionHistoryLoadResult =
   | { status: 'loaded'; history: HistoryMessage[]; filePath: string }
   | { status: 'not_found' }
-  | { status: 'skipped'; reason: 'missing_provider_session_id' };
+  | { status: 'skipped'; reason: 'missing_provider_session_id' }
+  | { status: 'error'; reason: 'read_failed'; filePath: string };
 
 function getClaudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
@@ -91,7 +92,11 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
-function normalizeTimestamp(entry: ClaudeSessionHistoryEntry, lineNumber: number): string {
+function normalizeTimestamp(
+  entry: ClaudeSessionHistoryEntry,
+  lineNumber: number,
+  fallbackBaseTimestampMs: number
+): string {
   const rawCandidates = [entry.timestamp, entry.createdAt, entry.message?.timestamp];
   for (const candidate of rawCandidates) {
     if (typeof candidate === 'string' && !Number.isNaN(Date.parse(candidate))) {
@@ -99,7 +104,7 @@ function normalizeTimestamp(entry: ClaudeSessionHistoryEntry, lineNumber: number
     }
   }
 
-  return new Date(lineNumber).toISOString();
+  return new Date(fallbackBaseTimestampMs + lineNumber).toISOString();
 }
 
 function normalizeToolResultContent(value: unknown): ToolResultContentValue {
@@ -391,17 +396,22 @@ class ClaudeSessionHistoryLoaderService {
       return { status: 'not_found' };
     }
 
-    const history = await this.readHistoryFromFile(filePath, params.providerSessionId);
-    return { status: 'loaded', history, filePath };
+    const readResult = await this.readHistoryFromFile(filePath, params.providerSessionId);
+    if (readResult.hadReadError) {
+      return { status: 'error', reason: 'read_failed', filePath };
+    }
+    return { status: 'loaded', history: readResult.history, filePath };
   }
 
   private async readHistoryFromFile(
     filePath: string,
     providerSessionId: string
-  ): Promise<HistoryMessage[]> {
+  ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     const history: HistoryMessage[] = [];
+    const fallbackBaseTimestampMs = Date.now();
     const stream = createReadStream(filePath, { encoding: 'utf-8' });
     const reader = createInterface({ input: stream, crlfDelay: Number.POSITIVE_INFINITY });
+    let hadReadError = false;
 
     try {
       let lineNumber = 0;
@@ -427,11 +437,12 @@ class ClaudeSessionHistoryLoaderService {
           continue;
         }
 
-        const timestamp = normalizeTimestamp(entry, lineNumber);
+        const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
         const uuid = resolveSessionUuid(entry);
         history.push(...parseContentAsHistory(role, content, timestamp, uuid));
       }
     } catch (error) {
+      hadReadError = true;
       logger.warn('Failed parsing Claude session history file', {
         filePath,
         providerSessionId,
@@ -442,7 +453,7 @@ class ClaudeSessionHistoryLoaderService {
       stream.destroy();
     }
 
-    return history;
+    return { history, hadReadError };
   }
 }
 

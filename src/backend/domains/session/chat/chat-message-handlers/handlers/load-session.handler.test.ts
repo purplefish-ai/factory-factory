@@ -156,6 +156,34 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-1', 'none');
   });
 
+  it('does not mark history hydrated when JSONL read fails', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadSessionHistory.mockResolvedValue({
+      status: 'error',
+      reason: 'read_failed',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+    expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+  });
+
   it('does not initialize CODEX sessions on passive load', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CODEX',

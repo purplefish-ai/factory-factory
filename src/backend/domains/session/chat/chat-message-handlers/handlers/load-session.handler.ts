@@ -96,6 +96,15 @@ async function hydrateClaudeHistoryIfNeeded(
     return;
   }
 
+  if (loadResult.status === 'error') {
+    logger.warn('Claude JSONL history hydration failed; keeping session eligible for retry', {
+      sessionId,
+      providerSessionId: dbSession.providerSessionId,
+      filePath: loadResult.filePath,
+    });
+    return;
+  }
+
   sessionDomainService.markHistoryHydrated(sessionId, 'none');
   logger.debug('Claude JSONL history not available; skipping runtime fallback hydration', {
     sessionId,

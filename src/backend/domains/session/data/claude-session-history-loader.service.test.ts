@@ -192,4 +192,67 @@ describe('claudeSessionHistoryLoaderService', () => {
 
     expect(result).toEqual({ status: 'not_found' });
   });
+
+  it('uses non-epoch fallback timestamps when history entries have invalid timestamps', async () => {
+    const providerSessionId = 'provider-session-invalid-ts';
+    const cwd = '/Users/test/project';
+    writeSessionFile({
+      claudeConfigDir: tempDir,
+      cwd,
+      providerSessionId,
+      entries: [
+        {
+          type: 'user',
+          sessionId: providerSessionId,
+          timestamp: 'not-a-date',
+          message: { role: 'user', content: 'first' },
+        },
+        {
+          type: 'assistant',
+          sessionId: providerSessionId,
+          createdAt: 'also-not-a-date',
+          message: {
+            role: 'assistant',
+            timestamp: 'still-bad',
+            content: 'second',
+          },
+        },
+      ],
+    });
+
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    const firstTs = Date.parse(result.history[0]?.timestamp ?? '');
+    const secondTs = Date.parse(result.history[1]?.timestamp ?? '');
+    expect(firstTs).toBeGreaterThan(Date.parse('2000-01-01T00:00:00.000Z'));
+    expect(secondTs).toBeGreaterThanOrEqual(firstTs);
+  });
+
+  it('returns error when the located session path cannot be read as a file', async () => {
+    const providerSessionId = 'provider-session-dir';
+    const cwd = '/Users/test/project-dir';
+    const projectDir = join(tempDir, 'projects', encodeProjectPath(cwd));
+    mkdirSync(projectDir, { recursive: true });
+    const directoryPath = join(projectDir, `${providerSessionId}.jsonl`);
+    mkdirSync(directoryPath, { recursive: true });
+
+    const result = await claudeSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toEqual({
+      status: 'error',
+      reason: 'read_failed',
+      filePath: directoryPath,
+    });
+  });
 });
