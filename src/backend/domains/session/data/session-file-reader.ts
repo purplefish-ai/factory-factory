@@ -4,8 +4,12 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { getClaudeProjectPath } from '@/backend/lib/claude-paths';
 import { createLogger } from '@/backend/services/logger.service';
-import type { ClaudeContentItem, ClaudeMessagePayload, HistoryMessage } from '@/shared/claude';
-import type { ClaudeJson } from '../claude/types';
+import type {
+  ClaudeContentItem,
+  ClaudeMessage,
+  ClaudeMessagePayload,
+  HistoryMessage,
+} from '@/shared/claude';
 
 export type { HistoryMessage } from '@/shared/claude';
 
@@ -220,7 +224,7 @@ export class SessionFileReader {
     return sessions;
   }
 
-  static extractClaudeSessionId(msg: ClaudeJson): string | undefined {
+  static extractClaudeSessionId(msg: ClaudeMessage): string | undefined {
     if (msg.type === 'system') {
       return undefined;
     }
@@ -234,7 +238,7 @@ export class SessionFileReader {
     }
 
     if (msg.type === 'result') {
-      return msg.session_id ?? msg.sessionId;
+      return msg.session_id;
     }
 
     return undefined;

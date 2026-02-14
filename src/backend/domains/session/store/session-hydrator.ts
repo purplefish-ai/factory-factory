@@ -1,4 +1,4 @@
-import { SessionManager } from '@/backend/domains/session/claude/session';
+import { SessionFileReader } from '@/backend/domains/session/data/session-file-reader';
 import { buildHydrateKey, type HydrateKeyInput } from './session-hydrate-key';
 import type { SessionStore } from './session-store.types';
 import {
@@ -31,7 +31,7 @@ export class SessionHydrator {
 
     const hydratePromise = (async () => {
       if (options.claudeSessionId && options.claudeProjectPath) {
-        const history = await SessionManager.getHistoryFromProjectPath(
+        const history = await SessionFileReader.getHistoryFromProjectPath(
           options.claudeSessionId,
           options.claudeProjectPath
         );

@@ -1,7 +1,7 @@
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
-import type { ClaudeContentItem } from '@/backend/domains/session/claude/types';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { createLogger } from '@/backend/services/logger.service';
+import type { ClaudeContentItem } from '@/shared/claude';
 import type { UserInputMessage } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');

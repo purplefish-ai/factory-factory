@@ -3,7 +3,7 @@ import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
-  SessionManager,
+  SessionFileReader,
   sessionDataService,
   sessionProviderResolverService,
 } from '@/backend/domains/session';
@@ -96,7 +96,7 @@ export const sessionRouter = router({
       const workspace = await workspaceDataService.findById(input.workspaceId);
       const claudeProjectPath =
         provider === SessionProvider.CLAUDE && workspace?.worktreePath
-          ? SessionManager.getProjectPath(workspace.worktreePath)
+          ? SessionFileReader.getProjectPath(workspace.worktreePath)
           : null;
       const session = await sessionDataService.createAgentSession({
         workspaceId: input.workspaceId,

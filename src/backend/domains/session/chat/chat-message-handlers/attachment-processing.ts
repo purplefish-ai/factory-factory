@@ -5,8 +5,8 @@
  * Extracted from chat-message-handlers.service.ts to reduce cognitive complexity.
  */
 
-import type { ClaudeContentItem } from '@/backend/domains/session/claude/types';
 import { createLogger } from '@/backend/services/logger.service';
+import type { ClaudeContentItem } from '@/shared/claude';
 import type { MessageAttachment } from '@/shared/claude/protocol';
 import { resolveAttachmentContentType } from './attachment-utils';
 

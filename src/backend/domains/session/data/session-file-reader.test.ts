@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import type { ClaudeJson } from '../claude/types';
+import type { ClaudeMessage } from '@/shared/claude';
 import { parseHistoryEntry, SessionFileReader } from './session-file-reader';
 
 describe('SessionFileReader', () => {
@@ -43,7 +43,7 @@ describe('SessionFileReader', () => {
 
   describe('extractClaudeSessionId', () => {
     it('should extract session_id from assistant messages', () => {
-      const msg: ClaudeJson = {
+      const msg: ClaudeMessage = {
         type: 'assistant',
         session_id: 'abc123',
         message: { role: 'assistant', content: [] },
@@ -52,7 +52,7 @@ describe('SessionFileReader', () => {
     });
 
     it('should extract session_id from user messages', () => {
-      const msg: ClaudeJson = {
+      const msg: ClaudeMessage = {
         type: 'user',
         session_id: 'user-session-456',
         message: { role: 'user', content: 'Hello' },
@@ -61,32 +61,22 @@ describe('SessionFileReader', () => {
     });
 
     it('should extract session_id from result messages using session_id field', () => {
-      const msg: ClaudeJson = {
+      const msg: ClaudeMessage = {
         type: 'result',
         session_id: 'result-session-789',
       };
       expect(SessionFileReader.extractClaudeSessionId(msg)).toBe('result-session-789');
     });
 
-    it('should extract sessionId from result messages using sessionId field', () => {
-      const msg: ClaudeJson = {
+    it('should return undefined for result messages without session_id', () => {
+      const msg: ClaudeMessage = {
         type: 'result',
-        sessionId: 'result-session-camel',
       };
-      expect(SessionFileReader.extractClaudeSessionId(msg)).toBe('result-session-camel');
-    });
-
-    it('should prefer session_id over sessionId in result messages', () => {
-      const msg: ClaudeJson = {
-        type: 'result',
-        session_id: 'snake-case-wins',
-        sessionId: 'camel-case-loses',
-      };
-      expect(SessionFileReader.extractClaudeSessionId(msg)).toBe('snake-case-wins');
+      expect(SessionFileReader.extractClaudeSessionId(msg)).toBeUndefined();
     });
 
     it('should return undefined for system messages', () => {
-      const msg: ClaudeJson = {
+      const msg: ClaudeMessage = {
         type: 'system',
         session_id: 'should-be-ignored',
       };
@@ -94,7 +84,7 @@ describe('SessionFileReader', () => {
     });
 
     it('should return undefined for stream_event messages', () => {
-      const msg: ClaudeJson = {
+      const msg: ClaudeMessage = {
         type: 'stream_event',
         session_id: 'should-be-ignored',
         event: { type: 'message_start', message: { role: 'assistant', content: [] } },
@@ -102,33 +92,25 @@ describe('SessionFileReader', () => {
       expect(SessionFileReader.extractClaudeSessionId(msg)).toBeUndefined();
     });
 
-    it('should return undefined for control_request messages', () => {
-      const msg: ClaudeJson = {
+    it('should return undefined for unrecognized message types', () => {
+      // Control messages have types not in ClaudeMessage union; cast to exercise fallback
+      const controlRequest = {
         type: 'control_request',
         request_id: 'req-123',
-        request: { subtype: 'can_use_tool', tool_name: 'Read', input: {} },
-      };
-      expect(SessionFileReader.extractClaudeSessionId(msg)).toBeUndefined();
-    });
+      } as unknown as ClaudeMessage;
+      expect(SessionFileReader.extractClaudeSessionId(controlRequest)).toBeUndefined();
 
-    it('should return undefined for control_response messages', () => {
-      const msg: ClaudeJson = {
+      const controlResponse = {
         type: 'control_response',
-        response: {
-          subtype: 'success',
-          request_id: 'req-123',
-          response: { behavior: 'allow', updatedInput: {} },
-        },
-      };
-      expect(SessionFileReader.extractClaudeSessionId(msg)).toBeUndefined();
-    });
+        response: { subtype: 'success' },
+      } as unknown as ClaudeMessage;
+      expect(SessionFileReader.extractClaudeSessionId(controlResponse)).toBeUndefined();
 
-    it('should return undefined for control_cancel_request messages', () => {
-      const msg: ClaudeJson = {
+      const controlCancel = {
         type: 'control_cancel_request',
         request_id: 'req-123',
-      };
-      expect(SessionFileReader.extractClaudeSessionId(msg)).toBeUndefined();
+      } as unknown as ClaudeMessage;
+      expect(SessionFileReader.extractClaudeSessionId(controlCancel)).toBeUndefined();
     });
   });
 });

@@ -254,48 +254,13 @@ module.exports = {
       name: 'session-runtime-import-boundary',
       severity: 'error',
       comment:
-        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session providers/lifecycle entry points.',
+        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session acp/lifecycle entry points.',
       from: {
         path: '^src/backend/domains/session/',
         pathNot:
-          '^src/backend/domains/session/(acp/|runtime/|providers/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
+          '^src/backend/domains/session/(acp/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/domains/session/runtime/' },
-    },
-    {
-      name: 'session-provider-import-boundary',
-      severity: 'error',
-      comment:
-        'Session provider adapters are internal orchestration seams and should be consumed only from lifecycle/chat forwarding entry points.',
-      from: {
-        path: '^src/backend/domains/session/',
-        pathNot:
-          '^src/backend/domains/session/(providers/|lifecycle/)|^src/backend/domains/session/chat/chat-event-forwarder\\.service\\.ts$|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/domains/session/providers/' },
-    },
-    {
-      name: 'session-codex-import-boundary',
-      severity: 'error',
-      comment:
-        'Codex runtime internals are encapsulated under session codex/provider/runtime seams and should not be imported directly by unrelated session modules.',
-      from: {
-        path: '^src/backend/domains/session/',
-        pathNot:
-          '^src/backend/domains/session/(codex/|providers/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/domains/session/codex/' },
-    },
-    {
-      name: 'non-session-modules-cannot-import-provider-runtime-internals',
-      severity: 'error',
-      comment:
-        'Provider runtime internals should remain inside the session domain. Other backend modules must use session-domain contracts.',
-      from: {
-        path: '^src/backend',
-        pathNot: '^src/backend/domains/session/|^src/backend/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/domains/session/(claude|codex)/' },
     },
     {
       name: 'no-cross-domain-imports',

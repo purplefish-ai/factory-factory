@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
-import { SessionManager } from '@/backend/domains/session/claude/session';
+import { SessionFileReader } from '@/backend/domains/session/data/session-file-reader';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 
-vi.mock('@/backend/domains/session/claude/session', async () => {
-  const actual = await vi.importActual<typeof import('@/backend/domains/session/claude/session')>(
-    '@/backend/domains/session/claude/session'
-  );
+vi.mock('@/backend/domains/session/data/session-file-reader', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/backend/domains/session/data/session-file-reader')
+  >('@/backend/domains/session/data/session-file-reader');
   return {
     ...actual,
-    SessionManager: {
-      ...actual.SessionManager,
+    SessionFileReader: {
+      ...actual.SessionFileReader,
       getHistoryFromProjectPath: vi.fn(),
     },
   };
@@ -61,7 +61,7 @@ describe('SessionDomainService', () => {
   });
 
   it('hydrates from Claude history on first subscribe and emits session_replay_batch', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'user',
         content: 'hello',
@@ -128,7 +128,7 @@ describe('SessionDomainService', () => {
   });
 
   it('hydrates user attachments from Claude history into snapshot messages', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'user',
         content: '',
@@ -170,7 +170,7 @@ describe('SessionDomainService', () => {
   });
 
   it('preserves tool_result is_error flag when hydrating history', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'tool_result',
         content: 'Tool failed',
@@ -222,7 +222,7 @@ describe('SessionDomainService', () => {
       },
     ];
 
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([
       {
         type: 'tool_result',
         content: structuredContent,
@@ -265,7 +265,7 @@ describe('SessionDomainService', () => {
   });
 
   it('subscribe does not emit session_delta before session_replay_batch', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionDomainService.subscribe({
       sessionId: 's1',
@@ -307,7 +307,7 @@ describe('SessionDomainService', () => {
     const historyPromise = new Promise<HydratedHistory>((resolve) => {
       resolveHistory = resolve;
     });
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockReturnValue(historyPromise);
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockReturnValue(historyPromise);
 
     const firstSubscribe = sessionDomainService.subscribe({
       sessionId: 's1',
@@ -333,7 +333,7 @@ describe('SessionDomainService', () => {
     });
 
     await Promise.resolve();
-    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(1);
+    expect(SessionFileReader.getHistoryFromProjectPath).toHaveBeenCalledTimes(1);
 
     resolveHistory([
       {
@@ -357,7 +357,7 @@ describe('SessionDomainService', () => {
   });
 
   it('rehydrates when claudeSessionId changes for the same db session', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath)
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath)
       .mockResolvedValueOnce([
         {
           type: 'user',
@@ -397,7 +397,7 @@ describe('SessionDomainService', () => {
       },
     });
 
-    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
+    expect(SessionFileReader.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
     const latestEvents = getLatestReplayBatch().replayEvents ?? [];
     const accepted = latestEvents.find(
       (event) =>
@@ -415,7 +415,7 @@ describe('SessionDomainService', () => {
       resolveFirst = resolve;
     });
 
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockImplementation((claudeSessionId) => {
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockImplementation((claudeSessionId) => {
       if (claudeSessionId === 'claude-s1') {
         return firstHistoryPromise;
       }
@@ -484,7 +484,7 @@ describe('SessionDomainService', () => {
         timestamp: '2026-02-01T00:00:01.000Z',
       },
     ];
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue(history);
 
     await sessionDomainService.subscribe({
       sessionId: 's1',
@@ -505,7 +505,7 @@ describe('SessionDomainService', () => {
 
     mockedConnectionService.forwardToSession.mockClear();
     sessionDomainService.clearSession('s1');
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue(history);
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue(history);
 
     await sessionDomainService.subscribe({
       sessionId: 's1',
@@ -528,7 +528,7 @@ describe('SessionDomainService', () => {
   });
 
   it('rehydrates from JSONL after process exit and replaces stale in-memory transcript', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath)
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath)
       .mockResolvedValueOnce([
         {
           type: 'user',
@@ -570,7 +570,7 @@ describe('SessionDomainService', () => {
       },
     });
 
-    expect(SessionManager.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
+    expect(SessionFileReader.getHistoryFromProjectPath).toHaveBeenCalledTimes(2);
 
     const latestSnapshot = mockedConnectionService.forwardToSession.mock.calls
       .map(([, payload]) => payload as { type?: string; messages?: Array<{ text?: string }> })
@@ -587,7 +587,7 @@ describe('SessionDomainService', () => {
       resolveRehydrate = resolve;
     });
 
-    vi.mocked(SessionManager.getHistoryFromProjectPath)
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath)
       .mockResolvedValueOnce([
         {
           type: 'user',
@@ -741,7 +741,7 @@ describe('SessionDomainService', () => {
   });
 
   it('markProcessExit treats exit code 0 as expected and keeps idle phase', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionDomainService.subscribe({
       sessionId: 's1',
@@ -774,7 +774,7 @@ describe('SessionDomainService', () => {
   });
 
   it('markProcessExit treats null exit code as unexpected and sets error phase', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionDomainService.subscribe({
       sessionId: 's1',
@@ -807,7 +807,7 @@ describe('SessionDomainService', () => {
   });
 
   it('clears stale lastExit after transitioning back to idle', async () => {
-    vi.mocked(SessionManager.getHistoryFromProjectPath).mockResolvedValue([]);
+    vi.mocked(SessionFileReader.getHistoryFromProjectPath).mockResolvedValue([]);
 
     await sessionDomainService.subscribe({
       sessionId: 's1',
