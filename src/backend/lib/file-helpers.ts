@@ -53,14 +53,36 @@ export async function isPathSafe(worktreePath: string, filePath: string): Promis
     return false;
   }
 
-  // If the file exists, resolve symlinks and verify the real path is still within worktree
+  const isWithinPath = (targetPath: string, rootPath: string) =>
+    targetPath === rootPath || targetPath.startsWith(rootPath + path.sep);
+
+  const resolveNearestExistingPath = async (targetPath: string): Promise<string> => {
+    let candidatePath = targetPath;
+
+    while (true) {
+      try {
+        return await realpath(candidatePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
+        }
+
+        const parentPath = path.dirname(candidatePath);
+        if (parentPath === candidatePath) {
+          throw error;
+        }
+        candidatePath = parentPath;
+      }
+    }
+  };
+
+  // Resolve symlinks and verify the path (or nearest existing parent) stays within worktree.
   try {
-    const realFullPath = await realpath(fullPath);
     const realWorktree = await realpath(normalizedWorktree);
-    return realFullPath.startsWith(realWorktree + path.sep) || realFullPath === realWorktree;
+    const realTargetPath = await resolveNearestExistingPath(fullPath);
+    return isWithinPath(realTargetPath, realWorktree);
   } catch {
-    // File doesn't exist yet (e.g., for new file creation) - rely on the initial check
-    return true;
+    return false;
   }
 }
 
