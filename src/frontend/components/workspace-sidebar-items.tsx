@@ -378,10 +378,9 @@ function getSidebarAttentionState(
 ): { showAttentionGlow: boolean } {
   const isDone = workspace.cachedKanbanColumn === 'DONE';
   const isRatchetActive = !(disableAnimation || isDone) && Boolean(workspace.ratchetButtonAnimated);
-  const isAwaitingUserInput = Boolean(workspace.pendingRequestType);
 
   return {
-    showAttentionGlow: (isAwaitingUserInput || needsAttention(workspace.id)) && !isRatchetActive,
+    showAttentionGlow: needsAttention(workspace.id) && !isRatchetActive,
   };
 }
 
