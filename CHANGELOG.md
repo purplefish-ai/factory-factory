@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add Codex app-server adapter and manager (#962, #971)
 - Add @ file mention autocomplete in chat input (#955)
 - Add integration coverage for websocket and accessor paths (#958)
+- Add syntax highlighting to diff viewer (#974)
 
 ### Changed
 
@@ -54,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enforce stricter backend dependency boundaries (#959)
 - Implement core library extraction scaffolding and enum extraction (#957)
 - Archive v1.1 Project Snapshot Service milestone (#961)
+
+### Documentation
+
+- Add Factory Factory Cloud vision and V1 MVP plan (#956)
+- Add Factory Factory Cloud vision document (#892)
 
 ## [0.2.8] - 2026-02-11
 
