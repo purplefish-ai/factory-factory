@@ -4,15 +4,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---- Hoisted mock state (shared between factory and tests) ----
 
-const { mockSpawn, mockInitialize, mockNewSession, mockPrompt, mockCancel, mockNdJsonStream } =
-  vi.hoisted(() => ({
-    mockSpawn: vi.fn(),
-    mockInitialize: vi.fn(),
-    mockNewSession: vi.fn(),
-    mockPrompt: vi.fn(),
-    mockCancel: vi.fn(),
-    mockNdJsonStream: vi.fn().mockReturnValue({ writable: {}, readable: {} }),
-  }));
+const {
+  mockSpawn,
+  mockInitialize,
+  mockNewSession,
+  mockPrompt,
+  mockCancel,
+  mockSetSessionConfigOption,
+  mockSetSessionMode,
+  mockSetSessionModel,
+  mockNdJsonStream,
+} = vi.hoisted(() => ({
+  mockSpawn: vi.fn(),
+  mockInitialize: vi.fn(),
+  mockNewSession: vi.fn(),
+  mockPrompt: vi.fn(),
+  mockCancel: vi.fn(),
+  mockSetSessionConfigOption: vi.fn(),
+  mockSetSessionMode: vi.fn(),
+  mockSetSessionModel: vi.fn(),
+  mockNdJsonStream: vi.fn().mockReturnValue({ writable: {}, readable: {} }),
+}));
 
 // ---- Mocks ----
 
@@ -27,6 +39,9 @@ vi.mock('@agentclientprotocol/sdk', () => {
     newSession = mockNewSession;
     prompt = mockPrompt;
     cancel = mockCancel;
+    setSessionConfigOption = mockSetSessionConfigOption;
+    setSessionMode = mockSetSessionMode;
+    unstable_setSessionModel = mockSetSessionModel;
 
     constructor(toClient: (agent: unknown) => unknown, _stream: unknown) {
       this.toClient = toClient;
@@ -127,6 +142,11 @@ function setupSuccessfulSpawn() {
     configOptions: [],
     modes: [],
   });
+  mockSetSessionConfigOption.mockResolvedValue({
+    configOptions: [],
+  });
+  mockSetSessionMode.mockResolvedValue({});
+  mockSetSessionModel.mockResolvedValue({});
   return child;
 }
 
@@ -306,6 +326,54 @@ describe('AcpRuntimeManager', () => {
       );
 
       expect(handle.configOptions).toEqual(expectedConfigOptions);
+    });
+
+    it('synthesizes config options from legacy Claude models/modes response', async () => {
+      setupSuccessfulSpawn();
+      mockNewSession.mockResolvedValueOnce({
+        sessionId: 'provider-session-123',
+        models: {
+          currentModelId: 'sonnet',
+          availableModels: [
+            { modelId: 'sonnet', name: 'Sonnet' },
+            { modelId: 'opus', name: 'Opus' },
+          ],
+        },
+        modes: {
+          currentModeId: 'plan',
+          availableModes: [
+            { id: 'default', name: 'Default' },
+            { id: 'plan', name: 'Plan' },
+          ],
+        },
+      });
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const modelOption = handle.configOptions.find((option) => option.id === 'model');
+      const modeOption = handle.configOptions.find((option) => option.id === 'mode');
+
+      expect(modelOption).toMatchObject({
+        id: 'model',
+        category: 'model',
+        currentValue: 'sonnet',
+      });
+      expect(modeOption).toMatchObject({
+        id: 'mode',
+        category: 'mode',
+        currentValue: 'plan',
+      });
+      expect(
+        modelOption?.options.map((option) => ('value' in option ? option.value : undefined))
+      ).toEqual(expect.arrayContaining(['sonnet', 'opus']));
+      expect(
+        modeOption?.options.map((option) => ('value' in option ? option.value : undefined))
+      ).toEqual(expect.arrayContaining(['default', 'plan']));
     });
   });
 
@@ -534,6 +602,86 @@ describe('AcpRuntimeManager', () => {
     it('does nothing for nonexistent session', async () => {
       await manager.cancelPrompt('nonexistent');
       expect(mockCancel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setConfigOption', () => {
+    it('falls back to legacy Claude mode setter when setSessionConfigOption fails', async () => {
+      setupSuccessfulSpawn();
+      mockNewSession.mockResolvedValueOnce({
+        sessionId: 'provider-session-123',
+        models: {
+          currentModelId: 'sonnet',
+          availableModels: [{ modelId: 'sonnet', name: 'Sonnet' }],
+        },
+        modes: {
+          currentModeId: 'default',
+          availableModes: [
+            { id: 'default', name: 'Default' },
+            { id: 'plan', name: 'Plan' },
+          ],
+        },
+      });
+      mockSetSessionConfigOption.mockRejectedValueOnce(new Error('Method not found'));
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await manager.setConfigOption('session-1', 'mode', 'plan');
+
+      expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        configId: 'mode',
+        value: 'plan',
+      });
+      expect(mockSetSessionMode).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        modeId: 'plan',
+      });
+      expect(handle.configOptions.find((option) => option.id === 'mode')?.currentValue).toBe(
+        'plan'
+      );
+    });
+
+    it('falls back to legacy Claude model setter when setSessionConfigOption fails', async () => {
+      setupSuccessfulSpawn();
+      mockNewSession.mockResolvedValueOnce({
+        sessionId: 'provider-session-123',
+        models: {
+          currentModelId: 'sonnet',
+          availableModels: [
+            { modelId: 'sonnet', name: 'Sonnet' },
+            { modelId: 'opus', name: 'Opus' },
+          ],
+        },
+      });
+      mockSetSessionConfigOption.mockRejectedValueOnce(new Error('Method not found'));
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await manager.setConfigOption('session-1', 'model', 'opus');
+
+      expect(mockSetSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        configId: 'model',
+        value: 'opus',
+      });
+      expect(mockSetSessionModel).toHaveBeenCalledWith({
+        sessionId: 'provider-session-123',
+        modelId: 'opus',
+      });
+      expect(handle.configOptions.find((option) => option.id === 'model')?.currentValue).toBe(
+        'opus'
+      );
     });
   });
 

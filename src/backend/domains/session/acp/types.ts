@@ -3,6 +3,8 @@ export type AcpProvider = 'CLAUDE' | 'CODEX';
 export interface AcpClientOptions {
   provider: AcpProvider;
   workingDir: string;
+  /** Optional test hook to override the ACP adapter binary path. */
+  adapterBinaryPath?: string;
   model?: string;
   systemPrompt?: string;
   permissionMode?: string;

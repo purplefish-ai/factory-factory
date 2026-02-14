@@ -1,7 +1,16 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
+import {
+  ClientSideConnection,
+  type LoadSessionResponse,
+  type NewSessionResponse,
+  ndJsonStream,
+  PROTOCOL_VERSION,
+  type SessionConfigOption,
+  type SessionModelState,
+  type SessionModeState,
+} from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
 import { AcpClientHandler } from './acp-client-handler';
@@ -49,6 +58,135 @@ function resolveAcpBinary(packageName: string, binaryName: string): string {
     });
   }
   return binaryName;
+}
+
+type SessionConfigResolution = {
+  configOptions: SessionConfigOption[];
+  source: 'config_options' | 'legacy_models_modes' | 'none';
+};
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function buildModelConfigOption(
+  models: SessionModelState | null | undefined
+): SessionConfigOption | null {
+  if (!(models && Array.isArray(models.availableModels))) {
+    return null;
+  }
+
+  const resolveModelName = (model: {
+    modelId: string;
+    name: string;
+    description?: string | null;
+  }): string => {
+    if (model.modelId === 'default' && isNonEmptyString(model.description)) {
+      const family = model.description.split('·')[0]?.trim();
+      if (family) {
+        return `${model.name} (${family})`;
+      }
+    }
+    return model.name;
+  };
+
+  const options = models.availableModels
+    .filter((model) => isNonEmptyString(model?.modelId) && isNonEmptyString(model?.name))
+    .map((model) => ({
+      value: model.modelId,
+      name: resolveModelName(model),
+      ...(isNonEmptyString(model.description) ? { description: model.description } : {}),
+    }));
+
+  if (options.length === 0) {
+    return null;
+  }
+  const firstValue = options[0]?.value;
+  if (!firstValue) {
+    return null;
+  }
+
+  const currentValue =
+    isNonEmptyString(models.currentModelId) &&
+    options.some((option) => option.value === models.currentModelId)
+      ? models.currentModelId
+      : firstValue;
+
+  return {
+    id: 'model',
+    name: 'Model',
+    type: 'select',
+    category: 'model',
+    currentValue,
+    options,
+  };
+}
+
+function buildModeConfigOption(
+  modes: SessionModeState | null | undefined
+): SessionConfigOption | null {
+  if (!(modes && Array.isArray(modes.availableModes))) {
+    return null;
+  }
+
+  const options = modes.availableModes
+    .filter((mode) => isNonEmptyString(mode?.id) && isNonEmptyString(mode?.name))
+    .map((mode) => ({
+      value: mode.id,
+      name: mode.name,
+      ...(isNonEmptyString(mode.description) ? { description: mode.description } : {}),
+    }));
+
+  if (options.length === 0) {
+    return null;
+  }
+  const firstValue = options[0]?.value;
+  if (!firstValue) {
+    return null;
+  }
+
+  const currentValue =
+    isNonEmptyString(modes.currentModeId) &&
+    options.some((option) => option.value === modes.currentModeId)
+      ? modes.currentModeId
+      : firstValue;
+
+  return {
+    id: 'mode',
+    name: 'Mode',
+    type: 'select',
+    category: 'mode',
+    currentValue,
+    options,
+  };
+}
+
+function resolveSessionConfigOptions(
+  provider: 'CLAUDE' | 'CODEX',
+  sessionResult: NewSessionResponse | LoadSessionResponse
+): SessionConfigResolution {
+  const configOptions = Array.isArray(sessionResult.configOptions)
+    ? sessionResult.configOptions
+    : [];
+  if (configOptions.length > 0) {
+    return { configOptions, source: 'config_options' };
+  }
+
+  // Temporary compatibility path for Claude adapter versions that still expose
+  // model/mode via legacy fields instead of configOptions.
+  if (provider !== 'CLAUDE') {
+    return { configOptions, source: 'none' };
+  }
+
+  const legacyOptions = [
+    buildModelConfigOption(sessionResult.models),
+    buildModeConfigOption(sessionResult.modes),
+  ].filter((option): option is SessionConfigOption => option !== null);
+  if (legacyOptions.length > 0) {
+    return { configOptions: legacyOptions, source: 'legacy_models_modes' };
+  }
+
+  return { configOptions: [], source: 'none' };
 }
 
 export class AcpRuntimeManager {
@@ -138,7 +276,7 @@ export class AcpRuntimeManager {
     const isCodex = options.provider === 'CODEX';
     const binaryName = isCodex ? 'codex-acp' : 'claude-code-acp';
     const packageName = isCodex ? '@zed-industries/codex-acp' : '@zed-industries/claude-code-acp';
-    const binaryPath = resolveAcpBinary(packageName, binaryName);
+    const binaryPath = options.adapterBinaryPath ?? resolveAcpBinary(packageName, binaryName);
 
     logger.info('Spawning ACP subprocess', {
       sessionId,
@@ -297,7 +435,7 @@ export class AcpRuntimeManager {
     agentCapabilities: Record<string, unknown>
   ): Promise<{
     providerSessionId: string;
-    configOptions: import('@agentclientprotocol/sdk').SessionConfigOption[];
+    configOptions: SessionConfigOption[];
   }> {
     const storedId = options.resumeProviderSessionId;
     const canResume = agentCapabilities.loadSession === true && !!storedId;
@@ -313,9 +451,17 @@ export class AcpRuntimeManager {
           sessionId,
           providerSessionId: storedId,
         });
+        const resolved = resolveSessionConfigOptions(options.provider, loadResult);
+        if (resolved.source === 'legacy_models_modes') {
+          logger.info('Using legacy session models/modes as configOptions', {
+            sessionId,
+            provider: options.provider,
+            sessionSource: 'loadSession',
+          });
+        }
         return {
           providerSessionId: storedId,
-          configOptions: loadResult.configOptions ?? [],
+          configOptions: resolved.configOptions,
         };
       } catch (error) {
         logger.warn('loadSession failed, falling back to newSession', {
@@ -334,9 +480,17 @@ export class AcpRuntimeManager {
       sessionId,
       providerSessionId: sessionResult.sessionId,
     });
+    const resolved = resolveSessionConfigOptions(options.provider, sessionResult);
+    if (resolved.source === 'legacy_models_modes') {
+      logger.info('Using legacy session models/modes as configOptions', {
+        sessionId,
+        provider: options.provider,
+        sessionSource: 'newSession',
+      });
+    }
     return {
       providerSessionId: sessionResult.sessionId,
-      configOptions: sessionResult.configOptions ?? [],
+      configOptions: resolved.configOptions,
     };
   }
 
@@ -432,20 +586,58 @@ export class AcpRuntimeManager {
     sessionId: string,
     configId: string,
     value: string
-  ): Promise<import('@agentclientprotocol/sdk').SessionConfigOption[]> {
+  ): Promise<SessionConfigOption[]> {
     const handle = this.sessions.get(sessionId);
     if (!handle) {
       throw new Error(`No ACP session found for sessionId: ${sessionId}`);
     }
 
-    const response = await handle.connection.setSessionConfigOption({
-      sessionId: handle.providerSessionId,
-      configId,
-      value,
-    });
+    try {
+      const response = await handle.connection.setSessionConfigOption({
+        sessionId: handle.providerSessionId,
+        configId,
+        value,
+      });
 
-    handle.configOptions = response.configOptions;
-    return response.configOptions;
+      handle.configOptions = response.configOptions;
+      return response.configOptions;
+    } catch (error) {
+      const isLegacyClaudeFallback =
+        handle.provider === 'CLAUDE' && (configId === 'model' || configId === 'mode');
+      if (!isLegacyClaudeFallback) {
+        throw error;
+      }
+
+      logger.debug('setSessionConfigOption failed for Claude; using legacy fallback', {
+        sessionId,
+        configId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (configId === 'model') {
+        await handle.connection.unstable_setSessionModel({
+          sessionId: handle.providerSessionId,
+          modelId: value,
+        });
+      } else {
+        await handle.connection.setSessionMode({
+          sessionId: handle.providerSessionId,
+          modeId: value,
+        });
+      }
+
+      const updatedOptions = handle.configOptions.map((option) =>
+        option.id === configId
+          ? {
+              ...option,
+              currentValue: value,
+            }
+          : option
+      );
+
+      handle.configOptions = updatedOptions;
+      return updatedOptions;
+    }
   }
 
   async stopAllClients(timeoutMs = 5000): Promise<void> {
