@@ -657,18 +657,4 @@ describe('SessionService', () => {
 
     await expect(sessionService.stopAllClients()).rejects.toThrow('acp shutdown failed');
   });
-
-  it('deprecated getClient returns undefined', () => {
-    expect(sessionService.getClient('session-1')).toBeUndefined();
-  });
-
-  it('deprecated getAllActiveProcesses returns empty array', () => {
-    expect(sessionService.getAllActiveProcesses()).toEqual([]);
-  });
-
-  it('deprecated getCodexManagerStatus returns stopped status', () => {
-    expect(sessionService.getCodexManagerStatus()).toEqual(
-      expect.objectContaining({ state: 'stopped' })
-    );
-  });
 });

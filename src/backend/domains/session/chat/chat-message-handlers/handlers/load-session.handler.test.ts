@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildHydrateKey } from '@/backend/domains/session/store/session-hydrate-key';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
   getChatBarCapabilities: vi.fn(),
-  tryHydrateCodexTranscript: vi.fn(),
   subscribe: vi.fn(),
   emitDelta: vi.fn(),
-  setHydratedTranscript: vi.fn(),
   getCachedCommands: vi.fn(),
 }));
 
@@ -22,7 +19,6 @@ vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
   sessionService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
     getChatBarCapabilities: mocks.getChatBarCapabilities,
-    tryHydrateCodexTranscript: mocks.tryHydrateCodexTranscript,
   },
 }));
 
@@ -30,7 +26,6 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
   sessionDomainService: {
     subscribe: mocks.subscribe,
     emitDelta: mocks.emitDelta,
-    setHydratedTranscript: mocks.setHydratedTranscript,
   },
 }));
 
@@ -65,22 +60,13 @@ describe('createLoadSessionHandler', () => {
     mocks.getCachedCommands.mockResolvedValue(null);
   });
 
-  it('hydrates CODEX transcript from thread/read before subscribe replay', async () => {
+  it('subscribes with no Claude hydration context for CODEX session', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CODEX',
       workspace: { worktreePath: '/tmp/worktree' },
       claudeSessionId: null,
       claudeProjectPath: null,
     });
-    mocks.tryHydrateCodexTranscript.mockResolvedValue([
-      {
-        id: 'codex-turn-1-item-1',
-        source: 'user',
-        text: 'hello',
-        timestamp: '2026-02-13T00:00:00.000Z',
-        order: 0,
-      },
-    ]);
 
     const handler = createLoadSessionHandler();
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
@@ -91,17 +77,6 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
 
-    expect(mocks.tryHydrateCodexTranscript).toHaveBeenCalledWith('session-1');
-    expect(mocks.setHydratedTranscript).toHaveBeenCalledWith(
-      'session-1',
-      expect.any(Array),
-      expect.objectContaining({
-        hydratedKey: buildHydrateKey({
-          claudeSessionId: null,
-          claudeProjectPath: null,
-        }),
-      })
-    );
     expect(mocks.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
@@ -112,14 +87,14 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
-  it('skips transcript replacement when no CODEX hydration data is available', async () => {
+  it('emits cached slash commands when available', async () => {
     mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
+      provider: 'CLAUDE',
       workspace: { worktreePath: '/tmp/worktree' },
       claudeSessionId: null,
       claudeProjectPath: null,
     });
-    mocks.tryHydrateCodexTranscript.mockResolvedValue(null);
+    mocks.getCachedCommands.mockResolvedValue([{ name: '/test', description: 'Test command' }]);
 
     const handler = createLoadSessionHandler();
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
@@ -130,7 +105,9 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.setHydratedTranscript).not.toHaveBeenCalled();
-    expect(mocks.subscribe).toHaveBeenCalled();
+    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
+      type: 'slash_commands',
+      slashCommands: [{ name: '/test', description: 'Test command' }],
+    });
   });
 });

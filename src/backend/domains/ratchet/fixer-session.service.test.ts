@@ -49,7 +49,7 @@ const mockSessionBridge: RatchetSessionBridge = {
   isSessionWorking: vi.fn(),
   stopSession: vi.fn(),
   startSession: vi.fn(),
-  getClient: vi.fn(),
+  sendSessionMessage: vi.fn(),
   injectCommittedUserMessage: vi.fn(),
 };
 
@@ -115,8 +115,8 @@ describe('FixerSessionService', () => {
     });
 
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
-    const client = { sendMessage: vi.fn(), isRunning: vi.fn() };
-    vi.mocked(mockSessionBridge.getClient).mockReturnValue(client);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.sendSessionMessage).mockResolvedValue(undefined);
 
     const result = await fixerSessionService.acquireAndDispatch({
       workspaceId: 'w1',
@@ -131,7 +131,7 @@ describe('FixerSessionService', () => {
       sessionId: 's1',
       reason: 'message_dispatched',
     });
-    expect(client.sendMessage).toHaveBeenCalledWith('prompt');
+    expect(mockSessionBridge.sendSessionMessage).toHaveBeenCalledWith('s1', 'prompt');
   });
 
   it('creates and starts a new session', async () => {

@@ -13,7 +13,6 @@ import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-sess
 import { createLogger } from '@/backend/services/logger.service';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type {
-  ChatMessage,
   ClaudeContentItem,
   ClaudeMessage,
   HistoryMessage,
@@ -30,16 +29,6 @@ import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
-
-/**
- * @deprecated Legacy callback type -- kept for API compatibility during migration.
- * Will be removed in Plan 02 when consumers are updated.
- */
-export type ClientCreatedCallback = (
-  sessionId: string,
-  client: unknown,
-  context: { workspaceId: string; workingDir: string }
-) => void;
 
 class SessionService {
   private readonly repository: SessionRepository;
@@ -701,33 +690,12 @@ class SessionService {
     return await SessionFileReader.getHistory(session.claudeSessionId, workingDir);
   }
 
-  respondToPermissionRequest(sessionId: string, requestId: string, _allow: boolean): void {
-    // Legacy permission response -- no longer supported for ACP sessions.
-    // ACP permissions are handled via respondToAcpPermission with optionId.
-    logger.debug('respondToPermissionRequest is a no-op (legacy adapter removed)', {
-      sessionId,
-      requestId,
-    });
-  }
-
   respondToAcpPermission(sessionId: string, requestId: string, optionId: string): boolean {
     const bridge = this.acpPermissionBridges.get(sessionId);
     if (!bridge) {
       return false;
     }
     return bridge.resolvePermission(requestId, optionId);
-  }
-
-  respondToQuestionRequest(
-    sessionId: string,
-    requestId: string,
-    _answers: Record<string, string | string[]>
-  ): void {
-    // Legacy question response -- no longer supported for ACP sessions.
-    logger.debug('respondToQuestionRequest is a no-op (legacy adapter removed)', {
-      sessionId,
-      requestId,
-    });
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
@@ -914,100 +882,6 @@ class SessionService {
       });
       throw error;
     }
-  }
-
-  // ===========================================================================
-  // Deprecated Stubs (kept for API compatibility during Phase 22 migration)
-  // Will be removed in Plan 02 when consumers are updated.
-  // ===========================================================================
-
-  /** @deprecated No-op -- legacy ClaudeClient event forwarding removed. */
-  setOnClientCreated(_callback: ClientCreatedCallback): void {
-    // No-op: ACP sessions use setupAcpEventHandler for event wiring
-  }
-
-  /** @deprecated No-op -- Codex terminal turn callback removed. */
-  setOnCodexTerminalTurn(_callback: (sessionId: string) => void | Promise<void>): void {
-    // No-op: Codex sessions are no longer supported
-  }
-
-  /** @deprecated Always returns undefined -- ClaudeClient no longer managed. */
-  getClient(_sessionId: string): unknown {
-    return undefined;
-  }
-
-  /** @deprecated Returns a minimal delta -- legacy ClaudeAdapter translation removed. */
-  toPublicMessageDelta(message: ClaudeMessage, order?: number): SessionDeltaEvent {
-    return {
-      type: 'agent_message',
-      data: message,
-      ...(order !== undefined ? { order } : {}),
-    } as SessionDeltaEvent;
-  }
-
-  /** @deprecated Always returns null -- Codex transcript hydration removed. */
-  tryHydrateCodexTranscript(_sessionId: string): ChatMessage[] | null {
-    return null;
-  }
-
-  /** @deprecated Returns empty response -- legacy rewind files removed. */
-  rewindSessionFiles(
-    _sessionId: string,
-    _userMessageId: string,
-    _dryRun?: boolean
-  ): { affected_files?: string[] } {
-    return { affected_files: [] };
-  }
-
-  /** @deprecated Always returns undefined -- ClaudeProcess registry removed. */
-  getClaudeProcess(_sessionId: string): undefined {
-    return undefined;
-  }
-
-  /** @deprecated Returns empty array -- legacy ClaudeProcess monitoring removed. */
-  getAllActiveProcesses(): Array<{
-    sessionId: string;
-    pid: number | undefined;
-    status: string;
-    isRunning: boolean;
-    resourceUsage: { cpu: number; memory: number } | null;
-    idleTimeMs: number;
-  }> {
-    return [];
-  }
-
-  /** @deprecated Returns empty status -- Codex app-server monitoring removed. */
-  getCodexManagerStatus(): {
-    state: string;
-    unavailableReason: string | null;
-    pid: number | null;
-    startedAt: string | null;
-    restartCount: number;
-    activeSessionCount: number;
-  } {
-    return {
-      state: 'stopped',
-      unavailableReason: null,
-      pid: null,
-      startedAt: null,
-      restartCount: 0,
-      activeSessionCount: 0,
-    };
-  }
-
-  /** @deprecated Returns empty array -- Codex process monitoring removed. */
-  getAllCodexActiveProcesses(): Array<{
-    sessionId: string;
-    threadId: string;
-    isRunning: boolean;
-    createdAt: Date;
-  }> {
-    return [];
-  }
-
-  /** @deprecated Returns empty iterator -- legacy ClaudeClient map removed. */
-  getAllClients(): IterableIterator<[string, unknown]> {
-    return new Map<string, unknown>().entries();
   }
 
   // ===========================================================================

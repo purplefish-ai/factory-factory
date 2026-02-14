@@ -50,10 +50,7 @@ export function configureDomainBridges(): void {
     isSessionWorking: (id) => sessionService.isSessionWorking(id),
     stopSession: (id) => sessionService.stopSession(id),
     startSession: (id, opts) => sessionService.startSession(id, opts),
-    getClient: (id) =>
-      (sessionService.getClient(id) as
-        | { isRunning(): boolean; sendMessage(msg: string): Promise<void> }
-        | undefined) ?? null,
+    sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     injectCommittedUserMessage: (id, msg) =>
       sessionDomainService.injectCommittedUserMessage(id, msg),
   };
@@ -129,10 +126,8 @@ export function configureDomainBridges(): void {
   prReviewFixerService.configure({
     session: {
       isSessionWorking: (id) => sessionService.isSessionWorking(id),
-      getClient: (id) =>
-        (sessionService.getClient(id) as
-          | { isRunning(): boolean; sendMessage(msg: string): Promise<void> }
-          | undefined) ?? null,
+      isSessionRunning: (id) => sessionService.isSessionRunning(id),
+      sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
     },
     fixer: {
       acquireAndDispatch: (input) => fixerSessionService.acquireAndDispatch(input),

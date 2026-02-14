@@ -123,7 +123,9 @@ class PRReviewFixerService {
       workflow: PR_REVIEW_FIX_WORKFLOW,
       getActiveSession: (targetWorkspaceId, workflow) =>
         this.fixer.getActiveSession(targetWorkspaceId, workflow),
-      getClient: (sessionId) => this.session.getClient(sessionId),
+      isSessionRunning: (sessionId) => this.session.isSessionRunning(sessionId),
+      sendSessionMessage: (sessionId, message) =>
+        this.session.sendSessionMessage(sessionId, message),
       message:
         '✅ **Reviews Addressed** - The review comments have been addressed. You can wrap up your current work.',
       logger,

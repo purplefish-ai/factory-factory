@@ -212,11 +212,13 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
         return;
       }
+      if (!optionId) {
+        return;
+      }
       const msg: PermissionResponseMessage = {
         type: 'permission_response',
         requestId,
-        allow,
-        ...(optionId && { optionId }),
+        optionId,
       };
       send(msg);
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });

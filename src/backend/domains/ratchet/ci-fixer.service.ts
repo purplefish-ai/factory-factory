@@ -104,7 +104,9 @@ class CIFixerService {
       workflow: CI_FIX_WORKFLOW,
       getActiveSession: (targetWorkspaceId, workflow) =>
         fixerSessionService.getActiveSession(targetWorkspaceId, workflow),
-      getClient: (sessionId) => this.session.getClient(sessionId),
+      isSessionRunning: (sessionId) => this.session.isSessionRunning(sessionId),
+      sendSessionMessage: (sessionId, message) =>
+        this.session.sendSessionMessage(sessionId, message),
       message:
         '✅ **CI Passed** - The CI checks are now passing. You can wrap up your current work.',
       logger,

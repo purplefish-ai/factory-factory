@@ -1,5 +1,4 @@
 import type { ChatMessageInput } from '@/shared/websocket';
-import { createListSessionsHandler } from './handlers/list-sessions.handler';
 import { createLoadSessionHandler } from './handlers/load-session.handler';
 import { createPermissionResponseHandler } from './handlers/permission-response.handler';
 import { createQuestionResponseHandler } from './handlers/question-response.handler';
@@ -27,7 +26,6 @@ export function createChatMessageHandlerRegistry(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandlerRegistry {
   return {
-    list_sessions: createListSessionsHandler(),
     start: createStartHandler(deps),
     user_input: createUserInputHandler(),
     queue_message: createQueueMessageHandler(deps),

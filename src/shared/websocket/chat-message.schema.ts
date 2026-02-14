@@ -34,9 +34,6 @@ export const ChatSettingsSchema = z.object({
 // ============================================================================
 
 export const ChatMessageSchema = z.discriminatedUnion('type', [
-  // List sessions - no session required
-  z.object({ type: z.literal('list_sessions') }),
-
   // Start a session
   z.object({
     type: z.literal('start'),
@@ -89,9 +86,8 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('permission_response'),
     requestId: z.string().min(1),
-    allow: z.boolean(),
-    /** ACP permission option ID -- when present, takes precedence over boolean allow */
-    optionId: z.string().optional(),
+    /** ACP permission option ID selected by the user */
+    optionId: z.string().min(1),
   }),
 
   // Set the model
@@ -134,7 +130,6 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
 export type ChatMessageInput = z.infer<typeof ChatMessageSchema>;
 
 // Narrow types for specific message types
-export type ListSessionsMessage = Extract<ChatMessageInput, { type: 'list_sessions' }>;
 export type StartMessageInput = Extract<ChatMessageInput, { type: 'start' }>;
 export type UserInputMessage = Extract<ChatMessageInput, { type: 'user_input' }>;
 export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message' }>;

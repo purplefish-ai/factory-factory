@@ -244,14 +244,13 @@ class FixerSessionService {
   }
 
   private async sendMessageSafely(sessionId: string, prompt: string): Promise<boolean> {
-    const client = this.session.getClient(sessionId);
-    if (!client) {
-      logger.warn('Could not send fixer message because no client was found', { sessionId });
+    if (!this.session.isSessionRunning(sessionId)) {
+      logger.warn('Could not send fixer message because session is not running', { sessionId });
       return false;
     }
 
     try {
-      await client.sendMessage(prompt);
+      await this.session.sendSessionMessage(sessionId, prompt);
       return true;
     } catch (error) {
       logger.warn('Failed to send fixer message', {

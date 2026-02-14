@@ -2,7 +2,6 @@ import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-mes
 import { SessionFileReader } from '@/backend/domains/session/data/session-file-reader';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { buildHydrateKey } from '@/backend/domains/session/store/session-hydrate-key';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import type { LoadSessionMessage } from '@/shared/websocket';
@@ -51,27 +50,6 @@ function resolveClaudeHydrationContext(session: PersistedSession): {
   };
 }
 
-async function hydrateCodexTranscriptIfAvailable(
-  sessionId: string,
-  provider: PersistedSession['provider']
-): Promise<void> {
-  if (provider !== 'CODEX') {
-    return;
-  }
-
-  const codexTranscript = await sessionService.tryHydrateCodexTranscript(sessionId);
-  if (!codexTranscript) {
-    return;
-  }
-
-  sessionDomainService.setHydratedTranscript(sessionId, codexTranscript, {
-    hydratedKey: buildHydrateKey({
-      claudeSessionId: null,
-      claudeProjectPath: null,
-    }),
-  });
-}
-
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
     const dbSession = await agentSessionAccessor.findById(sessionId);
@@ -81,8 +59,6 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
     }
 
     const { claudeProjectPath, claudeSessionId } = resolveClaudeHydrationContext(dbSession);
-    await hydrateCodexTranscriptIfAvailable(sessionId, dbSession.provider);
-
     const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
       sessionId,

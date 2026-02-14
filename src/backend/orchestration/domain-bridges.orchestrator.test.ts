@@ -34,7 +34,7 @@ vi.mock('@/backend/domains/session', () => ({
     isAnySessionWorking: vi.fn(),
     stopSession: vi.fn(),
     startSession: vi.fn(),
-    getClient: vi.fn(),
+    sendSessionMessage: vi.fn(),
   },
   sessionDomainService: { injectCommittedUserMessage: vi.fn() },
   chatEventForwarderService: { configure: vi.fn(), getAllPendingRequests: vi.fn() },
@@ -165,23 +165,12 @@ describe('configureDomainBridges', () => {
       });
     });
 
-    it('session bridge delegates getClient and returns null when undefined', () => {
-      vi.mocked(sessionService.getClient).mockReturnValue(undefined as never);
+    it('session bridge delegates sendSessionMessage to sessionService', async () => {
       configureDomainBridges();
       const bridge = getBridge(ratchetService.configure);
 
-      const result = bridge.session.getClient('s1');
-      expect(result).toBeNull();
-    });
-
-    it('session bridge delegates getClient and returns client when present', () => {
-      const mockClient = { sendMessage: vi.fn() };
-      vi.mocked(sessionService.getClient).mockReturnValue(mockClient as never);
-      configureDomainBridges();
-      const bridge = getBridge(ratchetService.configure);
-
-      const result = bridge.session.getClient('s1');
-      expect(result).toBe(mockClient);
+      await bridge.session.sendSessionMessage('s1', 'hello');
+      expect(sessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     });
 
     it('session bridge delegates injectCommittedUserMessage to sessionDomainService', () => {
@@ -344,13 +333,20 @@ describe('configureDomainBridges', () => {
       expect(sessionService.isSessionWorking).toHaveBeenCalledWith('s1');
     });
 
-    it('prReviewFixer session bridge getClient returns null for undefined', () => {
-      vi.mocked(sessionService.getClient).mockReturnValue(undefined as never);
+    it('prReviewFixer session bridge delegates isSessionRunning', () => {
       configureDomainBridges();
       const bridge = getBridge(prReviewFixerService.configure);
 
-      const result = bridge.session.getClient('s1');
-      expect(result).toBeNull();
+      bridge.session.isSessionRunning('s1');
+      expect(sessionService.isSessionRunning).toHaveBeenCalledWith('s1');
+    });
+
+    it('prReviewFixer session bridge delegates sendSessionMessage', async () => {
+      configureDomainBridges();
+      const bridge = getBridge(prReviewFixerService.configure);
+
+      await bridge.session.sendSessionMessage('s1', 'hi');
+      expect(sessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hi');
     });
 
     it('prSnapshotService gets kanban bridge with updateCachedKanbanColumn', () => {

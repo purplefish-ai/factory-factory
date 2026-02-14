@@ -399,10 +399,8 @@ class CIMonitorService {
         return false;
       }
 
-      // Get the client for this session
-      const client = this.session.getClient(runningSession.id);
-      if (!client) {
-        logger.debug('Session has no active client', {
+      if (!this.session.isSessionRunning(runningSession.id)) {
+        logger.debug('Session is not running, skipping notification', {
           workspaceId,
           sessionId: runningSession.id,
         });
@@ -419,7 +417,7 @@ PR: ${prUrl}
 
 You can check the CI status and logs on GitHub to see what failed.`;
 
-      client.sendMessage(message).catch((error) => {
+      this.session.sendSessionMessage(runningSession.id, message).catch((error) => {
         logger.warn('Failed to send CI failure notification', { workspaceId, error });
       });
 

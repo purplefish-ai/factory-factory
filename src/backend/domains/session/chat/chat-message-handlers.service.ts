@@ -216,12 +216,6 @@ class ChatMessageHandlerService {
       return;
     }
 
-    // list_sessions doesn't require a session
-    if (message.type === 'list_sessions') {
-      await handler({ ws, sessionId: dbSessionId ?? '', workingDir, message });
-      return;
-    }
-
     // All other operations require a session
     if (!dbSessionId) {
       ws.send(

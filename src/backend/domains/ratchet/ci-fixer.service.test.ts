@@ -26,7 +26,7 @@ const mockSessionBridge: RatchetSessionBridge = {
   isSessionWorking: vi.fn(),
   stopSession: vi.fn(),
   startSession: vi.fn(),
-  getClient: vi.fn(),
+  sendSessionMessage: vi.fn(),
   injectCommittedUserMessage: vi.fn(),
 };
 
@@ -107,19 +107,18 @@ describe('CIFixerService', () => {
     await expect(ciFixerService.isFixingInProgress('w1')).resolves.toBe(true);
   });
 
-  it('notifies CI passed when running client exists', async () => {
+  it('notifies CI passed when session is running', async () => {
     vi.mocked(fixerSessionService.getActiveSession).mockResolvedValue({
       id: 's1',
       status: SessionStatus.RUNNING,
     });
-
-    const client = {
-      isRunning: vi.fn().mockReturnValue(true),
-      sendMessage: vi.fn().mockResolvedValue(undefined),
-    };
-    vi.mocked(mockSessionBridge.getClient).mockReturnValue(client);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.sendSessionMessage).mockResolvedValue(undefined);
 
     await expect(ciFixerService.notifyCIPassed('w1')).resolves.toBe(true);
-    expect(client.sendMessage).toHaveBeenCalled();
+    expect(mockSessionBridge.sendSessionMessage).toHaveBeenCalledWith(
+      's1',
+      expect.stringContaining('CI Passed')
+    );
   });
 });

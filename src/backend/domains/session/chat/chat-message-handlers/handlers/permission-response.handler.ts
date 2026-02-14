@@ -9,25 +9,19 @@ const logger = createLogger('chat-message-handlers');
 
 export function createPermissionResponseHandler(): ChatMessageHandler<PermissionResponseMessage> {
   return ({ ws, sessionId, message }) => {
-    const { requestId, allow, optionId } = message;
+    const { requestId, optionId } = message;
 
     try {
-      if (optionId) {
-        // ACP permission response -- route through bridge
-        const resolved = sessionService.respondToAcpPermission(sessionId, requestId, optionId);
-        if (!resolved) {
-          // Fallback to legacy handler if bridge doesn't have this request
-          sessionService.respondToPermissionRequest(sessionId, requestId, allow);
-        }
-      } else {
-        // Legacy Claude/Codex permission response
-        sessionService.respondToPermissionRequest(sessionId, requestId, allow);
+      // ACP permission response -- route through bridge
+      const resolved = sessionService.respondToAcpPermission(sessionId, requestId, optionId);
+      if (!resolved) {
+        sendWebSocketError(ws, 'No pending ACP permission request found for this request ID');
+        return;
       }
       if (DEBUG_CHAT_WS) {
         logger.info('[Chat WS] Responded to permission request', {
           sessionId,
           requestId,
-          allow,
           optionId,
         });
       }
