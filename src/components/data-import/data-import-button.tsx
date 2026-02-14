@@ -63,18 +63,13 @@ export function DataImportButton({
   });
 
   const buildImportSummary = (data: ParsedExportData): string => {
-    const sessionCount =
-      'agentSessions' in data.data
-        ? data.data.agentSessions.length
-        : data.data.claudeSessions.length;
-
     return [
       `Exported: ${new Date(data.meta.exportedAt).toLocaleString()}`,
       `Version: ${data.meta.version}`,
       '',
       `Projects: ${data.data.projects.length}`,
       `Workspaces: ${data.data.workspaces.length}`,
-      `Agent Sessions: ${sessionCount}`,
+      `Agent Sessions: ${data.data.agentSessions.length}`,
       `Terminal Sessions: ${data.data.terminalSessions.length}`,
       `User Settings: ${data.data.userSettings ? 'Yes' : 'No'}`,
     ].join('\n');
