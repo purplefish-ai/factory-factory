@@ -6,11 +6,15 @@ import {
   type AcpRuntimeEventHandlers,
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
+import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { SessionFileReader } from '@/backend/domains/session/data/session-file-reader';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
-import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import {
+  type ChatBarCapabilities,
+  createClaudeChatBarCapabilities,
+} from '@/shared/chat-capabilities';
 import type {
   ChatMessage,
   ClaudeContentItem,
@@ -47,6 +51,19 @@ class SessionService {
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
   private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
+  /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
+  private workspaceBridge: SessionWorkspaceBridge | null = null;
+  /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
+  private readonly sessionToWorkspace = new Map<string, string>();
+
+  /**
+   * Configure cross-domain bridges. Called once at startup by orchestration layer.
+   */
+  configure(bridges: {
+    workspace: Pick<SessionWorkspaceBridge, 'markSessionRunning' | 'markSessionIdle'>;
+  }): void {
+    this.workspaceBridge = bridges.workspace as SessionWorkspaceBridge;
+  }
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
     if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
@@ -103,8 +120,9 @@ class SessionService {
         }
       },
       onExit: async (sid: string, exitCode: number | null) => {
-        // Clean up permission bridge and streaming state on exit
+        // Clean up permission bridge, streaming state, and workspace mapping on exit
         this.acpStreamState.delete(sid);
+        this.sessionToWorkspace.delete(sid);
         const b = this.acpPermissionBridges.get(sid);
         if (b) {
           b.cancelAll();
@@ -236,6 +254,7 @@ class SessionService {
     }
 
     await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
+    this.sessionToWorkspace.set(sessionId, sessionContext.workspaceId);
 
     const handlers = this.setupAcpEventHandler(sessionId);
     const clientOptions: AcpClientOptions = {
@@ -601,12 +620,18 @@ class SessionService {
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
   async sendAcpMessage(sessionId: string, content: string): Promise<string> {
+    const workspaceId = this.sessionToWorkspace.get(sessionId);
+
     sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'running',
       processState: 'alive',
       activity: 'WORKING',
       updatedAt: new Date().toISOString(),
     });
+
+    if (workspaceId && this.workspaceBridge) {
+      this.workspaceBridge.markSessionRunning(workspaceId, sessionId);
+    }
 
     try {
       const result = await acpRuntimeManager.sendPrompt(sessionId, content);
@@ -625,6 +650,10 @@ class SessionService {
         updatedAt: new Date().toISOString(),
       });
       throw error;
+    } finally {
+      if (workspaceId && this.workspaceBridge) {
+        this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+      }
     }
   }
 
@@ -814,18 +843,10 @@ class SessionService {
       return this.buildAcpChatBarCapabilities(acpHandle);
     }
 
-    // Default capabilities when no ACP handle is available
-    return {
-      provider: 'CLAUDE',
-      model: { enabled: false, options: [] },
-      reasoning: { enabled: false, options: [] },
-      thinking: { enabled: false },
-      planMode: { enabled: true },
-      attachments: { enabled: true, kinds: ['image', 'text'] },
-      slashCommands: { enabled: false },
-      usageStats: { enabled: false, contextWindow: false },
-      rewind: { enabled: false },
-    };
+    // Fall back to known Claude model options when ACP configOptions are empty
+    const selectedModel = acpHandle?.configOptions.find((o) => o.category === 'model')
+      ?.currentValue as string | undefined;
+    return createClaudeChatBarCapabilities(selectedModel);
   }
 
   /**

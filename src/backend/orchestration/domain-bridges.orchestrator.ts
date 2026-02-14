@@ -155,6 +155,13 @@ export function configureDomainBridges(): void {
     },
   });
 
+  sessionService.configure({
+    workspace: {
+      markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
+      markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
+    },
+  });
+
   chatMessageHandlerService.configure({
     initPolicy: {
       getWorkspaceInitPolicy: (input) => getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput),

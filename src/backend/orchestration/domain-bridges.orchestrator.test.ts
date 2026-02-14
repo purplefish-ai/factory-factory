@@ -28,6 +28,7 @@ vi.mock('@/backend/domains/workspace', () => ({
 
 vi.mock('@/backend/domains/session', () => ({
   sessionService: {
+    configure: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     isAnySessionWorking: vi.fn(),
@@ -128,6 +129,7 @@ describe('configureDomainBridges', () => {
 
     expect(chatEventForwarderService.configure).toHaveBeenCalledTimes(1);
     expect(chatMessageHandlerService.configure).toHaveBeenCalledTimes(1);
+    expect(sessionService.configure).toHaveBeenCalledTimes(1);
   });
 
   it('configures run-script domain services', () => {
@@ -296,6 +298,22 @@ describe('configureDomainBridges', () => {
 
       bridge.initPolicy.getWorkspaceInitPolicy({ status: 'READY' });
       expect(getWorkspaceInitPolicy).toHaveBeenCalledWith({ status: 'READY' });
+    });
+
+    it('sessionService workspace bridge delegates markSessionRunning', () => {
+      configureDomainBridges();
+      const bridge = getBridge(sessionService.configure);
+
+      bridge.workspace.markSessionRunning('ws1', 's1');
+      expect(workspaceActivityService.markSessionRunning).toHaveBeenCalledWith('ws1', 's1');
+    });
+
+    it('sessionService workspace bridge delegates markSessionIdle', () => {
+      configureDomainBridges();
+      const bridge = getBridge(sessionService.configure);
+
+      bridge.workspace.markSessionIdle('ws1', 's1');
+      expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1');
     });
   });
 
