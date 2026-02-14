@@ -37,7 +37,7 @@ const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'F
 type WorkspaceWithSessions = Workspace & {
   agentSessions?: unknown[];
   isWorking?: boolean;
-  pendingRequestType?: 'plan_approval' | 'user_question' | null;
+  pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
 };
 
 function MobileWorkspaceCard({

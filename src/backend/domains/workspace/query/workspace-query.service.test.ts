@@ -86,7 +86,7 @@ describe('WorkspaceQueryService.listWithRuntimeState', () => {
     mockGetAllPendingRequests.mockReturnValue(
       new Map([
         ['s-1', { toolName: 'ExitPlanMode' }],
-        ['s-2', { toolName: 'AskUserQuestion' }],
+        ['s-2', { toolName: 'SomeOtherPermissionTool' }],
       ])
     );
 
@@ -101,12 +101,32 @@ describe('WorkspaceQueryService.listWithRuntimeState', () => {
     expect(result[1]).toMatchObject({
       id: 'ws-2',
       isWorking: true,
-      pendingRequestType: 'user_question',
+      pendingRequestType: 'permission_request',
     });
     expect(result[2]).toMatchObject({
       id: 'ws-3',
       isWorking: false,
       pendingRequestType: null,
+    });
+  });
+
+  it('keeps user_question mapping for AskUserQuestion', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'ws-1',
+        name: 'Workspace 1',
+      },
+    ]);
+
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({ sessionIds: ['s-1'], isWorking: false });
+
+    mockGetAllPendingRequests.mockReturnValue(new Map([['s-1', { toolName: 'AskUserQuestion' }]]));
+
+    const result = await workspaceQueryService.listWithRuntimeState({ projectId: 'proj-1' });
+
+    expect(result[0]).toMatchObject({
+      id: 'ws-1',
+      pendingRequestType: 'user_question',
     });
   });
 

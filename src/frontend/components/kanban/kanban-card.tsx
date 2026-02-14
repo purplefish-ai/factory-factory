@@ -17,7 +17,7 @@ export interface WorkspaceWithKanban extends Workspace {
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   isArchived?: boolean;
-  pendingRequestType?: 'plan_approval' | 'user_question' | null;
+  pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
 }
 
 interface KanbanCardProps {

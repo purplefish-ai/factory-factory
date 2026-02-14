@@ -647,6 +647,31 @@ describe('useProjectSnapshotSync', () => {
       );
     });
 
+    it('dispatches attention on null to generic permission_request transition', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-1', pendingRequestType: null })],
+      });
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry({ workspaceId: 'ws-1', pendingRequestType: 'permission_request' }),
+      });
+
+      expect(mockGlobalDispatchEvent).toHaveBeenCalledTimes(1);
+      expect(mockGlobalDispatchEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'workspace-attention-required',
+          detail: { workspaceId: 'ws-1' },
+        })
+      );
+    });
+
     it('does not dispatch attention when pending type remains unchanged', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;

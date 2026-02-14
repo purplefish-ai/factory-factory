@@ -122,7 +122,7 @@ export function detectDrift(
 function computePendingRequestType(
   sessionIds: string[],
   pendingRequests: Map<string, { toolName: string }>
-): 'plan_approval' | 'user_question' | null {
+): 'plan_approval' | 'user_question' | 'permission_request' | null {
   for (const sessionId of sessionIds) {
     const request = pendingRequests.get(sessionId);
     if (!request) {
@@ -134,6 +134,8 @@ function computePendingRequestType(
     if (request.toolName === 'AskUserQuestion') {
       return 'user_question';
     }
+
+    return 'permission_request';
   }
   return null;
 }

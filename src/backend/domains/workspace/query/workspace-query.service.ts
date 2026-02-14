@@ -27,12 +27,13 @@ const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
  * Determine the pending request type for a workspace based on its active sessions.
  * Returns 'plan_approval' if any session has a pending ExitPlanMode request,
  * 'user_question' if any session has a pending AskUserQuestion request,
+ * 'permission_request' for any other pending modal permission request,
  * or null if no pending requests.
  */
 function computePendingRequestType(
   sessionIds: string[],
   pendingRequests: Map<string, { toolName: string }>
-): 'plan_approval' | 'user_question' | null {
+): 'plan_approval' | 'user_question' | 'permission_request' | null {
   for (const sessionId of sessionIds) {
     const request = pendingRequests.get(sessionId);
     if (!request) {
@@ -45,6 +46,8 @@ function computePendingRequestType(
     if (request.toolName === 'AskUserQuestion') {
       return 'user_question';
     }
+
+    return 'permission_request';
   }
   return null;
 }
@@ -112,7 +115,10 @@ class WorkspaceQueryService {
       string,
       ReturnType<typeof deriveWorkspaceRuntimeState>['flowState']
     >();
-    const pendingRequestByWorkspace = new Map<string, 'plan_approval' | 'user_question' | null>();
+    const pendingRequestByWorkspace = new Map<
+      string,
+      'plan_approval' | 'user_question' | 'permission_request' | null
+    >();
     for (const workspace of workspaces) {
       const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
         this.session.isAnySessionWorking(sessionIds)

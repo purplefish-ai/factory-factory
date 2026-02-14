@@ -1,8 +1,8 @@
-import { FileCheck, MessageCircleQuestion } from 'lucide-react';
+import { FileCheck, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
-export type PendingRequestType = 'plan_approval' | 'user_question';
+export type PendingRequestType = 'plan_approval' | 'user_question' | 'permission_request';
 
 export function PendingRequestBadge({
   type,
@@ -25,6 +25,22 @@ export function PendingRequestBadge({
       >
         <FileCheck className={size === 'xs' ? 'h-2 w-2' : 'h-2.5 w-2.5'} />
         Plan Approval Needed
+      </Badge>
+    );
+  }
+
+  if (type === 'permission_request') {
+    return (
+      <Badge
+        variant="outline"
+        className={cn(
+          'gap-1 bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/30',
+          size === 'xs' ? 'h-4 px-1 text-[10px]' : 'text-[10px]',
+          className
+        )}
+      >
+        <ShieldAlert className={size === 'xs' ? 'h-2 w-2' : 'h-2.5 w-2.5'} />
+        Permission Needed
       </Badge>
     );
   }

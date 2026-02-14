@@ -34,7 +34,7 @@ type CacheData = {
 // Type alias for the kanban cache data shape (matches tRPC-inferred listWithKanbanState output).
 type KanbanCacheData = Record<string, unknown>[] | undefined;
 type WorkspaceDetailCache = Record<string, unknown> | undefined;
-type PendingRequestType = 'plan_approval' | 'user_question' | null;
+type PendingRequestType = 'plan_approval' | 'user_question' | 'permission_request' | null;
 type TrpcUtils = ReturnType<typeof trpc.useUtils>;
 
 // =============================================================================

@@ -529,6 +529,32 @@ describe('SnapshotReconciliationService', () => {
       expect(upsertFields.pendingRequestType).toBe('plan_approval');
     });
 
+    it('maps non-question permissions to permission_request', async () => {
+      const ws = createMockWorkspace({
+        id: 'ws-1',
+        worktreePath: null,
+        agentSessions: [
+          {
+            id: 'cs-1',
+            name: 'Chat 1',
+            workflow: 'followup',
+            model: 'claude-sonnet',
+            status: 'IDLE',
+            updatedAt: new Date(),
+          },
+        ],
+      });
+      mockFindAllNonArchived.mockResolvedValue([ws]);
+
+      const pendingRequests = new Map([['cs-1', { toolName: 'RequestPermission' }]]);
+      vi.mocked(bridges.session.getAllPendingRequests).mockReturnValue(pendingRequests);
+
+      await service.reconcile();
+
+      const upsertFields = mockUpsert.mock.calls[0]![1] as SnapshotUpdateInput;
+      expect(upsertFields.pendingRequestType).toBe('permission_request');
+    });
+
     it('includes sessionSummaries derived from runtime snapshots', async () => {
       const ws = createMockWorkspace({
         id: 'ws-1',

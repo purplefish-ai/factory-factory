@@ -103,7 +103,7 @@ export interface WorkspaceSnapshotEntry {
 
   // In-memory state (from session domain)
   isWorking: boolean;
-  pendingRequestType: 'plan_approval' | 'user_question' | null;
+  pendingRequestType: 'plan_approval' | 'user_question' | 'permission_request' | null;
   sessionSummaries: WorkspaceSessionSummary[];
 
   // Reconciliation-only state
@@ -150,7 +150,7 @@ export interface SnapshotUpdateInput {
 
   // Session fields (group: 'session')
   isWorking?: boolean;
-  pendingRequestType?: 'plan_approval' | 'user_question' | null;
+  pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
   sessionSummaries?: WorkspaceSessionSummary[];
 
   // Ratchet fields (group: 'ratchet')
