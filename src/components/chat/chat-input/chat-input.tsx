@@ -1,4 +1,4 @@
-import { Brain, ImagePlus, Loader2, Map as MapIcon, Send, Square } from 'lucide-react';
+import { Brain, ImagePlus, Loader2, Send, Square } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
@@ -159,7 +159,6 @@ interface LeftControlsVisibility {
   showModelSelector: boolean;
   showReasoningSelector: boolean;
   showThinkingToggle: boolean;
-  showPlanToggle: boolean;
   showAttachments: boolean;
   showUsageIndicator: boolean;
 }
@@ -174,7 +173,6 @@ function deriveLeftControlsVisibility(
   const showReasoningSelector =
     capabilities?.reasoning.enabled === true && (capabilities.reasoning.options.length ?? 0) > 0;
   const showThinkingToggle = capabilities?.thinking.enabled === true;
-  const showPlanToggle = capabilities?.planMode.enabled === true;
   const showAttachments =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
   const showUsageIndicator =
@@ -200,7 +198,6 @@ function deriveLeftControlsVisibility(
     showModelSelector,
     showReasoningSelector,
     showThinkingToggle,
-    showPlanToggle,
     showAttachments,
     showUsageIndicator,
   };
@@ -257,24 +254,20 @@ const ProviderIndicator = memo(function ProviderIndicator({
 
 const ModeToggles = memo(function ModeToggles({
   showThinkingToggle,
-  showPlanToggle,
   settings,
   onThinkingChange,
-  onPlanModeChange,
   running,
   modLabel,
   modifierHeld,
 }: {
   showThinkingToggle: boolean;
-  showPlanToggle: boolean;
   settings?: ChatSettings;
   onThinkingChange: (enabled: boolean) => void;
-  onPlanModeChange: (enabled: boolean) => void;
   running: boolean;
   modLabel: string;
   modifierHeld: boolean;
 }) {
-  if (!(showThinkingToggle || showPlanToggle)) {
+  if (!showThinkingToggle) {
     return null;
   }
 
@@ -289,18 +282,6 @@ const ModeToggles = memo(function ModeToggles({
           label="Extended thinking mode"
           ariaLabel="Toggle thinking mode"
           shortcut={`${modLabel}+Shift+T`}
-          showShortcut={modifierHeld}
-        />
-      )}
-      {showPlanToggle && (
-        <SettingsToggle
-          pressed={settings?.planModeEnabled ?? false}
-          onPressedChange={onPlanModeChange}
-          disabled={running}
-          icon={MapIcon}
-          label="Plan mode"
-          ariaLabel="Toggle plan mode"
-          shortcut={`${modLabel}+Shift+P`}
           showShortcut={modifierHeld}
         />
       )}
@@ -364,7 +345,6 @@ const LeftControls = memo(function LeftControls({
   onModelChange,
   onReasoningChange,
   onThinkingChange,
-  onPlanModeChange,
   running,
   modLabel,
   modifierHeld,
@@ -384,7 +364,6 @@ const LeftControls = memo(function LeftControls({
   onModelChange: (model: string) => void;
   onReasoningChange: (effort: string) => void;
   onThinkingChange: (enabled: boolean) => void;
-  onPlanModeChange: (enabled: boolean) => void;
   running: boolean;
   modLabel: string;
   modifierHeld: boolean;
@@ -406,11 +385,10 @@ const LeftControls = memo(function LeftControls({
     showModelSelector,
     showReasoningSelector,
     showThinkingToggle,
-    showPlanToggle,
     showAttachments,
     showUsageIndicator,
   } = deriveLeftControlsVisibility(settings, capabilities, tokenStats);
-  const hasModeToggles = showThinkingToggle || showPlanToggle;
+  const hasModeToggles = showThinkingToggle;
   const hasAcpConfigOptions =
     acpConfigOptions != null && acpConfigOptions.length > 0 && onSetConfigOption != null;
 
@@ -456,10 +434,8 @@ const LeftControls = memo(function LeftControls({
           )}
           <ModeToggles
             showThinkingToggle={showThinkingToggle}
-            showPlanToggle={showPlanToggle}
             settings={settings}
             onThinkingChange={onThinkingChange}
-            onPlanModeChange={onPlanModeChange}
             running={running}
             modLabel={modLabel}
             modifierHeld={modifierHeld}
@@ -773,7 +749,6 @@ export const ChatInput = memo(function ChatInput({
             onModelChange={actions.handleModelChange}
             onReasoningChange={actions.handleReasoningChange}
             onThinkingChange={actions.handleThinkingChange}
-            onPlanModeChange={actions.handlePlanModeChange}
             running={running}
             modLabel={modLabel}
             modifierHeld={modifierHeld}

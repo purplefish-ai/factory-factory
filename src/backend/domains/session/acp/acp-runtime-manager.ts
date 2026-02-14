@@ -119,7 +119,7 @@ function buildModelConfigOption(
     if (model.modelId === 'default' && isNonEmptyString(model.description)) {
       const family = model.description.split('·')[0]?.trim();
       if (family) {
-        return `${model.name} (${family})`;
+        return family;
       }
     }
     return model.name;

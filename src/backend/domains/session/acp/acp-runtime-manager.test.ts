@@ -375,6 +375,41 @@ describe('AcpRuntimeManager', () => {
         modeOption?.options.map((option) => ('value' in option ? option.value : undefined))
       ).toEqual(expect.arrayContaining(['default', 'plan']));
     });
+
+    it('uses model family name for legacy Claude default model labels', async () => {
+      setupSuccessfulSpawn();
+      mockNewSession.mockResolvedValueOnce({
+        sessionId: 'provider-session-123',
+        models: {
+          currentModelId: 'default',
+          availableModels: [
+            {
+              modelId: 'default',
+              name: 'Default (recommended)',
+              description: 'Opus 4.6 · best for complex tasks',
+            },
+            { modelId: 'sonnet', name: 'Sonnet 4.5' },
+          ],
+        },
+      });
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const modelOption = handle.configOptions.find((option) => option.id === 'model');
+      const defaultEntry = modelOption?.options.find(
+        (option) => 'value' in option && option.value === 'default'
+      );
+
+      expect(defaultEntry).toMatchObject({
+        value: 'default',
+        name: 'Opus 4.6',
+      });
+    });
   });
 
   describe('stopClient', () => {

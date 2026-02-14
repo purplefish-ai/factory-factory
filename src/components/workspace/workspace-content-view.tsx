@@ -1,10 +1,7 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { AppRouter } from '@/frontend/lib/trpc';
-import type {
-  NewSessionProviderSelection,
-  SessionProviderValue,
-} from '@/lib/session-provider-selection';
+import type { SessionProviderValue } from '@/lib/session-provider-selection';
 
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
@@ -32,9 +29,8 @@ interface WorkspaceContentViewProps {
   maxSessions?: number;
   /** Whether the workspace has a worktree path (required for sessions) */
   hasWorktreePath: boolean;
-  selectedProvider: NewSessionProviderSelection;
-  setSelectedProvider: Dispatch<SetStateAction<NewSessionProviderSelection>>;
-  effectiveDefaultProvider: SessionProviderValue;
+  selectedProvider: SessionProviderValue;
+  setSelectedProvider: Dispatch<SetStateAction<SessionProviderValue>>;
 }
 
 // =============================================================================
@@ -63,7 +59,6 @@ export function WorkspaceContentView({
   hasWorktreePath,
   selectedProvider,
   setSelectedProvider,
-  effectiveDefaultProvider,
 }: WorkspaceContentViewProps) {
   const hasNoSessions = sessions && sessions.length === 0;
 
@@ -83,7 +78,6 @@ export function WorkspaceContentView({
           maxSessions={maxSessions}
           selectedProvider={selectedProvider}
           setSelectedProvider={setSelectedProvider}
-          effectiveDefaultProvider={effectiveDefaultProvider}
         />
       </div>
 

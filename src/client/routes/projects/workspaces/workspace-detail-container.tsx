@@ -5,13 +5,12 @@ import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
-import { resolveEffectiveSessionProvider } from '@/lib/session-provider-selection';
-import { forgetResumeWorkspace } from './resume-workspace-storage';
 import {
-  type NewSessionProviderSelection,
-  useSessionManagement,
-  useWorkspaceData,
-} from './use-workspace-detail';
+  resolveEffectiveSessionProvider,
+  type SessionProviderValue,
+} from '@/lib/session-provider-selection';
+import { forgetResumeWorkspace } from './resume-workspace-storage';
+import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
   useAutoFocusChatInput,
   useSelectedSessionId,
@@ -55,12 +54,15 @@ export function WorkspaceDetailContainer() {
     sessionIds
   );
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] =
-    useState<NewSessionProviderSelection>('WORKSPACE_DEFAULT');
   const effectiveDefaultProvider = resolveEffectiveSessionProvider(
     workspace?.defaultSessionProvider,
     userSettings?.defaultSessionProvider
   );
+  const [selectedProvider, setSelectedProvider] =
+    useState<SessionProviderValue>(effectiveDefaultProvider);
+  useEffect(() => {
+    setSelectedProvider(effectiveDefaultProvider);
+  }, [effectiveDefaultProvider]);
 
   const { data: gitStatus } = trpc.workspace.getGitStatus.useQuery(
     { workspaceId },
@@ -322,7 +324,6 @@ export function WorkspaceDetailContainer() {
         hasWorktreePath: !!workspace?.worktreePath,
         selectedProvider,
         setSelectedProvider,
-        effectiveDefaultProvider,
       }}
       chat={chatViewModel}
       rightPanelVisible={rightPanelVisible}
