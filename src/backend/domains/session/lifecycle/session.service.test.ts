@@ -1114,6 +1114,84 @@ describe('SessionService', () => {
     expect(acpRuntimeManager.setConfigOption).not.toHaveBeenCalled();
   });
 
+  it('finalizes orphaned ACP tool calls when prompt ends without terminal updates', async () => {
+    const pendingToolCalls = (
+      sessionService as unknown as {
+        pendingAcpToolCalls: Map<
+          string,
+          Map<
+            string,
+            {
+              toolUseId: string;
+              toolName: string;
+              acpKind?: string;
+              acpLocations?: Array<{ path: string; line?: number | null }>;
+            }
+          >
+        >;
+      }
+    ).pendingAcpToolCalls;
+
+    vi.mocked(acpRuntimeManager.sendPrompt).mockImplementation(() => {
+      pendingToolCalls.set(
+        'session-1',
+        new Map([
+          [
+            'call-1',
+            {
+              toolUseId: 'call-1',
+              toolName: 'Run pwd',
+              acpKind: 'execute',
+            },
+          ],
+        ])
+      );
+      return Promise.resolve({ stopReason: 'end_turn' } as never);
+    });
+
+    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
+    const appendClaudeEventSpy = vi
+      .spyOn(sessionDomainService, 'appendClaudeEvent')
+      .mockReturnValue(77);
+
+    await sessionService.sendAcpMessage('session-1', 'hello');
+
+    expect(emitDeltaSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'tool_progress',
+        tool_use_id: 'call-1',
+        tool_name: 'Run pwd',
+        elapsed_time_seconds: 0,
+      })
+    );
+    expect(appendClaudeEventSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'user',
+        message: expect.objectContaining({
+          content: [
+            expect.objectContaining({
+              type: 'tool_result',
+              tool_use_id: 'call-1',
+              is_error: true,
+            }),
+          ],
+        }),
+      })
+    );
+    expect(pendingToolCalls.has('session-1')).toBe(false);
+  });
+
+  it('does not synthesize tool call completion when no ACP tool calls are pending', async () => {
+    vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' } as never);
+    const appendClaudeEventSpy = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
+
+    await sessionService.sendAcpMessage('session-1', 'hello');
+
+    expect(appendClaudeEventSpy).not.toHaveBeenCalled();
+  });
+
   it('avoids redundant session DB lookups during startSession', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
