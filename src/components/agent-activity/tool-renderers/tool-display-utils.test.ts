@@ -32,6 +32,14 @@ describe('tool-display-utils', () => {
 
       expect(preview).toBe('git push -u origin release/v0.3.0');
     });
+
+    it('does not treat non-shell -c as a shell script flag', () => {
+      const preview = extractCommandPreviewFromInput({
+        command: ['uv', 'run', 'python', '-c', 'print("hello")'],
+      });
+
+      expect(preview).toBe('uv run python -c print("hello")');
+    });
   });
 
   describe('getDisplayToolName', () => {
@@ -53,6 +61,14 @@ describe('tool-display-utils', () => {
       });
 
       expect(display).toBe('Run cat > /tmp/pr-body.md <<EOF hello EOF');
+    });
+
+    it('keeps non-shell -c flags in detail mode', () => {
+      const display = getDisplayToolName('Run uv run python -c', {
+        command: ['uv', 'run', 'python', '-c', 'print("hello")'],
+      });
+
+      expect(display).toBe('Run uv run python -c print("hello")');
     });
 
     it('truncates long non-run names in summary mode', () => {

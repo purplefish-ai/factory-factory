@@ -1,6 +1,7 @@
 const SUMMARY_TOOL_NAME_MAX = 24;
 const DETAIL_TOOL_NAME_MAX = 96;
 const RUN_COMMAND_PREVIEW_MAX = 84;
+const SHELL_EXECUTABLES = new Set(['bash', 'dash', 'ksh', 'mksh', 'sh', 'zsh', 'fish']);
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -11,6 +12,18 @@ function truncateWithEllipsis(value: string, maxLength: number): string {
     return value;
   }
   return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function getBaseExecutableName(commandPart: string): string {
+  return commandPart.split(/[/\\]/).pop()?.toLowerCase() ?? '';
+}
+
+function isShellCommand(commandParts: string[]): boolean {
+  const executable = commandParts[0];
+  if (!executable) {
+    return false;
+  }
+  return SHELL_EXECUTABLES.has(getBaseExecutableName(executable));
 }
 
 export function isRunLikeToolName(name: string): boolean {
@@ -33,7 +46,11 @@ export function extractCommandPreviewFromInput(input: Record<string, unknown>): 
     }
 
     const shellFlagIndex = stringParts.findIndex((part) => part === '-c' || part === '-lc');
-    if (shellFlagIndex >= 0 && shellFlagIndex < stringParts.length - 1) {
+    if (
+      isShellCommand(stringParts) &&
+      shellFlagIndex >= 0 &&
+      shellFlagIndex < stringParts.length - 1
+    ) {
       const script = normalizeWhitespace(stringParts[shellFlagIndex + 1] ?? '');
       if (script) {
         return script;
