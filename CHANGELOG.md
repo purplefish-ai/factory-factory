@@ -5,6 +5,62 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-14
+
+### Added
+
+- Add Codex model-list and reasoning schema hardening (#986)
+- Add Playwright MCP screenshots with quick action and viewer UI (#981)
+- Add provider-aware AgentSession migration support (#964, #975)
+- Add Codex app-server adapter and manager (#962, #971)
+- Add @ file mention autocomplete in chat input (#955)
+- Add integration coverage for websocket and accessor paths (#958)
+- Add syntax highlighting to diff viewer (#974)
+
+### Changed
+
+- ACP cutover: migrate runtime/protocol from custom parsers (#1000)
+- Support workspace initialization from blank repositories (#988)
+- Make chat bar capability-driven by provider (#982, #983)
+- Move provider select beside new session button (#995)
+- Keep provider preselect enabled while running (#980)
+- Provider-neutralize session adapter seam follow-up (#968, #969)
+- Refactor Claude sessions behind runtime adapter seam (#963, #967)
+- Configure dev server setup flow for clarity (#972)
+- Unify ClaudeActiveProcessSummary type source (#970)
+- Auto-build @factory-factory/core in all npm scripts (#987)
+- Extract shared session hydrate key builder (#993)
+
+### Fixed
+
+- Load session history without passive runtime startup (#1004)
+- Fix duplicate transcript injection from ACP user_message_chunk (#1003)
+- Fix session load/runtime UX and Codex chat-bar hydration (#1002)
+- Show concrete workspace default provider labels (#1001)
+- Refine provider UX and sync Codex capabilities (#994)
+- Hydrate Codex sessions from thread/read (#992)
+- Harden Codex session boundaries and clarify unsupported tool calls (#991)
+- Replace raw runtime casts with Zod validation (#990)
+- Remove duplicated workspace session model defaults (#985)
+- Refactor ratchet session stop handling (#978)
+- Reset ratchet dispatch tracking when fixer session dies without doing work (#976)
+- Clear persisted Codex thread mappings on session clear (#973)
+- Fix workspace not updating after PR creation detected (#954)
+- Add exponential backoff polling for late-arriving PR review comments (#945)
+
+### Refactored
+
+- Remove compatibility barrels and shim aliases (#989)
+- Phase 3 contract cutover: provider-neutral API/events (#965, #979)
+- Enforce stricter backend dependency boundaries (#959)
+- Implement core library extraction scaffolding and enum extraction (#957)
+- Archive v1.1 Project Snapshot Service milestone (#961)
+
+### Documentation
+
+- Add Factory Factory Cloud vision and V1 MVP plan (#956)
+- Add Factory Factory Cloud vision document (#892)
+
 ## [0.2.8] - 2026-02-11
 
 ### Added
