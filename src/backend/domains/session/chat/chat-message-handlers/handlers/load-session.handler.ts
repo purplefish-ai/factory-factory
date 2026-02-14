@@ -3,7 +3,10 @@ import { sessionService } from '@/backend/domains/session/lifecycle/session.serv
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
+import { createLogger } from '@/backend/services/logger.service';
 import type { LoadSessionMessage } from '@/shared/websocket';
+
+const logger = createLogger('load-session-handler');
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
@@ -20,10 +23,14 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       loadRequestId: message.loadRequestId,
     });
 
-    if (dbSession.workspace.worktreePath) {
+    const shouldEagerInit =
+      Boolean(dbSession.workspace.worktreePath) &&
+      (dbSession.status === 'RUNNING' || sessionRuntime.processState === 'alive');
+
+    if (shouldEagerInit) {
       try {
-        // Active tab should have a live provider runtime so config options and
-        // capabilities are negotiated immediately (without waiting for first send).
+        // Active runtime sessions should have live provider state negotiated
+        // immediately so model/mode capabilities are accurate in the chat bar.
         await sessionService.getOrCreateSessionClientFromRecord(dbSession);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
@@ -31,6 +38,13 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
           JSON.stringify({ type: 'error', message: `Failed to initialize session: ${detail}` })
         );
       }
+    } else {
+      logger.debug('Skipping eager ACP runtime init for inactive session', {
+        sessionId,
+        status: dbSession.status,
+        processState: sessionRuntime.processState,
+        hasWorktreePath: Boolean(dbSession.workspace.worktreePath),
+      });
     }
 
     const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);

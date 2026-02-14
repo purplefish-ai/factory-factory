@@ -1,5 +1,5 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AcpPermissionBridge } from './acp-permission-bridge';
 
 function createMockParams(overrides?: Partial<RequestPermissionRequest>): RequestPermissionRequest {
@@ -19,6 +19,10 @@ function createMockParams(overrides?: Partial<RequestPermissionRequest>): Reques
 }
 
 describe('AcpPermissionBridge', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('waitForUserResponse creates a pending entry', () => {
     const bridge = new AcpPermissionBridge();
     const params = createMockParams();
@@ -152,5 +156,30 @@ describe('AcpPermissionBridge', () => {
     const bridge = new AcpPermissionBridge();
 
     expect(bridge.getPendingParams('nonexistent')).toBeUndefined();
+  });
+
+  it('auto-cancels pending requests after timeout', async () => {
+    vi.useFakeTimers();
+    const bridge = new AcpPermissionBridge(1000);
+
+    const promise = bridge.waitForUserResponse('req-timeout', createMockParams());
+    expect(bridge.pendingCount).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1001);
+    await expect(promise).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+    expect(bridge.pendingCount).toBe(0);
+  });
+
+  it('cancels previous pending request when requestId is reused', async () => {
+    const bridge = new AcpPermissionBridge(10_000);
+
+    const first = bridge.waitForUserResponse('req-1', createMockParams({ sessionId: 's-1' }));
+    const second = bridge.waitForUserResponse('req-1', createMockParams({ sessionId: 's-2' }));
+    bridge.resolvePermission('req-1', 'allow_once');
+
+    await expect(first).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+    await expect(second).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'allow_once' },
+    });
   });
 });

@@ -294,6 +294,29 @@ describe('SessionService', () => {
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
   });
 
+  it('still clears queued work and marks idle when runtime stop fails', async () => {
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockRejectedValue(new Error('stop failed'));
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+        workflow: 'ratchet',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const clearQueuedWorkSpy = vi.spyOn(sessionDomainService, 'clearQueuedWork');
+
+    await sessionService.stopSession('session-1');
+
+    expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.IDLE,
+    });
+    expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
+    expect(sessionRepository.clearRatchetActiveSession).not.toHaveBeenCalled();
+    expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
+  });
+
   it('deletes ratchet session record during manual stop', async () => {
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();

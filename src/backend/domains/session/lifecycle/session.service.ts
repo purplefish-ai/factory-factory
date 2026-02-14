@@ -405,10 +405,18 @@ class SessionService {
       this.acpPermissionBridges.delete(sessionId);
     }
 
+    let stopClientFailed = false;
     try {
       if (!acpRuntimeManager.isStopInProgress(sessionId)) {
         await acpRuntimeManager.stopClient(sessionId);
       }
+    } catch (error) {
+      stopClientFailed = true;
+      logger.warn('Error stopping ACP session runtime; continuing cleanup', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
       await this.updateStoppedSessionState(sessionId);
       sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
       sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -418,18 +426,19 @@ class SessionService {
         updatedAt: new Date().toISOString(),
       });
 
-      const shouldCleanupTransientRatchetSession = options?.cleanupTransientRatchetSession ?? true;
-      await this.cleanupTransientRatchetOnStop(
-        session,
-        sessionId,
-        shouldCleanupTransientRatchetSession
-      );
+      if (!stopClientFailed) {
+        const shouldCleanupTransientRatchetSession =
+          options?.cleanupTransientRatchetSession ?? true;
+        await this.cleanupTransientRatchetOnStop(
+          session,
+          sessionId,
+          shouldCleanupTransientRatchetSession
+        );
+      }
 
-      logger.info('ACP session stopped', { sessionId });
-    } catch (error) {
-      logger.warn('Error stopping ACP session', {
+      logger.info('ACP session stopped', {
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
       });
     }
   }

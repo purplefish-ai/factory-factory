@@ -262,6 +262,25 @@ describe('AcpRuntimeManager', () => {
       expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
     });
 
+    it('kills subprocess when initialization fails after spawn', async () => {
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockRejectedValue(new Error('handshake failed'));
+
+      await expect(
+        manager.getOrCreateClient(
+          'session-1',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('handshake failed');
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(mockNewSession).not.toHaveBeenCalled();
+    });
+
     it('returns existing handle if session already exists and is running', async () => {
       setupSuccessfulSpawn();
 

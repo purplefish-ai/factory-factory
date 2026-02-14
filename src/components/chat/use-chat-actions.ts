@@ -293,10 +293,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const optionId = findQuestionOptionId(pendingRequest.request.acpOptions, answers);
-      if (!optionId) {
-        return;
-      }
+      const optionId = findQuestionOptionId(pendingRequest.request.acpOptions, answers) ?? 'allow';
       const msg: PermissionResponseMessage = {
         type: 'permission_response',
         requestId,

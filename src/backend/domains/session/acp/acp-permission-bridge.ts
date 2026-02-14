@@ -3,6 +3,7 @@ import type { RequestPermissionRequest, RequestPermissionResponse } from '@agent
 interface PendingPermission {
   resolve: (response: RequestPermissionResponse) => void;
   params: RequestPermissionRequest;
+  timeout: ReturnType<typeof setTimeout>;
 }
 
 /**
@@ -20,7 +21,12 @@ interface PendingPermission {
  *   4. On session cancel/stop -> cancelAll resolves all pending with cancelled outcome
  */
 export class AcpPermissionBridge {
+  private readonly responseTimeoutMs: number;
   private readonly pending = new Map<string, PendingPermission>();
+
+  constructor(responseTimeoutMs = 5 * 60 * 1000) {
+    this.responseTimeoutMs = responseTimeoutMs;
+  }
 
   /**
    * Called by AcpClientHandler.requestPermission().
@@ -31,7 +37,31 @@ export class AcpPermissionBridge {
     params: RequestPermissionRequest
   ): Promise<RequestPermissionResponse> {
     return new Promise<RequestPermissionResponse>((resolve) => {
-      this.pending.set(requestId, { resolve, params });
+      const existing = this.pending.get(requestId);
+      if (existing) {
+        clearTimeout(existing.timeout);
+        existing.resolve({
+          outcome: {
+            outcome: 'cancelled',
+          },
+        });
+      }
+
+      const timeout = setTimeout(() => {
+        const entry = this.pending.get(requestId);
+        if (!entry) {
+          return;
+        }
+        this.pending.delete(requestId);
+        entry.resolve({
+          outcome: {
+            outcome: 'cancelled',
+          },
+        });
+      }, this.responseTimeoutMs);
+
+      timeout.unref?.();
+      this.pending.set(requestId, { resolve, params, timeout });
     });
   }
 
@@ -46,13 +76,14 @@ export class AcpPermissionBridge {
       return false;
     }
 
+    this.pending.delete(requestId);
+    clearTimeout(entry.timeout);
     entry.resolve({
       outcome: {
         outcome: 'selected',
         optionId,
       },
     });
-    this.pending.delete(requestId);
     return true;
   }
 
@@ -62,6 +93,7 @@ export class AcpPermissionBridge {
    */
   cancelAll(): void {
     for (const entry of this.pending.values()) {
+      clearTimeout(entry.timeout);
       entry.resolve({
         outcome: {
           outcome: 'cancelled',

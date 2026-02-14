@@ -256,7 +256,10 @@ module.exports = {
       severity: 'error',
       comment:
         'ACP internals must stay isolated from app code; only ACP internals and the logger service are allowed.',
-      from: { path: '^src/backend/domains/session/acp/' },
+      from: {
+        path: '^src/backend/domains/session/acp/',
+        pathNot: '^src/backend/domains/session/acp/.*\\.test\\.ts$',
+      },
       to: {
         path: '^src/',
         pathNot:

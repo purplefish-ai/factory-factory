@@ -5,10 +5,13 @@ import type {
   RequestPermissionResponse,
   SessionNotification,
 } from '@agentclientprotocol/sdk';
+import { createLogger } from '@/backend/services/logger.service';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 
 export type AcpEventCallback = (sessionId: string, event: unknown) => void;
 export type AcpLogCallback = (sessionId: string, payload: Record<string, unknown>) => void;
+
+const logger = createLogger('acp-client-handler');
 
 export class AcpClientHandler implements Client {
   private readonly sessionId: string;
@@ -54,7 +57,11 @@ export class AcpClientHandler implements Client {
     });
 
     if (!this.permissionBridge) {
-      // Fallback to auto-approve (Phase 19 behavior)
+      // Fallback for non-interactive contexts; production paths should inject permissionBridge.
+      logger.warn('Permission bridge missing; auto-approving ACP permission request', {
+        sessionId: this.sessionId,
+        toolCallId: params.toolCall.toolCallId,
+      });
       const allowOption = params.options.find(
         (o) => o.kind === 'allow_always' || o.kind === 'allow_once'
       );

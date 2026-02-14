@@ -387,6 +387,9 @@ export class AcpRuntimeManager {
         this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
         startupError,
       ]);
+    } catch (error) {
+      this.cleanupFailedClientCreation(child, sessionId);
+      throw error;
     } finally {
       if (startupErrorListener) {
         child.removeListener('error', startupErrorListener);
@@ -412,6 +415,26 @@ export class AcpRuntimeManager {
     await this.notifyClientCreated(sessionId, handle, context, handlers);
 
     return handle;
+  }
+
+  private cleanupFailedClientCreation(child: ChildProcess, sessionId: string): void {
+    if (child.exitCode !== null) {
+      return;
+    }
+
+    try {
+      child.kill('SIGTERM');
+      if (child.exitCode === null) {
+        child.kill('SIGKILL');
+      }
+    } catch {
+      // Ignore process-kill errors while cleaning up failed initialization.
+    }
+
+    logger.warn('Cleaned up ACP subprocess after initialization failure', {
+      sessionId,
+      pid: child.pid,
+    });
   }
 
   private wireChildExitHandler(
@@ -577,9 +600,6 @@ export class AcpRuntimeManager {
         }
       }
 
-      // Send SIGTERM
-      handle.child.kill('SIGTERM');
-
       // Wait for exit or timeout
       const exitPromise = new Promise<void>((resolve) => {
         handle.child.on('exit', () => resolve());
@@ -588,6 +608,10 @@ export class AcpRuntimeManager {
           resolve();
         }
       });
+
+      // Send SIGTERM after registering exit listener to avoid missing fast exits.
+      handle.child.kill('SIGTERM');
+
       const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 5000));
       await Promise.race([exitPromise, timeoutPromise]);
 
