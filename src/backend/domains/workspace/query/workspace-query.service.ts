@@ -275,6 +275,37 @@ class WorkspaceQueryService {
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
+  async listWithRuntimeState(input: {
+    projectId: string;
+    status?: WorkspaceStatus;
+    limit?: number;
+    offset?: number;
+  }) {
+    const { projectId, ...filters } = input;
+
+    const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, filters);
+
+    // Get all pending requests from active sessions
+    const allPendingRequests = this.session.getAllPendingRequests();
+
+    return workspaces.map((workspace) => {
+      const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
+        this.session.isAnySessionWorking(sessionIds)
+      );
+
+      const pendingRequestType = computePendingRequestType(
+        runtimeState.sessionIds,
+        allPendingRequests
+      );
+
+      return {
+        ...workspace,
+        isWorking: runtimeState.isWorking,
+        pendingRequestType,
+      };
+    });
+  }
+
   async refreshFactoryConfigs(projectId: string) {
     const workspaces = await workspaceAccessor.findByProjectId(projectId);
 

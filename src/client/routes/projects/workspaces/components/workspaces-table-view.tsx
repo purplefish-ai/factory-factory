@@ -23,6 +23,7 @@ import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-ba
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatStatusLabel } from '@/lib/formatters';
 import type { CIStatus, WorkspaceStatus } from '@/shared/core';
@@ -35,6 +36,8 @@ const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'F
 
 type WorkspaceWithSessions = Workspace & {
   agentSessions?: unknown[];
+  isWorking?: boolean;
+  pendingRequestType?: 'plan_approval' | 'user_question' | null;
 };
 
 function MobileWorkspaceCard({
@@ -61,6 +64,11 @@ function MobileWorkspaceCard({
               <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground font-mono truncate">
                 <GitBranch className="h-3 w-3 shrink-0" />
                 <span className="truncate">{workspace.branchName}</span>
+              </div>
+            )}
+            {workspace.pendingRequestType && (
+              <div className="mt-1">
+                <PendingRequestBadge type={workspace.pendingRequestType} size="xs" />
               </div>
             )}
           </div>
@@ -153,6 +161,7 @@ export function WorkspacesTableView({
                 <TableHead>Status</TableHead>
                 <TableHead>Sessions</TableHead>
                 <TableHead>Branch</TableHead>
+                <TableHead>Awaiting You</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -199,6 +208,13 @@ export function WorkspacesTableView({
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-sm">
                     {workspace.branchName || '-'}
+                  </TableCell>
+                  <TableCell>
+                    {workspace.pendingRequestType ? (
+                      <PendingRequestBadge type={workspace.pendingRequestType} size="xs" />
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(workspace.createdAt).toLocaleDateString()}

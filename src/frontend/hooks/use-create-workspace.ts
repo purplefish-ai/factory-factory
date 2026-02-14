@@ -56,6 +56,7 @@ export function useCreateWorkspace(
       });
 
       utils.workspace.list.invalidate({ projectId });
+      utils.workspace.listWithRuntimeState.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
       setIsCreating(false);
       void navigate(`/projects/${projectSlug}/workspaces/${workspace.id}`);

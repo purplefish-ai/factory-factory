@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceSnapshotEntry } from '@/frontend/lib/snapshot-to-sidebar';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
@@ -13,6 +13,7 @@ vi.mock('react', async (importOriginal) => {
   return {
     ...actual,
     useCallback: (fn: (...args: never[]) => unknown) => fn,
+    useRef: <T>(value: T) => ({ current: value }),
   };
 });
 
@@ -30,6 +31,8 @@ const mockSetData = vi.fn();
 const mockKanbanSetData = vi.fn();
 const mockWorkspaceGetSetData = vi.fn();
 const mockListInvalidate = vi.fn();
+const mockListWithRuntimeStateInvalidate = vi.fn();
+const mockGlobalDispatchEvent = vi.fn();
 
 vi.mock('@/frontend/lib/trpc', () => ({
   trpc: {
@@ -46,6 +49,9 @@ vi.mock('@/frontend/lib/trpc', () => ({
         },
         list: {
           invalidate: mockListInvalidate,
+        },
+        listWithRuntimeState: {
+          invalidate: mockListWithRuntimeStateInvalidate,
         },
       },
     }),
@@ -109,6 +115,14 @@ describe('useProjectSnapshotSync', () => {
     mockKanbanSetData.mockReset();
     mockWorkspaceGetSetData.mockReset();
     mockListInvalidate.mockClear();
+    mockListWithRuntimeStateInvalidate.mockClear();
+    mockGlobalDispatchEvent.mockClear();
+    vi.stubGlobal('dispatchEvent', mockGlobalDispatchEvent);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('sets URL to null when projectId is undefined', () => {
@@ -558,6 +572,8 @@ describe('useProjectSnapshotSync', () => {
 
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
       expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
     });
 
     it('snapshot_changed invalidates workspace.list cache', () => {
@@ -572,6 +588,8 @@ describe('useProjectSnapshotSync', () => {
 
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
       expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
     });
 
     it('snapshot_removed invalidates workspace.list cache', () => {
@@ -585,6 +603,86 @@ describe('useProjectSnapshotSync', () => {
 
       expect(mockListInvalidate).toHaveBeenCalledTimes(1);
       expect(mockListInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledTimes(1);
+      expect(mockListWithRuntimeStateInvalidate).toHaveBeenCalledWith({ projectId: 'proj-1' });
+    });
+  });
+
+  describe('workspace attention events for pending requests', () => {
+    it('does not dispatch attention during snapshot_full hydration', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-1', pendingRequestType: 'plan_approval' })],
+      });
+
+      expect(mockGlobalDispatchEvent).not.toHaveBeenCalled();
+    });
+
+    it('dispatches attention on null to pending transition', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-1', pendingRequestType: null })],
+      });
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry({ workspaceId: 'ws-1', pendingRequestType: 'user_question' }),
+      });
+
+      expect(mockGlobalDispatchEvent).toHaveBeenCalledTimes(1);
+      expect(mockGlobalDispatchEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'workspace-attention-required',
+          detail: { workspaceId: 'ws-1' },
+        })
+      );
+    });
+
+    it('does not dispatch attention when pending type remains unchanged', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-1', pendingRequestType: 'plan_approval' })],
+      });
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry({ workspaceId: 'ws-1', pendingRequestType: 'plan_approval' }),
+      });
+
+      expect(mockGlobalDispatchEvent).not.toHaveBeenCalled();
+    });
+
+    it('does not dispatch attention when pending request clears', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [makeEntry({ workspaceId: 'ws-1', pendingRequestType: 'plan_approval' })],
+      });
+
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry: makeEntry({ workspaceId: 'ws-1', pendingRequestType: null }),
+      });
+
+      expect(mockGlobalDispatchEvent).not.toHaveBeenCalled();
     });
   });
 });

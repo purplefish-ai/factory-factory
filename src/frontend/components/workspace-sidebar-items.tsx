@@ -1,18 +1,11 @@
 import type { useSortable } from '@dnd-kit/sortable';
-import {
-  Archive,
-  CheckCircle2,
-  FileCheck,
-  GitPullRequest,
-  GripVertical,
-  MessageCircleQuestion,
-  Play,
-} from 'lucide-react';
+import { Archive, CheckCircle2, GitPullRequest, GripVertical, Play } from 'lucide-react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton } from '@/components/workspace';
+import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { trpc } from '@/frontend/lib/trpc';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import {
@@ -238,23 +231,8 @@ export function ActiveWorkspaceItem({
 
               {/* Pending request indicator */}
               {workspace.pendingRequestType && (
-                <div className="flex items-center gap-1 text-[10px] leading-tight mt-0.5">
-                  {workspace.pendingRequestType === 'plan_approval' && (
-                    <>
-                      <FileCheck className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
-                      <span className="text-amber-700 dark:text-amber-400 font-medium">
-                        Plan Approval Needed
-                      </span>
-                    </>
-                  )}
-                  {workspace.pendingRequestType === 'user_question' && (
-                    <>
-                      <MessageCircleQuestion className="h-2.5 w-2.5 text-blue-600 dark:text-blue-400" />
-                      <span className="text-blue-700 dark:text-blue-400 font-medium">
-                        Question Waiting
-                      </span>
-                    </>
-                  )}
+                <div className="mt-0.5">
+                  <PendingRequestBadge type={workspace.pendingRequestType} size="xs" />
                 </div>
               )}
 
@@ -400,9 +378,10 @@ function getSidebarAttentionState(
 ): { showAttentionGlow: boolean } {
   const isDone = workspace.cachedKanbanColumn === 'DONE';
   const isRatchetActive = !(disableAnimation || isDone) && Boolean(workspace.ratchetButtonAnimated);
+  const isAwaitingUserInput = Boolean(workspace.pendingRequestType);
 
   return {
-    showAttentionGlow: needsAttention(workspace.id) && !isRatchetActive,
+    showAttentionGlow: (isAwaitingUserInput || needsAttention(workspace.id)) && !isRatchetActive,
   };
 }
 
