@@ -800,6 +800,33 @@ describe('SessionService', () => {
     });
   });
 
+  it('keeps updatedAt stable while ACP client remains in same runtime state', () => {
+    const updatedAt = '2026-02-10T01:45:35.844Z';
+    vi.spyOn(sessionDomainService, 'getRuntimeSnapshot').mockReturnValue({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt,
+    });
+
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(
+      unsafeCoerce<AcpProcessHandle>({
+        isPromptInFlight: false,
+        configOptions: [],
+      })
+    );
+    vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(false);
+
+    const runtime = sessionService.getRuntimeSnapshot('session-1');
+
+    expect(runtime).toEqual({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt,
+    });
+  });
+
   it('stops all ACP clients during shutdown', async () => {
     vi.mocked(acpRuntimeManager.stopAllClients).mockResolvedValue(undefined);
 

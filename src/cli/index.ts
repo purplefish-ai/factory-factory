@@ -51,6 +51,11 @@ function findProjectRoot(): string {
 
 const PROJECT_ROOT = findProjectRoot();
 
+function resolveLocalBin(command: string): string {
+  const suffix = process.platform === 'win32' ? '.cmd' : '';
+  return join(PROJECT_ROOT, 'node_modules', '.bin', `${command}${suffix}`);
+}
+
 // Setup stdout/stderr forwarding for a child process in non-verbose mode
 function setupProcessOutput(proc: ChildProcess, name: string): void {
   if (proc.stdout) {
@@ -538,7 +543,7 @@ async function startDevelopmentMode(
 ): Promise<void> {
   console.log(chalk.blue('  🔧 Starting backend (development mode)...'));
 
-  const backend = spawn('npx', ['tsx', 'watch', 'src/backend/index.ts'], {
+  const backend = spawn(resolveLocalBin('tsx'), ['watch', 'src/backend/index.ts'], {
     cwd: PROJECT_ROOT,
     env,
     stdio: options.verbose ? 'inherit' : 'pipe',
@@ -559,11 +564,15 @@ async function startDevelopmentMode(
     BACKEND_URL: `http://${options.host}:${backendPort}`,
   };
 
-  const frontend = spawn('npx', ['vite', '--port', frontendPort.toString(), '--strictPort'], {
-    cwd: PROJECT_ROOT,
-    env: frontendEnv,
-    stdio: options.verbose ? 'inherit' : 'pipe',
-  });
+  const frontend = spawn(
+    resolveLocalBin('vite'),
+    ['--port', frontendPort.toString(), '--strictPort'],
+    {
+      cwd: PROJECT_ROOT,
+      env: frontendEnv,
+      stdio: options.verbose ? 'inherit' : 'pipe',
+    }
+  );
   processes.push({ name: 'frontend', proc: frontend });
 
   if (!options.verbose) {

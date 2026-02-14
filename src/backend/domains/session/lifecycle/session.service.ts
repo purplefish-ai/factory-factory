@@ -823,7 +823,7 @@ class SessionService {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
         activity: isWorking ? 'WORKING' : 'IDLE',
-        updatedAt: new Date().toISOString(),
+        updatedAt: base.updatedAt,
       };
     }
 
@@ -831,7 +831,7 @@ class SessionService {
       return {
         ...base,
         phase: 'stopping',
-        updatedAt: new Date().toISOString(),
+        updatedAt: base.updatedAt,
       };
     }
 
@@ -843,7 +843,7 @@ class SessionService {
         phase: 'idle',
         processState: 'stopped',
         activity: 'IDLE',
-        updatedAt: new Date().toISOString(),
+        updatedAt: base.updatedAt,
       };
     }
 
