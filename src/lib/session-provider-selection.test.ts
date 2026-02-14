@@ -29,4 +29,13 @@ describe('getWorkspaceDefaultOptionLabel', () => {
     );
     expect(getWorkspaceDefaultOptionLabel('CODEX', 'CLAUDE')).toBe('Codex (Workspace Default)');
   });
+
+  it('falls back to Claude when user default provider is missing', () => {
+    expect(getWorkspaceDefaultOptionLabel('WORKSPACE_DEFAULT', undefined)).toBe(
+      'Claude (Workspace Default)'
+    );
+    expect(getWorkspaceDefaultOptionLabel('WORKSPACE_DEFAULT', null)).toBe(
+      'Claude (Workspace Default)'
+    );
+  });
 });
