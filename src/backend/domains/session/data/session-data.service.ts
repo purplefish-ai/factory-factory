@@ -26,7 +26,7 @@ class SessionDataService {
     workflow: string;
     model?: string;
     provider?: SessionProvider;
-    claudeProjectPath?: string | null;
+    providerProjectPath?: string | null;
   }): Promise<AgentSessionRecord> {
     return agentSessionAccessor.create(data);
   }
@@ -39,9 +39,9 @@ class SessionDataService {
       model?: string;
       status?: SessionStatus;
       provider?: SessionProvider;
-      claudeSessionId?: string | null;
-      claudeProjectPath?: string | null;
-      claudeProcessPid?: number | null;
+      providerSessionId?: string | null;
+      providerProjectPath?: string | null;
+      providerProcessPid?: number | null;
     }
   ): Promise<AgentSessionRecord> {
     return agentSessionAccessor.update(id, data);

@@ -131,7 +131,7 @@ class FixerSessionService {
       sessionName: input.sessionName,
       maxSessions: configService.getMaxSessionsPerWorkspace(),
       provider,
-      claudeProjectPath: null,
+      providerProjectPath: null,
     });
 
     if (acquisition.outcome === 'limit_reached') {

@@ -283,7 +283,7 @@ export const adminRouter = router({
         name: session.name,
         workflow: session.workflow,
         model: session.model,
-        pid: session.claudeProcessPid,
+        pid: session.providerProcessPid,
         status: session.status,
         inMemory: !!memProcess,
         memoryStatus: memProcess?.status ?? null,

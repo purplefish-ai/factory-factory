@@ -148,9 +148,9 @@ describe('WorkspaceCreationService', () => {
       model: 'sonnet',
       provider: 'CLAUDE',
       providerMetadata: null,
-      claudeSessionId: null,
-      claudeProjectPath: null,
-      claudeProcessPid: null,
+      providerSessionId: null,
+      providerProjectPath: null,
+      providerProcessPid: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -388,7 +388,7 @@ describe('WorkspaceCreationService', () => {
           workflow: 'followup',
           name: 'Chat 1',
           provider: 'CLAUDE',
-          claudeProjectPath: null,
+          providerProjectPath: null,
         });
       });
 
@@ -455,7 +455,7 @@ describe('WorkspaceCreationService', () => {
         expect(agentSessionAccessorModule.agentSessionAccessor.create).toHaveBeenCalledWith(
           expect.objectContaining({
             provider: 'CODEX',
-            claudeProjectPath: null,
+            providerProjectPath: null,
           })
         );
       });

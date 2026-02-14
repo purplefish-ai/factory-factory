@@ -158,7 +158,7 @@ describe('FixerSessionService', () => {
     });
   });
 
-  it('does not set claudeProjectPath when resolved provider is CODEX', async () => {
+  it('does not set providerProjectPath when resolved provider is CODEX', async () => {
     vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
       id: 'w1',
       defaultSessionProvider: 'CODEX',
@@ -181,7 +181,7 @@ describe('FixerSessionService', () => {
     expect(agentSessionAccessor.acquireFixerSession).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: 'CODEX',
-        claudeProjectPath: null,
+        providerProjectPath: null,
       })
     );
   });

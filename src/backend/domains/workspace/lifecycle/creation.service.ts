@@ -243,7 +243,7 @@ export class WorkspaceCreationService {
         workflow: DEFAULT_FOLLOWUP,
         name: 'Chat 1',
         provider,
-        claudeProjectPath: null,
+        providerProjectPath: null,
       });
       return true;
     } catch (error) {

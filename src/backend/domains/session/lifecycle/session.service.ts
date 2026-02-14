@@ -92,7 +92,7 @@ class SessionService {
       },
       onSessionId: async (sid: string, providerSessionId: string) => {
         try {
-          await this.repository.updateSession(sid, { claudeSessionId: providerSessionId });
+          await this.repository.updateSession(sid, { providerSessionId });
           logger.debug('Updated session with ACP providerSessionId', {
             sessionId: sid,
             providerSessionId,
@@ -265,7 +265,7 @@ class SessionService {
       systemPrompt: sessionContext.systemPrompt,
       permissionMode: options?.permissionMode ?? 'bypassPermissions',
       sessionId,
-      resumeProviderSessionId: session?.claudeSessionId ?? undefined,
+      resumeProviderSessionId: session?.providerSessionId ?? undefined,
     };
 
     const handle = await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
@@ -995,7 +995,7 @@ class SessionService {
 
     return {
       workingDir: workspace.worktreePath,
-      resumeProviderSessionId: session.claudeSessionId ?? undefined,
+      resumeProviderSessionId: session.providerSessionId ?? undefined,
       systemPrompt,
       model: session.model,
       workspaceId: workspace.id,
