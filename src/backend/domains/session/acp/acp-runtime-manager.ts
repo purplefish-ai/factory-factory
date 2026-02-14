@@ -60,6 +60,41 @@ function resolveAcpBinary(packageName: string, binaryName: string): string {
   return binaryName;
 }
 
+type AcpErrorLogDetails = {
+  message: string;
+  code?: number | string;
+  data?: unknown;
+};
+
+function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const maybe = error as { message?: unknown; code?: unknown; data?: unknown };
+    const message =
+      typeof maybe.message === 'string'
+        ? maybe.message
+        : (() => {
+            try {
+              return JSON.stringify(error);
+            } catch {
+              return String(error);
+            }
+          })();
+    const code =
+      typeof maybe.code === 'number' || typeof maybe.code === 'string' ? maybe.code : undefined;
+    return {
+      message,
+      ...(code !== undefined ? { code } : {}),
+      ...(typeof maybe.data !== 'undefined' ? { data: maybe.data } : {}),
+    };
+  }
+
+  return { message: String(error) };
+}
+
 type SessionConfigResolution = {
   configOptions: SessionConfigOption[];
   source: 'config_options' | 'legacy_models_modes' | 'none';
@@ -464,10 +499,13 @@ export class AcpRuntimeManager {
           configOptions: resolved.configOptions,
         };
       } catch (error) {
+        const details = getAcpErrorLogDetails(error);
         logger.warn('loadSession failed, falling back to newSession', {
           sessionId,
           storedProviderSessionId: storedId,
-          error: error instanceof Error ? error.message : String(error),
+          error: details.message,
+          ...(details.code !== undefined ? { errorCode: details.code } : {}),
+          ...(typeof details.data !== 'undefined' ? { errorData: details.data } : {}),
         });
       }
     }

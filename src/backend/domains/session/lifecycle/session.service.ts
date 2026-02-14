@@ -512,6 +512,22 @@ class SessionService {
   }
 
   /**
+   * Reuses a preloaded session record to avoid redundant lookups and reduce
+   * races between separate reads during load_session initialization.
+   */
+  async getOrCreateSessionClientFromRecord(
+    session: AgentSessionRecord,
+    options?: {
+      thinkingEnabled?: boolean;
+      permissionMode?: 'bypassPermissions' | 'plan';
+      model?: string;
+      reasoningEffort?: string;
+    }
+  ): Promise<unknown> {
+    return await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
+  }
+
+  /**
    * Backward-compatible Claude-named entrypoint used by existing public contracts.
    */
   async getOrCreateClient(

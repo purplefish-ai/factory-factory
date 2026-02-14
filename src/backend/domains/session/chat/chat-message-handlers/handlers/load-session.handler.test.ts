@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
-  getOrCreateSessionClient: vi.fn(),
+  getOrCreateSessionClientFromRecord: vi.fn(),
   getChatBarCapabilities: vi.fn(),
   getSessionConfigOptions: vi.fn(),
   subscribe: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
 vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
   sessionService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
-    getOrCreateSessionClient: mocks.getOrCreateSessionClient,
+    getOrCreateSessionClientFromRecord: mocks.getOrCreateSessionClientFromRecord,
     getChatBarCapabilities: mocks.getChatBarCapabilities,
     getSessionConfigOptions: mocks.getSessionConfigOptions,
   },
@@ -63,7 +63,7 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.getCachedCommands.mockResolvedValue(null);
     mocks.getSessionConfigOptions.mockReturnValue([]);
-    mocks.getOrCreateSessionClient.mockResolvedValue({});
+    mocks.getOrCreateSessionClientFromRecord.mockResolvedValue({});
   });
 
   it('subscribes with no Claude hydration context for CODEX session', async () => {
@@ -89,7 +89,11 @@ describe('createLoadSessionHandler', () => {
         loadRequestId: 'load-1',
       })
     );
-    expect(mocks.getOrCreateSessionClient).toHaveBeenCalledWith('session-1');
+    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CODEX',
+      })
+    );
   });
 
   it('emits cached slash commands when available', async () => {
@@ -165,7 +169,7 @@ describe('createLoadSessionHandler', () => {
       providerSessionId: null,
       providerProjectPath: null,
     });
-    mocks.getOrCreateSessionClient.mockRejectedValueOnce(new Error('boom'));
+    mocks.getOrCreateSessionClientFromRecord.mockRejectedValueOnce(new Error('boom'));
 
     const handler = createLoadSessionHandler();
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };

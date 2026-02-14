@@ -23,7 +23,7 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
     try {
       // Active tab should have a live provider runtime so config options and
       // capabilities are negotiated immediately (without waiting for first send).
-      await sessionService.getOrCreateSessionClient(sessionId);
+      await sessionService.getOrCreateSessionClientFromRecord(dbSession);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       ws.send(
