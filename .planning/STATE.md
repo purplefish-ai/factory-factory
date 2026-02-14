@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Every domain object has exactly one owner module, and any operation touching that domain flows through a single, traceable path.
-**Current focus:** v1.2 ACP Cutover -- Phase 21 complete, Phase 22: Cleanup + Polish
+**Current focus:** v1.2 ACP Cutover -- COMPLETE (all 4 phases: 19-22 executed)
 
 ## Current Position
 
 Phase: 22 of 22 (Cleanup + Polish)
-Plan: 2 of 3 (complete)
-Status: Plan 22-02 complete -- ready for Plan 22-03
-Last activity: 2026-02-14 -- Plan 22-02 executed
+Plan: 3 of 3 (complete)
+Status: v1.2 ACP Cutover milestone COMPLETE -- all phases executed
+Last activity: 2026-02-14 -- Plan 22-03 executed
 
-Progress: [██████████] 95%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (v1.2)
-- Average duration: 9min
-- Total execution time: 89min
+- Total plans completed: 11 (v1.2)
+- Average duration: 8min
+- Total execution time: 92min
 
 **By Phase:**
 
@@ -30,7 +30,7 @@ Progress: [██████████] 95%
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
 | 20. Event Translation + Permissions | 3/3 | 26min | 6min |
 | 21. Config Options + Unified Runtime | 3/3 | 23min | 8min |
-| 22. Cleanup + Polish | 2/3 | 31min | 16min |
+| 22. Cleanup + Polish | 3/3 | 34min | 11min |
 
 *Updated after each plan completion*
 
@@ -121,6 +121,11 @@ Phase 22-01 decisions:
 - Made getChatBarCapabilities synchronous with default fallback instead of legacy adapter delegation
 - SessionFileReader relocated to data/ directory independent of claude/ directory
 
+Phase 22-03 decisions:
+- Updated AGENTS.md session domain description to reference ACP agent runtimes, event translation, and permission handling
+- Added session subdirectory layout (acp/, lifecycle/, chat/, data/, store/, logging/) to Backend Domain Module Pattern
+- Added ACP Runtime feature note documenting @agentclientprotocol/sdk, adapter subprocesses, permission model, and configOptions
+
 ### Pending Todos
 
 None.
@@ -132,5 +137,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 22-02-PLAN.md
+Stopped at: Completed 22-03-PLAN.md -- v1.2 ACP Cutover COMPLETE
 Resume file: None
