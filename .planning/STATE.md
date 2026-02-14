@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 
 ## Current Position
 
-Phase: 21 of 22 (Config Options + Unified Runtime) -- COMPLETE
-Plan: 3 of 3 (complete)
-Status: Phase 21 complete -- ready for Phase 22
-Last activity: 2026-02-13 -- Plan 21-03 executed
+Phase: 22 of 22 (Cleanup + Polish)
+Plan: 1 of 3 (complete)
+Status: Plan 22-01 complete -- ready for Plan 22-02
+Last activity: 2026-02-13 -- Plan 22-01 executed
 
-Progress: [█████████░] 85%
+Progress: [██████████] 90%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8 (v1.2)
-- Average duration: 7min
-- Total execution time: 58min
+- Total plans completed: 9 (v1.2)
+- Average duration: 8min
+- Total execution time: 74min
 
 **By Phase:**
 
@@ -30,7 +30,7 @@ Progress: [█████████░] 85%
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
 | 20. Event Translation + Permissions | 3/3 | 26min | 6min |
 | 21. Config Options + Unified Runtime | 3/3 | 23min | 8min |
-| 22. Cleanup + Polish | 0/TBD | -- | -- |
+| 22. Cleanup + Polish | 1/3 | 16min | 16min |
 
 *Updated after each plan completion*
 
@@ -107,6 +107,12 @@ Phase 21-03 decisions:
 - buildAcpChatBarCapabilities derives model/thinking from configOptions categories
 - Legacy runtime managers kept but deprecated with @deprecated JSDoc for Phase 22
 
+Phase 22-01 decisions:
+- Kept 12 deprecated stub methods in SessionService for consumer API compatibility during incremental migration
+- Changed getClient return type to unknown to avoid claude/ imports, fixed 4 consumer files with type casts
+- Made getChatBarCapabilities synchronous with default fallback instead of legacy adapter delegation
+- SessionFileReader relocated to data/ directory independent of claude/ directory
+
 ### Pending Todos
 
 None.
@@ -118,5 +124,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed 21-03-PLAN.md (Phase 21 complete)
+Stopped at: Completed 22-01-PLAN.md
 Resume file: None
