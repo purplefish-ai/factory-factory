@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fix `npx factory-factory@latest serve` crashing at startup with Prisma runtime `Cannot read properties of undefined (reading 'graph')` by pinning `@prisma/client`/`prisma` to 7.3.0 and enforcing supported Node engines in package metadata
+- Fix `npx factory-factory@latest serve` crashing at startup with Prisma runtime `Cannot read properties of undefined (reading 'graph')` by pinning `@prisma/adapter-better-sqlite3`, `@prisma/client`, and `prisma` to 7.3.0 and enforcing supported Node engines in package metadata
 - Update installation prerequisites to match Prisma-supported Node versions
 
 ## [0.3.1] - 2026-02-14
