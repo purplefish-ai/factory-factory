@@ -81,6 +81,10 @@ class SessionService {
             type: string;
             update: import('@agentclientprotocol/sdk').SessionUpdate;
           };
+          if (update.sessionUpdate === 'user_message_chunk' && update.content.type === 'text') {
+            this.handleAcpUserMessageChunk(sid, update.content.text);
+            return;
+          }
           const deltas = this.acpEventTranslator.translateSessionUpdate(update);
           for (const delta of deltas) {
             this.handleAcpDelta(sid, delta as SessionDeltaEvent);
@@ -190,6 +194,21 @@ class SessionService {
     // Persist to transcript + allocate order in one step
     const order = sessionDomainService.appendClaudeEvent(sid, data);
     sessionDomainService.emitDelta(sid, { ...delta, order });
+  }
+
+  /**
+   * ACP can emit user_message_chunk during both replay (idle) and live sends (working).
+   * Live sends are already committed by our send pipeline, so only inject replay chunks.
+   */
+  private handleAcpUserMessageChunk(sid: string, text: string): void {
+    if (acpRuntimeManager.isSessionWorking(sid)) {
+      return;
+    }
+    const normalized = text.trim();
+    if (normalized.length === 0) {
+      return;
+    }
+    sessionDomainService.injectCommittedUserMessage(sid, normalized);
   }
 
   /**
