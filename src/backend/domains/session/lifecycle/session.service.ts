@@ -33,7 +33,6 @@ import { sessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
-type ReplayUserMessageDelta = { type: 'user_message_chunk'; text: string };
 type SessionProvider = 'CLAUDE' | 'CODEX';
 type StoredAcpConfigSnapshot = {
   provider: SessionProvider;
@@ -92,10 +91,7 @@ class SessionService {
             update: import('@agentclientprotocol/sdk').SessionUpdate;
           };
           if (update.sessionUpdate === 'user_message_chunk' && update.content.type === 'text') {
-            this.handleAcpDelta(sid, {
-              type: 'user_message_chunk',
-              text: update.content.text,
-            } as SessionDeltaEvent);
+            this.handleAcpUserMessageChunk(sid, update.content.text);
             return;
           }
           const deltas = this.acpEventTranslator.translateSessionUpdate(update);
@@ -171,15 +167,7 @@ class SessionService {
    * Handle a single translated ACP delta: persist and emit agent_messages,
    * accumulate text chunks, and forward non-message deltas.
    */
-  private handleAcpDelta(sid: string, delta: SessionDeltaEvent | ReplayUserMessageDelta): void {
-    if (delta.type === 'user_message_chunk') {
-      const text = delta.text.trim();
-      if (text.length > 0) {
-        sessionDomainService.injectCommittedUserMessage(sid, text);
-      }
-      return;
-    }
-
+  private handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
     // When configOptions change mid-session, sync the handle and re-emit capabilities
     if (delta.type === 'config_options_update') {
       const acpHandle = acpRuntimeManager.getClient(sid);
@@ -219,6 +207,21 @@ class SessionService {
     // Persist to transcript + allocate order in one step
     const order = sessionDomainService.appendClaudeEvent(sid, data);
     sessionDomainService.emitDelta(sid, { ...delta, order });
+  }
+
+  /**
+   * ACP can emit user_message_chunk during both replay (idle) and live sends (working).
+   * Live sends are already committed by our send pipeline, so only inject replay chunks.
+   */
+  private handleAcpUserMessageChunk(sid: string, text: string): void {
+    if (acpRuntimeManager.isSessionWorking(sid)) {
+      return;
+    }
+    const normalized = text.trim();
+    if (normalized.length === 0) {
+      return;
+    }
+    sessionDomainService.injectCommittedUserMessage(sid, normalized);
   }
 
   /**
