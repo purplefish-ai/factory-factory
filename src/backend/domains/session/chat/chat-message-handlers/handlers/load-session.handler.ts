@@ -1,5 +1,4 @@
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
-import { SessionFileReader } from '@/backend/domains/session/data/session-file-reader';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
@@ -7,23 +6,6 @@ import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session
 import type { LoadSessionMessage } from '@/shared/websocket';
 
 type PersistedSession = NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>;
-
-function shouldSwitchToWorkspaceProjectPath(
-  session: PersistedSession,
-  workspaceProjectPath: string | null
-): boolean {
-  return Boolean(
-    session.claudeSessionId &&
-      session.claudeProjectPath &&
-      workspaceProjectPath &&
-      session.claudeProjectPath !== workspaceProjectPath &&
-      !SessionFileReader.hasSessionFileFromProjectPath(
-        session.claudeSessionId,
-        session.claudeProjectPath
-      ) &&
-      SessionFileReader.hasSessionFileFromProjectPath(session.claudeSessionId, workspaceProjectPath)
-  );
-}
 
 function resolveClaudeHydrationContext(session: PersistedSession): {
   claudeProjectPath: string | null;
@@ -36,17 +18,9 @@ function resolveClaudeHydrationContext(session: PersistedSession): {
     };
   }
 
-  const workspaceProjectPath = session.workspace.worktreePath
-    ? SessionFileReader.getProjectPath(session.workspace.worktreePath)
-    : null;
-
-  const claudeProjectPath = shouldSwitchToWorkspaceProjectPath(session, workspaceProjectPath)
-    ? workspaceProjectPath
-    : (session.claudeProjectPath ?? workspaceProjectPath);
-
   return {
-    claudeProjectPath,
-    claudeSessionId: session.claudeSessionId,
+    claudeProjectPath: session.claudeProjectPath ?? null,
+    claudeSessionId: session.claudeSessionId ?? null,
   };
 }
 
