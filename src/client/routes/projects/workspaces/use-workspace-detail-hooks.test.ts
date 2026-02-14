@@ -46,6 +46,34 @@ describe('resolveSelectedSessionId', () => {
     expect(selected).toBe('s2');
   });
 
+  it('preserves a pending explicit selection while session list catches up', () => {
+    const selected = resolveSelectedSessionId({
+      currentSelectedDbSessionId: 's3',
+      persistedSessionId: 's3',
+      initialDbSessionId: 's1',
+      sessionIds: ['s1', 's2'],
+      pendingSelectionId: 's3',
+      pendingSelectionSetAtMs: 1000,
+      nowMs: 1200,
+    });
+
+    expect(selected).toBe('s3');
+  });
+
+  it('does not preserve pending selection after grace period expires', () => {
+    const selected = resolveSelectedSessionId({
+      currentSelectedDbSessionId: 's3',
+      persistedSessionId: 's3',
+      initialDbSessionId: 's1',
+      sessionIds: ['s1', 's2'],
+      pendingSelectionId: 's3',
+      pendingSelectionSetAtMs: 1000,
+      nowMs: 7000,
+    });
+
+    expect(selected).toBe('s1');
+  });
+
   it('falls back to the first session when no preference is valid', () => {
     const selected = resolveSelectedSessionId({
       currentSelectedDbSessionId: null,

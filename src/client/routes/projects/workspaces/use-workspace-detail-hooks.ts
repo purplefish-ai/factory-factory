@@ -60,12 +60,16 @@ export function useWorkspaceInitStatus(
 }
 
 const SESSION_TAB_STORAGE_PREFIX = 'workspace-selected-session-';
+const PENDING_SELECTION_GRACE_MS = 5000;
 
 interface ResolveSelectedSessionIdInput {
   currentSelectedDbSessionId: string | null;
   persistedSessionId: string | null;
   initialDbSessionId: string | null;
   sessionIds: string[];
+  pendingSelectionId?: string | null;
+  pendingSelectionSetAtMs?: number | null;
+  nowMs?: number;
 }
 
 export function resolveSelectedSessionId({
@@ -73,8 +77,21 @@ export function resolveSelectedSessionId({
   persistedSessionId,
   initialDbSessionId,
   sessionIds,
+  pendingSelectionId,
+  pendingSelectionSetAtMs,
+  nowMs = Date.now(),
 }: ResolveSelectedSessionIdInput): string | null {
   if (sessionIds.length === 0) {
+    return currentSelectedDbSessionId;
+  }
+
+  const shouldPreservePendingSelection =
+    pendingSelectionId != null &&
+    currentSelectedDbSessionId === pendingSelectionId &&
+    !sessionIds.includes(pendingSelectionId) &&
+    pendingSelectionSetAtMs != null &&
+    nowMs - pendingSelectionSetAtMs < PENDING_SELECTION_GRACE_MS;
+  if (shouldPreservePendingSelection) {
     return currentSelectedDbSessionId;
   }
 
@@ -99,6 +116,10 @@ export function useSelectedSessionId(
   sessionIds: string[]
 ) {
   const storageKey = `${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`;
+  const pendingSelectionRef = useRef<{ id: string | null; setAtMs: number | null }>({
+    id: null,
+    setAtMs: null,
+  });
 
   const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
     const stored = localStorage.getItem(storageKey);
@@ -106,12 +127,19 @@ export function useSelectedSessionId(
   });
 
   useEffect(() => {
+    const pending = pendingSelectionRef.current;
+    if (pending.id && sessionIds.includes(pending.id)) {
+      pendingSelectionRef.current = { id: null, setAtMs: null };
+    }
+
     const persistedSessionId = localStorage.getItem(storageKey);
     const resolved = resolveSelectedSessionId({
       currentSelectedDbSessionId: selectedDbSessionId,
       persistedSessionId,
       initialDbSessionId,
       sessionIds,
+      pendingSelectionId: pendingSelectionRef.current.id,
+      pendingSelectionSetAtMs: pendingSelectionRef.current.setAtMs,
     });
     if (resolved !== selectedDbSessionId) {
       setSelectedDbSessionIdRaw(resolved);
@@ -120,6 +148,7 @@ export function useSelectedSessionId(
 
   const setSelectedDbSessionId = useCallback(
     (id: string | null) => {
+      pendingSelectionRef.current = { id, setAtMs: id ? Date.now() : null };
       setSelectedDbSessionIdRaw(id);
       if (id) {
         localStorage.setItem(storageKey, id);
