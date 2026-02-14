@@ -28,10 +28,12 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
     const transcriptCount = sessionDomainService.getTranscriptSnapshot(sessionId).length;
     const hasHydratedTranscript = transcriptCount > 0;
     const isWorkspaceArchived = dbSession.workspace.status === 'ARCHIVED';
+    const isCodexSession = dbSession.provider === 'CODEX';
     const shouldEagerInit =
       hasWorktreePath &&
       !isWorkspaceArchived &&
-      (dbSession.status === 'RUNNING' ||
+      (isCodexSession ||
+        dbSession.status === 'RUNNING' ||
         sessionRuntime.processState === 'alive' ||
         hasResumableProviderSession ||
         hasHydratedTranscript);
@@ -56,6 +58,7 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
         hasResumableProviderSession,
         hasHydratedTranscript,
         transcriptCount,
+        isCodexSession,
         isWorkspaceArchived,
       });
     }

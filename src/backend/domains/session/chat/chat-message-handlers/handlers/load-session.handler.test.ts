@@ -319,6 +319,38 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
+  it('eagerly initializes inactive CODEX sessions to hydrate chat bar capabilities', async () => {
+    mocks.getRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-02-13T00:00:00.000Z',
+    });
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'IDLE',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'CODEX',
+        status: 'IDLE',
+      })
+    );
+  });
+
   it('skips eager runtime init for archived workspaces even with providerSessionId', async () => {
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
