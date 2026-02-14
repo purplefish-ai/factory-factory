@@ -62,13 +62,6 @@ function parseStoredTopTab(value: string | null): TopPanelTab | null {
   return null;
 }
 
-function parseLegacyChangesView(value: string | null): ChangesView | null {
-  if (value === 'unstaged' || value === 'diff-vs-main') {
-    return value;
-  }
-  return null;
-}
-
 function loadPersistedTopPanelState(workspaceId: string): PersistedTopPanelState {
   const defaultState: PersistedTopPanelState = { topTab: 'changes', changesView: 'unstaged' };
 
@@ -91,11 +84,13 @@ function loadPersistedTopPanelState(workspaceId: string): PersistedTopPanelState
       };
     }
 
-    const legacyChangesView = parseLegacyChangesView(storedTop);
+    const legacyChangesView = parseStoredChangesView(storedTop);
     if (legacyChangesView) {
+      // Migrate legacy top-level tab values to the new "changes" tab key.
+      localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, 'changes');
       return {
         topTab: 'changes',
-        changesView: legacyChangesView,
+        changesView: changesView ?? legacyChangesView,
       };
     }
   } catch {
