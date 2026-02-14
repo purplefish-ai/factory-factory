@@ -865,7 +865,7 @@ class SessionService {
     const thoughtOption = handle.configOptions.find((o) => o.category === 'thought_level');
 
     return {
-      provider: 'CLAUDE',
+      provider: handle.provider === 'CODEX' ? 'CODEX' : 'CLAUDE',
       model: {
         enabled: !!modelOption,
         options: [],
