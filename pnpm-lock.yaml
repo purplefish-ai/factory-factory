@@ -33,7 +33,7 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.4)
       '@factory-factory/core':
-        specifier: workspace:*
+        specifier: file:packages/core
         version: link:packages/core
       '@hookform/resolvers':
         specifier: ^5.2.2
