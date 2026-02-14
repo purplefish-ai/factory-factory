@@ -42,11 +42,12 @@ const ClaudeHistoryEntrySchema = z
   .passthrough();
 
 type ClaudeSessionHistoryEntry = z.infer<typeof ClaudeHistoryEntrySchema>;
+const SAFE_PROVIDER_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 export type ClaudeSessionHistoryLoadResult =
   | { status: 'loaded'; history: HistoryMessage[]; filePath: string }
   | { status: 'not_found' }
-  | { status: 'skipped'; reason: 'missing_provider_session_id' }
+  | { status: 'skipped'; reason: 'missing_provider_session_id' | 'invalid_provider_session_id' }
   | { status: 'error'; reason: 'read_failed'; filePath: string };
 
 function getClaudeConfigDir(): string {
@@ -338,6 +339,10 @@ function isEntryEligible(entry: ClaudeSessionHistoryEntry, providerSessionId: st
   return true;
 }
 
+function isSafeProviderSessionId(providerSessionId: string): boolean {
+  return SAFE_PROVIDER_SESSION_ID_PATTERN.test(providerSessionId);
+}
+
 async function resolveSessionFilePath(
   workingDir: string,
   providerSessionId: string
@@ -389,6 +394,12 @@ class ClaudeSessionHistoryLoaderService {
   }): Promise<ClaudeSessionHistoryLoadResult> {
     if (!params.providerSessionId) {
       return { status: 'skipped', reason: 'missing_provider_session_id' };
+    }
+    if (!isSafeProviderSessionId(params.providerSessionId)) {
+      logger.warn('Skipping Claude history load for unsafe provider session id', {
+        providerSessionId: params.providerSessionId,
+      });
+      return { status: 'skipped', reason: 'invalid_provider_session_id' };
     }
 
     const filePath = await resolveSessionFilePath(params.workingDir, params.providerSessionId);
