@@ -58,13 +58,6 @@ export function resolveSelectedModel(selectedModel: string | null | undefined): 
 export const DEFAULT_THINKING_BUDGET = 10_000;
 
 /**
- * @deprecated Use DEFAULT_THINKING_BUDGET with setMaxThinkingTokens instead.
- * Suffix previously appended to user messages to enable extended thinking mode.
- * Kept for backwards compatibility during migration.
- */
-export const THINKING_SUFFIX = ' ultrathink';
-
-/**
  * Valid model values for server-side validation.
  */
 export const VALID_MODEL_VALUES = AVAILABLE_MODELS.map((m) => m.value);

@@ -30,7 +30,7 @@ const groups = [
     files: [
       'src/backend/resource_accessors/workspace.accessor.ts',
       'src/backend/resource_accessors/project.accessor.ts',
-      'src/backend/resource_accessors/claude-session.accessor.ts',
+      'src/backend/resource_accessors/agent-session.accessor.ts',
       'src/backend/resource_accessors/terminal-session.accessor.ts',
       'src/backend/resource_accessors/user-settings.accessor.ts',
       'src/backend/resource_accessors/decision-log.accessor.ts',
@@ -44,7 +44,7 @@ const perFileThresholds = [
   { file: 'src/backend/routers/websocket/terminal.handler.ts', threshold: 55 },
   { file: 'src/backend/resource_accessors/workspace.accessor.ts', threshold: 50 },
   { file: 'src/backend/resource_accessors/project.accessor.ts', threshold: 70 },
-  { file: 'src/backend/resource_accessors/claude-session.accessor.ts', threshold: 50 },
+  { file: 'src/backend/resource_accessors/agent-session.accessor.ts', threshold: 50 },
 ];
 
 function getEntry(filePath) {

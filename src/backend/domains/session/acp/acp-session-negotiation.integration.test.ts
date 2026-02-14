@@ -13,7 +13,7 @@ type SessionFixture = {
     type: 'select';
     category: string;
     currentValue: string;
-    options: Array<{ value: string; name: string }>;
+    options: Array<{ value: string; name: string; description?: string }>;
   }>;
   models?: {
     availableModels: Array<{ modelId: string; name: string }>;
@@ -27,20 +27,34 @@ type SessionFixture = {
 
 const CLAUDE_SESSION_FIXTURE: SessionFixture = {
   sessionId: 'claude-session-001',
-  models: {
-    availableModels: [
-      { modelId: 'sonnet', name: 'Sonnet' },
-      { modelId: 'opus', name: 'Opus' },
-    ],
-    currentModelId: 'sonnet',
-  },
-  modes: {
-    availableModes: [
-      { id: 'default', name: 'Default' },
-      { id: 'plan', name: 'Plan' },
-    ],
-    currentModeId: 'default',
-  },
+  configOptions: [
+    {
+      id: 'model',
+      name: 'Model',
+      type: 'select',
+      category: 'model',
+      currentValue: 'default',
+      options: [
+        {
+          value: 'default',
+          name: 'Default (recommended)',
+          description: 'Opus 4.6 · best for complex tasks',
+        },
+        { value: 'sonnet', name: 'Sonnet 4.5' },
+      ],
+    },
+    {
+      id: 'mode',
+      name: 'Mode',
+      type: 'select',
+      category: 'mode',
+      currentValue: 'default',
+      options: [
+        { value: 'default', name: 'Default' },
+        { value: 'plan', name: 'Plan' },
+      ],
+    },
+  ],
 };
 
 const CODEX_SESSION_FIXTURE: SessionFixture = {
@@ -190,6 +204,35 @@ function getOptionValues(option: { options?: unknown[] } | undefined): string[] 
   });
 }
 
+function getOptionByValue(
+  option: { options?: unknown[] } | undefined,
+  value: string
+): { value: string; name?: string } | null {
+  if (!(option && Array.isArray(option.options))) {
+    return null;
+  }
+
+  for (const entry of option.options) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const single = entry as { value?: string; name?: string };
+    if (single.value === value) {
+      return { value: single.value, name: single.name };
+    }
+    const group = entry as { options?: Array<{ value?: string; name?: string }> };
+    if (!Array.isArray(group.options)) {
+      continue;
+    }
+    const nested = group.options.find((nestedEntry) => nestedEntry.value === value);
+    if (nested) {
+      return { value: nested.value ?? value, name: nested.name };
+    }
+  }
+
+  return null;
+}
+
 describe('ACP session negotiation integration', () => {
   let manager: AcpRuntimeManager;
   let tempDir: string;
@@ -227,9 +270,12 @@ describe('ACP session negotiation integration', () => {
     const modelOption = handle.configOptions.find((option) => option.category === 'model');
     const modeOption = handle.configOptions.find((option) => option.category === 'mode');
 
-    expect(getOptionValues(modelOption)).toEqual(expect.arrayContaining(['sonnet', 'opus']));
+    expect(getOptionValues(modelOption)).toEqual(expect.arrayContaining(['default', 'sonnet']));
     expect(getOptionValues(modeOption)).toEqual(expect.arrayContaining(['default', 'plan']));
     expect(handle.configOptions.length).toBe(2);
+
+    const defaultModel = getOptionByValue(modelOption, 'default');
+    expect(defaultModel).toEqual({ value: 'default', name: 'Opus 4.6' });
   });
 
   it('negotiates initial CODEX session config options and modes', async () => {

@@ -563,21 +563,6 @@ class SessionService {
     return await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
   }
 
-  /**
-   * Backward-compatible Claude-named entrypoint used by existing public contracts.
-   */
-  async getOrCreateClient(
-    sessionId: string,
-    options?: {
-      thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
-      model?: string;
-      reasoningEffort?: string;
-    }
-  ): Promise<unknown> {
-    return await this.getOrCreateSessionClient(sessionId, options);
-  }
-
   getSessionClient(sessionId: string): unknown | undefined {
     return acpRuntimeManager.getClient(sessionId);
   }

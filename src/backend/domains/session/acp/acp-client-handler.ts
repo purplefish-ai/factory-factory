@@ -28,8 +28,7 @@ export class AcpClientHandler implements Client {
     this.onLog = onLog ?? null;
   }
 
-  // biome-ignore lint/suspicious/useAwait: async required by Client interface contract
-  async sessionUpdate(params: SessionNotification): Promise<void> {
+  sessionUpdate(params: SessionNotification): Promise<void> {
     const update = params.update;
 
     // PRESERVE: Log ALL events to session file logger (EVENT-06)
@@ -43,10 +42,10 @@ export class AcpClientHandler implements Client {
     // Forward the raw update to session service for translation via AcpEventTranslator
     // This replaces the Phase 19 inline switch that only handled 3 event types
     this.onEvent(this.sessionId, { type: 'acp_session_update', update });
+    return Promise.resolve();
   }
 
-  // biome-ignore lint/suspicious/useAwait: async required by Client interface contract
-  async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+  requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     // PRESERVE: Log permission request to session file logger
     this.onLog?.(this.sessionId, {
       eventType: 'acp_permission_request',
@@ -59,12 +58,12 @@ export class AcpClientHandler implements Client {
       const allowOption = params.options.find(
         (o) => o.kind === 'allow_always' || o.kind === 'allow_once'
       );
-      return {
+      return Promise.resolve({
         outcome: {
           outcome: 'selected',
           optionId: allowOption?.optionId ?? params.options[0]?.optionId ?? 'unknown',
         },
-      };
+      });
     }
 
     const requestId = crypto.randomUUID();
