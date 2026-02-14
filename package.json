@@ -1,7 +1,7 @@
 {
   "name": "factory-factory",
-  "version": "0.2.8",
-  "description": "Workspace-based coding environment for running multiple Claude Code sessions in parallel",
+  "version": "0.3.0",
+  "description": "Workspace-based coding environment for running multiple Claude Code and Codex sessions in parallel",
   "private": false,
   "license": "MIT",
   "repository": {
@@ -15,6 +15,7 @@
   "keywords": [
     "claude",
     "claude-code",
+    "codex",
     "ai",
     "coding",
     "workspace",
