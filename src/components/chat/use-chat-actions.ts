@@ -35,6 +35,11 @@ import type { ChatAction, ChatState } from './reducer';
 
 type QueueMessageRequest = QueueMessageInput;
 type RemoveQueuedMessageRequest = RemoveQueuedMessageInput;
+type AcpPermissionOption = {
+  optionId: string;
+  name: string;
+  kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+};
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
@@ -117,6 +122,54 @@ function maybeSendModelUpdate(
   }
 
   send(modelMessage);
+}
+
+function findOptionIdByDecision(
+  options: AcpPermissionOption[] | undefined,
+  allow: boolean
+): string | undefined {
+  if (!options || options.length === 0) {
+    return undefined;
+  }
+
+  const preferred = options.find((option) =>
+    allow ? option.kind.startsWith('allow') : option.kind.startsWith('reject')
+  );
+  return preferred?.optionId ?? options[0]?.optionId;
+}
+
+function flattenAnswerValues(answers: Record<string, string | string[]>): string[] {
+  const values: string[] = [];
+  for (const value of Object.values(answers)) {
+    if (Array.isArray(value)) {
+      values.push(...value);
+      continue;
+    }
+    if (value) {
+      values.push(value);
+    }
+  }
+  return values;
+}
+
+function findQuestionOptionId(
+  options: AcpPermissionOption[] | undefined,
+  answers: Record<string, string | string[]>
+): string | undefined {
+  if (!options || options.length === 0) {
+    return undefined;
+  }
+
+  const selected = new Set(flattenAnswerValues(answers).map((v) => v.trim().toLowerCase()));
+  if (selected.size > 0) {
+    const matched = options.find((option) => selected.has(option.name.trim().toLowerCase()));
+    if (matched) {
+      return matched.optionId;
+    }
+  }
+
+  // Fallback to first allow option (or first option if no allow kinds).
+  return findOptionIdByDecision(options, true);
 }
 
 // =============================================================================
@@ -209,13 +262,15 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      if (!optionId) {
+      const resolvedOptionId =
+        optionId ?? findOptionIdByDecision(pendingRequest.request.acpOptions, allow);
+      if (!resolvedOptionId) {
         return;
       }
       const msg: PermissionResponseMessage = {
         type: 'permission_response',
         requestId,
-        optionId,
+        optionId: resolvedOptionId,
       };
       send(msg);
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
@@ -230,10 +285,19 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      void answers;
+      const optionId = findQuestionOptionId(pendingRequest.request.acpOptions, answers);
+      if (!optionId) {
+        return;
+      }
+      const msg: PermissionResponseMessage = {
+        type: 'permission_response',
+        requestId,
+        optionId,
+      };
+      send(msg);
       dispatch({ type: 'QUESTION_RESPONSE' });
     },
-    [dispatch, stateRef]
+    [send, dispatch, stateRef]
   );
 
   const updateSettings = useCallback(

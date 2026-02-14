@@ -22,6 +22,12 @@ export interface AskUserQuestion {
 export interface UserQuestionRequest {
   requestId: string;
   questions: AskUserQuestion[];
+  /** ACP option IDs mapped to answer labels for submitting the user's choice. */
+  acpOptions?: Array<{
+    optionId: string;
+    name: string;
+    kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+  }>;
   timestamp: string;
 }
 

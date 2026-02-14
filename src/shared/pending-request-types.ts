@@ -33,5 +33,11 @@ export interface PendingInteractiveRequest {
   input: Record<string, unknown>;
   /** Plan content for ExitPlanMode requests */
   planContent: string | null;
+  /** ACP permission options for resolving pending requests after reconnect. */
+  acpOptions?: Array<{
+    optionId: string;
+    name: string;
+    kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+  }>;
   timestamp: string;
 }

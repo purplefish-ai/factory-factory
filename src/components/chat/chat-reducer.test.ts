@@ -2295,16 +2295,22 @@ describe('createActionFromWebSocketMessage', () => {
         options: [{ label: 'file1.txt', description: 'First file' }],
       },
     ];
+    const acpOptions = [
+      { optionId: 'opt-1', name: 'file1.txt', kind: 'allow_once' as const },
+      { optionId: 'opt-2', name: 'Cancel', kind: 'reject_once' as const },
+    ];
     const wsMessage: WebSocketMessage = {
       type: 'user_question',
       requestId: 'req-456',
       questions,
+      acpOptions,
     };
     const action = createActionFromWebSocketMessage(wsMessage);
 
     expect(action?.type).toBe('WS_USER_QUESTION');
     expect((action as { payload: UserQuestionRequest }).payload.requestId).toBe('req-456');
     expect((action as { payload: UserQuestionRequest }).payload.questions).toEqual(questions);
+    expect((action as { payload: UserQuestionRequest }).payload.acpOptions).toEqual(acpOptions);
     expect((action as { payload: UserQuestionRequest }).payload.timestamp).toBeDefined();
   });
 

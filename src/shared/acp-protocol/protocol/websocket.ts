@@ -24,6 +24,11 @@ interface WebSocketMessageCommon {
   toolInput?: Record<string, unknown>;
   planContent?: string | null;
   questions?: AskUserQuestion[];
+  acpOptions?: Array<{
+    optionId: string;
+    name: string;
+    kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+  }>;
   text?: string;
   id?: string;
   order?: number;
@@ -107,6 +112,12 @@ interface WebSocketMessagePayloadByType {
   user_question: {
     requestId?: string;
     questions?: AskUserQuestion[];
+    /** ACP permission options for mapping selected answer labels to option IDs. */
+    acpOptions?: Array<{
+      optionId: string;
+      name: string;
+      kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+    }>;
   };
   permission_cancelled: {
     requestId?: string;

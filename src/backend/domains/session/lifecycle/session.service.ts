@@ -14,6 +14,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import type {
   AgentContentItem,
   AgentMessage,
+  AskUserQuestion,
   ChatMessage,
   HistoryMessage,
   SessionDeltaEvent,
@@ -223,26 +224,99 @@ class SessionService {
       requestId: string;
       params: import('@agentclientprotocol/sdk').RequestPermissionRequest;
     };
-    sessionDomainService.emitDelta(sid, {
-      type: 'permission_request',
-      requestId,
-      toolName: params.toolCall.title ?? 'ACP Tool',
-      toolUseId: params.toolCall.toolCallId,
-      toolInput: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
-      acpOptions: params.options.map((o) => ({
-        optionId: o.optionId,
-        name: o.name,
-        kind: o.kind,
-      })),
-    });
+    const toolName = params.toolCall.title ?? 'ACP Tool';
+    const toolInput = (params.toolCall.rawInput as Record<string, unknown>) ?? {};
+    const acpOptions = params.options.map((o) => ({
+      optionId: o.optionId,
+      name: o.name,
+      kind: o.kind,
+    }));
+    const planContent = this.extractPlanContent(toolName, toolInput);
+
+    if (toolName === 'AskUserQuestion') {
+      const questions = this.extractAskUserQuestions(toolInput);
+      sessionDomainService.emitDelta(sid, {
+        type: 'user_question',
+        requestId,
+        questions,
+        acpOptions,
+      });
+    } else {
+      sessionDomainService.emitDelta(sid, {
+        type: 'permission_request',
+        requestId,
+        toolName,
+        toolUseId: params.toolCall.toolCallId,
+        toolInput,
+        planContent,
+        acpOptions,
+      });
+    }
+
     sessionDomainService.setPendingInteractiveRequest(sid, {
       requestId,
-      toolName: params.toolCall.title ?? 'ACP Tool',
+      toolName,
       toolUseId: params.toolCall.toolCallId,
-      input: (params.toolCall.rawInput as Record<string, unknown>) ?? {},
-      planContent: null,
+      input: toolInput,
+      planContent,
+      acpOptions,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  private extractAskUserQuestions(input: Record<string, unknown>): AskUserQuestion[] {
+    const questions = input.questions;
+    if (!Array.isArray(questions)) {
+      return [];
+    }
+    return questions as AskUserQuestion[];
+  }
+
+  private extractPlanContent(toolName: string, input: Record<string, unknown>): string | null {
+    if (toolName !== 'ExitPlanMode') {
+      return null;
+    }
+
+    const value = input.plan;
+    if (typeof value === 'string') {
+      const parsed = this.tryExtractPlanFromJsonString(value);
+      return parsed ?? value;
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      const nestedPlan = Reflect.get(value, 'plan');
+      if (typeof nestedPlan === 'string') {
+        return nestedPlan;
+      }
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch {
+        return String(value);
+      }
+    }
+
+    return null;
+  }
+
+  private tryExtractPlanFromJsonString(value: string): string | null {
+    const trimmed = value.trim();
+    if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'object' && parsed !== null) {
+        const maybePlan = Reflect.get(parsed, 'plan');
+        if (typeof maybePlan === 'string') {
+          return maybePlan;
+        }
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
   }
 
   private async createAcpClient(

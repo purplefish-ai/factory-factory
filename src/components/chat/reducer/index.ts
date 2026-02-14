@@ -217,6 +217,7 @@ function handleUserQuestionMessage(data: WebSocketMessage): ChatAction | null {
       payload: {
         requestId: data.requestId,
         questions: data.questions,
+        ...(Array.isArray(data.acpOptions) ? { acpOptions: data.acpOptions } : {}),
         timestamp: new Date().toISOString(),
       },
     };

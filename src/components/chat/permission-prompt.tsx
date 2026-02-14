@@ -65,6 +65,52 @@ function formatToolInput(input: Record<string, unknown>): string {
   }
 }
 
+function parsePlanFromJsonString(value: string): string | null {
+  const trimmed = value.trim();
+  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === 'object' && parsed !== null) {
+      const maybePlan = Reflect.get(parsed, 'plan');
+      if (typeof maybePlan === 'string') {
+        return maybePlan;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function resolvePlanContent(permission: PermissionRequest): string | null {
+  const fromField = permission.planContent;
+  if (typeof fromField === 'string' && fromField.length > 0) {
+    return parsePlanFromJsonString(fromField) ?? fromField;
+  }
+
+  const fromInput = permission.toolInput.plan;
+  if (typeof fromInput === 'string' && fromInput.length > 0) {
+    return parsePlanFromJsonString(fromInput) ?? fromInput;
+  }
+  if (typeof fromInput === 'object' && fromInput !== null) {
+    const nestedPlan = Reflect.get(fromInput, 'plan');
+    if (typeof nestedPlan === 'string') {
+      return nestedPlan;
+    }
+    try {
+      return JSON.stringify(fromInput, null, 2);
+    } catch {
+      return String(fromInput);
+    }
+  }
+
+  return null;
+}
+
 // =============================================================================
 // Plan View Toggle
 // =============================================================================
@@ -125,7 +171,8 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
     return null;
   }
 
-  const { requestId, planContent } = permission;
+  const { requestId } = permission;
+  const planContent = resolvePlanContent(permission);
 
   const handleApprove = () => {
     onApprove(requestId, true);

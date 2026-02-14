@@ -45,6 +45,10 @@ function createStore(): SessionStore {
       toolUseId: 'tool-1',
       input: { reason: 'x' },
       planContent: 'x',
+      acpOptions: [
+        { optionId: 'allow', name: 'Approve', kind: 'allow_once' },
+        { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+      ],
       timestamp: '2026-02-01T00:00:03.000Z',
     },
     runtime: {
@@ -94,6 +98,10 @@ describe('session-replay-builder', () => {
           type: 'permission_request',
           requestId: 'req-1',
           toolName: 'ExitPlanMode',
+          acpOptions: [
+            { optionId: 'allow', name: 'Approve', kind: 'allow_once' },
+            { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+          ],
         }),
       ])
     );
