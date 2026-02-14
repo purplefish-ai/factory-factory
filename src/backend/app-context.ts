@@ -8,6 +8,8 @@ import {
   startupScriptService,
 } from './domains/run-script';
 import {
+  type AcpTraceLogger,
+  acpTraceLogger,
   chatConnectionService,
   chatEventForwarderService,
   chatMessageHandlerService,
@@ -43,6 +45,7 @@ export type AppServices = {
   runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
   serverInstanceService: typeof serverInstanceService;
+  acpTraceLogger: AcpTraceLogger;
   sessionFileLogger: SessionFileLogger;
   sessionService: typeof sessionService;
   sessionDomainService: typeof sessionDomainService;
@@ -75,6 +78,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     runScriptStateMachine,
     schedulerService,
     serverInstanceService,
+    acpTraceLogger,
     sessionFileLogger,
     sessionService,
     sessionDomainService,
@@ -101,4 +105,4 @@ export function createAppContext(
   };
 }
 
-export type { SessionFileLogger };
+export type { AcpTraceLogger, SessionFileLogger };

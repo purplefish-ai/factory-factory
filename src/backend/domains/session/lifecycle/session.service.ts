@@ -8,6 +8,7 @@ import {
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
+import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
@@ -41,6 +42,14 @@ type StoredAcpConfigSnapshot = {
   configOptions: SessionConfigOption[];
   observedModelId?: string;
 };
+type PendingAcpToolCall = {
+  toolUseId: string;
+  toolName: string;
+  acpKind?: string;
+  acpLocations?: Array<{ path: string; line?: number | null }>;
+};
+
+const TERMINAL_TOOL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 class SessionService {
   private readonly repository: SessionRepository;
@@ -49,6 +58,8 @@ class SessionService {
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
   private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
+  /** Per-session ACP tool calls that have started but not reached terminal status. */
+  private readonly pendingAcpToolCalls = new Map<string, Map<string, PendingAcpToolCall>>();
   /**
    * Suppress transcript-mutating ACP replay events for sessions whose transcript was
    * already hydrated from on-disk history during passive load_session.
@@ -100,7 +111,18 @@ class SessionService {
             return;
           }
           const deltas = this.acpEventTranslator.translateSessionUpdate(update);
-          for (const delta of deltas) {
+          if (deltas.length === 0) {
+            acpTraceLogger.log(sid, 'translated_delta', {
+              sessionUpdate: update.sessionUpdate,
+              deltaCount: 0,
+            });
+          }
+          for (const [index, delta] of deltas.entries()) {
+            acpTraceLogger.log(sid, 'translated_delta', {
+              sessionUpdate: update.sessionUpdate,
+              deltaIndex: index,
+              delta,
+            });
             this.handleAcpDelta(sid, delta as SessionDeltaEvent);
           }
           return;
@@ -114,6 +136,10 @@ class SessionService {
       onSessionId: async (sid: string, providerSessionId: string) => {
         try {
           await this.repository.updateSession(sid, { providerSessionId });
+          acpTraceLogger.log(sid, 'runtime_metadata', {
+            type: 'provider_session_id',
+            providerSessionId,
+          });
           logger.debug('Updated session with ACP providerSessionId', {
             sessionId: sid,
             providerSessionId,
@@ -129,6 +155,7 @@ class SessionService {
       onExit: async (sid: string, exitCode: number | null) => {
         // Clean up permission bridge, streaming state, and workspace mapping on exit
         this.acpStreamState.delete(sid);
+        this.pendingAcpToolCalls.delete(sid);
         this.suppressAcpReplayForSession.delete(sid);
         this.sessionToWorkspace.delete(sid);
         const b = this.acpPermissionBridges.get(sid);
@@ -136,6 +163,7 @@ class SessionService {
           b.cancelAll();
           this.acpPermissionBridges.delete(sid);
         }
+        acpTraceLogger.log(sid, 'runtime_exit', { exitCode });
 
         try {
           sessionDomainService.markProcessExit(sid, exitCode);
@@ -154,9 +182,15 @@ class SessionService {
             sessionId: sid,
             error: error instanceof Error ? error.message : String(error),
           });
+        } finally {
+          acpTraceLogger.closeSession(sid);
         }
       },
       onError: (sid: string, error: Error) => {
+        acpTraceLogger.log(sid, 'runtime_error', {
+          message: error.message,
+          stack: error.stack,
+        });
         logger.error('ACP client error', {
           sessionId: sid,
           error: error.message,
@@ -164,6 +198,7 @@ class SessionService {
         });
       },
       onAcpLog: (sid: string, payload: Record<string, unknown>) => {
+        acpTraceLogger.log(sid, 'raw_acp_event', payload);
         sessionFileLogger.log(sid, 'FROM_CLAUDE_CLI', payload);
       },
     };
@@ -183,6 +218,8 @@ class SessionService {
     ) {
       return;
     }
+
+    this.trackPendingAcpToolCalls(sid, delta);
 
     // When configOptions change mid-session, sync the handle and re-emit capabilities
     if (delta.type === 'config_options_update') {
@@ -223,6 +260,187 @@ class SessionService {
     // Persist to transcript + allocate order in one step
     const order = sessionDomainService.appendClaudeEvent(sid, data);
     sessionDomainService.emitDelta(sid, { ...delta, order });
+  }
+
+  private trackPendingAcpToolCalls(sid: string, delta: SessionDeltaEvent): void {
+    if (delta.type === 'agent_message') {
+      this.trackPendingFromAgentMessage(sid, (delta as { data: AgentMessage }).data);
+      return;
+    }
+
+    if (delta.type === 'tool_progress') {
+      this.trackPendingFromToolProgress(
+        sid,
+        delta as {
+          tool_use_id?: string;
+          tool_name?: string;
+          acpStatus?: string;
+          acpKind?: string;
+          acpLocations?: Array<{ path: string; line?: number | null }>;
+        }
+      );
+    }
+  }
+
+  private trackPendingFromAgentMessage(sid: string, data: AgentMessage): void {
+    if (data.type === 'stream_event') {
+      this.trackPendingFromToolUseStreamEvent(sid, data);
+    }
+
+    if (data.type !== 'user') {
+      return;
+    }
+
+    this.clearPendingFromToolResultMessage(sid, data);
+  }
+
+  private trackPendingFromToolUseStreamEvent(sid: string, data: AgentMessage): void {
+    const streamEvent = (
+      data as {
+        event?: {
+          type?: string;
+          content_block?: { type?: string; id?: unknown; name?: unknown };
+        };
+      }
+    ).event;
+    const contentBlock = streamEvent?.content_block;
+    const isToolUse =
+      streamEvent?.type === 'content_block_start' && contentBlock?.type === 'tool_use';
+    if (!isToolUse) {
+      return;
+    }
+    const toolUseId = typeof contentBlock?.id === 'string' ? contentBlock.id : null;
+    if (!toolUseId) {
+      return;
+    }
+    const toolName = typeof contentBlock?.name === 'string' ? contentBlock.name : 'ACP Tool';
+    this.upsertPendingToolCall(sid, toolUseId, { toolName });
+  }
+
+  private clearPendingFromToolResultMessage(sid: string, data: AgentMessage): void {
+    if (data.type !== 'user') {
+      return;
+    }
+    const content = data.message?.content;
+    if (!Array.isArray(content)) {
+      return;
+    }
+    for (const item of content) {
+      if (item.type === 'tool_result') {
+        this.removePendingToolCall(sid, item.tool_use_id);
+      }
+    }
+  }
+
+  private trackPendingFromToolProgress(
+    sid: string,
+    progress: {
+      tool_use_id?: string;
+      tool_name?: string;
+      acpStatus?: string;
+      acpKind?: string;
+      acpLocations?: Array<{ path: string; line?: number | null }>;
+    }
+  ): void {
+    if (!progress.tool_use_id) {
+      return;
+    }
+    if (progress.acpStatus && TERMINAL_TOOL_STATUSES.has(progress.acpStatus)) {
+      this.removePendingToolCall(sid, progress.tool_use_id);
+      return;
+    }
+    this.upsertPendingToolCall(sid, progress.tool_use_id, {
+      toolName: progress.tool_name ?? 'ACP Tool',
+      acpKind: progress.acpKind,
+      acpLocations: progress.acpLocations,
+    });
+  }
+
+  private upsertPendingToolCall(
+    sid: string,
+    toolUseId: string,
+    update: Pick<PendingAcpToolCall, 'toolName'> &
+      Partial<Pick<PendingAcpToolCall, 'acpKind' | 'acpLocations'>>
+  ): void {
+    const pendingById = this.pendingAcpToolCalls.get(sid) ?? new Map<string, PendingAcpToolCall>();
+    const existing = pendingById.get(toolUseId);
+    pendingById.set(toolUseId, {
+      toolUseId,
+      toolName: update.toolName || existing?.toolName || 'ACP Tool',
+      acpKind: update.acpKind ?? existing?.acpKind,
+      acpLocations: update.acpLocations ?? existing?.acpLocations,
+    });
+    this.pendingAcpToolCalls.set(sid, pendingById);
+  }
+
+  private removePendingToolCall(sid: string, toolUseId: string): void {
+    const pendingById = this.pendingAcpToolCalls.get(sid);
+    if (!pendingById) {
+      return;
+    }
+    pendingById.delete(toolUseId);
+    if (pendingById.size === 0) {
+      this.pendingAcpToolCalls.delete(sid);
+    }
+  }
+
+  private finalizeOrphanedToolCalls(sid: string, reason: string): void {
+    const pendingById = this.pendingAcpToolCalls.get(sid);
+    if (!pendingById || pendingById.size === 0) {
+      this.pendingAcpToolCalls.delete(sid);
+      return;
+    }
+
+    const toolUseIds = [...pendingById.keys()];
+    logger.warn('Finalizing orphaned ACP tool calls without terminal status', {
+      sessionId: sid,
+      reason,
+      count: toolUseIds.length,
+      toolUseIds,
+    });
+
+    for (const pending of pendingById.values()) {
+      const syntheticProgress = {
+        type: 'tool_progress',
+        tool_use_id: pending.toolUseId,
+        tool_name: pending.toolName,
+        acpStatus: 'failed',
+        elapsed_time_seconds: 0,
+        ...(pending.acpKind ? { acpKind: pending.acpKind } : {}),
+        ...(pending.acpLocations ? { acpLocations: pending.acpLocations } : {}),
+      } as SessionDeltaEvent;
+      this.handleAcpDelta(sid, syntheticProgress);
+
+      const syntheticResult = {
+        type: 'agent_message',
+        data: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: pending.toolUseId,
+                content: `Tool call did not receive a terminal ACP update (${reason}). Marked as failed locally.`,
+                is_error: true,
+              },
+            ],
+          },
+        },
+      } as SessionDeltaEvent;
+      this.handleAcpDelta(sid, syntheticResult);
+
+      acpTraceLogger.log(sid, 'translated_delta', {
+        sessionUpdate: 'synthetic_orphan_tool_call',
+        delta: syntheticProgress,
+      });
+      acpTraceLogger.log(sid, 'translated_delta', {
+        sessionUpdate: 'synthetic_orphan_tool_call',
+        delta: syntheticResult,
+      });
+    }
+
+    this.pendingAcpToolCalls.delete(sid);
   }
 
   /**
@@ -496,6 +714,7 @@ class SessionService {
 
     // Cancel pending ACP permissions and clean up streaming state
     this.acpStreamState.delete(sessionId);
+    this.pendingAcpToolCalls.delete(sessionId);
     this.suppressAcpReplayForSession.delete(sessionId);
     const acpBridge = this.acpPermissionBridges.get(sessionId);
     if (acpBridge) {
@@ -538,6 +757,7 @@ class SessionService {
         sessionId,
         ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
       });
+      acpTraceLogger.closeSession(sessionId);
     }
   }
 
@@ -833,6 +1053,8 @@ class SessionService {
    */
   async sendAcpMessage(sessionId: string, content: string): Promise<string> {
     const workspaceId = this.sessionToWorkspace.get(sessionId);
+    // Scope orphan detection to each prompt turn.
+    this.pendingAcpToolCalls.set(sessionId, new Map());
 
     sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'running',
@@ -847,6 +1069,7 @@ class SessionService {
 
     try {
       const result = await acpRuntimeManager.sendPrompt(sessionId, content);
+      this.finalizeOrphanedToolCalls(sessionId, `stop_reason:${result.stopReason}`);
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
         processState: 'alive',
@@ -855,6 +1078,7 @@ class SessionService {
       });
       return result.stopReason;
     } catch (error) {
+      this.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
         processState: 'alive',

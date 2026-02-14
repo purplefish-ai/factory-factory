@@ -19,6 +19,7 @@ export { sessionPromptBuilder } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 // Session lifecycle (start/stop/create)
 export { sessionService } from './lifecycle/session.service';
+export { AcpTraceLogger, acpTraceLogger } from './logging/acp-trace-logger.service';
 // Session file logging
 export { SessionFileLogger, sessionFileLogger } from './logging/session-file-logger.service';
 // Runtime types
