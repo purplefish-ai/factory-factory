@@ -1,5 +1,4 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
-import { SessionStatus } from '@factory-factory/core';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
 import {
   AcpEventTranslator,
@@ -22,6 +21,7 @@ import type {
 } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
+import { SessionStatus } from '@/shared/core';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,

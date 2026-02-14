@@ -1,5 +1,5 @@
-import { SessionStatus } from '@factory-factory/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 
 vi.mock('./fixer-session.service', () => ({

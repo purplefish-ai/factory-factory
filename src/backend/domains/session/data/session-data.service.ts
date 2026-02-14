@@ -1,10 +1,10 @@
-import type { SessionStatus } from '@factory-factory/core';
 import type { SessionProvider, TerminalSession } from '@prisma-gen/client';
 import {
   type AgentSessionRecord,
   agentSessionAccessor,
 } from '@/backend/resource_accessors/agent-session.accessor';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
+import type { SessionStatus } from '@/shared/core';
 
 class SessionDataService {
   // Agent sessions

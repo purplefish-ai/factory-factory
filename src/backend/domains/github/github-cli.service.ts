@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { CIStatus, PRState } from '@factory-factory/core';
 import { createLogger } from '@/backend/services/logger.service';
+import type { CIStatus, PRState } from '@/shared/core';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
 import { classifyError, logGitHubCLIError } from './github-cli/errors';

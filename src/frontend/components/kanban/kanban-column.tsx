@@ -1,5 +1,5 @@
-import type { KanbanColumn as KanbanColumnType } from '@factory-factory/core';
 import { Badge } from '@/components/ui/badge';
+import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
 // UI column IDs include ISSUES (UI-only) plus the database enum values

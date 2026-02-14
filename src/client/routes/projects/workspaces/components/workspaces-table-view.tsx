@@ -1,4 +1,3 @@
-import type { CIStatus, WorkspaceStatus } from '@factory-factory/core';
 import type { Workspace } from '@prisma-gen/browser';
 import { GitBranch } from 'lucide-react';
 import { Link } from 'react-router';
@@ -26,6 +25,7 @@ import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatStatusLabel } from '@/lib/formatters';
+import type { CIStatus, WorkspaceStatus } from '@/shared/core';
 import { NewWorkspaceButton } from './new-workspace-button';
 import { ResumeBranchButton } from './resume-branch-button';
 import type { ViewMode } from './types';

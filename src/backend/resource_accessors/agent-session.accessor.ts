@@ -1,7 +1,7 @@
-import { SessionStatus } from '@factory-factory/core';
 import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
+import { SessionStatus } from '@/shared/core';
 
 export type AgentSessionRecord = AgentSession;
 

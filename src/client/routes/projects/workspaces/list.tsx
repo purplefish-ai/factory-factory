@@ -1,10 +1,10 @@
-import type { WorkspaceStatus } from '@factory-factory/core';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { Loading } from '@/frontend/components/loading';
 import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
 import { trpc } from '@/frontend/lib/trpc';
+import type { WorkspaceStatus } from '@/shared/core';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import {
   ResumeBranchDialog,

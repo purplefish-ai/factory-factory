@@ -1,7 +1,5 @@
-import type { SessionStatus as DbSessionStatus } from '@factory-factory/core';
 import { Camera, FileCode, FileDiff, Plus } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
-
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -11,6 +9,7 @@ import {
   type SessionProviderValue,
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
+import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 import {

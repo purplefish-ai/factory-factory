@@ -1,6 +1,6 @@
-import { SessionStatus } from '@factory-factory/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 vi.mock('@/backend/services/logger.service', () => ({

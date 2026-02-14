@@ -1,4 +1,3 @@
-import { type KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
 import pLimit from 'p-limit';
 import type {
   WorkspaceGitHubBridge,
@@ -12,6 +11,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { type KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');

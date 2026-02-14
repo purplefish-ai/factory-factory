@@ -16,10 +16,10 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { WorkspaceStatus } from '@factory-factory/core';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
+import type { WorkspaceStatus } from '@/shared/core';
 
 const logger = createLogger('workspace-state-machine');
 

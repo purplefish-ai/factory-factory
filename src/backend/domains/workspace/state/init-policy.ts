@@ -1,4 +1,4 @@
-import type { WorkspaceStatus } from '@factory-factory/core';
+import type { WorkspaceStatus } from '@/shared/core';
 import type { WorkspaceInitBanner, WorkspaceInitPhase } from '@/shared/workspace-init';
 
 export interface WorkspaceInitPolicyInput {

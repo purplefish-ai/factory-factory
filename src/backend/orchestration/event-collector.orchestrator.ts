@@ -16,7 +16,6 @@
  * - NOT re-exported from orchestration/index.ts (circular dep risk)
  */
 
-import type { CIStatus, PRState } from '@factory-factory/core';
 import {
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
@@ -48,6 +47,7 @@ import {
   type SnapshotUpdateInput,
   workspaceSnapshotStore,
 } from '@/backend/services/workspace-snapshot-store.service';
+import type { CIStatus, PRState } from '@/shared/core';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,8 +1,8 @@
-import { SessionStatus } from '@factory-factory/core';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
 

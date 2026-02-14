@@ -1,6 +1,6 @@
-import type { WorkspaceStatus } from '@factory-factory/core';
 import type { Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import type { WorkspaceStatus } from '@/shared/core';
 
 class WorkspaceDataService {
   findById(id: string) {

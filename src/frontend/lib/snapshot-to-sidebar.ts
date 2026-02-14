@@ -7,6 +7,8 @@
  * but only includes fields needed for mapping.
  */
 
+import { z } from 'zod';
+import type { ServerWorkspace } from '@/frontend/components/use-workspace-list-state';
 import {
   CIStatus,
   KanbanColumn,
@@ -14,9 +16,7 @@ import {
   RatchetState,
   RunScriptStatus,
   SessionStatus,
-} from '@factory-factory/core';
-import { z } from 'zod';
-import type { ServerWorkspace } from '@/frontend/components/use-workspace-list-state';
+} from '@/shared/core';
 
 // =============================================================================
 // Snapshot message types (client-side mirror of server messages)

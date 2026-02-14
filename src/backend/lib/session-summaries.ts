@@ -1,5 +1,5 @@
-import type { SessionStatus as DbSessionStatus } from '@factory-factory/core';
 import type { WorkspaceSessionSummary } from '@/backend/services/workspace-snapshot-store.service';
+import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 interface SessionLike {

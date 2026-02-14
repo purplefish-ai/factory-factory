@@ -12,7 +12,7 @@ vi.mock('./logger.service', () => ({
   }),
 }));
 
-import { KanbanColumn } from '@factory-factory/core';
+import { KanbanColumn } from '@/shared/core';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,

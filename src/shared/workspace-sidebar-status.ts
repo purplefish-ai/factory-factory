@@ -8,4 +8,4 @@ export {
   type WorkspaceSidebarCiState,
   type WorkspaceSidebarStatus,
   type WorkspaceSidebarStatusInput,
-} from '@factory-factory/core';
+} from '@/shared/core';

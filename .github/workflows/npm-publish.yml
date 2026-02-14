@@ -56,16 +56,15 @@ jobs:
       - name: Pack npm tarball
         run: npm pack --silent
 
-      - name: Smoke test packed artifact with npm install
+      - name: Smoke test packed artifact with npm exec
         run: |
           set -euo pipefail
           ROOT_DIR="$PWD"
           TARBALL=$(ls factory-factory-*.tgz | head -n1)
           TMPDIR=$(mktemp -d)
           cd "$TMPDIR"
-          npm init -y >/dev/null 2>&1
-          npm install "$ROOT_DIR/$TARBALL"
-          npx --yes ff db:migrate --database-path "$TMPDIR/test.db"
+          npm exec --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory serve --help
+          npm exec --yes --package "$ROOT_DIR/$TARBALL" -- factory-factory db:migrate --database-path "$TMPDIR/test.db"
 
       - name: Publish to npm (dry run)
         if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}

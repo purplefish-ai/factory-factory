@@ -1,5 +1,5 @@
-import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@factory-factory/core';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 

@@ -1,9 +1,9 @@
-import { SessionStatus } from '@factory-factory/core';
 import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/domains/session';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
+import { SessionStatus } from '@/shared/core';
 import { publicProcedure, router } from './trpc';
 
 export const sessionRouter = router({

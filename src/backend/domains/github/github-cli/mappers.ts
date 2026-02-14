@@ -1,5 +1,5 @@
-import { CIStatus, PRState } from '@factory-factory/core';
 import type { z } from 'zod';
+import { CIStatus, PRState } from '@/shared/core';
 import type {
   GitHubComment,
   GitHubLabel,

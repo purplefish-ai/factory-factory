@@ -1,5 +1,5 @@
-import { CIStatus, PRState, RatchetState } from '@factory-factory/core';
 import { describe, expect, it } from 'vitest';
+import { CIStatus, PRState, RatchetState } from '@/shared/core';
 import { deriveWorkspaceFlowState, deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 
 describe('deriveWorkspaceFlowState', () => {

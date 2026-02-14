@@ -1,4 +1,3 @@
-import { SessionStatus } from '@factory-factory/core';
 import { githubCLIService } from '@/backend/domains/github';
 import { startupScriptService } from '@/backend/domains/run-script';
 import {
@@ -15,6 +14,7 @@ import { FactoryConfigService } from '@/backend/services/factory-config.service'
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
+import { SessionStatus } from '@/shared/core';
 import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-init-orchestrator');

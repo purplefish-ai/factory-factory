@@ -19,10 +19,10 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { RunScriptStatus } from '@factory-factory/core';
 import type { Prisma, Workspace } from '@prisma-gen/client';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
+import type { RunScriptStatus } from '@/shared/core';
 
 const logger = createLogger('run-script-state-machine');
 

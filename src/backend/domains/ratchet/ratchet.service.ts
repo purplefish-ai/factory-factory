@@ -8,7 +8,6 @@
  */
 
 import { EventEmitter } from 'node:events';
-import { CIStatus, RatchetState, SessionStatus } from '@factory-factory/core';
 import type { SessionProvider } from '@prisma-gen/client';
 import pLimit from 'p-limit';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
@@ -22,6 +21,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';

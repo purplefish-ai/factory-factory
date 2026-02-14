@@ -3,7 +3,7 @@
 // Mock Prisma client to avoid node: module imports in jsdom - must be before imports
 import { vi } from 'vitest';
 
-vi.mock('@factory-factory/core', async (importOriginal) => {
+vi.mock('@/shared/core', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
@@ -16,12 +16,12 @@ vi.mock('@factory-factory/core', async (importOriginal) => {
   };
 });
 
-import { SessionStatus } from '@factory-factory/core';
 import { createElement, createRef } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CommandInfo } from '@/lib/chat-protocol';
+import { SessionStatus } from '@/shared/core';
 import { type SessionData, SessionTabBar } from './session-tab-bar';
 import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
 
