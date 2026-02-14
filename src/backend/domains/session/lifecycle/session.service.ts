@@ -255,7 +255,7 @@ class SessionService {
   ): Promise<AcpProcessHandle> {
     const sessionContext = await this.loadSessionContext(sessionId, session);
     if (!sessionContext) {
-      throw new Error(`Session not found: ${sessionId}`);
+      throw new Error(`Session context not ready: ${sessionId}`);
     }
 
     await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);

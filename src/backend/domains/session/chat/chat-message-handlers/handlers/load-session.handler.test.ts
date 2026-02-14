@@ -187,4 +187,27 @@ describe('createLoadSessionHandler', () => {
       })
     );
   });
+
+  it('skips eager runtime init until workspace worktree path exists', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      workspace: { worktreePath: null },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.getOrCreateSessionClientFromRecord).not.toHaveBeenCalled();
+    expect(ws.send).not.toHaveBeenCalledWith(
+      expect.stringContaining('Failed to initialize session')
+    );
+  });
 });

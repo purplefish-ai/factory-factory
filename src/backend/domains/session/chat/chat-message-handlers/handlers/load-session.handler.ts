@@ -20,15 +20,17 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       loadRequestId: message.loadRequestId,
     });
 
-    try {
-      // Active tab should have a live provider runtime so config options and
-      // capabilities are negotiated immediately (without waiting for first send).
-      await sessionService.getOrCreateSessionClientFromRecord(dbSession);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      ws.send(
-        JSON.stringify({ type: 'error', message: `Failed to initialize session: ${detail}` })
-      );
+    if (dbSession.workspace.worktreePath) {
+      try {
+        // Active tab should have a live provider runtime so config options and
+        // capabilities are negotiated immediately (without waiting for first send).
+        await sessionService.getOrCreateSessionClientFromRecord(dbSession);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        ws.send(
+          JSON.stringify({ type: 'error', message: `Failed to initialize session: ${detail}` })
+        );
+      }
     }
 
     const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);
