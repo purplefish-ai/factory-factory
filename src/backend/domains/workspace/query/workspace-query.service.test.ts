@@ -130,6 +130,63 @@ describe('WorkspaceQueryService.listWithRuntimeState', () => {
     });
   });
 
+  it('prioritizes AskUserQuestion over generic permissions regardless of session order', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'ws-1',
+        name: 'Workspace 1',
+      },
+    ]);
+
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: ['s-permission', 's-question'],
+      isWorking: false,
+    });
+
+    mockGetAllPendingRequests.mockReturnValue(
+      new Map([
+        ['s-permission', { toolName: 'SomeOtherPermissionTool' }],
+        ['s-question', { toolName: 'AskUserQuestion' }],
+      ])
+    );
+
+    const result = await workspaceQueryService.listWithRuntimeState({ projectId: 'proj-1' });
+
+    expect(result[0]).toMatchObject({
+      id: 'ws-1',
+      pendingRequestType: 'user_question',
+    });
+  });
+
+  it('prioritizes ExitPlanMode over all other pending request types', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'ws-1',
+        name: 'Workspace 1',
+      },
+    ]);
+
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: ['s-permission', 's-question', 's-plan'],
+      isWorking: false,
+    });
+
+    mockGetAllPendingRequests.mockReturnValue(
+      new Map([
+        ['s-permission', { toolName: 'SomeOtherPermissionTool' }],
+        ['s-question', { toolName: 'AskUserQuestion' }],
+        ['s-plan', { toolName: 'ExitPlanMode' }],
+      ])
+    );
+
+    const result = await workspaceQueryService.listWithRuntimeState({ projectId: 'proj-1' });
+
+    expect(result[0]).toMatchObject({
+      id: 'ws-1',
+      pendingRequestType: 'plan_approval',
+    });
+  });
+
   it('passes list filters through to accessor', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([]);
     mockGetAllPendingRequests.mockReturnValue(new Map());

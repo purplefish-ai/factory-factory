@@ -123,6 +123,9 @@ function computePendingRequestType(
   sessionIds: string[],
   pendingRequests: Map<string, { toolName: string }>
 ): 'plan_approval' | 'user_question' | 'permission_request' | null {
+  let hasUserQuestion = false;
+  let hasPermissionRequest = false;
+
   for (const sessionId of sessionIds) {
     const request = pendingRequests.get(sessionId);
     if (!request) {
@@ -132,9 +135,16 @@ function computePendingRequestType(
       return 'plan_approval';
     }
     if (request.toolName === 'AskUserQuestion') {
-      return 'user_question';
+      hasUserQuestion = true;
+      continue;
     }
+    hasPermissionRequest = true;
+  }
 
+  if (hasUserQuestion) {
+    return 'user_question';
+  }
+  if (hasPermissionRequest) {
     return 'permission_request';
   }
   return null;
