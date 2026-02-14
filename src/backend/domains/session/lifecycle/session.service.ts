@@ -19,6 +19,7 @@ import type {
   HistoryMessage,
   SessionDeltaEvent,
 } from '@/shared/acp-protocol';
+import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import {
   createInitialSessionRuntimeState,
@@ -277,46 +278,7 @@ class SessionService {
       return null;
     }
 
-    const value = input.plan;
-    if (typeof value === 'string') {
-      const parsed = this.tryExtractPlanFromJsonString(value);
-      return parsed ?? value;
-    }
-
-    if (typeof value === 'object' && value !== null) {
-      const nestedPlan = Reflect.get(value, 'plan');
-      if (typeof nestedPlan === 'string') {
-        return nestedPlan;
-      }
-      try {
-        return JSON.stringify(value, null, 2);
-      } catch {
-        return String(value);
-      }
-    }
-
-    return null;
-  }
-
-  private tryExtractPlanFromJsonString(value: string): string | null {
-    const trimmed = value.trim();
-    if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (typeof parsed === 'object' && parsed !== null) {
-        const maybePlan = Reflect.get(parsed, 'plan');
-        if (typeof maybePlan === 'string') {
-          return maybePlan;
-        }
-      }
-    } catch {
-      return null;
-    }
-
-    return null;
+    return extractPlanText(input.plan);
   }
 
   private async createAcpClient(

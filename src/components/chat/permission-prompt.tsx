@@ -6,6 +6,7 @@ import { MarkdownRenderer } from '@/components/ui/markdown';
 import { PromptCard } from '@/components/ui/prompt-card';
 import type { PermissionRequest } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { type PlanViewMode, usePlanViewMode } from './plan-view-preference';
 
 // =============================================================================
@@ -65,46 +66,30 @@ function formatToolInput(input: Record<string, unknown>): string {
   }
 }
 
-function parsePlanFromJsonString(value: string): string | null {
-  const trimmed = value.trim();
-  if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (typeof parsed === 'object' && parsed !== null) {
-      const maybePlan = Reflect.get(parsed, 'plan');
-      if (typeof maybePlan === 'string') {
-        return maybePlan;
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 function resolvePlanContent(permission: PermissionRequest): string | null {
-  const fromField = permission.planContent;
-  if (typeof fromField === 'string' && fromField.length > 0) {
-    return parsePlanFromJsonString(fromField) ?? fromField;
+  const fromField = extractPlanText(permission.planContent);
+  if (fromField) {
+    return fromField;
   }
 
-  const fromInput = permission.toolInput.plan;
-  if (typeof fromInput === 'string' && fromInput.length > 0) {
-    return parsePlanFromJsonString(fromInput) ?? fromInput;
+  const fromInput = extractPlanText(permission.toolInput.plan);
+  if (fromInput) {
+    return fromInput;
   }
-  if (typeof fromInput === 'object' && fromInput !== null) {
-    const nestedPlan = Reflect.get(fromInput, 'plan');
-    if (typeof nestedPlan === 'string') {
-      return nestedPlan;
-    }
+
+  if (typeof permission.planContent === 'string' && permission.planContent.length > 0) {
+    return permission.planContent;
+  }
+
+  if (typeof permission.toolInput.plan === 'string' && permission.toolInput.plan.length > 0) {
+    return permission.toolInput.plan;
+  }
+
+  if (typeof permission.toolInput.plan === 'object' && permission.toolInput.plan !== null) {
     try {
-      return JSON.stringify(fromInput, null, 2);
+      return JSON.stringify(permission.toolInput.plan, null, 2);
     } catch {
-      return String(fromInput);
+      return String(permission.toolInput.plan);
     }
   }
 
