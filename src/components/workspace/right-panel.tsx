@@ -86,11 +86,13 @@ function loadPersistedTopPanelState(workspaceId: string): PersistedTopPanelState
 
     const legacyChangesView = parseStoredChangesView(storedTop);
     if (legacyChangesView) {
+      const migratedChangesView = changesView ?? legacyChangesView;
       // Migrate legacy top-level tab values to the new "changes" tab key.
       localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, 'changes');
+      localStorage.setItem(`${STORAGE_KEY_CHANGES_VIEW_PREFIX}${workspaceId}`, migratedChangesView);
       return {
         topTab: 'changes',
-        changesView: changesView ?? legacyChangesView,
+        changesView: migratedChangesView,
       };
     }
   } catch {
