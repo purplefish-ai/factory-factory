@@ -166,8 +166,11 @@ export function setNextOrderFromTranscript(store: SessionStore): void {
   store.nextOrder = maxOrder + 1;
 }
 
-function hasPersistedToolUseStart(store: SessionStore, toolUseId: string): boolean {
-  return store.transcript.some((entry) => {
+function findPersistedToolUseStart(
+  store: SessionStore,
+  toolUseId: string
+): ChatMessage | undefined {
+  return store.transcript.find((entry) => {
     if (entry.source !== 'claude' || !entry.message || entry.message.type !== 'stream_event') {
       return false;
     }
@@ -187,26 +190,29 @@ export function appendClaudeEvent(
     onParityTrace: (data: Record<string, unknown>) => void;
   }
 ): number {
-  const order = store.nextOrder;
-  store.nextOrder += 1;
-
+  // When the ACP adapter sends progressive enrichment for the same tool call
+  // (same toolCallId, updated title/input), upsert the existing transcript
+  // entry and return its original order so the frontend updates in place
+  // instead of creating a second tool call.
   if (claudeMessage.type === 'stream_event') {
     const event = claudeMessage.event;
-    if (
-      event &&
-      event.type === 'content_block_start' &&
-      event.content_block.type === 'tool_use' &&
-      hasPersistedToolUseStart(store, event.content_block.id)
-    ) {
-      options.onParityTrace({
-        path: 'live_stream_filtered',
-        reason: 'duplicate_tool_use_start_suppressed',
-        order,
-        claudeMessage,
-      });
-      return order;
+    if (event && event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
+      const existing = findPersistedToolUseStart(store, event.content_block.id);
+      if (existing) {
+        existing.message = claudeMessage;
+        options.onParityTrace({
+          path: 'live_stream_upserted',
+          reason: 'duplicate_tool_use_start_enriched',
+          order: existing.order,
+          claudeMessage,
+        });
+        return existing.order;
+      }
     }
   }
+
+  const order = store.nextOrder;
+  store.nextOrder += 1;
 
   const shouldPersist = shouldPersistClaudeMessage(claudeMessage);
   const isDuplicateResult = shouldSuppressDuplicateResultMessage(store.transcript, claudeMessage);

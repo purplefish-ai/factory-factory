@@ -68,18 +68,18 @@ describe('session-transcript', () => {
     expect(store.transcript[0]?.order).toBe(5);
   });
 
-  it('suppresses duplicate tool_use content_block_start events by tool id', () => {
+  it('upserts duplicate tool_use content_block_start events by tool id', () => {
     const store = createStore();
     const onParityTrace = vi.fn();
 
-    appendClaudeEvent(
+    const firstOrder = appendClaudeEvent(
       store,
       {
         type: 'stream_event',
         event: {
           type: 'content_block_start',
           index: 0,
-          content_block: { type: 'tool_use', id: 'tool-1', name: 'Read', input: {} },
+          content_block: { type: 'tool_use', id: 'tool-1', name: 'Bash', input: {} },
         },
       },
       {
@@ -88,14 +88,19 @@ describe('session-transcript', () => {
       }
     );
 
-    appendClaudeEvent(
+    const secondOrder = appendClaudeEvent(
       store,
       {
         type: 'stream_event',
         event: {
           type: 'content_block_start',
           index: 0,
-          content_block: { type: 'tool_use', id: 'tool-1', name: 'Read', input: {} },
+          content_block: {
+            type: 'tool_use',
+            id: 'tool-1',
+            name: 'Bash',
+            input: { command: 'ls', description: 'List files' },
+          },
         },
       },
       {
@@ -105,8 +110,14 @@ describe('session-transcript', () => {
     );
 
     expect(store.transcript).toHaveLength(1);
+    expect(secondOrder).toBe(firstOrder);
+    // Existing entry should be updated with enriched input
+    const entry = store.transcript[0]!;
+    const block = (entry.message as { event: { content_block: { input: unknown } } }).event
+      .content_block;
+    expect(block.input).toEqual({ command: 'ls', description: 'List files' });
     expect(onParityTrace).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'duplicate_tool_use_start_suppressed' })
+      expect.objectContaining({ reason: 'duplicate_tool_use_start_enriched' })
     );
   });
 

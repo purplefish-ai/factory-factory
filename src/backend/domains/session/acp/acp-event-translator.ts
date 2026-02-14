@@ -133,6 +133,13 @@ export class AcpEventTranslator {
       return [];
     }
 
+    // Prefer _meta.claudeCode.toolName (the actual tool name) over title
+    // (display label that may be generic like "Terminal" or a formatted command string).
+    const meta = (update as Record<string, unknown>)._meta as
+      | { claudeCode?: { toolName?: string } }
+      | undefined;
+    const toolName = meta?.claudeCode?.toolName ?? update.title;
+
     const events: SessionDeltaEvent[] = [
       {
         type: 'agent_message',
@@ -144,7 +151,7 @@ export class AcpEventTranslator {
             content_block: {
               type: 'tool_use',
               id: update.toolCallId,
-              name: update.title,
+              name: toolName,
               input: (update.rawInput as Record<string, unknown>) ?? {},
             },
           },
@@ -153,7 +160,7 @@ export class AcpEventTranslator {
       {
         type: 'tool_progress',
         tool_use_id: update.toolCallId,
-        tool_name: update.title,
+        tool_name: toolName,
         acpLocations: update.locations ?? [],
         acpKind: update.kind ?? undefined,
         acpStatus: update.status ?? undefined,
