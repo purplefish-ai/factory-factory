@@ -325,19 +325,40 @@ export function useSessionManagement({
     (name: string, prompt: string) => {
       const provider = selectedProvider;
       const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
+      const previousSessionId = selectedDbSessionId;
       createSession.mutate(
         { workspaceId, workflow: 'followup', name, model, provider },
         {
           onSuccess: (session) => {
-            // Store the pending prompt to be sent once the session state settles
-            pendingQuickActionRef.current = { dbSessionId: session.id, prompt };
-            // Setting the new session ID triggers WebSocket reconnection automatically
-            setSelectedDbSessionId(session.id);
+            startSession.mutate(
+              { id: session.id, initialPrompt: '' },
+              {
+                onSuccess: () => {
+                  // Store the pending prompt to be sent once the session state settles
+                  pendingQuickActionRef.current = { dbSessionId: session.id, prompt };
+                  // Setting the new session ID triggers WebSocket reconnection automatically
+                  setSelectedDbSessionId(session.id);
+                },
+                onError: (error) => {
+                  toast.error(error.message || 'Failed to start session');
+                  pendingQuickActionRef.current = null;
+                  setSelectedDbSessionId(previousSessionId);
+                },
+              }
+            );
           },
         }
       );
     },
-    [createSession, workspaceId, setSelectedDbSessionId, selectedModel, selectedProvider]
+    [
+      createSession,
+      workspaceId,
+      startSession,
+      selectedDbSessionId,
+      setSelectedDbSessionId,
+      selectedModel,
+      selectedProvider,
+    ]
   );
 
   return {
