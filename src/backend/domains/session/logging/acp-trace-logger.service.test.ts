@@ -14,6 +14,7 @@ function waitForFlush(): Promise<void> {
 
 describe('AcpTraceLogger', () => {
   const TraceEntrySchema = z.object({
+    ts: z.string(),
     seq: z.number(),
     sessionId: z.string(),
     channel: z.string(),
