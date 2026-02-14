@@ -18,11 +18,9 @@ import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { DEFAULT_THINKING_BUDGET } from '@/lib/chat-protocol';
 import type {
   PermissionResponseMessage,
-  QuestionResponseMessage,
   QueueMessageInput,
   RemoveQueuedMessageInput,
   ResumeQueuedMessagesInput,
-  RewindFilesMessage,
   SetConfigOptionMessage,
   SetModelMessage,
   StopMessage,
@@ -37,7 +35,6 @@ import type { ChatAction, ChatState } from './reducer';
 
 type QueueMessageRequest = QueueMessageInput;
 type RemoveQueuedMessageRequest = RemoveQueuedMessageInput;
-type RewindFilesRequest = RewindFilesMessage;
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
@@ -233,7 +230,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const msg: QuestionResponseMessage = { type: 'question_response', requestId, answers };
+      const msg = { type: 'question_response', requestId, answers };
       send(msg);
       dispatch({ type: 'QUESTION_RESPONSE' });
     },
@@ -320,7 +317,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       });
 
       // Send dry run request to get affected files
-      const msg: RewindFilesRequest = {
+      const msg = {
         type: 'rewind_files',
         userMessageId: userMessageUuid,
         dryRun: true,
@@ -372,7 +369,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     dispatch({ type: 'REWIND_EXECUTING' });
 
     // Send actual rewind request (not dry run)
-    const msg: RewindFilesRequest = {
+    const msg = {
       type: 'rewind_files',
       userMessageId: rewindPreview.userMessageId,
       dryRun: false,

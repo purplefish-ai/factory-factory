@@ -75,13 +75,6 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     loadRequestId: z.string().min(1).optional(),
   }),
 
-  // Answer a question from AskUserQuestion tool
-  z.object({
-    type: z.literal('question_response'),
-    requestId: z.string().min(1),
-    answers: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
-  }),
-
   // Respond to a permission request
   z.object({
     type: z.literal('permission_response'),
@@ -101,13 +94,6 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_thinking_budget'),
     max_tokens: z.number().nullable(),
-  }),
-
-  // Rewind files to a previous state
-  z.object({
-    type: z.literal('rewind_files'),
-    userMessageId: z.string().min(1),
-    dryRun: z.boolean().optional(),
   }),
 
   // Resume dispatching queued messages after a manual pause.
@@ -136,11 +122,9 @@ export type QueueMessageInput = Extract<ChatMessageInput, { type: 'queue_message
 export type RemoveQueuedMessageInput = Extract<ChatMessageInput, { type: 'remove_queued_message' }>;
 export type StopMessage = Extract<ChatMessageInput, { type: 'stop' }>;
 export type LoadSessionMessage = Extract<ChatMessageInput, { type: 'load_session' }>;
-export type QuestionResponseMessage = Extract<ChatMessageInput, { type: 'question_response' }>;
 export type PermissionResponseMessage = Extract<ChatMessageInput, { type: 'permission_response' }>;
 export type SetModelMessage = Extract<ChatMessageInput, { type: 'set_model' }>;
 export type SetThinkingBudgetMessage = Extract<ChatMessageInput, { type: 'set_thinking_budget' }>;
-export type RewindFilesMessage = Extract<ChatMessageInput, { type: 'rewind_files' }>;
 export type ResumeQueuedMessagesInput = Extract<
   ChatMessageInput,
   { type: 'resume_queued_messages' }

@@ -521,14 +521,14 @@ describe('websocket integration', () => {
     );
     openSockets.add(ws);
 
-    ws.send(JSON.stringify({ type: 'list_sessions' }));
+    ws.send(JSON.stringify({ type: 'load_session' }));
 
     await vi.waitFor(() => {
       expect(appContext.services.chatMessageHandlerService.handleMessage).toHaveBeenCalledWith(
         expect.any(Object),
         null,
         normalizedWorkingDir,
-        { type: 'list_sessions' }
+        { type: 'load_session' }
       );
     });
   });

@@ -36,16 +36,14 @@ describe('ChatMessageSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts question_response with multi-select answers', () => {
+  it('rejects question_response as unsupported legacy message type', () => {
     const result = ChatMessageSchema.safeParse({
       type: 'question_response',
       requestId: 'req-1',
-      answers: {
-        question1: ['a', 'b'],
-      },
+      answers: { question1: ['a', 'b'] },
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it('accepts set_thinking_budget with null', () => {
@@ -57,14 +55,14 @@ describe('ChatMessageSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts rewind_files with optional dryRun', () => {
+  it('rejects rewind_files as unsupported legacy message type', () => {
     const result = ChatMessageSchema.safeParse({
       type: 'rewind_files',
       userMessageId: 'user-msg-123',
       dryRun: true,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it('accepts load_session with optional loadRequestId', () => {
