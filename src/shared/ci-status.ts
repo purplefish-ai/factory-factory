@@ -3,4 +3,4 @@ export {
   deriveCiVisualStateFromChecks,
   deriveCiVisualStateFromPrCiStatus,
   getCiVisualLabel,
-} from '@factory-factory/core';
+} from '@/shared/core';

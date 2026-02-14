@@ -1,4 +1,4 @@
-import { CIStatus, PRState, RatchetState } from '@factory-factory/core';
+import { CIStatus, PRState, RatchetState } from '@/shared/core';
 
 export type WorkspaceFlowPhase =
   | 'NO_PR'

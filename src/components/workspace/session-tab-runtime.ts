@@ -1,4 +1,3 @@
-import type { SessionStatus as DbSessionStatus } from '@factory-factory/core';
 import {
   Activity,
   CheckCircle2,
@@ -8,6 +7,7 @@ import {
   type LucideIcon,
   XCircle,
 } from 'lucide-react';
+import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
 
 export type WorkspaceSessionRuntimeSummary = SessionSummary;

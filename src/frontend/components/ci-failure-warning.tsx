@@ -1,6 +1,6 @@
-import type { CIStatus } from '@factory-factory/core';
 import { AlertTriangle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import type { CIStatus } from '@/shared/core';
 
 interface CIFailureWarningProps {
   ciStatus: CIStatus;

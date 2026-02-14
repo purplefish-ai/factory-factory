@@ -21,7 +21,7 @@ import type {
   RatchetState,
   RunScriptStatus,
   WorkspaceStatus,
-} from '@factory-factory/core';
+} from '@/shared/core';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { createLogger } from './logger.service';
 

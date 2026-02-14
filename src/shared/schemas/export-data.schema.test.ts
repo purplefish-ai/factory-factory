@@ -5,6 +5,8 @@
  * If Prisma schema enums are modified, these tests will fail, prompting updates to the
  * shared schema to prevent backup import failures.
  */
+
+import { describe, expect, it } from 'vitest';
 import {
   CIStatus as PrismaCIStatus,
   KanbanColumn as PrismaKanbanColumn,
@@ -14,8 +16,7 @@ import {
   SessionStatus as PrismaSessionStatus,
   WorkspaceCreationSource as PrismaWorkspaceCreationSource,
   WorkspaceStatus as PrismaWorkspaceStatus,
-} from '@factory-factory/core';
-import { describe, expect, it } from 'vitest';
+} from '@/shared/core';
 import { exportedAgentSessionSchema, exportedWorkspaceSchema } from './export-data.schema';
 
 type DefWithType = {

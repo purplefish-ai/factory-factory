@@ -1,5 +1,5 @@
-import type { KanbanColumn as KanbanColumnType } from '@factory-factory/core';
 import type { Meta, StoryObj } from '@storybook/react';
+import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
 

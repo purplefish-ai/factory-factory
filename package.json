@@ -1,6 +1,6 @@
 {
   "name": "factory-factory",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Workspace-based coding environment for running multiple Claude Code and Codex sessions in parallel",
   "private": false,
   "license": "MIT",
@@ -37,8 +37,6 @@
   },
   "files": [
     "dist",
-    "packages/core/package.json",
-    "packages/core/dist",
     "prisma/migrations",
     "prisma/schema.prisma",
     "prompts",
@@ -82,7 +80,6 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@factory-factory/core": "file:packages/core",
     "@hookform/resolvers": "^5.2.2",
     "@prisma/adapter-better-sqlite3": "7.3.0",
     "@prisma/client": "7.3.0",

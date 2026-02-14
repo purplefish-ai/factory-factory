@@ -1,4 +1,3 @@
-import type { SessionStatus } from '@factory-factory/core';
 import {
   Activity,
   CheckCircle2,
@@ -11,9 +10,9 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import type { SessionStatus } from '@/shared/core';
 
 // =============================================================================
 // Types

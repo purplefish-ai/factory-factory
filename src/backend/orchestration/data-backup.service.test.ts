@@ -1,13 +1,4 @@
 import {
-  CIStatus,
-  KanbanColumn,
-  PRState,
-  RatchetState,
-  RunScriptStatus,
-  WorkspaceCreationSource,
-  WorkspaceStatus,
-} from '@factory-factory/core';
-import {
   type AgentSession,
   type Project,
   SessionProvider,
@@ -17,6 +8,15 @@ import {
   WorkspaceProviderSelection,
 } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  CIStatus,
+  KanbanColumn,
+  PRState,
+  RatchetState,
+  RunScriptStatus,
+  WorkspaceCreationSource,
+  WorkspaceStatus,
+} from '@/shared/core';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 

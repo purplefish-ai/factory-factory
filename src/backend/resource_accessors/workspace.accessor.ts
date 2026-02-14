@@ -1,3 +1,5 @@
+import type { Prisma, Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
+import { prisma } from '@/backend/db';
 import type {
   CIStatus,
   KanbanColumn,
@@ -5,9 +7,7 @@ import type {
   RatchetState,
   RunScriptStatus,
   WorkspaceStatus,
-} from '@factory-factory/core';
-import type { Prisma, Workspace, WorkspaceProviderSelection } from '@prisma-gen/client';
-import { prisma } from '@/backend/db';
+} from '@/shared/core';
 
 /**
  * Threshold for considering a PROVISIONING workspace as stale.

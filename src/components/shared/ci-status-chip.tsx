@@ -1,7 +1,7 @@
-import type { PRState } from '@factory-factory/core';
 import { CheckCircle2, Circle, type LucideIcon, XCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import type { PRState } from '@/shared/core';
 import {
   getWorkspaceCiLabel,
   getWorkspaceCiTooltip,

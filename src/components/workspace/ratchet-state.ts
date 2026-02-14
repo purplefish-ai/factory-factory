@@ -1,4 +1,4 @@
-import type { RatchetState } from '@factory-factory/core';
+import type { RatchetState } from '@/shared/core';
 
 export type RatchetVisualState = 'off' | 'idle' | 'processing';
 export type RatchetStateLike = RatchetState | string | null | undefined;

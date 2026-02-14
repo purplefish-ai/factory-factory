@@ -1,4 +1,4 @@
-import type { SessionStatus } from '@factory-factory/core';
+import type { SessionStatus } from '@/shared/core';
 
 export type SessionRuntimePhase =
   | 'loading'

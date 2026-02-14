@@ -5,6 +5,16 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-02-14
+
+### Fixed
+
+- Fix `npx factory-factory@latest serve` failing during npm package linking (`Cannot destructure property 'package' of 'node.target' as it is null`) by removing the published `file:packages/core` dependency and in-package core import path
+
+### CI
+
+- Align npm publish workflow smoke test to use packed-tarball `npm exec --package ...` so npx/npm exec install-link failures are caught before release
+
 ## [0.3.2] - 2026-02-14
 
 ### Fixed

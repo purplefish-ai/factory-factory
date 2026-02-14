@@ -1,9 +1,9 @@
-import { SessionStatus } from '@factory-factory/core';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
+import { SessionStatus } from '@/shared/core';
 import type { RatchetWorkspaceBridge } from './bridges';
 
 const logger = createLogger('reconciliation');

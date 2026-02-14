@@ -8,6 +8,7 @@
  * Prisma client into the browser bundle.
  */
 
+import { z } from 'zod';
 import {
   CIStatus as CoreCIStatus,
   KanbanColumn as CoreKanbanColumn,
@@ -17,8 +18,7 @@ import {
   SessionStatus as CoreSessionStatus,
   WorkspaceCreationSource as CoreWorkspaceCreationSource,
   WorkspaceStatus as CoreWorkspaceStatus,
-} from '@factory-factory/core';
-import { z } from 'zod';
+} from '@/shared/core';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
   return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];

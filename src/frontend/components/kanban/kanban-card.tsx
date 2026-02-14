@@ -1,4 +1,3 @@
-import type { KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
 import type { Workspace } from '@prisma-gen/browser';
 import {
   Archive,
@@ -15,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
 import { cn } from '@/lib/utils';
+import type { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export interface WorkspaceWithKanban extends Workspace {

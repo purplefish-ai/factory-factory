@@ -1,4 +1,3 @@
-import { KanbanColumn, WorkspaceStatus } from '@factory-factory/core';
 import { WorkspaceProviderSelection } from '@prisma-gen/client';
 import { z } from 'zod';
 import { ratchetService } from '@/backend/domains/ratchet';
@@ -15,6 +14,7 @@ import {
 } from '@/backend/lib/session-summaries';
 import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';

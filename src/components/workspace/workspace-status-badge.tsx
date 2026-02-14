@@ -1,8 +1,8 @@
-import type { WorkspaceStatus } from '@factory-factory/core';
 import { AlertCircle, Clock, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import type { WorkspaceStatus } from '@/shared/core';
 
 export type { WorkspaceStatus };
 

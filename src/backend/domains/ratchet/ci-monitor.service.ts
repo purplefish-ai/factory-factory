@@ -5,13 +5,13 @@
  * Runs on a 3-minute polling interval with adaptive backoff on rate limits.
  */
 
-import { CIStatus, SessionStatus } from '@factory-factory/core';
 import pLimit from 'p-limit';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CONCURRENCY, SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { CIStatus, SessionStatus } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import { ciFixerService } from './ci-fixer.service';
 

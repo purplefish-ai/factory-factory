@@ -5,7 +5,6 @@
  * Prevents duplicate concurrent CI fixing sessions per workspace.
  */
 
-import type { SessionStatus } from '@factory-factory/core';
 import {
   dispatchFixWorkflow,
   isFixWorkflowInProgress,
@@ -13,6 +12,7 @@ import {
   runExclusiveWorkspaceOperation,
 } from '@/backend/services/fixer-workflow.service';
 import { createLogger } from '@/backend/services/logger.service';
+import type { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 

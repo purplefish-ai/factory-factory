@@ -1,10 +1,10 @@
-import type { KanbanColumn as KanbanColumnType } from '@factory-factory/core';
 import { RefreshCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { IssueCard } from './issue-card';
 import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';

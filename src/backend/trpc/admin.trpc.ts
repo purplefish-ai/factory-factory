@@ -7,7 +7,6 @@
 import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { SessionStatus } from '@factory-factory/core';
 import type { DecisionLog } from '@prisma-gen/client';
 import { z } from 'zod';
 import { acpRuntimeManager, sessionDataService } from '@/backend/domains/session';
@@ -15,6 +14,7 @@ import { workspaceDataService } from '@/backend/domains/workspace';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import { getLogFilePath } from '@/backend/services/logger.service';
+import { SessionStatus } from '@/shared/core';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 import { type Context, publicProcedure, router } from './trpc';
 
