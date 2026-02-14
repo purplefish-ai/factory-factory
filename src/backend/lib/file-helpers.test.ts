@@ -13,6 +13,11 @@ import { realpath, stat } from 'node:fs/promises';
 
 const mockedRealpath = vi.mocked(realpath);
 const mockedStat = vi.mocked(stat);
+const createErrno = (code: string): NodeJS.ErrnoException => {
+  const error = new Error(code) as NodeJS.ErrnoException;
+  error.code = code;
+  return error;
+};
 
 describe('file-helpers', () => {
   describe('pathExists', () => {
@@ -44,25 +49,45 @@ describe('file-helpers', () => {
 
     describe('safe paths', () => {
       it('should allow a simple file path', async () => {
-        mockedRealpath.mockRejectedValue(new Error('ENOENT')); // File doesn't exist
+        mockedRealpath.mockImplementation((targetPath) => {
+          if (targetPath === path.resolve(worktreePath)) {
+            return Promise.resolve(path.resolve(worktreePath));
+          }
+          return Promise.reject(createErrno('ENOENT'));
+        });
         const result = await isPathSafe(worktreePath, 'src/index.ts');
         expect(result).toBe(true);
       });
 
       it('should allow nested directory paths', async () => {
-        mockedRealpath.mockRejectedValue(new Error('ENOENT'));
+        mockedRealpath.mockImplementation((targetPath) => {
+          if (targetPath === path.resolve(worktreePath)) {
+            return Promise.resolve(path.resolve(worktreePath));
+          }
+          return Promise.reject(createErrno('ENOENT'));
+        });
         const result = await isPathSafe(worktreePath, 'src/components/Button/index.tsx');
         expect(result).toBe(true);
       });
 
       it('should allow paths with dots in filename', async () => {
-        mockedRealpath.mockRejectedValue(new Error('ENOENT'));
+        mockedRealpath.mockImplementation((targetPath) => {
+          if (targetPath === path.resolve(worktreePath)) {
+            return Promise.resolve(path.resolve(worktreePath));
+          }
+          return Promise.reject(createErrno('ENOENT'));
+        });
         const result = await isPathSafe(worktreePath, 'file.config.js');
         expect(result).toBe(true);
       });
 
       it('should allow current directory reference when normalized', async () => {
-        mockedRealpath.mockRejectedValue(new Error('ENOENT'));
+        mockedRealpath.mockImplementation((targetPath) => {
+          if (targetPath === path.resolve(worktreePath)) {
+            return Promise.resolve(path.resolve(worktreePath));
+          }
+          return Promise.reject(createErrno('ENOENT'));
+        });
         const result = await isPathSafe(worktreePath, './src/index.ts');
         expect(result).toBe(true);
       });
@@ -75,7 +100,7 @@ describe('file-helpers', () => {
           if (p === path.resolve(worktreePath)) {
             return Promise.resolve(path.resolve(worktreePath));
           }
-          return Promise.reject(new Error('ENOENT'));
+          return Promise.reject(createErrno('ENOENT'));
         });
 
         const result = await isPathSafe(worktreePath, 'src/index.ts');
@@ -121,7 +146,7 @@ describe('file-helpers', () => {
           if (p === path.resolve(worktreePath)) {
             return Promise.resolve(path.resolve(worktreePath));
           }
-          return Promise.reject(new Error('ENOENT'));
+          return Promise.reject(createErrno('ENOENT'));
         });
 
         const result = await isPathSafe(worktreePath, 'malicious-link');
@@ -136,7 +161,7 @@ describe('file-helpers', () => {
           if (p === path.resolve(worktreePath)) {
             return Promise.resolve(path.resolve(worktreePath));
           }
-          return Promise.reject(new Error('ENOENT'));
+          return Promise.reject(createErrno('ENOENT'));
         });
 
         const result = await isPathSafe(worktreePath, 'link-to-src');
@@ -151,11 +176,40 @@ describe('file-helpers', () => {
           if (p === path.resolve(worktreePath)) {
             return Promise.resolve(path.resolve(worktreePath));
           }
-          return Promise.reject(new Error('ENOENT'));
+          return Promise.reject(createErrno('ENOENT'));
         });
 
         const result = await isPathSafe(worktreePath, 'deep/nested/link');
         expect(result).toBe(true);
+      });
+
+      it('should reject non-existent files through symlinked parent outside worktree', async () => {
+        mockedRealpath.mockImplementation((targetPath) => {
+          if (targetPath === path.resolve(worktreePath)) {
+            return Promise.resolve(path.resolve(worktreePath));
+          }
+          if (targetPath === path.resolve(worktreePath, 'link/newfile')) {
+            return Promise.reject(createErrno('ENOENT'));
+          }
+          if (targetPath === path.resolve(worktreePath, 'link')) {
+            return Promise.resolve('/tmp/external');
+          }
+          return Promise.reject(createErrno('ENOENT'));
+        });
+
+        const result = await isPathSafe(worktreePath, 'link/newfile');
+        expect(result).toBe(false);
+      });
+
+      it('should reject when nearest existing parent resolves outside worktree', async () => {
+        mockedRealpath
+          .mockResolvedValueOnce(path.resolve(worktreePath))
+          .mockRejectedValueOnce(createErrno('ENOENT'))
+          .mockRejectedValueOnce(createErrno('ENOENT'))
+          .mockResolvedValueOnce('/tmp/external');
+
+        const result = await isPathSafe(worktreePath, 'link/deep/newfile.ts');
+        expect(result).toBe(false);
       });
 
       it('should handle worktree path that is itself a symlink', async () => {
@@ -169,7 +223,7 @@ describe('file-helpers', () => {
           if (p === path.resolve(symlinkWorktree)) {
             return Promise.resolve(realWorktreePath);
           }
-          return Promise.reject(new Error('ENOENT'));
+          return Promise.reject(createErrno('ENOENT'));
         });
 
         const result = await isPathSafe(symlinkWorktree, 'src/index.ts');
