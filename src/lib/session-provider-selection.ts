@@ -32,3 +32,14 @@ export function resolveEffectiveSessionProvider(
 export function getSessionProviderLabel(provider: SessionProviderValue): string {
   return provider === 'CODEX' ? 'Codex' : 'Claude';
 }
+
+export function getWorkspaceDefaultOptionLabel(
+  workspaceDefaultProvider: unknown,
+  userDefaultProvider: unknown
+): string {
+  const effectiveProvider = resolveEffectiveSessionProvider(
+    workspaceDefaultProvider,
+    userDefaultProvider
+  );
+  return `${getSessionProviderLabel(effectiveProvider)} (Workspace Default)`;
+}
