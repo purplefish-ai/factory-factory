@@ -20,6 +20,17 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       loadRequestId: message.loadRequestId,
     });
 
+    try {
+      // Active tab should have a live provider runtime so config options and
+      // capabilities are negotiated immediately (without waiting for first send).
+      await sessionService.getOrCreateSessionClient(sessionId);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      ws.send(
+        JSON.stringify({ type: 'error', message: `Failed to initialize session: ${detail}` })
+      );
+    }
+
     const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);
     sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',

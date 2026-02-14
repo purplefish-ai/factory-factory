@@ -542,6 +542,16 @@ class SessionService {
     if (acpHandle) {
       const modelOption = acpHandle.configOptions.find((o) => o.category === 'model');
       if (modelOption && model) {
+        const availableValues = this.getConfigOptionValues(modelOption);
+        if (availableValues.length > 0 && !availableValues.includes(model)) {
+          logger.debug('Skipping unsupported model for ACP session', {
+            sessionId,
+            provider: acpHandle.provider,
+            model,
+            availableValues,
+          });
+          return;
+        }
         await this.setSessionConfigOption(sessionId, modelOption.id, model);
       }
       return;
@@ -880,9 +890,16 @@ class SessionService {
     };
   }
 
-  getChatBarCapabilities(sessionId: string): ChatBarCapabilities {
+  async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
     if (!acpHandle) {
+      const session = await this.repository.getSessionById(sessionId);
+      if (session?.provider === 'CODEX') {
+        return {
+          ...EMPTY_CHAT_BAR_CAPABILITIES,
+          provider: 'CODEX',
+        };
+      }
       return EMPTY_CHAT_BAR_CAPABILITIES;
     }
     return this.buildAcpChatBarCapabilities(acpHandle);
@@ -916,6 +933,25 @@ class SessionService {
       usageStats: { enabled: false, contextWindow: false },
       rewind: { enabled: false },
     };
+  }
+
+  private getConfigOptionValues(
+    option: import('@agentclientprotocol/sdk').SessionConfigOption
+  ): string[] {
+    return option.options.flatMap((entry) => {
+      if (typeof entry !== 'object' || entry === null) {
+        return [];
+      }
+      if ('value' in entry && typeof entry.value === 'string') {
+        return [entry.value];
+      }
+      if ('options' in entry && Array.isArray(entry.options)) {
+        return entry.options
+          .map((grouped) => grouped?.value)
+          .filter((value): value is string => typeof value === 'string');
+      }
+      return [];
+    });
   }
 
   /**

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
+  getOrCreateSessionClient: vi.fn(),
   getChatBarCapabilities: vi.fn(),
   getSessionConfigOptions: vi.fn(),
   subscribe: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
 vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
   sessionService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
+    getOrCreateSessionClient: mocks.getOrCreateSessionClient,
     getChatBarCapabilities: mocks.getChatBarCapabilities,
     getSessionConfigOptions: mocks.getSessionConfigOptions,
   },
@@ -61,6 +63,7 @@ describe('createLoadSessionHandler', () => {
     });
     mocks.getCachedCommands.mockResolvedValue(null);
     mocks.getSessionConfigOptions.mockReturnValue([]);
+    mocks.getOrCreateSessionClient.mockResolvedValue({});
   });
 
   it('subscribes with no Claude hydration context for CODEX session', async () => {
@@ -86,6 +89,7 @@ describe('createLoadSessionHandler', () => {
         loadRequestId: 'load-1',
       })
     );
+    expect(mocks.getOrCreateSessionClient).toHaveBeenCalledWith('session-1');
   });
 
   it('emits cached slash commands when available', async () => {
@@ -152,5 +156,31 @@ describe('createLoadSessionHandler', () => {
         },
       ],
     });
+  });
+
+  it('sends websocket error when runtime initialization fails', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      workspace: { worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+    mocks.getOrCreateSessionClient.mockRejectedValueOnce(new Error('boom'));
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'error',
+        message: 'Failed to initialize session: boom',
+      })
+    );
   });
 });

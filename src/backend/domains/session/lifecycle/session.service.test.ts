@@ -578,6 +578,85 @@ describe('SessionService', () => {
     expect(sessionService.getSessionConfigOptions('session-1')).toEqual([]);
   });
 
+  it('returns CODEX provider fallback capabilities when no ACP handle is active', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-codex',
+        provider: 'CODEX',
+      })
+    );
+
+    const capabilities = await sessionService.getChatBarCapabilities('session-codex');
+
+    expect(capabilities.provider).toBe('CODEX');
+    expect(capabilities.model.enabled).toBe(false);
+  });
+
+  it('skips setSessionModel when requested model is not in ACP model options', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(
+      unsafeCoerce({
+        provider: 'CODEX',
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            category: 'model',
+            currentValue: 'gpt-5.3-codex',
+            options: [
+              { value: 'gpt-5.3-codex', name: 'GPT-5.3 Codex' },
+              { value: 'gpt-5.2-codex', name: 'GPT-5.2 Codex' },
+            ],
+          },
+        ],
+      })
+    );
+
+    await sessionService.setSessionModel('session-codex', 'opus');
+
+    expect(acpRuntimeManager.setConfigOption).not.toHaveBeenCalled();
+  });
+
+  it('applies setSessionModel when requested model is supported by ACP options', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(
+      unsafeCoerce({
+        provider: 'CODEX',
+        configOptions: [
+          {
+            id: 'model',
+            name: 'Model',
+            type: 'select',
+            category: 'model',
+            currentValue: 'gpt-5.3-codex',
+            options: [
+              { value: 'gpt-5.3-codex', name: 'GPT-5.3 Codex' },
+              { value: 'gpt-5.2-codex', name: 'GPT-5.2 Codex' },
+            ],
+          },
+        ],
+      })
+    );
+    vi.mocked(acpRuntimeManager.setConfigOption).mockResolvedValue([
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'gpt-5.2-codex',
+        options: [{ value: 'gpt-5.2-codex', name: 'GPT-5.2 Codex' }],
+      },
+    ] as never);
+
+    await sessionService.setSessionModel('session-codex', 'gpt-5.2-codex');
+
+    expect(acpRuntimeManager.setConfigOption).toHaveBeenCalledWith(
+      'session-codex',
+      'model',
+      'gpt-5.2-codex'
+    );
+  });
+
   it('avoids redundant session DB lookups during startSession', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
