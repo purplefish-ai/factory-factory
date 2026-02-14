@@ -12,7 +12,11 @@ type SessionAccessor = {
     data: Partial<
       Pick<
         AgentSessionRecord,
-        'status' | 'providerProcessPid' | 'providerSessionId' | 'providerProjectPath'
+        | 'status'
+        | 'providerProcessPid'
+        | 'providerSessionId'
+        | 'providerProjectPath'
+        | 'providerMetadata'
       >
     >
   ): Promise<AgentSessionRecord>;
@@ -65,7 +69,11 @@ export class SessionRepository {
     data: Partial<
       Pick<
         AgentSessionRecord,
-        'status' | 'providerProcessPid' | 'providerSessionId' | 'providerProjectPath'
+        | 'status'
+        | 'providerProcessPid'
+        | 'providerSessionId'
+        | 'providerProjectPath'
+        | 'providerMetadata'
       >
     >
   ): Promise<AgentSessionRecord> {
@@ -77,7 +85,11 @@ export class SessionRepository {
     data: Partial<
       Pick<
         AgentSessionRecord,
-        'status' | 'providerProcessPid' | 'providerSessionId' | 'providerProjectPath'
+        | 'status'
+        | 'providerProcessPid'
+        | 'providerSessionId'
+        | 'providerProjectPath'
+        | 'providerMetadata'
       >
     >
   ): Promise<AgentSessionRecord> {

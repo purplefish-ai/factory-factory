@@ -5,6 +5,9 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 export interface SessionStore {
   sessionId: string;
   initialized: boolean;
+  historyHydrated?: boolean;
+  historyHydratedAt?: string;
+  historyHydrationSource?: 'jsonl' | 'acp_fallback' | 'none';
   transcript: ChatMessage[];
   queue: QueuedMessage[];
   pendingInteractiveRequest: PendingInteractiveRequest | null;

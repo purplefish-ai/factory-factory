@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findById: vi.fn(),
+  loadSessionHistory: vi.fn(),
   getRuntimeSnapshot: vi.fn(),
-  getOrCreateSessionClientFromRecord: vi.fn(),
   getChatBarCapabilities: vi.fn(),
-  getSessionConfigOptions: vi.fn(),
+  getSessionConfigOptionsWithFallback: vi.fn(),
   subscribe: vi.fn(),
   emitDelta: vi.fn(),
   getTranscriptSnapshot: vi.fn(),
+  isHistoryHydrated: vi.fn(),
+  markHistoryHydrated: vi.fn(),
+  replaceTranscript: vi.fn(),
   getCachedCommands: vi.fn(),
 }));
 
@@ -18,12 +21,17 @@ vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
   },
 }));
 
+vi.mock('@/backend/domains/session/data/claude-session-history-loader.service', () => ({
+  claudeSessionHistoryLoaderService: {
+    loadSessionHistory: mocks.loadSessionHistory,
+  },
+}));
+
 vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
   sessionService: {
     getRuntimeSnapshot: mocks.getRuntimeSnapshot,
-    getOrCreateSessionClientFromRecord: mocks.getOrCreateSessionClientFromRecord,
     getChatBarCapabilities: mocks.getChatBarCapabilities,
-    getSessionConfigOptions: mocks.getSessionConfigOptions,
+    getSessionConfigOptionsWithFallback: mocks.getSessionConfigOptionsWithFallback,
   },
 }));
 
@@ -32,6 +40,9 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
     subscribe: mocks.subscribe,
     emitDelta: mocks.emitDelta,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
+    isHistoryHydrated: mocks.isHistoryHydrated,
+    markHistoryHydrated: mocks.markHistoryHydrated,
+    replaceTranscript: mocks.replaceTranscript,
   },
 }));
 
@@ -45,37 +56,51 @@ import { createLoadSessionHandler } from './load-session.handler';
 
 describe('createLoadSessionHandler', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
-      processState: 'alive',
+      processState: 'stopped',
       activity: 'IDLE',
-      updatedAt: '2026-02-13T00:00:00.000Z',
+      updatedAt: '2026-02-14T00:00:00.000Z',
     });
     mocks.getChatBarCapabilities.mockResolvedValue({
-      provider: 'CODEX',
+      provider: 'CLAUDE',
       model: { enabled: false, options: [] },
       reasoning: { enabled: false, options: [] },
       thinking: { enabled: false },
       planMode: { enabled: true },
-      attachments: { enabled: false, kinds: [] },
+      attachments: { enabled: true, kinds: ['image', 'text'] },
       slashCommands: { enabled: false },
       usageStats: { enabled: false, contextWindow: false },
       rewind: { enabled: false },
     });
     mocks.getCachedCommands.mockResolvedValue(null);
-    mocks.getSessionConfigOptions.mockReturnValue([]);
-    mocks.getOrCreateSessionClientFromRecord.mockResolvedValue({});
+    mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([]);
     mocks.getTranscriptSnapshot.mockReturnValue([]);
+    mocks.isHistoryHydrated.mockReturnValue(true);
+    mocks.loadSessionHistory.mockResolvedValue({ status: 'not_found' });
   });
 
-  it('subscribes with no Claude hydration context for CODEX session', async () => {
+  it('hydrates Claude transcript from JSONL history', async () => {
     mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
-      status: 'RUNNING',
-      workspace: { worktreePath: '/tmp/worktree' },
-      providerSessionId: null,
-      providerProjectPath: null,
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadSessionHistory.mockResolvedValue({
+      status: 'loaded',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
+      history: [
+        {
+          type: 'user',
+          content: 'hello',
+          timestamp: '2026-02-14T00:00:00.000Z',
+        },
+      ],
     });
 
     const handler = createLoadSessionHandler();
@@ -87,28 +112,38 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session', loadRequestId: 'load-1' } as never,
     });
 
+    expect(mocks.loadSessionHistory).toHaveBeenCalledWith({
+      providerSessionId: 'provider-session-1',
+      workingDir: '/tmp/worktree',
+    });
+    expect(mocks.replaceTranscript).toHaveBeenCalledWith(
+      'session-1',
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'user',
+          text: 'hello',
+        }),
+      ]),
+      { historySource: 'jsonl' }
+    );
     expect(mocks.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
         loadRequestId: 'load-1',
       })
     );
-    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'CODEX',
-      })
-    );
   });
 
-  it('emits cached slash commands when available', async () => {
+  it('marks Claude history hydration as none when JSONL file is not found', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
-      status: 'RUNNING',
-      workspace: { worktreePath: '/tmp/worktree' },
-      providerSessionId: null,
-      providerProjectPath: null,
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
     });
-    mocks.getCachedCommands.mockResolvedValue([{ name: '/test', description: 'Test command' }]);
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadSessionHistory.mockResolvedValue({ status: 'not_found' });
 
     const handler = createLoadSessionHandler();
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
@@ -119,28 +154,112 @@ describe('createLoadSessionHandler', () => {
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.emitDelta).toHaveBeenCalledWith('session-1', {
-      type: 'slash_commands',
-      slashCommands: [{ name: '/test', description: 'Test command' }],
-    });
+    expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-1', 'none');
   });
 
-  it('emits config options when ACP session handle is active', async () => {
+  it('does not mark history hydrated when JSONL read fails', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
-      status: 'RUNNING',
-      workspace: { worktreePath: '/tmp/worktree' },
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadSessionHistory.mockResolvedValue({
+      status: 'error',
+      reason: 'read_failed',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+    expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+  });
+
+  it('throttles repeated Claude history reads after read failures', async () => {
+    vi.useFakeTimers();
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadSessionHistory.mockResolvedValue({
+      status: 'error',
+      reason: 'read_failed',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-retry-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-retry-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+  });
+
+  it('does not initialize CODEX sessions on passive load', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'IDLE',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
       providerSessionId: null,
       providerProjectPath: null,
     });
-    mocks.getSessionConfigOptions.mockReturnValue([
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadSessionHistory).not.toHaveBeenCalled();
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+  });
+
+  it('emits config options using fallback-aware session service method', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([
       {
         id: 'model',
         name: 'Model',
-        type: 'string',
+        type: 'select',
         category: 'model',
-        currentValue: 'sonnet',
-        options: [{ value: 'sonnet', name: 'Sonnet' }],
+        currentValue: 'claude-sonnet-4-5',
+        options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
       },
     ]);
 
@@ -159,222 +278,12 @@ describe('createLoadSessionHandler', () => {
         {
           id: 'model',
           name: 'Model',
-          type: 'string',
+          type: 'select',
           category: 'model',
-          currentValue: 'sonnet',
-          options: [{ value: 'sonnet', name: 'Sonnet' }],
+          currentValue: 'claude-sonnet-4-5',
+          options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
         },
       ],
     });
-  });
-
-  it('sends websocket error when runtime initialization fails', async () => {
-    mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
-      status: 'RUNNING',
-      workspace: { worktreePath: '/tmp/worktree' },
-      providerSessionId: null,
-      providerProjectPath: null,
-    });
-    mocks.getOrCreateSessionClientFromRecord.mockRejectedValueOnce(new Error('boom'));
-
-    const handler = createLoadSessionHandler();
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
-      message: { type: 'load_session' } as never,
-    });
-
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: 'error',
-        message: 'Failed to initialize session: boom',
-      })
-    );
-  });
-
-  it('skips eager runtime init until workspace worktree path exists', async () => {
-    mocks.findById.mockResolvedValue({
-      provider: 'CLAUDE',
-      status: 'RUNNING',
-      workspace: { worktreePath: null },
-      providerSessionId: null,
-      providerProjectPath: null,
-    });
-
-    const handler = createLoadSessionHandler();
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '',
-      message: { type: 'load_session' } as never,
-    });
-
-    expect(mocks.getOrCreateSessionClientFromRecord).not.toHaveBeenCalled();
-    expect(ws.send).not.toHaveBeenCalledWith(
-      expect.stringContaining('Failed to initialize session')
-    );
-  });
-
-  it('skips eager runtime init for inactive sessions without replay context', async () => {
-    mocks.getRuntimeSnapshot.mockReturnValue({
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: '2026-02-13T00:00:00.000Z',
-    });
-    mocks.findById.mockResolvedValue({
-      provider: 'CLAUDE',
-      status: 'IDLE',
-      workspace: { worktreePath: '/tmp/worktree' },
-      providerSessionId: null,
-      providerProjectPath: null,
-    });
-
-    const handler = createLoadSessionHandler();
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
-      message: { type: 'load_session' } as never,
-    });
-
-    expect(mocks.getOrCreateSessionClientFromRecord).not.toHaveBeenCalled();
-  });
-
-  it('eagerly initializes inactive sessions when transcript is already hydrated', async () => {
-    mocks.getRuntimeSnapshot.mockReturnValue({
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: '2026-02-13T00:00:00.000Z',
-    });
-    mocks.getTranscriptSnapshot.mockReturnValue([
-      {
-        id: 'm-1',
-        source: 'user',
-        text: 'hello',
-        timestamp: '2026-02-13T00:00:01.000Z',
-        order: 1,
-      },
-    ]);
-    mocks.findById.mockResolvedValue({
-      provider: 'CLAUDE',
-      status: 'IDLE',
-      workspace: { worktreePath: '/tmp/worktree' },
-      providerSessionId: null,
-      providerProjectPath: null,
-    });
-
-    const handler = createLoadSessionHandler();
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
-      message: { type: 'load_session' } as never,
-    });
-
-    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'CLAUDE',
-        providerSessionId: null,
-      })
-    );
-  });
-
-  it('eagerly initializes inactive sessions when providerSessionId is present', async () => {
-    mocks.getRuntimeSnapshot.mockReturnValue({
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: '2026-02-13T00:00:00.000Z',
-    });
-    mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
-      status: 'COMPLETED',
-      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
-      providerSessionId: 'provider-session-1',
-      providerProjectPath: null,
-    });
-
-    const handler = createLoadSessionHandler();
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
-      message: { type: 'load_session' } as never,
-    });
-
-    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'CODEX',
-        providerSessionId: 'provider-session-1',
-      })
-    );
-  });
-
-  it('eagerly initializes inactive CODEX sessions to hydrate chat bar capabilities', async () => {
-    mocks.getRuntimeSnapshot.mockReturnValue({
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: '2026-02-13T00:00:00.000Z',
-    });
-    mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
-      status: 'IDLE',
-      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
-      providerSessionId: null,
-      providerProjectPath: null,
-    });
-
-    const handler = createLoadSessionHandler();
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
-      message: { type: 'load_session' } as never,
-    });
-
-    expect(mocks.getOrCreateSessionClientFromRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'CODEX',
-        status: 'IDLE',
-      })
-    );
-  });
-
-  it('skips eager runtime init for archived workspaces even with providerSessionId', async () => {
-    mocks.getRuntimeSnapshot.mockReturnValue({
-      phase: 'idle',
-      processState: 'stopped',
-      activity: 'IDLE',
-      updatedAt: '2026-02-13T00:00:00.000Z',
-    });
-    mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
-      status: 'COMPLETED',
-      workspace: { status: 'ARCHIVED', worktreePath: '/tmp/worktree' },
-      providerSessionId: 'provider-session-1',
-      providerProjectPath: null,
-    });
-
-    const handler = createLoadSessionHandler();
-    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    await handler({
-      ws: ws as never,
-      sessionId: 'session-1',
-      workingDir: '/tmp/worktree',
-      message: { type: 'load_session' } as never,
-    });
-
-    expect(mocks.getOrCreateSessionClientFromRecord).not.toHaveBeenCalled();
   });
 });

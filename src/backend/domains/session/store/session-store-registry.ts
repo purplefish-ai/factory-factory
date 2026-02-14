@@ -12,6 +12,7 @@ export class SessionStoreRegistry {
       store = {
         sessionId,
         initialized: false,
+        historyHydrated: false,
         transcript: [],
         queue: [],
         pendingInteractiveRequest: null,

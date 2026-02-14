@@ -1,12 +1,28 @@
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
+import { claudeSessionHistoryLoaderService } from '@/backend/domains/session/data/claude-session-history-loader.service';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { buildTranscriptFromHistory } from '@/backend/domains/session/store/session-transcript';
 import { slashCommandCacheService } from '@/backend/domains/session/store/slash-command-cache.service';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
 const logger = createLogger('load-session-handler');
+const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
+const nextHistoryRetryAtBySession = new Map<string, number>();
+
+function canAttemptHistoryHydration(sessionId: string): boolean {
+  const retryAt = nextHistoryRetryAtBySession.get(sessionId);
+  if (!retryAt) {
+    return true;
+  }
+  if (retryAt <= Date.now()) {
+    nextHistoryRetryAtBySession.delete(sessionId);
+    return true;
+  }
+  return false;
+}
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
@@ -16,6 +32,8 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       return;
     }
 
+    await hydrateClaudeHistoryIfNeeded(sessionId, dbSession);
+
     const sessionRuntime = sessionService.getRuntimeSnapshot(sessionId);
     await sessionDomainService.subscribe({
       sessionId,
@@ -23,52 +41,21 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
       loadRequestId: message.loadRequestId,
     });
 
-    const hasWorktreePath = Boolean(dbSession.workspace.worktreePath);
-    const hasResumableProviderSession = Boolean(dbSession.providerSessionId);
-    const transcriptCount = sessionDomainService.getTranscriptSnapshot(sessionId).length;
-    const hasHydratedTranscript = transcriptCount > 0;
-    const isWorkspaceArchived = dbSession.workspace.status === 'ARCHIVED';
-    const isCodexSession = dbSession.provider === 'CODEX';
-    const shouldEagerInit =
-      hasWorktreePath &&
-      !isWorkspaceArchived &&
-      (isCodexSession ||
-        dbSession.status === 'RUNNING' ||
-        sessionRuntime.processState === 'alive' ||
-        hasResumableProviderSession ||
-        hasHydratedTranscript);
-
-    if (shouldEagerInit) {
-      try {
-        // Active runtime sessions should have live provider state negotiated
-        // immediately so model/mode capabilities are accurate in the chat bar.
-        await sessionService.getOrCreateSessionClientFromRecord(dbSession);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        ws.send(
-          JSON.stringify({ type: 'error', message: `Failed to initialize session: ${detail}` })
-        );
-      }
-    } else {
-      logger.debug('Skipping eager ACP runtime init on session load', {
-        sessionId,
-        status: dbSession.status,
-        processState: sessionRuntime.processState,
-        hasWorktreePath,
-        hasResumableProviderSession,
-        hasHydratedTranscript,
-        transcriptCount,
-        isCodexSession,
-        isWorkspaceArchived,
-      });
-    }
+    logger.debug('Skipping ACP runtime init on passive session load', {
+      sessionId,
+      status: dbSession.status,
+      processState: sessionRuntime.processState,
+      hasWorktreePath: Boolean(dbSession.workspace.worktreePath),
+      provider: dbSession.provider,
+      isWorkspaceArchived: dbSession.workspace.status === 'ARCHIVED',
+    });
 
     const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);
     sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',
       capabilities: chatCapabilities,
     });
-    const configOptions = sessionService.getSessionConfigOptions(sessionId);
+    const configOptions = await sessionService.getSessionConfigOptionsWithFallback(sessionId);
     if (configOptions.length > 0) {
       sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
@@ -78,6 +65,79 @@ export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessag
 
     await sendCachedSlashCommandsIfNeeded(sessionId, dbSession.provider);
   };
+}
+
+async function hydrateClaudeHistoryIfNeeded(
+  sessionId: string,
+  dbSession: NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>
+): Promise<void> {
+  if (dbSession.provider !== 'CLAUDE') {
+    return;
+  }
+
+  if (sessionDomainService.isHistoryHydrated(sessionId)) {
+    return;
+  }
+
+  const transcriptCount = sessionDomainService.getTranscriptSnapshot(sessionId).length;
+  if (transcriptCount > 0) {
+    sessionDomainService.markHistoryHydrated(sessionId, 'none');
+    return;
+  }
+
+  if (!dbSession.providerSessionId) {
+    nextHistoryRetryAtBySession.delete(sessionId);
+    sessionDomainService.markHistoryHydrated(sessionId, 'none');
+    return;
+  }
+
+  if (!canAttemptHistoryHydration(sessionId)) {
+    logger.debug('Skipping Claude JSONL history hydration during retry cooldown', {
+      sessionId,
+      providerSessionId: dbSession.providerSessionId,
+      retryAfterMs: HISTORY_READ_RETRY_COOLDOWN_MS,
+    });
+    return;
+  }
+
+  const loadStart = Date.now();
+  const loadResult = await claudeSessionHistoryLoaderService.loadSessionHistory({
+    providerSessionId: dbSession.providerSessionId,
+    workingDir: dbSession.workspace.worktreePath ?? '',
+  });
+
+  if (loadResult.status === 'loaded') {
+    nextHistoryRetryAtBySession.delete(sessionId);
+    const transcript = buildTranscriptFromHistory(loadResult.history);
+    sessionDomainService.replaceTranscript(sessionId, transcript, { historySource: 'jsonl' });
+    logger.debug('Hydrated Claude transcript from JSONL history', {
+      sessionId,
+      providerSessionId: dbSession.providerSessionId,
+      filePath: loadResult.filePath,
+      historyCount: loadResult.history.length,
+      transcriptCount: transcript.length,
+      loadDurationMs: Date.now() - loadStart,
+    });
+    return;
+  }
+
+  if (loadResult.status === 'error') {
+    nextHistoryRetryAtBySession.set(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
+    logger.warn('Claude JSONL history hydration failed; keeping session eligible for retry', {
+      sessionId,
+      providerSessionId: dbSession.providerSessionId,
+      filePath: loadResult.filePath,
+    });
+    return;
+  }
+
+  nextHistoryRetryAtBySession.delete(sessionId);
+  sessionDomainService.markHistoryHydrated(sessionId, 'none');
+  logger.debug('Claude JSONL history not available; skipping runtime fallback hydration', {
+    sessionId,
+    providerSessionId: dbSession.providerSessionId,
+    loadStatus: loadResult.status,
+  });
 }
 
 async function sendCachedSlashCommandsIfNeeded(
