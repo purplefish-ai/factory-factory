@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 22 of 22 (Cleanup + Polish)
-Plan: 1 of 3 (complete)
-Status: Plan 22-01 complete -- ready for Plan 22-02
-Last activity: 2026-02-13 -- Plan 22-01 executed
+Plan: 2 of 3 (complete)
+Status: Plan 22-02 complete -- ready for Plan 22-03
+Last activity: 2026-02-14 -- Plan 22-02 executed
 
-Progress: [██████████] 90%
+Progress: [██████████] 95%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9 (v1.2)
-- Average duration: 8min
-- Total execution time: 74min
+- Total plans completed: 10 (v1.2)
+- Average duration: 9min
+- Total execution time: 89min
 
 **By Phase:**
 
@@ -30,7 +30,7 @@ Progress: [██████████] 90%
 | 19. ACP Runtime Foundation | 2/2 | 18min | 9min |
 | 20. Event Translation + Permissions | 3/3 | 26min | 6min |
 | 21. Config Options + Unified Runtime | 3/3 | 23min | 8min |
-| 22. Cleanup + Polish | 1/3 | 16min | 16min |
+| 22. Cleanup + Polish | 2/3 | 31min | 16min |
 
 *Updated after each plan completion*
 
@@ -107,6 +107,14 @@ Phase 21-03 decisions:
 - buildAcpChatBarCapabilities derives model/thinking from configOptions categories
 - Legacy runtime managers kept but deprecated with @deprecated JSDoc for Phase 22
 
+Phase 22-02 decisions:
+- Replaced ClaudeJson type with ClaudeMessage from @/shared/claude (same shape, already shared)
+- Stubbed AgentProcessAdapter as deprecated no-op instead of deleting (server.ts still imports for shutdown)
+- Added provider field to AcpProcessHandle constructor for admin process identification
+- Admin endpoint returns null for resource monitoring fields (ACP handles don't expose CPU/memory)
+- Removed codex section from admin response entirely (frontend never rendered it)
+- Kept codexCliVersionCheck timeout constant since cli-health.service.ts still uses it
+
 Phase 22-01 decisions:
 - Kept 12 deprecated stub methods in SessionService for consumer API compatibility during incremental migration
 - Changed getClient return type to unknown to avoid claude/ imports, fixed 4 consumer files with type casts
@@ -123,6 +131,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-13
-Stopped at: Completed 22-01-PLAN.md
+Last session: 2026-02-14
+Stopped at: Completed 22-02-PLAN.md
 Resume file: None
