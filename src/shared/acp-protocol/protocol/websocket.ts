@@ -77,7 +77,7 @@ interface WebSocketMessagePayloadByType {
     sessionRuntime: SessionRuntimeState;
   };
   agent_message: {
-    data: import('./messages').ClaudeMessage;
+    data: import('./messages').AgentMessage;
     /** Backend-assigned order for agent_message and message_used_as_response events */
     order?: number;
   };

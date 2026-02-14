@@ -1,5 +1,5 @@
 /**
- * Information about a slash command from the Claude CLI.
+ * Information about a slash command reported by the ACP runtime.
  */
 export interface CommandInfo {
   name: string;
@@ -16,7 +16,7 @@ export interface ModelInfo {
 }
 
 /**
- * Available models using Claude CLI aliases.
+ * Available models exposed by ACP providers.
  * Opus is the default (when selectedModel is null).
  */
 export const AVAILABLE_MODELS: ModelInfo[] = [

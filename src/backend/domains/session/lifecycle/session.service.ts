@@ -7,17 +7,18 @@ import {
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
+import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
-import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import type {
+  AgentContentItem,
+  AgentMessage,
   ChatMessage,
-  ClaudeContentItem,
-  ClaudeMessage,
   HistoryMessage,
   SessionDeltaEvent,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
+import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -80,7 +81,7 @@ class SessionService {
           };
           const deltas = this.acpEventTranslator.translateSessionUpdate(update);
           for (const delta of deltas) {
-            this.handleAcpDelta(sid, delta);
+            this.handleAcpDelta(sid, delta as SessionDeltaEvent);
           }
           return;
         }
@@ -141,6 +142,9 @@ class SessionService {
           stack: error.stack,
         });
       },
+      onAcpLog: (sid: string, payload: Record<string, unknown>) => {
+        sessionFileLogger.log(sid, 'FROM_CLAUDE_CLI', payload);
+      },
     };
   }
 
@@ -170,7 +174,7 @@ class SessionService {
       return;
     }
 
-    const data = (delta as { data: ClaudeMessage }).data;
+    const data = (delta as { data: AgentMessage }).data;
 
     // Text chunks: accumulate into single message, reuse same order
     // so the frontend upserts rather than inserting a new bubble per chunk.
@@ -189,7 +193,7 @@ class SessionService {
   /**
    * Accumulate ACP assistant text chunks into a single message at a stable order.
    */
-  private accumulateAcpText(sid: string, data: ClaudeMessage): void {
+  private accumulateAcpText(sid: string, data: AgentMessage): void {
     const content = data.message?.content;
     const chunkText =
       Array.isArray(content) && content[0]?.type === 'text'
@@ -201,7 +205,7 @@ class SessionService {
       this.acpStreamState.set(sid, ss);
     }
     ss.accText += chunkText;
-    const accMsg: ClaudeMessage = {
+    const accMsg: AgentMessage = {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text: ss.accText }] },
     };
@@ -576,7 +580,7 @@ class SessionService {
     } as SessionDeltaEvent);
   }
 
-  sendSessionMessage(sessionId: string, content: string | ClaudeContentItem[]): Promise<void> {
+  sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
     const acpClient = acpRuntimeManager.getClient(sessionId);
     if (acpClient) {
       const normalizedText =
@@ -604,9 +608,9 @@ class SessionService {
   }
 
   /**
-   * Normalize ClaudeContentItem[] to a plain text string for ACP.
+   * Normalize AgentContentItem[] to a plain text string for ACP.
    */
-  private normalizeContentToText(content: ClaudeContentItem[]): string {
+  private normalizeContentToText(content: AgentContentItem[]): string {
     const chunks: string[] = [];
     for (const item of content) {
       switch (item.type) {
@@ -721,7 +725,7 @@ class SessionService {
     ];
   }
 
-  private extractMessageText(message: ClaudeMessage): string {
+  private extractMessageText(message: AgentMessage): string {
     const content = message.message?.content;
     if (typeof content === 'string') {
       return content;
@@ -730,7 +734,7 @@ class SessionService {
       return '';
     }
     return content
-      .filter((item): item is Extract<ClaudeContentItem, { type: 'text' }> => item.type === 'text')
+      .filter((item): item is Extract<AgentContentItem, { type: 'text' }> => item.type === 'text')
       .map((item) => item.text)
       .join('\n')
       .trim();

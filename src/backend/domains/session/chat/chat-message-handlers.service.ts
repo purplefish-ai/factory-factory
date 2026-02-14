@@ -15,12 +15,12 @@ import { sessionService } from '@/backend/domains/session/lifecycle/session.serv
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { createLogger } from '@/backend/services/logger.service';
 import {
-  type ClaudeContentItem,
+  type AgentContentItem,
   DEFAULT_THINKING_BUDGET,
   MessageState,
   type QueuedMessage,
   resolveSelectedModel,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
 import { processAttachmentsAndBuildContent } from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
@@ -386,7 +386,7 @@ class ChatMessageHandlerService {
    * Text attachments are combined into the main text content with a prefix.
    * Image attachments are sent as separate image content blocks.
    */
-  private buildMessageContent(msg: QueuedMessage): string | ClaudeContentItem[] {
+  private buildMessageContent(msg: QueuedMessage): string | AgentContentItem[] {
     return processAttachmentsAndBuildContent(msg.text, msg.attachments);
   }
 

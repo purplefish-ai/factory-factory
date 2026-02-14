@@ -4,7 +4,7 @@
  * Extracts key topics and generates branch name suggestions from conversation history.
  */
 
-import type { HistoryMessage } from '@/shared/claude';
+import type { HistoryMessage } from '@/shared/acp-protocol';
 
 /**
  * Extract key topics from conversation history for branch naming.

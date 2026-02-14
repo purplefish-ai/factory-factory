@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import type { ClaudeMessage, ClaudeStreamEvent, InputJsonDelta } from '@/lib/chat-protocol';
+import type { AgentMessage, AgentStreamEvent, InputJsonDelta } from '@/lib/chat-protocol';
 import { isStreamEventMessage } from '@/lib/chat-protocol';
 import { createDebugLogger } from '@/lib/debug';
 import type { ChatAction } from './reducer';
@@ -27,7 +27,7 @@ const debug = createDebugLogger(DEBUG_STREAMING);
  * Get stream event data from a Claude message.
  * Returns the event if the message is a stream_event type, null otherwise.
  */
-function getStreamEvent(claudeMsg: ClaudeMessage): ClaudeStreamEvent | null {
+function getStreamEvent(claudeMsg: AgentMessage): AgentStreamEvent | null {
   if (!isStreamEventMessage(claudeMsg)) {
     return null;
   }
@@ -59,7 +59,7 @@ export function clearToolInputAccumulator(state: ToolInputAccumulatorState): voi
  * Handle tool_use block start - initialize accumulator.
  */
 function handleToolUseStart(
-  event: ClaudeStreamEvent,
+  event: AgentStreamEvent,
   toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
 ): void {
   if (event.type !== 'content_block_start') {
@@ -79,7 +79,7 @@ function handleToolUseStart(
  * Returns a TOOL_INPUT_UPDATE action if valid JSON was accumulated, null otherwise.
  */
 function handleToolInputDelta(
-  event: ClaudeStreamEvent,
+  event: AgentStreamEvent,
   toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
 ): ChatAction | null {
   if (event.type !== 'content_block_delta') {
@@ -115,7 +115,7 @@ function handleToolInputDelta(
 }
 
 function handleToolUseStop(
-  event: ClaudeStreamEvent,
+  event: AgentStreamEvent,
   toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
 ): void {
   if (event.type !== 'content_block_stop') {
@@ -135,7 +135,7 @@ function handleToolUseStop(
  * Returns a TOOL_INPUT_UPDATE action if input was accumulated, null otherwise.
  */
 export function handleToolInputStreaming(
-  claudeMsg: ClaudeMessage,
+  claudeMsg: AgentMessage,
   toolInputAccumulatorRef: React.MutableRefObject<ToolInputAccumulatorState>
 ): ChatAction | null {
   const event = getStreamEvent(claudeMsg);

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type AgentContentItem,
   type ChatMessage,
-  type ClaudeContentItem,
   hasRenderableAssistantContent,
   isImageContent,
   isRenderableAssistantContentItem,
-  shouldPersistClaudeMessage,
+  shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
 } from './protocol';
 
@@ -43,11 +43,11 @@ describe('assistant renderability guards', () => {
 
   it('persists assistant message with stream-compatible tool_use blocks', () => {
     expect(
-      shouldPersistClaudeMessage({
+      shouldPersistAgentMessage({
         type: 'assistant',
         message: {
           role: 'assistant',
-          content: [{ type: 'tool_use', id: 'tool-1', name: 'Read' } as ClaudeContentItem],
+          content: [{ type: 'tool_use', id: 'tool-1', name: 'Read' } as AgentContentItem],
         },
       })
     ).toBe(true);
@@ -55,7 +55,7 @@ describe('assistant renderability guards', () => {
 
   it('persists stream tool_use content_block_start without initial input', () => {
     expect(
-      shouldPersistClaudeMessage({
+      shouldPersistAgentMessage({
         type: 'stream_event',
         event: {
           type: 'content_block_start',
@@ -64,7 +64,7 @@ describe('assistant renderability guards', () => {
             type: 'tool_use',
             id: 'tool-1',
             name: 'Read',
-          } as ClaudeContentItem,
+          } as AgentContentItem,
         },
       })
     ).toBe(true);
@@ -81,23 +81,23 @@ describe('image guard', () => {
           media_type: 'image/png',
           data: 'Zm9v',
         },
-      } as ClaudeContentItem)
+      } as AgentContentItem)
     ).toBe(true);
   });
 
   it('rejects image content missing required source fields', () => {
-    expect(isImageContent({ type: 'image' } as ClaudeContentItem)).toBe(false);
+    expect(isImageContent({ type: 'image' } as AgentContentItem)).toBe(false);
     expect(
       isImageContent({
         type: 'image',
         source: { type: 'base64', media_type: 'image/png' },
-      } as ClaudeContentItem)
+      } as AgentContentItem)
     ).toBe(false);
     expect(
       isImageContent({
         type: 'image',
         source: { media_type: 'image/png', data: 'Zm9v' },
-      } as ClaudeContentItem)
+      } as AgentContentItem)
     ).toBe(false);
   });
 });
@@ -106,7 +106,7 @@ describe('result dedup', () => {
   const transcript: ChatMessage[] = [
     {
       id: 'm1',
-      source: 'claude',
+      source: 'agent',
       message: {
         type: 'assistant',
         message: { role: 'assistant', content: [{ type: 'text', text: 'final answer' }] },

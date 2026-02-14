@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { MessageAttachment } from '@/shared/claude/protocol';
+import type { MessageAttachment } from '@/shared/acp-protocol/protocol';
 import {
   buildCombinedTextContent,
   buildContentArray,

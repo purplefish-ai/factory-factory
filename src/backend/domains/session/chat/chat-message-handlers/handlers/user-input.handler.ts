@@ -1,7 +1,7 @@
 import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { createLogger } from '@/backend/services/logger.service';
-import type { ClaudeContentItem } from '@/shared/claude';
+import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
@@ -17,9 +17,9 @@ export function createUserInputHandler(): ChatMessageHandler<UserInputMessage> {
       return;
     }
 
-    // Cast content array to ClaudeContentItem[] - validation is done at WebSocket handler level
+    // Cast content array to AgentContentItem[] - validation is done at WebSocket handler level
     const messageContent =
-      typeof rawContent === 'string' ? rawContent : (rawContent as ClaudeContentItem[]);
+      typeof rawContent === 'string' ? rawContent : (rawContent as AgentContentItem[]);
 
     if (sessionService.isSessionRunning(sessionId)) {
       void sessionService.sendSessionMessage(sessionId, messageContent).catch((error) => {

@@ -1,8 +1,8 @@
 import { QUEUED_MESSAGE_ORDER_BASE } from './constants';
 import type { TextContent } from './content';
-import type { ChatMessage, ClaudeMessage } from './messages';
+import type { AgentMessage, ChatMessage } from './messages';
 
-function extractTextForResultDedup(message: ClaudeMessage): string {
+function extractTextForResultDedup(message: AgentMessage): string {
   if (message.type === 'assistant' && message.message && Array.isArray(message.message.content)) {
     return message.message.content
       .filter((item): item is TextContent => item.type === 'text')
@@ -65,13 +65,13 @@ function extractResultTextFromUnknown(value: unknown, depth = 0): string | null 
  */
 export function shouldSuppressDuplicateResultMessage(
   transcript: ChatMessage[],
-  claudeMessage: ClaudeMessage
+  agentMessage: AgentMessage
 ): boolean {
-  if (claudeMessage.type !== 'result') {
+  if (agentMessage.type !== 'result') {
     return false;
   }
 
-  const incomingText = extractResultTextFromUnknown(claudeMessage.result);
+  const incomingText = extractResultTextFromUnknown(agentMessage.result);
   if (incomingText === null) {
     return false;
   }
@@ -98,11 +98,7 @@ export function shouldSuppressDuplicateResultMessage(
       return false;
     }
 
-    if (
-      candidate.source !== 'claude' ||
-      !candidate.message ||
-      candidate.message.type === 'result'
-    ) {
+    if (candidate.source !== 'agent' || !candidate.message || candidate.message.type === 'result') {
       continue;
     }
 

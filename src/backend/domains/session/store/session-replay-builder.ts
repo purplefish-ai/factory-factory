@@ -5,7 +5,7 @@ import {
   QUEUED_MESSAGE_ORDER_BASE,
   type WebSocketMessage as ReplayEventMessage,
   resolveSelectedModel,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
 import type { SessionStore } from './session-store.types';
 import { messageSort } from './session-transcript';
 

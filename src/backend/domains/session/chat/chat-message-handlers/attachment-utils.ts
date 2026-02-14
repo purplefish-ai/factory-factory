@@ -1,4 +1,4 @@
-import type { MessageAttachment } from '@/shared/claude';
+import type { MessageAttachment } from '@/shared/acp-protocol';
 
 const PASTED_TEXT_NAME = /^Pasted text\b/i;
 const BASE64_REGEX = /^[A-Za-z0-9+/=]+$/;

@@ -15,7 +15,7 @@ export interface ThinkingContent {
 }
 
 /**
- * Tool use content block - Claude requesting to use a tool.
+ * Tool use content block - agent requesting to use a tool.
  */
 export interface ToolUseContent {
   type: 'tool_use';
@@ -75,7 +75,7 @@ export interface ToolResultContent {
 /**
  * Union of all content item types that can appear in a message.
  */
-export type ClaudeContentItem =
+export type AgentContentItem =
   | TextContent
   | ThinkingContent
   | ToolUseContent
@@ -114,7 +114,7 @@ export type ContentBlockDelta = TextDelta | ThinkingDelta | InputJsonDelta;
 /**
  * Token usage statistics.
  */
-export interface ClaudeUsage {
+export interface AgentUsage {
   input_tokens?: number;
   output_tokens?: number;
   cache_creation_input_tokens?: number;
@@ -138,29 +138,29 @@ export interface ModelUsage {
 }
 
 /**
- * Claude message within a stream event.
+ * Agent message within a stream event.
  */
-export interface ClaudeMessagePayload {
+export interface AgentMessagePayload {
   id?: string;
   type?: string;
   role: 'assistant' | 'user';
   model?: string;
-  content: ClaudeContentItem[] | string;
+  content: AgentContentItem[] | string;
   stop_reason?: string;
 }
 
 /**
- * Stream event types from the Claude CLI.
+ * Stream event types from the ACP runtime.
  */
-export type ClaudeStreamEvent =
-  | { type: 'message_start'; message: ClaudeMessagePayload }
-  | { type: 'content_block_start'; index: number; content_block: ClaudeContentItem }
+export type AgentStreamEvent =
+  | { type: 'message_start'; message: AgentMessagePayload }
+  | { type: 'content_block_start'; index: number; content_block: AgentContentItem }
   | { type: 'content_block_delta'; index: number; delta: ContentBlockDelta }
   | { type: 'content_block_stop'; index: number }
   | {
       type: 'message_delta';
       delta?: { stop_reason?: string; stop_sequence?: string };
-      usage?: ClaudeUsage;
+      usage?: AgentUsage;
     }
   | { type: 'message_stop' };
 

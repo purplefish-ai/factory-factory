@@ -1,5 +1,10 @@
 import { createLogger } from '@/backend/services/logger.service';
-import type { ChatMessage, ClaudeMessage, QueuedMessage, SessionDeltaEvent } from '@/shared/claude';
+import type {
+  AgentMessage,
+  ChatMessage,
+  QueuedMessage,
+  SessionDeltaEvent,
+} from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { handleProcessExit } from './store/session-process-exit';
@@ -199,7 +204,7 @@ class SessionDomainService {
     }
   }
 
-  appendClaudeEvent(sessionId: string, claudeMessage: ClaudeMessage): number {
+  appendClaudeEvent(sessionId: string, claudeMessage: AgentMessage): number {
     const store = this.registry.getOrCreate(sessionId);
     return appendClaudeEvent(store, claudeMessage, {
       nowIso: this.nowIso,
@@ -213,11 +218,11 @@ class SessionDomainService {
    * Upsert a Claude event at a specific order (for ACP text accumulation).
    * Creates or replaces the transcript entry at the given order.
    */
-  upsertClaudeEvent(sessionId: string, claudeMessage: ClaudeMessage, order: number): void {
+  upsertClaudeEvent(sessionId: string, claudeMessage: AgentMessage, order: number): void {
     const store = this.registry.getOrCreate(sessionId);
     upsertTranscriptMessage(store, {
       id: `${store.sessionId}-${order}`,
-      source: 'claude',
+      source: 'agent',
       message: claudeMessage,
       timestamp: claudeMessage.timestamp ?? this.nowIso(),
       order,

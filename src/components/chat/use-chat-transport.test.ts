@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { type ClaudeMessage, isWebSocketMessage } from '@/lib/chat-protocol';
+import { type AgentMessage, isWebSocketMessage } from '@/lib/chat-protocol';
 import { createToolInputAccumulatorState, handleToolInputStreaming } from './streaming-utils';
 
 describe('handleToolInputStreaming', () => {
   it('accumulates input_json_delta and returns TOOL_INPUT_UPDATE when JSON is complete', () => {
     const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
 
-    const startMsg: ClaudeMessage = {
+    const startMsg: AgentMessage = {
       type: 'stream_event',
       event: {
         type: 'content_block_start',
@@ -19,7 +19,7 @@ describe('handleToolInputStreaming', () => {
     expect(toolInputAccumulatorRef.current.toolUseIdByIndex.get(0)).toBe('tool-1');
     expect(toolInputAccumulatorRef.current.inputJsonByToolUseId.get('tool-1')).toBe('');
 
-    const partialMsg: ClaudeMessage = {
+    const partialMsg: AgentMessage = {
       type: 'stream_event',
       event: {
         type: 'content_block_delta',
@@ -33,7 +33,7 @@ describe('handleToolInputStreaming', () => {
       '{"query":"hi"'
     );
 
-    const finalMsg: ClaudeMessage = {
+    const finalMsg: AgentMessage = {
       type: 'stream_event',
       event: {
         type: 'content_block_delta',
@@ -50,7 +50,7 @@ describe('handleToolInputStreaming', () => {
 
   it('cleans up accumulator entries on content_block_stop', () => {
     const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
-    const startMsg: ClaudeMessage = {
+    const startMsg: AgentMessage = {
       type: 'stream_event',
       event: {
         type: 'content_block_start',
@@ -60,7 +60,7 @@ describe('handleToolInputStreaming', () => {
     };
     handleToolInputStreaming(startMsg, toolInputAccumulatorRef);
 
-    const stopMsg: ClaudeMessage = {
+    const stopMsg: AgentMessage = {
       type: 'stream_event',
       event: { type: 'content_block_stop', index: 3 },
     };
@@ -72,7 +72,7 @@ describe('handleToolInputStreaming', () => {
 
   it('returns null when message is not a stream_event', () => {
     const toolInputAccumulatorRef = { current: createToolInputAccumulatorState() };
-    const nonStream: ClaudeMessage = {
+    const nonStream: AgentMessage = {
       type: 'assistant',
       message: { role: 'assistant', content: 'ok' },
     };

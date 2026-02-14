@@ -11,7 +11,7 @@ import { memo } from 'react';
 import type { ToolCallInfo } from '@/components/agent-activity/types';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { ClaudeMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
+import type { AgentMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
 import {
   extractToolInfo,
   extractToolResultInfo,
@@ -27,7 +27,7 @@ import { ToolResultContentRenderer } from './tool-result-renderer';
 // =============================================================================
 
 export interface ToolInfoRendererProps {
-  message: ClaudeMessage;
+  message: AgentMessage;
   defaultOpen?: boolean;
   isPending?: boolean;
 }

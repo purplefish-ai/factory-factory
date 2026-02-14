@@ -5,26 +5,27 @@ import type {
   RequestPermissionResponse,
   SessionNotification,
 } from '@agentclientprotocol/sdk';
-import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
-import type { createLogger } from '@/backend/services/logger.service';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 
 export type AcpEventCallback = (sessionId: string, event: unknown) => void;
+export type AcpLogCallback = (sessionId: string, payload: Record<string, unknown>) => void;
 
 export class AcpClientHandler implements Client {
   private readonly sessionId: string;
   private readonly onEvent: AcpEventCallback;
   private readonly permissionBridge: AcpPermissionBridge | null;
+  private readonly onLog: AcpLogCallback | null;
 
   constructor(
     sessionId: string,
     onEvent: AcpEventCallback,
-    _logger: ReturnType<typeof createLogger>,
-    permissionBridge?: AcpPermissionBridge
+    permissionBridge?: AcpPermissionBridge,
+    onLog?: AcpLogCallback
   ) {
     this.sessionId = sessionId;
     this.onEvent = onEvent;
     this.permissionBridge = permissionBridge ?? null;
+    this.onLog = onLog ?? null;
   }
 
   // biome-ignore lint/suspicious/useAwait: async required by Client interface contract
@@ -33,7 +34,7 @@ export class AcpClientHandler implements Client {
 
     // PRESERVE: Log ALL events to session file logger (EVENT-06)
     // This logging MUST happen FIRST, before any forwarding or translation.
-    sessionFileLogger.log(this.sessionId, 'FROM_CLAUDE_CLI', {
+    this.onLog?.(this.sessionId, {
       eventType: 'acp_session_update',
       sessionUpdate: update.sessionUpdate,
       data: update,
@@ -47,7 +48,7 @@ export class AcpClientHandler implements Client {
   // biome-ignore lint/suspicious/useAwait: async required by Client interface contract
   async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
     // PRESERVE: Log permission request to session file logger
-    sessionFileLogger.log(this.sessionId, 'FROM_CLAUDE_CLI', {
+    this.onLog?.(this.sessionId, {
       eventType: 'acp_permission_request',
       toolCallId: params.toolCall.toolCallId,
       options: params.options.map((o) => ({ optionId: o.optionId, kind: o.kind, name: o.name })),

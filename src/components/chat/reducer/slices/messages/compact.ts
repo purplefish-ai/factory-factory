@@ -1,5 +1,5 @@
 import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
-import type { ChatMessage, ClaudeMessage } from '@/lib/chat-protocol';
+import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 
 export function reduceMessageCompactSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -7,11 +7,11 @@ export function reduceMessageCompactSlice(state: ChatState, action: ChatAction):
       const maxOrder = state.messages.reduce((max, m) => Math.max(max, m.order), -1);
       const compactBoundaryMessage: ChatMessage = {
         id: `compact-boundary-${Date.now()}`,
-        source: 'claude',
+        source: 'agent',
         message: {
           type: 'system',
           subtype: 'compact_boundary',
-        } as ClaudeMessage,
+        } as AgentMessage,
         timestamp: new Date().toISOString(),
         order: maxOrder + 1,
       };

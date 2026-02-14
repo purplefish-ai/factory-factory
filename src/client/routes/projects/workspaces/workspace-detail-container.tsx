@@ -118,7 +118,7 @@ export function WorkspaceDetailContainer() {
     (sessionStatus.phase === 'loading' || sessionStatus.phase === 'ready') &&
     processStatus.state === 'unknown' &&
     messages.some((message) => message.source === 'user') &&
-    !messages.some((message) => message.source === 'claude');
+    !messages.some((message) => message.source === 'agent');
 
   const sessionSummariesById = useMemo(
     () =>

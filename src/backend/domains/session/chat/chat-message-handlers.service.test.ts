@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { QueuedMessage } from '@/shared/claude';
+import type { QueuedMessage } from '@/shared/acp-protocol';
 
 const { mockSessionDomainService, mockSessionService, mockSessionDataService } = vi.hoisted(() => ({
   mockSessionDomainService: {

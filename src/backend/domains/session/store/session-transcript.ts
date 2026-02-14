@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { HistoryMessage } from '@/shared/claude';
+import type { HistoryMessage } from '@/shared/acp-protocol';
 import {
+  type AgentMessage,
   type ChatMessage,
-  type ClaudeMessage,
   type QueuedMessage,
-  shouldPersistClaudeMessage,
+  shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
 import type { SessionStore } from './session-store.types';
 
 export function messageSort(a: ChatMessage, b: ChatMessage): number {
@@ -30,7 +30,7 @@ function buildDeterministicHistoryId(historyMsg: HistoryMessage, index: number):
   return `history-${index}-${digest}`;
 }
 
-function historyToClaudeMessage(msg: HistoryMessage): ClaudeMessage {
+function historyToClaudeMessage(msg: HistoryMessage): AgentMessage {
   const assertNever = (value: never): never => {
     throw new Error(`Unhandled history message type: ${JSON.stringify(value)}`);
   };
@@ -134,7 +134,7 @@ export function buildTranscriptFromHistory(history: HistoryMessage[]): ChatMessa
     ) {
       transcript.push({
         id: messageId,
-        source: 'claude',
+        source: 'agent',
         message: historyToClaudeMessage(historyMsg),
         timestamp: historyMsg.timestamp,
         order,
@@ -171,7 +171,7 @@ function findPersistedToolUseStart(
   toolUseId: string
 ): ChatMessage | undefined {
   return store.transcript.find((entry) => {
-    if (entry.source !== 'claude' || !entry.message || entry.message.type !== 'stream_event') {
+    if (entry.source !== 'agent' || !entry.message || entry.message.type !== 'stream_event') {
       return false;
     }
     const event = entry.message.event;
@@ -184,7 +184,7 @@ function findPersistedToolUseStart(
 
 export function appendClaudeEvent(
   store: SessionStore,
-  claudeMessage: ClaudeMessage,
+  claudeMessage: AgentMessage,
   options: {
     nowIso: () => string;
     onParityTrace: (data: Record<string, unknown>) => void;
@@ -214,7 +214,7 @@ export function appendClaudeEvent(
   const order = store.nextOrder;
   store.nextOrder += 1;
 
-  const shouldPersist = shouldPersistClaudeMessage(claudeMessage);
+  const shouldPersist = shouldPersistAgentMessage(claudeMessage);
   const isDuplicateResult = shouldSuppressDuplicateResultMessage(store.transcript, claudeMessage);
   if (!shouldPersist || isDuplicateResult) {
     options.onParityTrace({
@@ -228,7 +228,7 @@ export function appendClaudeEvent(
 
   const entry: ChatMessage = {
     id: `${store.sessionId}-${order}`,
-    source: 'claude',
+    source: 'agent',
     message: claudeMessage,
     timestamp: claudeMessage.timestamp ?? options.nowIso(),
     order,
@@ -308,7 +308,7 @@ function normalizeTranscriptMessage(message: ChatMessage): Record<string, unknow
   }
 
   return {
-    source: 'claude',
+    source: 'agent',
     order: message.order,
     message: message.message,
   };

@@ -1,33 +1,33 @@
 /**
  * Frontend helper utilities and UI-specific types for the chat event protocol.
  *
- * Core protocol types/constants are defined in src/shared/claude/protocol/
+ * Core protocol types/constants are defined in src/shared/acp-protocol/protocol/
  * and re-exported here for convenience.
  */
 
-export * from '@/shared/claude';
+export * from '@/shared/acp-protocol';
 
 import type {
+  AgentContentItem,
+  AgentMessage,
+  AgentStreamEvent,
   ChatMessage,
-  ClaudeContentItem,
-  ClaudeMessage,
-  ClaudeStreamEvent,
   ContentBlockDelta,
   ModelUsage,
   ToolResultContent,
   ToolResultContentValue,
   ToolUseContent,
   WebSocketMessage,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
 import {
-  CLAUDE_MESSAGE_TYPES,
+  AGENT_MESSAGE_TYPES,
   isTextContent,
   isThinkingContent,
   isToolResultContent,
   isToolUseContent,
   SESSION_DELTA_EXCLUDED_MESSAGE_TYPES,
   WEBSOCKET_MESSAGE_TYPES,
-} from '@/shared/claude';
+} from '@/shared/acp-protocol';
 
 // =============================================================================
 // UI Chat Message Group Types
@@ -58,7 +58,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'err
 
 const wsMessageTypes = new Set<string>(WEBSOCKET_MESSAGE_TYPES);
 const sessionDeltaExcludedMessageTypes = new Set<string>(SESSION_DELTA_EXCLUDED_MESSAGE_TYPES);
-const claudeMessageTypes = new Set<string>(CLAUDE_MESSAGE_TYPES);
+const claudeMessageTypes = new Set<string>(AGENT_MESSAGE_TYPES);
 
 /**
  * Type guard to validate unknown data is a WebSocketMessage.
@@ -108,11 +108,11 @@ export function isWsAgentMessage(
 }
 
 /**
- * Type guard for ClaudeMessage with stream_event type.
+ * Type guard for AgentMessage with stream_event type.
  */
 export function isStreamEventMessage(
-  msg: ClaudeMessage
-): msg is ClaudeMessage & { type: 'stream_event'; event: ClaudeStreamEvent } {
+  msg: AgentMessage
+): msg is AgentMessage & { type: 'stream_event'; event: AgentStreamEvent } {
   return msg.type === 'stream_event' && msg.event != null;
 }
 
@@ -121,7 +121,7 @@ export function isStreamEventMessage(
  * Internal helper for getToolUseIdFromEvent.
  */
 function isToolUseStartEvent(
-  event: ClaudeStreamEvent
+  event: AgentStreamEvent
 ): event is { type: 'content_block_start'; index: number; content_block: ToolUseContent } {
   return event.type === 'content_block_start' && event.content_block?.type === 'tool_use';
 }
@@ -130,7 +130,7 @@ function isToolUseStartEvent(
  * Extracts tool_use ID from a stream event if it's a tool_use start event.
  * Returns null if it's not a tool_use start event.
  */
-export function getToolUseIdFromEvent(event: ClaudeStreamEvent): string | null {
+export function getToolUseIdFromEvent(event: AgentStreamEvent): string | null {
   if (!isToolUseStartEvent(event)) {
     return null;
   }
@@ -180,7 +180,7 @@ export function groupMessages(messages: ChatMessage[]): MessageGroup[] {
 /**
  * Extracts text from a content block start event.
  */
-function extractTextFromContentBlockStart(block: ClaudeContentItem): string {
+function extractTextFromContentBlockStart(block: AgentContentItem): string {
   if (isTextContent(block)) {
     return block.text;
   }
@@ -206,7 +206,7 @@ function extractTextFromContentBlockDelta(delta: ContentBlockDelta): string {
 /**
  * Extracts text from a stream event.
  */
-function extractTextFromStreamEvent(event: ClaudeStreamEvent): string {
+function extractTextFromStreamEvent(event: AgentStreamEvent): string {
   if (event.type === 'content_block_start') {
     return extractTextFromContentBlockStart(event.content_block);
   }
@@ -219,7 +219,7 @@ function extractTextFromStreamEvent(event: ClaudeStreamEvent): string {
 /**
  * Extracts text from a content item for mapping.
  */
-function extractTextFromContentItem(item: ClaudeContentItem): string {
+function extractTextFromContentItem(item: AgentContentItem): string {
   if (isTextContent(item)) {
     return item.text;
   }
@@ -232,7 +232,7 @@ function extractTextFromContentItem(item: ClaudeContentItem): string {
 /**
  * Extracts text from message content.
  */
-function extractTextFromMessageContent(content: ClaudeContentItem[] | string): string {
+function extractTextFromMessageContent(content: AgentContentItem[] | string): string {
   if (typeof content === 'string') {
     return content;
   }
@@ -243,9 +243,9 @@ function extractTextFromMessageContent(content: ClaudeContentItem[] | string): s
 }
 
 /**
- * Extracts text content from a ClaudeMessage.
+ * Extracts text content from a AgentMessage.
  */
-export function extractTextFromMessage(msg: ClaudeMessage): string {
+export function extractTextFromMessage(msg: AgentMessage): string {
   // Handle stream events
   if (msg.type === 'stream_event' && msg.event) {
     return extractTextFromStreamEvent(msg.event);
@@ -270,11 +270,11 @@ export function extractTextFromMessage(msg: ClaudeMessage): string {
 }
 
 /**
- * Extracts tool information from a ClaudeMessage.
+ * Extracts tool information from a AgentMessage.
  * Returns null if the message is not a tool use message.
  */
 export function extractToolInfo(
-  msg: ClaudeMessage
+  msg: AgentMessage
 ): { name: string; id: string; input: Record<string, unknown> } | null {
   const normalizeToolInput = (input: unknown): Record<string, unknown> => {
     return typeof input === 'object' && input !== null && !Array.isArray(input)
@@ -314,16 +314,16 @@ export function extractToolInfo(
 }
 
 /**
- * Checks if a ClaudeMessage contains a tool use.
+ * Checks if a AgentMessage contains a tool use.
  */
-export function isToolUseMessage(msg: ClaudeMessage): boolean {
+export function isToolUseMessage(msg: AgentMessage): boolean {
   return extractToolInfo(msg) !== null;
 }
 
 /**
- * Checks if a ClaudeMessage contains a tool result.
+ * Checks if a AgentMessage contains a tool result.
  */
-export function isToolResultMessage(msg: ClaudeMessage): boolean {
+export function isToolResultMessage(msg: AgentMessage): boolean {
   // Check stream events for tool result
   if (msg.type === 'stream_event' && msg.event) {
     if (msg.event.type === 'content_block_start') {
@@ -363,7 +363,7 @@ function toolResultContentToInfo(block: ToolResultContent): ToolResultInfo {
 /**
  * Extracts tool result info from a stream event.
  */
-function extractToolResultFromStreamEvent(event: ClaudeStreamEvent): ToolResultInfo | null {
+function extractToolResultFromStreamEvent(event: AgentStreamEvent): ToolResultInfo | null {
   if (event.type === 'content_block_start' && isToolResultContent(event.content_block)) {
     return toolResultContentToInfo(event.content_block);
   }
@@ -373,7 +373,7 @@ function extractToolResultFromStreamEvent(event: ClaudeStreamEvent): ToolResultI
 /**
  * Extracts tool result info from message content.
  */
-function extractToolResultFromContent(content: ClaudeContentItem[]): ToolResultInfo | null {
+function extractToolResultFromContent(content: AgentContentItem[]): ToolResultInfo | null {
   const toolResult = content.find((item) => isToolResultContent(item));
   if (toolResult && isToolResultContent(toolResult)) {
     return toolResultContentToInfo(toolResult);
@@ -382,10 +382,10 @@ function extractToolResultFromContent(content: ClaudeContentItem[]): ToolResultI
 }
 
 /**
- * Extracts tool result information from a ClaudeMessage.
+ * Extracts tool result information from a AgentMessage.
  * Returns null if the message is not a tool result message.
  */
-export function extractToolResultInfo(msg: ClaudeMessage): ToolResultInfo | null {
+export function extractToolResultInfo(msg: AgentMessage): ToolResultInfo | null {
   // Check stream events for tool result
   if (msg.type === 'stream_event' && msg.event) {
     return extractToolResultFromStreamEvent(msg.event);
@@ -644,7 +644,7 @@ function extractFirstModelUsage(
  * Updates token stats from a result message.
  * Accumulates tokens, duration, and cost while taking the latest context window info.
  */
-export function updateTokenStatsFromResult(stats: TokenStats, msg: ClaudeMessage): TokenStats {
+export function updateTokenStatsFromResult(stats: TokenStats, msg: AgentMessage): TokenStats {
   if (msg.type !== 'result') {
     return stats;
   }

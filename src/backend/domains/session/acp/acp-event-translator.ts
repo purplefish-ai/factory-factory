@@ -1,7 +1,10 @@
 import type { SessionUpdate } from '@agentclientprotocol/sdk';
 import type { createLogger } from '@/backend/services/logger.service';
-import type { SessionDeltaEvent } from '@/shared/claude';
-import type { CommandInfo } from '@/shared/claude/protocol/models';
+
+export type AcpTranslatedDelta = {
+  type: string;
+  [key: string]: unknown;
+};
 
 /**
  * Stateless translator that maps ACP SessionUpdate variants to FF SessionDeltaEvent arrays.
@@ -19,7 +22,7 @@ export class AcpEventTranslator {
     this.logger = logger;
   }
 
-  translateSessionUpdate(update: SessionUpdate): SessionDeltaEvent[] {
+  translateSessionUpdate(update: SessionUpdate): AcpTranslatedDelta[] {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk':
         return this.translateAgentMessageChunk(update);
@@ -61,7 +64,7 @@ export class AcpEventTranslator {
 
   private translateAgentMessageChunk(
     update: Extract<SessionUpdate, { sessionUpdate: 'agent_message_chunk' }>
-  ): SessionDeltaEvent[] {
+  ): AcpTranslatedDelta[] {
     if (!update.content) {
       this.logger.warn('agent_message_chunk: missing content', { update });
       return [];
@@ -92,7 +95,7 @@ export class AcpEventTranslator {
 
   private translateAgentThoughtChunk(
     update: Extract<SessionUpdate, { sessionUpdate: 'agent_thought_chunk' }>
-  ): SessionDeltaEvent[] {
+  ): AcpTranslatedDelta[] {
     if (!update.content) {
       this.logger.warn('agent_thought_chunk: missing content', { update });
       return [];
@@ -124,7 +127,7 @@ export class AcpEventTranslator {
 
   private translateToolCall(
     update: Extract<SessionUpdate, { sessionUpdate: 'tool_call' }>
-  ): SessionDeltaEvent[] {
+  ): AcpTranslatedDelta[] {
     if (!(update.toolCallId && update.title)) {
       this.logger.warn('tool_call: missing toolCallId or title', {
         toolCallId: update.toolCallId,
@@ -140,7 +143,7 @@ export class AcpEventTranslator {
       | undefined;
     const toolName = meta?.claudeCode?.toolName ?? update.title;
 
-    const events: SessionDeltaEvent[] = [
+    const events: AcpTranslatedDelta[] = [
       {
         type: 'agent_message',
         data: {
@@ -164,7 +167,7 @@ export class AcpEventTranslator {
         acpLocations: update.locations ?? [],
         acpKind: update.kind ?? undefined,
         acpStatus: update.status ?? undefined,
-      } as SessionDeltaEvent,
+      },
     ];
 
     return events;
@@ -172,7 +175,7 @@ export class AcpEventTranslator {
 
   private translateToolCallUpdate(
     update: Extract<SessionUpdate, { sessionUpdate: 'tool_call_update' }>
-  ): SessionDeltaEvent[] {
+  ): AcpTranslatedDelta[] {
     if (!update.toolCallId) {
       this.logger.warn('tool_call_update: missing toolCallId', { update });
       return [];
@@ -193,7 +196,7 @@ export class AcpEventTranslator {
       event.elapsed_time_seconds = 0;
     }
 
-    const events: SessionDeltaEvent[] = [event as SessionDeltaEvent];
+    const events: AcpTranslatedDelta[] = [event as AcpTranslatedDelta];
 
     // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
     if (update.status === 'completed' || update.status === 'failed') {
@@ -221,7 +224,7 @@ export class AcpEventTranslator {
 
   private translatePlan(
     update: Extract<SessionUpdate, { sessionUpdate: 'plan' }>
-  ): SessionDeltaEvent[] {
+  ): AcpTranslatedDelta[] {
     return [
       {
         type: 'task_notification',
@@ -235,8 +238,8 @@ export class AcpEventTranslator {
 
   private translateAvailableCommands(
     update: Extract<SessionUpdate, { sessionUpdate: 'available_commands_update' }>
-  ): SessionDeltaEvent[] {
-    const slashCommands: CommandInfo[] = (update.availableCommands ?? []).map((cmd) => ({
+  ): AcpTranslatedDelta[] {
+    const slashCommands = (update.availableCommands ?? []).map((cmd) => ({
       name: cmd.name,
       description: cmd.description,
       argumentHint: cmd.input?.hint,
@@ -268,7 +271,7 @@ export class AcpEventTranslator {
 
   private translateConfigOptionUpdate(
     update: Extract<SessionUpdate, { sessionUpdate: 'config_option_update' }>
-  ): SessionDeltaEvent[] {
+  ): AcpTranslatedDelta[] {
     const configOptions = (update as { configOptions?: unknown[] }).configOptions;
     if (!Array.isArray(configOptions)) {
       this.logger.warn('config_option_update: missing configOptions array', { update });
@@ -279,13 +282,13 @@ export class AcpEventTranslator {
       {
         type: 'config_options_update',
         configOptions,
-      } as SessionDeltaEvent,
+      } as AcpTranslatedDelta,
     ];
   }
 
   private translateUsageUpdate(
     update: Extract<SessionUpdate, { sessionUpdate: 'usage_update' }>
-  ): SessionDeltaEvent[] {
+  ): AcpTranslatedDelta[] {
     return [
       {
         type: 'agent_message',

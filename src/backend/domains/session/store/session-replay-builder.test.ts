@@ -16,7 +16,7 @@ function createStore(): SessionStore {
       },
       {
         id: 'c1',
-        source: 'claude',
+        source: 'agent',
         message: {
           type: 'assistant',
           message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },

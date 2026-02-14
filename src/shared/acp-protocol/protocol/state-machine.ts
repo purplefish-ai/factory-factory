@@ -8,11 +8,11 @@ import type { QueuedMessage } from './queued';
  *   PENDING → SENT → ACCEPTED → DISPATCHED → COMMITTED
  *                        ↘ REJECTED/FAILED/CANCELLED
  *
- * Claude message flow:
+ * Agent message flow:
  *   STREAMING → COMPLETE
  *
  * Note: For type-safe state handling in discriminated unions, prefer using
- * `UserMessageState` or `ClaudeMessageState` type aliases. This enum provides
+ * `UserMessageState` or `AgentMessageState` type aliases. This enum provides
  * runtime values and is used throughout the codebase for state comparisons.
  */
 export enum MessageState {
@@ -20,7 +20,7 @@ export enum MessageState {
   PENDING = 'PENDING', // User typed, not yet sent to backend
   SENT = 'SENT', // Sent over WebSocket, awaiting ACK
   ACCEPTED = 'ACCEPTED', // Backend queued (has queuePosition)
-  DISPATCHED = 'DISPATCHED', // Sent to Claude CLI
+  DISPATCHED = 'DISPATCHED', // Sent to ACP runtime
   COMMITTED = 'COMMITTED', // Response complete
 
   // Error states
@@ -28,9 +28,9 @@ export enum MessageState {
   FAILED = 'FAILED', // Error during processing
   CANCELLED = 'CANCELLED', // User cancelled
 
-  // Claude message states
-  STREAMING = 'STREAMING', // Claude actively generating
-  COMPLETE = 'COMPLETE', // Claude finished
+  // Agent message states
+  STREAMING = 'STREAMING', // Agent actively generating
+  COMPLETE = 'COMPLETE', // Agent finished
 }
 
 /**
@@ -49,10 +49,10 @@ export type UserMessageState =
   | 'CANCELLED';
 
 /**
- * Valid states for Claude messages.
- * Claude messages flow through: STREAMING → COMPLETE
+ * Valid states for agent messages.
+ * Agent messages flow through: STREAMING → COMPLETE
  */
-export type ClaudeMessageState = 'STREAMING' | 'COMPLETE';
+export type AgentMessageState = 'STREAMING' | 'COMPLETE';
 
 /**
  * User message with state - has required user-specific fields.
@@ -80,13 +80,13 @@ export interface UserMessageWithState {
 }
 
 /**
- * Claude message with state - has required Claude-specific fields.
- * The `type: 'claude'` discriminant enables type narrowing.
+ * Agent message with state - has required agent-specific fields.
+ * The `type: 'agent'` discriminant enables type narrowing.
  */
-export interface ClaudeMessageWithState {
+export interface AgentMessageWithState {
   id: string;
-  type: 'claude';
-  state: ClaudeMessageState;
+  type: 'agent';
+  state: AgentMessageState;
   timestamp: string;
   /** Pre-built ChatMessages for snapshot restoration - same format frontend uses */
   chatMessages: ChatMessage[];
@@ -98,7 +98,7 @@ export interface ClaudeMessageWithState {
  * Unified message type with state for the message state machine.
  * This is a discriminated union - use `msg.type` to narrow to the specific type.
  */
-export type MessageWithState = UserMessageWithState | ClaudeMessageWithState;
+export type MessageWithState = UserMessageWithState | AgentMessageWithState;
 
 /**
  * Type guard to check if a MessageWithState is a UserMessageWithState.
@@ -109,9 +109,9 @@ export function isUserMessage(msg: MessageWithState): msg is UserMessageWithStat
 }
 
 /**
- * Type guard to check if a MessageWithState is a ClaudeMessageWithState.
- * Use this for type-safe handling of Claude messages.
+ * Type guard to check if a MessageWithState is an AgentMessageWithState.
+ * Use this for type-safe handling of agent messages.
  */
-export function isClaudeMessage(msg: MessageWithState): msg is ClaudeMessageWithState {
-  return msg.type === 'claude';
+export function isAgentMessage(msg: MessageWithState): msg is AgentMessageWithState {
+  return msg.type === 'agent';
 }

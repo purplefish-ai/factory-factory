@@ -14,7 +14,7 @@ import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { MessageState, resolveSelectedModel } from '@/shared/claude';
+import { MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-init-orchestrator');

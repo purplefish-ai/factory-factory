@@ -1,4 +1,4 @@
-import type { ChatMessage, QueuedMessage } from '@/shared/claude';
+import type { ChatMessage, QueuedMessage } from '@/shared/acp-protocol';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
 

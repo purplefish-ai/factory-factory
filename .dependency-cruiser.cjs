@@ -100,11 +100,19 @@ module.exports = {
       to: { path: '^src/backend' },
     },
     {
-      name: 'no-ui-importing-provider-specific-shared-contracts',
+      name: 'no-ui-importing-legacy-claude-contracts',
       severity: 'error',
       comment:
-        'UI layers must consume provider-neutral shared contracts. Provider-specific shared protocols are backend-only.',
+        'UI must import shared protocol contracts from src/shared/acp-protocol, not src/shared/claude.',
       from: { path: '^src/(client|components|frontend)' },
+      to: { path: '^src/shared/claude/' },
+    },
+    {
+      name: 'no-importing-legacy-shared-claude-protocol',
+      severity: 'error',
+      comment:
+        'Import shared protocol contracts from src/shared/acp-protocol, not src/shared/claude.',
+      from: { path: '^src/' },
       to: { path: '^src/shared/claude/' },
     },
     {
@@ -221,14 +229,11 @@ module.exports = {
       to: { path: '^src/(backend|client|frontend|components)' },
     },
     {
-      name: 'no-shared-importing-provider-specific-shared-contracts',
+      name: 'no-shared-importing-legacy-claude-contracts',
       severity: 'error',
       comment:
-        'Provider-specific shared protocol trees should not be imported by provider-neutral shared contracts.',
-      from: {
-        path: '^src/shared',
-        pathNot: '^src/shared/claude/',
-      },
+        'Shared contracts must not depend on legacy Claude-named protocol paths. Use shared/acp-protocol.',
+      from: { path: '^src/shared' },
       to: { path: '^src/shared/claude/' },
     },
     {
@@ -261,6 +266,18 @@ module.exports = {
           '^src/backend/domains/session/(acp/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/domains/session/runtime/' },
+    },
+    {
+      name: 'acp-no-external-imports',
+      severity: 'error',
+      comment:
+        'ACP internals must stay isolated from app code; only ACP internals and the logger service are allowed.',
+      from: { path: '^src/backend/domains/session/acp/' },
+      to: {
+        path: '^src/',
+        pathNot:
+          '^src/backend/domains/session/acp/|^src/backend/domains/session/acp$|^src/backend/services/logger.service.ts$',
+      },
     },
     {
       name: 'no-cross-domain-imports',

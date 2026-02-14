@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import type { ClaudeMessage, ToolSequence } from '@/lib/chat-protocol';
+import type { AgentMessage, ToolSequence } from '@/lib/chat-protocol';
 import {
   SAMPLE_BASH_COMMANDS,
   SAMPLE_BASH_OUTPUTS,
@@ -17,7 +17,7 @@ function createToolUseClaudeMessage(
   toolName: string,
   input: Record<string, unknown>,
   toolId = `toolu_${Date.now()}`
-): ClaudeMessage {
+): AgentMessage {
   return {
     type: 'stream_event',
     timestamp: new Date().toISOString(),
@@ -38,7 +38,7 @@ function createToolResultClaudeMessage(
   toolUseId: string,
   content: string,
   isError = false
-): ClaudeMessage {
+): AgentMessage {
   return {
     type: 'stream_event',
     timestamp: new Date().toISOString(),

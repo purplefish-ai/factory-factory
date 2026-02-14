@@ -1,27 +1,27 @@
 import type {
-  ClaudeContentItem,
-  ClaudeStreamEvent,
-  ClaudeUsage,
+  AgentContentItem,
+  AgentStreamEvent,
+  AgentUsage,
   ModelUsage,
   ToolDefinition,
 } from './content';
 
 /**
  * Top-level message types received from the WebSocket.
- * These are the messages forwarded from the Claude CLI process.
+ * These are the messages forwarded from the ACP runtime.
  */
-export interface ClaudeMessage {
+export interface AgentMessage {
   type: 'system' | 'assistant' | 'user' | 'stream_event' | 'result' | 'error';
   timestamp?: string;
   session_id?: string;
   parent_tool_use_id?: string; // For subagent tracking (Phase 10)
   message?: {
     role: 'assistant' | 'user';
-    content: ClaudeContentItem[] | string;
+    content: AgentContentItem[] | string;
   };
-  event?: ClaudeStreamEvent;
+  event?: AgentStreamEvent;
   // Result fields
-  usage?: ClaudeUsage;
+  usage?: AgentUsage;
   duration_ms?: number;
   duration_api_ms?: number;
   total_cost_usd?: number;
@@ -41,7 +41,7 @@ export interface ClaudeMessage {
   status?: string;
 }
 
-const CLAUDE_MESSAGE_TYPE_MAP: Record<ClaudeMessage['type'], true> = {
+const AGENT_MESSAGE_TYPE_MAP: Record<AgentMessage['type'], true> = {
   system: true,
   assistant: true,
   user: true,
@@ -51,18 +51,18 @@ const CLAUDE_MESSAGE_TYPE_MAP: Record<ClaudeMessage['type'], true> = {
 };
 
 /**
- * Canonical list of valid Claude payload types nested in agent_message events.
+ * Canonical list of valid payload types nested in agent_message events.
  */
-export const CLAUDE_MESSAGE_TYPES = Object.keys(CLAUDE_MESSAGE_TYPE_MAP) as ClaudeMessage['type'][];
+export const AGENT_MESSAGE_TYPES = Object.keys(AGENT_MESSAGE_TYPE_MAP) as AgentMessage['type'][];
 
 /**
  * UI chat message representation.
  */
 export interface ChatMessage {
   id: string;
-  source: 'user' | 'claude';
+  source: 'user' | 'agent';
   text?: string; // For user messages
-  message?: ClaudeMessage; // For claude messages
+  message?: AgentMessage; // For agent messages
   timestamp: string;
   attachments?: import('./queued').MessageAttachment[]; // For user uploaded images/files
   /** Backend-assigned order for reliable sorting (monotonically increasing per session) */

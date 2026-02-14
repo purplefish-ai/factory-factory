@@ -1,4 +1,4 @@
-import type { ClaudeContentItem, ToolResultContentValue } from './content';
+import type { AgentContentItem, ToolResultContentValue } from './content';
 import type { MessageAttachment } from './queued';
 
 /**
@@ -12,7 +12,7 @@ export interface SessionInfo {
 }
 
 /**
- * Base fields for messages parsed from Claude session history.
+ * Base fields for messages parsed from agent session history.
  */
 interface HistoryMessageBase {
   timestamp: string;
@@ -52,7 +52,7 @@ export interface ToolResultHistoryMessage extends HistoryMessageBase {
 
 export interface UserToolResultHistoryMessage extends HistoryMessageBase {
   type: 'user_tool_result';
-  content: ClaudeContentItem[];
+  content: AgentContentItem[];
 }
 
 /**

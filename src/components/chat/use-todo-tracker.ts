@@ -4,7 +4,7 @@
  */
 
 import { useMemo } from 'react';
-import type { ChatMessage, ClaudeMessage } from '@/lib/chat-protocol';
+import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
 import { isToolUseMessage } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
 
@@ -52,7 +52,7 @@ function calculateTodoState(todos: Todo[], timestamp: string): TodoState {
  * Helper to extract todos from a TodoWrite tool use in a stream event
  */
 function extractTodosFromStreamEvent(
-  claudeMessage: ClaudeMessage,
+  claudeMessage: AgentMessage,
   timestamp: string
 ): TodoState | null {
   if (claudeMessage.type !== 'stream_event' || !claudeMessage.event) {
@@ -79,7 +79,7 @@ function extractTodosFromStreamEvent(
  * Helper to extract todos from a TodoWrite tool use in an assistant message
  */
 function extractTodosFromAssistantMessage(
-  claudeMessage: ClaudeMessage,
+  claudeMessage: AgentMessage,
   timestamp: string
 ): TodoState | null {
   if (!(claudeMessage.message && Array.isArray(claudeMessage.message.content))) {
@@ -103,7 +103,7 @@ function extractTodosFromAssistantMessage(
  * Helper to extract todos from a TodoWrite tool call
  */
 function extractTodosFromMessage(message: ChatMessage): TodoState | null {
-  if (message.source !== 'claude' || !message.message) {
+  if (message.source !== 'agent' || !message.message) {
     return null;
   }
 

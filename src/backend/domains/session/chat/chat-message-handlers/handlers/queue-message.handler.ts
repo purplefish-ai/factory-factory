@@ -4,7 +4,7 @@ import type {
 } from '@/backend/domains/session/chat/chat-message-handlers/types';
 import { buildQueuedMessage } from '@/backend/domains/session/chat/chat-message-handlers/utils';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
-import { MessageState, resolveSelectedModel } from '@/shared/claude';
+import { MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import type { QueueMessageInput } from '@/shared/websocket';
 
 export function createQueueMessageHandler(

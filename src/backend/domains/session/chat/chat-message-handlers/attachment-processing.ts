@@ -6,8 +6,8 @@
  */
 
 import { createLogger } from '@/backend/services/logger.service';
-import type { ClaudeContentItem } from '@/shared/claude';
-import type { MessageAttachment } from '@/shared/claude/protocol';
+import type { AgentContentItem } from '@/shared/acp-protocol';
+import type { MessageAttachment } from '@/shared/acp-protocol/protocol';
 import { resolveAttachmentContentType } from './attachment-utils';
 
 const logger = createLogger('attachment-processing');
@@ -133,15 +133,15 @@ export function buildCombinedTextContent(
 export function buildContentArray(
   combinedText: string,
   imageAttachments: MessageAttachment[]
-): ClaudeContentItem[] {
-  const content: ClaudeContentItem[] = [];
+): AgentContentItem[] {
+  const content: AgentContentItem[] = [];
 
   if (combinedText) {
     content.push({ type: 'text', text: combinedText });
   }
 
   for (const attachment of imageAttachments) {
-    const imageContent: Extract<ClaudeContentItem, { type: 'image' }> = {
+    const imageContent: Extract<AgentContentItem, { type: 'image' }> = {
       type: 'image',
       source: {
         type: 'base64',
@@ -170,7 +170,7 @@ export function buildContentArray(
 export function processAttachmentsAndBuildContent(
   userText: string,
   attachments?: MessageAttachment[]
-): string | ClaudeContentItem[] {
+): string | AgentContentItem[] {
   // No attachments - return text as-is
   if (!attachments || attachments.length === 0) {
     return userText;

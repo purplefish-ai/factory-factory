@@ -1,5 +1,5 @@
-import type { ClaudeContentItem } from './content';
-import type { ClaudeMessage } from './messages';
+import type { AgentContentItem } from './content';
+import type { AgentMessage } from './messages';
 
 type ContentTypeLike = { type: string };
 
@@ -103,7 +103,7 @@ export function hasRenderableAssistantContent(content: AssistantRenderableConten
 /**
  * True when user message content contains a tool_result block.
  */
-export function hasToolResultContent(content: ClaudeContentItem[] | string): boolean {
+export function hasToolResultContent(content: AgentContentItem[] | string): boolean {
   if (!Array.isArray(content)) {
     return false;
   }
@@ -111,35 +111,35 @@ export function hasToolResultContent(content: ClaudeContentItem[] | string): boo
 }
 
 /**
- * Canonical predicate for whether a Claude message should be persisted in transcript state.
+ * Canonical predicate for whether an agent message should be persisted in transcript state.
  * Shared by backend session store and frontend reducer to prevent drift.
  */
-export function shouldPersistClaudeMessage(claudeMsg: ClaudeMessage): boolean {
-  if (claudeMsg.type === 'user') {
-    if (!claudeMsg.message) {
+export function shouldPersistAgentMessage(agentMsg: AgentMessage): boolean {
+  if (agentMsg.type === 'user') {
+    if (!agentMsg.message) {
       return false;
     }
-    return hasToolResultContent(claudeMsg.message.content);
+    return hasToolResultContent(agentMsg.message.content);
   }
 
-  if (claudeMsg.type === 'assistant') {
-    const content = claudeMsg.message?.content;
+  if (agentMsg.type === 'assistant') {
+    const content = agentMsg.message?.content;
     return Array.isArray(content) && hasRenderableAssistantContent(content);
   }
 
-  if (claudeMsg.type === 'result') {
+  if (agentMsg.type === 'result') {
     return true;
   }
 
-  if (claudeMsg.type !== 'stream_event') {
+  if (agentMsg.type !== 'stream_event') {
     return true;
   }
 
-  if (!claudeMsg.event || claudeMsg.event.type !== 'content_block_start') {
+  if (!agentMsg.event || agentMsg.event.type !== 'content_block_start') {
     return false;
   }
 
-  const block = claudeMsg.event.content_block as AssistantRenderableContentLike;
+  const block = agentMsg.event.content_block as AssistantRenderableContentLike;
   if (block.type === 'text') {
     return false;
   }

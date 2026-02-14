@@ -4,27 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---- Hoisted mock state (shared between factory and tests) ----
 
-const {
-  mockSpawn,
-  mockInitialize,
-  mockNewSession,
-  mockPrompt,
-  mockCancel,
-  mockNdJsonStream,
-  mockSessionFileLogger,
-} = vi.hoisted(() => ({
-  mockSpawn: vi.fn(),
-  mockInitialize: vi.fn(),
-  mockNewSession: vi.fn(),
-  mockPrompt: vi.fn(),
-  mockCancel: vi.fn(),
-  mockNdJsonStream: vi.fn().mockReturnValue({ writable: {}, readable: {} }),
-  mockSessionFileLogger: {
-    log: vi.fn(),
-    initSession: vi.fn(),
-    closeSession: vi.fn(),
-  },
-}));
+const { mockSpawn, mockInitialize, mockNewSession, mockPrompt, mockCancel, mockNdJsonStream } =
+  vi.hoisted(() => ({
+    mockSpawn: vi.fn(),
+    mockInitialize: vi.fn(),
+    mockNewSession: vi.fn(),
+    mockPrompt: vi.fn(),
+    mockCancel: vi.fn(),
+    mockNdJsonStream: vi.fn().mockReturnValue({ writable: {}, readable: {} }),
+  }));
 
 // ---- Mocks ----
 
@@ -51,10 +39,6 @@ vi.mock('@agentclientprotocol/sdk', () => {
     PROTOCOL_VERSION: 1,
   };
 });
-
-vi.mock('@/backend/domains/session/logging/session-file-logger.service', () => ({
-  sessionFileLogger: mockSessionFileLogger,
-}));
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -601,17 +585,11 @@ describe('AcpRuntimeManager', () => {
 });
 
 describe('AcpClientHandler', () => {
-  const mockLogger = {
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  } as unknown as ReturnType<typeof import('@/backend/services/logger.service').createLogger>;
-
-  it('sessionUpdate logs all events to sessionFileLogger', async () => {
+  it('sessionUpdate emits logs through onLog callback', async () => {
     const onEvent = vi.fn();
+    const onLog = vi.fn();
 
-    const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
+    const handler = new AcpClientHandler('test-session', onEvent, undefined, onLog);
 
     await handler.sessionUpdate({
       sessionId: 'provider-session-1',
@@ -621,7 +599,7 @@ describe('AcpClientHandler', () => {
       },
     });
 
-    expect(mockSessionFileLogger.log).toHaveBeenCalledWith('test-session', 'FROM_CLAUDE_CLI', {
+    expect(onLog).toHaveBeenCalledWith('test-session', {
       eventType: 'acp_session_update',
       sessionUpdate: 'agent_message_chunk',
       data: expect.objectContaining({ sessionUpdate: 'agent_message_chunk' }),
@@ -631,7 +609,7 @@ describe('AcpClientHandler', () => {
   it('sessionUpdate forwards all events as acp_session_update wrapper', async () => {
     const onEvent = vi.fn();
 
-    const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
+    const handler = new AcpClientHandler('test-session', onEvent);
 
     await handler.sessionUpdate({
       sessionId: 'provider-session-1',
@@ -653,7 +631,7 @@ describe('AcpClientHandler', () => {
   it('sessionUpdate forwards tool_call events as acp_session_update wrapper', async () => {
     const onEvent = vi.fn();
 
-    const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
+    const handler = new AcpClientHandler('test-session', onEvent);
 
     await handler.sessionUpdate({
       sessionId: 'provider-session-1',
@@ -681,7 +659,7 @@ describe('AcpClientHandler', () => {
   it('sessionUpdate forwards all event types including previously deferred ones', async () => {
     const onEvent = vi.fn();
 
-    const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
+    const handler = new AcpClientHandler('test-session', onEvent);
 
     await handler.sessionUpdate({
       sessionId: 'provider-session-1',
@@ -703,7 +681,7 @@ describe('AcpClientHandler', () => {
   it('requestPermission auto-approves with allow_always option', async () => {
     const onEvent = vi.fn();
 
-    const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
+    const handler = new AcpClientHandler('test-session', onEvent);
 
     const result = await handler.requestPermission({
       sessionId: 'provider-session-1',
@@ -726,7 +704,7 @@ describe('AcpClientHandler', () => {
   it('requestPermission falls back to first option when no allow option exists', async () => {
     const onEvent = vi.fn();
 
-    const handler = new AcpClientHandler('test-session', onEvent, mockLogger);
+    const handler = new AcpClientHandler('test-session', onEvent);
 
     const result = await handler.requestPermission({
       sessionId: 'provider-session-1',

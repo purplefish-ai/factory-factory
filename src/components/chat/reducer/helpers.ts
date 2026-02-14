@@ -1,6 +1,6 @@
 import type {
+  AgentMessage,
   ChatMessage,
-  ClaudeMessage,
   PendingInteractiveRequest,
   ToolUseContent,
   UserQuestionRequest,
@@ -8,7 +8,7 @@ import type {
 import {
   getToolUseIdFromEvent,
   isStreamEventMessage,
-  shouldPersistClaudeMessage,
+  shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
   updateTokenStatsFromResult,
 } from '@/lib/chat-protocol';
@@ -36,7 +36,7 @@ function appendThinkingDelta(state: ChatState, index: number, deltaText: string)
     if (!msg) {
       continue;
     }
-    if (msg.source !== 'claude' || !msg.message || !isStreamEventMessage(msg.message)) {
+    if (msg.source !== 'agent' || !msg.message || !isStreamEventMessage(msg.message)) {
       continue;
     }
 
@@ -70,10 +70,10 @@ function appendThinkingDelta(state: ChatState, index: number, deltaText: string)
   return state;
 }
 
-function createClaudeMessage(message: ClaudeMessage, order: number): ChatMessage {
+function createClaudeMessage(message: AgentMessage, order: number): ChatMessage {
   return {
     id: generateMessageId(),
-    source: 'claude',
+    source: 'agent',
     message,
     timestamp: new Date().toISOString(),
     order,
@@ -118,7 +118,7 @@ export function insertMessageByOrder(
  * Checks if a message is a tool_use message with the given ID.
  */
 function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
-  if (msg.source !== 'claude' || !msg.message) {
+  if (msg.source !== 'agent' || !msg.message) {
     return false;
   }
   const claudeMsg = msg.message;
@@ -136,7 +136,7 @@ function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
 /**
  * Gets the tool use ID from a Claude message if it's a tool_use start event.
  */
-function getToolUseIdFromMessage(claudeMsg: ClaudeMessage): string | null {
+function getToolUseIdFromMessage(claudeMsg: AgentMessage): string | null {
   if (!isStreamEventMessage(claudeMsg)) {
     return null;
   }
@@ -149,11 +149,11 @@ function getToolUseIdFromMessage(claudeMsg: ClaudeMessage): string | null {
  */
 function upsertClaudeMessageAtOrder(
   state: ChatState,
-  claudeMsg: ClaudeMessage,
+  claudeMsg: AgentMessage,
   order: number
 ): ChatState | null {
   const existingIndex = state.messages.findIndex(
-    (msg) => msg.source === 'claude' && msg.order === order
+    (msg) => msg.source === 'agent' && msg.order === order
   );
   if (existingIndex < 0) {
     return null;
@@ -201,7 +201,7 @@ function upsertClaudeMessageAtOrder(
  */
 export function handleClaudeMessage(
   state: ChatState,
-  claudeMsg: ClaudeMessage,
+  claudeMsg: AgentMessage,
   order: number
 ): ChatState {
   let baseState: ChatState = state;
@@ -241,7 +241,7 @@ export function handleClaudeMessage(
   }
 
   // Check if message should be stored
-  if (!shouldPersistClaudeMessage(claudeMsg)) {
+  if (!shouldPersistAgentMessage(claudeMsg)) {
     return baseState;
   }
 
@@ -336,7 +336,7 @@ export function handleToolInputUpdate(
 
   const updatedChatMessage = {
     ...msg,
-    message: { ...claudeMsg, event: updatedEvent } as ClaudeMessage,
+    message: { ...claudeMsg, event: updatedEvent } as AgentMessage,
   } as ChatMessage;
 
   const newMessages = [...currentState.messages];

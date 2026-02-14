@@ -3,12 +3,6 @@ import { dirname, join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
-import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
-import type {
-  ProviderRuntimeManager,
-  RuntimeCreatedCallback,
-  RuntimeEventHandlers,
-} from '@/backend/domains/session/runtime/provider-runtime-manager';
 import { createLogger } from '@/backend/services/logger.service';
 import { AcpClientHandler } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
@@ -17,8 +11,18 @@ import type { AcpClientOptions } from './types';
 
 const logger = createLogger('acp-runtime-manager');
 
-export type AcpRuntimeEventHandlers = RuntimeEventHandlers & {
+export type AcpRuntimeCreatedCallback = (
+  sessionId: string,
+  client: AcpProcessHandle,
+  context: { workspaceId: string; workingDir: string }
+) => void;
+
+export type AcpRuntimeEventHandlers = {
+  onSessionId?: (sessionId: string, providerSessionId: string) => Promise<void>;
+  onExit?: (sessionId: string, code: number | null) => Promise<void>;
+  onError?: (sessionId: string, error: Error) => Promise<void> | void;
   onAcpEvent?: (sessionId: string, event: unknown) => void;
+  onAcpLog?: (sessionId: string, payload: Record<string, unknown>) => void;
   /** Permission bridge to inject into AcpClientHandler for suspending requestPermission */
   permissionBridge?: AcpPermissionBridge;
 };
@@ -47,17 +51,15 @@ function resolveAcpBinary(packageName: string, binaryName: string): string {
   return binaryName;
 }
 
-export class AcpRuntimeManager
-  implements ProviderRuntimeManager<AcpProcessHandle, AcpClientOptions>
-{
+export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
-  private onClientCreatedCallback: RuntimeCreatedCallback<AcpProcessHandle> | null = null;
+  private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
 
-  setOnClientCreated(callback: RuntimeCreatedCallback<AcpProcessHandle>): void {
+  setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
     this.onClientCreatedCallback = callback;
   }
 
@@ -153,9 +155,9 @@ export class AcpRuntimeManager
       detached: false,
     });
 
-    // Wire stderr to session file logger
+    // Wire stderr to session log hook
     child.stderr?.on('data', (chunk: Buffer) => {
-      sessionFileLogger.log(options.sessionId, 'FROM_CLAUDE_CLI', {
+      handlers.onAcpLog?.(options.sessionId, {
         eventType: 'acp_stderr',
         data: chunk.toString(),
       });
@@ -180,7 +182,8 @@ export class AcpRuntimeManager
 
     // Create connection with client handler (inject permission bridge from handlers)
     const connection = new ClientSideConnection(
-      (_agent) => new AcpClientHandler(sessionId, onEvent, logger, handlers.permissionBridge),
+      (_agent) =>
+        new AcpClientHandler(sessionId, onEvent, handlers.permissionBridge, handlers.onAcpLog),
       stream
     );
 
