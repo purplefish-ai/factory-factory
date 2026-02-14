@@ -3,12 +3,14 @@ import { useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
+import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import {
   resolveEffectiveSessionProvider,
   type SessionProviderValue,
 } from '@/lib/session-provider-selection';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
@@ -18,6 +20,93 @@ import {
 } from './use-workspace-detail-hooks';
 import type { ChatContentProps } from './workspace-detail-chat-content';
 import { WorkspaceDetailView } from './workspace-detail-view';
+
+function areRuntimeStatesEqual(
+  left: SessionRuntimeState | undefined,
+  right: SessionRuntimeState
+): boolean {
+  if (!left) {
+    return false;
+  }
+
+  const leftExit = left.lastExit;
+  const rightExit = right.lastExit;
+  const sameLastExit =
+    leftExit === rightExit ||
+    (leftExit?.code === rightExit?.code &&
+      leftExit?.timestamp === rightExit?.timestamp &&
+      leftExit?.unexpected === rightExit?.unexpected);
+
+  return (
+    left.phase === right.phase &&
+    left.processState === right.processState &&
+    left.activity === right.activity &&
+    left.updatedAt === right.updatedAt &&
+    sameLastExit
+  );
+}
+
+function isLiveRuntimeNewerOrEqual(
+  liveRuntime: SessionRuntimeState,
+  summaryUpdatedAt: string | undefined
+): boolean {
+  if (!summaryUpdatedAt) {
+    return true;
+  }
+  const liveTs = Date.parse(liveRuntime.updatedAt);
+  const summaryTs = Date.parse(summaryUpdatedAt);
+  if (Number.isNaN(liveTs) || Number.isNaN(summaryTs)) {
+    return true;
+  }
+  return liveTs >= summaryTs;
+}
+
+interface SessionForRuntimeOverlay {
+  id: string;
+  name: string | null;
+  workflow: string | null;
+  model: string | null;
+  provider?: WorkspaceSessionRuntimeSummary['provider'];
+  status: WorkspaceSessionRuntimeSummary['persistedStatus'];
+}
+
+function mergeSessionSummariesWithLiveRuntime(
+  workspaceSummaries: WorkspaceSessionRuntimeSummary[] | undefined,
+  sessions: SessionForRuntimeOverlay[] | undefined,
+  liveSessionRuntimeById: Map<string, SessionRuntimeState>
+): Map<string, WorkspaceSessionRuntimeSummary> {
+  const summaries = new Map(
+    (workspaceSummaries ?? []).map((summary) => [summary.sessionId, summary])
+  );
+
+  for (const session of sessions ?? []) {
+    const liveRuntime = liveSessionRuntimeById.get(session.id);
+    if (!liveRuntime) {
+      continue;
+    }
+
+    const existingSummary = summaries.get(session.id);
+    if (!isLiveRuntimeNewerOrEqual(liveRuntime, existingSummary?.updatedAt)) {
+      continue;
+    }
+
+    summaries.set(session.id, {
+      sessionId: session.id,
+      name: existingSummary?.name ?? session.name ?? null,
+      workflow: existingSummary?.workflow ?? session.workflow ?? null,
+      model: existingSummary?.model ?? session.model ?? null,
+      provider: existingSummary?.provider ?? session.provider,
+      persistedStatus: existingSummary?.persistedStatus ?? session.status,
+      runtimePhase: liveRuntime.phase,
+      processState: liveRuntime.processState,
+      activity: liveRuntime.activity,
+      updatedAt: liveRuntime.updatedAt,
+      lastExit: liveRuntime.lastExit ?? existingSummary?.lastExit ?? null,
+    });
+  }
+
+  return summaries;
+}
 
 export function WorkspaceDetailContainer() {
   const { slug = '', id: workspaceId = '' } = useParams<{ slug: string; id: string }>();
@@ -123,37 +212,52 @@ export function WorkspaceDetailContainer() {
     messages.some((message) => message.source === 'user') &&
     !messages.some((message) => message.source === 'agent');
 
-  const sessionSummariesById = useMemo(() => {
-    const summaries = new Map(
-      (workspace?.sessionSummaries ?? []).map((summary) => [summary.sessionId, summary])
-    );
+  const [liveSessionRuntimeById, setLiveSessionRuntimeById] = useState<
+    Map<string, SessionRuntimeState>
+  >(new Map());
 
+  useEffect(() => {
     if (!selectedDbSessionId) {
-      return summaries;
+      return;
     }
 
-    const selectedSession = sessions?.find((session) => session.id === selectedDbSessionId);
-    if (!selectedSession) {
-      return summaries;
-    }
+    setLiveSessionRuntimeById((previous) => {
+      const previousRuntime = previous.get(selectedDbSessionId);
+      if (areRuntimeStatesEqual(previousRuntime, sessionRuntime)) {
+        return previous;
+      }
 
-    const existingSummary = summaries.get(selectedDbSessionId);
-    summaries.set(selectedDbSessionId, {
-      sessionId: selectedDbSessionId,
-      name: existingSummary?.name ?? selectedSession.name ?? null,
-      workflow: existingSummary?.workflow ?? selectedSession.workflow ?? null,
-      model: existingSummary?.model ?? selectedSession.model ?? null,
-      provider: existingSummary?.provider ?? selectedSession.provider,
-      persistedStatus: existingSummary?.persistedStatus ?? selectedSession.status,
-      runtimePhase: sessionRuntime.phase,
-      processState: sessionRuntime.processState,
-      activity: sessionRuntime.activity,
-      updatedAt: sessionRuntime.updatedAt,
-      lastExit: sessionRuntime.lastExit ?? existingSummary?.lastExit ?? null,
+      const next = new Map(previous);
+      next.set(selectedDbSessionId, sessionRuntime);
+      return next;
     });
+  }, [selectedDbSessionId, sessionRuntime]);
 
-    return summaries;
-  }, [workspace?.sessionSummaries, selectedDbSessionId, sessions, sessionRuntime]);
+  useEffect(() => {
+    const knownSessionIds = new Set(sessionIds);
+    setLiveSessionRuntimeById((previous) => {
+      let changed = false;
+      const next = new Map<string, SessionRuntimeState>();
+      for (const [sessionId, runtime] of previous) {
+        if (knownSessionIds.has(sessionId)) {
+          next.set(sessionId, runtime);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : previous;
+    });
+  }, [sessionIds]);
+
+  const sessionSummariesById = useMemo(
+    () =>
+      mergeSessionSummariesWithLiveRuntime(
+        workspace?.sessionSummaries,
+        sessions,
+        liveSessionRuntimeById
+      ),
+    [workspace?.sessionSummaries, sessions, liveSessionRuntimeById]
+  );
   const workspaceRunning = useMemo(
     () =>
       Array.from(sessionSummariesById.values()).some(

@@ -61,35 +61,73 @@ export function useWorkspaceInitStatus(
 
 const SESSION_TAB_STORAGE_PREFIX = 'workspace-selected-session-';
 
+interface ResolveSelectedSessionIdInput {
+  currentSelectedDbSessionId: string | null;
+  persistedSessionId: string | null;
+  initialDbSessionId: string | null;
+  sessionIds: string[];
+}
+
+export function resolveSelectedSessionId({
+  currentSelectedDbSessionId,
+  persistedSessionId,
+  initialDbSessionId,
+  sessionIds,
+}: ResolveSelectedSessionIdInput): string | null {
+  if (sessionIds.length === 0) {
+    return currentSelectedDbSessionId;
+  }
+
+  if (currentSelectedDbSessionId && sessionIds.includes(currentSelectedDbSessionId)) {
+    return currentSelectedDbSessionId;
+  }
+
+  if (persistedSessionId && sessionIds.includes(persistedSessionId)) {
+    return persistedSessionId;
+  }
+
+  if (initialDbSessionId && sessionIds.includes(initialDbSessionId)) {
+    return initialDbSessionId;
+  }
+
+  return sessionIds[0] ?? null;
+}
+
 export function useSelectedSessionId(
   workspaceId: string,
   initialDbSessionId: string | null,
   sessionIds: string[]
 ) {
+  const storageKey = `${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`;
+
   const [selectedDbSessionId, setSelectedDbSessionIdRaw] = useState<string | null>(() => {
-    const stored = localStorage.getItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`);
-    if (stored && sessionIds.includes(stored)) {
-      return stored;
-    }
-    return initialDbSessionId;
+    const stored = localStorage.getItem(storageKey);
+    return stored ?? initialDbSessionId;
   });
 
   useEffect(() => {
-    if (initialDbSessionId && selectedDbSessionId === null) {
-      setSelectedDbSessionIdRaw(initialDbSessionId);
+    const persistedSessionId = localStorage.getItem(storageKey);
+    const resolved = resolveSelectedSessionId({
+      currentSelectedDbSessionId: selectedDbSessionId,
+      persistedSessionId,
+      initialDbSessionId,
+      sessionIds,
+    });
+    if (resolved !== selectedDbSessionId) {
+      setSelectedDbSessionIdRaw(resolved);
     }
-  }, [initialDbSessionId, selectedDbSessionId]);
+  }, [initialDbSessionId, selectedDbSessionId, sessionIds, storageKey]);
 
   const setSelectedDbSessionId = useCallback(
     (id: string | null) => {
       setSelectedDbSessionIdRaw(id);
       if (id) {
-        localStorage.setItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`, id);
+        localStorage.setItem(storageKey, id);
       } else {
-        localStorage.removeItem(`${SESSION_TAB_STORAGE_PREFIX}${workspaceId}`);
+        localStorage.removeItem(storageKey);
       }
     },
-    [workspaceId]
+    [storageKey]
   );
 
   return { selectedDbSessionId, setSelectedDbSessionId };
