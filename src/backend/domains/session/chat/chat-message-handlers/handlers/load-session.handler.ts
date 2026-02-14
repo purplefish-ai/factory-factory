@@ -9,6 +9,20 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
 const logger = createLogger('load-session-handler');
+const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
+const nextHistoryRetryAtBySession = new Map<string, number>();
+
+function canAttemptHistoryHydration(sessionId: string): boolean {
+  const retryAt = nextHistoryRetryAtBySession.get(sessionId);
+  if (!retryAt) {
+    return true;
+  }
+  if (retryAt <= Date.now()) {
+    nextHistoryRetryAtBySession.delete(sessionId);
+    return true;
+  }
+  return false;
+}
 
 export function createLoadSessionHandler(): ChatMessageHandler<LoadSessionMessage> {
   return async ({ ws, sessionId, message }) => {
@@ -72,7 +86,17 @@ async function hydrateClaudeHistoryIfNeeded(
   }
 
   if (!dbSession.providerSessionId) {
+    nextHistoryRetryAtBySession.delete(sessionId);
     sessionDomainService.markHistoryHydrated(sessionId, 'none');
+    return;
+  }
+
+  if (!canAttemptHistoryHydration(sessionId)) {
+    logger.debug('Skipping Claude JSONL history hydration during retry cooldown', {
+      sessionId,
+      providerSessionId: dbSession.providerSessionId,
+      retryAfterMs: HISTORY_READ_RETRY_COOLDOWN_MS,
+    });
     return;
   }
 
@@ -83,6 +107,7 @@ async function hydrateClaudeHistoryIfNeeded(
   });
 
   if (loadResult.status === 'loaded') {
+    nextHistoryRetryAtBySession.delete(sessionId);
     const transcript = buildTranscriptFromHistory(loadResult.history);
     sessionDomainService.replaceTranscript(sessionId, transcript, { historySource: 'jsonl' });
     logger.debug('Hydrated Claude transcript from JSONL history', {
@@ -97,6 +122,7 @@ async function hydrateClaudeHistoryIfNeeded(
   }
 
   if (loadResult.status === 'error') {
+    nextHistoryRetryAtBySession.set(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
     logger.warn('Claude JSONL history hydration failed; keeping session eligible for retry', {
       sessionId,
       providerSessionId: dbSession.providerSessionId,
@@ -105,6 +131,7 @@ async function hydrateClaudeHistoryIfNeeded(
     return;
   }
 
+  nextHistoryRetryAtBySession.delete(sessionId);
   sessionDomainService.markHistoryHydrated(sessionId, 'none');
   logger.debug('Claude JSONL history not available; skipping runtime fallback hydration', {
     sessionId,

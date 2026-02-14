@@ -56,6 +56,7 @@ import { createLoadSessionHandler } from './load-session.handler';
 
 describe('createLoadSessionHandler', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
@@ -182,6 +183,41 @@ describe('createLoadSessionHandler', () => {
 
     expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
     expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+  });
+
+  it('throttles repeated Claude history reads after read failures', async () => {
+    vi.useFakeTimers();
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadSessionHistory.mockResolvedValue({
+      status: 'error',
+      reason: 'read_failed',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
+    });
+
+    const handler = createLoadSessionHandler();
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-retry-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-retry-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadSessionHistory).toHaveBeenCalledTimes(1);
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
   });
 
   it('does not initialize CODEX sessions on passive load', async () => {

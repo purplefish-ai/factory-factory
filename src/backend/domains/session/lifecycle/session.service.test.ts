@@ -835,6 +835,49 @@ describe('SessionService', () => {
     expect(capabilities.model.options).toEqual([]);
   });
 
+  it('retries persisting ACP config snapshot metadata once when first write fails', async () => {
+    const configOptions = unsafeCoerce<import('@agentclientprotocol/sdk').SessionConfigOption[]>([
+      {
+        id: 'model',
+        name: 'Model',
+        type: 'select',
+        category: 'model',
+        currentValue: 'claude-sonnet-4-5',
+        options: [{ value: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5' }],
+      },
+    ]);
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(
+      unsafeCoerce({
+        provider: 'CLAUDE',
+        providerSessionId: 'provider-session-1',
+        configOptions,
+      })
+    );
+    vi.mocked(acpRuntimeManager.setSessionModel).mockResolvedValue(configOptions);
+    vi.mocked(sessionRepository.updateSession)
+      .mockRejectedValueOnce(new Error('primary metadata write failed'))
+      .mockResolvedValueOnce(unsafeCoerce({ id: 'session-1' }));
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        providerMetadata: { existing: 'metadata' },
+      })
+    );
+
+    await sessionService.setSessionConfigOption('session-1', 'model', 'claude-sonnet-4-5');
+
+    const metadataUpdates = vi
+      .mocked(sessionRepository.updateSession)
+      .mock.calls.filter(([, update]) => Object.hasOwn(update, 'providerMetadata'));
+    expect(metadataUpdates).toHaveLength(2);
+    expect(metadataUpdates[1]?.[1]).toMatchObject({
+      providerMetadata: expect.objectContaining({
+        existing: 'metadata',
+        acpConfigSnapshot: expect.any(Object),
+      }),
+    });
+  });
+
   it('returns CODEX provider fallback capabilities when no ACP handle is active', async () => {
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(

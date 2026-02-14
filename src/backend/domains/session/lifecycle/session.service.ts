@@ -1181,10 +1181,32 @@ class SessionService {
         providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
       });
     } catch (error) {
-      logger.warn('Failed persisting ACP config snapshot to session metadata', {
+      logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });
+
+      try {
+        const latestMetadataSource = (await this.repository.getSessionById(sessionId))
+          ?.providerMetadata;
+        const latestMetadata = this.toMetadataRecord(latestMetadataSource);
+        const retryMetadata: Record<string, unknown> = {
+          ...latestMetadata,
+          acpConfigSnapshot: snapshot,
+        };
+        if (observedModelId) {
+          retryMetadata.observedModelId = observedModelId;
+        }
+
+        await this.repository.updateSession(sessionId, {
+          providerMetadata: retryMetadata as AgentSessionRecord['providerMetadata'],
+        });
+      } catch (retryError) {
+        logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
+          sessionId,
+          error: retryError instanceof Error ? retryError.message : String(retryError),
+        });
+      }
     }
   }
 
