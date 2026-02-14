@@ -8,6 +8,7 @@ import {
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
+import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
@@ -100,7 +101,18 @@ class SessionService {
             return;
           }
           const deltas = this.acpEventTranslator.translateSessionUpdate(update);
-          for (const delta of deltas) {
+          if (deltas.length === 0) {
+            acpTraceLogger.log(sid, 'translated_delta', {
+              sessionUpdate: update.sessionUpdate,
+              deltaCount: 0,
+            });
+          }
+          for (const [index, delta] of deltas.entries()) {
+            acpTraceLogger.log(sid, 'translated_delta', {
+              sessionUpdate: update.sessionUpdate,
+              deltaIndex: index,
+              delta,
+            });
             this.handleAcpDelta(sid, delta as SessionDeltaEvent);
           }
           return;
@@ -114,6 +126,10 @@ class SessionService {
       onSessionId: async (sid: string, providerSessionId: string) => {
         try {
           await this.repository.updateSession(sid, { providerSessionId });
+          acpTraceLogger.log(sid, 'runtime_metadata', {
+            type: 'provider_session_id',
+            providerSessionId,
+          });
           logger.debug('Updated session with ACP providerSessionId', {
             sessionId: sid,
             providerSessionId,
@@ -136,6 +152,7 @@ class SessionService {
           b.cancelAll();
           this.acpPermissionBridges.delete(sid);
         }
+        acpTraceLogger.log(sid, 'runtime_exit', { exitCode });
 
         try {
           sessionDomainService.markProcessExit(sid, exitCode);
@@ -154,9 +171,15 @@ class SessionService {
             sessionId: sid,
             error: error instanceof Error ? error.message : String(error),
           });
+        } finally {
+          acpTraceLogger.closeSession(sid);
         }
       },
       onError: (sid: string, error: Error) => {
+        acpTraceLogger.log(sid, 'runtime_error', {
+          message: error.message,
+          stack: error.stack,
+        });
         logger.error('ACP client error', {
           sessionId: sid,
           error: error.message,
@@ -164,6 +187,7 @@ class SessionService {
         });
       },
       onAcpLog: (sid: string, payload: Record<string, unknown>) => {
+        acpTraceLogger.log(sid, 'raw_acp_event', payload);
         sessionFileLogger.log(sid, 'FROM_CLAUDE_CLI', payload);
       },
     };
@@ -538,6 +562,7 @@ class SessionService {
         sessionId,
         ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
       });
+      acpTraceLogger.closeSession(sessionId);
     }
   }
 
@@ -1186,6 +1211,7 @@ class SessionService {
   async stopAllClients(_timeoutMs = 5000): Promise<void> {
     try {
       await acpRuntimeManager.stopAllClients();
+      acpTraceLogger.cleanup();
     } catch (error) {
       logger.error('Failed to stop ACP clients during shutdown', {
         error: error instanceof Error ? error.message : String(error),

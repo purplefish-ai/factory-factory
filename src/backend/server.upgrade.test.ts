@@ -94,6 +94,10 @@ function createTestAppContext(): AppContext {
         start: vi.fn(),
         stop: vi.fn(async () => undefined),
       },
+      acpTraceLogger: {
+        cleanup: vi.fn(),
+        cleanupOldLogs: vi.fn(),
+      },
       sessionFileLogger: {
         cleanup: vi.fn(),
         cleanupOldLogs: vi.fn(),

@@ -60,6 +60,7 @@ export type { ServerInstance };
 export function createServer(requestedPort?: number, appContext?: AppContext): ServerInstance {
   const context = appContext ?? createAppContext();
   const {
+    acpTraceLogger,
     configService,
     createLogger,
     findAvailablePort,
@@ -257,6 +258,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
     terminalService.cleanup();
     sessionFileLogger.cleanup();
+    acpTraceLogger.cleanup();
     await rateLimiter.stop();
 
     await schedulerService.stop();
@@ -309,6 +311,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           }
 
           sessionFileLogger.cleanupOldLogs();
+          acpTraceLogger.cleanupOldLogs();
           reconciliationService.startPeriodicCleanup();
           rateLimiter.start();
           schedulerService.start();
