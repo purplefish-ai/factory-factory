@@ -9,8 +9,6 @@ vi.mock('@/backend/domains/ratchet', () => ({
     acquireAndDispatch: vi.fn(),
     getActiveSession: vi.fn(),
   },
-  ciFixerService: { configure: vi.fn() },
-  ciMonitorService: { configure: vi.fn() },
   reconciliationService: { configure: vi.fn() },
 }));
 
@@ -52,7 +50,6 @@ vi.mock('@/backend/domains/github', () => ({
     checkHealth: vi.fn(),
     listReviewRequests: vi.fn(),
   },
-  prReviewFixerService: { configure: vi.fn() },
   prSnapshotService: { configure: vi.fn(), refreshWorkspace: vi.fn() },
 }));
 
@@ -62,14 +59,8 @@ vi.mock('@/backend/domains/run-script', () => ({
 
 // --- Import mocked modules to get references ---
 
+import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
 import {
-  githubCLIService,
-  prReviewFixerService,
-  prSnapshotService,
-} from '@/backend/domains/github';
-import {
-  ciFixerService,
-  ciMonitorService,
   fixerSessionService,
   ratchetService,
   reconciliationService,
@@ -105,8 +96,6 @@ describe('configureDomainBridges', () => {
 
     expect(ratchetService.configure).toHaveBeenCalledTimes(1);
     expect(fixerSessionService.configure).toHaveBeenCalledTimes(1);
-    expect(ciFixerService.configure).toHaveBeenCalledTimes(1);
-    expect(ciMonitorService.configure).toHaveBeenCalledTimes(1);
     expect(reconciliationService.configure).toHaveBeenCalledTimes(1);
   });
 
@@ -120,7 +109,6 @@ describe('configureDomainBridges', () => {
   it('configures GitHub domain services', () => {
     configureDomainBridges();
 
-    expect(prReviewFixerService.configure).toHaveBeenCalledTimes(1);
     expect(prSnapshotService.configure).toHaveBeenCalledTimes(1);
   });
 
@@ -325,30 +313,6 @@ describe('configureDomainBridges', () => {
   });
 
   describe('github domain bridge delegation', () => {
-    it('prReviewFixer gets session bridge with isSessionWorking', () => {
-      configureDomainBridges();
-      const bridge = getBridge(prReviewFixerService.configure);
-
-      bridge.session.isSessionWorking('s1');
-      expect(sessionService.isSessionWorking).toHaveBeenCalledWith('s1');
-    });
-
-    it('prReviewFixer session bridge delegates isSessionRunning', () => {
-      configureDomainBridges();
-      const bridge = getBridge(prReviewFixerService.configure);
-
-      bridge.session.isSessionRunning('s1');
-      expect(sessionService.isSessionRunning).toHaveBeenCalledWith('s1');
-    });
-
-    it('prReviewFixer session bridge delegates sendSessionMessage', async () => {
-      configureDomainBridges();
-      const bridge = getBridge(prReviewFixerService.configure);
-
-      await bridge.session.sendSessionMessage('s1', 'hi');
-      expect(sessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hi');
-    });
-
     it('prSnapshotService gets kanban bridge with updateCachedKanbanColumn', () => {
       configureDomainBridges();
       const bridge = getBridge(prSnapshotService.configure);

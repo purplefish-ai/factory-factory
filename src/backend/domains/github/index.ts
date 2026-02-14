@@ -3,13 +3,7 @@
 // Consumers should import from '@/backend/domains/github' only.
 
 // Bridge interfaces for orchestration layer wiring
-export type {
-  GitHubFixerAcquireInput,
-  GitHubFixerAcquireResult,
-  GitHubFixerBridge,
-  GitHubKanbanBridge,
-  GitHubSessionBridge,
-} from './bridges';
+export type { GitHubKanbanBridge } from './bridges';
 // --- GitHub CLI wrapper ---
 export {
   type GitHubCLIErrorType,
@@ -20,14 +14,6 @@ export {
   type PRStatusFromGitHub,
   type ReviewRequestedPR,
 } from './github-cli.service';
-// --- PR review fixer ---
-export {
-  type PRReviewFixResult,
-  prReviewFixerService,
-  type ReviewCommentDetails,
-} from './pr-review-fixer.service';
-// --- PR review monitor ---
-export { prReviewMonitorService } from './pr-review-monitor.service';
 // --- PR snapshot ---
 export {
   type AttachAndRefreshResult,

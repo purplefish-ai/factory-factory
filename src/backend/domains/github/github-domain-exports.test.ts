@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  githubCLIService,
-  prReviewFixerService,
-  prReviewMonitorService,
-  prSnapshotService,
-} from './index';
+import { githubCLIService, prSnapshotService } from './index';
 
 /**
  * Domain barrel export smoke test.
@@ -20,13 +15,5 @@ describe('GitHub domain exports', () => {
 
   it('exports prSnapshotService as an object', () => {
     expect(prSnapshotService).toBeDefined();
-  });
-
-  it('exports prReviewFixerService as an object', () => {
-    expect(prReviewFixerService).toBeDefined();
-  });
-
-  it('exports prReviewMonitorService as an object', () => {
-    expect(prReviewMonitorService).toBeDefined();
   });
 });

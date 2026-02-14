@@ -8,14 +8,8 @@
  * Domain services never import each other; they receive capabilities via bridges.
  */
 
+import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
 import {
-  githubCLIService,
-  prReviewFixerService,
-  prSnapshotService,
-} from '@/backend/domains/github';
-import {
-  ciFixerService,
-  ciMonitorService,
   fixerSessionService,
   type RatchetGitHubBridge,
   type RatchetPRSnapshotBridge,
@@ -86,12 +80,6 @@ export function configureDomainBridges(): void {
     snapshot: ratchetSnapshotBridge,
   });
   fixerSessionService.configure({ session: ratchetSessionBridge });
-  ciFixerService.configure({ session: ratchetSessionBridge });
-  ciMonitorService.configure({
-    session: ratchetSessionBridge,
-    github: ratchetGithubBridge,
-    snapshot: ratchetSnapshotBridge,
-  });
   reconciliationService.configure({
     workspace: {
       markFailed: async (id, reason) => {
@@ -123,18 +111,6 @@ export function configureDomainBridges(): void {
   });
 
   // === GitHub domain bridges ===
-  prReviewFixerService.configure({
-    session: {
-      isSessionWorking: (id) => sessionService.isSessionWorking(id),
-      isSessionRunning: (id) => sessionService.isSessionRunning(id),
-      sendSessionMessage: (id, message) => sessionService.sendSessionMessage(id, message),
-    },
-    fixer: {
-      acquireAndDispatch: (input) => fixerSessionService.acquireAndDispatch(input),
-      getActiveSession: (wsId, wf) => fixerSessionService.getActiveSession(wsId, wf),
-    },
-  });
-
   prSnapshotService.configure({
     kanban: {
       updateCachedKanbanColumn: (id) => kanbanStateService.updateCachedKanbanColumn(id),
