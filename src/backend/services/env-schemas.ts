@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { SERVICE_TIMEOUT_MS } from './constants';
 
 const PermissionModeSchema = z.enum(['strict', 'relaxed', 'yolo']);
 const LogLevelSchema = z.enum(['error', 'warn', 'info', 'debug']);
@@ -69,16 +68,6 @@ export const ConfigEnvSchema = z.object({
   NOTIFICATION_QUIET_HOURS_START: HourEnvSchema.optional().catch(undefined),
   NOTIFICATION_QUIET_HOURS_END: HourEnvSchema.optional().catch(undefined),
   CORS_ALLOWED_ORIGINS: z.preprocess(toTrimmedString, z.string()).optional(),
-  CLAUDE_HUNG_TIMEOUT_MS: PositiveIntEnvSchema.catch(SERVICE_TIMEOUT_MS.configDefaultClaudeHung),
-  CODEX_APP_SERVER_COMMAND: z.preprocess(toTrimmedString, z.string().min(1)).catch('codex'),
-  CODEX_APP_SERVER_ARGS: z.preprocess(toTrimmedString, z.string()).optional(),
-  CODEX_APP_SERVER_REQUEST_TIMEOUT_MS: PositiveIntEnvSchema.catch(
-    SERVICE_TIMEOUT_MS.codexAppServerRequest
-  ),
-  CODEX_APP_SERVER_HANDSHAKE_TIMEOUT_MS: PositiveIntEnvSchema.catch(
-    SERVICE_TIMEOUT_MS.codexAppServerHandshake
-  ),
-  CODEX_REQUEST_USER_INPUT_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(false),
   BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional(),
   WORKTREE_BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional(),
   NODE_ENV: z.preprocess(toLowerString, NodeEnvSchema).catch('development'),

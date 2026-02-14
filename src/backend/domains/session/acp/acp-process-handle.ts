@@ -4,6 +4,7 @@ import type { ClientSideConnection, SessionConfigOption } from '@agentclientprot
 export class AcpProcessHandle {
   readonly connection: ClientSideConnection;
   readonly child: ChildProcess;
+  readonly provider: string;
   providerSessionId: string;
   agentCapabilities: Record<string, unknown>;
   isPromptInFlight: boolean;
@@ -13,11 +14,13 @@ export class AcpProcessHandle {
   constructor(params: {
     connection: ClientSideConnection;
     child: ChildProcess;
+    provider: string;
     providerSessionId: string;
     agentCapabilities: Record<string, unknown>;
   }) {
     this.connection = params.connection;
     this.child = params.child;
+    this.provider = params.provider;
     this.providerSessionId = params.providerSessionId;
     this.agentCapabilities = params.agentCapabilities;
     this.isPromptInFlight = false;

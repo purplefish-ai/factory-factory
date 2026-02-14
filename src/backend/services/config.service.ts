@@ -65,24 +65,6 @@ export interface NotificationConfig {
 }
 
 /**
- * Claude process configuration
- */
-export interface ClaudeProcessConfig {
-  hungTimeoutMs: number;
-}
-
-/**
- * Codex app-server process configuration
- */
-export interface CodexAppServerConfig {
-  command: string;
-  args: string[];
-  requestTimeoutMs: number;
-  handshakeTimeoutMs: number;
-  requestUserInputEnabled: boolean;
-}
-
-/**
  * CORS configuration
  */
 export interface CorsConfig {
@@ -145,12 +127,6 @@ interface SystemConfig {
 
   // Notification settings
   notification: NotificationConfig;
-
-  // Claude process settings
-  claudeProcess: ClaudeProcessConfig;
-
-  // Codex app-server settings
-  codexAppServer: CodexAppServerConfig;
 
   // CORS settings
   cors: CorsConfig;
@@ -263,30 +239,6 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
 }
 
 /**
- * Build Claude process configuration from environment with validation
- */
-function buildClaudeProcessConfig(env: ConfigEnv): ClaudeProcessConfig {
-  return { hungTimeoutMs: env.CLAUDE_HUNG_TIMEOUT_MS };
-}
-
-/**
- * Build Codex app-server configuration from environment with validation.
- */
-function buildCodexAppServerConfig(env: ConfigEnv): CodexAppServerConfig {
-  const command = env.CODEX_APP_SERVER_COMMAND;
-  const argsEnv = env.CODEX_APP_SERVER_ARGS;
-  const args = argsEnv && argsEnv.length > 0 ? argsEnv.split(/\s+/) : ['app-server'];
-
-  return {
-    command,
-    args,
-    requestTimeoutMs: env.CODEX_APP_SERVER_REQUEST_TIMEOUT_MS,
-    handshakeTimeoutMs: env.CODEX_APP_SERVER_HANDSHAKE_TIMEOUT_MS,
-    requestUserInputEnabled: env.CODEX_REQUEST_USER_INPUT_ENABLED,
-  };
-}
-
-/**
  * Get default base directory
  */
 function getDefaultBaseDir(): string {
@@ -349,12 +301,6 @@ function loadSystemConfig(): SystemConfig {
 
     // Notification settings
     notification: buildNotificationConfig(env),
-
-    // Claude process settings
-    claudeProcess: buildClaudeProcessConfig(env),
-
-    // Codex app-server settings
-    codexAppServer: buildCodexAppServerConfig(env),
 
     // CORS settings
     cors: buildCorsConfig(env),
@@ -521,23 +467,6 @@ class ConfigService {
    */
   getNotificationConfig(): NotificationConfig {
     return { ...this.config.notification };
-  }
-
-  /**
-   * Get Claude process configuration
-   */
-  getClaudeProcessConfig(): ClaudeProcessConfig {
-    return { ...this.config.claudeProcess };
-  }
-
-  /**
-   * Get Codex app-server configuration
-   */
-  getCodexAppServerConfig(): CodexAppServerConfig {
-    return {
-      ...this.config.codexAppServer,
-      args: [...this.config.codexAppServer.args],
-    };
   }
 
   /**

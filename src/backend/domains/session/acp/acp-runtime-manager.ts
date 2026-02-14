@@ -213,6 +213,7 @@ export class AcpRuntimeManager
     const handle = new AcpProcessHandle({
       connection,
       child,
+      provider: options.provider,
       providerSessionId: sessionInfo.providerSessionId,
       agentCapabilities,
     });
@@ -480,6 +481,35 @@ export class AcpRuntimeManager
 
   isAnySessionWorking(sessionIds: string[]): boolean {
     return sessionIds.some((id) => this.isSessionWorking(id));
+  }
+
+  getAllActiveProcesses(): Array<{
+    sessionId: string;
+    pid: number | undefined;
+    status: string;
+    isRunning: boolean;
+    isPromptInFlight: boolean;
+    provider: string;
+  }> {
+    const processes: Array<{
+      sessionId: string;
+      pid: number | undefined;
+      status: string;
+      isRunning: boolean;
+      isPromptInFlight: boolean;
+      provider: string;
+    }> = [];
+    for (const [sessionId, handle] of this.sessions) {
+      processes.push({
+        sessionId,
+        pid: handle.getPid(),
+        status: handle.isRunning() ? 'running' : 'stopped',
+        isRunning: handle.isRunning(),
+        isPromptInFlight: handle.isPromptInFlight,
+        provider: handle.provider,
+      });
+    }
+    return processes;
   }
 }
 

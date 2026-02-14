@@ -10,7 +10,7 @@ import { createInterface } from 'node:readline';
 import { SessionStatus } from '@factory-factory/core';
 import type { DecisionLog } from '@prisma-gen/client';
 import { z } from 'zod';
-import { sessionDataService } from '@/backend/domains/session';
+import { acpRuntimeManager, sessionDataService } from '@/backend/domains/session';
 import { workspaceDataService } from '@/backend/domains/workspace';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
@@ -243,38 +243,36 @@ export const adminRouter = router({
     }),
 
   /**
-   * Get all active processes (Claude, Codex app-server, and Terminal)
+   * Get all active processes (Agent sessions via ACP and Terminal)
    */
   getActiveProcesses: publicProcedure.query(async ({ ctx }) => {
-    const { sessionService, terminalService } = ctx.appContext.services;
+    const { terminalService } = ctx.appContext.services;
     const logger = getLogger(ctx);
-    // Get active Claude processes from in-memory map
-    const activeClaudeProcesses = sessionService.getAllActiveProcesses();
-    const codexManager = sessionService.getCodexManagerStatus();
-    const codexProcesses = sessionService.getAllCodexActiveProcesses();
+    // Get active ACP sessions from in-memory map
+    const activeAcpProcesses = acpRuntimeManager.getAllActiveProcesses();
 
     // Get active terminals from in-memory map
     const activeTerminals = terminalService.getAllTerminals();
 
-    // Get Claude sessions with PIDs from database for enriched info
-    const claudeSessionsWithPid = await sessionDataService.findAgentSessionsWithPid();
+    // Get agent sessions with PIDs from database for enriched info
+    const agentSessionsWithPid = await sessionDataService.findAgentSessionsWithPid();
 
     // Get terminal sessions with PIDs from database
     const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([
-      ...claudeSessionsWithPid.map((s) => s.workspaceId),
+      ...agentSessionsWithPid.map((s) => s.workspaceId),
       ...terminalSessionsWithPid.map((s) => s.workspaceId),
       ...activeTerminals.map((t) => t.workspaceId),
     ]);
     const workspaces = await workspaceDataService.findByIdsWithProject(Array.from(workspaceIds));
     const workspaceMap = new Map(workspaces.map((w) => [w.id, w]));
 
-    // Build enriched Claude process list from DB sessions
-    const dbSessionIds = new Set(claudeSessionsWithPid.map((s) => s.id));
-    const claudeProcesses = claudeSessionsWithPid.map((session) => {
-      const memProcess = activeClaudeProcesses.find((p) => p.sessionId === session.id);
+    // Build enriched agent process list from DB sessions
+    const dbSessionIds = new Set(agentSessionsWithPid.map((s) => s.id));
+    const claudeProcesses = agentSessionsWithPid.map((session) => {
+      const memProcess = activeAcpProcesses.find((p) => p.sessionId === session.id);
       const workspace = workspaceMap.get(session.workspaceId);
       return {
         sessionId: session.id,
@@ -291,28 +289,21 @@ export const adminRouter = router({
         memoryStatus: memProcess?.status ?? null,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
-        // Resource monitoring data
-        cpuPercent: memProcess?.resourceUsage?.cpu ?? null,
-        memoryBytes: memProcess?.resourceUsage?.memory ?? null,
-        idleTimeMs: memProcess?.idleTimeMs ?? null,
+        // ACP sessions don't expose resource monitoring -- set to null
+        cpuPercent: null as number | null,
+        memoryBytes: null as number | null,
+        idleTimeMs: null as number | null,
       };
     });
 
-    // Add in-memory processes that don't have a DB record (edge case)
-    for (const memProcess of activeClaudeProcesses) {
+    // Add in-memory ACP processes that don't have a DB record (edge case)
+    for (const memProcess of activeAcpProcesses) {
       if (!dbSessionIds.has(memProcess.sessionId)) {
-        logger.warn('Found in-memory Claude process without DB record', {
+        logger.warn('Found in-memory ACP process without DB record', {
           sessionId: memProcess.sessionId,
           pid: memProcess.pid,
           status: memProcess.status,
         });
-        // Map in-memory status to DB SessionStatus
-        const statusMap: Record<string, SessionStatus> = {
-          starting: SessionStatus.RUNNING, // starting maps to running
-          ready: SessionStatus.IDLE,
-          running: SessionStatus.RUNNING,
-          exited: SessionStatus.COMPLETED,
-        };
         claudeProcesses.push({
           sessionId: memProcess.sessionId,
           workspaceId: 'unknown',
@@ -323,14 +314,14 @@ export const adminRouter = router({
           workflow: 'unknown',
           model: 'unknown',
           pid: memProcess.pid ?? null,
-          status: statusMap[memProcess.status] ?? SessionStatus.RUNNING,
+          status: memProcess.isRunning ? SessionStatus.RUNNING : SessionStatus.COMPLETED,
           inMemory: true,
           memoryStatus: memProcess.status,
           createdAt: new Date(),
           updatedAt: new Date(),
-          cpuPercent: memProcess.resourceUsage?.cpu ?? null,
-          memoryBytes: memProcess.resourceUsage?.memory ?? null,
-          idleTimeMs: memProcess.idleTimeMs ?? null,
+          cpuPercent: null,
+          memoryBytes: null,
+          idleTimeMs: null,
         });
       }
     }
@@ -360,16 +351,11 @@ export const adminRouter = router({
 
     return {
       claude: claudeProcesses,
-      codex: {
-        manager: codexManager,
-        sessions: codexProcesses,
-      },
       terminal: terminalProcesses,
       summary: {
         totalClaude: claudeProcesses.length,
-        totalCodexSessions: codexProcesses.length,
         totalTerminal: terminalProcesses.length,
-        total: claudeProcesses.length + codexProcesses.length + terminalProcesses.length,
+        total: claudeProcesses.length + terminalProcesses.length,
       },
     };
   }),

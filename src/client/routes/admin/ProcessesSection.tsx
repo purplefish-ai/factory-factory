@@ -149,7 +149,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
           <div>
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
               <Bot className="w-4 h-4" />
-              Claude Processes ({processes.claude.length})
+              Agent Sessions ({processes.claude.length})
             </h4>
             <div className="border rounded-md">
               <Table>
