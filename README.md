@@ -46,7 +46,7 @@
 ## Installation
 
 **Prerequisites:**
-- Node.js 18+
+- Node.js 20.19+ (or 22.12+, or 24+)
 - GitHub CLI (`gh`) - authenticated
 - Claude Code (for Claude provider) - authenticated via `claude login`
 - ChatGPT/Codex account (for Codex provider)
