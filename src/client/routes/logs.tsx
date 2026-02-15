@@ -40,6 +40,11 @@ import { cn } from '@/lib/utils';
 const PAGE_SIZE = 200;
 
 type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+type LogsResultMeta = {
+  total: number;
+  totalIsExact: boolean;
+  hasMore: boolean;
+};
 
 function getLevelBadgeVariant(level: string): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (level) {
@@ -137,6 +142,35 @@ function computeTimeRange(
   return {};
 }
 
+function formatTotalEntriesLabel(data: LogsResultMeta | undefined): string {
+  if (!data) {
+    return '0';
+  }
+  if (data.totalIsExact) {
+    return String(data.total);
+  }
+  return `at least ${data.total}`;
+}
+
+function getPaginationState(data: LogsResultMeta | undefined, offset: number) {
+  const totalPages = data?.totalIsExact ? Math.ceil(data.total / PAGE_SIZE) : null;
+  const hasPreviousPage = offset > 0;
+  const hasNextPage = Boolean(data?.hasMore);
+  return {
+    totalPages,
+    hasPreviousPage,
+    hasNextPage,
+    showPagination: hasPreviousPage || hasNextPage || (totalPages != null && totalPages > 1),
+  };
+}
+
+function formatPageLabel(currentPage: number, totalPages: number | null): string {
+  if (totalPages == null) {
+    return `Page ${currentPage}`;
+  }
+  return `Page ${currentPage} of ${totalPages}`;
+}
+
 export default function LogsPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -205,8 +239,9 @@ export default function LogsPage() {
 
   const { download, isDownloading } = useDownloadServerLog();
 
-  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+  const pagination = getPaginationState(data, offset);
+  const totalEntriesLabel = formatTotalEntriesLabel(data);
 
   const toggleRow = (rowId: string) => {
     setExpandedRows((prev) => {
@@ -310,7 +345,7 @@ export default function LogsPage() {
 
         {/* Results info */}
         <div className="text-sm text-muted-foreground">
-          {data?.total ?? 0} entries
+          {totalEntriesLabel} entries
           {debouncedSearch && ' matching search'}
           {level !== 'all' && ` (${level})`}
         </div>
@@ -391,23 +426,23 @@ export default function LogsPage() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {pagination.showPagination && (
           <div className="flex items-center justify-between">
             <Button
               variant="outline"
               size="sm"
-              disabled={offset === 0}
+              disabled={!pagination.hasPreviousPage}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
             >
               Previous
             </Button>
             <span className="text-sm text-muted-foreground">
-              Page {currentPage} of {totalPages}
+              {formatPageLabel(currentPage, pagination.totalPages)}
             </span>
             <Button
               variant="outline"
               size="sm"
-              disabled={currentPage >= totalPages}
+              disabled={!pagination.hasNextPage}
               onClick={() => setOffset(offset + PAGE_SIZE)}
             >
               Next

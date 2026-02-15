@@ -23,6 +23,7 @@ interface LogPagination {
 
 export interface LogPageResult {
   entries: ParsedLogEntry[];
+  // Lower bound when totalIsExact is false.
   total: number;
   totalIsExact: boolean;
   hasMore: boolean;
@@ -228,9 +229,10 @@ export async function readFilteredLogEntriesPage(
       }
     }
 
+    const lowerBoundTotal = pagination.offset + state.entries.length + (state.hasMore ? 1 : 0);
     return {
       entries: state.entries,
-      total: state.matchedCount,
+      total: state.hasMore ? lowerBoundTotal : state.matchedCount,
       totalIsExact: !state.hasMore,
       hasMore: state.hasMore,
     };

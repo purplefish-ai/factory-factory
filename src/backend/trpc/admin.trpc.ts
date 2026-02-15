@@ -339,7 +339,7 @@ export const adminRouter = router({
         return {
           entries: [],
           total: 0,
-          totalIsExact: true,
+          totalIsExact: false,
           hasMore: false,
           filePath,
         };
