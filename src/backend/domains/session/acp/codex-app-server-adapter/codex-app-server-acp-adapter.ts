@@ -127,6 +127,7 @@ type AdapterSession = {
   activeTurn: ActiveTurnState | null;
   toolCallsByItemId: Map<string, ToolCallState>;
   planTextByItemId: Map<string, string>;
+  planApprovalRequestedByTurnId: Set<string>;
   pendingTurnCompletionsByTurnId: Map<string, PendingTurnCompletion>;
 };
 
@@ -212,6 +213,62 @@ function toThreadId(sessionId: string): string {
 
 function createToolCallId(threadId: string, turnId: string, itemId: string): string {
   return `codex:${threadId}:${turnId}:${itemId}`;
+}
+
+function isPlanLikeMode(mode: string): boolean {
+  return /plan/i.test(mode);
+}
+
+const PLAN_TEXT_MAX_DEPTH = 8;
+const PLAN_TEXT_PREFERRED_KEYS = [
+  'plan',
+  'text',
+  'content',
+  'markdown',
+  'value',
+  'message',
+] as const;
+
+function extractFirstPlanText(values: Iterable<unknown>, depth: number): string | null {
+  for (const entry of values) {
+    const extracted = extractPlanTextLocal(entry, depth + 1);
+    if (extracted) {
+      return extracted;
+    }
+  }
+  return null;
+}
+
+function extractPlanTextFromRecord(value: Record<string, unknown>, depth: number): string | null {
+  const preferred = extractFirstPlanText(
+    PLAN_TEXT_PREFERRED_KEYS.map((key) => value[key]),
+    depth
+  );
+  if (preferred) {
+    return preferred;
+  }
+  return extractFirstPlanText(Object.values(value), depth);
+}
+
+function extractPlanTextLocal(value: unknown, depth = 0): string | null {
+  if (depth > PLAN_TEXT_MAX_DEPTH) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? value : null;
+  }
+
+  if (Array.isArray(value)) {
+    return extractFirstPlanText(value, depth);
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return extractPlanTextFromRecord(value, depth);
 }
 
 function toMcpEnvRecord(envVars: Array<{ name: string; value: string }>): Record<string, string> {
@@ -675,6 +732,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       activeTurn: null,
       toolCallsByItemId: new Map(),
       planTextByItemId: new Map(),
+      planApprovalRequestedByTurnId: new Set(),
       pendingTurnCompletionsByTurnId: new Map(),
     };
 
@@ -721,6 +779,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       activeTurn: null,
       toolCallsByItemId: new Map(),
       planTextByItemId: new Map(),
+      planApprovalRequestedByTurnId: new Set(),
       pendingTurnCompletionsByTurnId: new Map(),
     };
 
@@ -1664,7 +1723,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private async handleItemCompleted(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
-    _turnId: string
+    turnId: string
   ): Promise<void> {
     const existing = session.toolCallsByItemId.get(item.id);
     if (!existing) {
@@ -1686,6 +1745,115 @@ export class CodexAppServerAcpAdapter implements Agent {
     });
 
     session.toolCallsByItemId.delete(item.id);
+
+    await this.maybeRequestPlanApproval(session, item, turnId, existing);
+  }
+
+  private buildPlanApprovalInput(planText: string, sourceItemId: string): Record<string, unknown> {
+    return {
+      type: 'ExitPlanMode',
+      plan: { type: 'text', text: planText },
+      reason: 'Plan proposed. Approve to exit plan mode and continue implementation.',
+      source: 'codex_plan_completion',
+      sourceItemId,
+    };
+  }
+
+  private extractPlanApprovalText(
+    session: AdapterSession,
+    item: { id: string } & Record<string, unknown>
+  ): string | null {
+    const bufferedText = session.planTextByItemId.get(item.id);
+    if (bufferedText && bufferedText.trim().length > 0) {
+      return bufferedText;
+    }
+    const fromPlanField = extractPlanTextLocal(item.plan);
+    if (fromPlanField && fromPlanField.trim().length > 0) {
+      return fromPlanField;
+    }
+    const fromTextField = extractPlanTextLocal(item.text);
+    if (fromTextField && fromTextField.trim().length > 0) {
+      return fromTextField;
+    }
+    return null;
+  }
+
+  private isPlanApprovalSelected(optionId: string | null): boolean {
+    if (!optionId) {
+      return false;
+    }
+    return optionId.startsWith('allow') || optionId === 'default';
+  }
+
+  private async maybeRequestPlanApproval(
+    session: AdapterSession,
+    item: { type: string; id: string } & Record<string, unknown>,
+    turnId: string,
+    completedPlanToolCall: ToolCallState
+  ): Promise<void> {
+    if (item.type !== 'plan') {
+      return;
+    }
+    if (!isPlanLikeMode(session.defaults.collaborationMode)) {
+      return;
+    }
+    if (session.planApprovalRequestedByTurnId.has(turnId)) {
+      return;
+    }
+
+    const planText = this.extractPlanApprovalText(session, item);
+    if (!planText) {
+      return;
+    }
+
+    session.planApprovalRequestedByTurnId.add(turnId);
+    const approvalToolCallId = `${completedPlanToolCall.toolCallId}:exit-plan`;
+    const approvalInput = this.buildPlanApprovalInput(planText, item.id);
+
+    await this.emitSessionUpdate(session.sessionId, {
+      sessionUpdate: 'tool_call',
+      toolCallId: approvalToolCallId,
+      title: 'ExitPlanMode',
+      kind: 'switch_mode',
+      status: 'pending',
+      rawInput: approvalInput,
+    });
+
+    const permissionResult = await this.connection.requestPermission({
+      sessionId: session.sessionId,
+      toolCall: {
+        toolCallId: approvalToolCallId,
+        title: 'ExitPlanMode',
+        kind: 'switch_mode',
+        status: 'pending',
+        rawInput: approvalInput,
+      },
+      options: [
+        {
+          optionId: 'allow_once',
+          name: 'Approve plan',
+          kind: 'allow_once',
+        },
+        {
+          optionId: 'reject_once',
+          name: 'Request changes',
+          kind: 'reject_once',
+        },
+      ],
+    });
+
+    const selectedOptionId =
+      permissionResult.outcome.outcome === 'selected' ? permissionResult.outcome.optionId : null;
+    const approved = this.isPlanApprovalSelected(selectedOptionId);
+
+    await this.emitSessionUpdate(session.sessionId, {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: approvalToolCallId,
+      kind: 'switch_mode',
+      title: 'ExitPlanMode',
+      status: approved ? 'completed' : 'failed',
+      rawOutput: approved ? 'Plan approved' : 'Plan approval rejected',
+    });
   }
 
   private extractLocations(item: unknown): Array<{ path: string; line?: number | null }> {
@@ -1944,6 +2112,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     session.activeTurn.resolve(stopReason);
     session.activeTurn = null;
     session.planTextByItemId.clear();
+    session.planApprovalRequestedByTurnId.clear();
     session.toolCallsByItemId.clear();
     session.pendingTurnCompletionsByTurnId.clear();
   }

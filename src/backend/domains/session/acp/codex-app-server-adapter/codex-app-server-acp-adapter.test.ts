@@ -575,6 +575,190 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('requests ExitPlanMode approval after completed plan item in plan mode', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+      outcome: { outcome: 'selected', optionId: 'allow_once' },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_plan_approval', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+    await adapter.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_plan_approval',
+      turnId: 'turn_plan_approval',
+      item: {
+        type: 'plan',
+        id: 'item_plan_approval',
+        status: 'inProgress',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/plan/delta', {
+      threadId: 'thread_plan_approval',
+      turnId: 'turn_plan_approval',
+      itemId: 'item_plan_approval',
+      delta: '## Proposed Plan\n1. Add adapter plan approval bridge',
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_plan_approval',
+      turnId: 'turn_plan_approval',
+      item: {
+        type: 'plan',
+        id: 'item_plan_approval',
+        status: 'completed',
+      },
+    });
+
+    expect(connection.requestPermission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCall: expect.objectContaining({
+          title: 'ExitPlanMode',
+          kind: 'switch_mode',
+        }),
+        options: [
+          { optionId: 'allow_once', name: 'Approve plan', kind: 'allow_once' },
+          { optionId: 'reject_once', name: 'Request changes', kind: 'reject_once' },
+        ],
+      })
+    );
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call',
+              title: 'ExitPlanMode',
+              kind: 'switch_mode',
+              status: 'pending',
+              rawInput: expect.objectContaining({
+                type: 'ExitPlanMode',
+                plan: expect.objectContaining({
+                  type: 'text',
+                  text: expect.stringContaining('## Proposed Plan'),
+                }),
+              }),
+            }),
+          }),
+        ],
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call_update',
+              title: 'ExitPlanMode',
+              kind: 'switch_mode',
+              status: 'completed',
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
+  it('marks synthetic ExitPlanMode approval as failed when user rejects', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+      outcome: { outcome: 'selected', optionId: 'reject_once' },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_plan_reject', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+    await adapter.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_plan_reject',
+      turnId: 'turn_plan_reject',
+      item: {
+        type: 'plan',
+        id: 'item_plan_reject',
+        status: 'inProgress',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/plan/delta', {
+      threadId: 'thread_plan_reject',
+      turnId: 'turn_plan_reject',
+      itemId: 'item_plan_reject',
+      delta: '# Plan\n- gather context',
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_plan_reject',
+      turnId: 'turn_plan_reject',
+      item: {
+        type: 'plan',
+        id: 'item_plan_reject',
+        status: 'completed',
+      },
+    });
+
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call_update',
+              title: 'ExitPlanMode',
+              kind: 'switch_mode',
+              status: 'failed',
+              rawOutput: 'Plan approval rejected',
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
   it('maps tool request_user_input selections into answer payloads', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
