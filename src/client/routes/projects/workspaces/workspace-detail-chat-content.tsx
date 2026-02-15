@@ -11,7 +11,7 @@ import {
 } from '@/components/chat';
 import { Button } from '@/components/ui/button';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
-import { groupAdjacentToolCalls, isToolSequence } from '@/lib/chat-protocol';
+import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
@@ -42,6 +42,7 @@ export interface ChatContentProps {
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   resumeQueuedMessages: ReturnType<typeof useChatWebSocket>['resumeQueuedMessages'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
+  sessionRuntime: ReturnType<typeof useChatWebSocket>['sessionRuntime'];
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
   permissionMode: ReturnType<typeof useChatWebSocket>['permissionMode'];
@@ -173,19 +174,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
 
   const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId);
   const groupedMessages = useMemo(() => groupAdjacentToolCalls(props.messages), [props.messages]);
-  const latestToolSequence = useMemo(() => {
-    for (let i = groupedMessages.length - 1; i >= 0; i -= 1) {
-      const item = groupedMessages[i];
-      if (!item) {
-        continue;
-      }
-      if (isToolSequence(item)) {
-        return item;
-      }
-    }
-    return null;
-  }, [groupedMessages]);
-
   const queuedMessageIds = useMemo(
     () => new Set(props.queuedMessages.map((msg) => msg.id)),
     [props.queuedMessages]
@@ -199,6 +187,10 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
       });
     }
   }, [props.isNearBottom, props.viewportRef]);
+
+  const focusInput = useCallback(() => {
+    props.inputRef.current?.focus();
+  }, [props.inputRef]);
 
   const running = props.sessionStatus.phase === 'running';
   const stopping = props.sessionStatus.phase === 'stopping';
@@ -279,14 +271,18 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
       <div className="border-t">
         <AgentLiveDock
           workspaceId={props.workspaceId}
+          groupedMessages={groupedMessages}
+          pendingRequest={props.pendingRequest}
           running={running}
           starting={displayStartingState}
           stopping={stopping}
           permissionMode={props.permissionMode}
           latestThinking={props.latestThinking ?? null}
-          latestToolSequence={latestToolSequence}
           acpPlan={props.acpPlan}
           toolProgress={props.toolProgress}
+          onApprovePermission={props.approvePermission}
+          onJumpIn={focusInput}
+          lastUpdatedAt={props.sessionRuntime.updatedAt}
         />
         <PermissionPrompt
           permission={
