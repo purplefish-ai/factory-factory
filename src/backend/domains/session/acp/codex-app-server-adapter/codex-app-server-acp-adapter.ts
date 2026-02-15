@@ -1141,23 +1141,16 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private resolveTurnCollaborationMode(session: AdapterSession): Record<string, unknown> | null {
-    if (session.defaults.collaborationMode === this.resolveDefaultCollaborationMode()) {
-      return null;
-    }
-
     const modeEntry = this.collaborationModes.find(
       (entry) => entry.mode === session.defaults.collaborationMode
     );
-    if (!modeEntry) {
-      return null;
-    }
 
     return {
-      mode: modeEntry.mode,
+      mode: modeEntry?.mode ?? session.defaults.collaborationMode,
       settings: {
-        model: modeEntry.model ?? session.defaults.model,
-        reasoning_effort: modeEntry.reasoningEffort ?? session.defaults.reasoningEffort,
-        developer_instructions: modeEntry.developerInstructions,
+        model: modeEntry?.model ?? session.defaults.model,
+        reasoning_effort: modeEntry?.reasoningEffort ?? session.defaults.reasoningEffort,
+        developer_instructions: modeEntry?.developerInstructions ?? null,
       },
     };
   }
@@ -1843,7 +1836,11 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
 
     const firstNonPlan = availableModes.find((mode) => !isPlanLikeMode(mode));
-    return firstNonPlan ?? null;
+    if (firstNonPlan) {
+      return firstNonPlan;
+    }
+
+    return currentMode.toLowerCase() === 'default' ? null : 'default';
   }
 
   private holdTurnUntilPlanApprovalResolves(session: AdapterSession, turnId: string): void {

@@ -816,7 +816,13 @@ describe('CodexAppServerAcpAdapter', () => {
     const turnStartCalls = getCodexRequestCalls(codex, 'turn/start');
     const secondTurnStart = turnStartCalls[1]?.[1];
     expect(secondTurnStart).toBeDefined();
-    expect(secondTurnStart).not.toHaveProperty('collaborationMode');
+    expect(secondTurnStart).toEqual(
+      expect.objectContaining({
+        collaborationMode: expect.objectContaining({
+          mode: 'default',
+        }),
+      })
+    );
   });
 
   it('marks synthetic ExitPlanMode approval as failed when user rejects', async () => {
