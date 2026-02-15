@@ -197,6 +197,14 @@ function findQuestionOptionId(
   return findOptionIdByDecision(options, true);
 }
 
+function isAllowOptionId(optionId: string, options: AcpPermissionOption[] | undefined): boolean {
+  const matchedOption = options?.find((option) => option.optionId === optionId);
+  if (matchedOption) {
+    return matchedOption.kind.startsWith('allow');
+  }
+  return optionId === 'allow' || optionId === 'allow_once' || optionId === 'default';
+}
+
 function flattenConfigOptionValues(option: AcpConfigOptionState): string[] {
   const values: string[] = [];
   for (const entry of option.options) {
@@ -244,10 +252,6 @@ function resolvePostApprovalModeValue(state: ChatState): string | null {
 
   const firstNonPlan = optionValues.find((value) => !isPlanModeValue(value));
   return firstNonPlan ?? null;
-}
-
-function answersIncludeApprovalIntent(answers: Record<string, string | string[]>): boolean {
-  return flattenAnswerValues(answers).some((value) => /\bapprove(?:d)?\b/i.test(value.trim()));
 }
 
 // =============================================================================
@@ -429,7 +433,10 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       send(msg);
       dispatch({ type: 'QUESTION_RESPONSE' });
 
-      if (answersIncludeApprovalIntent(answers)) {
+      if (
+        pendingRequest.request.toolName === 'ExitPlanMode' &&
+        isAllowOptionId(optionId, pendingRequest.request.acpOptions)
+      ) {
         completeCodexPlanApproval(state);
       }
     },

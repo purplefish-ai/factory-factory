@@ -660,13 +660,22 @@ export class CodexAppServerAcpAdapter implements Agent {
         },
       });
 
-    // AgentSideConnection initializes its internal connection after invoking toAgent().
-    // Defer closed-hook registration to avoid accessing connection internals too early.
-    queueMicrotask(() => {
-      void this.connection.closed.finally(async () => {
+    this.monitorConnectionClose();
+  }
+
+  private monitorConnectionClose(): void {
+    // AgentSideConnection initializes internals after toAgent(); defer one microtask
+    // so reading connection.closed does not race constructor-time setup.
+    void (async () => {
+      await Promise.resolve();
+      try {
+        await this.connection.closed;
+      } catch {
+        // Ignore close-watcher errors and still attempt subprocess shutdown.
+      } finally {
         await this.codex.stop();
-      });
-    });
+      }
+    })();
   }
 
   async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
@@ -912,19 +921,24 @@ export class CodexAppServerAcpAdapter implements Agent {
         reason: 'A turn is already in progress for this session',
       });
     }
-    const stopReasonPromise = this.createPendingTurnPromise(session);
 
     const input = params.prompt
       .map((block) => parseTextFromPromptBlock(block))
+      .filter((text) => text.trim().length > 0)
       .map((text) => ({ type: 'text', text, text_elements: [] as [] }));
 
-    const safeInput =
-      input.length > 0 ? input : [{ type: 'text', text: '', text_elements: [] as [] }];
+    if (input.length === 0) {
+      throw RequestError.invalidParams({
+        reason: 'Prompt must include at least one non-empty content block',
+      });
+    }
+
+    const stopReasonPromise = this.createPendingTurnPromise(session);
 
     try {
       const turnStartParams: Record<string, unknown> = {
         threadId: session.threadId,
-        input: safeInput,
+        input,
         cwd: session.cwd,
         approvalPolicy: session.defaults.approvalPolicy,
         sandboxPolicy: session.defaults.sandboxPolicy,

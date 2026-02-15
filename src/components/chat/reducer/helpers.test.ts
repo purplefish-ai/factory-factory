@@ -48,6 +48,7 @@ describe('convertPendingRequest', () => {
     const result = convertPendingRequest(request);
     expect(result.type).toBe('question');
     if (result.type === 'question') {
+      expect(result.request.toolName).toBe('AskUserQuestion');
       expect(result.request.acpOptions).toEqual(acpOptions);
     }
   });

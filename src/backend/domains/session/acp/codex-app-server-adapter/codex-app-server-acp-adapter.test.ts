@@ -581,6 +581,45 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('rejects empty prompt content and does not start a turn', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_empty_prompt', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await expect(
+      adapter.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: '   ' }],
+      })
+    ).rejects.toBeInstanceOf(Error);
+
+    expect(getCodexRequestCalls(codex, 'turn/start')).toHaveLength(0);
+
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_after_empty_prompt', status: 'completed' },
+    });
+    await expect(
+      adapter.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'run now' }],
+      })
+    ).resolves.toEqual({ stopReason: 'end_turn' });
+
+    expect(getCodexRequestCalls(codex, 'turn/start')).toHaveLength(1);
+  });
+
   it('requests ExitPlanMode approval after completed plan item in plan mode', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({

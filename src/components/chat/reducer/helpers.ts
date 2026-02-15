@@ -361,6 +361,7 @@ export function convertPendingRequest(
       type: 'question',
       request: {
         requestId: req.requestId,
+        toolName: req.toolName,
         questions: (input.questions ?? []) as UserQuestionRequest['questions'],
         ...(Array.isArray(req.acpOptions) ? { acpOptions: req.acpOptions } : {}),
         timestamp: req.timestamp,

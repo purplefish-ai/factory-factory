@@ -23,6 +23,8 @@ export interface AskUserQuestion {
 export interface UserQuestionRequest {
   requestId: string;
   questions: AskUserQuestion[];
+  /** Originating tool name (for targeted flows like ExitPlanMode). */
+  toolName?: string;
   /** ACP option IDs mapped to answer labels for submitting the user's choice. */
   acpOptions?: Array<{
     optionId: string;

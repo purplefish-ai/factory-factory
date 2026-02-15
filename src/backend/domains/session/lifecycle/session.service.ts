@@ -519,6 +519,7 @@ class SessionService {
       sessionDomainService.emitDelta(sid, {
         type: 'user_question',
         requestId,
+        toolName,
         questions,
         acpOptions,
       });
@@ -1116,7 +1117,7 @@ class SessionService {
       return;
     }
 
-    const selectedOption = acpHandle?.configOptions.find((option) => option.id === configId);
+    const selectedOption = acpHandle.configOptions.find((option) => option.id === configId);
     const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
 

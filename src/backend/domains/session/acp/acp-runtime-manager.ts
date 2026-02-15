@@ -91,6 +91,7 @@ type SpawnCommand = {
 };
 
 const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
+const MAX_FACTORY_ROOT_SEARCH_DEPTH = 20;
 
 function resolveAcpStartupTimeoutMs(): number {
   const raw = process.env.ACP_STARTUP_TIMEOUT_MS;
@@ -114,6 +115,7 @@ async function withTimeout<T>(params: {
     const timeout = setTimeout(() => {
       reject(new Error(`ACP ${params.description} timed out after ${params.timeoutMs}ms`));
     }, params.timeoutMs);
+    timeout.unref?.();
 
     params.promise.then(
       (value) => {
@@ -130,7 +132,7 @@ async function withTimeout<T>(params: {
 
 function findFactoryRoot(startDir: string): string | null {
   let currentDir = startDir;
-  for (;;) {
+  for (let depth = 0; depth < MAX_FACTORY_ROOT_SEARCH_DEPTH; depth += 1) {
     const hasPackageJson = existsSync(join(currentDir, 'package.json'));
     const hasCliDistEntrypoint = existsSync(join(currentDir, 'dist', 'src', 'cli', 'index.js'));
     const hasCliSourceEntrypoint = existsSync(join(currentDir, 'src', 'cli', 'index.ts'));
@@ -144,6 +146,7 @@ function findFactoryRoot(startDir: string): string | null {
     }
     currentDir = parentDir;
   }
+  return null;
 }
 
 function resolveFactoryRootForInternalCodexAdapter(): string {
