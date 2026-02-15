@@ -123,6 +123,37 @@ describe('live-activity-summary', () => {
     );
   });
 
+  it('marks tests as failed when output contains failure text despite success status', () => {
+    const groupedMessages: GroupedMessageItem[] = [
+      {
+        type: 'tool_sequence',
+        id: 'seq-1',
+        pairedCalls: [
+          createCall({
+            id: 'call-test',
+            name: 'Run pnpm test',
+            input: { command: ['pnpm', 'test'] },
+            status: 'success',
+            result: { content: '12 passed, 1 failed', isError: false },
+          }),
+        ],
+      },
+    ];
+
+    const summary = summarizeLiveActivity({
+      groupedMessages,
+      latestThinking: null,
+      running: false,
+      starting: false,
+      stopping: false,
+      pendingRequest: createPendingRequest('none'),
+      permissionMode: null,
+      toolProgress: new Map(),
+    });
+
+    expect(summary.recent.map((event) => event.label)).toContain('Tests failed');
+  });
+
   it('deduplicates touched files and caps to six visible chips', () => {
     const toolProgress = new Map<string, ToolProgressInfo>();
     toolProgress.set('tool-1', {

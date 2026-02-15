@@ -129,7 +129,243 @@ function getFileChipLabel(path: string, line?: number | null): string {
   return line ? `${fileName}:${line}` : fileName;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Live dock layout intentionally combines multiple conditional UI sections.
+type LiveActivitySummary = ReturnType<typeof summarizeLiveActivity>;
+
+interface NeedsAttentionCardProps {
+  needsAttention: LiveActivitySummary['needsAttention'];
+  pendingRequest: PendingRequest;
+  onApprovePermission?: (requestId: string, allow: boolean) => void;
+  onJumpIn?: () => void;
+  onOpenDetails: () => void;
+}
+
+function NeedsAttentionCard({
+  needsAttention,
+  pendingRequest,
+  onApprovePermission,
+  onJumpIn,
+  onOpenDetails,
+}: NeedsAttentionCardProps) {
+  if (!needsAttention) {
+    return null;
+  }
+
+  const needsPermissionAction =
+    needsAttention.kind === 'permission' &&
+    pendingRequest.type === 'permission' &&
+    onApprovePermission;
+
+  return (
+    <div className="rounded border border-amber-300 bg-amber-50 p-2 space-y-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-900">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        Needs attention
+        <span className="text-amber-800 font-normal">{needsAttention.message}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        {needsPermissionAction && pendingRequest.type === 'permission' && (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => onApprovePermission(pendingRequest.request.requestId, true)}
+            >
+              Approve
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => onApprovePermission(pendingRequest.request.requestId, false)}
+            >
+              Deny
+            </Button>
+          </>
+        )}
+        {needsAttention.kind === 'error' && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            onClick={onOpenDetails}
+          >
+            Open logs
+          </Button>
+        )}
+        {onJumpIn && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            onClick={onJumpIn}
+          >
+            Message agent
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface RecentMilestonesSectionProps {
+  recent: LiveActivitySummary['recent'];
+}
+
+function RecentMilestonesSection({ recent }: RecentMilestonesSectionProps) {
+  return (
+    <section className="space-y-1">
+      <div className="text-[10px] font-medium text-muted-foreground">Recent</div>
+      {recent.length === 0 ? (
+        <div className="rounded border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+          Waiting for milestones...
+        </div>
+      ) : (
+        <div className="rounded border bg-muted/20 px-2 py-1.5 space-y-1">
+          {recent.map((milestone) => (
+            <div key={milestone.id} className="flex items-center gap-2 min-w-0 text-xs">
+              <span
+                className={cn('h-1.5 w-1.5 rounded-full shrink-0', {
+                  'bg-muted-foreground': milestone.tone === 'muted',
+                  'bg-primary': milestone.tone === 'default',
+                  'bg-success': milestone.tone === 'success',
+                  'bg-destructive': milestone.tone === 'error',
+                })}
+              />
+              <span className={cn('truncate', getToneClass(milestone.tone))}>
+                {milestone.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface FilesTouchedSectionProps {
+  filesTouched: LiveActivitySummary['filesTouched'];
+  hiddenFileCount: number;
+}
+
+function FilesTouchedSection({ filesTouched, hiddenFileCount }: FilesTouchedSectionProps) {
+  return (
+    <section className="space-y-1">
+      <div className="text-[10px] font-medium text-muted-foreground">Files touched</div>
+      {filesTouched.length === 0 ? (
+        <div className="rounded border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+          No files yet
+        </div>
+      ) : (
+        <div className="rounded border bg-muted/20 px-2 py-1.5">
+          <div className="flex flex-wrap gap-1">
+            {filesTouched.map((file) => (
+              <button
+                key={`${file.path}:${file.line ?? ''}`}
+                type="button"
+                className="rounded border bg-background px-1.5 py-0.5 text-[10px] font-mono text-blue-500 hover:text-blue-600 hover:underline truncate max-w-[220px]"
+                title={file.line ? `${file.path}:${file.line}` : file.path}
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('acp-open-file', {
+                      detail: { path: file.path, line: file.line },
+                    })
+                  );
+                }}
+              >
+                {getFileChipLabel(file.path, file.line)}
+              </button>
+            ))}
+            {hiddenFileCount > 0 && (
+              <span className="rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                +{hiddenFileCount} more
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+interface LiveActivityDetailsSheetProps {
+  detailsOpen: boolean;
+  onDetailsOpenChange: (open: boolean) => void;
+  latestToolSequence: LiveActivitySummary['latestToolSequence'];
+  toolWindowOpen: boolean;
+  onToolWindowOpenChange: (open: boolean) => void;
+  latestThinking: string | null;
+  running: boolean;
+  starting: boolean;
+  hasAcpPlan: boolean;
+  acpPlan?: AcpPlanState | null;
+}
+
+function LiveActivityDetailsSheet({
+  detailsOpen,
+  onDetailsOpenChange,
+  latestToolSequence,
+  toolWindowOpen,
+  onToolWindowOpenChange,
+  latestThinking,
+  running,
+  starting,
+  hasAcpPlan,
+  acpPlan,
+}: LiveActivityDetailsSheetProps) {
+  return (
+    <Sheet open={detailsOpen} onOpenChange={onDetailsOpenChange}>
+      <SheetContent side="right" className="sm:max-w-xl w-[min(95vw,720px)] overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Live activity details</SheetTitle>
+          <SheetDescription>
+            Raw tool payloads and full outputs are hidden from the main view.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="mt-4 space-y-4">
+          {latestToolSequence ? (
+            <section className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">Latest tool call</div>
+              <ToolSequenceGroup
+                sequence={latestToolSequence}
+                summaryOrder="latest-first"
+                open={toolWindowOpen}
+                onOpenChange={onToolWindowOpenChange}
+                toolDetailsClassName="overflow-y-auto"
+                toolDetailsMaxHeight={360}
+              />
+            </section>
+          ) : (
+            <div className="rounded border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              No tool details yet.
+            </div>
+          )}
+
+          {latestThinking !== null && (
+            <section className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">
+                Latest thinking (full)
+              </div>
+              <LatestThinking thinking={latestThinking} running={running || starting} />
+            </section>
+          )}
+
+          {hasAcpPlan && acpPlan && (
+            <section className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">Agent plan</div>
+              <AcpPlanView entries={acpPlan.entries} />
+            </section>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export const AgentLiveDock = memo(function AgentLiveDock({
   workspaceId,
   groupedMessages,
@@ -256,11 +492,6 @@ export const AgentLiveDock = memo(function AgentLiveDock({
 
   const updatedLabel = lastUpdatedAt ? `updated ${formatRelativeTime(lastUpdatedAt)}` : null;
 
-  const needsPermissionAction =
-    summary.needsAttention?.kind === 'permission' &&
-    pendingRequest.type === 'permission' &&
-    onApprovePermission;
-
   if (!(hasContent || running || starting || stopping || permissionMode)) {
     return null;
   }
@@ -294,60 +525,13 @@ export const AgentLiveDock = memo(function AgentLiveDock({
         </div>
 
         <div className="mt-2 min-h-0 space-y-2 overflow-y-auto">
-          {summary.needsAttention && (
-            <div className="rounded border border-amber-300 bg-amber-50 p-2 space-y-2">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-900">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Needs attention
-                <span className="text-amber-800 font-normal">{summary.needsAttention.message}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {needsPermissionAction && pendingRequest.type === 'permission' && (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-6 px-2 text-[11px]"
-                      onClick={() => onApprovePermission(pendingRequest.request.requestId, true)}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-[11px]"
-                      onClick={() => onApprovePermission(pendingRequest.request.requestId, false)}
-                    >
-                      Deny
-                    </Button>
-                  </>
-                )}
-                {summary.needsAttention.kind === 'error' && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-2 text-[11px]"
-                    onClick={() => setDetailsOpen(true)}
-                  >
-                    Open logs
-                  </Button>
-                )}
-                {onJumpIn && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-6 px-2 text-[11px]"
-                    onClick={onJumpIn}
-                  >
-                    Message agent
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
+          <NeedsAttentionCard
+            needsAttention={summary.needsAttention}
+            pendingRequest={pendingRequest}
+            onApprovePermission={onApprovePermission}
+            onJumpIn={onJumpIn}
+            onOpenDetails={() => setDetailsOpen(true)}
+          />
 
           <section className="space-y-1">
             <div className="text-[10px] font-medium text-muted-foreground">Now</div>
@@ -358,68 +542,11 @@ export const AgentLiveDock = memo(function AgentLiveDock({
             </div>
           </section>
 
-          <section className="space-y-1">
-            <div className="text-[10px] font-medium text-muted-foreground">Recent</div>
-            {summary.recent.length === 0 ? (
-              <div className="rounded border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
-                Waiting for milestones...
-              </div>
-            ) : (
-              <div className="rounded border bg-muted/20 px-2 py-1.5 space-y-1">
-                {summary.recent.map((milestone) => (
-                  <div key={milestone.id} className="flex items-center gap-2 min-w-0 text-xs">
-                    <span
-                      className={cn('h-1.5 w-1.5 rounded-full shrink-0', {
-                        'bg-muted-foreground': milestone.tone === 'muted',
-                        'bg-primary': milestone.tone === 'default',
-                        'bg-success': milestone.tone === 'success',
-                        'bg-destructive': milestone.tone === 'error',
-                      })}
-                    />
-                    <span className={cn('truncate', getToneClass(milestone.tone))}>
-                      {milestone.label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="space-y-1">
-            <div className="text-[10px] font-medium text-muted-foreground">Files touched</div>
-            {summary.filesTouched.length === 0 ? (
-              <div className="rounded border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
-                No files yet
-              </div>
-            ) : (
-              <div className="rounded border bg-muted/20 px-2 py-1.5">
-                <div className="flex flex-wrap gap-1">
-                  {summary.filesTouched.map((file) => (
-                    <button
-                      key={`${file.path}:${file.line ?? ''}`}
-                      type="button"
-                      className="rounded border bg-background px-1.5 py-0.5 text-[10px] font-mono text-blue-500 hover:text-blue-600 hover:underline truncate max-w-[220px]"
-                      title={file.line ? `${file.path}:${file.line}` : file.path}
-                      onClick={() => {
-                        window.dispatchEvent(
-                          new CustomEvent('acp-open-file', {
-                            detail: { path: file.path, line: file.line },
-                          })
-                        );
-                      }}
-                    >
-                      {getFileChipLabel(file.path, file.line)}
-                    </button>
-                  ))}
-                  {summary.hiddenFileCount > 0 && (
-                    <span className="rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      +{summary.hiddenFileCount} more
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
+          <RecentMilestonesSection recent={summary.recent} />
+          <FilesTouchedSection
+            filesTouched={summary.filesTouched}
+            hiddenFileCount={summary.hiddenFileCount}
+          />
 
           {hasDetailsContent && (
             <div className="pt-1">
@@ -439,52 +566,18 @@ export const AgentLiveDock = memo(function AgentLiveDock({
         </div>
       </div>
 
-      <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <SheetContent side="right" className="sm:max-w-xl w-[min(95vw,720px)] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Live activity details</SheetTitle>
-            <SheetDescription>
-              Raw tool payloads and full outputs are hidden from the main view.
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="mt-4 space-y-4">
-            {summary.latestToolSequence ? (
-              <section className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">Latest tool call</div>
-                <ToolSequenceGroup
-                  sequence={summary.latestToolSequence}
-                  summaryOrder="latest-first"
-                  open={toolWindowOpen}
-                  onOpenChange={setToolWindowOpen}
-                  toolDetailsClassName="overflow-y-auto"
-                  toolDetailsMaxHeight={360}
-                />
-              </section>
-            ) : (
-              <div className="rounded border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                No tool details yet.
-              </div>
-            )}
-
-            {latestThinking !== null && (
-              <section className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Latest thinking (full)
-                </div>
-                <LatestThinking thinking={latestThinking} running={running || starting} />
-              </section>
-            )}
-
-            {hasAcpPlan && acpPlan && (
-              <section className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">Agent plan</div>
-                <AcpPlanView entries={acpPlan.entries} />
-              </section>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <LiveActivityDetailsSheet
+        detailsOpen={detailsOpen}
+        onDetailsOpenChange={setDetailsOpen}
+        latestToolSequence={summary.latestToolSequence}
+        toolWindowOpen={toolWindowOpen}
+        onToolWindowOpenChange={setToolWindowOpen}
+        latestThinking={latestThinking}
+        running={running}
+        starting={starting}
+        hasAcpPlan={hasAcpPlan}
+        acpPlan={acpPlan}
+      />
 
       <button
         type="button"

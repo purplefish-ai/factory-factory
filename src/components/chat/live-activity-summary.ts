@@ -75,6 +75,10 @@ const READER_TOOL_NAMES = ['read', 'grep', 'glob', 'search'];
 const TEST_COMMAND_PATTERN =
   /\b(vitest|jest|mocha|pytest|cargo test|go test|pnpm test|npm test|yarn test|bun test)\b/i;
 const TEST_FAILURE_PATTERN = /\b(fail(?:ed|ure|ing)?|error|not ok)\b/i;
+const NON_ZERO_TEST_FAILURE_PATTERN =
+  /\b([1-9]\d*)\s+(?:tests?\s+)?(?:fail(?:ed|ure|ing|ures)?|errors?|not ok)\b/i;
+const ZERO_TEST_FAILURE_PATTERN =
+  /\b(?:0|no)\s+(?:tests?\s+)?(?:fail(?:ed|ure|ing|ures)?|errors?|not ok)\b/i;
 const TEST_SUCCESS_PATTERN = /\b(all tests passed|0 failed|\d+\s+passed)\b/i;
 
 function normalizeWhitespace(value: string): string {
@@ -265,19 +269,23 @@ function makeTestMilestone(
   }
 
   const outputText = toContentText(call.result?.content).toLowerCase();
+  const hasFailureSignal = TEST_FAILURE_PATTERN.test(outputText);
+  const hasNonZeroFailureCount = NON_ZERO_TEST_FAILURE_PATTERN.test(outputText);
+  const hasZeroFailureCount = ZERO_TEST_FAILURE_PATTERN.test(outputText);
+
+  if (hasNonZeroFailureCount || (hasFailureSignal && !hasZeroFailureCount)) {
+    return {
+      id: `${call.id}-test`,
+      label: 'Tests failed',
+      tone: 'error',
+    };
+  }
+
   if (TEST_SUCCESS_PATTERN.test(outputText) || call.status === 'success') {
     return {
       id: `${call.id}-test`,
       label: 'Tests passed',
       tone: 'success',
-    };
-  }
-
-  if (TEST_FAILURE_PATTERN.test(outputText)) {
-    return {
-      id: `${call.id}-test`,
-      label: 'Tests failed',
-      tone: 'error',
     };
   }
 
