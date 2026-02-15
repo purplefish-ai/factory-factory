@@ -1107,6 +1107,15 @@ class SessionService {
    */
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
+    if (!acpHandle) {
+      const configOptions = await this.setCachedSessionConfigOption(sessionId, configId, value);
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions,
+      } as SessionDeltaEvent);
+      return;
+    }
+
     const selectedOption = acpHandle?.configOptions.find((option) => option.id === configId);
     const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
@@ -1128,6 +1137,66 @@ class SessionService {
         configOptions: configOptions,
       });
     }
+  }
+
+  private async setCachedSessionConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<SessionConfigOption[]> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const snapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    if (!snapshot || snapshot.provider !== session.provider) {
+      throw new Error(
+        `Cannot set config option for inactive session ${sessionId}: no cached ACP config available`
+      );
+    }
+
+    const configOptions = this.updateCachedConfigOptions(snapshot.configOptions, configId, value);
+    await this.persistAcpConfigSnapshot(sessionId, {
+      provider: snapshot.provider,
+      providerSessionId: snapshot.providerSessionId,
+      configOptions,
+      existingMetadata: session.providerMetadata,
+    });
+    return configOptions;
+  }
+
+  private updateCachedConfigOptions(
+    configOptions: SessionConfigOption[],
+    configId: string,
+    value: string
+  ): SessionConfigOption[] {
+    let didUpdate = false;
+    const nextConfigOptions = configOptions.map((option) => {
+      if (option.id !== configId) {
+        return option;
+      }
+
+      const allowedValues = this.getConfigOptionValues(option);
+      if (allowedValues.length > 0 && !allowedValues.includes(value)) {
+        throw new Error(
+          `Unsupported value "${value}" for config option "${configId}"` +
+            ` (allowed: ${allowedValues.join(', ')})`
+        );
+      }
+
+      didUpdate = true;
+      return {
+        ...option,
+        currentValue: value,
+      };
+    });
+
+    if (!didUpdate) {
+      throw new Error(`Unknown config option: ${configId}`);
+    }
+
+    return nextConfigOptions;
   }
 
   sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {

@@ -1351,6 +1351,123 @@ describe('SessionService', () => {
     expect(acpRuntimeManager.setConfigOption).not.toHaveBeenCalled();
   });
 
+  it('updates cached config snapshot when setting config on inactive session', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        provider: 'CODEX',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'CODEX',
+            providerSessionId: 'thread_123',
+            capturedAt: '2026-02-15T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'execution_mode',
+                name: 'Execution Mode',
+                type: 'select',
+                category: 'permission',
+                currentValue: '["on-request","workspace-write"]',
+                options: [
+                  {
+                    value: '["on-request","workspace-write"]',
+                    name: 'on-request + workspace-write',
+                  },
+                  {
+                    value: '["on-failure","workspace-write"]',
+                    name: 'on-failure + workspace-write',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue(unsafeCoerce({ id: 'session-1' }));
+    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
+
+    await sessionService.setSessionConfigOption(
+      'session-1',
+      'execution_mode',
+      '["on-failure","workspace-write"]'
+    );
+
+    expect(acpRuntimeManager.setConfigOption).not.toHaveBeenCalled();
+    expect(acpRuntimeManager.setSessionMode).not.toHaveBeenCalled();
+    expect(acpRuntimeManager.setSessionModel).not.toHaveBeenCalled();
+    expect(sessionRepository.updateSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          acpConfigSnapshot: expect.objectContaining({
+            configOptions: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'execution_mode',
+                currentValue: '["on-failure","workspace-write"]',
+              }),
+            ]),
+          }),
+        }),
+      })
+    );
+    expect(emitDeltaSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'config_options_update',
+        configOptions: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'execution_mode',
+            currentValue: '["on-failure","workspace-write"]',
+          }),
+        ]),
+      })
+    );
+  });
+
+  it('rejects unsupported cached config values on inactive session', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        provider: 'CODEX',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'CODEX',
+            providerSessionId: 'thread_123',
+            capturedAt: '2026-02-15T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'execution_mode',
+                name: 'Execution Mode',
+                type: 'select',
+                category: 'permission',
+                currentValue: '["on-request","workspace-write"]',
+                options: [
+                  {
+                    value: '["on-request","workspace-write"]',
+                    name: 'on-request + workspace-write',
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      })
+    );
+
+    await expect(
+      sessionService.setSessionConfigOption(
+        'session-1',
+        'execution_mode',
+        '["never","danger-full-access"]'
+      )
+    ).rejects.toThrow('Unsupported value');
+    expect(sessionRepository.updateSession).not.toHaveBeenCalled();
+    expect(acpRuntimeManager.setConfigOption).not.toHaveBeenCalled();
+  });
+
   it('finalizes orphaned ACP tool calls when prompt ends without terminal updates', async () => {
     const pendingToolCalls = (
       sessionService as unknown as {
