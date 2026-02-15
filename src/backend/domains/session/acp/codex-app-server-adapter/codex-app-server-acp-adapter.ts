@@ -91,6 +91,9 @@ type AdapterSession = {
 };
 
 type PromptContentBlock = PromptRequest['prompt'][number];
+type ThreadReadItem = ReturnType<
+  typeof threadReadResponseSchema.parse
+>['thread']['turns'][number]['items'][number];
 type CodexClient = Pick<
   CodexRpcClient,
   'start' | 'stop' | 'request' | 'notify' | 'respondSuccess' | 'respondError'
@@ -431,13 +434,13 @@ export class CodexAppServerAcpAdapter implements Agent {
     };
   }
 
-  // biome-ignore lint/suspicious/useAwait: ACP agent interface methods are async for consistency.
   async authenticate(_params: AuthenticateRequest): Promise<AuthenticateResponse> {
+    await Promise.resolve();
     return {};
   }
 
-  // biome-ignore lint/suspicious/useAwait: ACP agent interface methods are async for consistency.
   async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
+    await Promise.resolve();
     const session = this.requireSession(params.sessionId);
     const nextMode = params.modeId === 'code' ? 'code' : 'ask';
 
@@ -447,10 +450,10 @@ export class CodexAppServerAcpAdapter implements Agent {
     return {};
   }
 
-  // biome-ignore lint/suspicious/useAwait: ACP agent interface methods are async for consistency.
   async setSessionConfigOption(
     params: SetSessionConfigOptionRequest
   ): Promise<SetSessionConfigOptionResponse> {
+    await Promise.resolve();
     const session = this.requireSession(params.sessionId);
 
     switch (params.configId) {
@@ -657,7 +660,6 @@ export class CodexAppServerAcpAdapter implements Agent {
     throw lastError;
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Event replay is an exhaustive protocol mapping.
   private async replayThreadHistory(sessionId: string, threadId: string): Promise<void> {
     const session = this.requireSession(sessionId);
     const threadReadRaw = await this.codex.request('thread/read', {
@@ -668,70 +670,83 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     for (const turn of threadRead.thread.turns) {
       for (const item of turn.items) {
-        switch (item.type) {
-          case 'userMessage': {
-            const contentBlocks = Array.isArray((item as Record<string, unknown>).content)
-              ? ((item as Record<string, unknown>).content as unknown[])
-              : [];
-            for (const content of contentBlocks) {
-              if (
-                !isRecord(content) ||
-                content.type !== 'text' ||
-                typeof content.text !== 'string'
-              ) {
-                continue;
-              }
-              await this.emitSessionUpdate(sessionId, {
-                sessionUpdate: 'user_message_chunk',
-                content: { type: 'text', text: content.text },
-              });
-            }
-            break;
-          }
-          case 'agentMessage': {
-            const text = asString((item as Record<string, unknown>).text);
-            if (!text) {
-              break;
-            }
-            await this.emitSessionUpdate(sessionId, {
-              sessionUpdate: 'agent_message_chunk',
-              content: { type: 'text', text },
-            });
-            break;
-          }
-          case 'commandExecution':
-          case 'fileChange':
-          case 'mcpToolCall':
-          case 'webSearch':
-          case 'plan':
-          case 'reasoning': {
-            const toolInfo = this.buildToolCallState(
-              session,
-              item as unknown as { type: string; id: string } & Record<string, unknown>,
-              turn.id
-            );
-            if (!toolInfo) {
-              break;
-            }
-            await this.emitSessionUpdate(sessionId, {
-              sessionUpdate: 'tool_call',
-              toolCallId: toolInfo.toolCallId,
-              title: toolInfo.title,
-              kind: toolInfo.kind,
-              status: 'completed',
-              rawInput: item,
-              rawOutput: item,
-            });
-            break;
-          }
-          default:
-            break;
-        }
+        await this.replayThreadHistoryItem(session, sessionId, turn.id, item);
       }
     }
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Notification routing must map each protocol event explicitly.
+  private async replayThreadHistoryItem(
+    session: AdapterSession,
+    sessionId: string,
+    turnId: string,
+    item: ThreadReadItem
+  ): Promise<void> {
+    if (item.type === 'userMessage') {
+      await this.replayUserMessageHistoryItem(sessionId, item as Record<string, unknown>);
+      return;
+    }
+
+    if (item.type === 'agentMessage') {
+      await this.replayAgentMessageHistoryItem(sessionId, item as Record<string, unknown>);
+      return;
+    }
+
+    await this.replayToolLikeHistoryItem(session, sessionId, turnId, item);
+  }
+
+  private async replayUserMessageHistoryItem(
+    sessionId: string,
+    item: Record<string, unknown>
+  ): Promise<void> {
+    const contentBlocks = Array.isArray(item.content) ? item.content : [];
+    for (const content of contentBlocks) {
+      if (!isRecord(content) || content.type !== 'text' || typeof content.text !== 'string') {
+        continue;
+      }
+      await this.emitSessionUpdate(sessionId, {
+        sessionUpdate: 'user_message_chunk',
+        content: { type: 'text', text: content.text },
+      });
+    }
+  }
+
+  private async replayAgentMessageHistoryItem(
+    sessionId: string,
+    item: Record<string, unknown>
+  ): Promise<void> {
+    const text = asString(item.text);
+    if (!text) {
+      return;
+    }
+
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text },
+    });
+  }
+
+  private async replayToolLikeHistoryItem(
+    session: AdapterSession,
+    sessionId: string,
+    turnId: string,
+    item: { type: string; id: string } & Record<string, unknown>
+  ): Promise<void> {
+    const toolInfo = this.buildToolCallState(session, item, turnId);
+    if (!toolInfo) {
+      return;
+    }
+
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: 'tool_call',
+      toolCallId: toolInfo.toolCallId,
+      title: toolInfo.title,
+      kind: toolInfo.kind,
+      status: 'completed',
+      rawInput: item,
+      rawOutput: item,
+    });
+  }
+
   private async handleCodexNotification(method: string, params: unknown): Promise<void> {
     const parsed = knownCodexNotificationSchema.safeParse({ method, params });
     if (!parsed.success) {
@@ -740,13 +755,11 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
 
     const notification = parsed.data;
-
-    if (notification.method === 'error') {
+    if (notification.method === 'error' || notification.method === 'turn/started') {
       return;
     }
 
-    const threadId = notification.params.threadId;
-    const sessionId = this.sessionIdByThreadId.get(threadId);
+    const sessionId = this.sessionIdByThreadId.get(notification.params.threadId);
     if (!sessionId) {
       return;
     }
@@ -756,128 +769,150 @@ export class CodexAppServerAcpAdapter implements Agent {
       return;
     }
 
-    switch (notification.method) {
-      case 'item/agentMessage/delta': {
-        await this.emitSessionUpdate(sessionId, {
+    if (notification.method === 'item/agentMessage/delta') {
+      await this.emitSessionUpdate(sessionId, {
+        sessionUpdate: 'agent_message_chunk',
+        content: {
+          type: 'text',
+          text: notification.params.delta,
+        },
+      });
+      return;
+    }
+
+    if (notification.method === 'item/plan/delta') {
+      await this.handlePlanDelta(
+        sessionId,
+        session,
+        notification.params.itemId,
+        notification.params.delta
+      );
+      return;
+    }
+
+    if (notification.method === 'item/commandExecution/outputDelta') {
+      await this.emitToolCallProgress(
+        sessionId,
+        session,
+        notification.params.itemId,
+        notification.params.delta
+      );
+      return;
+    }
+
+    if (notification.method === 'item/fileChange/outputDelta') {
+      await this.emitToolCallProgress(
+        sessionId,
+        session,
+        notification.params.itemId,
+        notification.params.delta
+      );
+      return;
+    }
+
+    if (notification.method === 'item/mcpToolCall/progress') {
+      await this.emitToolCallProgress(
+        sessionId,
+        session,
+        notification.params.itemId,
+        notification.params.message
+      );
+      return;
+    }
+
+    if (notification.method === 'item/started') {
+      await this.handleItemStarted(
+        session,
+        notification.params.item as { type: string; id: string } & Record<string, unknown>,
+        notification.params.turnId
+      );
+      return;
+    }
+
+    if (notification.method === 'item/completed') {
+      await this.handleItemCompleted(
+        session,
+        notification.params.item as { type: string; id: string } & Record<string, unknown>,
+        notification.params.turnId
+      );
+      return;
+    }
+
+    if (notification.method === 'turn/completed') {
+      await this.handleTurnCompletedNotification(
+        session,
+        notification.params.turn.status,
+        notification.params.turn.error?.message
+      );
+    }
+  }
+
+  private async handlePlanDelta(
+    sessionId: string,
+    session: AdapterSession,
+    itemId: string,
+    delta: string
+  ): Promise<void> {
+    const previous = session.planTextByItemId.get(itemId) ?? '';
+    const next = `${previous}${delta}`;
+    session.planTextByItemId.set(itemId, next);
+
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: 'plan',
+      entries: [
+        {
+          content: next,
+          priority: 'medium',
+          status: 'in_progress',
+        },
+      ],
+    });
+  }
+
+  private async emitToolCallProgress(
+    sessionId: string,
+    session: AdapterSession,
+    itemId: string,
+    output: string
+  ): Promise<void> {
+    const toolCall = session.toolCallsByItemId.get(itemId);
+    if (!toolCall) {
+      return;
+    }
+
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: toolCall.toolCallId,
+      status: 'in_progress',
+      rawOutput: output,
+    });
+  }
+
+  private async handleTurnCompletedNotification(
+    session: AdapterSession,
+    status: 'completed' | 'interrupted' | 'failed' | 'inProgress',
+    errorMessage?: string
+  ): Promise<void> {
+    if (status === 'interrupted') {
+      this.settleTurn(session, 'cancelled');
+      return;
+    }
+
+    if (status === 'failed') {
+      if (errorMessage) {
+        await this.emitSessionUpdate(session.sessionId, {
           sessionUpdate: 'agent_message_chunk',
           content: {
             type: 'text',
-            text: notification.params.delta,
+            text: `Turn failed: ${errorMessage}`,
           },
         });
-        return;
       }
-
-      case 'item/plan/delta': {
-        const previous = session.planTextByItemId.get(notification.params.itemId) ?? '';
-        const next = `${previous}${notification.params.delta}`;
-        session.planTextByItemId.set(notification.params.itemId, next);
-
-        await this.emitSessionUpdate(sessionId, {
-          sessionUpdate: 'plan',
-          entries: [
-            {
-              content: next,
-              priority: 'medium',
-              status: 'in_progress',
-            },
-          ],
-        });
-        return;
-      }
-
-      case 'item/commandExecution/outputDelta': {
-        const toolCall = session.toolCallsByItemId.get(notification.params.itemId);
-        if (!toolCall) {
-          return;
-        }
-
-        await this.emitSessionUpdate(sessionId, {
-          sessionUpdate: 'tool_call_update',
-          toolCallId: toolCall.toolCallId,
-          status: 'in_progress',
-          rawOutput: notification.params.delta,
-        });
-        return;
-      }
-
-      case 'item/fileChange/outputDelta': {
-        const toolCall = session.toolCallsByItemId.get(notification.params.itemId);
-        if (!toolCall) {
-          return;
-        }
-
-        await this.emitSessionUpdate(sessionId, {
-          sessionUpdate: 'tool_call_update',
-          toolCallId: toolCall.toolCallId,
-          status: 'in_progress',
-          rawOutput: notification.params.delta,
-        });
-        return;
-      }
-
-      case 'item/mcpToolCall/progress': {
-        const toolCall = session.toolCallsByItemId.get(notification.params.itemId);
-        if (!toolCall) {
-          return;
-        }
-
-        await this.emitSessionUpdate(sessionId, {
-          sessionUpdate: 'tool_call_update',
-          toolCallId: toolCall.toolCallId,
-          status: 'in_progress',
-          rawOutput: notification.params.message,
-        });
-        return;
-      }
-
-      case 'item/started': {
-        await this.handleItemStarted(
-          session,
-          notification.params.item as { type: string; id: string } & Record<string, unknown>,
-          notification.params.turnId
-        );
-        return;
-      }
-
-      case 'item/completed': {
-        await this.handleItemCompleted(
-          session,
-          notification.params.item as { type: string; id: string } & Record<string, unknown>,
-          notification.params.turnId
-        );
-        return;
-      }
-
-      case 'turn/completed': {
-        const status = notification.params.turn.status;
-        if (status === 'interrupted') {
-          this.settleTurn(session, 'cancelled');
-          return;
-        }
-
-        if (status === 'failed') {
-          const errorMessage = notification.params.turn.error?.message;
-          if (errorMessage) {
-            await this.emitSessionUpdate(session.sessionId, {
-              sessionUpdate: 'agent_message_chunk',
-              content: {
-                type: 'text',
-                text: `Turn failed: ${errorMessage}`,
-              },
-            });
-          }
-          this.settleTurn(session, 'end_turn');
-          return;
-        }
-
-        this.settleTurn(session, session.activeTurn?.cancelRequested ? 'cancelled' : 'end_turn');
-        return;
-      }
-
-      default:
-        return;
+      this.settleTurn(session, 'end_turn');
+      return;
     }
+
+    this.settleTurn(session, session.activeTurn?.cancelRequested ? 'cancelled' : 'end_turn');
   }
 
   private async handleItemStarted(
