@@ -1,4 +1,8 @@
-import type { AgentSideConnection, RequestPermissionResponse } from '@agentclientprotocol/sdk';
+import type {
+  AgentSideConnection,
+  McpServer,
+  RequestPermissionResponse,
+} from '@agentclientprotocol/sdk';
 import { describe, expect, it, vi } from 'vitest';
 import { CodexAppServerAcpAdapter } from './codex-app-server-acp-adapter';
 import { CodexRequestError } from './codex-rpc-client';
@@ -53,6 +57,15 @@ function createMockCodexClient(): { client: InjectedCodexClient; mocks: CodexMoc
     client: mocks as unknown as InjectedCodexClient,
     mocks,
   };
+}
+
+function getCodexRequestCalls(
+  codex: CodexMocks,
+  method: string
+): [string, Record<string, unknown>][] {
+  return codex.request.mock.calls.filter(
+    (call): call is [string, Record<string, unknown>] => call[0] === method
+  );
 }
 
 async function initializeAdapterWithDefaultModel(
@@ -149,6 +162,127 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(response.sessionId).toBe('sess_thread_123');
   });
 
+  it('writes provided MCP servers to Codex config and reloads on newSession', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_with_mcp', cwd: '/tmp/workspace' },
+      reasoningEffort: 'medium',
+    });
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({});
+
+    const mcpServers: McpServer[] = [
+      {
+        name: 'local-tools',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp/workspace'],
+        env: [{ name: 'NODE_ENV', value: 'test' }],
+      },
+    ];
+
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers,
+    });
+
+    expect(getCodexRequestCalls(codex, 'config/value/write')).toEqual([
+      [
+        'config/value/write',
+        {
+          keyPath: 'mcp_servers',
+          mergeStrategy: 'replace',
+          value: {
+            'local-tools': {
+              enabled: true,
+              command: 'npx',
+              args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp/workspace'],
+              env: { NODE_ENV: 'test' },
+            },
+          },
+        },
+      ],
+    ]);
+    expect(getCodexRequestCalls(codex, 'config/mcpServer/reload')).toEqual([
+      ['config/mcpServer/reload', {}],
+    ]);
+  });
+
+  it('deduplicates MCP server names when writing Codex config', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_mcp_names', cwd: '/tmp/workspace' },
+      reasoningEffort: 'medium',
+    });
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({});
+
+    const mcpServers: McpServer[] = [
+      { name: '', command: 'server-a', args: [], env: [] },
+      { name: 'dup', command: 'server-b', args: [], env: [] },
+      { name: 'dup', command: 'server-c', args: [], env: [] },
+    ];
+
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers,
+    });
+
+    const configWriteCalls = getCodexRequestCalls(codex, 'config/value/write');
+    expect(configWriteCalls).toHaveLength(1);
+    const firstWriteCall = configWriteCalls[0];
+    if (!firstWriteCall) {
+      throw new Error('expected config/value/write call');
+    }
+    expect(firstWriteCall[1]).toEqual({
+      keyPath: 'mcp_servers',
+      mergeStrategy: 'replace',
+      value: {
+        mcp_server_1: { enabled: true, command: 'server-a', args: [] },
+        dup: { enabled: true, command: 'server-b', args: [] },
+        dup_2: { enabled: true, command: 'server-c', args: [] },
+      },
+    });
+  });
+
+  it('does not keep a session when MCP config write fails during newSession', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_mcp_error', cwd: '/tmp/workspace' },
+      reasoningEffort: 'medium',
+    });
+    codex.request.mockRejectedValueOnce(new Error('failed to write codex config'));
+
+    await expect(
+      adapter.newSession({
+        cwd: '/tmp/workspace',
+        mcpServers: [{ name: 'broken', command: 'bad-server', args: [], env: [] }],
+      })
+    ).rejects.toThrow('failed to write codex config');
+
+    await expect(
+      adapter.setSessionConfigOption({
+        sessionId: 'sess_thread_mcp_error',
+        configId: 'mode',
+        value: 'code',
+      })
+    ).rejects.toBeInstanceOf(Error);
+  });
+
   it('loadSession replays thread history from thread/read', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -207,6 +341,61 @@ describe('CodexAppServerAcpAdapter', () => {
           update.toolCallId === 'codex:thread_abc:turn_1:item_c1'
       )
     ).toBe(true);
+  });
+
+  it('writes provided MCP servers to Codex config and reloads on loadSession', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_resume', cwd: '/tmp/workspace' },
+      reasoningEffort: 'medium',
+    });
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_resume', turns: [] },
+    });
+
+    const mcpServers: McpServer[] = [
+      {
+        type: 'http',
+        name: 'remote-tools',
+        url: 'https://mcp.example.com',
+        headers: [{ name: 'Authorization', value: 'Bearer token' }],
+      },
+    ];
+
+    await adapter.loadSession({
+      sessionId: 'sess_thread_resume',
+      cwd: '/tmp/workspace',
+      mcpServers,
+    });
+
+    expect(getCodexRequestCalls(codex, 'config/value/write')).toEqual([
+      [
+        'config/value/write',
+        {
+          keyPath: 'mcp_servers',
+          mergeStrategy: 'replace',
+          value: {
+            'remote-tools': {
+              enabled: true,
+              url: 'https://mcp.example.com',
+              http_headers: {
+                Authorization: 'Bearer token',
+              },
+            },
+          },
+        },
+      ],
+    ]);
+    expect(getCodexRequestCalls(codex, 'config/mcpServer/reload')).toEqual([
+      ['config/mcpServer/reload', {}],
+    ]);
   });
 
   it('rejects invalid thought level values', async () => {

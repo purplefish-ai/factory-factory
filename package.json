@@ -51,6 +51,8 @@
     "test:watch": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && vitest",
     "test:coverage": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && vitest run --coverage",
     "test:integration": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && vitest run \"src/backend/**/*.integration.test.ts\"",
+    "test:codex-app-server:manual": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && RUN_REAL_CODEX_APP_SERVER_TESTS=1 vitest run \"src/backend/domains/session/acp/codex-app-server-adapter/*.manual.integration.test.ts\"",
+    "test:codex-app-server:manual:prompt": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && RUN_REAL_CODEX_APP_SERVER_TESTS=1 RUN_REAL_CODEX_APP_SERVER_PROMPT_TESTS=1 vitest run \"src/backend/domains/session/acp/codex-app-server-adapter/*.manual.integration.test.ts\"",
     "check:coverage:critical": "node scripts/check-critical-coverage.mjs",
     "check": "biome check . && pnpm check:ownership",
     "check:imports": "node scripts/check-ambiguous-relative-imports.mjs",

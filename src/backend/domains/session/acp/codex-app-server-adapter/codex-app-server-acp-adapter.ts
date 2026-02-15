@@ -9,6 +9,7 @@ import {
   type InitializeResponse,
   type LoadSessionRequest,
   type LoadSessionResponse,
+  type McpServer,
   type NewSessionRequest,
   type NewSessionResponse,
   ndJsonStream,
@@ -59,6 +60,16 @@ type CodexModelEntry = {
   supportedReasoningEfforts: string[];
   inputModalities: string[];
   isDefault: boolean;
+};
+
+type CodexMcpServerConfig = {
+  enabled: boolean;
+  args?: string[];
+  command?: string;
+  env?: Record<string, string>;
+  http_headers?: Record<string, string>;
+  transport?: 'sse';
+  url?: string;
 };
 
 type ToolCallState = {
@@ -144,6 +155,68 @@ function toThreadId(sessionId: string): string {
 
 function createToolCallId(threadId: string, turnId: string, itemId: string): string {
   return `codex:${threadId}:${turnId}:${itemId}`;
+}
+
+function toMcpEnvRecord(envVars: Array<{ name: string; value: string }>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const entry of envVars) {
+    env[entry.name] = entry.value;
+  }
+  return env;
+}
+
+function toMcpHeadersRecord(
+  headers: Array<{ name: string; value: string }>
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const header of headers) {
+    result[header.name] = header.value;
+  }
+  return result;
+}
+
+function sanitizeMcpServerName(name: string, index: number): string {
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? trimmed : `mcp_server_${index + 1}`;
+}
+
+function toCodexMcpServerConfig(server: McpServer): CodexMcpServerConfig {
+  if ('command' in server) {
+    const env = toMcpEnvRecord(server.env);
+    return {
+      enabled: true,
+      command: server.command,
+      args: [...server.args],
+      ...(Object.keys(env).length > 0 ? { env } : {}),
+    };
+  }
+
+  const httpHeaders = toMcpHeadersRecord(server.headers);
+  return {
+    enabled: true,
+    url: server.url,
+    ...(Object.keys(httpHeaders).length > 0 ? { http_headers: httpHeaders } : {}),
+    ...(server.type === 'sse' ? { transport: 'sse' as const } : {}),
+  };
+}
+
+function toCodexMcpConfigMap(mcpServers: McpServer[]): Record<string, CodexMcpServerConfig> {
+  const mcpServersByName: Record<string, CodexMcpServerConfig> = {};
+  const usedNames = new Set<string>();
+
+  for (const [index, server] of mcpServers.entries()) {
+    const baseName = sanitizeMcpServerName(server.name, index);
+    let nextName = baseName;
+    let suffix = 2;
+    while (usedNames.has(nextName)) {
+      nextName = `${baseName}_${suffix}`;
+      suffix += 1;
+    }
+    usedNames.add(nextName);
+    mcpServersByName[nextName] = toCodexMcpServerConfig(server);
+  }
+
+  return mcpServersByName;
 }
 
 function buildToolUserInputPermissionOptions(
@@ -393,6 +466,13 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     this.sessions.set(sessionId, session);
     this.sessionIdByThreadId.set(session.threadId, sessionId);
+    try {
+      await this.applyMcpServers(params.mcpServers);
+    } catch (error) {
+      this.sessions.delete(sessionId);
+      this.sessionIdByThreadId.delete(session.threadId);
+      throw error;
+    }
 
     return {
       sessionId,
@@ -426,8 +506,14 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     this.sessions.set(session.sessionId, session);
     this.sessionIdByThreadId.set(session.threadId, session.sessionId);
-
-    await this.replayThreadHistory(session.sessionId, session.threadId);
+    try {
+      await this.applyMcpServers(params.mcpServers);
+      await this.replayThreadHistory(session.sessionId, session.threadId);
+    } catch (error) {
+      this.sessions.delete(session.sessionId);
+      this.sessionIdByThreadId.delete(session.threadId);
+      throw error;
+    }
 
     return {
       configOptions: this.buildConfigOptions(session),
@@ -585,6 +671,20 @@ export class CodexAppServerAcpAdapter implements Agent {
   private resolveDefaultModel(): string {
     const preferred = this.modelCatalog.find((model) => model.isDefault);
     return preferred?.id ?? this.modelCatalog[0]?.id ?? 'gpt-5';
+  }
+
+  private async applyMcpServers(mcpServers: McpServer[]): Promise<void> {
+    if (mcpServers.length === 0) {
+      return;
+    }
+
+    const codexMcpServers = toCodexMcpConfigMap(mcpServers);
+    await this.codex.request('config/value/write', {
+      keyPath: 'mcp_servers',
+      value: codexMcpServers,
+      mergeStrategy: 'replace',
+    });
+    await this.codex.request('config/mcpServer/reload', {});
   }
 
   private buildConfigOptions(session: AdapterSession): SessionConfigOption[] {
