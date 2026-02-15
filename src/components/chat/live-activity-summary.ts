@@ -2,6 +2,8 @@ import {
   extractCommandPreviewFromInput,
   getDisplayToolName,
   isRunLikeToolName,
+  normalizeWhitespace,
+  truncateWithEllipsis,
 } from '@/components/agent-activity/tool-renderers/tool-display-utils';
 import type {
   GroupedMessageItem,
@@ -80,17 +82,6 @@ const NON_ZERO_TEST_FAILURE_PATTERN =
 const ZERO_TEST_FAILURE_PATTERN =
   /\b(?:0|no)\s+(?:tests?\s+)?(?:fail(?:ed|ure|ing|ures)?|errors?|not ok)\b/i;
 const TEST_SUCCESS_PATTERN = /\b(all tests passed|0 failed|\d+\s+passed)\b/i;
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
-function truncateWithEllipsis(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-  return `${value.slice(0, maxLength - 1)}…`;
-}
 
 function sanitizeThinkingLine(line: string): string {
   return normalizeWhitespace(line.replace(/^\*+|\*+$/g, ''));
