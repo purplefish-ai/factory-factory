@@ -54,7 +54,7 @@ const logger = createLogger('snapshot-reconciliation');
 export interface ReconciliationBridges {
   session: {
     getRuntimeSnapshot(sessionId: string): ReturnType<typeof sessionService.getRuntimeSnapshot>;
-    getAllPendingRequests(): Map<string, { toolName: string }>;
+    getAllPendingRequests(): Map<string, { toolName: string; input?: Record<string, unknown> }>;
   };
 }
 
@@ -198,7 +198,7 @@ export class SnapshotReconciliationService {
     ws: Awaited<
       ReturnType<typeof workspaceAccessor.findAllNonArchivedWithSessionsAndProject>
     >[number],
-    allPendingRequests: Map<string, { toolName: string }>,
+    allPendingRequests: Map<string, { toolName: string; input?: Record<string, unknown> }>,
     gitStatsMap: Map<
       string,
       { total: number; additions: number; deletions: number; hasUncommitted: boolean } | null

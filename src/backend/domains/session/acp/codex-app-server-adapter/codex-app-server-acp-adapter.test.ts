@@ -565,6 +565,13 @@ describe('CodexAppServerAcpAdapter', () => {
         choice: { answers: ['Second'] },
       },
     });
+    expect(connection.requestPermission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCall: expect.objectContaining({
+          title: 'AskUserQuestion',
+        }),
+      })
+    );
   });
 
   it('treats cancelled request_user_input permission outcomes as rejected', async () => {

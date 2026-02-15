@@ -1713,7 +1713,7 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     return {
       toolCallId: createToolCallId(session.threadId, turnId, itemId),
-      title: 'Tool input request',
+      title: 'AskUserQuestion',
       kind: 'other',
     };
   }

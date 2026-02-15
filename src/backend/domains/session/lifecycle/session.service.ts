@@ -23,6 +23,7 @@ import type {
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
+import { isUserQuestionRequest } from '@/shared/pending-request-types';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -504,7 +505,7 @@ class SessionService {
     }));
     const planContent = this.extractPlanContent(toolName, toolInput);
 
-    if (toolName === 'AskUserQuestion') {
+    if (isUserQuestionRequest({ toolName, input: toolInput })) {
       const questions = this.extractAskUserQuestions(toolInput);
       sessionDomainService.emitDelta(sid, {
         type: 'user_question',

@@ -7,7 +7,7 @@
 /** Session capabilities needed by workspace domain */
 export interface WorkspaceSessionBridge {
   isAnySessionWorking(sessionIds: string[]): boolean;
-  getAllPendingRequests(): Map<string, { toolName: string }>;
+  getAllPendingRequests(): Map<string, { toolName: string; input?: Record<string, unknown> }>;
 }
 
 /** GitHub capabilities needed by workspace domain */
