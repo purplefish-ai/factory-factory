@@ -52,7 +52,9 @@ import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 import { Logo, LogoIcon } from './logo';
 import { ThemeToggle } from './theme-toggle';
 import {
+  reorderWorkspaceIds,
   type ServerWorkspace,
+  sortWorkspaces,
   useWorkspaceListState,
   type WorkspaceListItem,
 } from './use-workspace-list-state';
@@ -363,24 +365,32 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
-      const canReorder = over && active.id !== over.id && selectedProjectId;
+      const canReorder = over && active.id !== over.id && selectedProjectId && serverWorkspaces;
       if (!canReorder) {
         return;
       }
 
-      // Get current workspace IDs (excluding creating placeholder)
-      const currentIds = workspaceList.filter((w) => w.uiState !== 'creating').map((w) => w.id);
-      const oldIndex = currentIds.indexOf(active.id as string);
-      const newIndex = currentIds.indexOf(over.id as string);
+      const allWorkspaceIds = sortWorkspaces(
+        serverWorkspaces,
+        isMocked ? undefined : workspaceOrder
+      ).map((workspace) => workspace.id);
+      const visibleWorkspaceIds = workspaceList
+        .filter((workspace) => workspace.uiState !== 'creating')
+        .map((workspace) => workspace.id);
+      const visibleWorkspaceIdSet = new Set(visibleWorkspaceIds);
+      const hiddenWorkspaceIds = new Set(
+        allWorkspaceIds.filter((id) => !visibleWorkspaceIdSet.has(id))
+      );
+      const newOrder = reorderWorkspaceIds(
+        allWorkspaceIds,
+        hiddenWorkspaceIds,
+        String(active.id),
+        String(over.id)
+      );
 
-      if (oldIndex === -1 || newIndex === -1) {
+      if (!newOrder) {
         return;
       }
-
-      // Reorder the array
-      const newOrder = [...currentIds];
-      newOrder.splice(oldIndex, 1);
-      newOrder.splice(newIndex, 0, active.id as string);
 
       // Persist the new order
       updateWorkspaceOrder.mutate({
@@ -388,7 +398,14 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
         workspaceIds: newOrder,
       });
     },
-    [workspaceList, selectedProjectId, updateWorkspaceOrder]
+    [
+      workspaceList,
+      selectedProjectId,
+      updateWorkspaceOrder,
+      serverWorkspaces,
+      workspaceOrder,
+      isMocked,
+    ]
   );
 
   // Use shared workspace creation hook, passing sidebar's existing names to avoid a redundant query

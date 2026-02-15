@@ -99,6 +99,40 @@ export function sortWorkspaces(
   return [...unordered, ...ordered];
 }
 
+/**
+ * Reorders visible workspace IDs while preserving hidden workspace IDs in place.
+ * Hidden IDs represent optimistically archived items that are temporarily removed
+ * from the rendered list but must remain in persisted order for rollback safety.
+ */
+export function reorderWorkspaceIds(
+  allWorkspaceIds: string[],
+  hiddenWorkspaceIds: Set<string>,
+  activeId: string,
+  overId: string
+): string[] | null {
+  const visibleWorkspaceIds = allWorkspaceIds.filter((id) => !hiddenWorkspaceIds.has(id));
+  const oldIndex = visibleWorkspaceIds.indexOf(activeId);
+  const newIndex = visibleWorkspaceIds.indexOf(overId);
+
+  if (oldIndex === -1 || newIndex === -1) {
+    return null;
+  }
+
+  const reorderedVisibleIds = [...visibleWorkspaceIds];
+  reorderedVisibleIds.splice(oldIndex, 1);
+  reorderedVisibleIds.splice(newIndex, 0, activeId);
+
+  let visibleIndex = 0;
+  return allWorkspaceIds.map((id) => {
+    if (hiddenWorkspaceIds.has(id)) {
+      return id;
+    }
+    const nextVisibleId = reorderedVisibleIds[visibleIndex];
+    visibleIndex += 1;
+    return nextVisibleId as string;
+  });
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
