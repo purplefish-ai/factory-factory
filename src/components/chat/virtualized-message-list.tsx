@@ -162,6 +162,12 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
     const prevCount = prevMessageCountRef.current;
     prevMessageCountRef.current = currentCount;
 
+    // Let hydration/scroll-restore settle before auto-scroll logic runs.
+    // Running virtualizer scroll commands during loading can apply stale offsets.
+    if (loadingSession) {
+      return;
+    }
+
     // If messages were added and user is near bottom, scroll to bottom
     if (currentCount > prevCount && isNearBottomRef.current && scrollContainerRef.current) {
       isAutoScrollingRef.current = true;
@@ -178,7 +184,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         isAutoScrollingRef.current = false;
       });
     }
-  }, [messages.length, virtualizer, scrollContainerRef]);
+  }, [loadingSession, messages.length, virtualizer, scrollContainerRef]);
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
