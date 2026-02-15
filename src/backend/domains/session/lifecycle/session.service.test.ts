@@ -623,7 +623,7 @@ describe('SessionService', () => {
 
     await sessionService.stopSession('session-1');
 
-    expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
+    expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
   });
 
   it('still clears queued work and marks idle when runtime stop fails', async () => {
@@ -644,7 +644,7 @@ describe('SessionService', () => {
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.IDLE,
     });
-    expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
+    expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
     expect(sessionRepository.clearRatchetActiveSession).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
