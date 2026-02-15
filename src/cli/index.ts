@@ -787,7 +787,7 @@ program
 // internal commands (hidden)
 // ============================================================================
 
-const internalProgram = program.command('internal');
+const internalProgram = program.command('internal', { hidden: true });
 internalProgram.command('codex-app-server-acp').action(() => {
   runCodexAppServerAcpAdapter();
 });

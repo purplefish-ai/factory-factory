@@ -137,6 +137,7 @@ export class CodexRpcClient {
         }
         resolve();
       }, 2000);
+      timeout.unref?.();
       child.once('exit', () => {
         clearTimeout(timeout);
         resolve();
