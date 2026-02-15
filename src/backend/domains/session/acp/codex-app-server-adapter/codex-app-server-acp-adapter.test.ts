@@ -554,6 +554,35 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(codex.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('does not access connection.closed synchronously during constructor', async () => {
+    let allowClosedRead = false;
+    const closedPromise = Promise.resolve();
+    const connection = {
+      get closed() {
+        if (!allowClosedRead) {
+          throw new Error('closed accessed too early');
+        }
+        return closedPromise;
+      },
+      sessionUpdate: vi.fn(async () => undefined),
+      requestPermission: vi.fn(() =>
+        Promise.resolve({
+          outcome: { outcome: 'selected', optionId: 'allow_once' },
+        } as RequestPermissionResponse)
+      ),
+    };
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+
+    expect(() => {
+      new CodexAppServerAcpAdapter(connection as unknown as AgentSideConnection, codexClient);
+    }).not.toThrow();
+
+    allowClosedRead = true;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(codex.stop).toHaveBeenCalledTimes(1);
+  });
+
   it('returns end_turn on overloaded turn/start and emits fallback message', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();

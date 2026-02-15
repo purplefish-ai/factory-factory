@@ -397,8 +397,12 @@ export class CodexAppServerAcpAdapter implements Agent {
         },
       });
 
-    void this.connection.closed.finally(async () => {
-      await this.codex.stop();
+    // AgentSideConnection initializes its internal connection after invoking toAgent().
+    // Defer closed-hook registration to avoid accessing connection internals too early.
+    queueMicrotask(() => {
+      void this.connection.closed.finally(async () => {
+        await this.codex.stop();
+      });
     });
   }
 

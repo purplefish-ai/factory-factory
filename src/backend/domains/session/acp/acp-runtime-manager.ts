@@ -162,18 +162,23 @@ function resolveFactoryRootForInternalCodexAdapter(): string {
 
 function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
   const projectRoot = resolveFactoryRootForInternalCodexAdapter();
+  const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
   const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
-  if (existsSync(cliDistEntrypoint)) {
-    const args = [cliDistEntrypoint, 'internal', 'codex-app-server-acp'];
+  const preferSourceEntrypoint = process.env.NODE_ENV !== 'production';
+
+  const buildNodeSpawnCommand = (entrypoint: string): SpawnCommand => {
+    const args = [entrypoint, 'internal', 'codex-app-server-acp'];
     return {
       command: process.execPath,
       args,
       commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
     };
-  }
+  };
 
-  const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
-  if (existsSync(cliSourceEntrypoint)) {
+  const resolveSourceSpawnCommand = (): SpawnCommand | null => {
+    if (!existsSync(cliSourceEntrypoint)) {
+      return null;
+    }
     const tsxBinary = join(
       projectRoot,
       'node_modules',
@@ -189,12 +194,27 @@ function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
       };
     }
 
-    const args = [...process.execArgv, cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
-    return {
-      command: process.execPath,
-      args,
-      commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
-    };
+    return buildNodeSpawnCommand(cliSourceEntrypoint);
+  };
+
+  if (preferSourceEntrypoint) {
+    const sourceCommand = resolveSourceSpawnCommand();
+    if (sourceCommand) {
+      return sourceCommand;
+    }
+
+    if (existsSync(cliDistEntrypoint)) {
+      return buildNodeSpawnCommand(cliDistEntrypoint);
+    }
+  } else {
+    if (existsSync(cliDistEntrypoint)) {
+      return buildNodeSpawnCommand(cliDistEntrypoint);
+    }
+
+    const sourceCommand = resolveSourceSpawnCommand();
+    if (sourceCommand) {
+      return sourceCommand;
+    }
   }
 
   throw new Error('Cannot resolve CLI entrypoint for CODEX ACP adapter spawn');
