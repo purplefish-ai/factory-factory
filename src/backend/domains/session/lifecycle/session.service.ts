@@ -858,7 +858,6 @@ class SessionService {
 
     // Cancel pending ACP permissions and clean up streaming state
     this.acpStreamState.delete(sessionId);
-    this.pendingAcpToolCalls.delete(sessionId);
     this.suppressAcpReplayForSession.delete(sessionId);
     const acpBridge = this.acpPermissionBridges.get(sessionId);
     if (acpBridge) {
@@ -878,6 +877,7 @@ class SessionService {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
+      this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
       await this.updateStoppedSessionState(sessionId);
       sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
       sessionDomainService.setRuntimeSnapshot(sessionId, {

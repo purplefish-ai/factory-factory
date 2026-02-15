@@ -678,6 +678,82 @@ describe('SessionService', () => {
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
+  it('finalizes orphaned ACP tool calls during manual stop', async () => {
+    const pendingToolCalls = (
+      sessionService as unknown as {
+        pendingAcpToolCalls: Map<
+          string,
+          Map<
+            string,
+            {
+              toolUseId: string;
+              toolName: string;
+              acpKind?: string;
+              acpLocations?: Array<{ path: string; line?: number | null }>;
+            }
+          >
+        >;
+      }
+    ).pendingAcpToolCalls;
+
+    pendingToolCalls.set(
+      'session-1',
+      new Map([
+        [
+          'call-1',
+          {
+            toolUseId: 'call-1',
+            toolName: 'Run pwd',
+            acpKind: 'execute',
+          },
+        ],
+      ])
+    );
+
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
+    const appendClaudeEventSpy = vi
+      .spyOn(sessionDomainService, 'appendClaudeEvent')
+      .mockReturnValue(77);
+
+    await sessionService.stopSession('session-1');
+
+    expect(emitDeltaSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'tool_progress',
+        tool_use_id: 'call-1',
+        tool_name: 'Run pwd',
+        acpStatus: 'failed',
+        elapsed_time_seconds: 0,
+      })
+    );
+    expect(appendClaudeEventSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'user',
+        message: expect.objectContaining({
+          content: [
+            expect.objectContaining({
+              type: 'tool_result',
+              tool_use_id: 'call-1',
+              is_error: true,
+            }),
+          ],
+        }),
+      })
+    );
+    expect(pendingToolCalls.has('session-1')).toBe(false);
+  });
+
   it('deletes ratchet session record during manual stop', async () => {
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
