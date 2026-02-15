@@ -629,7 +629,8 @@ export class CodexAppServerAcpAdapter implements Agent {
   private allowedApprovalPolicies: ApprovalPolicy[] = [];
   private allowedSandboxModes: SandboxMode[] = [];
   private collaborationModes: CollaborationModeEntry[] = [];
-  private hasConfiguredMcpServers = false;
+  private readonly mcpServersByThreadId = new Map<string, Record<string, CodexMcpServerConfig>>();
+  private appliedMcpServerConfigJson = '{}';
 
   constructor(connection: AgentSideConnection, codexClient?: CodexClient) {
     this.connection = connection;
@@ -743,7 +744,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     this.sessions.set(sessionId, session);
     this.sessionIdByThreadId.set(session.threadId, sessionId);
     try {
-      await this.applyMcpServers(params.mcpServers);
+      await this.applyMcpServers(session.threadId, params.mcpServers);
     } catch (error) {
       this.sessions.delete(sessionId);
       this.sessionIdByThreadId.delete(session.threadId);
@@ -791,9 +792,14 @@ export class CodexAppServerAcpAdapter implements Agent {
     this.sessions.set(session.sessionId, session);
     this.sessionIdByThreadId.set(session.threadId, session.sessionId);
     try {
-      await this.applyMcpServers(params.mcpServers);
+      await this.applyMcpServers(session.threadId, params.mcpServers);
       await this.replayThreadHistory(session.sessionId, session.threadId);
     } catch (error) {
+      try {
+        await this.removeMcpServersForThread(session.threadId);
+      } catch {
+        // Preserve the original session load failure.
+      }
       this.sessions.delete(session.sessionId);
       this.sessionIdByThreadId.delete(session.threadId);
       throw error;
@@ -1070,20 +1076,77 @@ export class CodexAppServerAcpAdapter implements Agent {
     throw new Error('Codex app-server model/list returned no models');
   }
 
-  private async applyMcpServers(mcpServers: McpServer[]): Promise<void> {
-    const codexMcpServers = toCodexMcpConfigMap(mcpServers);
-    const isEmptyConfig = Object.keys(codexMcpServers).length === 0;
-    if (isEmptyConfig && !this.hasConfiguredMcpServers) {
+  private buildMergedMcpServersConfig(): Record<string, CodexMcpServerConfig> {
+    const merged: Record<string, CodexMcpServerConfig> = {};
+    const threadIds = [...this.mcpServersByThreadId.keys()].sort();
+    for (const threadId of threadIds) {
+      const threadConfig = this.mcpServersByThreadId.get(threadId);
+      if (!threadConfig) {
+        continue;
+      }
+      for (const serverName of Object.keys(threadConfig).sort()) {
+        const nextServerConfig = threadConfig[serverName];
+        if (!nextServerConfig) {
+          continue;
+        }
+        const existingConfig = merged[serverName];
+        if (!existingConfig) {
+          merged[serverName] = nextServerConfig;
+          continue;
+        }
+        if (JSON.stringify(existingConfig) === JSON.stringify(nextServerConfig)) {
+          continue;
+        }
+        merged[`${serverName}__${threadId}`] = nextServerConfig;
+      }
+    }
+    return merged;
+  }
+
+  private async writeMergedMcpServersConfig(): Promise<void> {
+    const mergedConfig = this.buildMergedMcpServersConfig();
+    const nextConfigJson = JSON.stringify(mergedConfig);
+    if (nextConfigJson === this.appliedMcpServerConfigJson) {
       return;
     }
 
     await this.codex.request('config/value/write', {
       keyPath: 'mcp_servers',
-      value: codexMcpServers,
+      value: mergedConfig,
       mergeStrategy: 'replace',
     });
     await this.codex.request('config/mcpServer/reload', {});
-    this.hasConfiguredMcpServers = !isEmptyConfig;
+    this.appliedMcpServerConfigJson = nextConfigJson;
+  }
+
+  private async removeMcpServersForThread(threadId: string): Promise<void> {
+    if (!this.mcpServersByThreadId.has(threadId)) {
+      return;
+    }
+    this.mcpServersByThreadId.delete(threadId);
+    await this.writeMergedMcpServersConfig();
+  }
+
+  private async applyMcpServers(threadId: string, mcpServers: McpServer[]): Promise<void> {
+    const previousConfig = this.mcpServersByThreadId.get(threadId);
+    const hadPreviousConfig = this.mcpServersByThreadId.has(threadId);
+    const threadConfig = toCodexMcpConfigMap(mcpServers);
+    if (Object.keys(threadConfig).length === 0) {
+      this.mcpServersByThreadId.delete(threadId);
+    } else {
+      this.mcpServersByThreadId.set(threadId, threadConfig);
+    }
+
+    try {
+      await this.writeMergedMcpServersConfig();
+    } catch (error) {
+      if (hadPreviousConfig && previousConfig) {
+        this.mcpServersByThreadId.set(threadId, previousConfig);
+      } else {
+        this.mcpServersByThreadId.delete(threadId);
+      }
+      throw error;
+    }
   }
 
   private buildConfigOptions(session: AdapterSession): SessionConfigOption[] {

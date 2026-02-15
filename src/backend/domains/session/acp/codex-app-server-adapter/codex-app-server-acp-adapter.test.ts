@@ -317,7 +317,7 @@ describe('CodexAppServerAcpAdapter', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
-  it('clears MCP server config when a subsequent session has no MCP servers', async () => {
+  it('keeps existing MCP server config when a subsequent session has no MCP servers', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
     const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
@@ -350,13 +350,19 @@ describe('CodexAppServerAcpAdapter', () => {
     });
 
     const configWriteCalls = getCodexRequestCalls(codex, 'config/value/write');
-    expect(configWriteCalls).toHaveLength(2);
-    expect(configWriteCalls[1]).toEqual([
+    expect(configWriteCalls).toHaveLength(1);
+    expect(configWriteCalls[0]).toEqual([
       'config/value/write',
       {
         keyPath: 'mcp_servers',
         mergeStrategy: 'replace',
-        value: {},
+        value: {
+          tools: {
+            enabled: true,
+            command: 'server-a',
+            args: [],
+          },
+        },
       },
     ]);
   });
