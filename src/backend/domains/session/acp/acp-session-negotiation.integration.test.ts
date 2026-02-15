@@ -279,7 +279,11 @@ describe('ACP session negotiation integration', () => {
   });
 
   it('negotiates initial CODEX session config options and modes', async () => {
-    const binaryPath = createFakeAcpBinary(tempDir, 'codex-acp-stub', CODEX_SESSION_FIXTURE);
+    const binaryPath = createFakeAcpBinary(
+      tempDir,
+      'codex-app-server-acp-stub',
+      CODEX_SESSION_FIXTURE
+    );
 
     const options: AcpClientOptions = {
       provider: 'CODEX',
