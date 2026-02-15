@@ -1268,6 +1268,42 @@ describe('CodexAppServerAcpAdapter', () => {
     allowClosedRead = true;
     await Promise.resolve();
     await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(codex.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries closed watcher registration when closed getter is not ready', async () => {
+    let closedReadCount = 0;
+    let resolveClosed: (() => void) | undefined;
+    const closed = new Promise<void>((resolve) => {
+      resolveClosed = () => resolve();
+    });
+    const connection = {
+      get closed() {
+        closedReadCount += 1;
+        if (closedReadCount === 1) {
+          throw new Error('closed not ready yet');
+        }
+        return closed;
+      },
+      sessionUpdate: vi.fn(async () => undefined),
+      requestPermission: vi.fn(() =>
+        Promise.resolve({
+          outcome: { outcome: 'selected', optionId: 'allow_once' },
+        } as RequestPermissionResponse)
+      ),
+    };
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    new CodexAppServerAcpAdapter(connection as unknown as AgentSideConnection, codexClient);
+
+    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    resolveClosed?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(closedReadCount).toBeGreaterThanOrEqual(2);
     expect(codex.stop).toHaveBeenCalledTimes(1);
   });
 

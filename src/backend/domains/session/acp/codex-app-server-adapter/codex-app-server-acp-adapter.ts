@@ -664,18 +664,23 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private monitorConnectionClose(): void {
-    // AgentSideConnection initializes internals after toAgent(); defer one microtask
-    // so reading connection.closed does not race constructor-time setup.
-    void (async () => {
-      await Promise.resolve();
+    // AgentSideConnection initializes internals after toAgent(); defer watcher
+    // attachment and retry if closed isn't readable yet.
+    const attachCloseWatcher = () => {
       try {
-        await this.connection.closed;
+        void this.connection.closed
+          .finally(async () => {
+            await this.codex.stop();
+          })
+          .catch(() => {
+            // Ignore close-watcher errors and still attempt subprocess shutdown.
+          });
       } catch {
-        // Ignore close-watcher errors and still attempt subprocess shutdown.
-      } finally {
-        await this.codex.stop();
+        setTimeout(attachCloseWatcher, 0);
       }
-    })();
+    };
+
+    queueMicrotask(attachCloseWatcher);
   }
 
   async initialize(_params: InitializeRequest): Promise<InitializeResponse> {

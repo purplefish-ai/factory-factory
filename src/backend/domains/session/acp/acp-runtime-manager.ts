@@ -122,7 +122,9 @@ async function withTimeout<T>(params: {
     };
 
     if (typeof params.cancelOn !== 'undefined') {
-      void params.cancelOn.finally(clearTimer);
+      void params.cancelOn.finally(clearTimer).catch(() => {
+        // cancelOn is best-effort cancellation; ignore its rejection.
+      });
     }
 
     params.promise.then(
