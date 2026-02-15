@@ -281,6 +281,13 @@ describe('AcpRuntimeManager', () => {
       expect((spawnArgs[2] as { env?: Record<string, string> }).env?.DOTENV_CONFIG_QUIET).toBe(
         'true'
       );
+      if (
+        (spawnArgs[0] as string).endsWith('tsx') ||
+        (spawnArgs[0] as string).endsWith('tsx.cmd')
+      ) {
+        expect(spawnArgs[1]).toContain('--tsconfig');
+        expect((spawnArgs[1] as string[]).some((arg) => arg.endsWith('tsconfig.json'))).toBe(true);
+      }
       expect(spawnArgs[2]).toMatchObject({
         cwd: '/tmp/workspace',
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -311,6 +318,10 @@ describe('AcpRuntimeManager', () => {
       expect(command.length).toBeGreaterThan(0);
       expect(args).toContain('internal');
       expect(args).toContain('codex-app-server-acp');
+      if (command.endsWith('tsx') || command.endsWith('tsx.cmd')) {
+        expect(args).toContain('--tsconfig');
+        expect(args.some((arg) => arg.endsWith('tsconfig.json'))).toBe(true);
+      }
       expect(
         args.some(
           (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')

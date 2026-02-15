@@ -164,6 +164,7 @@ function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
   const projectRoot = resolveFactoryRootForInternalCodexAdapter();
   const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
   const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
+  const tsconfigPath = join(projectRoot, 'tsconfig.json');
   const tsxBin = join(
     projectRoot,
     'node_modules',
@@ -189,7 +190,12 @@ function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
       return null;
     }
     if (existsSync(tsxBin)) {
-      const args = [cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
+      const args = [
+        ...(existsSync(tsconfigPath) ? ['--tsconfig', tsconfigPath] : []),
+        cliSourceEntrypoint,
+        'internal',
+        'codex-app-server-acp',
+      ];
       return {
         command: tsxBin,
         args,
