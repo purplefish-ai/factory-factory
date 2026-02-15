@@ -878,7 +878,9 @@ class SessionService {
       });
     } finally {
       await this.updateStoppedSessionState(sessionId);
-      sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
+      // Manual stop should clear queued work and publish that change immediately
+      // so clients do not retain stale queued-message UI.
+      sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
       sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
         processState: 'stopped',
