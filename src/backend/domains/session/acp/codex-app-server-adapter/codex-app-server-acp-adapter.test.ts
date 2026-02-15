@@ -768,6 +768,14 @@ describe('CodexAppServerAcpAdapter', () => {
         expect.objectContaining({ threadId: 'thread_cancel' })
       );
     });
+    await vi.waitFor(() => {
+      const activeTurn = (
+        adapter as unknown as {
+          sessions: Map<string, { activeTurn: { turnId: string } | null }>;
+        }
+      ).sessions.get(session.sessionId)?.activeTurn;
+      expect(activeTurn?.turnId).toBe('turn_cancel');
+    });
     await adapter.cancel({ sessionId: session.sessionId });
 
     expect(codex.request).toHaveBeenCalledWith('turn/interrupt', {
@@ -835,6 +843,167 @@ describe('CodexAppServerAcpAdapter', () => {
           }),
         ],
       ])
+    );
+  });
+
+  it('reconciles turn/completed notifications that arrive before prompt attaches active turn', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_race', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    codex.request.mockImplementationOnce(async (method: string) => {
+      if (method !== 'turn/start') {
+        return {};
+      }
+      await (
+        adapter as unknown as {
+          handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+        }
+      ).handleCodexNotification('turn/completed', {
+        threadId: 'thread_race',
+        turn: { id: 'turn_race', status: 'completed', error: null, items: [] },
+      });
+
+      return {
+        turn: { id: 'turn_race', status: 'inProgress' },
+      };
+    });
+
+    await expect(
+      adapter.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'hello' }],
+      })
+    ).resolves.toEqual({ stopReason: 'end_turn' });
+  });
+
+  it('clears stale tool call state when a turn ends without item/completed events', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_stale_tools', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_stale_tools', status: 'inProgress' },
+    });
+
+    const promptPromise = adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'hello' }],
+    });
+    await vi.waitFor(() => {
+      expect(codex.request).toHaveBeenCalledWith(
+        'turn/start',
+        expect.objectContaining({ threadId: 'thread_stale_tools' })
+      );
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_stale_tools',
+      turnId: 'turn_stale_tools',
+      item: {
+        type: 'commandExecution',
+        id: 'item_stale_tool',
+        status: 'inProgress',
+        command: 'echo hello',
+      },
+    });
+
+    const adapterSession = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          { toolCallsByItemId: Map<string, unknown>; activeTurn: { turnId: string } | null }
+        >;
+      }
+    ).sessions.get(session.sessionId);
+    expect(adapterSession?.toolCallsByItemId.size).toBe(1);
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('turn/completed', {
+      threadId: 'thread_stale_tools',
+      turn: { id: 'turn_stale_tools', status: 'completed', error: null, items: [] },
+    });
+
+    await expect(promptPromise).resolves.toEqual({ stopReason: 'end_turn' });
+    expect(adapterSession?.activeTurn).toBeNull();
+    expect(adapterSession?.toolCallsByItemId.size).toBe(0);
+  });
+
+  it('responds with codex error payload when approval bridge throws', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error('permission bridge unavailable')
+    );
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_approval_error', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await expect(
+      (
+        adapter as unknown as {
+          handleCodexServerRequest: (request: unknown) => Promise<void>;
+        }
+      ).handleCodexServerRequest({
+        id: 32,
+        method: 'item/commandExecution/requestApproval',
+        params: {
+          threadId: 'thread_approval_error',
+          turnId: 'turn_approval_error',
+          itemId: 'item_approval_error',
+          command: 'echo test',
+        },
+      })
+    ).resolves.toBeUndefined();
+
+    expect(codex.respondError).toHaveBeenCalledWith(
+      32,
+      expect.objectContaining({
+        code: -32_600,
+        message: 'Failed to process codex approval request',
+      })
     );
   });
 });

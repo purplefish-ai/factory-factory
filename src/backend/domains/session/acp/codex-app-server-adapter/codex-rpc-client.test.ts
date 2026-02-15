@@ -140,6 +140,40 @@ describe('CodexRpcClient', () => {
     await expect(responsePromise).rejects.toThrow(/codex app-server exited/);
   });
 
+  it('rejects new requests after codex process exits', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+    const client = new CodexRpcClient({
+      cwd: '/tmp/workspace',
+      env: {},
+    });
+
+    client.start();
+    child.emit('exit', 1, null);
+
+    await expect(client.request('turn/start', { threadId: 'thread_1' })).rejects.toThrow(
+      /stdin unavailable/
+    );
+  });
+
+  it('cleans up pending request state when write fails', async () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+    const client = new CodexRpcClient({
+      cwd: '/tmp/workspace',
+      env: {},
+    });
+
+    client.start();
+    (client as unknown as { child: { stdin: null } }).child.stdin = null;
+
+    await expect(client.request('turn/start', { threadId: 'thread_1' })).rejects.toThrow(
+      /stdin unavailable/
+    );
+
+    expect((client as unknown as { pending: Map<number, unknown> }).pending.size).toBe(0);
+  });
+
   it('stops the subprocess gracefully', async () => {
     const child = createMockChild();
     mockSpawn.mockReturnValue(child);

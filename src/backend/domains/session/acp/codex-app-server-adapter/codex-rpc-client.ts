@@ -93,11 +93,21 @@ export class CodexRpcClient {
     this.lineReader.on('line', (line) => this.handleLine(line));
 
     child.on('exit', (code, signal) => {
+      if (this.child === child) {
+        this.child = null;
+      }
+      this.lineReader?.close();
+      this.lineReader = null;
       const reason = `codex app-server exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
       this.rejectPending(new Error(reason));
     });
 
     child.on('error', (error) => {
+      if (this.child === child) {
+        this.child = null;
+      }
+      this.lineReader?.close();
+      this.lineReader = null;
       this.rejectPending(error);
     });
 
@@ -151,7 +161,15 @@ export class CodexRpcClient {
       });
     });
 
-    this.write(payload);
+    try {
+      this.write(payload);
+    } catch (error) {
+      const pending = this.pending.get(id);
+      if (pending) {
+        this.pending.delete(id);
+        pending.reject(error);
+      }
+    }
     return await responsePromise;
   }
 

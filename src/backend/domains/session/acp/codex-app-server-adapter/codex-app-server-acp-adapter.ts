@@ -98,6 +98,11 @@ type ActiveTurnState = {
   resolve: (value: StopReason) => void;
 };
 
+type PendingTurnCompletion = {
+  stopReason: StopReason;
+  errorMessage?: string;
+};
+
 type ExecutionPreset = {
   id: 'current' | 'full_auto' | 'yolo';
   name: string;
@@ -120,12 +125,14 @@ type AdapterSession = {
   activeTurn: ActiveTurnState | null;
   toolCallsByItemId: Map<string, ToolCallState>;
   planTextByItemId: Map<string, string>;
+  pendingTurnCompletionsByTurnId: Map<string, PendingTurnCompletion>;
 };
 
 type PromptContentBlock = PromptRequest['prompt'][number];
 type ThreadReadItem = ReturnType<
   typeof threadReadResponseSchema.parse
 >['thread']['turns'][number]['items'][number];
+type TurnStartResponse = ReturnType<typeof turnStartResponseSchema.parse>;
 type CodexClient = Pick<
   CodexRpcClient,
   'start' | 'stop' | 'request' | 'notify' | 'respondSuccess' | 'respondError'
@@ -595,6 +602,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       activeTurn: null,
       toolCallsByItemId: new Map(),
       planTextByItemId: new Map(),
+      pendingTurnCompletionsByTurnId: new Map(),
     };
 
     this.sessions.set(sessionId, session);
@@ -640,6 +648,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       activeTurn: null,
       toolCallsByItemId: new Map(),
       planTextByItemId: new Map(),
+      pendingTurnCompletionsByTurnId: new Map(),
     };
 
     this.sessions.set(session.sessionId, session);
@@ -786,22 +795,11 @@ export class CodexAppServerAcpAdapter implements Agent {
       const turnStartRaw = await this.codex.request('turn/start', turnStartParams);
 
       const turnStart = turnStartResponseSchema.parse(turnStartRaw);
-      const immediateStatus = turnStart.turn.status;
-      if (immediateStatus === 'interrupted') {
-        return { stopReason: 'cancelled' };
+      const immediateStopReason = await this.resolveImmediateTurnStopReason(session, turnStart);
+      if (immediateStopReason) {
+        return { stopReason: immediateStopReason };
       }
-      if (immediateStatus === 'completed' || immediateStatus === 'failed') {
-        return { stopReason: 'end_turn' };
-      }
-
-      const stopReason = await new Promise<StopReason>((resolve) => {
-        session.activeTurn = {
-          turnId: turnStart.turn.id,
-          cancelRequested: false,
-          settled: false,
-          resolve,
-        };
-      });
+      const stopReason = await this.waitForTurnCompletion(session, turnStart.turn.id);
 
       return { stopReason };
     } catch (error) {
@@ -820,6 +818,67 @@ export class CodexAppServerAcpAdapter implements Agent {
       session.activeTurn = null;
       throw error;
     }
+  }
+
+  private async resolveImmediateTurnStopReason(
+    session: AdapterSession,
+    turnStart: TurnStartResponse
+  ): Promise<StopReason | null> {
+    const status = turnStart.turn.status;
+    if (status === 'interrupted') {
+      return 'cancelled';
+    }
+
+    if (status === 'failed') {
+      const failureMessage = asString(
+        isRecord(turnStart.turn.error) ? turnStart.turn.error.message : null
+      );
+      if (failureMessage) {
+        await this.emitTurnFailureMessage(session.sessionId, failureMessage);
+      }
+      return 'end_turn';
+    }
+
+    if (status === 'completed') {
+      return 'end_turn';
+    }
+
+    return null;
+  }
+
+  private async waitForTurnCompletion(
+    session: AdapterSession,
+    turnId: string
+  ): Promise<StopReason> {
+    const stopReasonPromise = new Promise<StopReason>((resolve) => {
+      session.activeTurn = {
+        turnId,
+        cancelRequested: false,
+        settled: false,
+        resolve,
+      };
+    });
+
+    const pendingCompletion = session.pendingTurnCompletionsByTurnId.get(turnId);
+    if (pendingCompletion) {
+      session.pendingTurnCompletionsByTurnId.delete(turnId);
+      if (pendingCompletion.errorMessage) {
+        await this.emitTurnFailureMessage(session.sessionId, pendingCompletion.errorMessage);
+      }
+      this.settleTurn(session, pendingCompletion.stopReason);
+    }
+
+    return await stopReasonPromise;
+  }
+
+  private async emitTurnFailureMessage(sessionId: string, errorMessage: string): Promise<void> {
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: 'agent_message_chunk',
+      content: {
+        type: 'text',
+        text: `Turn failed: ${errorMessage}`,
+      },
+    });
   }
 
   async cancel(params: CancelNotification): Promise<void> {
@@ -1394,6 +1453,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     if (notification.method === 'turn/completed') {
       await this.handleTurnCompletedNotification(
         session,
+        notification.params.turn.id,
         notification.params.turn.status,
         notification.params.turn.error?.message
       );
@@ -1443,9 +1503,24 @@ export class CodexAppServerAcpAdapter implements Agent {
 
   private async handleTurnCompletedNotification(
     session: AdapterSession,
+    turnId: string,
     status: 'completed' | 'interrupted' | 'failed' | 'inProgress',
     errorMessage?: string
   ): Promise<void> {
+    if (status === 'inProgress') {
+      return;
+    }
+
+    const stopReason = status === 'interrupted' ? 'cancelled' : 'end_turn';
+
+    if (!session.activeTurn || session.activeTurn.turnId !== turnId) {
+      session.pendingTurnCompletionsByTurnId.set(turnId, {
+        stopReason,
+        ...(status === 'failed' && errorMessage ? { errorMessage } : {}),
+      });
+      return;
+    }
+
     if (status === 'interrupted') {
       this.settleTurn(session, 'cancelled');
       return;
@@ -1595,93 +1670,102 @@ export class CodexAppServerAcpAdapter implements Agent {
     method: string;
     params?: unknown;
   }): Promise<void> {
-    const parsed = knownCodexServerRequestSchema.safeParse(request);
-    if (!parsed.success) {
-      this.codex.respondError(request.id, {
-        code: -32_602,
-        message: 'Unsupported codex server request payload',
-      });
-      return;
-    }
+    try {
+      const parsed = knownCodexServerRequestSchema.safeParse(request);
+      if (!parsed.success) {
+        this.codex.respondError(request.id, {
+          code: -32_602,
+          message: 'Unsupported codex server request payload',
+        });
+        return;
+      }
 
-    const typed = parsed.data;
-    const sessionId = this.sessionIdByThreadId.get(typed.params.threadId);
-    if (!sessionId) {
-      this.codex.respondError(typed.id, {
-        code: -32_603,
-        message: 'No ACP session mapped for this thread',
-      });
-      return;
-    }
+      const typed = parsed.data;
+      const sessionId = this.sessionIdByThreadId.get(typed.params.threadId);
+      if (!sessionId) {
+        this.codex.respondError(typed.id, {
+          code: -32_603,
+          message: 'No ACP session mapped for this thread',
+        });
+        return;
+      }
 
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      this.codex.respondError(typed.id, {
-        code: -32_603,
-        message: 'No ACP session mapped for this thread',
-      });
-      return;
-    }
+      const session = this.sessions.get(sessionId);
+      if (!session) {
+        this.codex.respondError(typed.id, {
+          code: -32_603,
+          message: 'No ACP session mapped for this thread',
+        });
+        return;
+      }
 
-    const existingTool = session.toolCallsByItemId.get(typed.params.itemId);
-    const toolCall =
-      existingTool ??
-      this.buildApprovalToolCallState(
+      const existingTool = session.toolCallsByItemId.get(typed.params.itemId);
+      const toolCall =
+        existingTool ??
+        this.buildApprovalToolCallState(
+          session,
+          typed.method,
+          typed.params.itemId,
+          typed.params.turnId,
+          typed.params
+        );
+      session.toolCallsByItemId.set(typed.params.itemId, toolCall);
+
+      if (!existingTool) {
+        await this.emitSessionUpdate(sessionId, {
+          sessionUpdate: 'tool_call',
+          toolCallId: toolCall.toolCallId,
+          title: toolCall.title,
+          kind: toolCall.kind,
+          status: 'pending',
+          rawInput: typed.params,
+        });
+      }
+
+      const questions = typed.method === 'item/tool/requestUserInput' ? typed.params.questions : [];
+      const permissionOptions =
+        typed.method === 'item/tool/requestUserInput'
+          ? buildToolUserInputPermissionOptions(questions)
+          : [
+              {
+                optionId: 'allow_once',
+                name: 'Allow once',
+                kind: 'allow_once' as const,
+              },
+              {
+                optionId: 'reject_once',
+                name: 'Reject',
+                kind: 'reject_once' as const,
+              },
+            ];
+
+      const permissionResult = await this.connection.requestPermission({
+        sessionId,
+        toolCall: {
+          toolCallId: toolCall.toolCallId,
+          title: toolCall.title,
+          kind: toolCall.kind,
+          status: 'pending',
+          rawInput: typed.params,
+        },
+        options: permissionOptions,
+      });
+
+      await this.respondToCodexPermissionRequest({
+        request: typed,
+        permission: permissionResult,
         session,
-        typed.method,
-        typed.params.itemId,
-        typed.params.turnId,
-        typed.params
-      );
-    session.toolCallsByItemId.set(typed.params.itemId, toolCall);
-
-    if (!existingTool) {
-      await this.emitSessionUpdate(sessionId, {
-        sessionUpdate: 'tool_call',
         toolCallId: toolCall.toolCallId,
-        title: toolCall.title,
-        kind: toolCall.kind,
-        status: 'pending',
-        rawInput: typed.params,
+        questions,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.codex.respondError(request.id, {
+        code: -32_600,
+        message: 'Failed to process codex approval request',
+        data: { error: message },
       });
     }
-
-    const questions = typed.method === 'item/tool/requestUserInput' ? typed.params.questions : [];
-    const permissionOptions =
-      typed.method === 'item/tool/requestUserInput'
-        ? buildToolUserInputPermissionOptions(questions)
-        : [
-            {
-              optionId: 'allow_once',
-              name: 'Allow once',
-              kind: 'allow_once' as const,
-            },
-            {
-              optionId: 'reject_once',
-              name: 'Reject',
-              kind: 'reject_once' as const,
-            },
-          ];
-
-    const permissionResult = await this.connection.requestPermission({
-      sessionId,
-      toolCall: {
-        toolCallId: toolCall.toolCallId,
-        title: toolCall.title,
-        kind: toolCall.kind,
-        status: 'pending',
-        rawInput: typed.params,
-      },
-      options: permissionOptions,
-    });
-
-    await this.respondToCodexPermissionRequest({
-      request: typed,
-      permission: permissionResult,
-      session,
-      toolCallId: toolCall.toolCallId,
-      questions,
-    });
   }
 
   private buildApprovalToolCallState(
@@ -1770,6 +1854,8 @@ export class CodexAppServerAcpAdapter implements Agent {
     session.activeTurn.resolve(stopReason);
     session.activeTurn = null;
     session.planTextByItemId.clear();
+    session.toolCallsByItemId.clear();
+    session.pendingTurnCompletionsByTurnId.clear();
   }
 
   private async emitSessionUpdate(sessionId: string, update: SessionUpdate): Promise<void> {
