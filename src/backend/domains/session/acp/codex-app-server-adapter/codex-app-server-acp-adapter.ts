@@ -1743,7 +1743,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       await this.emitSessionUpdate(params.session.sessionId, {
         sessionUpdate: 'tool_call_update',
         toolCallId: params.toolCallId,
-        status: rejected ? 'failed' : 'in_progress',
+        status: rejected ? 'failed' : 'completed',
         rawOutput: rejected ? 'User denied tool input request' : { answers },
       });
       return;

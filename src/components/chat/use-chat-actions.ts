@@ -40,6 +40,7 @@ type AcpPermissionOption = {
   name: string;
   kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
 };
+type AcpConfigOptionState = NonNullable<ChatState['acpConfigOptions']>[number];
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
@@ -181,6 +182,59 @@ function findQuestionOptionId(
   return findOptionIdByDecision(options, true);
 }
 
+function flattenConfigOptionValues(option: AcpConfigOptionState): string[] {
+  const values: string[] = [];
+  for (const entry of option.options) {
+    if ('value' in entry) {
+      values.push(entry.value);
+      continue;
+    }
+    values.push(...entry.options.map((nested) => nested.value));
+  }
+  return values;
+}
+
+function findModeConfigOption(state: ChatState): AcpConfigOptionState | null {
+  if (!state.acpConfigOptions) {
+    return null;
+  }
+  return (
+    state.acpConfigOptions.find((option) => option.id === 'mode' || option.category === 'mode') ??
+    null
+  );
+}
+
+function isPlanModeValue(value: string): boolean {
+  return /plan/i.test(value);
+}
+
+function resolvePostApprovalModeValue(state: ChatState): string | null {
+  const modeOption = findModeConfigOption(state);
+  if (!(modeOption && isPlanModeValue(modeOption.currentValue))) {
+    return null;
+  }
+
+  const optionValues = flattenConfigOptionValues(modeOption);
+  if (optionValues.length === 0) {
+    return null;
+  }
+
+  const preferredOrder = ['default', 'code', 'acceptEdits', 'ask'];
+  for (const preferred of preferredOrder) {
+    const match = optionValues.find((value) => value.toLowerCase() === preferred.toLowerCase());
+    if (match) {
+      return match;
+    }
+  }
+
+  const firstNonPlan = optionValues.find((value) => !isPlanModeValue(value));
+  return firstNonPlan ?? null;
+}
+
+function answersIncludeApprovalIntent(answers: Record<string, string | string[]>): boolean {
+  return flattenAnswerValues(answers).some((value) => /\bapprove(?:d)?\b/i.test(value.trim()));
+}
+
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -242,6 +296,55 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
     [send, dispatch, inputAttachmentsRef, stateRef, onClearInput]
   );
 
+  const queueAutomaticMessage = useCallback(
+    (text: string) => {
+      const trimmedText = text.trim();
+      if (!trimmedText) {
+        return;
+      }
+
+      const id = generateMessageId();
+      dispatch({
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id,
+          text: trimmedText,
+        },
+      });
+
+      const msg: QueueMessageRequest = {
+        type: 'queue_message',
+        id,
+        text: trimmedText,
+        settings: clampChatSettingsForCapabilities(
+          stateRef.current.chatSettings,
+          stateRef.current.chatCapabilities
+        ),
+      };
+      send(msg);
+    },
+    [send, dispatch, stateRef]
+  );
+
+  const completeCodexPlanApproval = useCallback(
+    (state: ChatState) => {
+      const modeValue = resolvePostApprovalModeValue(state);
+      if (!modeValue) {
+        return;
+      }
+
+      const modeMsg: SetConfigOptionMessage = {
+        type: 'set_config_option',
+        configId: 'mode',
+        value: modeValue,
+      };
+      send(modeMsg);
+      dispatch({ type: 'UPDATE_SETTINGS', payload: { planModeEnabled: false } });
+      queueAutomaticMessage('Approved');
+    },
+    [send, dispatch, queueAutomaticMessage]
+  );
+
   const stopChat = useCallback(() => {
     const { sessionStatus } = stateRef.current;
     // Only allow stop when running (not already stopping or idle)
@@ -267,7 +370,8 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   const approvePermission = useCallback(
     (requestId: string, allow: boolean, optionId?: string) => {
       // Validate requestId matches pending permission to prevent stale responses
-      const { pendingRequest } = stateRef.current;
+      const state = stateRef.current;
+      const { pendingRequest } = state;
       if (pendingRequest.type !== 'permission' || pendingRequest.request.requestId !== requestId) {
         return;
       }
@@ -282,14 +386,19 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       };
       send(msg);
       dispatch({ type: 'PERMISSION_RESPONSE', payload: { allow } });
+
+      if (allow && pendingRequest.request.toolName === 'ExitPlanMode') {
+        completeCodexPlanApproval(state);
+      }
     },
-    [send, dispatch, stateRef]
+    [send, dispatch, stateRef, completeCodexPlanApproval]
   );
 
   const answerQuestion = useCallback(
     (requestId: string, answers: Record<string, string | string[]>) => {
       // Validate requestId matches pending question to prevent stale responses
-      const { pendingRequest } = stateRef.current;
+      const state = stateRef.current;
+      const { pendingRequest } = state;
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
@@ -301,8 +410,12 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       };
       send(msg);
       dispatch({ type: 'QUESTION_RESPONSE' });
+
+      if (answersIncludeApprovalIntent(answers)) {
+        completeCodexPlanApproval(state);
+      }
     },
-    [send, dispatch, stateRef]
+    [send, dispatch, stateRef, completeCodexPlanApproval]
   );
 
   const updateSettings = useCallback(

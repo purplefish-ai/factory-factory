@@ -572,6 +572,18 @@ describe('CodexAppServerAcpAdapter', () => {
         }),
       })
     );
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call_update',
+              status: 'completed',
+            }),
+          }),
+        ],
+      ])
+    );
   });
 
   it('treats cancelled request_user_input permission outcomes as rejected', async () => {

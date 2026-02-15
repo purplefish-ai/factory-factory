@@ -32,6 +32,7 @@ describe('insertMessageByOrder', () => {
 
 describe('convertPendingRequest', () => {
   it('maps AskUserQuestion tool requests to question prompts', () => {
+    const acpOptions = [{ optionId: 'answer_0', name: 'A', kind: 'allow_once' as const }];
     const request: PendingInteractiveRequest = {
       requestId: 'req-1',
       toolName: 'AskUserQuestion',
@@ -40,11 +41,15 @@ describe('convertPendingRequest', () => {
         questions: [{ question: 'Pick one', options: [{ label: 'A', description: 'a' }] }],
       },
       planContent: null,
+      acpOptions,
       timestamp: '2026-02-09T00:00:00.000Z',
     };
 
     const result = convertPendingRequest(request);
     expect(result.type).toBe('question');
+    if (result.type === 'question') {
+      expect(result.request.acpOptions).toEqual(acpOptions);
+    }
   });
 
   it('maps legacy tool-input titles with questions to question prompts', () => {

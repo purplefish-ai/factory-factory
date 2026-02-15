@@ -1,6 +1,8 @@
 import { memo } from 'react';
+import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { extractPlanToolResult } from './tool-result-plan';
 
 // =============================================================================
 // Constants
@@ -29,6 +31,32 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
   content,
   isError,
 }: ToolResultContentRendererProps) {
+  const planResult = isError ? null : extractPlanToolResult(content);
+  if (planResult) {
+    const rendered = truncateContent(planResult.planText, TOOL_RESULT_CONTENT_TRUNCATE);
+    const raw = truncateContent(planResult.rawText, TOOL_RESULT_CONTENT_TRUNCATE);
+    return (
+      <div className="space-y-1 w-0 min-w-full">
+        <div className="rounded border bg-muted/20">
+          <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Plan
+          </div>
+          <div className="border-t px-2 py-2 max-h-64 overflow-y-auto text-sm leading-relaxed">
+            <MarkdownRenderer content={rendered} />
+          </div>
+        </div>
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            Raw payload
+          </summary>
+          <pre className="mt-1 overflow-x-auto max-h-40 overflow-y-auto rounded bg-muted px-1.5 py-1">
+            {raw}
+          </pre>
+        </details>
+      </div>
+    );
+  }
+
   if (typeof content === 'string') {
     return (
       <div className="w-0 min-w-full">
