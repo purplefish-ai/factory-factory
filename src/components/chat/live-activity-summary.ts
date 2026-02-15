@@ -473,7 +473,7 @@ function buildNowState(params: {
     };
   }
 
-  if (latestToolCall?.status === 'pending') {
+  if (running && latestToolCall?.status === 'pending') {
     return {
       label: `Running ${getDisplayToolName(latestToolCall.name, latestToolCall.input)}`,
       tone: 'default',

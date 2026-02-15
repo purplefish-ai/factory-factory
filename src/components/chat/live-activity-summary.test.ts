@@ -78,6 +78,36 @@ describe('live-activity-summary', () => {
     expect(summary.needsAttention?.kind).toBe('permission');
   });
 
+  it('does not show "Running" when latest tool is pending but session is idle', () => {
+    const groupedMessages: GroupedMessageItem[] = [
+      {
+        type: 'tool_sequence',
+        id: 'seq-1',
+        pairedCalls: [
+          createCall({
+            id: 'call-test',
+            name: 'Run pnpm test',
+            input: { command: ['pnpm', 'test'] },
+            status: 'pending',
+          }),
+        ],
+      },
+    ];
+
+    const summary = summarizeLiveActivity({
+      groupedMessages,
+      latestThinking: null,
+      running: false,
+      starting: false,
+      stopping: false,
+      pendingRequest: createPendingRequest('none'),
+      permissionMode: null,
+      toolProgress: new Map(),
+    });
+
+    expect(summary.now.label).toBe('Started Run pnpm test');
+  });
+
   it('builds recent milestones and test outcomes from tool calls', () => {
     const groupedMessages: GroupedMessageItem[] = [
       {
