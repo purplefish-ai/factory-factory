@@ -253,6 +253,7 @@ export const threadStartResponseSchema = z
       .passthrough(),
     model: z.string().optional(),
     approvalPolicy: z.string().optional(),
+    sandbox: z.unknown().optional(),
     reasoningEffort: z.string().nullable().optional(),
   })
   .passthrough();
@@ -318,6 +319,38 @@ export const modelListResponseSchema = z
   })
   .passthrough();
 
+export const collaborationModeListResponseSchema = z
+  .object({
+    data: z.array(
+      z
+        .object({
+          name: z.string(),
+          mode: z.string().nullable().optional(),
+          model: z.string().nullable().optional(),
+          reasoning_effort: z.string().nullable().optional(),
+          developer_instructions: z.string().nullable().optional(),
+        })
+        .passthrough()
+    ),
+    nextCursor: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+export const configRequirementsReadResponseSchema = z
+  .object({
+    requirements: z
+      .object({
+        allowedApprovalPolicies: z.array(z.string()).nullable().optional(),
+        allowedSandboxModes: z.array(z.string()).nullable().optional(),
+        allowedWebSearchModes: z.array(z.string()).nullable().optional(),
+        enforceResidency: z.unknown().nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+
 export type CodexRpcResponse = z.infer<typeof codexRpcResponseSchema>;
 export type CodexRpcServerRequest = z.infer<typeof codexRpcServerRequestSchema>;
 export type CodexKnownNotification = z.infer<typeof knownCodexNotificationSchema>;
@@ -327,3 +360,5 @@ export type ThreadResumeResponse = z.infer<typeof threadResumeResponseSchema>;
 export type ThreadReadResponse = z.infer<typeof threadReadResponseSchema>;
 export type TurnStartResponse = z.infer<typeof turnStartResponseSchema>;
 export type ModelListResponse = z.infer<typeof modelListResponseSchema>;
+export type CollaborationModeListResponse = z.infer<typeof collaborationModeListResponseSchema>;
+export type ConfigRequirementsReadResponse = z.infer<typeof configRequirementsReadResponseSchema>;

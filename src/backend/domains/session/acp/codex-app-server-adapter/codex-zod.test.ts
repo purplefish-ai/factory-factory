@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collaborationModeListResponseSchema,
+  configRequirementsReadResponseSchema,
   knownCodexNotificationSchema,
   knownCodexServerRequestSchema,
   modelListResponseSchema,
@@ -135,5 +137,33 @@ describe('codex-zod', () => {
     });
 
     expect(parsed.thread.turns[0]?.items).toHaveLength(3);
+  });
+
+  it('parses configRequirements/read responses', () => {
+    const parsed = configRequirementsReadResponseSchema.parse({
+      requirements: {
+        allowedApprovalPolicies: ['on-failure', 'on-request'],
+      },
+    });
+
+    expect(parsed.requirements?.allowedApprovalPolicies).toEqual(['on-failure', 'on-request']);
+  });
+
+  it('parses collaborationMode/list responses', () => {
+    const parsed = collaborationModeListResponseSchema.parse({
+      data: [
+        {
+          name: 'Plan',
+          mode: 'plan',
+          model: null,
+          reasoning_effort: 'medium',
+          developer_instructions: 'Plan mode instructions',
+        },
+      ],
+      nextCursor: null,
+    });
+
+    expect(parsed.data[0]?.mode).toBe('plan');
+    expect(parsed.data[0]?.reasoning_effort).toBe('medium');
   });
 });

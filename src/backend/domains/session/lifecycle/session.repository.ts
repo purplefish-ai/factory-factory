@@ -13,6 +13,7 @@ type SessionAccessor = {
       Pick<
         AgentSessionRecord,
         | 'status'
+        | 'model'
         | 'providerProcessPid'
         | 'providerSessionId'
         | 'providerProjectPath'
@@ -70,6 +71,7 @@ export class SessionRepository {
       Pick<
         AgentSessionRecord,
         | 'status'
+        | 'model'
         | 'providerProcessPid'
         | 'providerSessionId'
         | 'providerProjectPath'
@@ -86,6 +88,7 @@ export class SessionRepository {
       Pick<
         AgentSessionRecord,
         | 'status'
+        | 'model'
         | 'providerProcessPid'
         | 'providerSessionId'
         | 'providerProjectPath'

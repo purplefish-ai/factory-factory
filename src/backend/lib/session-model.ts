@@ -4,7 +4,7 @@ const CLAUDE_MODEL_ALIASES = new Set(['opus', 'sonnet', 'haiku']);
 
 const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
   CLAUDE: 'sonnet',
-  CODEX: 'gpt-5',
+  CODEX: 'default',
 };
 
 function isClaudeModel(model: string): boolean {

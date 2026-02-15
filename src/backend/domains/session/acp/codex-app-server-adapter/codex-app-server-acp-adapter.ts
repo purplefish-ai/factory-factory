@@ -30,6 +30,8 @@ import {
 } from '@agentclientprotocol/sdk';
 import { CodexRequestError, CodexRpcClient } from './codex-rpc-client';
 import {
+  collaborationModeListResponseSchema,
+  configRequirementsReadResponseSchema,
   knownCodexNotificationSchema,
   knownCodexServerRequestSchema,
   modelListResponseSchema,
@@ -39,9 +41,9 @@ import {
   turnStartResponseSchema,
 } from './codex-zod';
 
-type ModeId = 'ask' | 'code';
-type ThoughtLevel = 'low' | 'medium' | 'high';
-type ApprovalPolicy = 'untrusted' | 'on-failure' | 'on-request' | 'never';
+type ApprovalPolicy = string;
+type ReasoningEffort = string;
+type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 type UserInputAnswers = Record<string, { answers: string[] }>;
 type ToolUserInputQuestion = {
   id: string;
@@ -57,9 +59,20 @@ type CodexModelEntry = {
   displayName: string;
   description: string;
   defaultReasoningEffort: string;
-  supportedReasoningEfforts: string[];
+  supportedReasoningEfforts: Array<{
+    reasoningEffort: string;
+    description?: string;
+  }>;
   inputModalities: string[];
   isDefault: boolean;
+};
+
+type CollaborationModeEntry = {
+  mode: string;
+  name: string;
+  model: string | null;
+  reasoningEffort: ReasoningEffort | null;
+  developerInstructions: string | null;
 };
 
 type CodexMcpServerConfig = {
@@ -85,16 +98,24 @@ type ActiveTurnState = {
   resolve: (value: StopReason) => void;
 };
 
+type ExecutionPreset = {
+  id: 'current' | 'full_auto' | 'yolo';
+  name: string;
+  description?: string;
+  approvalPolicy: ApprovalPolicy;
+  sandboxMode: SandboxMode;
+};
+
 type AdapterSession = {
   sessionId: string;
   threadId: string;
   cwd: string;
   defaults: {
-    mode: ModeId;
     model: string;
-    thoughtLevel: ThoughtLevel;
     approvalPolicy: ApprovalPolicy;
-    personality: 'friendly' | 'pragmatic' | 'none';
+    sandboxPolicy: Record<string, unknown>;
+    reasoningEffort: ReasoningEffort | null;
+    collaborationMode: string;
   };
   activeTurn: ActiveTurnState | null;
   toolCallsByItemId: Map<string, ToolCallState>;
@@ -110,39 +131,66 @@ type CodexClient = Pick<
   'start' | 'stop' | 'request' | 'notify' | 'respondSuccess' | 'respondError'
 >;
 
-const MODE_OPTIONS: SessionConfigSelectOption[] = [
-  {
-    value: 'ask',
-    name: 'Ask',
-    description: 'Require approvals for side effects.',
-  },
-  {
-    value: 'code',
-    name: 'Code',
-    description: 'Allow autonomous execution with fewer prompts.',
-  },
-];
-
-const THOUGHT_LEVELS: ThoughtLevel[] = ['low', 'medium', 'high'];
-const THINKING_OPTIONS: SessionConfigSelectOption[] = THOUGHT_LEVELS.map((level) => ({
-  value: level,
-  name: level.slice(0, 1).toUpperCase() + level.slice(1),
-  description: `${level} reasoning effort`,
-}));
-
-function modeToApprovalPolicy(mode: ModeId): ApprovalPolicy {
-  return mode === 'code' ? 'on-failure' : 'untrusted';
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
-function mapThoughtLevel(value: string): ThoughtLevel {
-  if (value === 'low' || value === 'high') {
-    return value;
+function dedupeStrings<T extends string>(values: Iterable<T>): T[] {
+  return Array.from(new Set(values));
+}
+
+function sanitizeModeName(mode: string): string {
+  return mode
+    .split('_')
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function createWorkspaceWriteSandboxPolicy(cwd: string): Record<string, unknown> {
+  return {
+    type: 'workspaceWrite',
+    writableRoots: [cwd],
+    readOnlyAccess: { type: 'fullAccess' },
+    networkAccess: true,
+    excludeTmpdirEnvVar: false,
+    excludeSlashTmp: false,
+  };
+}
+
+function createDangerFullAccessSandboxPolicy(): Record<string, unknown> {
+  return {
+    type: 'dangerFullAccess',
+  };
+}
+
+function parseSandboxModeFromPolicy(policy: unknown): SandboxMode | null {
+  if (!isRecord(policy)) {
+    return null;
   }
-  return 'medium';
+  const policyType = asString(policy.type);
+  if (policyType === 'workspaceWrite') {
+    return 'workspace-write';
+  }
+  if (policyType === 'readOnly') {
+    return 'read-only';
+  }
+  if (policyType === 'dangerFullAccess') {
+    return 'danger-full-access';
+  }
+  return null;
 }
 
-function isThoughtLevel(value: string): value is ThoughtLevel {
-  return THOUGHT_LEVELS.includes(value as ThoughtLevel);
+function createSandboxPolicyFromMode(mode: SandboxMode, cwd: string): Record<string, unknown> {
+  if (mode === 'danger-full-access') {
+    return createDangerFullAccessSandboxPolicy();
+  }
+  if (mode === 'read-only') {
+    return {
+      type: 'readOnly',
+      access: { type: 'fullAccess' },
+    };
+  }
+  return createWorkspaceWriteSandboxPolicy(cwd);
 }
 
 function toSessionId(threadId: string): string {
@@ -323,14 +371,28 @@ function toToolStatus(status: unknown): ToolCallUpdate['status'] | undefined {
   return undefined;
 }
 
-function createModeConfigOption(currentMode: ModeId): SessionConfigOption {
+function createCollaborationModeConfigOption(
+  currentMode: string,
+  collaborationModes: CollaborationModeEntry[]
+): SessionConfigOption {
+  const options = collaborationModes
+    .filter((entry) => isNonEmptyString(entry.mode))
+    .map((entry) => ({
+      value: entry.mode,
+      name: entry.name,
+    }));
+
+  if (!options.some((option) => option.value === currentMode)) {
+    options.unshift({ value: currentMode, name: sanitizeModeName(currentMode) });
+  }
+
   return {
     id: 'mode',
     category: 'mode',
-    name: 'Mode',
+    name: 'Collaboration Mode',
     type: 'select',
     currentValue: currentMode,
-    options: MODE_OPTIONS,
+    options,
   };
 }
 
@@ -358,14 +420,71 @@ function createModelConfigOption(
   };
 }
 
-function createThoughtLevelOption(currentThoughtLevel: ThoughtLevel): SessionConfigOption {
+function createReasoningEffortConfigOption(
+  currentReasoningEffort: ReasoningEffort | null,
+  modelCatalog: CodexModelEntry[],
+  currentModel: string
+): SessionConfigOption | null {
+  const modelEntry = modelCatalog.find((model) => model.id === currentModel);
+  if (!modelEntry) {
+    return null;
+  }
+
+  const supportedEntries = modelEntry.supportedReasoningEfforts.filter((entry) =>
+    isNonEmptyString(entry.reasoningEffort)
+  );
+  if (supportedEntries.length === 0) {
+    return null;
+  }
+
+  const supportedByValue = new Map<string, string | undefined>();
+  for (const entry of supportedEntries) {
+    if (!supportedByValue.has(entry.reasoningEffort)) {
+      supportedByValue.set(entry.reasoningEffort, entry.description);
+    }
+  }
+
+  const supportedValues = [...supportedByValue.keys()];
+  const resolvedCurrent =
+    currentReasoningEffort && supportedByValue.has(currentReasoningEffort)
+      ? currentReasoningEffort
+      : supportedByValue.has(modelEntry.defaultReasoningEffort)
+        ? modelEntry.defaultReasoningEffort
+        : supportedValues[0];
+
+  if (!resolvedCurrent) {
+    return null;
+  }
+
   return {
     id: 'reasoning_effort',
     category: 'thought_level',
     name: 'Reasoning Effort',
     type: 'select',
-    currentValue: currentThoughtLevel,
-    options: THINKING_OPTIONS,
+    currentValue: resolvedCurrent,
+    options: supportedValues.map((value) => ({
+      value,
+      name: value,
+      ...(supportedByValue.get(value) ? { description: supportedByValue.get(value) } : {}),
+    })),
+  };
+}
+
+function createExecutionModeConfigOption(
+  currentPresetId: ExecutionPreset['id'],
+  presets: ExecutionPreset[]
+): SessionConfigOption {
+  return {
+    id: 'execution_mode',
+    category: 'permission',
+    name: 'Execution Mode',
+    type: 'select',
+    currentValue: currentPresetId,
+    options: presets.map((preset) => ({
+      value: preset.id,
+      name: preset.name,
+      ...(preset.description ? { description: preset.description } : {}),
+    })),
   };
 }
 
@@ -375,6 +494,9 @@ export class CodexAppServerAcpAdapter implements Agent {
   private readonly sessions = new Map<string, AdapterSession>();
   private readonly sessionIdByThreadId = new Map<string, string>();
   private modelCatalog: CodexModelEntry[] = [];
+  private allowedApprovalPolicies: ApprovalPolicy[] = [];
+  private allowedSandboxModes: SandboxMode[] = [];
+  private collaborationModes: CollaborationModeEntry[] = [];
 
   constructor(connection: AgentSideConnection, codexClient?: CodexClient) {
     this.connection = connection;
@@ -414,10 +536,16 @@ export class CodexAppServerAcpAdapter implements Agent {
         name: 'factory-factory-codex-app-server-acp',
         version: '0.1.0',
       },
-      capabilities: null,
+      capabilities: {
+        experimentalApi: true,
+      },
     });
     this.codex.notify('initialized');
 
+    const configRequirements = await this.loadConfigRequirements();
+    this.allowedApprovalPolicies = configRequirements.allowedApprovalPolicies;
+    this.allowedSandboxModes = configRequirements.allowedSandboxModes;
+    this.collaborationModes = await this.loadCollaborationModes();
     this.modelCatalog = await this.loadModelCatalog();
 
     return {
@@ -438,30 +566,31 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
-    const mode: ModeId = 'ask';
     const defaultModel = this.resolveDefaultModel();
 
     const responseRaw = await this.codex.request('thread/start', {
       cwd: params.cwd,
       model: defaultModel,
-      approvalPolicy: modeToApprovalPolicy(mode),
-      personality: 'friendly',
-      experimentalRawEvents: false,
     });
 
     const response = threadStartResponseSchema.parse(responseRaw);
     const sessionId = toSessionId(response.thread.id);
+    const approvalPolicy = this.requireApprovalPolicy(response.approvalPolicy, 'thread/start');
+    const model = this.resolveSessionModel(response.model, defaultModel);
+    const sandboxPolicy = this.resolveSandboxPolicy(response.sandbox, params.cwd);
+    const reasoningEffort = this.resolveReasoningEffortForModel(model, response.reasoningEffort);
+    const collaborationMode = this.resolveDefaultCollaborationMode();
 
     const session: AdapterSession = {
       sessionId,
       threadId: response.thread.id,
       cwd: params.cwd,
       defaults: {
-        mode,
-        model: defaultModel,
-        thoughtLevel: mapThoughtLevel(response.reasoningEffort ?? 'medium'),
-        approvalPolicy: modeToApprovalPolicy(mode),
-        personality: 'friendly',
+        model,
+        approvalPolicy,
+        sandboxPolicy,
+        reasoningEffort,
+        collaborationMode,
       },
       activeTurn: null,
       toolCallsByItemId: new Map(),
@@ -491,17 +620,22 @@ export class CodexAppServerAcpAdapter implements Agent {
       cwd: params.cwd,
     });
     const response = threadResumeResponseSchema.parse(responseRaw);
+    const approvalPolicy = this.requireApprovalPolicy(response.approvalPolicy, 'thread/resume');
+    const model = this.resolveSessionModel(response.model, this.resolveDefaultModel());
+    const sandboxPolicy = this.resolveSandboxPolicy(response.sandbox, params.cwd);
+    const reasoningEffort = this.resolveReasoningEffortForModel(model, response.reasoningEffort);
+    const collaborationMode = this.resolveDefaultCollaborationMode();
 
     const session: AdapterSession = {
       sessionId: params.sessionId,
       threadId: response.thread.id,
       cwd: params.cwd,
       defaults: {
-        mode: 'ask',
-        model: this.resolveDefaultModel(),
-        thoughtLevel: mapThoughtLevel(response.reasoningEffort ?? 'medium'),
-        approvalPolicy: modeToApprovalPolicy('ask'),
-        personality: 'friendly',
+        model,
+        approvalPolicy,
+        sandboxPolicy,
+        reasoningEffort,
+        collaborationMode,
       },
       activeTurn: null,
       toolCallsByItemId: new Map(),
@@ -532,10 +666,14 @@ export class CodexAppServerAcpAdapter implements Agent {
   async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
     await Promise.resolve();
     const session = this.requireSession(params.sessionId);
-    const nextMode = params.modeId === 'code' ? 'code' : 'ask';
+    const availableModes = this.getCollaborationModeValues(session.defaults.collaborationMode);
+    if (!availableModes.includes(params.modeId)) {
+      throw RequestError.invalidParams({
+        modeId: params.modeId,
+      });
+    }
 
-    session.defaults.mode = nextMode;
-    session.defaults.approvalPolicy = modeToApprovalPolicy(nextMode);
+    session.defaults.collaborationMode = params.modeId;
 
     return {};
   }
@@ -548,9 +686,30 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     switch (params.configId) {
       case 'mode': {
-        const nextMode = params.value === 'code' ? 'code' : 'ask';
-        session.defaults.mode = nextMode;
-        session.defaults.approvalPolicy = modeToApprovalPolicy(nextMode);
+        const availableModes = this.getCollaborationModeValues(session.defaults.collaborationMode);
+        if (!availableModes.includes(params.value)) {
+          throw RequestError.invalidParams({
+            configId: params.configId,
+            value: params.value,
+          });
+        }
+        session.defaults.collaborationMode = params.value;
+        break;
+      }
+      case 'execution_mode': {
+        const presets = this.getExecutionPresets(session);
+        const selectedPreset = presets.find((preset) => preset.id === params.value);
+        if (!selectedPreset) {
+          throw RequestError.invalidParams({
+            configId: params.configId,
+            value: params.value,
+          });
+        }
+        session.defaults.approvalPolicy = selectedPreset.approvalPolicy;
+        session.defaults.sandboxPolicy = createSandboxPolicyFromMode(
+          selectedPreset.sandboxMode,
+          session.cwd
+        );
         break;
       }
       case 'model': {
@@ -561,17 +720,28 @@ export class CodexAppServerAcpAdapter implements Agent {
           });
         }
         session.defaults.model = params.value;
+        session.defaults.reasoningEffort = this.resolveReasoningEffortForModel(
+          session.defaults.model,
+          session.defaults.reasoningEffort
+        );
         break;
       }
       case 'reasoning_effort':
       case 'thought_level': {
-        if (!isThoughtLevel(params.value)) {
+        const modelEntry = this.modelCatalog.find((model) => model.id === session.defaults.model);
+        const supportedReasoningEfforts = modelEntry?.supportedReasoningEfforts ?? [];
+        const supportedValues = new Set(
+          supportedReasoningEfforts
+            .map((entry) => entry.reasoningEffort)
+            .filter((effort): effort is string => isNonEmptyString(effort))
+        );
+        if (!supportedValues.has(params.value)) {
           throw RequestError.invalidParams({
             configId: params.configId,
             value: params.value,
           });
         }
-        session.defaults.thoughtLevel = params.value;
+        session.defaults.reasoningEffort = params.value;
         break;
       }
       default:
@@ -599,23 +769,21 @@ export class CodexAppServerAcpAdapter implements Agent {
       input.length > 0 ? input : [{ type: 'text', text: '', text_elements: [] as [] }];
 
     try {
-      const turnStartRaw = await this.codex.request('turn/start', {
+      const turnStartParams: Record<string, unknown> = {
         threadId: session.threadId,
         input: safeInput,
         cwd: session.cwd,
         approvalPolicy: session.defaults.approvalPolicy,
+        sandboxPolicy: session.defaults.sandboxPolicy,
         model: session.defaults.model,
-        effort: session.defaults.thoughtLevel,
-        personality: session.defaults.personality,
-        sandboxPolicy: {
-          type: 'workspaceWrite',
-          writableRoots: [session.cwd],
-          readOnlyAccess: { type: 'fullAccess' },
-          networkAccess: true,
-          excludeTmpdirEnvVar: false,
-          excludeSlashTmp: false,
-        },
-      });
+        effort: session.defaults.reasoningEffort,
+      };
+      const collaborationModeParams = this.resolveTurnCollaborationMode(session);
+      if (collaborationModeParams) {
+        turnStartParams.collaborationMode = collaborationModeParams;
+      }
+
+      const turnStartRaw = await this.codex.request('turn/start', turnStartParams);
 
       const turnStart = turnStartResponseSchema.parse(turnStartRaw);
       const immediateStatus = turnStart.turn.status;
@@ -674,7 +842,14 @@ export class CodexAppServerAcpAdapter implements Agent {
 
   private resolveDefaultModel(): string {
     const preferred = this.modelCatalog.find((model) => model.isDefault);
-    return preferred?.id ?? this.modelCatalog[0]?.id ?? 'gpt-5';
+    const fallback = this.modelCatalog[0]?.id;
+    if (preferred?.id) {
+      return preferred.id;
+    }
+    if (fallback) {
+      return fallback;
+    }
+    throw new Error('Codex app-server model/list returned no models');
   }
 
   private async applyMcpServers(mcpServers: McpServer[]): Promise<void> {
@@ -692,11 +867,178 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private buildConfigOptions(session: AdapterSession): SessionConfigOption[] {
-    return [
+    const executionPresets = this.getExecutionPresets(session);
+    const currentExecutionPreset = this.resolveExecutionPresetId(session, executionPresets);
+    const configOptions: SessionConfigOption[] = [
       createModelConfigOption(session.defaults.model, this.modelCatalog),
-      createModeConfigOption(session.defaults.mode),
-      createThoughtLevelOption(session.defaults.thoughtLevel),
+      createCollaborationModeConfigOption(
+        session.defaults.collaborationMode,
+        this.collaborationModes
+      ),
+      createExecutionModeConfigOption(currentExecutionPreset, executionPresets),
     ];
+
+    const reasoningOption = createReasoningEffortConfigOption(
+      session.defaults.reasoningEffort,
+      this.modelCatalog,
+      session.defaults.model
+    );
+    if (reasoningOption) {
+      configOptions.push(reasoningOption);
+    }
+
+    return configOptions;
+  }
+
+  private requireApprovalPolicy(
+    approvalPolicy: unknown,
+    source: 'thread/start' | 'thread/resume'
+  ): ApprovalPolicy {
+    if (!isNonEmptyString(approvalPolicy)) {
+      throw new Error(`Codex ${source} response did not include approvalPolicy`);
+    }
+    return approvalPolicy;
+  }
+
+  private resolveSessionModel(model: unknown, fallbackModel: string): string {
+    return isNonEmptyString(model) ? model : fallbackModel;
+  }
+
+  private resolveSandboxPolicy(sandbox: unknown, cwd: string): Record<string, unknown> {
+    return isRecord(sandbox) ? sandbox : createWorkspaceWriteSandboxPolicy(cwd);
+  }
+
+  private resolveDefaultCollaborationMode(): string {
+    const preferredDefault = this.collaborationModes.find((entry) => entry.mode === 'default');
+    return preferredDefault?.mode ?? this.collaborationModes[0]?.mode ?? 'default';
+  }
+
+  private resolveTurnCollaborationMode(session: AdapterSession): Record<string, unknown> | null {
+    if (session.defaults.collaborationMode === 'default') {
+      return null;
+    }
+
+    const modeEntry = this.collaborationModes.find(
+      (entry) => entry.mode === session.defaults.collaborationMode
+    );
+    if (!modeEntry) {
+      return null;
+    }
+
+    return {
+      mode: modeEntry.mode,
+      settings: {
+        model: modeEntry.model ?? session.defaults.model,
+        reasoning_effort: modeEntry.reasoningEffort ?? session.defaults.reasoningEffort,
+        developer_instructions: modeEntry.developerInstructions,
+      },
+    };
+  }
+
+  private resolveReasoningEffortForModel(
+    modelId: string,
+    candidateReasoningEffort: unknown
+  ): ReasoningEffort | null {
+    const modelEntry = this.modelCatalog.find((entry) => entry.id === modelId);
+    if (!modelEntry) {
+      return null;
+    }
+
+    const supportedEntries = modelEntry.supportedReasoningEfforts.filter((entry) =>
+      isNonEmptyString(entry.reasoningEffort)
+    );
+    if (supportedEntries.length === 0) {
+      return null;
+    }
+
+    const supportedValues = dedupeStrings(supportedEntries.map((entry) => entry.reasoningEffort));
+    if (
+      isNonEmptyString(candidateReasoningEffort) &&
+      supportedValues.includes(candidateReasoningEffort)
+    ) {
+      return candidateReasoningEffort;
+    }
+    if (supportedValues.includes(modelEntry.defaultReasoningEffort)) {
+      return modelEntry.defaultReasoningEffort;
+    }
+    return supportedValues[0] ?? null;
+  }
+
+  private getCollaborationModeValues(currentMode: string): string[] {
+    const values = this.collaborationModes
+      .map((entry) => entry.mode)
+      .filter((mode): mode is string => isNonEmptyString(mode));
+    if (!values.includes(currentMode)) {
+      values.unshift(currentMode);
+    }
+    return dedupeStrings(values);
+  }
+
+  private isApprovalPolicyAllowed(policy: ApprovalPolicy): boolean {
+    return (
+      this.allowedApprovalPolicies.length === 0 || this.allowedApprovalPolicies.includes(policy)
+    );
+  }
+
+  private isSandboxModeAllowed(mode: SandboxMode): boolean {
+    return this.allowedSandboxModes.length === 0 || this.allowedSandboxModes.includes(mode);
+  }
+
+  private getExecutionPresets(session: AdapterSession): ExecutionPreset[] {
+    const currentSandboxMode =
+      parseSandboxModeFromPolicy(session.defaults.sandboxPolicy) ?? 'workspace-write';
+    const presets: ExecutionPreset[] = [
+      {
+        id: 'current',
+        name: 'Current',
+        description: `${session.defaults.approvalPolicy} + ${currentSandboxMode}`,
+        approvalPolicy: session.defaults.approvalPolicy,
+        sandboxMode: currentSandboxMode,
+      },
+    ];
+
+    if (
+      this.isApprovalPolicyAllowed('on-request') &&
+      this.isSandboxModeAllowed('workspace-write')
+    ) {
+      presets.push({
+        id: 'full_auto',
+        name: 'Full Auto',
+        description: 'on-request + workspace-write',
+        approvalPolicy: 'on-request',
+        sandboxMode: 'workspace-write',
+      });
+    }
+
+    if (this.isApprovalPolicyAllowed('never') && this.isSandboxModeAllowed('danger-full-access')) {
+      presets.push({
+        id: 'yolo',
+        name: 'YOLO',
+        description: 'never + danger-full-access',
+        approvalPolicy: 'never',
+        sandboxMode: 'danger-full-access',
+      });
+    }
+
+    return presets;
+  }
+
+  private resolveExecutionPresetId(
+    session: AdapterSession,
+    presets: ExecutionPreset[]
+  ): ExecutionPreset['id'] {
+    const currentSandboxMode = parseSandboxModeFromPolicy(session.defaults.sandboxPolicy);
+    for (const preset of presets) {
+      if (
+        preset.id === 'current' ||
+        preset.approvalPolicy !== session.defaults.approvalPolicy ||
+        preset.sandboxMode !== currentSandboxMode
+      ) {
+        continue;
+      }
+      return preset.id;
+    }
+    return 'current';
   }
 
   private requireSession(sessionId: string): AdapterSession {
@@ -705,6 +1047,110 @@ export class CodexAppServerAcpAdapter implements Agent {
       throw RequestError.invalidParams({ sessionId });
     }
     return session;
+  }
+
+  private async loadConfigRequirements(): Promise<{
+    allowedApprovalPolicies: ApprovalPolicy[];
+    allowedSandboxModes: SandboxMode[];
+  }> {
+    const raw = await this.codex.request('configRequirements/read', undefined);
+    const parsed = configRequirementsReadResponseSchema.parse(raw);
+    const allowedApprovalPolicies = dedupeStrings(
+      (parsed.requirements?.allowedApprovalPolicies ?? []).filter(isNonEmptyString)
+    );
+    const allowedSandboxModes = dedupeStrings(
+      (parsed.requirements?.allowedSandboxModes ?? []).filter(
+        (mode): mode is SandboxMode =>
+          mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access'
+      )
+    );
+
+    return {
+      allowedApprovalPolicies,
+      allowedSandboxModes,
+    };
+  }
+
+  private async loadCollaborationModes(): Promise<CollaborationModeEntry[]> {
+    try {
+      const entries: CollaborationModeEntry[] = [];
+      let cursor: string | null = null;
+
+      for (;;) {
+        const response = await this.requestCollaborationModeListWithRetry(cursor);
+        entries.push(
+          ...response.data.flatMap((entry) =>
+            isNonEmptyString(entry.mode)
+              ? [
+                  {
+                    mode: entry.mode,
+                    name: entry.name,
+                    model: entry.model ?? null,
+                    reasoningEffort: entry.reasoning_effort ?? null,
+                    developerInstructions: entry.developer_instructions ?? null,
+                  },
+                ]
+              : []
+          )
+        );
+
+        cursor = response.nextCursor ?? null;
+        if (!cursor) {
+          break;
+        }
+      }
+
+      if (entries.length > 0) {
+        return entries;
+      }
+    } catch (error) {
+      if (
+        !(error instanceof CodexRequestError) ||
+        (error.code !== -32_601 && error.code !== -32_600)
+      ) {
+        throw error;
+      }
+    }
+
+    return [
+      {
+        mode: 'default',
+        name: 'Default',
+        model: null,
+        reasoningEffort: null,
+        developerInstructions: null,
+      },
+    ];
+  }
+
+  private async requestCollaborationModeListWithRetry(
+    cursor?: string | null,
+    maxAttempts = 3
+  ): Promise<ReturnType<typeof collaborationModeListResponseSchema.parse>> {
+    let attempt = 0;
+    let lastError: unknown;
+
+    while (attempt < maxAttempts) {
+      attempt += 1;
+      try {
+        const raw = await this.codex.request('collaborationMode/list', cursor ? { cursor } : {});
+        return collaborationModeListResponseSchema.parse(raw);
+      } catch (error) {
+        lastError = error;
+        if (
+          !(error instanceof CodexRequestError) ||
+          error.code !== -32_001 ||
+          attempt >= maxAttempts
+        ) {
+          throw error;
+        }
+
+        const delayMs = Math.round(2 ** attempt * 100 + Math.random() * 120);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError;
   }
 
   private async loadModelCatalog(): Promise<CodexModelEntry[]> {
@@ -719,9 +1165,12 @@ export class CodexAppServerAcpAdapter implements Agent {
           displayName: model.displayName,
           description: model.description,
           defaultReasoningEffort: model.defaultReasoningEffort,
-          supportedReasoningEfforts: (model.supportedReasoningEfforts ?? []).map(
-            (entry) => entry.reasoningEffort
-          ),
+          supportedReasoningEfforts: (model.supportedReasoningEfforts ?? [])
+            .filter((entry) => isNonEmptyString(entry.reasoningEffort))
+            .map((entry) => ({
+              reasoningEffort: entry.reasoningEffort,
+              description: entry.description,
+            })),
           inputModalities: model.inputModalities ?? [],
           isDefault: model.isDefault ?? false,
         }))

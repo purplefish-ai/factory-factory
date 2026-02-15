@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
 import {
   AcpEventTranslator,
@@ -1339,12 +1339,41 @@ class SessionService {
     fallbackModel?: string
   ): ChatBarCapabilities {
     const modelOption = configOptions.find((o) => o.category === 'model');
-    const thoughtOption = configOptions.find((o) => o.category === 'thought_level');
+    const modeOption = configOptions.find((o) => o.category === 'mode');
+    const thoughtOption = configOptions.find(
+      (o) =>
+        o.category === 'thought_level' || o.id === 'reasoning_effort' || o.category === 'reasoning'
+    );
     const selectedModel = modelOption?.currentValue
       ? String(modelOption.currentValue)
       : (fallbackModel ?? undefined);
     const modelOptions = this.buildModelOptions(modelOption, selectedModel);
     const isCodexProvider = provider === 'CODEX';
+    const reasoningOptions =
+      isCodexProvider && thoughtOption
+        ? this.getSelectOptions(thoughtOption).map((option) => ({
+            value: option.value,
+            label: option.name ?? option.value,
+            ...(option.description ? { description: option.description } : {}),
+          }))
+        : [];
+    const reasoningValues = new Set(reasoningOptions.map((option) => option.value));
+    const selectedReasoning =
+      isCodexProvider &&
+      thoughtOption?.currentValue &&
+      typeof thoughtOption.currentValue === 'string' &&
+      reasoningValues.has(thoughtOption.currentValue)
+        ? thoughtOption.currentValue
+        : undefined;
+    const modeDescriptors = modeOption
+      ? [
+          ...this.getConfigOptionValues(modeOption),
+          ...this.getSelectOptions(modeOption)
+            .map((entry) => entry.name ?? '')
+            .filter((value) => value.trim().length > 0),
+        ]
+      : [];
+    const planModeEnabled = modeDescriptors.some((entry) => /plan/i.test(entry));
 
     return {
       provider,
@@ -1354,13 +1383,14 @@ class SessionService {
         ...(selectedModel ? { selected: selectedModel } : {}),
       },
       reasoning: {
-        enabled: false,
-        options: [],
+        enabled: reasoningOptions.length > 0,
+        options: reasoningOptions,
+        ...(selectedReasoning ? { selected: selectedReasoning } : {}),
       },
       thinking: {
-        enabled: !!thoughtOption,
+        enabled: !isCodexProvider && !!thoughtOption,
       },
-      planMode: { enabled: true },
+      planMode: { enabled: planModeEnabled },
       attachments: isCodexProvider
         ? { enabled: false, kinds: [] }
         : { enabled: true, kinds: ['image', 'text'] },
@@ -1378,29 +1408,39 @@ class SessionService {
       return selectedModel ? [{ value: selectedModel, label: selectedModel }] : [];
     }
 
-    const uniqueValues = new Set<string>(this.getConfigOptionValues(modelOption));
-    if (selectedModel) {
-      uniqueValues.add(selectedModel);
+    const byValue = new Map<string, string>();
+    for (const option of this.getSelectOptions(modelOption)) {
+      if (!byValue.has(option.value)) {
+        byValue.set(option.value, option.name ?? option.value);
+      }
+    }
+    if (selectedModel && !byValue.has(selectedModel)) {
+      byValue.set(selectedModel, selectedModel);
     }
 
-    return Array.from(uniqueValues).map((value) => ({ value, label: value }));
+    return Array.from(byValue.entries()).map(([value, label]) => ({ value, label }));
   }
 
-  private getConfigOptionValues(option: SessionConfigOption): string[] {
+  private getSelectOptions(option: SessionConfigOption): SessionConfigSelectOption[] {
     return option.options.flatMap((entry) => {
       if (typeof entry !== 'object' || entry === null) {
         return [];
       }
       if ('value' in entry && typeof entry.value === 'string') {
-        return [entry.value];
+        return [entry];
       }
       if ('options' in entry && Array.isArray(entry.options)) {
-        return entry.options
-          .map((grouped) => grouped?.value)
-          .filter((value): value is string => typeof value === 'string');
+        return entry.options.filter(
+          (grouped): grouped is SessionConfigSelectOption =>
+            typeof grouped === 'object' && grouped !== null && typeof grouped.value === 'string'
+        );
       }
       return [];
     });
+  }
+
+  private getConfigOptionValues(option: SessionConfigOption): string[] {
+    return this.getSelectOptions(option).map((entry) => entry.value);
   }
 
   /**
@@ -1442,7 +1482,6 @@ class SessionService {
       (await this.repository.getSessionById(sessionId))?.providerMetadata ??
       null;
 
-    const metadataRecord = this.toMetadataRecord(metadataSource);
     const snapshot: StoredAcpConfigSnapshot = {
       provider: params.provider,
       providerSessionId: params.providerSessionId,
@@ -1451,45 +1490,62 @@ class SessionService {
       ...(observedModelId ? { observedModelId } : {}),
     };
 
+    const persistedUpdate = this.buildSnapshotPersistUpdate(
+      metadataSource,
+      snapshot,
+      observedModelId
+    );
+
+    try {
+      await this.repository.updateSession(sessionId, persistedUpdate);
+    } catch (error) {
+      logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await this.retryPersistAcpConfigSnapshot(sessionId, snapshot, observedModelId);
+    }
+  }
+
+  private buildSnapshotPersistUpdate(
+    metadataSource: unknown,
+    snapshot: StoredAcpConfigSnapshot,
+    observedModelId: string | undefined
+  ): {
+    providerMetadata: AgentSessionRecord['providerMetadata'];
+    model?: string;
+  } {
     const nextMetadata: Record<string, unknown> = {
-      ...metadataRecord,
+      ...this.toMetadataRecord(metadataSource),
       acpConfigSnapshot: snapshot,
     };
     if (observedModelId) {
       nextMetadata.observedModelId = observedModelId;
     }
 
+    return {
+      providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
+      ...(observedModelId ? { model: observedModelId } : {}),
+    };
+  }
+
+  private async retryPersistAcpConfigSnapshot(
+    sessionId: string,
+    snapshot: StoredAcpConfigSnapshot,
+    observedModelId: string | undefined
+  ): Promise<void> {
     try {
-      await this.repository.updateSession(sessionId, {
-        providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
-      });
-    } catch (error) {
-      logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
+      const latestMetadataSource = (await this.repository.getSessionById(sessionId))
+        ?.providerMetadata;
+      await this.repository.updateSession(
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        this.buildSnapshotPersistUpdate(latestMetadataSource, snapshot, observedModelId)
+      );
+    } catch (retryError) {
+      logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
+        sessionId,
+        error: retryError instanceof Error ? retryError.message : String(retryError),
       });
-
-      try {
-        const latestMetadataSource = (await this.repository.getSessionById(sessionId))
-          ?.providerMetadata;
-        const latestMetadata = this.toMetadataRecord(latestMetadataSource);
-        const retryMetadata: Record<string, unknown> = {
-          ...latestMetadata,
-          acpConfigSnapshot: snapshot,
-        };
-        if (observedModelId) {
-          retryMetadata.observedModelId = observedModelId;
-        }
-
-        await this.repository.updateSession(sessionId, {
-          providerMetadata: retryMetadata as AgentSessionRecord['providerMetadata'],
-        });
-      } catch (retryError) {
-        logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
-          sessionId,
-          error: retryError instanceof Error ? retryError.message : String(retryError),
-        });
-      }
     }
   }
 

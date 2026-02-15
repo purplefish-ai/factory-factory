@@ -16,6 +16,7 @@ const REQUIRED_APP_SERVER_METHODS = [
   'turn/start',
   'turn/interrupt',
   'model/list',
+  'configRequirements/read',
   'config/value/write',
   'config/mcpServer/reload',
   'item/commandExecution/requestApproval',

@@ -32,7 +32,7 @@ describe('normalizeSessionModelForProvider', () => {
 describe('resolveSessionModelForProvider', () => {
   it('falls back to provider defaults when normalized model is missing or invalid', () => {
     expect(resolveSessionModelForProvider(undefined, 'CLAUDE')).toBe('sonnet');
-    expect(resolveSessionModelForProvider('opus', 'CODEX')).toBe('gpt-5');
+    expect(resolveSessionModelForProvider('opus', 'CODEX')).toBe('default');
     expect(resolveSessionModelForProvider('gpt-5', 'CLAUDE')).toBe('sonnet');
   });
 });

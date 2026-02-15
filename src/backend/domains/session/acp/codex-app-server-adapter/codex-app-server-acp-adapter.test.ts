@@ -68,11 +68,27 @@ function getCodexRequestCalls(
   );
 }
 
+const DEFAULT_APPROVAL_POLICY = 'on-failure';
+const DEFAULT_ALLOWED_APPROVAL_POLICIES = [DEFAULT_APPROVAL_POLICY, 'on-request', 'never'];
+const DEFAULT_COLLABORATION_MODES = [
+  { name: 'Default', mode: 'default' },
+  { name: 'Plan', mode: 'plan' },
+];
+
 async function initializeAdapterWithDefaultModel(
   adapter: CodexAppServerAcpAdapter,
   codex: CodexMocks
 ): Promise<void> {
   codex.request.mockResolvedValueOnce({});
+  codex.request.mockResolvedValueOnce({
+    requirements: {
+      allowedApprovalPolicies: DEFAULT_ALLOWED_APPROVAL_POLICIES,
+    },
+  });
+  codex.request.mockResolvedValueOnce({
+    data: DEFAULT_COLLABORATION_MODES,
+    nextCursor: null,
+  });
   codex.request.mockResolvedValueOnce({
     data: [
       {
@@ -102,6 +118,15 @@ describe('CodexAppServerAcpAdapter', () => {
     const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
 
     codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({
+      requirements: {
+        allowedApprovalPolicies: DEFAULT_ALLOWED_APPROVAL_POLICIES,
+      },
+    });
+    codex.request.mockResolvedValueOnce({
+      data: DEFAULT_COLLABORATION_MODES,
+      nextCursor: null,
+    });
     codex.request.mockResolvedValueOnce({
       data: [
         {
@@ -138,8 +163,10 @@ describe('CodexAppServerAcpAdapter', () => {
     });
 
     expect(codex.start).toHaveBeenCalledTimes(1);
-    expect(codex.request).toHaveBeenNthCalledWith(2, 'model/list', expect.objectContaining({}));
-    expect(codex.request).toHaveBeenNthCalledWith(3, 'model/list', { cursor: 'cursor-2' });
+    expect(codex.request).toHaveBeenNthCalledWith(2, 'configRequirements/read', undefined);
+    expect(codex.request).toHaveBeenNthCalledWith(3, 'collaborationMode/list', {});
+    expect(codex.request).toHaveBeenNthCalledWith(4, 'model/list', expect.objectContaining({}));
+    expect(codex.request).toHaveBeenNthCalledWith(5, 'model/list', { cursor: 'cursor-2' });
   });
 
   it('assigns session ids as sess_<threadId> on newSession', async () => {
@@ -151,6 +178,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_123', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
 
@@ -171,6 +199,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_with_mcp', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     codex.request.mockResolvedValueOnce({});
@@ -221,6 +250,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_mcp_names', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     codex.request.mockResolvedValueOnce({});
@@ -263,6 +293,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_mcp_error', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     codex.request.mockRejectedValueOnce(new Error('failed to write codex config'));
@@ -292,6 +323,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_abc', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     codex.request.mockResolvedValueOnce({
@@ -352,6 +384,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_resume', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     codex.request.mockResolvedValueOnce({});
@@ -407,6 +440,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_123', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     const session = await adapter.newSession({
@@ -423,6 +457,61 @@ describe('CodexAppServerAcpAdapter', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
+  it('applies YOLO execution mode and plan collaboration mode to turn/start', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_modes', cwd: '/tmp/workspace' },
+      approvalPolicy: 'on-request',
+      sandbox: {
+        type: 'workspaceWrite',
+        writableRoots: ['/tmp/workspace'],
+        readOnlyAccess: { type: 'fullAccess' },
+        networkAccess: true,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: false,
+      },
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await adapter.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
+    await adapter.setSessionConfigOption({
+      sessionId: session.sessionId,
+      configId: 'execution_mode',
+      value: 'yolo',
+    });
+
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_modes', status: 'completed' },
+    });
+
+    const promptResponse = await adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'hello' }],
+    });
+
+    expect(promptResponse.stopReason).toBe('end_turn');
+    expect(codex.request).toHaveBeenCalledWith(
+      'turn/start',
+      expect.objectContaining({
+        threadId: 'thread_modes',
+        approvalPolicy: 'never',
+        sandboxPolicy: expect.objectContaining({ type: 'dangerFullAccess' }),
+        collaborationMode: expect.objectContaining({
+          mode: 'plan',
+        }),
+      })
+    );
+  });
+
   it('maps tool request_user_input selections into answer payloads', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -436,6 +525,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_perm', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     await adapter.newSession({
@@ -490,6 +580,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_cancelled_input', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     await adapter.newSession({
@@ -592,6 +683,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_overload', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     const session = await adapter.newSession({
@@ -634,6 +726,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_cancel', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     const session = await adapter.newSession({
@@ -688,6 +781,7 @@ describe('CodexAppServerAcpAdapter', () => {
 
     codex.request.mockResolvedValueOnce({
       thread: { id: 'thread_decline', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
       reasoningEffort: 'medium',
     });
     await adapter.newSession({

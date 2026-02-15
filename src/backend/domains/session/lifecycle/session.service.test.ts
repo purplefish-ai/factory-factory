@@ -947,6 +947,7 @@ describe('SessionService', () => {
       .mock.calls.filter(([, update]) => Object.hasOwn(update, 'providerMetadata'));
     expect(metadataUpdates).toHaveLength(2);
     expect(metadataUpdates[1]?.[1]).toMatchObject({
+      model: 'claude-sonnet-4-5',
       providerMetadata: expect.objectContaining({
         existing: 'metadata',
         acpConfigSnapshot: expect.any(Object),
@@ -967,6 +968,105 @@ describe('SessionService', () => {
 
     expect(capabilities.provider).toBe('CODEX');
     expect(capabilities.model.enabled).toBe(false);
+  });
+
+  it('derives CODEX model/reasoning/plan-mode capabilities from cached ACP config options', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-codex',
+        provider: 'CODEX',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'CODEX',
+            providerSessionId: 'sess_123',
+            capturedAt: '2026-02-15T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'model',
+                name: 'Model',
+                type: 'select',
+                category: 'model',
+                currentValue: 'gpt-5-codex',
+                options: [
+                  { value: 'gpt-5-codex', name: 'GPT-5 Codex' },
+                  { value: 'gpt-5-mini', name: 'GPT-5 Mini' },
+                ],
+              },
+              {
+                id: 'mode',
+                name: 'Mode',
+                type: 'select',
+                category: 'mode',
+                currentValue: 'plan',
+                options: [
+                  { value: 'ask', name: 'Ask' },
+                  { value: 'plan', name: 'Plan' },
+                ],
+              },
+              {
+                id: 'reasoning_effort',
+                name: 'Reasoning Effort',
+                type: 'select',
+                category: 'thought_level',
+                currentValue: 'high',
+                options: [
+                  { value: 'medium', name: 'Medium', description: 'Balanced' },
+                  { value: 'high', name: 'High', description: 'Thorough' },
+                ],
+              },
+            ],
+          },
+        },
+      })
+    );
+
+    const capabilities = await sessionService.getChatBarCapabilities('session-codex');
+
+    expect(capabilities.provider).toBe('CODEX');
+    expect(capabilities.model.options).toEqual([
+      { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+      { value: 'gpt-5-mini', label: 'GPT-5 Mini' },
+    ]);
+    expect(capabilities.reasoning.enabled).toBe(true);
+    expect(capabilities.reasoning.options).toEqual([
+      { value: 'medium', label: 'Medium', description: 'Balanced' },
+      { value: 'high', label: 'High', description: 'Thorough' },
+    ]);
+    expect(capabilities.reasoning.selected).toBe('high');
+    expect(capabilities.planMode.enabled).toBe(true);
+    expect(capabilities.thinking.enabled).toBe(false);
+  });
+
+  it('disables plan mode when ACP config options do not advertise a plan variant', async () => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-codex',
+        provider: 'CODEX',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'CODEX',
+            providerSessionId: 'sess_124',
+            capturedAt: '2026-02-15T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'mode',
+                name: 'Approval Policy',
+                type: 'select',
+                category: 'mode',
+                currentValue: 'on-failure',
+                options: [{ value: 'on-failure', name: 'On Failure' }],
+              },
+            ],
+          },
+        },
+      })
+    );
+
+    const capabilities = await sessionService.getChatBarCapabilities('session-codex');
+
+    expect(capabilities.planMode.enabled).toBe(false);
   });
 
   it('skips setSessionModel when requested model is not in ACP model options', async () => {
