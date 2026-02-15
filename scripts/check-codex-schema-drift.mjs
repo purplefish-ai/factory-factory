@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const SNAPSHOT_PATH = resolve(
-  'src/backend/domains/session/codex/schema-snapshots/app-server-methods.snapshot.json'
+  'src/backend/domains/session/acp/codex-app-server-adapter/schema-snapshots/app-server-methods.snapshot.json'
 );
 
 const SCHEMA_FILES = ['ClientRequest.ts', 'ServerRequest.ts', 'ClientNotification.ts'];

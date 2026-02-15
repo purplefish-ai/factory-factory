@@ -58,6 +58,7 @@
     "check:ownership": "node scripts/check-single-writer.mjs",
     "check:codex-schema": "node scripts/check-codex-schema-drift.mjs",
     "check:codex-schema:update": "node scripts/check-codex-schema-drift.mjs --update",
+    "codex:schema:generate": "node scripts/generate-codex-app-server-schemas.mjs",
     "check:fix": "biome check --write .",
     "typecheck": "pnpm --filter @factory-factory/core build && tsc --noEmit",
     "db:migrate": "prisma migrate dev",

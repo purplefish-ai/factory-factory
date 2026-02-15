@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import {
@@ -77,9 +78,55 @@ function normalizeUnknownError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-function createAcpSpawnError(binaryPath: string, error: unknown): Error {
+function createAcpSpawnError(commandLabel: string, error: unknown): Error {
   const normalized = normalizeUnknownError(error);
-  return new Error(`Failed to spawn ACP adapter "${binaryPath}": ${normalized.message}`);
+  return new Error(`Failed to spawn ACP adapter "${commandLabel}": ${normalized.message}`);
+}
+
+type SpawnCommand = {
+  command: string;
+  args: string[];
+  commandLabel: string;
+};
+
+function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
+  const projectRoot = process.cwd();
+  const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
+  if (existsSync(cliDistEntrypoint)) {
+    const args = [cliDistEntrypoint, 'internal', 'codex-app-server-acp'];
+    return {
+      command: process.execPath,
+      args,
+      commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
+    };
+  }
+
+  const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
+  if (existsSync(cliSourceEntrypoint)) {
+    const tsxBinary = join(
+      projectRoot,
+      'node_modules',
+      '.bin',
+      process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+    );
+    if (existsSync(tsxBinary)) {
+      const args = [cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
+      return {
+        command: tsxBinary,
+        args,
+        commandLabel: `${tsxBinary} ${args.join(' ')}`.trim(),
+      };
+    }
+
+    const args = [...process.execArgv, cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
+    return {
+      command: process.execPath,
+      args,
+      commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
+    };
+  }
+
+  throw new Error('Cannot resolve CLI entrypoint for CODEX ACP adapter spawn');
 }
 
 function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
@@ -416,21 +463,36 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
-    // Resolve binary path
     const isCodex = options.provider === 'CODEX';
-    const binaryName = isCodex ? 'codex-acp' : 'claude-code-acp';
-    const packageName = isCodex ? '@zed-industries/codex-acp' : '@zed-industries/claude-code-acp';
-    const binaryPath = options.adapterBinaryPath ?? resolveAcpBinary(packageName, binaryName);
+    const spawnCommand: SpawnCommand = options.adapterBinaryPath
+      ? {
+          command: options.adapterBinaryPath,
+          args: [],
+          commandLabel: options.adapterBinaryPath,
+        }
+      : isCodex
+        ? resolveInternalCodexAcpSpawnCommand()
+        : (() => {
+            const binaryName = 'claude-code-acp';
+            const packageName = '@zed-industries/claude-code-acp';
+            const binaryPath = resolveAcpBinary(packageName, binaryName);
+            return {
+              command: binaryPath,
+              args: [],
+              commandLabel: binaryPath,
+            };
+          })();
 
     logger.info('Spawning ACP subprocess', {
       sessionId,
-      binaryPath,
+      command: spawnCommand.command,
+      args: spawnCommand.args,
       provider: options.provider,
       workingDir: options.workingDir,
     });
 
     // Spawn subprocess (CRITICAL: detached MUST be false for orphan prevention)
-    const child: ChildProcess = spawn(binaryPath, [], {
+    const child: ChildProcess = spawn(spawnCommand.command, spawnCommand.args, {
       cwd: options.workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
@@ -441,7 +503,8 @@ export class AcpRuntimeManager {
     // client creation cleanly instead of surfacing as uncaught process errors.
     let startupErrorListener: ((error: unknown) => void) | null = null;
     const startupError = new Promise<never>((_, reject) => {
-      startupErrorListener = (error: unknown) => reject(createAcpSpawnError(binaryPath, error));
+      startupErrorListener = (error: unknown) =>
+        reject(createAcpSpawnError(spawnCommand.commandLabel, error));
       child.once('error', startupErrorListener);
     });
 

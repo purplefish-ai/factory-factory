@@ -119,6 +119,14 @@ function defaultOptions(): AcpClientOptions {
   };
 }
 
+function codexOptions(): AcpClientOptions {
+  return {
+    provider: 'CODEX',
+    workingDir: '/tmp/workspace',
+    sessionId: 'test-session-1',
+  };
+}
+
 function defaultHandlers(): AcpRuntimeEventHandlers {
   return {
     onSessionId: vi.fn().mockResolvedValue(undefined),
@@ -236,6 +244,29 @@ describe('AcpRuntimeManager', () => {
       expect(handle.isPromptInFlight).toBe(false);
       expect(handle.isRunning()).toBe(true);
       expect(handle.getPid()).toBe(12_345);
+    });
+
+    it('spawns CODEX provider using internal CLI adapter command', async () => {
+      setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        codexOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      const spawnArgs = mockSpawn.mock.calls[0]!;
+      expect(spawnArgs[1]).toContain('internal');
+      expect(spawnArgs[1]).toContain('codex-app-server-acp');
+      expect(typeof spawnArgs[0]).toBe('string');
+      expect((spawnArgs[0] as string).length).toBeGreaterThan(0);
+      expect(spawnArgs[2]).toMatchObject({
+        cwd: '/tmp/workspace',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false,
+      });
     });
 
     it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {
