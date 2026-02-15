@@ -4,9 +4,7 @@
  * Provides admin operations for managing system health.
  */
 
-import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
 import type { DecisionLog } from '@prisma-gen/client';
 import { z } from 'zod';
 import { acpRuntimeManager, sessionDataService } from '@/backend/domains/session';
@@ -16,106 +14,12 @@ import { decisionLogQueryService } from '@/backend/orchestration/decision-log-qu
 import { getLogFilePath } from '@/backend/services/logger.service';
 import { SessionStatus } from '@/shared/core';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import { readFilteredLogEntriesPage } from './log-file-reader';
 import { type Context, publicProcedure, router } from './trpc';
 
 const loggerName = 'admin-trpc';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
-
-export interface ParsedLogEntry {
-  level: string;
-  timestamp: string;
-  message: string;
-  component: string;
-  context: Record<string, unknown>;
-}
-
-const RawLogEntrySchema = z.object({
-  level: z.string(),
-  timestamp: z.string().optional(),
-  message: z.string().optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
-});
-
-type RawLogEntry = z.infer<typeof RawLogEntrySchema>;
-
-interface LogFilter {
-  level?: string;
-  search?: string;
-  sinceMs?: number | null;
-  untilMs?: number | null;
-}
-
-function matchesTimestamp(timestamp: string | undefined, filter: LogFilter): boolean {
-  if (!(timestamp && (filter.sinceMs || filter.untilMs))) {
-    return true;
-  }
-  const ts = new Date(timestamp).getTime();
-  if (filter.sinceMs && ts < filter.sinceMs) {
-    return false;
-  }
-  return !(filter.untilMs && ts > filter.untilMs);
-}
-
-function matchesLogFilter(entry: RawLogEntry, filter: LogFilter): boolean {
-  if (filter.level && entry.level !== filter.level) {
-    return false;
-  }
-  if (!matchesTimestamp(entry.timestamp, filter)) {
-    return false;
-  }
-  if (filter.search) {
-    const msg = entry.message?.toLowerCase() ?? '';
-    const comp = typeof entry.context?.component === 'string' ? entry.context.component : undefined;
-    if (!(msg.includes(filter.search) || comp?.toLowerCase().includes(filter.search))) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function toParsedLogEntry(entry: RawLogEntry): ParsedLogEntry {
-  return {
-    level: entry.level,
-    timestamp: entry.timestamp ?? '',
-    message: entry.message ?? '',
-    component: typeof entry.context?.component === 'string' ? entry.context.component : '',
-    context: entry.context ?? {},
-  };
-}
-
-async function readFilteredLogEntries(
-  filePath: string,
-  filter: LogFilter
-): Promise<ParsedLogEntry[]> {
-  const filtered: ParsedLogEntry[] = [];
-  const rl = createInterface({
-    input: createReadStream(filePath, 'utf-8'),
-    crlfDelay: Number.POSITIVE_INFINITY,
-  });
-
-  for await (const line of rl) {
-    if (!line) {
-      continue;
-    }
-    try {
-      const rawEntry: unknown = JSON.parse(line);
-      const parsedEntry = RawLogEntrySchema.safeParse(rawEntry);
-      if (!parsedEntry.success) {
-        continue;
-      }
-      const entry = parsedEntry.data;
-      if (!matchesLogFilter(entry, filter)) {
-        continue;
-      }
-      filtered.push(toParsedLogEntry(entry));
-    } catch {
-      // skip malformed lines
-    }
-  }
-
-  return filtered;
-}
 
 export const adminRouter = router({
   /**
@@ -418,25 +322,28 @@ export const adminRouter = router({
     .query(async ({ input }) => {
       const filePath = getLogFilePath();
 
-      // Stream the log file line-by-line to avoid loading the entire file into memory
-      const filter: LogFilter = {
+      const filter = {
         level: input.level,
         search: input.search?.toLowerCase(),
         sinceMs: input.since ? new Date(input.since).getTime() : null,
         untilMs: input.until ? new Date(input.until).getTime() : null,
       };
-      let filtered: ParsedLogEntry[];
+
       try {
-        filtered = await readFilteredLogEntries(filePath, filter);
+        const page = await readFilteredLogEntriesPage(filePath, filter, {
+          limit: input.limit,
+          offset: input.offset,
+        });
+        return { ...page, filePath };
       } catch {
-        return { entries: [], total: 0, filePath };
+        return {
+          entries: [],
+          total: 0,
+          totalIsExact: false,
+          hasMore: false,
+          filePath,
+        };
       }
-
-      // Reverse so newest entries come first, then paginate
-      filtered.reverse();
-      const page = filtered.slice(input.offset, input.offset + input.limit);
-
-      return { entries: page, total: filtered.length, filePath };
     }),
 
   /**
