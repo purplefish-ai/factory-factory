@@ -103,8 +103,8 @@ function parseLogLine(line: string): RawLogEntry | null {
 }
 
 interface ChunkResult {
-  lines: string[];
-  nextCarry: string;
+  lineBuffers: Buffer[];
+  nextCarry: Buffer;
 }
 
 interface ScanState {
@@ -113,15 +113,46 @@ interface ScanState {
   hasMore: boolean;
 }
 
-function splitChunkIntoLines(chunk: string, carry: string, hasOlderData: boolean): ChunkResult {
-  const joined = chunk + carry;
-  const lines = joined.split('\n');
-  if (!hasOlderData) {
-    return { lines, nextCarry: '' };
+const NEWLINE_BYTE = 0x0a;
+const CARRIAGE_RETURN_BYTE = 0x0d;
+const EMPTY_BUFFER = Buffer.alloc(0);
+
+function splitChunkIntoLineBuffers(
+  chunk: Buffer,
+  carry: Buffer,
+  hasOlderData: boolean
+): ChunkResult {
+  const joined = carry.length > 0 ? Buffer.concat([chunk, carry]) : chunk;
+  const lineBuffers: Buffer[] = [];
+  let segmentStart = 0;
+
+  for (let i = 0; i < joined.length; i += 1) {
+    if (joined[i] !== NEWLINE_BYTE) {
+      continue;
+    }
+
+    let segmentEnd = i;
+    if (segmentEnd > segmentStart && joined[segmentEnd - 1] === CARRIAGE_RETURN_BYTE) {
+      segmentEnd -= 1;
+    }
+    lineBuffers.push(joined.subarray(segmentStart, segmentEnd));
+    segmentStart = i + 1;
   }
+
+  let finalEnd = joined.length;
+  if (finalEnd > segmentStart && joined[finalEnd - 1] === CARRIAGE_RETURN_BYTE) {
+    finalEnd -= 1;
+  }
+  lineBuffers.push(joined.subarray(segmentStart, finalEnd));
+
+  if (!hasOlderData) {
+    return { lineBuffers, nextCarry: EMPTY_BUFFER };
+  }
+
+  const [nextCarry = EMPTY_BUFFER, ...rest] = lineBuffers;
   return {
-    lines,
-    nextCarry: lines.shift() ?? '',
+    lineBuffers: rest,
+    nextCarry,
   };
 }
 
@@ -171,7 +202,7 @@ export async function readFilteredLogEntriesPage(
     }
 
     let position = size;
-    let carry = '';
+    let carry: Buffer = EMPTY_BUFFER;
 
     while (position > 0 && !state.hasMore) {
       const readSize = Math.min(LOG_READ_CHUNK_SIZE_BYTES, position);
@@ -179,12 +210,18 @@ export async function readFilteredLogEntriesPage(
 
       const buffer = Buffer.alloc(readSize);
       const { bytesRead } = await file.read(buffer, 0, readSize, position);
-      const chunk = buffer.toString('utf-8', 0, bytesRead);
-      const chunkResult = splitChunkIntoLines(chunk, carry, position > 0);
+      const chunk = buffer.subarray(0, bytesRead);
+      const chunkResult = splitChunkIntoLineBuffers(chunk, carry, position > 0);
       carry = chunkResult.nextCarry;
 
-      for (let i = chunkResult.lines.length - 1; i >= 0; i -= 1) {
-        processLine(chunkResult.lines[i] ?? '', filter, pagination, targetMatches, state);
+      for (let i = chunkResult.lineBuffers.length - 1; i >= 0; i -= 1) {
+        processLine(
+          chunkResult.lineBuffers[i]?.toString('utf-8') ?? '',
+          filter,
+          pagination,
+          targetMatches,
+          state
+        );
         if (state.hasMore) {
           break;
         }

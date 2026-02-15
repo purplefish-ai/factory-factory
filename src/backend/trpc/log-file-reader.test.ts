@@ -158,4 +158,37 @@ describe('readFilteredLogEntriesPage', () => {
     expect(result.totalIsExact).toBe(false);
     expect(result.total).toBe(4);
   });
+
+  it('preserves UTF-8 characters split across chunk boundaries', async () => {
+    const timestamp = '2026-01-01T00:00:00.000Z';
+    const level: TestLogEntry['level'] = 'info';
+    const component = 'test-component';
+    let message: string | null = null;
+
+    for (let tailLength = 65_000; tailLength < 66_500; tailLength += 1) {
+      const candidate = `🙂${'a'.repeat(tailLength)}`;
+      const line = makeLogLine({ level, timestamp, component, message: candidate });
+      const lineBytes = Buffer.from(`${line}\n`, 'utf-8');
+      const emojiStart = lineBytes.indexOf(Buffer.from('🙂'));
+
+      if (emojiStart < 0) {
+        continue;
+      }
+
+      const bytesFromEmojiStartToFileEnd = lineBytes.length - emojiStart;
+      if (bytesFromEmojiStartToFileEnd > 65_536 && bytesFromEmojiStartToFileEnd < 65_540) {
+        message = candidate;
+        break;
+      }
+    }
+
+    expect(message).not.toBeNull();
+    const filePath = await writeLogFile([
+      makeLogLine({ level, timestamp, component, message: message! }),
+    ]);
+    const result = await readFilteredLogEntriesPage(filePath, {}, { offset: 0, limit: 1 });
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]?.message).toBe(message);
+  });
 });
