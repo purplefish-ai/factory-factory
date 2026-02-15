@@ -1277,6 +1277,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     const allow = selected === 'allow_once';
 
     if (params.request.method === 'item/tool/requestUserInput') {
+      const rejected = selected === null || selected === 'reject_once';
       const answers = buildToolUserInputAnswers({
         questions: params.questions,
         selectedOptionId: selected,
@@ -1289,8 +1290,8 @@ export class CodexAppServerAcpAdapter implements Agent {
       await this.emitSessionUpdate(params.session.sessionId, {
         sessionUpdate: 'tool_call_update',
         toolCallId: params.toolCallId,
-        status: selected === 'reject_once' ? 'failed' : 'in_progress',
-        rawOutput: selected === 'reject_once' ? 'User denied tool input request' : { answers },
+        status: rejected ? 'failed' : 'in_progress',
+        rawOutput: rejected ? 'User denied tool input request' : { answers },
       });
       return;
     }

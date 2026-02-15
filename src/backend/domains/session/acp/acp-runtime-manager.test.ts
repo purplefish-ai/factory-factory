@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -267,6 +268,36 @@ describe('AcpRuntimeManager', () => {
         stdio: ['pipe', 'pipe', 'pipe'],
         detached: false,
       });
+    });
+
+    it('resolves CODEX internal adapter from module location when cwd is outside repo', async () => {
+      setupSuccessfulSpawn();
+      const originalCwd = process.cwd();
+      process.chdir(tmpdir());
+
+      try {
+        await manager.getOrCreateClient(
+          'session-1',
+          codexOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
+
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      const spawnArgs = mockSpawn.mock.calls[0]!;
+      const command = spawnArgs[0] as string;
+      const args = spawnArgs[1] as string[];
+      expect(command.length).toBeGreaterThan(0);
+      expect(args).toContain('internal');
+      expect(args).toContain('codex-app-server-acp');
+      expect(
+        args.some(
+          (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')
+        )
+      ).toBe(true);
     });
 
     it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {

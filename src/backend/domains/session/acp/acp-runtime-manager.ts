@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 import {
   ClientSideConnection,
   type LoadSessionResponse,
@@ -89,8 +90,40 @@ type SpawnCommand = {
   commandLabel: string;
 };
 
+function findFactoryRoot(startDir: string): string | null {
+  let currentDir = startDir;
+  for (;;) {
+    const hasPackageJson = existsSync(join(currentDir, 'package.json'));
+    const hasCliDistEntrypoint = existsSync(join(currentDir, 'dist', 'src', 'cli', 'index.js'));
+    const hasCliSourceEntrypoint = existsSync(join(currentDir, 'src', 'cli', 'index.ts'));
+    if (hasPackageJson && (hasCliDistEntrypoint || hasCliSourceEntrypoint)) {
+      return currentDir;
+    }
+
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) {
+      return null;
+    }
+    currentDir = parentDir;
+  }
+}
+
+function resolveFactoryRootForInternalCodexAdapter(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const candidateStarts = [process.cwd(), moduleDir];
+
+  for (const candidate of candidateStarts) {
+    const root = findFactoryRoot(candidate);
+    if (root) {
+      return root;
+    }
+  }
+
+  throw new Error('Cannot resolve Factory Factory root for CODEX ACP adapter spawn');
+}
+
 function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
-  const projectRoot = process.cwd();
+  const projectRoot = resolveFactoryRootForInternalCodexAdapter();
   const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
   if (existsSync(cliDistEntrypoint)) {
     const args = [cliDistEntrypoint, 'internal', 'codex-app-server-acp'];

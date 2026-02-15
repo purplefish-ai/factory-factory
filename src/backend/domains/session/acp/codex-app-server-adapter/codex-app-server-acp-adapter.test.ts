@@ -477,6 +477,71 @@ describe('CodexAppServerAcpAdapter', () => {
     });
   });
 
+  it('treats cancelled request_user_input permission outcomes as rejected', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+      outcome: { outcome: 'cancelled' },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_cancelled_input', cwd: '/tmp/workspace' },
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 21,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thread_cancelled_input',
+        turnId: 'turn_cancelled_input',
+        itemId: 'item_cancelled_input',
+        questions: [
+          {
+            id: 'choice',
+            header: 'Pick one',
+            question: 'Select an option',
+            isOther: false,
+            isSecret: false,
+            options: [
+              { label: 'First', description: 'One' },
+              { label: 'Second', description: 'Two' },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(codex.respondSuccess).toHaveBeenCalledWith(21, {
+      answers: {},
+    });
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call_update',
+              status: 'failed',
+              rawOutput: 'User denied tool input request',
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
   it('stops codex subprocess when ACP connection closes', async () => {
     const { connection, resolveClosed } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
