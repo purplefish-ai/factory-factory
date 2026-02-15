@@ -73,6 +73,12 @@ describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionService.setPromptTurnCompleteHandler(null);
+    sessionService.configure({
+      workspace: {
+        markSessionRunning: vi.fn(),
+        markSessionIdle: vi.fn(),
+      },
+    });
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(false);
