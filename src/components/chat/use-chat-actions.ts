@@ -41,6 +41,7 @@ type AcpPermissionOption = {
   kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
 };
 type AcpConfigOptionState = NonNullable<ChatState['acpConfigOptions']>[number];
+const QUESTION_ANSWERS_OPTION_PREFIX = 'answers_json_v1:';
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
@@ -160,6 +161,36 @@ function flattenAnswerValues(answers: Record<string, string | string[]>): string
     }
   }
   return values;
+}
+
+function normalizeQuestionAnswers(
+  answers: Record<string, string | string[]>
+): Record<string, string[]> {
+  const normalized: Record<string, string[]> = {};
+  for (const [questionId, value] of Object.entries(answers)) {
+    const values = (Array.isArray(value) ? value : [value])
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (values.length > 0) {
+      normalized[questionId] = values;
+    }
+  }
+  return normalized;
+}
+
+function serializeQuestionAnswersOptionId(
+  answers: Record<string, string | string[]>
+): string | null {
+  const normalized = normalizeQuestionAnswers(answers);
+  if (Object.keys(normalized).length === 0) {
+    return null;
+  }
+
+  try {
+    return `${QUESTION_ANSWERS_OPTION_PREFIX}${encodeURIComponent(JSON.stringify(normalized))}`;
+  } catch {
+    return null;
+  }
 }
 
 function findQuestionOptionId(
@@ -402,7 +433,11 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const optionId = findQuestionOptionId(pendingRequest.request.acpOptions, answers) ?? 'allow';
+      const serializedOptionId = serializeQuestionAnswersOptionId(answers);
+      const optionId =
+        serializedOptionId ??
+        findQuestionOptionId(pendingRequest.request.acpOptions, answers) ??
+        'allow';
       const msg: PermissionResponseMessage = {
         type: 'permission_response',
         requestId,

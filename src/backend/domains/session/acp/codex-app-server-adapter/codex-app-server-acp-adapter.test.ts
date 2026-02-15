@@ -74,6 +74,7 @@ const DEFAULT_COLLABORATION_MODES = [
   { name: 'Default', mode: 'default' },
   { name: 'Plan', mode: 'plan' },
 ];
+const TOOL_USER_INPUT_ANSWERS_PREFIX = 'answers_json_v1:';
 
 async function initializeAdapterWithDefaultModel(
   adapter: CodexAppServerAcpAdapter,
@@ -583,6 +584,86 @@ describe('CodexAppServerAcpAdapter', () => {
           }),
         ],
       ])
+    );
+  });
+
+  it('maps serialized multi-question request_user_input answers', async () => {
+    const serializedAnswers = `${TOOL_USER_INPUT_ANSWERS_PREFIX}${encodeURIComponent(
+      JSON.stringify({
+        color: ['Blue'],
+        shell: ['zsh', 'fish'],
+        unknown: ['ignored'],
+      })
+    )}`;
+
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+      outcome: { outcome: 'selected', optionId: serializedAnswers },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_multi_question', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 19,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thread_multi_question',
+        turnId: 'turn_multi_question',
+        itemId: 'item_multi_question',
+        questions: [
+          {
+            id: 'color',
+            header: 'Pick color',
+            question: 'Favorite color?',
+            isOther: false,
+            isSecret: false,
+            options: [{ label: 'Blue', description: 'cool' }],
+          },
+          {
+            id: 'shell',
+            header: 'Pick shells',
+            question: 'Preferred shells?',
+            isOther: true,
+            isSecret: false,
+            options: [
+              { label: 'zsh', description: 'default' },
+              { label: 'fish', description: 'friendly' },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(codex.respondSuccess).toHaveBeenCalledWith(19, {
+      answers: {
+        color: { answers: ['Blue'] },
+        shell: { answers: ['zsh', 'fish'] },
+      },
+    });
+    expect(connection.requestPermission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: [
+          { optionId: 'allow_once', name: 'Submit', kind: 'allow_once' },
+          { optionId: 'reject_once', name: 'Cancel', kind: 'reject_once' },
+        ],
+      })
     );
   });
 

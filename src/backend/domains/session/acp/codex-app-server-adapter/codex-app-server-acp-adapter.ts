@@ -277,6 +277,13 @@ function toCodexMcpConfigMap(mcpServers: McpServer[]): Record<string, CodexMcpSe
 function buildToolUserInputPermissionOptions(
   questions: ToolUserInputQuestion[]
 ): Array<{ optionId: string; name: string; kind: 'allow_once' | 'reject_once' }> {
+  if (questions.length !== 1) {
+    return [
+      { optionId: 'allow_once', name: 'Submit', kind: 'allow_once' },
+      { optionId: 'reject_once', name: 'Cancel', kind: 'reject_once' },
+    ];
+  }
+
   const firstQuestionWithOptions = questions.find(
     (question) => Array.isArray(question.options) && question.options.length > 0
   );
@@ -308,6 +315,14 @@ function buildToolUserInputAnswers(params: {
     return {};
   }
 
+  const parsedAnswers = parseSerializedToolUserInputAnswers({
+    questions: params.questions,
+    selectedOptionId: params.selectedOptionId,
+  });
+  if (parsedAnswers) {
+    return parsedAnswers;
+  }
+
   const selectedIndex = params.selectedOptionId.startsWith('answer_')
     ? Number.parseInt(params.selectedOptionId.slice('answer_'.length), 10)
     : Number.NaN;
@@ -329,7 +344,54 @@ function buildToolUserInputAnswers(params: {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const TOOL_USER_INPUT_ANSWERS_PREFIX = 'answers_json_v1:';
+
+function parseSerializedToolUserInputAnswers(params: {
+  questions: ToolUserInputQuestion[];
+  selectedOptionId: string;
+}): UserInputAnswers | null {
+  if (!params.selectedOptionId.startsWith(TOOL_USER_INPUT_ANSWERS_PREFIX)) {
+    return null;
+  }
+
+  const encodedPayload = params.selectedOptionId.slice(TOOL_USER_INPUT_ANSWERS_PREFIX.length);
+  if (!encodedPayload) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decodeURIComponent(encodedPayload));
+  } catch {
+    return null;
+  }
+
+  if (!isRecord(parsed)) {
+    return null;
+  }
+
+  const knownQuestionIds = new Set(params.questions.map((question) => question.id));
+  const answers: UserInputAnswers = {};
+  for (const [questionId, value] of Object.entries(parsed)) {
+    if (!knownQuestionIds.has(questionId)) {
+      continue;
+    }
+
+    const values = (Array.isArray(value) ? value : [value])
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (values.length === 0) {
+      continue;
+    }
+
+    answers[questionId] = { answers: values };
+  }
+
+  return answers;
 }
 
 function asString(value: unknown): string | null {
