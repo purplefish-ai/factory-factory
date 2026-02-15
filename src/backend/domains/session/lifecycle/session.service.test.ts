@@ -72,6 +72,7 @@ import { sessionService } from './session.service';
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionService.setPromptTurnCompleteHandler(null);
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(false);
@@ -1326,6 +1327,42 @@ describe('SessionService', () => {
     await sessionService.sendAcpMessage('session-1', 'hello');
 
     expect(appendClaudeEventSpy).not.toHaveBeenCalled();
+  });
+
+  it('schedules prompt-turn completion callbacks after ACP prompt settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
+      sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
+      vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({
+        stopReason: 'end_turn',
+      } as never);
+
+      await sessionService.sendAcpMessage('session-1', 'hello');
+
+      expect(onPromptTurnComplete).not.toHaveBeenCalled();
+      await vi.runOnlyPendingTimersAsync();
+      expect(onPromptTurnComplete).toHaveBeenCalledWith('session-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('swallows prompt-turn completion callback failures', async () => {
+    vi.useFakeTimers();
+    try {
+      const onPromptTurnComplete = vi.fn().mockRejectedValue(new Error('dispatch failed'));
+      sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
+      vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({
+        stopReason: 'end_turn',
+      } as never);
+
+      await expect(sessionService.sendAcpMessage('session-1', 'hello')).resolves.toBe('end_turn');
+      await vi.runOnlyPendingTimersAsync();
+      expect(onPromptTurnComplete).toHaveBeenCalledWith('session-1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('avoids redundant session DB lookups during startSession', async () => {

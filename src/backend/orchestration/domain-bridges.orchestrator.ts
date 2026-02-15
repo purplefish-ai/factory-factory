@@ -138,6 +138,9 @@ export function configureDomainBridges(): void {
       getWorkspaceInitPolicy: (input) => getWorkspaceInitPolicy(input as WorkspaceInitPolicyInput),
     },
   });
+  sessionService.setPromptTurnCompleteHandler((sessionId) =>
+    chatMessageHandlerService.tryDispatchNextMessage(sessionId)
+  );
 
   // === Run-script domain bridges ===
   startupScriptService.configure({
