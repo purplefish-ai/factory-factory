@@ -1859,6 +1859,48 @@ describe('chatReducer', () => {
       expect(newState.queuedMessages.size).toBe(0);
     });
 
+    it('should recover missing queued message on DISPATCHED when ACCEPTED was missed', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'msg-1',
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
+          },
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.DISPATCHED,
+          userMessage: {
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 3,
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.queuedMessages.size).toBe(0);
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]).toMatchObject({
+        id: 'msg-1',
+        source: 'user',
+        text: 'Queued',
+        order: 3,
+      });
+    });
+
     it('should remove message from queuedMessages when committed', () => {
       const state: ChatState = {
         ...initialState,
@@ -1887,6 +1929,48 @@ describe('chatReducer', () => {
       const newState = chatReducer(state, action);
 
       expect(newState.queuedMessages.size).toBe(0);
+    });
+
+    it('should recover missing queued message on COMMITTED when dispatch event was missed', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'msg-1',
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
+          },
+        ]),
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.COMMITTED,
+          userMessage: {
+            text: 'Queued',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 3,
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.queuedMessages.size).toBe(0);
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]).toMatchObject({
+        id: 'msg-1',
+        source: 'user',
+        text: 'Queued',
+        order: 3,
+      });
     });
 
     it('should remove message from queuedMessages when complete', () => {

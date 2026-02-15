@@ -26,6 +26,9 @@ function applyMessageStateChange(
         ? handleDispatchedState(state, id, userMessage)
         : handleRemoveFromQueue(state, id);
     case MessageState.COMMITTED:
+      return userMessage
+        ? handleCommittedState(state, id, userMessage)
+        : handleRemoveFromQueue(state, id);
     case MessageState.COMPLETE:
       return handleRemoveFromQueue(state, id);
     case MessageState.CANCELLED:
@@ -144,11 +147,24 @@ function handleDispatchedState(
     return { ...state, queuedMessages: newQueuedMessages };
   }
 
+  const messageFromDelta: ChatMessage = {
+    id,
+    source: 'user',
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
+    order: userMessage.order,
+  };
+
   // Find the existing message and update its order
   const existingMessageIndex = state.messages.findIndex((m) => m.id === id);
   if (existingMessageIndex === -1) {
-    // Message not found in transcript yet - shouldn't happen but handle gracefully
-    return { ...state, queuedMessages: newQueuedMessages };
+    // If this tab missed ACCEPTED (reconnect/race), recover from DISPATCHED payload.
+    return {
+      ...state,
+      messages: insertMessageByOrder(state.messages, messageFromDelta),
+      queuedMessages: newQueuedMessages,
+    };
   }
 
   // Update the message with the new order and re-insert at correct position
@@ -159,6 +175,9 @@ function handleDispatchedState(
 
   const updatedMessage: ChatMessage = {
     ...existingMessage,
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
     order: userMessage.order,
   };
 
@@ -173,6 +192,59 @@ function handleDispatchedState(
     ...state,
     messages: newMessages,
     queuedMessages: newQueuedMessages,
+  };
+}
+
+function handleCommittedState(
+  state: ChatState,
+  id: string,
+  userMessage: Extract<
+    Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
+    object
+  >
+): ChatState {
+  const withoutQueue = handleRemoveFromQueue(state, id);
+  if (userMessage.order === undefined) {
+    return withoutQueue;
+  }
+
+  const messageFromDelta: ChatMessage = {
+    id,
+    source: 'user',
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
+    order: userMessage.order,
+  };
+
+  const existingMessageIndex = withoutQueue.messages.findIndex((m) => m.id === id);
+  if (existingMessageIndex === -1) {
+    return {
+      ...withoutQueue,
+      messages: insertMessageByOrder(withoutQueue.messages, messageFromDelta),
+    };
+  }
+
+  const existingMessage = withoutQueue.messages[existingMessageIndex];
+  if (!existingMessage) {
+    return withoutQueue;
+  }
+
+  const updatedMessage: ChatMessage = {
+    ...existingMessage,
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
+    order: userMessage.order,
+  };
+
+  const messagesWithoutOld = [
+    ...withoutQueue.messages.slice(0, existingMessageIndex),
+    ...withoutQueue.messages.slice(existingMessageIndex + 1),
+  ];
+  return {
+    ...withoutQueue,
+    messages: insertMessageByOrder(messagesWithoutOld, updatedMessage),
   };
 }
 

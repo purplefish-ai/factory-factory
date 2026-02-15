@@ -155,6 +155,18 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionService.setSessionReasoningEffort).toHaveBeenCalledWith('s1', null);
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
+    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        type: 'message_state_changed',
+        id: 'm1',
+        newState: 'COMMITTED',
+        userMessage: expect.objectContaining({
+          text: 'hello',
+          order: 0,
+        }),
+      })
+    );
   });
 
   it('leaves message in queue when dispatch gate evaluation throws', async () => {

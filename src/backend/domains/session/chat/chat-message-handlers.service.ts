@@ -318,22 +318,23 @@ class ChatMessageHandlerService {
     // Build content and send to Claude
     const content = this.buildMessageContent(msg);
     const order = sessionDomainService.allocateOrder(dbSessionId);
+    const dispatchedUserMessage = {
+      text: msg.text,
+      timestamp: msg.timestamp,
+      attachments: msg.attachments,
+      settings: {
+        ...msg.settings,
+        selectedModel: resolveSelectedModel(msg.settings.selectedModel),
+        reasoningEffort: msg.settings.reasoningEffort,
+      },
+      order,
+    };
 
     sessionDomainService.emitDelta(dbSessionId, {
       type: 'message_state_changed',
       id: msg.id,
       newState: MessageState.DISPATCHED,
-      userMessage: {
-        text: msg.text,
-        timestamp: msg.timestamp,
-        attachments: msg.attachments,
-        settings: {
-          ...msg.settings,
-          selectedModel: resolveSelectedModel(msg.settings.selectedModel),
-          reasoningEffort: msg.settings.reasoningEffort,
-        },
-        order,
-      },
+      userMessage: dispatchedUserMessage,
     });
 
     if (isCompactCommand && compactionClient) {
@@ -347,6 +348,7 @@ class ChatMessageHandlerService {
         type: 'message_state_changed',
         id: msg.id,
         newState: MessageState.COMMITTED,
+        userMessage: dispatchedUserMessage,
       });
     } catch (error) {
       if (isCompactCommand && compactionClient) {
