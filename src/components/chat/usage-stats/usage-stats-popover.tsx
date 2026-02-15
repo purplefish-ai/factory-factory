@@ -2,8 +2,12 @@ import { Clock, Coins, Database, Globe, Layers, Zap } from 'lucide-react';
 
 import { Progress } from '@/components/ui/progress';
 import type { TokenStats } from '@/lib/chat-protocol';
-import { CONTEXT_CRITICAL_THRESHOLD, CONTEXT_WARNING_THRESHOLD } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import {
+  calculateContextUsagePercentage,
+  getProgressColorClass,
+  getUsageColorClass,
+} from './usage-stats-utils';
 
 interface UsageStatsPopoverProps {
   tokenStats: TokenStats;
@@ -62,32 +66,6 @@ function calculateCacheHitRate(stats: TokenStats): number {
   return (stats.cacheReadInputTokens / totalCacheTokens) * 100;
 }
 
-/**
- * Gets the color class based on usage percentage.
- */
-function getUsageColorClass(percentage: number): string {
-  if (percentage >= CONTEXT_CRITICAL_THRESHOLD * 100) {
-    return 'text-red-500';
-  }
-  if (percentage >= CONTEXT_WARNING_THRESHOLD * 100) {
-    return 'text-yellow-500';
-  }
-  return 'text-muted-foreground';
-}
-
-/**
- * Gets the progress bar color class based on usage percentage.
- */
-function getProgressColorClass(percentage: number): string {
-  if (percentage >= CONTEXT_CRITICAL_THRESHOLD * 100) {
-    return '[&>div]:bg-red-500';
-  }
-  if (percentage >= CONTEXT_WARNING_THRESHOLD * 100) {
-    return '[&>div]:bg-yellow-500';
-  }
-  return '[&>div]:bg-green-500';
-}
-
 interface StatRowProps {
   icon: React.ReactNode;
   label: string;
@@ -117,9 +95,7 @@ function StatRow({ icon, label, value, subValue, className }: StatRowProps) {
  */
 export function UsageStatsPopover({ tokenStats }: UsageStatsPopoverProps) {
   const usedTokens = tokenStats.inputTokens + tokenStats.outputTokens;
-  const usagePercentage = tokenStats.contextWindow
-    ? Math.min((usedTokens / tokenStats.contextWindow) * 100, 100)
-    : 0;
+  const usagePercentage = calculateContextUsagePercentage(tokenStats);
   const cacheHitRate = calculateCacheHitRate(tokenStats);
   const hasCacheData =
     tokenStats.cacheReadInputTokens > 0 || tokenStats.cacheCreationInputTokens > 0;

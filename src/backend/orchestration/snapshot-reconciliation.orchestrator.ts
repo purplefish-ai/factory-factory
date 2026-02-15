@@ -20,6 +20,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import pLimit from 'p-limit';
 import { chatEventForwarderService, sessionService } from '@/backend/domains/session';
+import { computePendingRequestType } from '@/backend/domains/workspace';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
@@ -115,42 +116,6 @@ export function detectDrift(
   return drifts;
 }
 
-// ---------------------------------------------------------------------------
-// Pending request type computation (replicated from workspace-query.service.ts)
-// ---------------------------------------------------------------------------
-
-function computePendingRequestType(
-  sessionIds: string[],
-  pendingRequests: Map<string, { toolName: string }>
-): 'plan_approval' | 'user_question' | 'permission_request' | null {
-  let hasUserQuestion = false;
-  let hasPermissionRequest = false;
-
-  for (const sessionId of sessionIds) {
-    const request = pendingRequests.get(sessionId);
-    if (!request) {
-      continue;
-    }
-    if (request.toolName === 'ExitPlanMode') {
-      return 'plan_approval';
-    }
-    if (request.toolName === 'AskUserQuestion') {
-      hasUserQuestion = true;
-      continue;
-    }
-    hasPermissionRequest = true;
-  }
-
-  if (hasUserQuestion) {
-    return 'user_question';
-  }
-  if (hasPermissionRequest) {
-    return 'permission_request';
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
 // SnapshotReconciliationService
 // ---------------------------------------------------------------------------
 

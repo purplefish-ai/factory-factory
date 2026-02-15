@@ -168,53 +168,11 @@ const InitStatusBanner = memo(function InitStatusBanner({
   );
 });
 
-export const ChatContent = memo(function ChatContent({
-  workspaceId,
-  messages,
-  sessionStatus,
-  messagesEndRef,
-  viewportRef,
-  isNearBottom,
-  scrollToBottom,
-  onScroll,
-  pendingRequest,
-  approvePermission,
-  answerQuestion,
-  connected,
-  sendMessage,
-  stopChat,
-  inputRef,
-  chatSettings,
-  chatCapabilities,
-  updateSettings,
-  inputDraft,
-  setInputDraft,
-  inputAttachments,
-  setInputAttachments,
-  queuedMessages,
-  removeQueuedMessage,
-  resumeQueuedMessages,
-  latestThinking,
-  pendingMessages,
-  isCompacting,
-  permissionMode,
-  slashCommands,
-  slashCommandsLoaded,
-  tokenStats,
-  rewindPreview,
-  startRewindPreview,
-  confirmRewind,
-  cancelRewind,
-  getUuidForMessageId,
-  acpPlan,
-  acpConfigOptions,
-  setConfigOption,
-  toolProgress,
-  autoStartPending = false,
-  initBanner,
-}: ChatContentProps) {
-  const { retry, retryInit } = useRetryWorkspaceInit(workspaceId);
-  const groupedMessages = useMemo(() => groupAdjacentToolCalls(messages), [messages]);
+export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
+  const autoStartPending = props.autoStartPending ?? false;
+
+  const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId);
+  const groupedMessages = useMemo(() => groupAdjacentToolCalls(props.messages), [props.messages]);
   const latestToolSequence = useMemo(() => {
     for (let i = groupedMessages.length - 1; i >= 0; i -= 1) {
       const item = groupedMessages[i];
@@ -229,29 +187,30 @@ export const ChatContent = memo(function ChatContent({
   }, [groupedMessages]);
 
   const queuedMessageIds = useMemo(
-    () => new Set(queuedMessages.map((msg) => msg.id)),
-    [queuedMessages]
+    () => new Set(props.queuedMessages.map((msg) => msg.id)),
+    [props.queuedMessages]
   );
 
   const handleHeightChange = useCallback(() => {
-    if (isNearBottom && viewportRef.current) {
-      viewportRef.current.scrollTo({
-        top: viewportRef.current.scrollHeight,
+    if (props.isNearBottom && props.viewportRef.current) {
+      props.viewportRef.current.scrollTo({
+        top: props.viewportRef.current.scrollHeight,
         behavior: 'instant',
       });
     }
-  }, [isNearBottom, viewportRef]);
+  }, [props.isNearBottom, props.viewportRef]);
 
-  const running = sessionStatus.phase === 'running';
-  const stopping = sessionStatus.phase === 'stopping';
-  const displayStartingState = shouldShowStartingState(sessionStatus.phase, autoStartPending);
-  const loadingSession = sessionStatus.phase === 'loading';
-  const rewindEnabled = chatCapabilities.rewind.enabled;
+  const running = props.sessionStatus.phase === 'running';
+  const stopping = props.sessionStatus.phase === 'stopping';
+  const displayStartingState = shouldShowStartingState(props.sessionStatus.phase, autoStartPending);
+  const loadingSession = props.sessionStatus.phase === 'loading';
+  const rewindEnabled = props.chatCapabilities.rewind.enabled;
 
   const permissionRequestId =
-    pendingRequest.type === 'permission' ? pendingRequest.request.requestId : null;
+    props.pendingRequest.type === 'permission' ? props.pendingRequest.request.requestId : null;
   const isPlanApproval =
-    pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode';
+    props.pendingRequest.type === 'permission' &&
+    props.pendingRequest.request.toolName === 'ExitPlanMode';
 
   useEffect(() => {
     if (!(isPlanApproval && permissionRequestId)) {
@@ -261,28 +220,28 @@ export const ChatContent = memo(function ChatContent({
     if (activeElement && activeElement !== document.body) {
       return;
     }
-    inputRef?.current?.focus();
-  }, [isPlanApproval, permissionRequestId, inputRef]);
+    props.inputRef?.current?.focus();
+  }, [isPlanApproval, permissionRequestId, props.inputRef]);
 
   const placeholder = getInputPlaceholder({
     loadingSession,
     stopping,
     displayStartingState,
     running,
-    pendingRequest,
-    sessionPhase: sessionStatus.phase,
-    messageCount: messages.length,
+    pendingRequest: props.pendingRequest,
+    sessionPhase: props.sessionStatus.phase,
+    messageCount: props.messages.length,
   });
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
-      <div ref={viewportRef} className="flex-1 min-h-0 overflow-y-auto">
-        {initBanner && initBanner.kind !== 'info' && (
+      <div ref={props.viewportRef} className="flex-1 min-h-0 overflow-y-auto">
+        {props.initBanner && props.initBanner.kind !== 'info' && (
           <InitStatusBanner
-            banner={initBanner}
+            banner={props.initBanner}
             retryPending={retryInit.isPending}
             onRetry={retry}
-            onPlay={resumeQueuedMessages}
+            onPlay={props.resumeQueuedMessages}
           />
         )}
         <VirtualizedMessageList
@@ -290,25 +249,25 @@ export const ChatContent = memo(function ChatContent({
           running={running}
           startingSession={displayStartingState}
           loadingSession={loadingSession}
-          scrollContainerRef={viewportRef}
-          onScroll={onScroll}
-          messagesEndRef={messagesEndRef}
-          isNearBottom={isNearBottom}
+          scrollContainerRef={props.viewportRef}
+          onScroll={props.onScroll}
+          messagesEndRef={props.messagesEndRef}
+          isNearBottom={props.isNearBottom}
           queuedMessageIds={queuedMessageIds}
-          onRemoveQueuedMessage={removeQueuedMessage}
-          isCompacting={isCompacting}
-          getUuidForMessageId={getUuidForMessageId}
-          onRewindToMessage={rewindEnabled ? startRewindPreview : undefined}
-          initBanner={initBanner}
+          onRemoveQueuedMessage={props.removeQueuedMessage}
+          isCompacting={props.isCompacting}
+          getUuidForMessageId={props.getUuidForMessageId}
+          onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
+          initBanner={props.initBanner}
         />
       </div>
 
-      {!isNearBottom && (
+      {!props.isNearBottom && (
         <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10">
           <Button
             variant="secondary"
             size="sm"
-            onClick={scrollToBottom}
+            onClick={props.scrollToBottom}
             className="rounded-full shadow-lg"
           >
             <ArrowDown className="h-4 w-4 mr-1" />
@@ -319,55 +278,57 @@ export const ChatContent = memo(function ChatContent({
 
       <div className="border-t">
         <AgentLiveDock
-          workspaceId={workspaceId}
+          workspaceId={props.workspaceId}
           running={running}
           starting={displayStartingState}
           stopping={stopping}
-          permissionMode={permissionMode}
-          latestThinking={latestThinking ?? null}
+          permissionMode={props.permissionMode}
+          latestThinking={props.latestThinking ?? null}
           latestToolSequence={latestToolSequence}
-          acpPlan={acpPlan}
-          toolProgress={toolProgress}
+          acpPlan={props.acpPlan}
+          toolProgress={props.toolProgress}
         />
         <PermissionPrompt
-          permission={pendingRequest.type === 'permission' ? pendingRequest.request : null}
-          onApprove={approvePermission}
+          permission={
+            props.pendingRequest.type === 'permission' ? props.pendingRequest.request : null
+          }
+          onApprove={props.approvePermission}
         />
         <QuestionPrompt
-          question={pendingRequest.type === 'question' ? pendingRequest.request : null}
-          onAnswer={answerQuestion}
+          question={props.pendingRequest.type === 'question' ? props.pendingRequest.request : null}
+          onAnswer={props.answerQuestion}
         />
 
         <ChatInput
-          onSend={sendMessage}
-          onStop={stopChat}
-          disabled={!connected || loadingSession}
+          onSend={props.sendMessage}
+          onStop={props.stopChat}
+          disabled={!props.connected || loadingSession}
           running={running}
           stopping={stopping}
-          inputRef={inputRef}
+          inputRef={props.inputRef}
           placeholder={placeholder}
-          settings={chatSettings}
-          capabilities={chatCapabilities}
-          onSettingsChange={updateSettings}
-          value={inputDraft}
-          onChange={setInputDraft}
-          attachments={inputAttachments}
-          onAttachmentsChange={setInputAttachments}
+          settings={props.chatSettings}
+          capabilities={props.chatCapabilities}
+          onSettingsChange={props.updateSettings}
+          value={props.inputDraft}
+          onChange={props.setInputDraft}
+          attachments={props.inputAttachments}
+          onAttachmentsChange={props.setInputAttachments}
           onHeightChange={handleHeightChange}
-          pendingMessageCount={pendingMessages.size}
-          slashCommands={slashCommands}
-          slashCommandsLoaded={slashCommandsLoaded}
-          tokenStats={tokenStats}
-          workspaceId={workspaceId}
-          acpConfigOptions={acpConfigOptions}
-          onSetConfigOption={setConfigOption}
+          pendingMessageCount={props.pendingMessages.size}
+          slashCommands={props.slashCommands}
+          slashCommandsLoaded={props.slashCommandsLoaded}
+          tokenStats={props.tokenStats}
+          workspaceId={props.workspaceId}
+          acpConfigOptions={props.acpConfigOptions}
+          onSetConfigOption={props.setConfigOption}
         />
       </div>
 
       <RewindConfirmationDialog
-        rewindPreview={rewindPreview}
-        onConfirm={confirmRewind}
-        onCancel={cancelRewind}
+        rewindPreview={props.rewindPreview}
+        onConfirm={props.confirmRewind}
+        onCancel={props.cancelRewind}
       />
     </div>
   );

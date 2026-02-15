@@ -65,19 +65,10 @@ export class AcpEventTranslator {
   private translateAgentMessageChunk(
     update: Extract<SessionUpdate, { sessionUpdate: 'agent_message_chunk' }>
   ): AcpTranslatedDelta[] {
-    if (!update.content) {
-      this.logger.warn('agent_message_chunk: missing content', { update });
+    const text = this.extractTextChunkContent(update, 'agent_message_chunk');
+    if (text === null) {
       return [];
     }
-
-    if (update.content.type !== 'text') {
-      this.logger.warn('agent_message_chunk: non-text content type, skipping', {
-        contentType: update.content.type,
-      });
-      return [];
-    }
-
-    const text = (update.content as { type: 'text'; text: string }).text;
 
     return [
       {
@@ -96,19 +87,10 @@ export class AcpEventTranslator {
   private translateAgentThoughtChunk(
     update: Extract<SessionUpdate, { sessionUpdate: 'agent_thought_chunk' }>
   ): AcpTranslatedDelta[] {
-    if (!update.content) {
-      this.logger.warn('agent_thought_chunk: missing content', { update });
+    const text = this.extractTextChunkContent(update, 'agent_thought_chunk');
+    if (text === null) {
       return [];
     }
-
-    if (update.content.type !== 'text') {
-      this.logger.warn('agent_thought_chunk: non-text content type, skipping', {
-        contentType: update.content.type,
-      });
-      return [];
-    }
-
-    const text = (update.content as { type: 'text'; text: string }).text;
 
     return [
       {
@@ -176,25 +158,7 @@ export class AcpEventTranslator {
 
     // Some adapters emit one-shot terminal tool_call events without a follow-up tool_call_update.
     // Emit tool_result here so UI tool cards don't remain stuck in pending state.
-    if (this.isTerminalToolStatus(update.status)) {
-      events.push({
-        type: 'agent_message',
-        data: {
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [
-              {
-                type: 'tool_result',
-                tool_use_id: update.toolCallId,
-                content: this.extractToolOutputText(update.content, update.rawOutput),
-                ...(update.status === 'failed' ? { is_error: true } : {}),
-              },
-            ],
-          },
-        },
-      });
-    }
+    this.appendTerminalToolResultIfNeeded(events, update);
 
     return events;
   }
@@ -225,25 +189,7 @@ export class AcpEventTranslator {
     const events: AcpTranslatedDelta[] = [event as AcpTranslatedDelta];
 
     // Emit tool_result so the frontend can pair it with the tool_use (transitions pending → success/error)
-    if (this.isTerminalToolStatus(update.status)) {
-      events.push({
-        type: 'agent_message',
-        data: {
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [
-              {
-                type: 'tool_result',
-                tool_use_id: update.toolCallId,
-                content: this.extractToolOutputText(update.content, update.rawOutput),
-                ...(update.status === 'failed' ? { is_error: true } : {}),
-              },
-            ],
-          },
-        },
-      });
-    }
+    this.appendTerminalToolResultIfNeeded(events, update);
 
     return events;
   }
@@ -285,6 +231,69 @@ export class AcpEventTranslator {
       return contentText;
     }
     return this.extractContentText(rawOutput);
+  }
+
+  private createTerminalToolResultEvent(params: {
+    toolCallId: string;
+    status?: unknown;
+    content?: unknown;
+    rawOutput?: unknown;
+  }): AcpTranslatedDelta | null {
+    if (!this.isTerminalToolStatus(params.status)) {
+      return null;
+    }
+
+    return {
+      type: 'agent_message',
+      data: {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: params.toolCallId,
+              content: this.extractToolOutputText(params.content, params.rawOutput),
+              ...(params.status === 'failed' ? { is_error: true } : {}),
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  private appendTerminalToolResultIfNeeded(
+    events: AcpTranslatedDelta[],
+    update: {
+      toolCallId: string;
+      status?: unknown;
+      content?: unknown;
+      rawOutput?: unknown;
+    }
+  ): void {
+    const terminalResult = this.createTerminalToolResultEvent(update);
+    if (terminalResult) {
+      events.push(terminalResult);
+    }
+  }
+
+  private extractTextChunkContent(
+    update: { content?: { type?: string; text?: string } | null },
+    updateType: 'agent_message_chunk' | 'agent_thought_chunk'
+  ): string | null {
+    if (!update.content) {
+      this.logger.warn(`${updateType}: missing content`, { update });
+      return null;
+    }
+
+    if (update.content.type !== 'text' || typeof update.content.text !== 'string') {
+      this.logger.warn(`${updateType}: non-text content type, skipping`, {
+        contentType: update.content.type,
+      });
+      return null;
+    }
+
+    return update.content.text;
   }
 
   private extractContentText(content: unknown): string {

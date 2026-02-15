@@ -22,6 +22,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CommandInfo } from '@/lib/chat-protocol';
 import { SessionStatus } from '@/shared/core';
+import { FileMentionPalette, type FileMentionPaletteHandle } from './file-mention-palette';
 import { type SessionData, SessionTabBar } from './session-tab-bar';
 import { SlashCommandPalette, type SlashCommandPaletteHandle } from './slash-command-palette';
 
@@ -218,6 +219,65 @@ describe('slash-command-palette regression coverage', () => {
 
       expect(onSelect).toHaveBeenCalledTimes(1);
       expect(onSelect).toHaveBeenCalledWith(commands[0]);
+    });
+
+    cleanup();
+  });
+});
+
+describe('file-mention-palette regression coverage', () => {
+  it('resets selected file when filter changes even if result count stays the same', () => {
+    const files = ['src/alpha.ts', 'src/beta.ts', 'src/gamma.ts'];
+
+    const onSelect = vi.fn();
+    const onClose = vi.fn();
+    const anchorEl = document.createElement('div');
+    document.body.appendChild(anchorEl);
+    const anchorRef = { current: anchorEl };
+    const paletteRef = createRef<FileMentionPaletteHandle>();
+
+    const cleanup = renderInDom((root) => {
+      flushSync(() => {
+        root.render(
+          createElement(FileMentionPalette, {
+            files,
+            isOpen: true,
+            onClose,
+            onSelect,
+            filter: '',
+            anchorRef,
+            paletteRef,
+          })
+        );
+      });
+
+      // Move selection from index 0 -> 2.
+      flushSync(() => {
+        expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
+        expect(paletteRef.current?.handleKeyDown('ArrowDown')).toBe('handled');
+      });
+
+      // Filter changes but list remains the same length.
+      flushSync(() => {
+        root.render(
+          createElement(FileMentionPalette, {
+            files,
+            isOpen: true,
+            onClose,
+            onSelect,
+            filter: 'a',
+            anchorRef,
+            paletteRef,
+          })
+        );
+      });
+
+      flushSync(() => {
+        expect(paletteRef.current?.handleKeyDown('Enter')).toBe('handled');
+      });
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith(files[0]);
     });
 
     cleanup();

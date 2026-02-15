@@ -1,5 +1,5 @@
 import { File, Folder } from 'lucide-react';
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useCallback } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -8,6 +8,11 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import {
+  type PaletteKeyboardHandle,
+  type PaletteKeyResult,
+  usePaletteKeyboardNavigation,
+} from './palette-keyboard-navigation';
 
 // =============================================================================
 // Types
@@ -19,13 +24,10 @@ import { cn } from '@/lib/utils';
  * - 'passthrough': Event should be handled by normal input logic
  * - 'close-and-passthrough': Menu should close but event should still be processed
  */
-export type FileMentionKeyResult = 'handled' | 'passthrough' | 'close-and-passthrough';
+export type FileMentionKeyResult = PaletteKeyResult;
 
 /** Imperative handle exposed by FileMentionPalette */
-export interface FileMentionPaletteHandle {
-  /** Handle a keyboard event. Returns how the event should be handled. */
-  handleKeyDown: (key: string) => FileMentionKeyResult;
-}
+export interface FileMentionPaletteHandle extends PaletteKeyboardHandle {}
 
 export interface FileMentionPaletteProps {
   /** Available file paths */
@@ -96,162 +98,27 @@ export function FileMentionPalette({
   anchorRef,
   paletteRef,
 }: FileMentionPaletteProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const selectedIndexRef = useRef(selectedIndex);
-  const prevFilterRef = useRef(filter);
-
-  // Reset selection when filter changes or palette opens
-  useEffect(() => {
-    const filterChanged = prevFilterRef.current !== filter;
-    prevFilterRef.current = filter;
-
-    if (isOpen && filterChanged) {
-      setSelectedIndex(0);
-      selectedIndexRef.current = 0;
-    }
-  }, [isOpen, filter]);
-
-  // Keep selectedIndex ref in sync with state
-  useEffect(() => {
-    selectedIndexRef.current = selectedIndex;
-  }, [selectedIndex]);
-
-  // Keep refs array in sync with files list length
-  useEffect(() => {
-    itemRefs.current = itemRefs.current.slice(0, files.length);
-  }, [files.length]);
-
-  // Ensure the selected item stays visible when navigating with the keyboard
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const selectedItem = itemRefs.current[selectedIndex];
-    if (selectedItem) {
-      selectedItem.scrollIntoView({ block: 'nearest' });
-    }
-  }, [isOpen, selectedIndex]);
-
-  // Click outside to close
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      // Don't close if clicking inside the palette or the anchor (input)
-      if (containerRef.current?.contains(target) || anchorRef.current?.contains(target)) {
-        return;
+  const handleSelectByIndex = useCallback(
+    (index: number): boolean => {
+      const selectedFilePath = files[index];
+      if (!selectedFilePath) {
+        return false;
       }
-      onClose();
-    };
-
-    // Use mousedown to close before focus changes
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, onClose, anchorRef]);
-
-  /**
-   * Handle arrow down key - move selection down
-   */
-  const handleArrowDown = useCallback(() => {
-    if (files.length > 0) {
-      setSelectedIndex((prev) => Math.min(prev + 1, files.length - 1));
-    }
-    return 'handled' as const;
-  }, [files.length]);
-
-  /**
-   * Handle arrow up key - move selection up
-   */
-  const handleArrowUp = useCallback(() => {
-    if (files.length > 0) {
-      setSelectedIndex((prev) => Math.max(prev - 1, 0));
-    }
-    return 'handled' as const;
-  }, [files.length]);
-
-  /**
-   * Select the currently highlighted file if available
-   */
-  const selectCurrentFile = useCallback(() => {
-    const hasMatches = files.length > 0;
-    const currentIndex = selectedIndexRef.current;
-    if (hasMatches && files[currentIndex]) {
-      onSelect(files[currentIndex]);
+      onSelect(selectedFilePath);
       return true;
-    }
-    return false;
-  }, [files, onSelect]);
-
-  /**
-   * Handle Enter key - select file or close and passthrough
-   */
-  const handleEnter = useCallback((): FileMentionKeyResult => {
-    if (selectCurrentFile()) {
-      return 'handled';
-    }
-    // No matches - close menu and let message be sent
-    return 'close-and-passthrough';
-  }, [selectCurrentFile]);
-
-  /**
-   * Handle Tab key - select file or passthrough
-   */
-  const handleTab = useCallback((): FileMentionKeyResult => {
-    if (selectCurrentFile()) {
-      return 'handled';
-    }
-    // No matches - let Tab work normally (focus next element)
-    return 'passthrough';
-  }, [selectCurrentFile]);
-
-  /**
-   * Handle Escape key - close the palette
-   */
-  const handleEscape = useCallback(() => {
-    onClose();
-    return 'handled' as const;
-  }, [onClose]);
-
-  /**
-   * Map of key names to their handler functions
-   */
-  const keyHandlers = useMemo(
-    () => ({
-      ArrowDown: handleArrowDown,
-      ArrowUp: handleArrowUp,
-      Enter: handleEnter,
-      Tab: handleTab,
-      Escape: handleEscape,
-    }),
-    [handleArrowDown, handleArrowUp, handleEnter, handleTab, handleEscape]
-  );
-
-  /**
-   * Handle a keyboard event. Called by parent via paletteRef.
-   * Returns the result indicating how the event should be handled.
-   */
-  const handleKeyDown = useCallback(
-    (key: string): FileMentionKeyResult => {
-      const handler = keyHandlers[key as keyof typeof keyHandlers];
-      return handler ? handler() : 'passthrough';
     },
-    [keyHandlers]
+    [files, onSelect]
   );
 
-  // Expose handleKeyDown via imperative handle
-  useImperativeHandle(
+  const { containerRef, itemRefs, selectedIndex, setSelectedIndex } = usePaletteKeyboardNavigation({
+    isOpen,
+    itemCount: files.length,
+    resetKey: filter,
+    onClose,
+    onSelectByIndex: handleSelectByIndex,
+    anchorRef,
     paletteRef,
-    () => ({
-      handleKeyDown,
-    }),
-    [handleKeyDown]
-  );
+  });
 
   // Don't render if not open
   if (!isOpen) {
