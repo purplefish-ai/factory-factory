@@ -303,6 +303,52 @@ describe('codexSessionHistoryLoaderService', () => {
     expect(result).toEqual({ status: 'not_found' });
   });
 
+  it('loads history when providerSessionId includes sess_ prefix but file/meta use unprefixed id', async () => {
+    const unprefixedSessionId = '019c620a-8a8d-7b33-9b20-f9bd7c6512a7';
+    const providerSessionId = `sess_${unprefixedSessionId}`;
+    const cwd = '/Users/test/project';
+    const filePath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${unprefixedSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: {
+            id: unprefixedSessionId,
+            cwd,
+          },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'user_message',
+            message: 'hello from prefixed id',
+          },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'user',
+        content: 'hello from prefixed id',
+        timestamp: '2026-02-15T00:00:01.000Z',
+      },
+    ]);
+  });
+
   it('uses non-epoch fallback timestamps when entries have invalid timestamps', async () => {
     const providerSessionId = 'session-invalid-ts';
     const cwd = '/Users/test/project';

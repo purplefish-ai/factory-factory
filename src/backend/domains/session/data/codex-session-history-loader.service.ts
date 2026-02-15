@@ -64,6 +64,24 @@ function isSafeProviderSessionId(providerSessionId: string): boolean {
   return SAFE_PROVIDER_SESSION_ID_PATTERN.test(providerSessionId);
 }
 
+function normalizeProviderSessionId(providerSessionId: string): string {
+  return providerSessionId.startsWith('sess_')
+    ? providerSessionId.slice('sess_'.length)
+    : providerSessionId;
+}
+
+function getProviderSessionIdCandidates(providerSessionId: string): string[] {
+  const normalized = normalizeProviderSessionId(providerSessionId);
+  if (normalized === providerSessionId) {
+    return [providerSessionId];
+  }
+  return [providerSessionId, normalized];
+}
+
+function isMatchingProviderSessionId(candidateId: string, providerSessionId: string): boolean {
+  return normalizeProviderSessionId(candidateId) === normalizeProviderSessionId(providerSessionId);
+}
+
 function parseHistoryEntry(line: string): CodexHistoryEntry | null {
   let parsedLine: unknown;
   try {
@@ -298,7 +316,18 @@ async function resolveSessionFilePath(
     return null;
   }
 
-  const candidates = await collectCandidateSessionFiles(sessionsDir, `${providerSessionId}.jsonl`);
+  const sessionIdCandidates = getProviderSessionIdCandidates(providerSessionId);
+  const candidateSet = new Set<string>();
+  for (const sessionIdCandidate of sessionIdCandidates) {
+    const discovered = await collectCandidateSessionFiles(
+      sessionsDir,
+      `${sessionIdCandidate}.jsonl`
+    );
+    for (const candidatePath of discovered) {
+      candidateSet.add(candidatePath);
+    }
+  }
+  const candidates = [...candidateSet];
   if (candidates.length === 0) {
     return null;
   }
@@ -319,14 +348,18 @@ async function resolveSessionFilePath(
   for (const candidate of withMtime) {
     const meta = await parseSessionMeta(candidate.candidatePath);
     metaByPath.set(candidate.candidatePath, meta);
-    if (meta?.id === providerSessionId && meta.cwd === workingDir) {
+    if (
+      typeof meta?.id === 'string' &&
+      isMatchingProviderSessionId(meta.id, providerSessionId) &&
+      meta.cwd === workingDir
+    ) {
       return candidate.candidatePath;
     }
   }
 
   for (const candidate of withMtime) {
     const meta = metaByPath.get(candidate.candidatePath) ?? null;
-    if (meta?.id === providerSessionId) {
+    if (typeof meta?.id === 'string' && isMatchingProviderSessionId(meta.id, providerSessionId)) {
       return candidate.candidatePath;
     }
   }
