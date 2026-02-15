@@ -128,6 +128,7 @@ type AdapterSession = {
   toolCallsByItemId: Map<string, ToolCallState>;
   planTextByItemId: Map<string, string>;
   planApprovalRequestedByTurnId: Set<string>;
+  pendingPlanApprovalsByTurnId: Map<string, number>;
   pendingTurnCompletionsByTurnId: Map<string, PendingTurnCompletion>;
 };
 
@@ -218,6 +219,8 @@ function createToolCallId(threadId: string, turnId: string, itemId: string): str
 function isPlanLikeMode(mode: string): boolean {
   return /plan/i.test(mode);
 }
+
+const PLAN_EXIT_MODE_PREFERENCE = ['default', 'code', 'acceptEdits', 'ask'] as const;
 
 const PLAN_TEXT_MAX_DEPTH = 8;
 const PLAN_TEXT_PREFERRED_KEYS = [
@@ -733,6 +736,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       toolCallsByItemId: new Map(),
       planTextByItemId: new Map(),
       planApprovalRequestedByTurnId: new Set(),
+      pendingPlanApprovalsByTurnId: new Map(),
       pendingTurnCompletionsByTurnId: new Map(),
     };
 
@@ -780,6 +784,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       toolCallsByItemId: new Map(),
       planTextByItemId: new Map(),
       planApprovalRequestedByTurnId: new Set(),
+      pendingPlanApprovalsByTurnId: new Map(),
       pendingTurnCompletionsByTurnId: new Map(),
     };
 
@@ -1663,25 +1668,55 @@ export class CodexAppServerAcpAdapter implements Agent {
       return;
     }
 
-    const stopReason = status === 'interrupted' ? 'cancelled' : 'end_turn';
-
-    if (!session.activeTurn || session.activeTurn.turnId !== turnId) {
-      session.pendingTurnCompletionsByTurnId.set(turnId, {
-        stopReason,
-        ...(status === 'failed' && errorMessage ? { errorMessage } : {}),
-      });
+    const completionStatus = status;
+    if (this.shouldDeferTurnCompletion(session, turnId, completionStatus)) {
+      session.pendingTurnCompletionsByTurnId.set(
+        turnId,
+        this.buildPendingTurnCompletion(completionStatus, errorMessage)
+      );
       return;
     }
 
+    await this.finalizeTurnCompletion(session, completionStatus, errorMessage);
+  }
+
+  private shouldDeferTurnCompletion(
+    session: AdapterSession,
+    turnId: string,
+    status: 'completed' | 'interrupted' | 'failed'
+  ): boolean {
+    if (!session.activeTurn || session.activeTurn.turnId !== turnId) {
+      return true;
+    }
+    return status !== 'interrupted' && this.hasPendingPlanApprovals(session, turnId);
+  }
+
+  private buildPendingTurnCompletion(
+    status: 'completed' | 'interrupted' | 'failed',
+    errorMessage?: string
+  ): PendingTurnCompletion {
+    const stopReason = status === 'interrupted' ? 'cancelled' : 'end_turn';
+    if (status === 'failed' && errorMessage) {
+      return { stopReason, errorMessage };
+    }
+    return { stopReason };
+  }
+
+  private async finalizeTurnCompletion(
+    session: AdapterSession,
+    status: 'completed' | 'interrupted' | 'failed',
+    errorMessage?: string
+  ): Promise<void> {
     if (status === 'interrupted') {
       this.settleTurn(session, 'cancelled');
       return;
     }
 
+    if (status === 'failed' && errorMessage) {
+      await this.emitTurnFailureMessage(session.sessionId, errorMessage);
+    }
+
     if (status === 'failed') {
-      if (errorMessage) {
-        await this.emitTurnFailureMessage(session.sessionId, errorMessage);
-      }
       this.settleTurn(session, 'end_turn');
       return;
     }
@@ -1728,6 +1763,15 @@ export class CodexAppServerAcpAdapter implements Agent {
     const existing = session.toolCallsByItemId.get(item.id);
     if (!existing) {
       return;
+    }
+
+    const shouldHoldTurnForPlanApproval =
+      item.type === 'plan' &&
+      isPlanLikeMode(session.defaults.collaborationMode) &&
+      !session.planApprovalRequestedByTurnId.has(turnId) &&
+      this.extractPlanApprovalText(session, item) !== null;
+    if (shouldHoldTurnForPlanApproval) {
+      this.holdTurnUntilPlanApprovalResolves(session, turnId);
     }
 
     const statusFromItem = toToolStatus(item.status);
@@ -1785,6 +1829,65 @@ export class CodexAppServerAcpAdapter implements Agent {
     return optionId.startsWith('allow') || optionId === 'default';
   }
 
+  private resolvePostPlanApprovalMode(currentMode: string): string | null {
+    if (!isPlanLikeMode(currentMode)) {
+      return null;
+    }
+
+    const availableModes = this.getCollaborationModeValues(currentMode);
+    for (const preferred of PLAN_EXIT_MODE_PREFERENCE) {
+      const match = availableModes.find((mode) => mode.toLowerCase() === preferred.toLowerCase());
+      if (match) {
+        return match;
+      }
+    }
+
+    const firstNonPlan = availableModes.find((mode) => !isPlanLikeMode(mode));
+    return firstNonPlan ?? null;
+  }
+
+  private holdTurnUntilPlanApprovalResolves(session: AdapterSession, turnId: string): void {
+    if (this.hasPendingPlanApprovals(session, turnId)) {
+      return;
+    }
+    session.pendingPlanApprovalsByTurnId.set(turnId, 1);
+  }
+
+  private hasPendingPlanApprovals(session: AdapterSession, turnId: string): boolean {
+    return (session.pendingPlanApprovalsByTurnId.get(turnId) ?? 0) > 0;
+  }
+
+  private async releaseTurnHoldForPlanApproval(
+    session: AdapterSession,
+    turnId: string
+  ): Promise<void> {
+    const pendingCount = session.pendingPlanApprovalsByTurnId.get(turnId) ?? 0;
+    if (pendingCount <= 1) {
+      session.pendingPlanApprovalsByTurnId.delete(turnId);
+    } else {
+      session.pendingPlanApprovalsByTurnId.set(turnId, pendingCount - 1);
+    }
+
+    if (this.hasPendingPlanApprovals(session, turnId)) {
+      return;
+    }
+
+    if (!session.activeTurn || session.activeTurn.settled || session.activeTurn.turnId !== turnId) {
+      return;
+    }
+
+    const deferredCompletion = session.pendingTurnCompletionsByTurnId.get(turnId);
+    if (!deferredCompletion) {
+      return;
+    }
+
+    session.pendingTurnCompletionsByTurnId.delete(turnId);
+    if (deferredCompletion.errorMessage) {
+      await this.emitTurnFailureMessage(session.sessionId, deferredCompletion.errorMessage);
+    }
+    this.settleTurn(session, deferredCompletion.stopReason);
+  }
+
   private async maybeRequestPlanApproval(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
@@ -1807,6 +1910,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
 
     session.planApprovalRequestedByTurnId.add(turnId);
+    this.holdTurnUntilPlanApprovalResolves(session, turnId);
     const approvalToolCallId = `${completedPlanToolCall.toolCallId}:exit-plan`;
     const approvalInput = this.buildPlanApprovalInput(planText, item.id);
 
@@ -1819,41 +1923,68 @@ export class CodexAppServerAcpAdapter implements Agent {
       rawInput: approvalInput,
     });
 
-    const permissionResult = await this.connection.requestPermission({
-      sessionId: session.sessionId,
-      toolCall: {
+    try {
+      const permissionResult = await this.connection.requestPermission({
+        sessionId: session.sessionId,
+        toolCall: {
+          toolCallId: approvalToolCallId,
+          title: 'ExitPlanMode',
+          kind: 'switch_mode',
+          status: 'pending',
+          rawInput: approvalInput,
+        },
+        options: [
+          {
+            optionId: 'allow_once',
+            name: 'Approve plan',
+            kind: 'allow_once',
+          },
+          {
+            optionId: 'reject_once',
+            name: 'Request changes',
+            kind: 'reject_once',
+          },
+        ],
+      });
+
+      const selectedOptionId =
+        permissionResult.outcome.outcome === 'selected' ? permissionResult.outcome.optionId : null;
+      const approved = this.isPlanApprovalSelected(selectedOptionId);
+
+      if (approved) {
+        const postApprovalMode = this.resolvePostPlanApprovalMode(
+          session.defaults.collaborationMode
+        );
+        if (postApprovalMode) {
+          session.defaults.collaborationMode = postApprovalMode;
+          await this.emitSessionUpdate(session.sessionId, {
+            sessionUpdate: 'config_option_update',
+            configOptions: this.buildConfigOptions(session),
+          });
+        }
+      }
+
+      await this.emitSessionUpdate(session.sessionId, {
+        sessionUpdate: 'tool_call_update',
         toolCallId: approvalToolCallId,
-        title: 'ExitPlanMode',
         kind: 'switch_mode',
-        status: 'pending',
-        rawInput: approvalInput,
-      },
-      options: [
-        {
-          optionId: 'allow_once',
-          name: 'Approve plan',
-          kind: 'allow_once',
-        },
-        {
-          optionId: 'reject_once',
-          name: 'Request changes',
-          kind: 'reject_once',
-        },
-      ],
-    });
-
-    const selectedOptionId =
-      permissionResult.outcome.outcome === 'selected' ? permissionResult.outcome.optionId : null;
-    const approved = this.isPlanApprovalSelected(selectedOptionId);
-
-    await this.emitSessionUpdate(session.sessionId, {
-      sessionUpdate: 'tool_call_update',
-      toolCallId: approvalToolCallId,
-      kind: 'switch_mode',
-      title: 'ExitPlanMode',
-      status: approved ? 'completed' : 'failed',
-      rawOutput: approved ? 'Plan approved' : 'Plan approval rejected',
-    });
+        title: 'ExitPlanMode',
+        status: approved ? 'completed' : 'failed',
+        rawOutput: approved ? 'Plan approved' : 'Plan approval rejected',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.emitSessionUpdate(session.sessionId, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: approvalToolCallId,
+        kind: 'switch_mode',
+        title: 'ExitPlanMode',
+        status: 'failed',
+        rawOutput: `Plan approval failed: ${message}`,
+      });
+    } finally {
+      await this.releaseTurnHoldForPlanApproval(session, turnId);
+    }
   }
 
   private extractLocations(item: unknown): Array<{ path: string; line?: number | null }> {
@@ -2113,6 +2244,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     session.activeTurn = null;
     session.planTextByItemId.clear();
     session.planApprovalRequestedByTurnId.clear();
+    session.pendingPlanApprovalsByTurnId.clear();
     session.toolCallsByItemId.clear();
     session.pendingTurnCompletionsByTurnId.clear();
   }

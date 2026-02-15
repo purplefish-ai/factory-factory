@@ -670,6 +670,19 @@ describe('CodexAppServerAcpAdapter', () => {
         [
           expect.objectContaining({
             update: expect.objectContaining({
+              sessionUpdate: 'config_option_update',
+              configOptions: expect.arrayContaining([
+                expect.objectContaining({
+                  id: 'mode',
+                  currentValue: 'default',
+                }),
+              ]),
+            }),
+          }),
+        ],
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
               sessionUpdate: 'tool_call_update',
               title: 'ExitPlanMode',
               kind: 'switch_mode',
@@ -679,6 +692,131 @@ describe('CodexAppServerAcpAdapter', () => {
         ],
       ])
     );
+  });
+
+  it('holds prompt completion until plan approval resolves and exits plan mode', async () => {
+    let resolvePlanApproval: (value: RequestPermissionResponse) => void = () => {
+      throw new Error('expected plan approval request callback');
+    };
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockImplementation(
+      () =>
+        new Promise<RequestPermissionResponse>((resolve) => {
+          resolvePlanApproval = resolve;
+        })
+    );
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_plan_hold', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+    await adapter.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
+
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_plan_hold', status: 'inProgress' },
+    });
+
+    const promptPromise = adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'continue' }],
+    });
+
+    await vi.waitFor(() => {
+      expect(codex.request).toHaveBeenCalledWith(
+        'turn/start',
+        expect.objectContaining({
+          threadId: 'thread_plan_hold',
+        })
+      );
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_plan_hold',
+      turnId: 'turn_plan_hold',
+      item: {
+        type: 'plan',
+        id: 'item_plan_hold',
+        status: 'inProgress',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/plan/delta', {
+      threadId: 'thread_plan_hold',
+      turnId: 'turn_plan_hold',
+      itemId: 'item_plan_hold',
+      delta: '# Plan\n- implement it',
+    });
+
+    const itemCompletedPromise = (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_plan_hold',
+      turnId: 'turn_plan_hold',
+      item: {
+        type: 'plan',
+        id: 'item_plan_hold',
+        status: 'completed',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('turn/completed', {
+      threadId: 'thread_plan_hold',
+      turn: { id: 'turn_plan_hold', status: 'completed', error: null, items: [] },
+    });
+
+    let promptSettled = false;
+    void promptPromise.then(() => {
+      promptSettled = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(promptSettled).toBe(false);
+
+    resolvePlanApproval({
+      outcome: { outcome: 'selected', optionId: 'allow_once' },
+    });
+
+    await itemCompletedPromise;
+    await expect(promptPromise).resolves.toEqual({ stopReason: 'end_turn' });
+
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_after_plan_hold', status: 'completed' },
+    });
+
+    const secondPrompt = await adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'implement now' }],
+    });
+
+    expect(secondPrompt.stopReason).toBe('end_turn');
+    const turnStartCalls = getCodexRequestCalls(codex, 'turn/start');
+    const secondTurnStart = turnStartCalls[1]?.[1];
+    expect(secondTurnStart).toBeDefined();
+    expect(secondTurnStart).not.toHaveProperty('collaborationMode');
   });
 
   it('marks synthetic ExitPlanMode approval as failed when user rejects', async () => {
