@@ -263,6 +263,9 @@ describe('AcpRuntimeManager', () => {
       expect(spawnArgs[1]).toContain('codex-app-server-acp');
       expect(typeof spawnArgs[0]).toBe('string');
       expect((spawnArgs[0] as string).length).toBeGreaterThan(0);
+      expect((spawnArgs[2] as { env?: Record<string, string> }).env?.DOTENV_CONFIG_QUIET).toBe(
+        'true'
+      );
       expect(spawnArgs[2]).toMatchObject({
         cwd: '/tmp/workspace',
         stdio: ['pipe', 'pipe', 'pipe'],
