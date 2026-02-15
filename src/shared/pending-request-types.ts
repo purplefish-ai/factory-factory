@@ -23,6 +23,31 @@ export function isInteractiveResponseTool(toolName: string): toolName is Interac
 }
 
 /**
+ * Returns true when the tool input looks like AskUserQuestion input.
+ * This supports adapters that map question prompts to a non-standard tool name.
+ */
+export function hasAskUserQuestionInput(
+  input: Record<string, unknown> | null | undefined
+): boolean {
+  if (!input) {
+    return false;
+  }
+  const questions = input.questions;
+  return Array.isArray(questions);
+}
+
+/**
+ * Returns true when a pending request should be treated as a user-question prompt.
+ */
+export function isUserQuestionRequest(
+  request: Pick<PendingInteractiveRequest, 'toolName'> & {
+    input?: Record<string, unknown>;
+  }
+): boolean {
+  return request.toolName === 'AskUserQuestion' || hasAskUserQuestionInput(request.input);
+}
+
+/**
  * Pending interactive request stored for session restore.
  * When a user navigates away and returns, we need to restore the modal.
  */

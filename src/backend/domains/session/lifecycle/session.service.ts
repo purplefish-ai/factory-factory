@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
 import {
   AcpEventTranslator,
@@ -23,6 +23,7 @@ import type {
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
+import { isUserQuestionRequest } from '@/shared/pending-request-types';
 import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
@@ -513,11 +514,12 @@ class SessionService {
     }));
     const planContent = this.extractPlanContent(toolName, toolInput);
 
-    if (toolName === 'AskUserQuestion') {
+    if (isUserQuestionRequest({ toolName, input: toolInput })) {
       const questions = this.extractAskUserQuestions(toolInput);
       sessionDomainService.emitDelta(sid, {
         type: 'user_question',
         requestId,
+        toolName,
         questions,
         acpOptions,
       });
@@ -1106,7 +1108,16 @@ class SessionService {
    */
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
     const acpHandle = acpRuntimeManager.getClient(sessionId);
-    const selectedOption = acpHandle?.configOptions.find((option) => option.id === configId);
+    if (!acpHandle) {
+      const configOptions = await this.setCachedSessionConfigOption(sessionId, configId, value);
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions,
+      } as SessionDeltaEvent);
+      return;
+    }
+
+    const selectedOption = acpHandle.configOptions.find((option) => option.id === configId);
     const isModeOption = configId === 'mode' || selectedOption?.category === 'mode';
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
 
@@ -1127,6 +1138,66 @@ class SessionService {
         configOptions: configOptions,
       });
     }
+  }
+
+  private async setCachedSessionConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<SessionConfigOption[]> {
+    const session = await this.repository.getSessionById(sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    const snapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    if (!snapshot || snapshot.provider !== session.provider) {
+      throw new Error(
+        `Cannot set config option for inactive session ${sessionId}: no cached ACP config available`
+      );
+    }
+
+    const configOptions = this.updateCachedConfigOptions(snapshot.configOptions, configId, value);
+    await this.persistAcpConfigSnapshot(sessionId, {
+      provider: snapshot.provider,
+      providerSessionId: snapshot.providerSessionId,
+      configOptions,
+      existingMetadata: session.providerMetadata,
+    });
+    return configOptions;
+  }
+
+  private updateCachedConfigOptions(
+    configOptions: SessionConfigOption[],
+    configId: string,
+    value: string
+  ): SessionConfigOption[] {
+    let didUpdate = false;
+    const nextConfigOptions = configOptions.map((option) => {
+      if (option.id !== configId) {
+        return option;
+      }
+
+      const allowedValues = this.getConfigOptionValues(option);
+      if (allowedValues.length > 0 && !allowedValues.includes(value)) {
+        throw new Error(
+          `Unsupported value "${value}" for config option "${configId}"` +
+            ` (allowed: ${allowedValues.join(', ')})`
+        );
+      }
+
+      didUpdate = true;
+      return {
+        ...option,
+        currentValue: value,
+      };
+    });
+
+    if (!didUpdate) {
+      throw new Error(`Unknown config option: ${configId}`);
+    }
+
+    return nextConfigOptions;
   }
 
   sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
@@ -1319,12 +1390,17 @@ class SessionService {
       .trim();
   }
 
-  respondToAcpPermission(sessionId: string, requestId: string, optionId: string): boolean {
+  respondToAcpPermission(
+    sessionId: string,
+    requestId: string,
+    optionId: string,
+    answers?: Record<string, string[]>
+  ): boolean {
     const bridge = this.acpPermissionBridges.get(sessionId);
     if (!bridge) {
       return false;
     }
-    return bridge.resolvePermission(requestId, optionId);
+    return bridge.resolvePermission(requestId, optionId, answers);
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
@@ -1506,12 +1582,41 @@ class SessionService {
     fallbackModel?: string
   ): ChatBarCapabilities {
     const modelOption = configOptions.find((o) => o.category === 'model');
-    const thoughtOption = configOptions.find((o) => o.category === 'thought_level');
+    const modeOption = configOptions.find((o) => o.category === 'mode');
+    const thoughtOption = configOptions.find(
+      (o) =>
+        o.category === 'thought_level' || o.id === 'reasoning_effort' || o.category === 'reasoning'
+    );
     const selectedModel = modelOption?.currentValue
       ? String(modelOption.currentValue)
       : (fallbackModel ?? undefined);
     const modelOptions = this.buildModelOptions(modelOption, selectedModel);
     const isCodexProvider = provider === 'CODEX';
+    const reasoningOptions =
+      isCodexProvider && thoughtOption
+        ? this.getSelectOptions(thoughtOption).map((option) => ({
+            value: option.value,
+            label: option.name ?? option.value,
+            ...(option.description ? { description: option.description } : {}),
+          }))
+        : [];
+    const reasoningValues = new Set(reasoningOptions.map((option) => option.value));
+    const selectedReasoning =
+      isCodexProvider &&
+      thoughtOption?.currentValue &&
+      typeof thoughtOption.currentValue === 'string' &&
+      reasoningValues.has(thoughtOption.currentValue)
+        ? thoughtOption.currentValue
+        : undefined;
+    const modeDescriptors = modeOption
+      ? [
+          ...this.getConfigOptionValues(modeOption),
+          ...this.getSelectOptions(modeOption)
+            .map((entry) => entry.name ?? '')
+            .filter((value) => value.trim().length > 0),
+        ]
+      : [];
+    const planModeEnabled = modeDescriptors.some((entry) => /plan/i.test(entry));
 
     return {
       provider,
@@ -1521,13 +1626,14 @@ class SessionService {
         ...(selectedModel ? { selected: selectedModel } : {}),
       },
       reasoning: {
-        enabled: false,
-        options: [],
+        enabled: reasoningOptions.length > 0,
+        options: reasoningOptions,
+        ...(selectedReasoning ? { selected: selectedReasoning } : {}),
       },
       thinking: {
-        enabled: !!thoughtOption,
+        enabled: !isCodexProvider && !!thoughtOption,
       },
-      planMode: { enabled: true },
+      planMode: { enabled: planModeEnabled },
       attachments: isCodexProvider
         ? { enabled: false, kinds: [] }
         : { enabled: true, kinds: ['image', 'text'] },
@@ -1545,29 +1651,39 @@ class SessionService {
       return selectedModel ? [{ value: selectedModel, label: selectedModel }] : [];
     }
 
-    const uniqueValues = new Set<string>(this.getConfigOptionValues(modelOption));
-    if (selectedModel) {
-      uniqueValues.add(selectedModel);
+    const byValue = new Map<string, string>();
+    for (const option of this.getSelectOptions(modelOption)) {
+      if (!byValue.has(option.value)) {
+        byValue.set(option.value, option.name ?? option.value);
+      }
+    }
+    if (selectedModel && !byValue.has(selectedModel)) {
+      byValue.set(selectedModel, selectedModel);
     }
 
-    return Array.from(uniqueValues).map((value) => ({ value, label: value }));
+    return Array.from(byValue.entries()).map(([value, label]) => ({ value, label }));
   }
 
-  private getConfigOptionValues(option: SessionConfigOption): string[] {
+  private getSelectOptions(option: SessionConfigOption): SessionConfigSelectOption[] {
     return option.options.flatMap((entry) => {
       if (typeof entry !== 'object' || entry === null) {
         return [];
       }
       if ('value' in entry && typeof entry.value === 'string') {
-        return [entry.value];
+        return [entry];
       }
       if ('options' in entry && Array.isArray(entry.options)) {
-        return entry.options
-          .map((grouped) => grouped?.value)
-          .filter((value): value is string => typeof value === 'string');
+        return entry.options.filter(
+          (grouped): grouped is SessionConfigSelectOption =>
+            typeof grouped === 'object' && grouped !== null && typeof grouped.value === 'string'
+        );
       }
       return [];
     });
+  }
+
+  private getConfigOptionValues(option: SessionConfigOption): string[] {
+    return this.getSelectOptions(option).map((entry) => entry.value);
   }
 
   /**
@@ -1609,7 +1725,6 @@ class SessionService {
       (await this.repository.getSessionById(sessionId))?.providerMetadata ??
       null;
 
-    const metadataRecord = this.toMetadataRecord(metadataSource);
     const snapshot: StoredAcpConfigSnapshot = {
       provider: params.provider,
       providerSessionId: params.providerSessionId,
@@ -1618,45 +1733,62 @@ class SessionService {
       ...(observedModelId ? { observedModelId } : {}),
     };
 
+    const persistedUpdate = this.buildSnapshotPersistUpdate(
+      metadataSource,
+      snapshot,
+      observedModelId
+    );
+
+    try {
+      await this.repository.updateSession(sessionId, persistedUpdate);
+    } catch (error) {
+      logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await this.retryPersistAcpConfigSnapshot(sessionId, snapshot, observedModelId);
+    }
+  }
+
+  private buildSnapshotPersistUpdate(
+    metadataSource: unknown,
+    snapshot: StoredAcpConfigSnapshot,
+    observedModelId: string | undefined
+  ): {
+    providerMetadata: AgentSessionRecord['providerMetadata'];
+    model?: string;
+  } {
     const nextMetadata: Record<string, unknown> = {
-      ...metadataRecord,
+      ...this.toMetadataRecord(metadataSource),
       acpConfigSnapshot: snapshot,
     };
     if (observedModelId) {
       nextMetadata.observedModelId = observedModelId;
     }
 
+    return {
+      providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
+      ...(observedModelId ? { model: observedModelId } : {}),
+    };
+  }
+
+  private async retryPersistAcpConfigSnapshot(
+    sessionId: string,
+    snapshot: StoredAcpConfigSnapshot,
+    observedModelId: string | undefined
+  ): Promise<void> {
     try {
-      await this.repository.updateSession(sessionId, {
-        providerMetadata: nextMetadata as AgentSessionRecord['providerMetadata'],
-      });
-    } catch (error) {
-      logger.warn('Failed persisting ACP config snapshot to session metadata; retrying once', {
+      const latestMetadataSource = (await this.repository.getSessionById(sessionId))
+        ?.providerMetadata;
+      await this.repository.updateSession(
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        this.buildSnapshotPersistUpdate(latestMetadataSource, snapshot, observedModelId)
+      );
+    } catch (retryError) {
+      logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
+        sessionId,
+        error: retryError instanceof Error ? retryError.message : String(retryError),
       });
-
-      try {
-        const latestMetadataSource = (await this.repository.getSessionById(sessionId))
-          ?.providerMetadata;
-        const latestMetadata = this.toMetadataRecord(latestMetadataSource);
-        const retryMetadata: Record<string, unknown> = {
-          ...latestMetadata,
-          acpConfigSnapshot: snapshot,
-        };
-        if (observedModelId) {
-          retryMetadata.observedModelId = observedModelId;
-        }
-
-        await this.repository.updateSession(sessionId, {
-          providerMetadata: retryMetadata as AgentSessionRecord['providerMetadata'],
-        });
-      } catch (retryError) {
-        logger.warn('Retry failed persisting ACP config snapshot to session metadata', {
-          sessionId,
-          error: retryError instanceof Error ? retryError.message : String(retryError),
-        });
-      }
     }
   }
 

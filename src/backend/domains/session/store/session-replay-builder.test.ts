@@ -106,4 +106,34 @@ describe('session-replay-builder', () => {
       ])
     );
   });
+
+  it('replays legacy tool-input requests with questions as user_question', () => {
+    const store = createStore();
+    store.pendingInteractiveRequest = {
+      requestId: 'req-q',
+      toolName: 'Tool input request',
+      toolUseId: 'tool-q',
+      input: {
+        questions: [
+          {
+            question: 'Choose one',
+            options: [{ label: 'A', description: 'a' }],
+          },
+        ],
+      },
+      planContent: null,
+      acpOptions: [{ optionId: 'allow', name: 'Allow', kind: 'allow_once' }],
+      timestamp: '2026-02-01T00:00:03.000Z',
+    };
+
+    const replayEvents = buildReplayEvents(store);
+    expect(replayEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'user_question',
+          requestId: 'req-q',
+        }),
+      ])
+    );
+  });
 });

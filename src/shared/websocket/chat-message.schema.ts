@@ -81,6 +81,8 @@ export const ChatMessageSchema = z.discriminatedUnion('type', [
     requestId: z.string().min(1),
     /** ACP permission option ID selected by the user */
     optionId: z.string().min(1),
+    /** Structured answers for AskUserQuestion-style prompts (question-id keyed). */
+    answers: z.record(z.string(), z.array(z.string().min(1))).optional(),
   }),
 
   // Set the model

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
+import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---- Hoisted mock state (shared between factory and tests) ----
 
@@ -119,6 +120,14 @@ function defaultOptions(): AcpClientOptions {
   };
 }
 
+function codexOptions(): AcpClientOptions {
+  return {
+    provider: 'CODEX',
+    workingDir: '/tmp/workspace',
+    sessionId: 'test-session-1',
+  };
+}
+
 function defaultHandlers(): AcpRuntimeEventHandlers {
   return {
     onSessionId: vi.fn().mockResolvedValue(undefined),
@@ -183,9 +192,19 @@ function setupSuccessfulSpawn() {
 
 describe('AcpRuntimeManager', () => {
   let manager: AcpRuntimeManager;
+  let originalAcpStartupTimeout: string | undefined;
 
   beforeEach(() => {
     manager = new AcpRuntimeManager();
+    originalAcpStartupTimeout = process.env.ACP_STARTUP_TIMEOUT_MS;
+  });
+
+  afterEach(() => {
+    if (typeof originalAcpStartupTimeout === 'string') {
+      process.env.ACP_STARTUP_TIMEOUT_MS = originalAcpStartupTimeout;
+      return;
+    }
+    Reflect.deleteProperty(process.env, 'ACP_STARTUP_TIMEOUT_MS');
   });
 
   describe('getOrCreateClient', () => {
@@ -238,6 +257,78 @@ describe('AcpRuntimeManager', () => {
       expect(handle.getPid()).toBe(12_345);
     });
 
+    it('spawns CODEX provider using internal CLI adapter command', async () => {
+      setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        codexOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      const spawnArgs = mockSpawn.mock.calls[0]!;
+      expect(spawnArgs[1]).toContain('internal');
+      expect(spawnArgs[1]).toContain('codex-app-server-acp');
+      expect(
+        (spawnArgs[1] as string[]).some(
+          (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')
+        )
+      ).toBe(true);
+      expect(typeof spawnArgs[0]).toBe('string');
+      expect((spawnArgs[0] as string).length).toBeGreaterThan(0);
+      expect((spawnArgs[2] as { env?: Record<string, string> }).env?.DOTENV_CONFIG_QUIET).toBe(
+        'true'
+      );
+      if (
+        (spawnArgs[0] as string).endsWith('tsx') ||
+        (spawnArgs[0] as string).endsWith('tsx.cmd')
+      ) {
+        expect(spawnArgs[1]).toContain('--tsconfig');
+        expect((spawnArgs[1] as string[]).some((arg) => arg.endsWith('tsconfig.json'))).toBe(true);
+      }
+      expect(spawnArgs[2]).toMatchObject({
+        cwd: '/tmp/workspace',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false,
+      });
+    });
+
+    it('resolves CODEX internal adapter from module location when cwd is outside repo', async () => {
+      setupSuccessfulSpawn();
+      const originalCwd = process.cwd();
+      process.chdir(tmpdir());
+
+      try {
+        await manager.getOrCreateClient(
+          'session-1',
+          codexOptions(),
+          defaultHandlers(),
+          defaultContext()
+        );
+      } finally {
+        process.chdir(originalCwd);
+      }
+
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      const spawnArgs = mockSpawn.mock.calls[0]!;
+      const command = spawnArgs[0] as string;
+      const args = spawnArgs[1] as string[];
+      expect(command.length).toBeGreaterThan(0);
+      expect(args).toContain('internal');
+      expect(args).toContain('codex-app-server-acp');
+      if (command.endsWith('tsx') || command.endsWith('tsx.cmd')) {
+        expect(args).toContain('--tsconfig');
+        expect(args.some((arg) => arg.endsWith('tsconfig.json'))).toBe(true);
+      }
+      expect(
+        args.some(
+          (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')
+        )
+      ).toBe(true);
+    });
+
     it('rejects cleanly when ACP binary spawn fails (ENOENT)', async () => {
       const child = createMockChildProcess();
       mockSpawn.mockReturnValue(child);
@@ -287,6 +378,61 @@ describe('AcpRuntimeManager', () => {
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
       expect(child.kill).toHaveBeenCalledWith('SIGKILL');
       expect(mockNewSession).not.toHaveBeenCalled();
+    });
+
+    it('times out when ACP initialize handshake never resolves', async () => {
+      process.env.ACP_STARTUP_TIMEOUT_MS = '20';
+
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep unresolved to trigger startup timeout.
+          })
+      );
+
+      await expect(
+        manager.getOrCreateClient(
+          'session-timeout-init',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP initialize handshake timed out');
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    });
+
+    it('times out when ACP session creation never resolves', async () => {
+      process.env.ACP_STARTUP_TIMEOUT_MS = '20';
+
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockResolvedValue({
+        protocolVersion: 1,
+        agentCapabilities: { loadSession: {} },
+        agentInfo: { name: 'claude-code-acp' },
+      });
+      mockNewSession.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep unresolved to trigger startup timeout.
+          })
+      );
+
+      await expect(
+        manager.getOrCreateClient(
+          'session-timeout-new-session',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP session creation timed out');
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
     });
 
     it('returns existing handle if session already exists and is running', async () => {

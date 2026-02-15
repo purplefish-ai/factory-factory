@@ -4,7 +4,14 @@
 
 // ACP runtime (Phase 19+)
 export type { AcpClientOptions, AcpRuntimeEventHandlers, AcpSessionState } from './acp';
-export { AcpClientHandler, AcpProcessHandle, AcpRuntimeManager, acpRuntimeManager } from './acp';
+export {
+  AcpClientHandler,
+  AcpProcessHandle,
+  AcpRuntimeManager,
+  acpRuntimeManager,
+  CodexAppServerAcpAdapter,
+  runCodexAppServerAcpAdapter,
+} from './acp';
 // Bridge interfaces for orchestration layer wiring
 export type { SessionInitPolicyBridge, SessionWorkspaceBridge } from './bridges';
 export type { ConnectionInfo } from './chat/chat-connection.service';

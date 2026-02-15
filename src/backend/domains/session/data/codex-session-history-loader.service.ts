@@ -64,6 +64,24 @@ function isSafeProviderSessionId(providerSessionId: string): boolean {
   return SAFE_PROVIDER_SESSION_ID_PATTERN.test(providerSessionId);
 }
 
+function normalizeProviderSessionId(providerSessionId: string): string {
+  return providerSessionId.startsWith('sess_')
+    ? providerSessionId.slice('sess_'.length)
+    : providerSessionId;
+}
+
+function getProviderSessionIdCandidates(providerSessionId: string): string[] {
+  const normalized = normalizeProviderSessionId(providerSessionId);
+  if (normalized === providerSessionId) {
+    return [providerSessionId];
+  }
+  return [providerSessionId, normalized];
+}
+
+function isMatchingProviderSessionId(candidateId: string, providerSessionId: string): boolean {
+  return normalizeProviderSessionId(candidateId) === normalizeProviderSessionId(providerSessionId);
+}
+
 function parseHistoryEntry(line: string): CodexHistoryEntry | null {
   let parsedLine: unknown;
   try {
@@ -86,17 +104,6 @@ function normalizeTimestamp(
   }
 
   return new Date(fallbackBaseTimestampMs + lineNumber).toISOString();
-}
-
-function parseCodexHistoryMessage(
-  entry: CodexHistoryEntry,
-  timestamp: string
-): HistoryMessage | null {
-  const eventMessage = parseCodexEventMessage(entry, timestamp);
-  if (eventMessage) {
-    return eventMessage;
-  }
-  return parseCodexResponseItemMessage(entry, timestamp);
 }
 
 function parseCodexEventMessage(
@@ -166,50 +173,135 @@ function normalizeCodexFunctionOutput(output: unknown): string {
   }
 }
 
-function parseCodexResponseItemMessage(
-  entry: CodexHistoryEntry,
-  timestamp: string
-): HistoryMessage | null {
-  if (entry.type !== 'response_item' || !isRecord(entry.payload)) {
-    return null;
+function extractReasoningSummary(payload: Record<string, unknown>): string[] {
+  const summary = payload.summary;
+  if (!Array.isArray(summary)) {
+    return [];
   }
 
-  const payloadType = entry.payload.type;
-  if (payloadType === 'function_call') {
-    const toolName = entry.payload.name;
-    const toolId = entry.payload.call_id;
-    if (
-      typeof toolName !== 'string' ||
-      toolName.trim().length === 0 ||
-      typeof toolId !== 'string' ||
-      toolId.trim().length === 0
-    ) {
-      return null;
+  const values: string[] = [];
+  for (const entry of summary) {
+    if (isRecord(entry) && typeof entry.text === 'string' && entry.text.trim().length > 0) {
+      values.push(entry.text);
+      continue;
     }
-    return {
+
+    if (typeof entry === 'string' && entry.trim().length > 0) {
+      values.push(entry);
+    }
+  }
+
+  return values;
+}
+
+function parseFunctionCallResponseItem(
+  payload: Record<string, unknown>,
+  timestamp: string
+): HistoryMessage[] {
+  const toolName = payload.name;
+  const toolId = payload.call_id;
+  if (
+    typeof toolName !== 'string' ||
+    toolName.trim().length === 0 ||
+    typeof toolId !== 'string' ||
+    toolId.trim().length === 0
+  ) {
+    return [];
+  }
+
+  return [
+    {
       type: 'tool_use',
       content: '',
       timestamp,
       toolName,
       toolId,
-      toolInput: normalizeCodexFunctionArgs(entry.payload.arguments),
-    };
+      toolInput: normalizeCodexFunctionArgs(payload.arguments),
+    },
+  ];
+}
+
+function parseFunctionCallOutputResponseItem(
+  payload: Record<string, unknown>,
+  timestamp: string
+): HistoryMessage[] {
+  const toolId = payload.call_id;
+  if (typeof toolId !== 'string' || toolId.trim().length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      type: 'tool_result',
+      content: normalizeCodexFunctionOutput(payload.output),
+      timestamp,
+      toolId,
+    },
+  ];
+}
+
+function parseReasoningResponseItem(
+  payload: Record<string, unknown>,
+  timestamp: string,
+  lineNumber: number
+): HistoryMessage[] {
+  const summary = extractReasoningSummary(payload);
+  const toolId =
+    typeof payload.id === 'string' && payload.id.trim().length > 0
+      ? payload.id
+      : `reasoning-${lineNumber}`;
+
+  const toolResultPayload: Record<string, unknown> = {
+    type: 'reasoning',
+    id: toolId,
+    summary,
+    content: Array.isArray(payload.content) ? payload.content : [],
+  };
+
+  return [
+    {
+      type: 'tool_use',
+      content: '',
+      timestamp,
+      toolName: 'reasoning',
+      toolId,
+      toolInput: {
+        type: 'reasoning',
+        ...(summary.length > 0 ? { summary } : {}),
+      },
+    },
+    {
+      type: 'tool_result',
+      content: normalizeCodexFunctionOutput(toolResultPayload),
+      timestamp,
+      toolId,
+    },
+  ];
+}
+
+function parseCodexResponseItemMessages(
+  entry: CodexHistoryEntry,
+  timestamp: string,
+  lineNumber: number
+): HistoryMessage[] {
+  if (entry.type !== 'response_item' || !isRecord(entry.payload)) {
+    return [];
+  }
+
+  const payloadType = entry.payload.type;
+  if (payloadType === 'function_call') {
+    return parseFunctionCallResponseItem(entry.payload, timestamp);
   }
 
   if (payloadType === 'function_call_output') {
-    const toolId = entry.payload.call_id;
-    if (typeof toolId !== 'string' || toolId.trim().length === 0) {
-      return null;
-    }
-    return {
-      type: 'tool_result',
-      content: normalizeCodexFunctionOutput(entry.payload.output),
-      timestamp,
-      toolId,
-    };
+    return parseFunctionCallOutputResponseItem(entry.payload, timestamp);
   }
 
-  return null;
+  if (payloadType === 'reasoning') {
+    return parseReasoningResponseItem(entry.payload, timestamp, lineNumber);
+  }
+
+  return [];
 }
 
 async function parseSessionMeta(filePath: string): Promise<{ id?: string; cwd?: string } | null> {
@@ -298,7 +390,18 @@ async function resolveSessionFilePath(
     return null;
   }
 
-  const candidates = await collectCandidateSessionFiles(sessionsDir, `${providerSessionId}.jsonl`);
+  const sessionIdCandidates = getProviderSessionIdCandidates(providerSessionId);
+  const candidateSet = new Set<string>();
+  for (const sessionIdCandidate of sessionIdCandidates) {
+    const discovered = await collectCandidateSessionFiles(
+      sessionsDir,
+      `${sessionIdCandidate}.jsonl`
+    );
+    for (const candidatePath of discovered) {
+      candidateSet.add(candidatePath);
+    }
+  }
+  const candidates = [...candidateSet];
   if (candidates.length === 0) {
     return null;
   }
@@ -319,14 +422,18 @@ async function resolveSessionFilePath(
   for (const candidate of withMtime) {
     const meta = await parseSessionMeta(candidate.candidatePath);
     metaByPath.set(candidate.candidatePath, meta);
-    if (meta?.id === providerSessionId && meta.cwd === workingDir) {
+    if (
+      typeof meta?.id === 'string' &&
+      isMatchingProviderSessionId(meta.id, providerSessionId) &&
+      meta.cwd === workingDir
+    ) {
       return candidate.candidatePath;
     }
   }
 
   for (const candidate of withMtime) {
     const meta = metaByPath.get(candidate.candidatePath) ?? null;
-    if (meta?.id === providerSessionId) {
+    if (typeof meta?.id === 'string' && isMatchingProviderSessionId(meta.id, providerSessionId)) {
       return candidate.candidatePath;
     }
   }
@@ -399,11 +506,24 @@ class CodexSessionHistoryLoaderService {
     }
 
     const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
-    const parsedMessage = parseCodexHistoryMessage(entry, timestamp);
-    if (parsedMessage) {
-      history.push(parsedMessage);
+    const parsedMessages = parseCodexHistoryMessages(entry, timestamp, lineNumber);
+    if (parsedMessages.length > 0) {
+      history.push(...parsedMessages);
     }
   }
+}
+
+function parseCodexHistoryMessages(
+  entry: CodexHistoryEntry,
+  timestamp: string,
+  lineNumber: number
+): HistoryMessage[] {
+  const eventMessage = parseCodexEventMessage(entry, timestamp);
+  if (eventMessage) {
+    return [eventMessage];
+  }
+
+  return parseCodexResponseItemMessages(entry, timestamp, lineNumber);
 }
 
 export const codexSessionHistoryLoaderService = new CodexSessionHistoryLoaderService();

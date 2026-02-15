@@ -56,6 +56,33 @@ describe('AcpPermissionBridge', () => {
     expect(bridge.pendingCount).toBe(0);
   });
 
+  it('includes structured tool-input answers in ACP _meta when provided', async () => {
+    const bridge = new AcpPermissionBridge();
+    const params = createMockParams();
+
+    const promise = bridge.waitForUserResponse('req-answers', params);
+    const resolved = bridge.resolvePermission('req-answers', 'allow_once', {
+      color: ['Blue'],
+      shell: ['zsh', 'fish'],
+    });
+
+    expect(resolved).toBe(true);
+    await expect(promise).resolves.toEqual({
+      _meta: {
+        factoryFactory: {
+          toolUserInputAnswers: {
+            color: ['Blue'],
+            shell: ['zsh', 'fish'],
+          },
+        },
+      },
+      outcome: {
+        outcome: 'selected',
+        optionId: 'allow_once',
+      },
+    });
+  });
+
   it('resolvePermission returns false for unknown requestId', () => {
     const bridge = new AcpPermissionBridge();
 

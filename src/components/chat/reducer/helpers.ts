@@ -13,6 +13,7 @@ import {
   updateTokenStatsFromResult,
 } from '@/lib/chat-protocol';
 import { createDebugLogger } from '@/lib/debug';
+import { isUserQuestionRequest } from '@/shared/pending-request-types';
 import type { ChatState, PendingRequest } from './types';
 
 // Debug logger for chat reducer - set to true during development to see ignored state transitions
@@ -354,13 +355,15 @@ export function convertPendingRequest(
     return { type: 'none' };
   }
 
-  if (req.toolName === 'AskUserQuestion') {
+  if (isUserQuestionRequest(req)) {
     const input = req.input as { questions?: unknown[] };
     return {
       type: 'question',
       request: {
         requestId: req.requestId,
+        toolName: req.toolName,
         questions: (input.questions ?? []) as UserQuestionRequest['questions'],
+        ...(Array.isArray(req.acpOptions) ? { acpOptions: req.acpOptions } : {}),
         timestamp: req.timestamp,
       },
     };

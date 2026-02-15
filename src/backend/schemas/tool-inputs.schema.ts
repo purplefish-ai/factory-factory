@@ -60,6 +60,7 @@ export const AskUserQuestionOptionSchema = z.object({
  * A single question in AskUserQuestion input.
  */
 export const AskUserQuestionItemSchema = z.object({
+  id: z.string().optional(),
   question: z.string(),
   header: z.string().optional(),
   options: z.array(AskUserQuestionOptionSchema),

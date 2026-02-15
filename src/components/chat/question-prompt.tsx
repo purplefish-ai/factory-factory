@@ -558,12 +558,13 @@ export function QuestionPrompt({ question, onAnswer }: QuestionPromptProps) {
       return;
     }
 
-    // Convert indexed answers to the format expected by the hook
-    // The hook expects answers keyed by question text
+    // Convert indexed answers to the format expected by the hook.
+    // Prefer stable question IDs when available.
     const formattedAnswers: Record<string, string | string[]> = {};
 
     question.questions.forEach((q, index) => {
-      formattedAnswers[q.question] = formatAnswer(q, answers[index], otherTexts[index] ?? '');
+      const answerKey = q.id?.trim() || q.question;
+      formattedAnswers[answerKey] = formatAnswer(q, answers[index], otherTexts[index] ?? '');
     });
 
     onAnswer(question.requestId, formattedAnswers);

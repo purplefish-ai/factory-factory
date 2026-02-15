@@ -6,6 +6,7 @@ import {
   type WebSocketMessage as ReplayEventMessage,
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
+import { isUserQuestionRequest } from '@/shared/pending-request-types';
 import type { SessionStore } from './session-store.types';
 import { messageSort } from './session-transcript';
 
@@ -91,7 +92,7 @@ export function buildReplayEvents(store: SessionStore): ReplayEventMessage[] {
   }
 
   if (store.pendingInteractiveRequest) {
-    if (store.pendingInteractiveRequest.toolName === 'AskUserQuestion') {
+    if (isUserQuestionRequest(store.pendingInteractiveRequest)) {
       replayEvents.push({
         type: 'user_question',
         requestId: store.pendingInteractiveRequest.requestId,

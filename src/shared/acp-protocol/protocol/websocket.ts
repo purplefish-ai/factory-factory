@@ -111,6 +111,7 @@ interface WebSocketMessagePayloadByType {
   };
   user_question: {
     requestId?: string;
+    toolName?: string;
     questions?: AskUserQuestion[];
     /** ACP permission options for mapping selected answer labels to option IDs. */
     acpOptions?: Array<{

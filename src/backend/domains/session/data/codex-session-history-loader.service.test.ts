@@ -216,6 +216,65 @@ describe('codexSessionHistoryLoaderService', () => {
     ]);
   });
 
+  it('replays response_item reasoning as completed reasoning tool sequence', async () => {
+    const providerSessionId = 'session-reasoning-1';
+    const cwd = '/Users/test/project';
+    writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${providerSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: {
+            id: providerSessionId,
+            cwd,
+          },
+        },
+        {
+          timestamp: '2026-02-15T00:00:04.000Z',
+          type: 'response_item',
+          payload: {
+            type: 'reasoning',
+            summary: [{ type: 'summary_text', text: '**Counting files in directory**' }],
+            content: null,
+          },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result.status).toBe('loaded');
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'tool_use',
+        content: '',
+        timestamp: '2026-02-15T00:00:04.000Z',
+        toolName: 'reasoning',
+        toolId: 'reasoning-2',
+        toolInput: {
+          type: 'reasoning',
+          summary: ['**Counting files in directory**'],
+        },
+      },
+      {
+        type: 'tool_result',
+        content:
+          '{"type":"reasoning","id":"reasoning-2","summary":["**Counting files in directory**"],"content":[]}',
+        timestamp: '2026-02-15T00:00:04.000Z',
+        toolId: 'reasoning-2',
+      },
+    ]);
+  });
+
   it('prefers a matching cwd when multiple files have the same providerSessionId', async () => {
     const providerSessionId = 'session-dup-1';
     writeSessionFile({
@@ -301,6 +360,52 @@ describe('codexSessionHistoryLoaderService', () => {
     });
 
     expect(result).toEqual({ status: 'not_found' });
+  });
+
+  it('loads history when providerSessionId includes sess_ prefix but file/meta use unprefixed id', async () => {
+    const unprefixedSessionId = '019c620a-8a8d-7b33-9b20-f9bd7c6512a7';
+    const providerSessionId = `sess_${unprefixedSessionId}`;
+    const cwd = '/Users/test/project';
+    const filePath = writeSessionFile({
+      codexHomeDir: tempDir,
+      relativeDir: '2026/02/15',
+      fileName: `rollout-2026-02-15T00-00-00-${unprefixedSessionId}.jsonl`,
+      entries: [
+        {
+          type: 'session_meta',
+          payload: {
+            id: unprefixedSessionId,
+            cwd,
+          },
+        },
+        {
+          timestamp: '2026-02-15T00:00:01.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'user_message',
+            message: 'hello from prefixed id',
+          },
+        },
+      ],
+    });
+
+    const result = await codexSessionHistoryLoaderService.loadSessionHistory({
+      providerSessionId,
+      workingDir: cwd,
+    });
+
+    expect(result).toMatchObject({ status: 'loaded', filePath });
+    if (result.status !== 'loaded') {
+      return;
+    }
+
+    expect(result.history).toEqual([
+      {
+        type: 'user',
+        content: 'hello from prefixed id',
+        timestamp: '2026-02-15T00:00:01.000Z',
+      },
+    ]);
   });
 
   it('uses non-epoch fallback timestamps when entries have invalid timestamps', async () => {

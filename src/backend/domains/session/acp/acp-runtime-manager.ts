@@ -1,6 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 import {
   ClientSideConnection,
   type LoadSessionResponse,
@@ -77,9 +79,174 @@ function normalizeUnknownError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-function createAcpSpawnError(binaryPath: string, error: unknown): Error {
+function createAcpSpawnError(commandLabel: string, error: unknown): Error {
   const normalized = normalizeUnknownError(error);
-  return new Error(`Failed to spawn ACP adapter "${binaryPath}": ${normalized.message}`);
+  return new Error(`Failed to spawn ACP adapter "${commandLabel}": ${normalized.message}`);
+}
+
+type SpawnCommand = {
+  command: string;
+  args: string[];
+  commandLabel: string;
+};
+
+const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
+const MAX_FACTORY_ROOT_SEARCH_DEPTH = 20;
+
+function resolveAcpStartupTimeoutMs(): number {
+  const raw = process.env.ACP_STARTUP_TIMEOUT_MS;
+  if (!raw) {
+    return DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
+async function withTimeout<T>(params: {
+  promise: Promise<T>;
+  timeoutMs: number;
+  description: string;
+  cancelOn?: Promise<unknown>;
+}): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`ACP ${params.description} timed out after ${params.timeoutMs}ms`));
+    }, params.timeoutMs);
+    timeout.unref?.();
+    const clearTimer = () => {
+      clearTimeout(timeout);
+    };
+
+    if (typeof params.cancelOn !== 'undefined') {
+      void params.cancelOn.finally(clearTimer).catch(() => {
+        // cancelOn is best-effort cancellation; ignore its rejection.
+      });
+    }
+
+    params.promise.then(
+      (value) => {
+        clearTimer();
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimer();
+        reject(error);
+      }
+    );
+  });
+}
+
+function findFactoryRoot(startDir: string): string | null {
+  let currentDir = startDir;
+  for (let depth = 0; depth < MAX_FACTORY_ROOT_SEARCH_DEPTH; depth += 1) {
+    const hasPackageJson = existsSync(join(currentDir, 'package.json'));
+    const hasCliDistEntrypoint = existsSync(join(currentDir, 'dist', 'src', 'cli', 'index.js'));
+    const hasCliSourceEntrypoint = existsSync(join(currentDir, 'src', 'cli', 'index.ts'));
+    if (hasPackageJson && (hasCliDistEntrypoint || hasCliSourceEntrypoint)) {
+      return currentDir;
+    }
+
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) {
+      return null;
+    }
+    currentDir = parentDir;
+  }
+  return null;
+}
+
+function resolveFactoryRootForInternalCodexAdapter(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const candidateStarts = [process.cwd(), moduleDir];
+
+  for (const candidate of candidateStarts) {
+    const root = findFactoryRoot(candidate);
+    if (root) {
+      return root;
+    }
+  }
+
+  throw new Error('Cannot resolve Factory Factory root for CODEX ACP adapter spawn');
+}
+
+function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
+  const projectRoot = resolveFactoryRootForInternalCodexAdapter();
+  const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
+  const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
+  const tsconfigPath = join(projectRoot, 'tsconfig.json');
+  const tsxBin = join(
+    projectRoot,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+  );
+  const hasTypeScriptRuntime =
+    process.execArgv.some((arg) => arg.includes('tsx')) ||
+    process.execArgv.some((arg) => arg.includes('ts-node'));
+  const preferSourceEntrypoint = process.env.NODE_ENV !== 'production';
+
+  const buildNodeSpawnCommand = (entrypoint: string): SpawnCommand => {
+    const args = [entrypoint, 'internal', 'codex-app-server-acp'];
+    return {
+      command: process.execPath,
+      args,
+      commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
+    };
+  };
+
+  const resolveSourceSpawnCommand = (): SpawnCommand | null => {
+    if (!existsSync(cliSourceEntrypoint)) {
+      return null;
+    }
+    if (existsSync(tsxBin)) {
+      const args = [
+        ...(existsSync(tsconfigPath) ? ['--tsconfig', tsconfigPath] : []),
+        cliSourceEntrypoint,
+        'internal',
+        'codex-app-server-acp',
+      ];
+      return {
+        command: tsxBin,
+        args,
+        commandLabel: `${tsxBin} ${args.join(' ')}`.trim(),
+      };
+    }
+    if (hasTypeScriptRuntime) {
+      const args = [...process.execArgv, cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
+      return {
+        command: process.execPath,
+        args,
+        commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
+      };
+    }
+    return null;
+  };
+
+  if (preferSourceEntrypoint) {
+    const sourceCommand = resolveSourceSpawnCommand();
+    if (sourceCommand) {
+      return sourceCommand;
+    }
+
+    if (existsSync(cliDistEntrypoint)) {
+      return buildNodeSpawnCommand(cliDistEntrypoint);
+    }
+  } else {
+    if (existsSync(cliDistEntrypoint)) {
+      return buildNodeSpawnCommand(cliDistEntrypoint);
+    }
+
+    const sourceCommand = resolveSourceSpawnCommand();
+    if (sourceCommand) {
+      return sourceCommand;
+    }
+  }
+
+  throw new Error('Cannot resolve CLI entrypoint for CODEX ACP adapter spawn');
 }
 
 function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
@@ -416,24 +583,41 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
-    // Resolve binary path
     const isCodex = options.provider === 'CODEX';
-    const binaryName = isCodex ? 'codex-acp' : 'claude-code-acp';
-    const packageName = isCodex ? '@zed-industries/codex-acp' : '@zed-industries/claude-code-acp';
-    const binaryPath = options.adapterBinaryPath ?? resolveAcpBinary(packageName, binaryName);
+    const spawnCommand: SpawnCommand = options.adapterBinaryPath
+      ? {
+          command: options.adapterBinaryPath,
+          args: [],
+          commandLabel: options.adapterBinaryPath,
+        }
+      : isCodex
+        ? resolveInternalCodexAcpSpawnCommand()
+        : (() => {
+            const binaryName = 'claude-code-acp';
+            const packageName = '@zed-industries/claude-code-acp';
+            const binaryPath = resolveAcpBinary(packageName, binaryName);
+            return {
+              command: binaryPath,
+              args: [],
+              commandLabel: binaryPath,
+            };
+          })();
 
     logger.info('Spawning ACP subprocess', {
       sessionId,
-      binaryPath,
+      command: spawnCommand.command,
+      args: spawnCommand.args,
       provider: options.provider,
       workingDir: options.workingDir,
     });
 
+    const spawnEnv = isCodex ? { ...process.env, DOTENV_CONFIG_QUIET: 'true' } : { ...process.env };
+
     // Spawn subprocess (CRITICAL: detached MUST be false for orphan prevention)
-    const child: ChildProcess = spawn(binaryPath, [], {
+    const child: ChildProcess = spawn(spawnCommand.command, spawnCommand.args, {
       cwd: options.workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: spawnEnv,
       detached: false,
     });
 
@@ -441,7 +625,8 @@ export class AcpRuntimeManager {
     // client creation cleanly instead of surfacing as uncaught process errors.
     let startupErrorListener: ((error: unknown) => void) | null = null;
     const startupError = new Promise<never>((_, reject) => {
-      startupErrorListener = (error: unknown) => reject(createAcpSpawnError(binaryPath, error));
+      startupErrorListener = (error: unknown) =>
+        reject(createAcpSpawnError(spawnCommand.commandLabel, error));
       child.once('error', startupErrorListener);
     });
 
@@ -481,18 +666,25 @@ export class AcpRuntimeManager {
 
     let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
     let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
+    const startupTimeoutMs = resolveAcpStartupTimeoutMs();
+    const startupErrorSettled = startupError.catch(() => undefined);
 
     try {
       // Initialize handshake
       initResult = await Promise.race([
-        connection.initialize({
-          protocolVersion: PROTOCOL_VERSION,
-          clientCapabilities: {},
-          clientInfo: {
-            name: 'factory-factory',
-            title: 'Factory Factory',
-            version: '1.2.0',
-          },
+        withTimeout({
+          promise: connection.initialize({
+            protocolVersion: PROTOCOL_VERSION,
+            clientCapabilities: {},
+            clientInfo: {
+              name: 'factory-factory',
+              title: 'Factory Factory',
+              version: '1.2.0',
+            },
+          }),
+          timeoutMs: startupTimeoutMs,
+          description: 'initialize handshake',
+          cancelOn: startupErrorSettled,
         }),
         startupError,
       ]);
@@ -505,7 +697,12 @@ export class AcpRuntimeManager {
       // Create or resume provider session
       const agentCapabilities = initResult.agentCapabilities ?? {};
       sessionInfo = await Promise.race([
-        this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
+        withTimeout({
+          promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
+          timeoutMs: startupTimeoutMs,
+          description: 'session creation',
+          cancelOn: startupErrorSettled,
+        }),
         startupError,
       ]);
     } catch (error) {

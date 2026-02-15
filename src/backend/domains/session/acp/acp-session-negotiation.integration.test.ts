@@ -279,7 +279,11 @@ describe('ACP session negotiation integration', () => {
   });
 
   it('negotiates initial CODEX session config options and modes', async () => {
-    const binaryPath = createFakeAcpBinary(tempDir, 'codex-acp-stub', CODEX_SESSION_FIXTURE);
+    const binaryPath = createFakeAcpBinary(
+      tempDir,
+      'codex-app-server-acp-stub',
+      CODEX_SESSION_FIXTURE
+    );
 
     const options: AcpClientOptions = {
       provider: 'CODEX',
@@ -310,5 +314,19 @@ describe('ACP session negotiation integration', () => {
     expect(getOptionValues(reasoningOption)).toEqual(
       expect.arrayContaining(['low', 'medium', 'high'])
     );
+
+    expect(handle.configOptions.length).toBe(3);
+    expect(modelOption?.currentValue).toBe('gpt-5-codex');
+    expect(modeOption?.currentValue).toBe('code');
+    expect(reasoningOption?.currentValue).toBe('medium');
+
+    expect(getOptionByValue(modeOption, 'ask')).toEqual({ value: 'ask', name: 'Ask' });
+    expect(getOptionByValue(modeOption, 'code')).toEqual({ value: 'code', name: 'Code' });
+    expect(getOptionByValue(reasoningOption, 'low')).toEqual({ value: 'low', name: 'Low' });
+    expect(getOptionByValue(reasoningOption, 'medium')).toEqual({
+      value: 'medium',
+      name: 'Medium',
+    });
+    expect(getOptionByValue(reasoningOption, 'high')).toEqual({ value: 'high', name: 'High' });
   });
 });

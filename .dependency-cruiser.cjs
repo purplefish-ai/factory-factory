@@ -267,6 +267,20 @@ module.exports = {
       },
     },
     {
+      name: 'codex-app-server-adapter-self-contained',
+      severity: 'error',
+      comment:
+        'Codex app-server ACP adapter must be self-contained and must not import from outside its own directory.',
+      from: {
+        path: '^src/backend/domains/session/acp/codex-app-server-adapter/',
+        pathNot: '^src/backend/domains/session/acp/codex-app-server-adapter/.*\\.test\\.ts$',
+      },
+      to: {
+        path: '^src/',
+        pathNot: '^src/backend/domains/session/acp/codex-app-server-adapter/',
+      },
+    },
+    {
       name: 'no-cross-domain-imports',
       severity: 'error',
       comment:

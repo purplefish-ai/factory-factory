@@ -12,6 +12,7 @@ import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
 import treeKill from 'tree-kill';
+import { runCodexAppServerAcpAdapter } from '@/backend/domains/session';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { getLogFilePath } from '@/backend/services/logger.service';
 
@@ -33,7 +34,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load .env file before anything else
-config();
+config({ quiet: true });
 
 // Find project root (where package.json is)
 function findProjectRoot(): string {
@@ -785,6 +786,15 @@ program
     console.log(chalk.green('\n✅ Build completed successfully!'));
     console.log(chalk.gray('Run `ff serve` to start the production server'));
   });
+
+// ============================================================================
+// internal commands (hidden)
+// ============================================================================
+
+const internalProgram = program.command('internal', { hidden: true });
+internalProgram.command('codex-app-server-acp').action(() => {
+  runCodexAppServerAcpAdapter();
+});
 
 // ============================================================================
 // Parse and run
