@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---- Hoisted mock state (shared between factory and tests) ----
 
@@ -192,9 +192,19 @@ function setupSuccessfulSpawn() {
 
 describe('AcpRuntimeManager', () => {
   let manager: AcpRuntimeManager;
+  let originalAcpStartupTimeout: string | undefined;
 
   beforeEach(() => {
     manager = new AcpRuntimeManager();
+    originalAcpStartupTimeout = process.env.ACP_STARTUP_TIMEOUT_MS;
+  });
+
+  afterEach(() => {
+    if (typeof originalAcpStartupTimeout === 'string') {
+      process.env.ACP_STARTUP_TIMEOUT_MS = originalAcpStartupTimeout;
+      return;
+    }
+    Reflect.deleteProperty(process.env, 'ACP_STARTUP_TIMEOUT_MS');
   });
 
   describe('getOrCreateClient', () => {
@@ -352,6 +362,61 @@ describe('AcpRuntimeManager', () => {
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
       expect(child.kill).toHaveBeenCalledWith('SIGKILL');
       expect(mockNewSession).not.toHaveBeenCalled();
+    });
+
+    it('times out when ACP initialize handshake never resolves', async () => {
+      process.env.ACP_STARTUP_TIMEOUT_MS = '20';
+
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep unresolved to trigger startup timeout.
+          })
+      );
+
+      await expect(
+        manager.getOrCreateClient(
+          'session-timeout-init',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP initialize handshake timed out');
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    });
+
+    it('times out when ACP session creation never resolves', async () => {
+      process.env.ACP_STARTUP_TIMEOUT_MS = '20';
+
+      const child = createMockChildProcess();
+      mockSpawn.mockReturnValue(child);
+      mockInitialize.mockResolvedValue({
+        protocolVersion: 1,
+        agentCapabilities: { loadSession: {} },
+        agentInfo: { name: 'claude-code-acp' },
+      });
+      mockNewSession.mockImplementation(
+        () =>
+          new Promise(() => {
+            // Keep unresolved to trigger startup timeout.
+          })
+      );
+
+      await expect(
+        manager.getOrCreateClient(
+          'session-timeout-new-session',
+          defaultOptions(),
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP session creation timed out');
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
     });
 
     it('returns existing handle if session already exists and is running', async () => {

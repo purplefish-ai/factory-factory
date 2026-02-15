@@ -90,6 +90,44 @@ type SpawnCommand = {
   commandLabel: string;
 };
 
+const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
+
+function resolveAcpStartupTimeoutMs(): number {
+  const raw = process.env.ACP_STARTUP_TIMEOUT_MS;
+  if (!raw) {
+    return DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+  }
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+  }
+  return parsed;
+}
+
+async function withTimeout<T>(params: {
+  promise: Promise<T>;
+  timeoutMs: number;
+  description: string;
+}): Promise<T> {
+  return await new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`ACP ${params.description} timed out after ${params.timeoutMs}ms`));
+    }, params.timeoutMs);
+
+    params.promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    );
+  });
+}
+
 function findFactoryRoot(startDir: string): string | null {
   let currentDir = startDir;
   for (;;) {
@@ -579,18 +617,23 @@ export class AcpRuntimeManager {
 
     let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
     let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
+    const startupTimeoutMs = resolveAcpStartupTimeoutMs();
 
     try {
       // Initialize handshake
       initResult = await Promise.race([
-        connection.initialize({
-          protocolVersion: PROTOCOL_VERSION,
-          clientCapabilities: {},
-          clientInfo: {
-            name: 'factory-factory',
-            title: 'Factory Factory',
-            version: '1.2.0',
-          },
+        withTimeout({
+          promise: connection.initialize({
+            protocolVersion: PROTOCOL_VERSION,
+            clientCapabilities: {},
+            clientInfo: {
+              name: 'factory-factory',
+              title: 'Factory Factory',
+              version: '1.2.0',
+            },
+          }),
+          timeoutMs: startupTimeoutMs,
+          description: 'initialize handshake',
         }),
         startupError,
       ]);
@@ -603,7 +646,11 @@ export class AcpRuntimeManager {
       // Create or resume provider session
       const agentCapabilities = initResult.agentCapabilities ?? {};
       sessionInfo = await Promise.race([
-        this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
+        withTimeout({
+          promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
+          timeoutMs: startupTimeoutMs,
+          description: 'session creation',
+        }),
         startupError,
       ]);
     } catch (error) {
