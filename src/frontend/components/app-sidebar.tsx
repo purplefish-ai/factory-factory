@@ -56,11 +56,7 @@ import {
   useWorkspaceListState,
   type WorkspaceListItem,
 } from './use-workspace-list-state';
-import {
-  ActiveWorkspaceItem,
-  ArchivingWorkspaceItem,
-  CreatingWorkspaceItem,
-} from './workspace-sidebar-items';
+import { ActiveWorkspaceItem, CreatingWorkspaceItem } from './workspace-sidebar-items';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
@@ -431,8 +427,6 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-      // Archiving visual state is cleared automatically by useWorkspaceListState
-      // when the workspace disappears from serverWorkspaces after invalidation.
       // If we archived the currently viewed workspace, navigate to the workspaces list
       const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
       if (variables.id === currentId) {
@@ -774,12 +768,6 @@ function StaticWorkspaceItem({
   needsAttention: (workspaceId: string) => boolean;
   clearAttention: (workspaceId: string) => void;
 }) {
-  if (workspace.uiState === 'archiving') {
-    return (
-      <ArchivingWorkspaceItem workspace={workspace} selectedProjectSlug={selectedProjectSlug} />
-    );
-  }
-
   return (
     <ActiveWorkspaceItem
       workspace={workspace}
@@ -826,17 +814,6 @@ function SortableWorkspaceItem({
     transform: CSS.Transform.toString(transform),
     transition,
   };
-
-  if (workspace.uiState === 'archiving') {
-    return (
-      <ArchivingWorkspaceItem
-        workspace={workspace}
-        selectedProjectSlug={selectedProjectSlug}
-        sortableRef={setNodeRef}
-        sortableStyle={style}
-      />
-    );
-  }
 
   return (
     <ActiveWorkspaceItem

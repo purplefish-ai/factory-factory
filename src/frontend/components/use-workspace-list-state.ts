@@ -7,7 +7,7 @@ import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 // Types
 // =============================================================================
 
-export type WorkspaceUIState = 'normal' | 'creating' | 'archiving';
+export type WorkspaceUIState = 'normal' | 'creating';
 
 export interface ServerWorkspace {
   id: string;
@@ -114,7 +114,7 @@ interface UseWorkspaceListStateOptions {
  *
  * Key behaviors:
  * - Creating placeholder appears at the top of the list
- * - Archiving workspaces stay in their original position (no jumping)
+ * - Archiving workspaces are hidden immediately (optimistic remove)
  * - Automatically clears optimistic states when server data reflects changes
  * - Workspaces are ordered by customOrder if provided, otherwise by createdAt (newest first)
  * - Workspaces missing from customOrder appear at the top (newest first)
@@ -127,17 +127,8 @@ export function useWorkspaceListState(
   // Track workspace being created (before it has an ID)
   const [creatingWorkspace, setCreatingWorkspace] = useState<{ name: string } | null>(null);
 
-  // Track workspaces being archived (ID + cached data for display)
-  const [archivingWorkspaces, setArchivingWorkspaces] = useState<
-    Map<
-      string,
-      {
-        id: string;
-        name: string;
-        branchName?: string | null;
-      }
-    >
-  >(new Map());
+  // Track workspaces being archived so we can optimistically hide them.
+  const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
 
   // Check if creating workspace has appeared in the server list
   const creatingWorkspaceInList = creatingWorkspace
@@ -173,24 +164,23 @@ export function useWorkspaceListState(
       const sortedWorkspaces = sortWorkspaces(serverWorkspaces, customOrder);
 
       for (const workspace of sortedWorkspaces) {
-        const isArchiving = archivingWorkspaces.has(workspace.id);
+        // Hide archived items immediately in the sidebar.
+        if (archivingWorkspaceIds.has(workspace.id)) {
+          continue;
+        }
         items.push({
           ...workspace,
-          uiState: isArchiving ? 'archiving' : 'normal',
+          uiState: 'normal',
         });
       }
     }
-
-    // If archiving workspaces are no longer in server list but still in archiving state,
-    // we DON'T add them back - they've been successfully archived and removed.
-    // The archivingWorkspaces state will be cleared after a brief delay for visual feedback.
 
     return items;
   }, [
     serverWorkspaces,
     creatingWorkspace,
     creatingWorkspaceInList,
-    archivingWorkspaces,
+    archivingWorkspaceIds,
     customOrder,
   ]);
 
@@ -201,15 +191,15 @@ export function useWorkspaceListState(
     }
   }, [creatingWorkspace, creatingWorkspaceInList]);
 
-  // Clear archiving state after workspaces are removed and a brief delay
+  // Clear optimistic archiving state once workspace is no longer in the server list.
   useEffect(() => {
-    if (archivingWorkspaces.size === 0) {
+    if (archivingWorkspaceIds.size === 0 || !serverWorkspaces) {
       return;
     }
 
     const workspacesToClear: string[] = [];
-    for (const [id] of archivingWorkspaces) {
-      const stillInList = serverWorkspaces?.some((w) => w.id === id);
+    for (const id of archivingWorkspaceIds) {
+      const stillInList = serverWorkspaces.some((w) => w.id === id);
       if (!stillInList) {
         workspacesToClear.push(id);
       }
@@ -219,18 +209,14 @@ export function useWorkspaceListState(
       return;
     }
 
-    // Small delay for visual feedback before clearing
-    const timer = setTimeout(() => {
-      setArchivingWorkspaces((prev) => {
-        const next = new Map(prev);
-        for (const id of workspacesToClear) {
-          next.delete(id);
-        }
-        return next;
-      });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [archivingWorkspaces, serverWorkspaces]);
+    setArchivingWorkspaceIds((prev) => {
+      const next = new Set(prev);
+      for (const id of workspacesToClear) {
+        next.delete(id);
+      }
+      return next;
+    });
+  }, [archivingWorkspaceIds, serverWorkspaces]);
 
   // Get existing workspace names (including creating workspace to prevent duplicates)
   const existingNames = useMemo(() => {
@@ -253,13 +239,9 @@ export function useWorkspaceListState(
     (id: string) => {
       const workspace = serverWorkspaces?.find((w) => w.id === id);
       if (workspace) {
-        setArchivingWorkspaces((prev) => {
-          const next = new Map(prev);
-          next.set(id, {
-            id: workspace.id,
-            name: workspace.name,
-            branchName: workspace.branchName,
-          });
+        setArchivingWorkspaceIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
           return next;
         });
       }
@@ -270,14 +252,14 @@ export function useWorkspaceListState(
   const cancelArchiving = useCallback((id?: string) => {
     if (!id) {
       // If no ID provided, clear all
-      setArchivingWorkspaces(new Map());
+      setArchivingWorkspaceIds(new Set());
       return;
     }
-    setArchivingWorkspaces((prev) => {
+    setArchivingWorkspaceIds((prev) => {
       if (!prev.has(id)) {
         return prev;
       }
-      const next = new Map(prev);
+      const next = new Set(prev);
       next.delete(id);
       return next;
     });
