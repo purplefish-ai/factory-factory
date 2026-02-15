@@ -37,6 +37,7 @@ const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 type SessionProvider = 'CLAUDE' | 'CODEX';
 type SessionPermissionMode = 'bypassPermissions' | 'plan';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
+type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
 type StoredAcpConfigSnapshot = {
   provider: SessionProvider;
   providerSessionId: string;
@@ -71,6 +72,8 @@ class SessionService {
   private workspaceBridge: SessionWorkspaceBridge | null = null;
   /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
   private readonly sessionToWorkspace = new Map<string, string>();
+  /** Optional callback invoked after an ACP prompt turn settles. */
+  private promptTurnCompleteHandler: PromptTurnCompleteHandler | null = null;
 
   /**
    * Configure cross-domain bridges. Called once at startup by orchestration layer.
@@ -79,6 +82,10 @@ class SessionService {
     workspace: Pick<SessionWorkspaceBridge, 'markSessionRunning' | 'markSessionIdle'>;
   }): void {
     this.workspaceBridge = bridges.workspace as SessionWorkspaceBridge;
+  }
+
+  setPromptTurnCompleteHandler(handler: PromptTurnCompleteHandler | null): void {
+    this.promptTurnCompleteHandler = handler;
   }
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
@@ -1224,6 +1231,32 @@ class SessionService {
       if (workspaceId && this.workspaceBridge) {
         this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
       }
+      this.schedulePromptTurnComplete(sessionId);
+    }
+  }
+
+  private schedulePromptTurnComplete(sessionId: string): void {
+    if (!this.promptTurnCompleteHandler) {
+      return;
+    }
+
+    setTimeout(() => {
+      void this.notifyPromptTurnComplete(sessionId);
+    }, 0);
+  }
+
+  private async notifyPromptTurnComplete(sessionId: string): Promise<void> {
+    if (!this.promptTurnCompleteHandler) {
+      return;
+    }
+
+    try {
+      await this.promptTurnCompleteHandler(sessionId);
+    } catch (error) {
+      logger.warn('Prompt turn completion handler failed', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
