@@ -26,7 +26,7 @@ describe('computePendingRequestType', () => {
     expect(result).toBe('user_question');
   });
 
-  it('returns null when no matching pending request exists', () => {
+  it('returns permission_request when a generic permission request exists', () => {
     const result = computePendingRequestType(
       ['s1', 's2'],
       new Map([
@@ -35,6 +35,23 @@ describe('computePendingRequestType', () => {
       ])
     );
 
+    expect(result).toBe('permission_request');
+  });
+
+  it('prioritizes user_question over generic permission requests', () => {
+    const result = computePendingRequestType(
+      ['s1', 's2'],
+      new Map([
+        ['s1', { toolName: 'ReadFile' }],
+        ['s2', { toolName: 'AskUserQuestion' }],
+      ])
+    );
+
+    expect(result).toBe('user_question');
+  });
+
+  it('returns null when no pending requests exist', () => {
+    const result = computePendingRequestType(['s1', 's2'], new Map());
     expect(result).toBeNull();
   });
 });
