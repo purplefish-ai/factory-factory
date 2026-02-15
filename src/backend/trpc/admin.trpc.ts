@@ -12,8 +12,8 @@ import { workspaceDataService } from '@/backend/domains/workspace';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import { getLogFilePath } from '@/backend/services/logger.service';
-import { SessionStatus } from '@/shared/core';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
 import { readFilteredLogEntriesPage } from './log-file-reader';
 import { type Context, publicProcedure, router } from './trpc';
 
@@ -155,79 +155,41 @@ export const adminRouter = router({
     // Get active ACP sessions from in-memory map
     const activeAcpProcesses = acpRuntimeManager.getAllActiveProcesses();
 
+    // Resolve active ACP sessions by sessionId (not by providerProcessPid).
+    const activeSessionIds = activeAcpProcesses.map((process) => process.sessionId);
+    const activeDbSessions = await sessionDataService.findAgentSessionsByIds(activeSessionIds);
+
     // Get active terminals from in-memory map
     const activeTerminals = terminalService.getAllTerminals();
 
-    // Get agent sessions with PIDs from database for enriched info
+    // Include PID-backed DB sessions not in memory (orphan/stale edge cases).
     const agentSessionsWithPid = await sessionDataService.findAgentSessionsWithPid();
+    const mergedAgentSessions = mergeAgentSessions(activeDbSessions, agentSessionsWithPid);
 
     // Get terminal sessions with PIDs from database
     const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([
-      ...agentSessionsWithPid.map((s) => s.workspaceId),
+      ...mergedAgentSessions.map((s) => s.workspaceId),
       ...terminalSessionsWithPid.map((s) => s.workspaceId),
       ...activeTerminals.map((t) => t.workspaceId),
     ]);
     const workspaces = await workspaceDataService.findByIdsWithProject(Array.from(workspaceIds));
     const workspaceMap = new Map(workspaces.map((w) => [w.id, w]));
 
-    // Build enriched agent process list from DB sessions
-    const dbSessionIds = new Set(agentSessionsWithPid.map((s) => s.id));
-    const agentProcesses = agentSessionsWithPid.map((session) => {
-      const memProcess = activeAcpProcesses.find((p) => p.sessionId === session.id);
-      const workspace = workspaceMap.get(session.workspaceId);
-      return {
-        sessionId: session.id,
-        workspaceId: session.workspaceId,
-        workspaceName: workspace?.name ?? 'Unknown',
-        workspaceBranch: workspace?.branchName ?? null,
-        projectSlug: workspace?.project.slug ?? null,
-        name: session.name,
-        workflow: session.workflow,
-        model: session.model,
-        pid: session.providerProcessPid,
-        status: session.status,
-        inMemory: !!memProcess,
-        memoryStatus: memProcess?.status ?? null,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        // ACP sessions don't expose resource monitoring -- set to null
-        cpuPercent: null as number | null,
-        memoryBytes: null as number | null,
-        idleTimeMs: null as number | null,
-      };
+    const { agentProcesses, orphanedSessionIds } = buildAgentProcesses({
+      activeAcpProcesses,
+      dbSessions: mergedAgentSessions,
+      workspaceById: workspaceMap,
     });
-
-    // Add in-memory ACP processes that don't have a DB record (edge case)
-    for (const memProcess of activeAcpProcesses) {
-      if (!dbSessionIds.has(memProcess.sessionId)) {
-        logger.warn('Found in-memory ACP process without DB record', {
-          sessionId: memProcess.sessionId,
-          pid: memProcess.pid,
-          status: memProcess.status,
-        });
-        agentProcesses.push({
-          sessionId: memProcess.sessionId,
-          workspaceId: 'unknown',
-          workspaceName: 'Unknown (orphan)',
-          workspaceBranch: null,
-          projectSlug: null,
-          name: null,
-          workflow: 'unknown',
-          model: 'unknown',
-          pid: memProcess.pid ?? null,
-          status: memProcess.isRunning ? SessionStatus.RUNNING : SessionStatus.COMPLETED,
-          inMemory: true,
-          memoryStatus: memProcess.status,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          cpuPercent: null,
-          memoryBytes: null,
-          idleTimeMs: null,
-        });
-      }
+    for (const sessionId of orphanedSessionIds) {
+      const memProcess = activeAcpProcesses.find((process) => process.sessionId === sessionId);
+      logger.warn('Found in-memory ACP process without DB record', {
+        sessionId,
+        pid: memProcess?.pid,
+        status: memProcess?.status,
+      });
     }
 
     // Build enriched terminal process list

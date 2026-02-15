@@ -53,6 +53,7 @@ export type FixerAgentSessionAcquisition =
 export interface AgentSessionAccessor {
   create(data: CreateAgentSessionInput): Promise<AgentSessionRecord>;
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null>;
+  findByIds(ids: string[]): Promise<AgentSessionRecord[]>;
   findByWorkspaceId(
     workspaceId: string,
     filters?: AgentSessionFilters
@@ -83,6 +84,18 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     return prisma.agentSession.findUnique({
       where: { id },
       include: { workspace: true },
+    });
+  }
+
+  findByIds(ids: string[]): Promise<AgentSessionRecord[]> {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return prisma.agentSession.findMany({
+      where: {
+        id: { in: ids },
+      },
     });
   }
 

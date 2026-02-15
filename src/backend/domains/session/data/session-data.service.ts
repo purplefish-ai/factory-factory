@@ -13,6 +13,10 @@ class SessionDataService {
     return agentSessionAccessor.findById(id);
   }
 
+  findAgentSessionsByIds(ids: string[]): Promise<AgentSessionRecord[]> {
+    return agentSessionAccessor.findByIds(ids);
+  }
+
   findAgentSessionsByWorkspaceId(
     workspaceId: string,
     filters?: { status?: SessionStatus; provider?: SessionProvider; limit?: number }
