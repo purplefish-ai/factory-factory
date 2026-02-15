@@ -6,6 +6,8 @@ interface PendingPermission {
   timeout: ReturnType<typeof setTimeout>;
 }
 
+type ToolUserInputAnswers = Record<string, string[]>;
+
 /**
  * Promise-based bridge for ACP permission requests.
  *
@@ -70,7 +72,7 @@ export class AcpPermissionBridge {
    * Resolves the suspended Promise with the selected optionId.
    * Returns false if no pending request found for this requestId.
    */
-  resolvePermission(requestId: string, optionId: string): boolean {
+  resolvePermission(requestId: string, optionId: string, answers?: ToolUserInputAnswers): boolean {
     const entry = this.pending.get(requestId);
     if (!entry) {
       return false;
@@ -79,6 +81,15 @@ export class AcpPermissionBridge {
     this.pending.delete(requestId);
     clearTimeout(entry.timeout);
     entry.resolve({
+      ...(answers && Object.keys(answers).length > 0
+        ? {
+            _meta: {
+              factoryFactory: {
+                toolUserInputAnswers: answers,
+              },
+            },
+          }
+        : {}),
       outcome: {
         outcome: 'selected',
         optionId,

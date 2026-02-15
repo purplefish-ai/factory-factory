@@ -98,13 +98,15 @@ type ActiveTurnState = {
   resolve: (value: StopReason) => void;
 };
 
+const PENDING_TURN_ID = '__pending_turn__';
+
 type PendingTurnCompletion = {
   stopReason: StopReason;
   errorMessage?: string;
 };
 
 type ExecutionPreset = {
-  id: 'current' | 'full_auto' | 'yolo';
+  id: string;
   name: string;
   description?: string;
   approvalPolicy: ApprovalPolicy;
@@ -309,18 +311,23 @@ function buildToolUserInputPermissionOptions(
 
 function buildToolUserInputAnswers(params: {
   questions: ToolUserInputQuestion[];
+  permission: RequestPermissionResponse;
   selectedOptionId: string | null;
 }): UserInputAnswers {
   if (params.selectedOptionId === null || params.selectedOptionId === 'reject_once') {
     return {};
   }
 
-  const parsedAnswers = parseSerializedToolUserInputAnswers({
+  const parsedAnswers = parseToolUserInputAnswersFromPermissionMeta({
     questions: params.questions,
-    selectedOptionId: params.selectedOptionId,
+    permission: params.permission,
   });
   if (parsedAnswers) {
     return parsedAnswers;
+  }
+
+  if (params.questions.length !== 1) {
+    return {};
   }
 
   const selectedIndex = params.selectedOptionId.startsWith('answer_')
@@ -328,18 +335,19 @@ function buildToolUserInputAnswers(params: {
     : Number.NaN;
 
   const answers: UserInputAnswers = {};
-  for (const question of params.questions) {
-    if (!Array.isArray(question.options) || question.options.length === 0) {
-      continue;
-    }
-    const selectedOption = Number.isNaN(selectedIndex)
-      ? question.options[0]
-      : (question.options[selectedIndex] ?? question.options[0]);
-    if (!selectedOption) {
-      continue;
-    }
-    answers[question.id] = { answers: [selectedOption.label] };
+  const [question] = params.questions;
+  if (!(question && Array.isArray(question.options)) || question.options.length === 0) {
+    return answers;
   }
+
+  const selectedOption = Number.isNaN(selectedIndex)
+    ? question.options[0]
+    : (question.options[selectedIndex] ?? question.options[0]);
+  if (!selectedOption) {
+    return answers;
+  }
+
+  answers[question.id] = { answers: [selectedOption.label] };
   return answers;
 }
 
@@ -347,35 +355,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-const TOOL_USER_INPUT_ANSWERS_PREFIX = 'answers_json_v1:';
-
-function parseSerializedToolUserInputAnswers(params: {
+function parseToolUserInputAnswersFromPermissionMeta(params: {
   questions: ToolUserInputQuestion[];
-  selectedOptionId: string;
+  permission: RequestPermissionResponse;
 }): UserInputAnswers | null {
-  if (!params.selectedOptionId.startsWith(TOOL_USER_INPUT_ANSWERS_PREFIX)) {
+  const meta = params.permission._meta;
+  if (!isRecord(meta)) {
     return null;
   }
 
-  const encodedPayload = params.selectedOptionId.slice(TOOL_USER_INPUT_ANSWERS_PREFIX.length);
-  if (!encodedPayload) {
-    return null;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(decodeURIComponent(encodedPayload));
-  } catch {
-    return null;
-  }
-
-  if (!isRecord(parsed)) {
+  const factoryFactoryMeta = isRecord(meta.factoryFactory) ? meta.factoryFactory : null;
+  const answersRaw = (factoryFactoryMeta?.toolUserInputAnswers ?? meta.toolUserInputAnswers) as
+    | unknown
+    | undefined;
+  if (!isRecord(answersRaw)) {
     return null;
   }
 
   const knownQuestionIds = new Set(params.questions.map((question) => question.id));
   const answers: UserInputAnswers = {};
-  for (const [questionId, value] of Object.entries(parsed)) {
+  for (const [questionId, value] of Object.entries(answersRaw)) {
     if (!knownQuestionIds.has(questionId)) {
       continue;
     }
@@ -557,6 +556,10 @@ function createExecutionModeConfigOption(
   };
 }
 
+function toExecutionPresetId(approvalPolicy: ApprovalPolicy, sandboxMode: SandboxMode): string {
+  return JSON.stringify([approvalPolicy, sandboxMode]);
+}
+
 export class CodexAppServerAcpAdapter implements Agent {
   private readonly connection: AgentSideConnection;
   private readonly codex: CodexClient;
@@ -566,6 +569,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private allowedApprovalPolicies: ApprovalPolicy[] = [];
   private allowedSandboxModes: SandboxMode[] = [];
   private collaborationModes: CollaborationModeEntry[] = [];
+  private hasConfiguredMcpServers = false;
 
   constructor(connection: AgentSideConnection, codexClient?: CodexClient) {
     this.connection = connection;
@@ -581,7 +585,14 @@ export class CodexAppServerAcpAdapter implements Agent {
           void this.handleCodexNotification(notification.method, notification.params);
         },
         onRequest: (request) => {
-          void this.handleCodexServerRequest(request);
+          void this.handleCodexServerRequest(request).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            this.codex.respondError(request.id, {
+              code: -32_600,
+              message: 'Failed to process codex approval request',
+              data: { error: message },
+            });
+          });
         },
         onProtocolError: (error) => {
           process.stderr.write(`[codex-app-server-acp] protocol-error: ${error.reason}\n`);
@@ -831,6 +842,7 @@ export class CodexAppServerAcpAdapter implements Agent {
         reason: 'A turn is already in progress for this session',
       });
     }
+    const stopReasonPromise = this.createPendingTurnPromise(session);
 
     const input = params.prompt
       .map((block) => parseTextFromPromptBlock(block))
@@ -857,27 +869,29 @@ export class CodexAppServerAcpAdapter implements Agent {
       const turnStartRaw = await this.codex.request('turn/start', turnStartParams);
 
       const turnStart = turnStartResponseSchema.parse(turnStartRaw);
+      await this.bindTurnToActivePrompt(session, turnStart.turn.id);
       const immediateStopReason = await this.resolveImmediateTurnStopReason(session, turnStart);
       if (immediateStopReason) {
-        return { stopReason: immediateStopReason };
+        this.settleTurn(session, immediateStopReason);
+        return { stopReason: await stopReasonPromise };
       }
-      const stopReason = await this.waitForTurnCompletion(session, turnStart.turn.id);
 
-      return { stopReason };
+      if (this.isActiveTurnCancelRequested(session)) {
+        await this.requestTurnInterrupt(session);
+      }
+
+      return { stopReason: await stopReasonPromise };
     } catch (error) {
       if (error instanceof CodexRequestError && error.code === -32_001) {
-        await this.emitSessionUpdate(session.sessionId, {
-          sessionUpdate: 'agent_message_chunk',
-          content: {
-            type: 'text',
-            text: 'Codex app-server is overloaded. Please retry shortly.',
-          },
-        });
-        session.activeTurn = null;
-        return { stopReason: 'end_turn' };
+        await this.emitTurnFailureMessage(
+          session.sessionId,
+          error.message || 'Codex app-server request failed with overload response.'
+        );
+        this.settleTurn(session, 'end_turn');
+        return { stopReason: await stopReasonPromise };
       }
 
-      session.activeTurn = null;
+      this.settleTurn(session, 'end_turn');
       throw error;
     }
   }
@@ -908,29 +922,48 @@ export class CodexAppServerAcpAdapter implements Agent {
     return null;
   }
 
-  private async waitForTurnCompletion(
-    session: AdapterSession,
-    turnId: string
-  ): Promise<StopReason> {
-    const stopReasonPromise = new Promise<StopReason>((resolve) => {
+  private createPendingTurnPromise(session: AdapterSession): Promise<StopReason> {
+    return new Promise<StopReason>((resolve) => {
       session.activeTurn = {
-        turnId,
+        turnId: PENDING_TURN_ID,
         cancelRequested: false,
         settled: false,
         resolve,
       };
     });
+  }
 
-    const pendingCompletion = session.pendingTurnCompletionsByTurnId.get(turnId);
-    if (pendingCompletion) {
-      session.pendingTurnCompletionsByTurnId.delete(turnId);
-      if (pendingCompletion.errorMessage) {
-        await this.emitTurnFailureMessage(session.sessionId, pendingCompletion.errorMessage);
-      }
-      this.settleTurn(session, pendingCompletion.stopReason);
+  private async bindTurnToActivePrompt(session: AdapterSession, turnId: string): Promise<void> {
+    if (!session.activeTurn || session.activeTurn.settled) {
+      return;
     }
 
-    return await stopReasonPromise;
+    session.activeTurn.turnId = turnId;
+    const pendingCompletion = session.pendingTurnCompletionsByTurnId.get(turnId);
+    if (!pendingCompletion) {
+      return;
+    }
+
+    session.pendingTurnCompletionsByTurnId.delete(turnId);
+    if (pendingCompletion.errorMessage) {
+      await this.emitTurnFailureMessage(session.sessionId, pendingCompletion.errorMessage);
+    }
+    this.settleTurn(session, pendingCompletion.stopReason);
+  }
+
+  private async requestTurnInterrupt(session: AdapterSession): Promise<void> {
+    if (!session.activeTurn || session.activeTurn.turnId === PENDING_TURN_ID) {
+      return;
+    }
+
+    await this.codex.request('turn/interrupt', {
+      threadId: session.threadId,
+      turnId: session.activeTurn.turnId,
+    });
+  }
+
+  private isActiveTurnCancelRequested(session: AdapterSession): boolean {
+    return Boolean(session.activeTurn?.cancelRequested);
   }
 
   private async emitTurnFailureMessage(sessionId: string, errorMessage: string): Promise<void> {
@@ -938,7 +971,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       sessionUpdate: 'agent_message_chunk',
       content: {
         type: 'text',
-        text: `Turn failed: ${errorMessage}`,
+        text: errorMessage,
       },
     });
   }
@@ -950,12 +983,12 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
 
     session.activeTurn.cancelRequested = true;
+    if (session.activeTurn.turnId === PENDING_TURN_ID) {
+      return;
+    }
 
     try {
-      await this.codex.request('turn/interrupt', {
-        threadId: session.threadId,
-        turnId: session.activeTurn.turnId,
-      });
+      await this.requestTurnInterrupt(session);
     } catch {
       this.settleTurn(session, 'cancelled');
     }
@@ -974,17 +1007,19 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private async applyMcpServers(mcpServers: McpServer[]): Promise<void> {
-    if (mcpServers.length === 0) {
+    const codexMcpServers = toCodexMcpConfigMap(mcpServers);
+    const isEmptyConfig = Object.keys(codexMcpServers).length === 0;
+    if (isEmptyConfig && !this.hasConfiguredMcpServers) {
       return;
     }
 
-    const codexMcpServers = toCodexMcpConfigMap(mcpServers);
     await this.codex.request('config/value/write', {
       keyPath: 'mcp_servers',
       value: codexMcpServers,
       mergeStrategy: 'replace',
     });
     await this.codex.request('config/mcpServer/reload', {});
+    this.hasConfiguredMcpServers = !isEmptyConfig;
   }
 
   private buildConfigOptions(session: AdapterSession): SessionConfigOption[] {
@@ -1030,12 +1065,19 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private resolveDefaultCollaborationMode(): string {
+    if (this.collaborationModes.length === 0) {
+      throw new Error('Codex collaborationMode/list returned no modes');
+    }
     const preferredDefault = this.collaborationModes.find((entry) => entry.mode === 'default');
-    return preferredDefault?.mode ?? this.collaborationModes[0]?.mode ?? 'default';
+    const firstMode = this.collaborationModes[0]?.mode;
+    if (!firstMode) {
+      throw new Error('Codex collaborationMode/list returned an invalid mode entry');
+    }
+    return preferredDefault?.mode ?? firstMode;
   }
 
   private resolveTurnCollaborationMode(session: AdapterSession): Record<string, unknown> | null {
-    if (session.defaults.collaborationMode === 'default') {
+    if (session.defaults.collaborationMode === this.resolveDefaultCollaborationMode()) {
       return null;
     }
 
@@ -1095,50 +1137,57 @@ export class CodexAppServerAcpAdapter implements Agent {
     return dedupeStrings(values);
   }
 
-  private isApprovalPolicyAllowed(policy: ApprovalPolicy): boolean {
-    return (
-      this.allowedApprovalPolicies.length === 0 || this.allowedApprovalPolicies.includes(policy)
-    );
-  }
-
-  private isSandboxModeAllowed(mode: SandboxMode): boolean {
-    return this.allowedSandboxModes.length === 0 || this.allowedSandboxModes.includes(mode);
+  private resolveCurrentSandboxMode(session: AdapterSession): SandboxMode {
+    const currentSandboxMode = parseSandboxModeFromPolicy(session.defaults.sandboxPolicy);
+    if (currentSandboxMode) {
+      return currentSandboxMode;
+    }
+    const allowedSandboxMode = this.allowedSandboxModes[0];
+    if (allowedSandboxMode) {
+      return allowedSandboxMode;
+    }
+    throw new Error('Unable to resolve current sandbox mode for execution-mode options');
   }
 
   private getExecutionPresets(session: AdapterSession): ExecutionPreset[] {
-    const currentSandboxMode =
-      parseSandboxModeFromPolicy(session.defaults.sandboxPolicy) ?? 'workspace-write';
-    const presets: ExecutionPreset[] = [
-      {
-        id: 'current',
-        name: 'Current',
-        description: `${session.defaults.approvalPolicy} + ${currentSandboxMode}`,
-        approvalPolicy: session.defaults.approvalPolicy,
-        sandboxMode: currentSandboxMode,
-      },
-    ];
+    const currentSandboxMode = this.resolveCurrentSandboxMode(session);
+    const policies =
+      this.allowedApprovalPolicies.length > 0
+        ? this.allowedApprovalPolicies
+        : [session.defaults.approvalPolicy];
+    const sandboxModes =
+      this.allowedSandboxModes.length > 0 ? this.allowedSandboxModes : [currentSandboxMode];
 
-    if (
-      this.isApprovalPolicyAllowed('on-request') &&
-      this.isSandboxModeAllowed('workspace-write')
-    ) {
+    const presets: ExecutionPreset[] = [];
+    const seen = new Set<string>();
+    const addPreset = (
+      approvalPolicy: ApprovalPolicy,
+      sandboxMode: SandboxMode,
+      description?: string
+    ): void => {
+      const id = toExecutionPresetId(approvalPolicy, sandboxMode);
+      if (seen.has(id)) {
+        return;
+      }
+      seen.add(id);
       presets.push({
-        id: 'full_auto',
-        name: 'Full Auto',
-        description: 'on-request + workspace-write',
-        approvalPolicy: 'on-request',
-        sandboxMode: 'workspace-write',
+        id,
+        name: `${approvalPolicy} + ${sandboxMode}`,
+        ...(description ? { description } : {}),
+        approvalPolicy,
+        sandboxMode,
       });
-    }
+    };
 
-    if (this.isApprovalPolicyAllowed('never') && this.isSandboxModeAllowed('danger-full-access')) {
-      presets.push({
-        id: 'yolo',
-        name: 'YOLO',
-        description: 'never + danger-full-access',
-        approvalPolicy: 'never',
-        sandboxMode: 'danger-full-access',
-      });
+    addPreset(
+      session.defaults.approvalPolicy,
+      currentSandboxMode,
+      `Current session: ${session.defaults.approvalPolicy} + ${currentSandboxMode}`
+    );
+    for (const policy of policies) {
+      for (const sandboxMode of sandboxModes) {
+        addPreset(policy, sandboxMode);
+      }
     }
 
     return presets;
@@ -1148,18 +1197,18 @@ export class CodexAppServerAcpAdapter implements Agent {
     session: AdapterSession,
     presets: ExecutionPreset[]
   ): ExecutionPreset['id'] {
-    const currentSandboxMode = parseSandboxModeFromPolicy(session.defaults.sandboxPolicy);
-    for (const preset of presets) {
-      if (
-        preset.id === 'current' ||
-        preset.approvalPolicy !== session.defaults.approvalPolicy ||
-        preset.sandboxMode !== currentSandboxMode
-      ) {
-        continue;
-      }
-      return preset.id;
+    const currentSandboxMode = this.resolveCurrentSandboxMode(session);
+    const currentPresetId = toExecutionPresetId(
+      session.defaults.approvalPolicy,
+      currentSandboxMode
+    );
+    const fallbackPresetId = presets[0]?.id;
+    if (!fallbackPresetId) {
+      throw new Error('Execution-mode presets are unavailable for this session');
     }
-    return 'current';
+    return presets.some((preset) => preset.id === currentPresetId)
+      ? currentPresetId
+      : fallbackPresetId;
   }
 
   private requireSession(sessionId: string): AdapterSession {
@@ -1193,55 +1242,37 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private async loadCollaborationModes(): Promise<CollaborationModeEntry[]> {
-    try {
-      const entries: CollaborationModeEntry[] = [];
-      let cursor: string | null = null;
+    const entries: CollaborationModeEntry[] = [];
+    let cursor: string | null = null;
 
-      for (;;) {
-        const response = await this.requestCollaborationModeListWithRetry(cursor);
-        entries.push(
-          ...response.data.flatMap((entry) =>
-            isNonEmptyString(entry.mode)
-              ? [
-                  {
-                    mode: entry.mode,
-                    name: entry.name,
-                    model: entry.model ?? null,
-                    reasoningEffort: entry.reasoning_effort ?? null,
-                    developerInstructions: entry.developer_instructions ?? null,
-                  },
-                ]
-              : []
-          )
-        );
+    for (;;) {
+      const response = await this.requestCollaborationModeListWithRetry(cursor);
+      entries.push(
+        ...response.data.flatMap((entry) =>
+          isNonEmptyString(entry.mode)
+            ? [
+                {
+                  mode: entry.mode,
+                  name: entry.name,
+                  model: entry.model ?? null,
+                  reasoningEffort: entry.reasoning_effort ?? null,
+                  developerInstructions: entry.developer_instructions ?? null,
+                },
+              ]
+            : []
+        )
+      );
 
-        cursor = response.nextCursor ?? null;
-        if (!cursor) {
-          break;
-        }
-      }
-
-      if (entries.length > 0) {
-        return entries;
-      }
-    } catch (error) {
-      if (
-        !(error instanceof CodexRequestError) ||
-        (error.code !== -32_601 && error.code !== -32_600)
-      ) {
-        throw error;
+      cursor = response.nextCursor ?? null;
+      if (!cursor) {
+        break;
       }
     }
 
-    return [
-      {
-        mode: 'default',
-        name: 'Default',
-        model: null,
-        reasoningEffort: null,
-        developerInstructions: null,
-      },
-    ];
+    if (entries.length === 0) {
+      throw new Error('Codex collaborationMode/list returned no modes');
+    }
+    return entries;
   }
 
   private async requestCollaborationModeListWithRetry(
@@ -1590,13 +1621,7 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     if (status === 'failed') {
       if (errorMessage) {
-        await this.emitSessionUpdate(session.sessionId, {
-          sessionUpdate: 'agent_message_chunk',
-          content: {
-            type: 'text',
-            text: `Turn failed: ${errorMessage}`,
-          },
-        });
+        await this.emitTurnFailureMessage(session.sessionId, errorMessage);
       }
       this.settleTurn(session, 'end_turn');
       return;
@@ -1709,15 +1734,17 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     let title = item.type;
     if (item.type === 'commandExecution') {
-      title = asString(item.command) ? `Run: ${item.command}` : 'Command execution';
+      const command = asString(item.command);
+      title = command ?? 'commandExecution';
     } else if (item.type === 'fileChange') {
-      title = 'Apply file changes';
+      title = 'fileChange';
     } else if (item.type === 'mcpToolCall') {
       const server = asString(item.server) ?? 'mcp';
       const tool = asString(item.tool) ?? 'tool';
-      title = `MCP: ${server}/${tool}`;
+      title = `mcpToolCall:${server}/${tool}`;
     } else if (item.type === 'webSearch') {
-      title = asString(item.query) ? `Web search: ${item.query}` : 'Web search';
+      const query = asString(item.query);
+      title = query ? `webSearch:${query}` : 'webSearch';
     }
 
     return {
@@ -1844,7 +1871,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       const command = asString(params.command);
       return {
         toolCallId: createToolCallId(session.threadId, turnId, itemId),
-        title: command ? `Run: ${command}` : 'Command execution',
+        title: command ? command : 'commandExecution',
         kind: 'execute',
       };
     }
@@ -1852,14 +1879,14 @@ export class CodexAppServerAcpAdapter implements Agent {
     if (method === 'item/fileChange/requestApproval') {
       return {
         toolCallId: createToolCallId(session.threadId, turnId, itemId),
-        title: 'Apply file changes',
+        title: 'fileChange',
         kind: 'edit',
       };
     }
 
     return {
       toolCallId: createToolCallId(session.threadId, turnId, itemId),
-      title: 'AskUserQuestion',
+      title: 'item/tool/requestUserInput',
       kind: 'other',
     };
   }
@@ -1879,6 +1906,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       const rejected = selected === null || selected === 'reject_once';
       const answers = buildToolUserInputAnswers({
         questions: params.questions,
+        permission: params.permission,
         selectedOptionId: selected,
       });
 
@@ -1890,7 +1918,7 @@ export class CodexAppServerAcpAdapter implements Agent {
         sessionUpdate: 'tool_call_update',
         toolCallId: params.toolCallId,
         status: rejected ? 'failed' : 'completed',
-        rawOutput: rejected ? 'User denied tool input request' : { answers },
+        rawOutput: rejected ? { outcome: 'rejected' } : { answers },
       });
       return;
     }
@@ -1903,7 +1931,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       sessionUpdate: 'tool_call_update',
       toolCallId: params.toolCallId,
       status: allow ? 'in_progress' : 'failed',
-      rawOutput: allow ? 'Approved by user' : 'Declined by user',
+      rawOutput: { decision: allow ? 'accept' : 'decline' },
     });
   }
 

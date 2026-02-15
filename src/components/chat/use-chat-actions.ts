@@ -41,7 +41,6 @@ type AcpPermissionOption = {
   kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
 };
 type AcpConfigOptionState = NonNullable<ChatState['acpConfigOptions']>[number];
-const QUESTION_ANSWERS_OPTION_PREFIX = 'answers_json_v1:';
 
 export interface UseChatActionsOptions {
   /** Send function from WebSocket transport */
@@ -176,21 +175,6 @@ function normalizeQuestionAnswers(
     }
   }
   return normalized;
-}
-
-function serializeQuestionAnswersOptionId(
-  answers: Record<string, string | string[]>
-): string | null {
-  const normalized = normalizeQuestionAnswers(answers);
-  if (Object.keys(normalized).length === 0) {
-    return null;
-  }
-
-  try {
-    return `${QUESTION_ANSWERS_OPTION_PREFIX}${encodeURIComponent(JSON.stringify(normalized))}`;
-  } catch {
-    return null;
-  }
 }
 
 function findQuestionOptionId(
@@ -433,15 +417,14 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       if (pendingRequest.type !== 'question' || pendingRequest.request.requestId !== requestId) {
         return;
       }
-      const serializedOptionId = serializeQuestionAnswersOptionId(answers);
+      const normalizedAnswers = normalizeQuestionAnswers(answers);
       const optionId =
-        serializedOptionId ??
-        findQuestionOptionId(pendingRequest.request.acpOptions, answers) ??
-        'allow';
+        findQuestionOptionId(pendingRequest.request.acpOptions, normalizedAnswers) ?? 'allow';
       const msg: PermissionResponseMessage = {
         type: 'permission_response',
         requestId,
         optionId,
+        ...(Object.keys(normalizedAnswers).length > 0 ? { answers: normalizedAnswers } : {}),
       };
       send(msg);
       dispatch({ type: 'QUESTION_RESPONSE' });

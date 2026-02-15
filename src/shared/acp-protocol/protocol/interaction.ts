@@ -10,6 +10,7 @@ export interface AskUserQuestionOption {
  * Question in AskUserQuestion input.
  */
 export interface AskUserQuestion {
+  id?: string;
   question: string;
   header?: string;
   options: AskUserQuestionOption[];

@@ -1320,12 +1320,17 @@ class SessionService {
       .trim();
   }
 
-  respondToAcpPermission(sessionId: string, requestId: string, optionId: string): boolean {
+  respondToAcpPermission(
+    sessionId: string,
+    requestId: string,
+    optionId: string,
+    answers?: Record<string, string[]>
+  ): boolean {
     const bridge = this.acpPermissionBridges.get(sessionId);
     if (!bridge) {
       return false;
     }
-    return bridge.resolvePermission(requestId, optionId);
+    return bridge.resolvePermission(requestId, optionId, answers);
   }
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {

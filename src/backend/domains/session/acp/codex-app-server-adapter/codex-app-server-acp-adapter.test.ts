@@ -70,11 +70,11 @@ function getCodexRequestCalls(
 
 const DEFAULT_APPROVAL_POLICY = 'on-failure';
 const DEFAULT_ALLOWED_APPROVAL_POLICIES = [DEFAULT_APPROVAL_POLICY, 'on-request', 'never'];
+const DEFAULT_ALLOWED_SANDBOX_MODES = ['read-only', 'workspace-write', 'danger-full-access'];
 const DEFAULT_COLLABORATION_MODES = [
   { name: 'Default', mode: 'default' },
   { name: 'Plan', mode: 'plan' },
 ];
-const TOOL_USER_INPUT_ANSWERS_PREFIX = 'answers_json_v1:';
 
 async function initializeAdapterWithDefaultModel(
   adapter: CodexAppServerAcpAdapter,
@@ -84,6 +84,7 @@ async function initializeAdapterWithDefaultModel(
   codex.request.mockResolvedValueOnce({
     requirements: {
       allowedApprovalPolicies: DEFAULT_ALLOWED_APPROVAL_POLICIES,
+      allowedSandboxModes: DEFAULT_ALLOWED_SANDBOX_MODES,
     },
   });
   codex.request.mockResolvedValueOnce({
@@ -122,6 +123,7 @@ describe('CodexAppServerAcpAdapter', () => {
     codex.request.mockResolvedValueOnce({
       requirements: {
         allowedApprovalPolicies: DEFAULT_ALLOWED_APPROVAL_POLICIES,
+        allowedSandboxModes: DEFAULT_ALLOWED_SANDBOX_MODES,
       },
     });
     codex.request.mockResolvedValueOnce({
@@ -315,6 +317,50 @@ describe('CodexAppServerAcpAdapter', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
+  it('clears MCP server config when a subsequent session has no MCP servers', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_with_mcp_then_clear', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({});
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_without_mcp', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({});
+
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [{ name: 'tools', command: 'server-a', args: [], env: [] }],
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    const configWriteCalls = getCodexRequestCalls(codex, 'config/value/write');
+    expect(configWriteCalls).toHaveLength(2);
+    expect(configWriteCalls[1]).toEqual([
+      'config/value/write',
+      {
+        keyPath: 'mcp_servers',
+        mergeStrategy: 'replace',
+        value: {},
+      },
+    ]);
+  });
+
   it('loadSession replays thread history from thread/read', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -458,7 +504,7 @@ describe('CodexAppServerAcpAdapter', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
-  it('applies YOLO execution mode and plan collaboration mode to turn/start', async () => {
+  it('applies discovered execution mode and plan collaboration mode to turn/start', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
     const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
@@ -482,12 +528,28 @@ describe('CodexAppServerAcpAdapter', () => {
       cwd: '/tmp/workspace',
       mcpServers: [],
     });
+    const executionModeOption = (session.configOptions ?? []).find(
+      (option) => option.id === 'execution_mode'
+    );
+    const yoloLikeOption =
+      executionModeOption?.type === 'select'
+        ? executionModeOption.options.find(
+            (option): option is { value: string; name: string; description?: string } =>
+              'value' in option &&
+              option.value.includes('never') &&
+              option.value.includes('danger-full-access')
+          )
+        : null;
+    expect(yoloLikeOption).toBeDefined();
+    if (!yoloLikeOption) {
+      throw new Error('expected discovered execution mode option');
+    }
 
     await adapter.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
     await adapter.setSessionConfigOption({
       sessionId: session.sessionId,
       configId: 'execution_mode',
-      value: 'yolo',
+      value: yoloLikeOption.value,
     });
 
     codex.request.mockResolvedValueOnce({
@@ -569,7 +631,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(connection.requestPermission).toHaveBeenCalledWith(
       expect.objectContaining({
         toolCall: expect.objectContaining({
-          title: 'AskUserQuestion',
+          title: 'item/tool/requestUserInput',
         }),
       })
     );
@@ -587,18 +649,19 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
-  it('maps serialized multi-question request_user_input answers', async () => {
-    const serializedAnswers = `${TOOL_USER_INPUT_ANSWERS_PREFIX}${encodeURIComponent(
-      JSON.stringify({
-        color: ['Blue'],
-        shell: ['zsh', 'fish'],
-        unknown: ['ignored'],
-      })
-    )}`;
-
+  it('maps multi-question request_user_input answers from ACP _meta payload', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
-      outcome: { outcome: 'selected', optionId: serializedAnswers },
+      _meta: {
+        factoryFactory: {
+          toolUserInputAnswers: {
+            color: ['Blue'],
+            shell: ['zsh', 'fish'],
+            unknown: ['ignored'],
+          },
+        },
+      },
+      outcome: { outcome: 'selected', optionId: 'allow_once' },
     } satisfies RequestPermissionResponse);
 
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -667,6 +730,67 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('does not synthesize multi-question answers from a single selected option', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+      outcome: { outcome: 'selected', optionId: 'answer_1' },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_multi_question_no_meta', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 20,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thread_multi_question_no_meta',
+        turnId: 'turn_multi_question_no_meta',
+        itemId: 'item_multi_question_no_meta',
+        questions: [
+          {
+            id: 'color',
+            header: 'Pick color',
+            question: 'Favorite color?',
+            isOther: false,
+            isSecret: false,
+            options: [{ label: 'Blue', description: 'cool' }],
+          },
+          {
+            id: 'shell',
+            header: 'Pick shells',
+            question: 'Preferred shells?',
+            isOther: true,
+            isSecret: false,
+            options: [
+              { label: 'zsh', description: 'default' },
+              { label: 'fish', description: 'friendly' },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(codex.respondSuccess).toHaveBeenCalledWith(20, {
+      answers: {},
+    });
+  });
+
   it('treats cancelled request_user_input permission outcomes as rejected', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -725,7 +849,7 @@ describe('CodexAppServerAcpAdapter', () => {
             update: expect.objectContaining({
               sessionUpdate: 'tool_call_update',
               status: 'failed',
-              rawOutput: 'User denied tool input request',
+              rawOutput: { outcome: 'rejected' },
             }),
           }),
         ],
@@ -815,6 +939,80 @@ describe('CodexAppServerAcpAdapter', () => {
         ],
       ])
     );
+  });
+
+  it('queues early cancel until turn id is known, then interrupts the turn', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_early_cancel', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    let resolveTurnStart:
+      | ((value: { turn: { id: string; status: 'inProgress' } }) => void)
+      | undefined;
+    codex.request.mockImplementationOnce(
+      async (method: string): Promise<{ turn: { id: string; status: 'inProgress' } }> => {
+        if (method !== 'turn/start') {
+          return { turn: { id: 'unexpected', status: 'inProgress' } };
+        }
+        return await new Promise((resolve) => {
+          resolveTurnStart = resolve;
+        });
+      }
+    );
+
+    const promptPromise = adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'hello' }],
+    });
+
+    await vi.waitFor(() => {
+      const activeTurn = (
+        adapter as unknown as {
+          sessions: Map<string, { activeTurn: { turnId: string } | null }>;
+        }
+      ).sessions.get(session.sessionId)?.activeTurn;
+      expect(activeTurn?.turnId).toBe('__pending_turn__');
+    });
+
+    await adapter.cancel({ sessionId: session.sessionId });
+    expect(codex.request).not.toHaveBeenCalledWith(
+      'turn/interrupt',
+      expect.objectContaining({
+        threadId: 'thread_early_cancel',
+      })
+    );
+
+    resolveTurnStart?.({ turn: { id: 'turn_early_cancel', status: 'inProgress' } });
+
+    await vi.waitFor(() => {
+      expect(codex.request).toHaveBeenCalledWith('turn/interrupt', {
+        threadId: 'thread_early_cancel',
+        turnId: 'turn_early_cancel',
+      });
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('turn/completed', {
+      threadId: 'thread_early_cancel',
+      turn: { id: 'turn_early_cancel', status: 'interrupted', error: null, items: [] },
+    });
+
+    await expect(promptPromise).resolves.toEqual({ stopReason: 'cancelled' });
   });
 
   it('cancel interrupts active turn and resolves prompt with cancelled', async () => {
