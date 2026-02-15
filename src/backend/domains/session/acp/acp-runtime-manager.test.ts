@@ -271,7 +271,11 @@ describe('AcpRuntimeManager', () => {
       const spawnArgs = mockSpawn.mock.calls[0]!;
       expect(spawnArgs[1]).toContain('internal');
       expect(spawnArgs[1]).toContain('codex-app-server-acp');
-      expect((spawnArgs[1] as string[]).some((arg) => arg.endsWith('src/cli/index.ts'))).toBe(true);
+      expect(
+        (spawnArgs[1] as string[]).some(
+          (arg) => arg.endsWith('src/cli/index.ts') || arg.endsWith('dist/src/cli/index.js')
+        )
+      ).toBe(true);
       expect(typeof spawnArgs[0]).toBe('string');
       expect((spawnArgs[0] as string).length).toBeGreaterThan(0);
       expect((spawnArgs[2] as { env?: Record<string, string> }).env?.DOTENV_CONFIG_QUIET).toBe(

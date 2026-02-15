@@ -164,6 +164,15 @@ function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
   const projectRoot = resolveFactoryRootForInternalCodexAdapter();
   const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
   const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
+  const tsxBin = join(
+    projectRoot,
+    'node_modules',
+    '.bin',
+    process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
+  );
+  const hasTypeScriptRuntime =
+    process.execArgv.some((arg) => arg.includes('tsx')) ||
+    process.execArgv.some((arg) => arg.includes('ts-node'));
   const preferSourceEntrypoint = process.env.NODE_ENV !== 'production';
 
   const buildNodeSpawnCommand = (entrypoint: string): SpawnCommand => {
@@ -179,22 +188,23 @@ function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
     if (!existsSync(cliSourceEntrypoint)) {
       return null;
     }
-    const tsxBinary = join(
-      projectRoot,
-      'node_modules',
-      '.bin',
-      process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
-    );
-    if (existsSync(tsxBinary)) {
+    if (existsSync(tsxBin)) {
       const args = [cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
       return {
-        command: tsxBinary,
+        command: tsxBin,
         args,
-        commandLabel: `${tsxBinary} ${args.join(' ')}`.trim(),
+        commandLabel: `${tsxBin} ${args.join(' ')}`.trim(),
       };
     }
-
-    return buildNodeSpawnCommand(cliSourceEntrypoint);
+    if (hasTypeScriptRuntime) {
+      const args = [...process.execArgv, cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
+      return {
+        command: process.execPath,
+        args,
+        commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
+      };
+    }
+    return null;
   };
 
   if (preferSourceEntrypoint) {
