@@ -362,7 +362,11 @@ function createShutdownHandler(
       try {
         await Promise.allSettled(termPromises);
 
-        const alive = processes.filter(({ proc }) => proc.exitCode === null);
+        // A child that exits from a signal has `exitCode === null` and `signalCode !== null`.
+        // Treat those as already exited to avoid false "force killing" logs.
+        const alive = processes.filter(
+          ({ proc }) => proc.exitCode === null && proc.signalCode === null
+        );
 
         if (alive.length > 0) {
           console.log(
