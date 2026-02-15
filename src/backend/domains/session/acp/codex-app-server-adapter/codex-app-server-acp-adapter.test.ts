@@ -1103,7 +1103,7 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
-  it('does not synthesize multi-question answers from a single selected option', async () => {
+  it('fails multi-question request_user_input when structured answers are missing', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
       outcome: { outcome: 'selected', optionId: 'answer_1' },
@@ -1159,9 +1159,27 @@ describe('CodexAppServerAcpAdapter', () => {
       },
     });
 
-    expect(codex.respondSuccess).toHaveBeenCalledWith(20, {
-      answers: {},
-    });
+    expect(codex.respondError).toHaveBeenCalledWith(
+      20,
+      expect.objectContaining({
+        message: 'Failed to map requestUserInput answers',
+      })
+    );
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call_update',
+              status: 'failed',
+              rawOutput: expect.objectContaining({
+                error: 'Missing structured answers for multi-question requestUserInput',
+              }),
+            }),
+          }),
+        ],
+      ])
+    );
   });
 
   it('treats cancelled request_user_input permission outcomes as rejected', async () => {
@@ -1305,6 +1323,36 @@ describe('CodexAppServerAcpAdapter', () => {
 
     expect(closedReadCount).toBeGreaterThanOrEqual(2);
     expect(codex.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops retrying close watcher registration after retry limit', async () => {
+    vi.useFakeTimers();
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    try {
+      const connection = {
+        get closed() {
+          throw new Error('closed never ready');
+        },
+        sessionUpdate: vi.fn(async () => undefined),
+        requestPermission: vi.fn(() =>
+          Promise.resolve({
+            outcome: { outcome: 'selected', optionId: 'allow_once' },
+          } as RequestPermissionResponse)
+        ),
+      };
+      const { client: codexClient, mocks: codex } = createMockCodexClient();
+      new CodexAppServerAcpAdapter(connection as unknown as AgentSideConnection, codexClient);
+
+      await vi.runAllTimersAsync();
+
+      expect(stderrSpy).toHaveBeenCalledWith(
+        expect.stringContaining('failed to attach close watcher after 50 attempts')
+      );
+      expect(codex.stop).toHaveBeenCalledTimes(1);
+    } finally {
+      stderrSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('returns end_turn on overloaded turn/start and emits fallback message', async () => {

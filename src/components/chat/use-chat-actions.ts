@@ -347,19 +347,23 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
 
   const completeCodexPlanApproval = useCallback(
     (state: ChatState) => {
-      const modeValue = resolvePostApprovalModeValue(state);
-      if (!modeValue) {
-        return;
+      const isCodexProvider = state.chatCapabilities.provider === 'CODEX';
+      if (!isCodexProvider) {
+        const modeValue = resolvePostApprovalModeValue(state);
+        if (modeValue) {
+          const modeMsg: SetConfigOptionMessage = {
+            type: 'set_config_option',
+            configId: 'mode',
+            value: modeValue,
+          };
+          send(modeMsg);
+        }
       }
 
-      const modeMsg: SetConfigOptionMessage = {
-        type: 'set_config_option',
-        configId: 'mode',
-        value: modeValue,
-      };
-      send(modeMsg);
       dispatch({ type: 'UPDATE_SETTINGS', payload: { planModeEnabled: false } });
-      queueAutomaticMessage('Approved');
+      if (isCodexProvider) {
+        queueAutomaticMessage('Approved');
+      }
     },
     [send, dispatch, queueAutomaticMessage]
   );

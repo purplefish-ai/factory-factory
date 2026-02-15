@@ -99,6 +99,7 @@ type ActiveTurnState = {
 };
 
 const PENDING_TURN_ID = '__pending_turn__';
+const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
 
 type PendingTurnCompletion = {
   stopReason: StopReason;
@@ -387,7 +388,7 @@ function buildToolUserInputAnswers(params: {
   }
 
   if (params.questions.length !== 1) {
-    return {};
+    throw new Error('Missing structured answers for multi-question requestUserInput');
   }
 
   const selectedIndex = params.selectedOptionId.startsWith('answer_')
@@ -666,6 +667,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private monitorConnectionClose(): void {
     // AgentSideConnection initializes internals after toAgent(); defer watcher
     // attachment and retry if closed isn't readable yet.
+    let attachAttempts = 0;
     const attachCloseWatcher = () => {
       try {
         void this.connection.closed
@@ -676,7 +678,16 @@ export class CodexAppServerAcpAdapter implements Agent {
             // Ignore close-watcher errors and still attempt subprocess shutdown.
           });
       } catch {
-        setTimeout(attachCloseWatcher, 0);
+        attachAttempts += 1;
+        if (attachAttempts >= MAX_CLOSE_WATCHER_ATTACH_RETRIES) {
+          process.stderr.write(
+            `[codex-app-server-acp] failed to attach close watcher after ${MAX_CLOSE_WATCHER_ATTACH_RETRIES} attempts\n`
+          );
+          void this.codex.stop();
+          return;
+        }
+        const retryTimer = setTimeout(attachCloseWatcher, 0);
+        retryTimer.unref?.();
       }
     };
 
@@ -2282,11 +2293,28 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     if (params.request.method === 'item/tool/requestUserInput') {
       const rejected = selected === null || selected === 'reject_once';
-      const answers = buildToolUserInputAnswers({
-        questions: params.questions,
-        permission: params.permission,
-        selectedOptionId: selected,
-      });
+      let answers: UserInputAnswers;
+      try {
+        answers = buildToolUserInputAnswers({
+          questions: params.questions,
+          permission: params.permission,
+          selectedOptionId: selected,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.codex.respondError(params.request.id, {
+          code: -32_602,
+          message: 'Failed to map requestUserInput answers',
+          data: { error: message },
+        });
+        await this.emitSessionUpdate(params.session.sessionId, {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: params.toolCallId,
+          status: 'failed',
+          rawOutput: { error: message },
+        });
+        return;
+      }
 
       this.codex.respondSuccess(params.request.id, {
         answers,
