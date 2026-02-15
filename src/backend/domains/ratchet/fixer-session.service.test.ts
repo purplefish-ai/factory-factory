@@ -155,6 +155,7 @@ describe('FixerSessionService', () => {
     expect(result).toEqual({ status: 'started', sessionId: 's-new' });
     expect(mockSessionBridge.startSession).toHaveBeenCalledWith('s-new', {
       initialPrompt: 'prompt',
+      startupModePreset: 'non_interactive',
     });
   });
 
