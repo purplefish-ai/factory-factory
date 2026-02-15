@@ -214,6 +214,7 @@ class FixerSessionService {
     if (input.dispatchMode === 'start_empty_and_send') {
       await this.session.startSession(acquisitionResult.sessionId, {
         initialPrompt: '',
+        startupModePreset: 'non_interactive',
       });
 
       const promptSent = await this.sendMessageSafely(acquisitionResult.sessionId, prompt);
@@ -228,6 +229,7 @@ class FixerSessionService {
     } else {
       await this.session.startSession(acquisitionResult.sessionId, {
         initialPrompt: prompt,
+        startupModePreset: 'non_interactive',
       });
     }
 

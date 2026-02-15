@@ -191,6 +191,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     });
     expect(mocks.startSession).toHaveBeenCalledWith('session-1', {
       initialPrompt: '',
+      startupModePreset: 'non_interactive',
     });
     expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
@@ -280,7 +281,10 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.startSession).toHaveBeenCalledWith('session-1', {
+      initialPrompt: '',
+      startupModePreset: 'non_interactive',
+    });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
   });
@@ -301,7 +305,10 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       useExistingBranch: false,
     });
 
-    expect(mocks.startSession).toHaveBeenCalledWith('session-1', { initialPrompt: '' });
+    expect(mocks.startSession).toHaveBeenCalledWith('session-1', {
+      initialPrompt: '',
+      startupModePreset: 'non_interactive',
+    });
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
   });
 
