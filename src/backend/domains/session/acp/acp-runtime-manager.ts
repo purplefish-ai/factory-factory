@@ -110,20 +110,28 @@ async function withTimeout<T>(params: {
   promise: Promise<T>;
   timeoutMs: number;
   description: string;
+  cancelOn?: Promise<unknown>;
 }): Promise<T> {
   return await new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error(`ACP ${params.description} timed out after ${params.timeoutMs}ms`));
     }, params.timeoutMs);
     timeout.unref?.();
+    const clearTimer = () => {
+      clearTimeout(timeout);
+    };
+
+    if (typeof params.cancelOn !== 'undefined') {
+      void params.cancelOn.finally(clearTimer);
+    }
 
     params.promise.then(
       (value) => {
-        clearTimeout(timeout);
+        clearTimer();
         resolve(value);
       },
       (error: unknown) => {
-        clearTimeout(timeout);
+        clearTimer();
         reject(error);
       }
     );
@@ -657,6 +665,7 @@ export class AcpRuntimeManager {
     let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
     let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
     const startupTimeoutMs = resolveAcpStartupTimeoutMs();
+    const startupErrorSettled = startupError.catch(() => undefined);
 
     try {
       // Initialize handshake
@@ -673,6 +682,7 @@ export class AcpRuntimeManager {
           }),
           timeoutMs: startupTimeoutMs,
           description: 'initialize handshake',
+          cancelOn: startupErrorSettled,
         }),
         startupError,
       ]);
@@ -689,6 +699,7 @@ export class AcpRuntimeManager {
           promise: this.createOrResumeSession(connection, sessionId, options, agentCapabilities),
           timeoutMs: startupTimeoutMs,
           description: 'session creation',
+          cancelOn: startupErrorSettled,
         }),
         startupError,
       ]);
