@@ -27,6 +27,7 @@ vi.mock('@/backend/domains/workspace', () => ({
 vi.mock('@/backend/domains/session', () => ({
   sessionService: {
     configure: vi.fn(),
+    setPromptTurnCompleteHandler: vi.fn(),
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     isAnySessionWorking: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock('@/backend/domains/session', () => ({
   },
   sessionDomainService: { injectCommittedUserMessage: vi.fn() },
   chatEventForwarderService: { configure: vi.fn(), getAllPendingRequests: vi.fn() },
-  chatMessageHandlerService: { configure: vi.fn() },
+  chatMessageHandlerService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
 }));
 
 vi.mock('@/backend/domains/github', () => ({
@@ -118,6 +119,7 @@ describe('configureDomainBridges', () => {
     expect(chatEventForwarderService.configure).toHaveBeenCalledTimes(1);
     expect(chatMessageHandlerService.configure).toHaveBeenCalledTimes(1);
     expect(sessionService.configure).toHaveBeenCalledTimes(1);
+    expect(sessionService.setPromptTurnCompleteHandler).toHaveBeenCalledTimes(1);
   });
 
   it('configures run-script domain services', () => {
@@ -291,6 +293,16 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1');
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1');
+    });
+
+    it('sessionService prompt-turn callback delegates queue dispatch to chat handlers', async () => {
+      configureDomainBridges();
+      const onPromptTurnComplete = vi.mocked(sessionService.setPromptTurnCompleteHandler).mock
+        .calls[0]?.[0];
+
+      expect(onPromptTurnComplete).toBeTypeOf('function');
+      await onPromptTurnComplete?.('s1');
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
     });
   });
 

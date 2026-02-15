@@ -13,7 +13,10 @@ export interface RatchetSessionBridge {
   isSessionRunning(sessionId: string): boolean;
   isSessionWorking(sessionId: string): boolean;
   stopSession(sessionId: string): Promise<void>;
-  startSession(sessionId: string, opts: { initialPrompt?: string }): Promise<void>;
+  startSession(
+    sessionId: string,
+    opts: { initialPrompt?: string; startupModePreset?: 'non_interactive' | 'plan' }
+  ): Promise<void>;
   sendSessionMessage(sessionId: string, message: string): Promise<void>;
   injectCommittedUserMessage(sessionId: string, message: string): void;
 }

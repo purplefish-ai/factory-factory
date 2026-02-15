@@ -403,6 +403,7 @@ export function WorkspaceDetailContainer() {
     removeQueuedMessage,
     resumeQueuedMessages,
     latestThinking,
+    sessionRuntime,
     pendingMessages,
     isCompacting,
     permissionMode,

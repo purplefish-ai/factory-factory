@@ -3,11 +3,11 @@ const DETAIL_TOOL_NAME_MAX = 96;
 const RUN_COMMAND_PREVIEW_MAX = 84;
 const SHELL_EXECUTABLES = new Set(['bash', 'dash', 'ksh', 'mksh', 'sh', 'zsh', 'fish']);
 
-function normalizeWhitespace(value: string): string {
+export function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function truncateWithEllipsis(value: string, maxLength: number): string {
+export function truncateWithEllipsis(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
     return value;
   }

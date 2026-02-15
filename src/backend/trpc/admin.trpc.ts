@@ -4,9 +4,7 @@
  * Provides admin operations for managing system health.
  */
 
-import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
-import { createInterface } from 'node:readline';
 import type { DecisionLog } from '@prisma-gen/client';
 import { z } from 'zod';
 import { acpRuntimeManager, sessionDataService } from '@/backend/domains/session';
@@ -14,108 +12,14 @@ import { workspaceDataService } from '@/backend/domains/workspace';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
 import { getLogFilePath } from '@/backend/services/logger.service';
-import { SessionStatus } from '@/shared/core';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
+import { buildAgentProcesses, mergeAgentSessions } from './admin-active-processes';
+import { readFilteredLogEntriesPage } from './log-file-reader';
 import { type Context, publicProcedure, router } from './trpc';
 
 const loggerName = 'admin-trpc';
 
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
-
-export interface ParsedLogEntry {
-  level: string;
-  timestamp: string;
-  message: string;
-  component: string;
-  context: Record<string, unknown>;
-}
-
-const RawLogEntrySchema = z.object({
-  level: z.string(),
-  timestamp: z.string().optional(),
-  message: z.string().optional(),
-  context: z.record(z.string(), z.unknown()).optional(),
-});
-
-type RawLogEntry = z.infer<typeof RawLogEntrySchema>;
-
-interface LogFilter {
-  level?: string;
-  search?: string;
-  sinceMs?: number | null;
-  untilMs?: number | null;
-}
-
-function matchesTimestamp(timestamp: string | undefined, filter: LogFilter): boolean {
-  if (!(timestamp && (filter.sinceMs || filter.untilMs))) {
-    return true;
-  }
-  const ts = new Date(timestamp).getTime();
-  if (filter.sinceMs && ts < filter.sinceMs) {
-    return false;
-  }
-  return !(filter.untilMs && ts > filter.untilMs);
-}
-
-function matchesLogFilter(entry: RawLogEntry, filter: LogFilter): boolean {
-  if (filter.level && entry.level !== filter.level) {
-    return false;
-  }
-  if (!matchesTimestamp(entry.timestamp, filter)) {
-    return false;
-  }
-  if (filter.search) {
-    const msg = entry.message?.toLowerCase() ?? '';
-    const comp = typeof entry.context?.component === 'string' ? entry.context.component : undefined;
-    if (!(msg.includes(filter.search) || comp?.toLowerCase().includes(filter.search))) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function toParsedLogEntry(entry: RawLogEntry): ParsedLogEntry {
-  return {
-    level: entry.level,
-    timestamp: entry.timestamp ?? '',
-    message: entry.message ?? '',
-    component: typeof entry.context?.component === 'string' ? entry.context.component : '',
-    context: entry.context ?? {},
-  };
-}
-
-async function readFilteredLogEntries(
-  filePath: string,
-  filter: LogFilter
-): Promise<ParsedLogEntry[]> {
-  const filtered: ParsedLogEntry[] = [];
-  const rl = createInterface({
-    input: createReadStream(filePath, 'utf-8'),
-    crlfDelay: Number.POSITIVE_INFINITY,
-  });
-
-  for await (const line of rl) {
-    if (!line) {
-      continue;
-    }
-    try {
-      const rawEntry: unknown = JSON.parse(line);
-      const parsedEntry = RawLogEntrySchema.safeParse(rawEntry);
-      if (!parsedEntry.success) {
-        continue;
-      }
-      const entry = parsedEntry.data;
-      if (!matchesLogFilter(entry, filter)) {
-        continue;
-      }
-      filtered.push(toParsedLogEntry(entry));
-    } catch {
-      // skip malformed lines
-    }
-  }
-
-  return filtered;
-}
 
 export const adminRouter = router({
   /**
@@ -251,79 +155,41 @@ export const adminRouter = router({
     // Get active ACP sessions from in-memory map
     const activeAcpProcesses = acpRuntimeManager.getAllActiveProcesses();
 
+    // Resolve active ACP sessions by sessionId (not by providerProcessPid).
+    const activeSessionIds = activeAcpProcesses.map((process) => process.sessionId);
+    const activeDbSessions = await sessionDataService.findAgentSessionsByIds(activeSessionIds);
+
     // Get active terminals from in-memory map
     const activeTerminals = terminalService.getAllTerminals();
 
-    // Get agent sessions with PIDs from database for enriched info
+    // Include PID-backed DB sessions not in memory (orphan/stale edge cases).
     const agentSessionsWithPid = await sessionDataService.findAgentSessionsWithPid();
+    const mergedAgentSessions = mergeAgentSessions(activeDbSessions, agentSessionsWithPid);
 
     // Get terminal sessions with PIDs from database
     const terminalSessionsWithPid = await sessionDataService.findTerminalSessionsWithPid();
 
     // Get workspace info for all related workspaces (with project for URL generation)
     const workspaceIds = new Set([
-      ...agentSessionsWithPid.map((s) => s.workspaceId),
+      ...mergedAgentSessions.map((s) => s.workspaceId),
       ...terminalSessionsWithPid.map((s) => s.workspaceId),
       ...activeTerminals.map((t) => t.workspaceId),
     ]);
     const workspaces = await workspaceDataService.findByIdsWithProject(Array.from(workspaceIds));
     const workspaceMap = new Map(workspaces.map((w) => [w.id, w]));
 
-    // Build enriched agent process list from DB sessions
-    const dbSessionIds = new Set(agentSessionsWithPid.map((s) => s.id));
-    const agentProcesses = agentSessionsWithPid.map((session) => {
-      const memProcess = activeAcpProcesses.find((p) => p.sessionId === session.id);
-      const workspace = workspaceMap.get(session.workspaceId);
-      return {
-        sessionId: session.id,
-        workspaceId: session.workspaceId,
-        workspaceName: workspace?.name ?? 'Unknown',
-        workspaceBranch: workspace?.branchName ?? null,
-        projectSlug: workspace?.project.slug ?? null,
-        name: session.name,
-        workflow: session.workflow,
-        model: session.model,
-        pid: session.providerProcessPid,
-        status: session.status,
-        inMemory: !!memProcess,
-        memoryStatus: memProcess?.status ?? null,
-        createdAt: session.createdAt,
-        updatedAt: session.updatedAt,
-        // ACP sessions don't expose resource monitoring -- set to null
-        cpuPercent: null as number | null,
-        memoryBytes: null as number | null,
-        idleTimeMs: null as number | null,
-      };
+    const { agentProcesses, orphanedSessionIds } = buildAgentProcesses({
+      activeAcpProcesses,
+      dbSessions: mergedAgentSessions,
+      workspaceById: workspaceMap,
     });
-
-    // Add in-memory ACP processes that don't have a DB record (edge case)
-    for (const memProcess of activeAcpProcesses) {
-      if (!dbSessionIds.has(memProcess.sessionId)) {
-        logger.warn('Found in-memory ACP process without DB record', {
-          sessionId: memProcess.sessionId,
-          pid: memProcess.pid,
-          status: memProcess.status,
-        });
-        agentProcesses.push({
-          sessionId: memProcess.sessionId,
-          workspaceId: 'unknown',
-          workspaceName: 'Unknown (orphan)',
-          workspaceBranch: null,
-          projectSlug: null,
-          name: null,
-          workflow: 'unknown',
-          model: 'unknown',
-          pid: memProcess.pid ?? null,
-          status: memProcess.isRunning ? SessionStatus.RUNNING : SessionStatus.COMPLETED,
-          inMemory: true,
-          memoryStatus: memProcess.status,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          cpuPercent: null,
-          memoryBytes: null,
-          idleTimeMs: null,
-        });
-      }
+    for (const sessionId of orphanedSessionIds) {
+      const memProcess = activeAcpProcesses.find((process) => process.sessionId === sessionId);
+      logger.warn('Found in-memory ACP process without DB record', {
+        sessionId,
+        pid: memProcess?.pid,
+        status: memProcess?.status,
+      });
     }
 
     // Build enriched terminal process list
@@ -418,25 +284,28 @@ export const adminRouter = router({
     .query(async ({ input }) => {
       const filePath = getLogFilePath();
 
-      // Stream the log file line-by-line to avoid loading the entire file into memory
-      const filter: LogFilter = {
+      const filter = {
         level: input.level,
         search: input.search?.toLowerCase(),
         sinceMs: input.since ? new Date(input.since).getTime() : null,
         untilMs: input.until ? new Date(input.until).getTime() : null,
       };
-      let filtered: ParsedLogEntry[];
+
       try {
-        filtered = await readFilteredLogEntries(filePath, filter);
+        const page = await readFilteredLogEntriesPage(filePath, filter, {
+          limit: input.limit,
+          offset: input.offset,
+        });
+        return { ...page, filePath };
       } catch {
-        return { entries: [], total: 0, filePath };
+        return {
+          entries: [],
+          total: 0,
+          totalIsExact: false,
+          hasMore: false,
+          filePath,
+        };
       }
-
-      // Reverse so newest entries come first, then paginate
-      filtered.reverse();
-      const page = filtered.slice(input.offset, input.offset + input.limit);
-
-      return { entries: page, total: filtered.length, filePath };
     }),
 
   /**
