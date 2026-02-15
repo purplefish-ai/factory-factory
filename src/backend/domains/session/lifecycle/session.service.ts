@@ -841,6 +841,7 @@ class SessionService {
     options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
     const session = await this.loadSessionForStop(sessionId);
+    const workspaceId = session?.workspaceId ?? this.sessionToWorkspace.get(sessionId);
 
     if (acpRuntimeManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
@@ -885,6 +886,8 @@ class SessionService {
         activity: 'IDLE',
         updatedAt: new Date().toISOString(),
       });
+      this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
+      this.sessionToWorkspace.delete(sessionId);
 
       if (!stopClientFailed) {
         const shouldCleanupTransientRatchetSession =
@@ -901,6 +904,22 @@ class SessionService {
         ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
       });
       acpTraceLogger.closeSession(sessionId);
+    }
+  }
+
+  private markWorkspaceSessionIdleOnStop(workspaceId: string | undefined, sessionId: string): void {
+    if (!(workspaceId && this.workspaceBridge)) {
+      return;
+    }
+
+    try {
+      this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+    } catch (error) {
+      logger.warn('Failed to mark workspace session idle during stop', {
+        sessionId,
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

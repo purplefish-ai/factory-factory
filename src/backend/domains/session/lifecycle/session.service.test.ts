@@ -626,6 +626,29 @@ describe('SessionService', () => {
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: false });
   });
 
+  it('marks workspace session idle during manual stop', async () => {
+    const markSessionIdle = vi.fn();
+    sessionService.configure({
+      workspace: {
+        markSessionRunning: vi.fn(),
+        markSessionIdle,
+      },
+    });
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    await sessionService.stopSession('session-1');
+
+    expect(markSessionIdle).toHaveBeenCalledWith('workspace-1', 'session-1');
+  });
+
   it('still clears queued work and marks idle when runtime stop fails', async () => {
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockRejectedValue(new Error('stop failed'));
