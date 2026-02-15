@@ -156,11 +156,13 @@ function NeedsAttentionCard({
     onApprovePermission;
 
   return (
-    <div className="rounded border border-amber-300 bg-amber-50 p-2 space-y-2">
-      <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-900">
+    <div className="rounded border border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-900/20 p-2 space-y-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-900 dark:text-amber-200">
         <AlertTriangle className="h-3.5 w-3.5" />
         Needs attention
-        <span className="text-amber-800 font-normal">{needsAttention.message}</span>
+        <span className="text-amber-800 dark:text-amber-300 font-normal">
+          {needsAttention.message}
+        </span>
       </div>
       <div className="flex items-center gap-1.5">
         {needsPermissionAction && pendingRequest.type === 'permission' && (

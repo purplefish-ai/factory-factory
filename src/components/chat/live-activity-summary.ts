@@ -74,7 +74,7 @@ const READER_TOOL_NAMES = ['read', 'grep', 'glob', 'search'];
 
 const TEST_COMMAND_PATTERN =
   /\b(vitest|jest|mocha|pytest|cargo test|go test|pnpm test|npm test|yarn test|bun test)\b/i;
-const TEST_FAILURE_PATTERN = /\b(fail(?:ed|ure|ing)?|error|not ok)\b/i;
+const TEST_FAILURE_PATTERN = /\b(fail(?:ed|ure|ing|ures)?|not ok)\b/i;
 const NON_ZERO_TEST_FAILURE_PATTERN =
   /\b([1-9]\d*)\s+(?:tests?\s+)?(?:fail(?:ed|ure|ing|ures)?|errors?|not ok)\b/i;
 const ZERO_TEST_FAILURE_PATTERN =

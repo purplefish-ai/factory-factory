@@ -154,6 +154,38 @@ describe('live-activity-summary', () => {
     expect(summary.recent.map((event) => event.label)).toContain('Tests failed');
   });
 
+  it('does not treat passing test descriptions containing "error" as failures', () => {
+    const groupedMessages: GroupedMessageItem[] = [
+      {
+        type: 'tool_sequence',
+        id: 'seq-1',
+        pairedCalls: [
+          createCall({
+            id: 'call-test',
+            name: 'Run pnpm test',
+            input: { command: ['pnpm', 'test'] },
+            status: 'success',
+            result: { content: '✓ should throw error on invalid input', isError: false },
+          }),
+        ],
+      },
+    ];
+
+    const summary = summarizeLiveActivity({
+      groupedMessages,
+      latestThinking: null,
+      running: false,
+      starting: false,
+      stopping: false,
+      pendingRequest: createPendingRequest('none'),
+      permissionMode: null,
+      toolProgress: new Map(),
+    });
+
+    expect(summary.recent.map((event) => event.label)).toContain('Tests passed');
+    expect(summary.recent.map((event) => event.label)).not.toContain('Tests failed');
+  });
+
   it('deduplicates touched files and caps to six visible chips', () => {
     const toolProgress = new Map<string, ToolProgressInfo>();
     toolProgress.set('tool-1', {
