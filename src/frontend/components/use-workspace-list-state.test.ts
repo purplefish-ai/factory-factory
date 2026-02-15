@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ServerWorkspace } from './use-workspace-list-state';
-import { sortWorkspaces } from './use-workspace-list-state';
+import { reorderWorkspaceIds, sortWorkspaces } from './use-workspace-list-state';
 
 function makeWorkspace(
   overrides: Partial<ServerWorkspace> & { id: string; name: string; createdAt: string | Date }
@@ -57,5 +57,25 @@ describe('sortWorkspaces', () => {
     const sorted = sortWorkspaces(workspaces, ['b', 'a', 'c']);
 
     expect(sorted.map((w) => w.id)).toEqual(['b', 'a', 'c']);
+  });
+});
+
+describe('reorderWorkspaceIds', () => {
+  it('reorders visible IDs when no hidden IDs are present', () => {
+    const reordered = reorderWorkspaceIds(['a', 'b', 'c'], new Set(), 'c', 'a');
+
+    expect(reordered).toEqual(['c', 'a', 'b']);
+  });
+
+  it('preserves hidden IDs in place while reordering visible IDs', () => {
+    const reordered = reorderWorkspaceIds(['a', 'hidden', 'c'], new Set(['hidden']), 'c', 'a');
+
+    expect(reordered).toEqual(['c', 'hidden', 'a']);
+  });
+
+  it('returns null when active or over IDs are not visible', () => {
+    const reordered = reorderWorkspaceIds(['a', 'hidden', 'c'], new Set(['hidden']), 'hidden', 'a');
+
+    expect(reordered).toBeNull();
   });
 });

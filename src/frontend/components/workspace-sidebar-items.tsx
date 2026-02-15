@@ -36,39 +36,6 @@ export function CreatingWorkspaceItem() {
 }
 
 // =============================================================================
-// Archiving Workspace Item
-// =============================================================================
-
-interface ArchivingWorkspaceItemProps {
-  workspace: WorkspaceListItem;
-  selectedProjectSlug: string;
-  sortableRef?: (node: HTMLElement | null) => void;
-  sortableStyle?: React.CSSProperties;
-}
-
-export function ArchivingWorkspaceItem({
-  workspace,
-  selectedProjectSlug,
-  sortableRef,
-  sortableStyle,
-}: ArchivingWorkspaceItemProps) {
-  return (
-    <SidebarMenuItem ref={sortableRef} style={sortableStyle}>
-      <SidebarMenuButton asChild className="h-auto px-2 py-2 opacity-50 pointer-events-none">
-        <Link to={`/projects/${selectedProjectSlug}/workspaces/${workspace.id}`}>
-          <div className="flex items-center gap-1.5 w-full min-w-0">
-            {/* Invisible drag handle spacer to match layout */}
-            <div className="w-4 shrink-0" aria-hidden="true" />
-            <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
-            <span className="truncate text-sm text-muted-foreground">Archiving...</span>
-          </div>
-        </Link>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-}
-
-// =============================================================================
 // Active Workspace Item
 // =============================================================================
 
