@@ -564,6 +564,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(sessionService.startSession).toHaveBeenCalledWith('session-1', {
         initialPrompt: '',
+        startupModePreset: 'non_interactive',
       });
     });
 

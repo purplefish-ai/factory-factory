@@ -35,6 +35,8 @@ import { sessionRepository } from './session.repository';
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 type SessionProvider = 'CLAUDE' | 'CODEX';
+type SessionPermissionMode = 'bypassPermissions' | 'plan';
+type SessionStartupModePreset = 'non_interactive' | 'plan';
 type StoredAcpConfigSnapshot = {
   provider: SessionProvider;
   providerSessionId: string;
@@ -555,7 +557,7 @@ class SessionService {
     sessionId: string,
     options?: {
       model?: string;
-      permissionMode?: 'bypassPermissions' | 'plan';
+      permissionMode?: SessionPermissionMode;
     },
     session?: AgentSessionRecord
   ): Promise<AcpProcessHandle> {
@@ -658,7 +660,13 @@ class SessionService {
   /**
    * Start a session using the ACP runtime.
    */
-  async startSession(sessionId: string, options?: { initialPrompt?: string }): Promise<void> {
+  async startSession(
+    sessionId: string,
+    options?: {
+      initialPrompt?: string;
+      startupModePreset?: SessionStartupModePreset;
+    }
+  ): Promise<void> {
     const session = await this.repository.getSessionById(sessionId);
     if (!session) {
       throw new Error(`Session not found: ${sessionId}`);
@@ -675,11 +683,16 @@ class SessionService {
     }
 
     // Use getOrCreate for race-protected creation
-    await this.getOrCreateAcpSessionClient(
+    const startupModePreset = options?.startupModePreset;
+    const startupPermissionMode: SessionPermissionMode =
+      startupModePreset === 'plan' ? 'plan' : 'bypassPermissions';
+
+    const handle = await this.getOrCreateAcpSessionClient(
       sessionId,
-      { permissionMode: 'bypassPermissions' },
+      { permissionMode: startupPermissionMode },
       session
     );
+    await this.applyStartupModePreset(sessionId, handle, startupModePreset);
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
@@ -688,6 +701,127 @@ class SessionService {
     }
 
     logger.info('Session started', { sessionId, provider: session.provider });
+  }
+
+  private async applyStartupModePreset(
+    sessionId: string,
+    handle: AcpProcessHandle,
+    startupModePreset: SessionStartupModePreset | undefined
+  ): Promise<void> {
+    if (!startupModePreset) {
+      return;
+    }
+
+    const modeOption = handle.configOptions.find((option) => option.category === 'mode');
+    if (!modeOption) {
+      return;
+    }
+
+    const availableModeValues = this.getConfigOptionValues(modeOption);
+    const targetMode = this.resolveStartupModeTarget(
+      handle.provider as SessionProvider,
+      startupModePreset,
+      availableModeValues
+    );
+    if (!targetMode) {
+      logger.debug('Startup mode preset not available in ACP mode options', {
+        sessionId,
+        provider: handle.provider,
+        startupModePreset,
+        availableModeValues,
+      });
+      return;
+    }
+
+    const currentMode = modeOption.currentValue ? String(modeOption.currentValue) : null;
+    if (currentMode === targetMode) {
+      return;
+    }
+
+    try {
+      const configOptions = await acpRuntimeManager.setSessionMode(sessionId, targetMode);
+      handle.configOptions = configOptions;
+
+      await this.persistAcpConfigSnapshot(sessionId, {
+        provider: handle.provider as SessionProvider,
+        providerSessionId: handle.providerSessionId,
+        configOptions,
+      });
+
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions,
+      } as SessionDeltaEvent);
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'chat_capabilities',
+        capabilities: this.buildAcpChatBarCapabilities(handle),
+      });
+    } catch (error) {
+      logger.warn('Failed applying startup mode preset', {
+        sessionId,
+        provider: handle.provider,
+        startupModePreset,
+        targetMode,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private resolveStartupModeTarget(
+    provider: SessionProvider,
+    startupModePreset: SessionStartupModePreset,
+    availableModeValues: string[]
+  ): string | null {
+    if (availableModeValues.length === 0) {
+      return null;
+    }
+
+    if (startupModePreset === 'plan') {
+      return this.findModeValue(availableModeValues, ['plan']);
+    }
+
+    if (provider === 'CLAUDE') {
+      return this.findModeValue(availableModeValues, [
+        'bypassPermissions',
+        'dangerouslySkipPermissions',
+        'dangerousSkipPermissions',
+        'acceptEdits',
+      ]);
+    }
+
+    return this.findModeValue(availableModeValues, [
+      'fullAccess',
+      'full_access',
+      'full-access',
+      'code',
+    ]);
+  }
+
+  private findModeValue(
+    availableModeValues: string[],
+    preferredModeValues: string[]
+  ): string | null {
+    if (availableModeValues.length === 0 || preferredModeValues.length === 0) {
+      return null;
+    }
+
+    const availableByNormalized = new Map<string, string>();
+    for (const value of availableModeValues) {
+      availableByNormalized.set(this.normalizeModeValue(value), value);
+    }
+
+    for (const preferredValue of preferredModeValues) {
+      const match = availableByNormalized.get(this.normalizeModeValue(preferredValue));
+      if (match) {
+        return match;
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeModeValue(value: string): string {
+    return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
   }
 
   /**
@@ -861,7 +995,7 @@ class SessionService {
     sessionId: string,
     options?: {
       thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
+      permissionMode?: SessionPermissionMode;
       model?: string;
       reasoningEffort?: string;
     }
@@ -882,7 +1016,7 @@ class SessionService {
     session: AgentSessionRecord,
     options?: {
       thinkingEnabled?: boolean;
-      permissionMode?: 'bypassPermissions' | 'plan';
+      permissionMode?: SessionPermissionMode;
       model?: string;
       reasoningEffort?: string;
     }
@@ -1204,7 +1338,7 @@ class SessionService {
     sessionId: string,
     options: {
       model?: string;
-      permissionMode?: 'bypassPermissions' | 'plan';
+      permissionMode?: SessionPermissionMode;
     },
     session: AgentSessionRecord
   ): Promise<AcpProcessHandle> {
