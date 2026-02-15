@@ -1,11 +1,10 @@
-import { createReadStream } from 'node:fs';
 import { access, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
+import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('claude-session-history-loader');
 
@@ -420,49 +419,39 @@ class ClaudeSessionHistoryLoaderService {
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
     const history: HistoryMessage[] = [];
     const fallbackBaseTimestampMs = Date.now();
-    const stream = createReadStream(filePath, { encoding: 'utf-8' });
-    const reader = createInterface({ input: stream, crlfDelay: Number.POSITIVE_INFINITY });
     let hadReadError = false;
 
-    try {
-      let lineNumber = 0;
-      for await (const line of reader) {
-        lineNumber += 1;
-        const trimmed = line.trim();
-        if (!trimmed) {
-          continue;
-        }
-
+    await readNonEmptyJsonlLines({
+      filePath,
+      onLine: (trimmed, lineNumber) => {
         const entry = parseHistoryEntry(trimmed);
         if (!(entry && isEntryEligible(entry, providerSessionId))) {
-          continue;
+          return;
         }
 
         const role = resolveSessionRole(entry);
         if (!role) {
-          continue;
+          return;
         }
 
         const content = entry.message?.content;
         if (typeof content !== 'string' && !Array.isArray(content)) {
-          continue;
+          return;
         }
 
         const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
         const uuid = resolveSessionUuid(entry);
         history.push(...parseContentAsHistory(role, content, timestamp, uuid));
-      }
-    } catch (error) {
-      hadReadError = true;
-      logger.warn('Failed parsing Claude session history file', {
-        filePath,
-        providerSessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      reader.close();
-      stream.destroy();
-    }
+      },
+      onError: (error) => {
+        hadReadError = true;
+        logger.warn('Failed parsing Claude session history file', {
+          filePath,
+          providerSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    });
 
     return { history, hadReadError };
   }

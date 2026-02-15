@@ -1,12 +1,16 @@
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, FileCode, Loader2 } from 'lucide-react';
-import { memo, useCallback, useRef } from 'react';
-
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { AlertCircle } from 'lucide-react';
 import { trpc } from '@/frontend/lib/trpc';
 
-import { FileChangeItem, fileChangeKindFromDiffStatus } from './file-change-item';
-import { useWorkspacePanel } from './workspace-panel-context';
+import {
+  type ChangeListEntry,
+  PanelEmptyState,
+  PanelErrorState,
+  PanelLoadingState,
+  ScrollableChangeSections,
+  useOpenDiffTab,
+  VirtualizedChangeList,
+} from './change-panel-shared';
+import { fileChangeKindFromDiffStatus } from './file-change-item';
 
 // =============================================================================
 // Types
@@ -27,172 +31,20 @@ interface DiffVsMainPanelProps {
 // Main Component
 // =============================================================================
 
-// Helper component for virtualized file list
-interface VirtualizedFileListProps {
-  files: DiffFile[];
-  onFileClick: (file: DiffFile) => void;
-}
-
-const VirtualizedFileList = memo(function VirtualizedFileList({
-  files,
-  onFileClick,
-}: VirtualizedFileListProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
-
-  const virtualizer = useVirtualizer({
-    count: files.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 32,
-    overscan: 10,
-  });
-
-  return (
-    <div ref={parentRef} className="flex-1 overflow-auto">
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          position: 'relative',
-        }}
-      >
-        {virtualizer.getVirtualItems().map((virtualItem) => {
-          const file = files[virtualItem.index];
-          if (!file) {
-            return null;
-          }
-          return (
-            <div
-              key={virtualItem.key}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                transform: `translateY(${virtualItem.start}px)`,
-              }}
-            >
-              <FileChangeItem
-                path={file.path}
-                kind={fileChangeKindFromDiffStatus(file.status)}
-                statusCode={file.status[0]}
-                onClick={() => onFileClick(file)}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-
-// Component for rendering categorized file sections
-interface CategorizedFilesProps {
-  added: DiffFile[];
-  modified: DiffFile[];
-  deleted: DiffFile[];
-  onFileClick: (file: DiffFile) => void;
-}
-
-const CategorizedFiles = memo(function CategorizedFiles({
-  added,
-  modified,
-  deleted,
-  onFileClick,
-}: CategorizedFilesProps) {
-  return (
-    <ScrollArea className="h-full">
-      <div className="p-2 space-y-3">
-        {added.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
-              Added ({added.length})
-            </h3>
-            <div className="space-y-0.5">
-              {added.map((file) => (
-                <FileChangeItem
-                  key={file.path}
-                  path={file.path}
-                  kind={fileChangeKindFromDiffStatus(file.status)}
-                  statusCode={file.status[0]}
-                  onClick={() => onFileClick(file)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {modified.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
-              Modified ({modified.length})
-            </h3>
-            <div className="space-y-0.5">
-              {modified.map((file) => (
-                <FileChangeItem
-                  key={file.path}
-                  path={file.path}
-                  kind={fileChangeKindFromDiffStatus(file.status)}
-                  statusCode={file.status[0]}
-                  onClick={() => onFileClick(file)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {deleted.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
-              Deleted ({deleted.length})
-            </h3>
-            <div className="space-y-0.5">
-              {deleted.map((file) => (
-                <FileChangeItem
-                  key={file.path}
-                  path={file.path}
-                  kind={fileChangeKindFromDiffStatus(file.status)}
-                  statusCode={file.status[0]}
-                  onClick={() => onFileClick(file)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </ScrollArea>
-  );
-});
-
 export function DiffVsMainPanel({ workspaceId }: DiffVsMainPanelProps) {
-  const { openTab } = useWorkspacePanel();
+  const openDiffTab = useOpenDiffTab();
 
   const { data, isLoading, error } = trpc.workspace.getDiffVsMain.useQuery(
     { workspaceId },
     { refetchInterval: 15_000, staleTime: 10_000 }
   );
 
-  const handleFileClick = useCallback(
-    (file: DiffFile) => {
-      openTab('diff', file.path, `Diff: ${file.path.split('/').pop()}`);
-    },
-    [openTab]
-  );
-
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <PanelLoadingState />;
   }
 
   if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-4">
-        <AlertCircle className="h-8 w-8 text-destructive mb-2" />
-        <p className="text-sm text-destructive">Failed to load diff vs main</p>
-        <p className="text-xs text-muted-foreground mt-1">{error.message}</p>
-      </div>
-    );
+    return <PanelErrorState title="Failed to load diff vs main" errorMessage={error.message} />;
   }
 
   const { added, modified, deleted, noMergeBase } = data ?? {
@@ -218,17 +70,25 @@ export function DiffVsMainPanel({ workspaceId }: DiffVsMainPanelProps) {
 
   if (!hasChanges) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-4">
-        <FileCode className="h-8 w-8 text-muted-foreground mb-2" />
-        <p className="text-sm font-medium text-muted-foreground">Up to date with main</p>
-        <p className="text-xs text-muted-foreground/70 mt-1">No changes compared to main branch</p>
-      </div>
+      <PanelEmptyState
+        title="Up to date with main"
+        description="No changes compared to main branch"
+      />
     );
   }
 
+  const toEntry = (file: DiffFile): ChangeListEntry => ({
+    path: file.path,
+    kind: fileChangeKindFromDiffStatus(file.status),
+    statusCode: file.status[0],
+  });
+  const addedEntries = added.map(toEntry);
+  const modifiedEntries = modified.map(toEntry);
+  const deletedEntries = deleted.map(toEntry);
+
   // Use virtualization for large lists (>200 total files)
   if (totalFiles > 200) {
-    const allFiles = [...added, ...modified, ...deleted];
+    const allEntries = [...addedEntries, ...modifiedEntries, ...deletedEntries];
 
     return (
       <div className="h-full flex flex-col">
@@ -241,17 +101,19 @@ export function DiffVsMainPanel({ workspaceId }: DiffVsMainPanelProps) {
           )}
           {deleted.length > 0 && <span className="text-red-500">-{deleted.length}</span>}
         </div>
-        <VirtualizedFileList files={allFiles} onFileClick={handleFileClick} />
+        <VirtualizedChangeList entries={allEntries} onFileClick={openDiffTab} className="flex-1" />
       </div>
     );
   }
 
   return (
-    <CategorizedFiles
-      added={added}
-      modified={modified}
-      deleted={deleted}
-      onFileClick={handleFileClick}
+    <ScrollableChangeSections
+      sections={[
+        { key: 'added', title: 'Added', entries: addedEntries },
+        { key: 'modified', title: 'Modified', entries: modifiedEntries },
+        { key: 'deleted', title: 'Deleted', entries: deletedEntries },
+      ]}
+      onFileClick={openDiffTab}
     />
   );
 }

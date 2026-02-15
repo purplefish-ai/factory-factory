@@ -132,6 +132,8 @@ const mockWorkspace: Workspace = {
   ratchetEnabled: true,
   ratchetState: RatchetState.READY,
   ratchetLastCheckedAt: new Date('2025-01-01T00:25:00.000Z'),
+  ratchetLastPushAt: null,
+  ratchetLastNotifiedState: null,
   ratchetActiveSessionId: 'session-123',
   ratchetLastCiRunId: 'run-123',
   hasHadSessions: true,

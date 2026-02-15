@@ -18,6 +18,17 @@ interface PermissionPromptProps {
   onApprove: (requestId: string, allow: boolean, optionId?: string) => void;
 }
 
+interface PermissionDecisionActionsProps {
+  allowButtonRef: React.RefObject<HTMLButtonElement | null>;
+  onAllow: () => void;
+  onDeny: () => void;
+}
+
+interface PermissionDecisionCardProps extends PermissionDecisionActionsProps {
+  toolName: string;
+  children: React.ReactNode;
+}
+
 // =============================================================================
 // Helper Functions
 // =============================================================================
@@ -64,6 +75,65 @@ function formatToolInput(input: Record<string, unknown>): string {
   } catch {
     return String(input);
   }
+}
+
+function useAutoFocusPermissionButton(
+  buttonRef: React.RefObject<HTMLButtonElement | null>,
+  permissionRequestId: string | undefined
+) {
+  useEffect(() => {
+    if (!permissionRequestId) {
+      return;
+    }
+    // Small delay to ensure the element is rendered and focusable.
+    const timeoutId = setTimeout(() => {
+      buttonRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }, [permissionRequestId, buttonRef]);
+}
+
+function PermissionDecisionActions({
+  allowButtonRef,
+  onAllow,
+  onDeny,
+}: PermissionDecisionActionsProps) {
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={onDeny} className="gap-1.5">
+        <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
+        Deny
+      </Button>
+      <Button ref={allowButtonRef} size="sm" onClick={onAllow} className="gap-1.5">
+        <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+        Allow
+      </Button>
+    </>
+  );
+}
+
+function PermissionDecisionCard({
+  toolName,
+  allowButtonRef,
+  onAllow,
+  onDeny,
+  children,
+}: PermissionDecisionCardProps) {
+  return (
+    <PromptCard
+      icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
+      label={`Permission request for ${toolName}`}
+      actions={
+        <PermissionDecisionActions
+          allowButtonRef={allowButtonRef}
+          onAllow={onAllow}
+          onDeny={onDeny}
+        />
+      }
+    >
+      {children}
+    </PromptCard>
+  );
 }
 
 function resolvePlanContent(permission: PermissionRequest): string | null {
@@ -326,19 +396,7 @@ function AcpPermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
  */
 export function PermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
-  const permissionRequestId = permission?.requestId;
-
-  // Focus the Allow button when the prompt appears for keyboard accessibility
-  useEffect(() => {
-    if (!permissionRequestId) {
-      return;
-    }
-    // Small delay to ensure the element is rendered and focusable
-    const timeoutId = setTimeout(() => {
-      allowButtonRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [permissionRequestId]);
+  useAutoFocusPermissionButton(allowButtonRef, permission?.requestId);
 
   if (!permission) {
     return null;
@@ -366,27 +424,17 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
   };
 
   return (
-    <PromptCard
-      icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
-      label={`Permission request for ${toolName}`}
-      actions={
-        <>
-          <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">
-            <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
-            Deny
-          </Button>
-          <Button ref={allowButtonRef} size="sm" onClick={handleAllow} className="gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            Allow
-          </Button>
-        </>
-      }
+    <PermissionDecisionCard
+      toolName={toolName}
+      allowButtonRef={allowButtonRef}
+      onAllow={handleAllow}
+      onDeny={handleDeny}
     >
       <div className="text-sm font-medium">Permission: {toolName}</div>
       <div className="text-xs text-muted-foreground mt-1 font-mono truncate" title={inputPreview}>
         {inputPreview}
       </div>
-    </PromptCard>
+    </PermissionDecisionCard>
   );
 }
 
@@ -396,18 +444,7 @@ export function PermissionPrompt({ permission, onApprove }: PermissionPromptProp
  */
 export function PermissionPromptExpanded({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
-  const permissionRequestId = permission?.requestId;
-
-  // Focus the Allow button when the prompt appears for keyboard accessibility
-  useEffect(() => {
-    if (!permissionRequestId) {
-      return;
-    }
-    const timeoutId = setTimeout(() => {
-      allowButtonRef.current?.focus();
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }, [permissionRequestId]);
+  useAutoFocusPermissionButton(allowButtonRef, permission?.requestId);
 
   if (!permission) {
     return null;
@@ -424,21 +461,11 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
   };
 
   return (
-    <PromptCard
-      icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
-      label={`Permission request for ${toolName}`}
-      actions={
-        <>
-          <Button variant="outline" size="sm" onClick={handleDeny} className="gap-1.5">
-            <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
-            Deny
-          </Button>
-          <Button ref={allowButtonRef} size="sm" onClick={handleAllow} className="gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            Allow
-          </Button>
-        </>
-      }
+    <PermissionDecisionCard
+      toolName={toolName}
+      allowButtonRef={allowButtonRef}
+      onAllow={handleAllow}
+      onDeny={handleDeny}
     >
       <div className="space-y-2">
         <div className="text-sm font-medium">Permission: {toolName}</div>
@@ -448,6 +475,6 @@ export function PermissionPromptExpanded({ permission, onApprove }: PermissionPr
           </pre>
         </div>
       </div>
-    </PromptCard>
+    </PermissionDecisionCard>
   );
 }

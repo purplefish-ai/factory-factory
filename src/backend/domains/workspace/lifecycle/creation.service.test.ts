@@ -55,6 +55,8 @@ describe('WorkspaceCreationService', () => {
     ratchetEnabled: true,
     ratchetState: 'IDLE',
     ratchetLastCheckedAt: null,
+    ratchetLastPushAt: null,
+    ratchetLastNotifiedState: null,
     ratchetActiveSessionId: null,
     ratchetLastCiRunId: null,
     hasHadSessions: false,

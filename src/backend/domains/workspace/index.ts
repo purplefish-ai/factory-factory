@@ -51,6 +51,10 @@ export {
   kanbanStateService,
   type WorkspaceWithKanbanState,
 } from './state/kanban-state';
+export {
+  computePendingRequestType,
+  type WorkspacePendingRequestType,
+} from './state/pending-request-type';
 // --- Worktree management ---
 export {
   assertWorktreePathSafe,

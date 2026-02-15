@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage } from '@/shared/acp-protocol';
+import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
 const logger = createLogger('codex-session-history-loader');
 const SAFE_PROVIDER_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -338,71 +339,70 @@ class CodexSessionHistoryLoaderService {
     providerSessionId: string | null | undefined;
     workingDir: string;
   }): Promise<CodexSessionHistoryLoadResult> {
-    if (!params.providerSessionId) {
+    const providerSessionId = params.providerSessionId;
+    if (!providerSessionId) {
       return { status: 'skipped', reason: 'missing_provider_session_id' };
     }
 
-    if (!isSafeProviderSessionId(params.providerSessionId)) {
+    if (!isSafeProviderSessionId(providerSessionId)) {
       logger.warn('Skipping Codex history load for unsafe provider session id', {
-        providerSessionId: params.providerSessionId,
+        providerSessionId,
       });
       return { status: 'skipped', reason: 'invalid_provider_session_id' };
     }
 
-    const filePath = await resolveSessionFilePath(params.workingDir, params.providerSessionId);
-    if (!filePath) {
+    const filePath = await resolveSessionFilePath(params.workingDir, providerSessionId);
+    if (filePath === null) {
       return { status: 'not_found' };
     }
 
-    const readResult = await this.readHistoryFromFile(filePath);
-    if (readResult.hadReadError) {
+    const { history, hadReadError } = await this.readHistoryFromFile(filePath);
+    if (hadReadError) {
       return { status: 'error', reason: 'read_failed', filePath };
     }
 
-    return { status: 'loaded', history: readResult.history, filePath };
+    return { status: 'loaded', history, filePath };
   }
 
   private async readHistoryFromFile(
     filePath: string
   ): Promise<{ history: HistoryMessage[]; hadReadError: boolean }> {
+    let hadReadError = false;
     const history: HistoryMessage[] = [];
     const fallbackBaseTimestampMs = Date.now();
-    const stream = createReadStream(filePath, { encoding: 'utf-8' });
-    const reader = createInterface({ input: stream, crlfDelay: Number.POSITIVE_INFINITY });
-    let hadReadError = false;
 
-    try {
-      let lineNumber = 0;
-      for await (const line of reader) {
-        lineNumber += 1;
-        const trimmed = line.trim();
-        if (!trimmed) {
-          continue;
-        }
-
-        const entry = parseHistoryEntry(trimmed);
-        if (!entry) {
-          continue;
-        }
-
-        const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
-        const parsedMessage = parseCodexHistoryMessage(entry, timestamp);
-        if (parsedMessage) {
-          history.push(parsedMessage);
-        }
-      }
-    } catch (error) {
-      hadReadError = true;
-      logger.warn('Failed parsing Codex session history file', {
-        filePath,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      reader.close();
-      stream.destroy();
-    }
+    await readNonEmptyJsonlLines({
+      filePath,
+      onLine: (trimmed, lineNumber) =>
+        this.appendHistoryFromLine(history, trimmed, lineNumber, fallbackBaseTimestampMs),
+      onError: (error) => {
+        hadReadError = true;
+        logger.warn('Failed parsing Codex session history file', {
+          filePath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    });
 
     return { history, hadReadError };
+  }
+
+  private appendHistoryFromLine(
+    history: HistoryMessage[],
+    line: string,
+    lineNumber: number,
+    fallbackBaseTimestampMs: number
+  ): void {
+    const entry = parseHistoryEntry(line);
+    if (!entry) {
+      return;
+    }
+
+    const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
+    const parsedMessage = parseCodexHistoryMessage(entry, timestamp);
+    if (parsedMessage) {
+      history.push(parsedMessage);
+    }
   }
 }
 

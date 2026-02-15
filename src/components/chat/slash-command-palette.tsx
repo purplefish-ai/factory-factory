@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -8,6 +8,11 @@ import {
 } from '@/components/ui/command';
 import type { CommandInfo } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import {
+  type PaletteKeyboardHandle,
+  type PaletteKeyResult,
+  usePaletteKeyboardNavigation,
+} from './palette-keyboard-navigation';
 
 // =============================================================================
 // Types
@@ -19,13 +24,10 @@ import { cn } from '@/lib/utils';
  * - 'passthrough': Event should be handled by normal input logic
  * - 'close-and-passthrough': Menu should close but event should still be processed
  */
-export type SlashKeyResult = 'handled' | 'passthrough' | 'close-and-passthrough';
+export type SlashKeyResult = PaletteKeyResult;
 
 /** Imperative handle exposed by SlashCommandPalette */
-export interface SlashCommandPaletteHandle {
-  /** Handle a keyboard event. Returns how the event should be handled. */
-  handleKeyDown: (key: string) => SlashKeyResult;
-}
+export interface SlashCommandPaletteHandle extends PaletteKeyboardHandle {}
 
 export interface SlashCommandPaletteProps {
   /** Available slash commands */
@@ -70,168 +72,33 @@ export function SlashCommandPalette({
   anchorRef,
   paletteRef,
 }: SlashCommandPaletteProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const selectedIndexRef = useRef(selectedIndex);
-  const prevFilterRef = useRef(filter);
-
   // Filter commands based on the filter text (case-insensitive)
   const filteredCommands = useMemo(
     () => commands.filter((cmd) => cmd.name.toLowerCase().includes(filter.toLowerCase())),
     [commands, filter]
   );
 
-  // Reset selection when filter changes or palette opens
-  useEffect(() => {
-    const filterChanged = prevFilterRef.current !== filter;
-    prevFilterRef.current = filter;
-
-    if (isOpen && filterChanged) {
-      setSelectedIndex(0);
-      selectedIndexRef.current = 0; // Update ref immediately to avoid stale reads
-    }
-  }, [isOpen, filter]);
-
-  // Keep selectedIndex ref in sync with state
-  useEffect(() => {
-    selectedIndexRef.current = selectedIndex;
-  }, [selectedIndex]);
-
-  // Keep refs array in sync with filtered list length
-  useEffect(() => {
-    itemRefs.current = itemRefs.current.slice(0, filteredCommands.length);
-  }, [filteredCommands.length]);
-
-  // Ensure the selected item stays visible when navigating with the keyboard
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const selectedItem = itemRefs.current[selectedIndex];
-    if (selectedItem) {
-      selectedItem.scrollIntoView({ block: 'nearest' });
-    }
-  }, [isOpen, selectedIndex]);
-
-  // Click outside to close
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      // Don't close if clicking inside the palette or the anchor (input)
-      if (containerRef.current?.contains(target) || anchorRef.current?.contains(target)) {
-        return;
+  const handleSelectByIndex = useCallback(
+    (index: number): boolean => {
+      const selectedCommand = filteredCommands[index];
+      if (!selectedCommand) {
+        return false;
       }
-      onClose();
-    };
-
-    // Use mousedown to close before focus changes
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen, onClose, anchorRef]);
-
-  /**
-   * Handle arrow down key - move selection down
-   */
-  const handleArrowDown = useCallback(() => {
-    if (filteredCommands.length > 0) {
-      setSelectedIndex((prev) => Math.min(prev + 1, filteredCommands.length - 1));
-    }
-    return 'handled' as const;
-  }, [filteredCommands.length]);
-
-  /**
-   * Handle arrow up key - move selection up
-   */
-  const handleArrowUp = useCallback(() => {
-    if (filteredCommands.length > 0) {
-      setSelectedIndex((prev) => Math.max(prev - 1, 0));
-    }
-    return 'handled' as const;
-  }, [filteredCommands.length]);
-
-  /**
-   * Select the currently highlighted command if available
-   */
-  const selectCurrentCommand = useCallback(() => {
-    const hasMatches = filteredCommands.length > 0;
-    const currentIndex = selectedIndexRef.current;
-    if (hasMatches && filteredCommands[currentIndex]) {
-      onSelect(filteredCommands[currentIndex]);
+      onSelect(selectedCommand);
       return true;
-    }
-    return false;
-  }, [filteredCommands, onSelect]);
-
-  /**
-   * Handle Enter key - select command or close and passthrough
-   */
-  const handleEnter = useCallback((): SlashKeyResult => {
-    if (selectCurrentCommand()) {
-      return 'handled';
-    }
-    // No matches - close menu and let message be sent
-    return 'close-and-passthrough';
-  }, [selectCurrentCommand]);
-
-  /**
-   * Handle Tab key - select command or passthrough
-   */
-  const handleTab = useCallback((): SlashKeyResult => {
-    if (selectCurrentCommand()) {
-      return 'handled';
-    }
-    // No matches - let Tab work normally (focus next element)
-    return 'passthrough';
-  }, [selectCurrentCommand]);
-
-  /**
-   * Handle Escape key - close the palette
-   */
-  const handleEscape = useCallback(() => {
-    onClose();
-    return 'handled' as const;
-  }, [onClose]);
-
-  /**
-   * Map of key names to their handler functions
-   */
-  const keyHandlers = useMemo(
-    () => ({
-      ArrowDown: handleArrowDown,
-      ArrowUp: handleArrowUp,
-      Enter: handleEnter,
-      Tab: handleTab,
-      Escape: handleEscape,
-    }),
-    [handleArrowDown, handleArrowUp, handleEnter, handleTab, handleEscape]
-  );
-
-  /**
-   * Handle a keyboard event. Called by parent via paletteRef.
-   * Returns the result indicating how the event should be handled.
-   */
-  const handleKeyDown = useCallback(
-    (key: string): SlashKeyResult => {
-      const handler = keyHandlers[key as keyof typeof keyHandlers];
-      return handler ? handler() : 'passthrough';
     },
-    [keyHandlers]
+    [filteredCommands, onSelect]
   );
 
-  // Expose handleKeyDown via imperative handle
-  useImperativeHandle(
+  const { containerRef, itemRefs, selectedIndex, setSelectedIndex } = usePaletteKeyboardNavigation({
+    isOpen,
+    itemCount: filteredCommands.length,
+    resetKey: filter,
+    onClose,
+    onSelectByIndex: handleSelectByIndex,
+    anchorRef,
     paletteRef,
-    () => ({
-      handleKeyDown,
-    }),
-    [handleKeyDown]
-  );
+  });
 
   // Don't render if not open
   if (!isOpen) {

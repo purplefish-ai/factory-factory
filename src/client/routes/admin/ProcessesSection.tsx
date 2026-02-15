@@ -38,6 +38,36 @@ function getStatusBadgeVariant(
   }
 }
 
+function WorkspaceCell(props: {
+  process: {
+    projectSlug?: string | null;
+    workspaceId: string;
+    workspaceName: string;
+    workspaceBranch?: string | null;
+  };
+}) {
+  const { process } = props;
+  return (
+    <TableCell>
+      <div className="flex flex-col">
+        {process.projectSlug ? (
+          <Link
+            to={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
+            className="font-medium hover:underline"
+          >
+            {process.workspaceName}
+          </Link>
+        ) : (
+          <span className="font-medium">{process.workspaceName}</span>
+        )}
+        {process.workspaceBranch && (
+          <span className="text-xs text-muted-foreground font-mono">{process.workspaceBranch}</span>
+        )}
+      </div>
+    </TableCell>
+  );
+}
+
 export function ProcessesSectionSkeleton() {
   return (
     <Card>
@@ -167,25 +197,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                 <TableBody>
                   {processes.agent.map((process) => (
                     <TableRow key={process.sessionId}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          {process.projectSlug ? (
-                            <Link
-                              to={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
-                              className="font-medium hover:underline"
-                            >
-                              {process.workspaceName}
-                            </Link>
-                          ) : (
-                            <span className="font-medium">{process.workspaceName}</span>
-                          )}
-                          {process.workspaceBranch && (
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {process.workspaceBranch}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
+                      <WorkspaceCell process={process} />
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="text-xs font-mono text-muted-foreground">
@@ -264,25 +276,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
                 <TableBody>
                   {processes.terminal.map((process) => (
                     <TableRow key={process.terminalId}>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          {process.projectSlug ? (
-                            <Link
-                              to={`/projects/${process.projectSlug}/workspaces/${process.workspaceId}`}
-                              className="font-medium hover:underline"
-                            >
-                              {process.workspaceName}
-                            </Link>
-                          ) : (
-                            <span className="font-medium">{process.workspaceName}</span>
-                          )}
-                          {process.workspaceBranch && (
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {process.workspaceBranch}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
+                      <WorkspaceCell process={process} />
                       <TableCell>
                         <span className="text-xs font-mono text-muted-foreground">
                           {process.terminalId.slice(0, 12)}
