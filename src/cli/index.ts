@@ -34,7 +34,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load .env file before anything else
-config();
+config({ quiet: true });
 
 // Find project root (where package.json is)
 function findProjectRoot(): string {
