@@ -193,6 +193,8 @@ export const commandExecutionApprovalRequestSchema = z.object({
     reason: z.string().nullable().optional(),
     command: z.string().nullable().optional(),
     cwd: z.string().nullable().optional(),
+    callId: z.string().nullable().optional(),
+    call_id: z.string().nullable().optional(),
     commandActions: z.unknown().optional(),
     proposedExecpolicyAmendment: z.unknown().optional(),
   }),
@@ -207,6 +209,8 @@ export const fileChangeApprovalRequestSchema = z.object({
     itemId: z.string(),
     reason: z.string().nullable().optional(),
     grantRoot: z.string().nullable().optional(),
+    callId: z.string().nullable().optional(),
+    call_id: z.string().nullable().optional(),
   }),
 });
 
@@ -217,6 +221,8 @@ export const toolUserInputRequestSchema = z.object({
     threadId: z.string(),
     turnId: z.string(),
     itemId: z.string(),
+    callId: z.string().nullable().optional(),
+    call_id: z.string().nullable().optional(),
     questions: z.array(
       z.object({
         id: z.string(),
