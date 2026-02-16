@@ -278,7 +278,7 @@ export function MainViewTabBar({
                 className={cn(
                   'flex h-[30px] w-[30px] items-center justify-center rounded-none',
                   'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-                  'transition-colors disabled:pointer-events-none'
+                  'transition-colors disabled:pointer-events-none disabled:opacity-50'
                 )}
                 aria-label={`New ${providerTriggerLabel} session`}
               >
