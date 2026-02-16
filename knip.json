@@ -1,15 +1,17 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": [
-    "src/client/main.tsx",
-    "src/backend/server.ts",
-    "src/backend/index.ts",
-    "src/backend/migrate.ts",
-    "src/cli/index.ts",
-    "electron/main/index.ts",
-    "electron/preload/index.ts"
-  ],
-  "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts"],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/client/main.tsx",
+        "src/backend/server.ts",
+        "src/backend/migrate.ts",
+        "electron/main/index.ts",
+        "electron/preload/index.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts"]
+    }
+  },
   "paths": {
     "@/*": ["src/*"],
     "@prisma-gen/*": ["prisma/generated/*"]
@@ -35,7 +37,6 @@
     "@radix-ui/react-accordion",
     "@radix-ui/react-aspect-ratio",
     "@radix-ui/react-avatar",
-    "@radix-ui/react-context-menu",
     "@radix-ui/react-hover-card",
     "@radix-ui/react-menubar",
     "@radix-ui/react-navigation-menu",
