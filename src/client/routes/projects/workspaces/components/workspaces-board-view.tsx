@@ -31,7 +31,9 @@ export function WorkspacesBoardView({
           <KanbanControls />
           <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
           <ResumeBranchButton onClick={onResumeOpen} />
-          <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
+          <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace}>
+            Workspace
+          </NewWorkspaceButton>
         </PageHeader>
 
         <div className="flex-1 min-h-0">
