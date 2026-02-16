@@ -159,19 +159,30 @@ export const MessageWrapper = memo(function MessageWrapper({
 // =============================================================================
 
 interface LoadingIndicatorProps {
+  latestReasoning?: string | null;
   className?: string;
+}
+
+function getLoadingText(latestReasoning: string | null | undefined): string {
+  const normalized = latestReasoning?.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return 'Agent is working...';
+  }
+  return normalized.length > 200 ? `${normalized.slice(0, 197)}...` : normalized;
 }
 
 /**
  * Shows a loading/typing indicator when the agent is processing.
  */
 export const LoadingIndicator = memo(function LoadingIndicator({
+  latestReasoning = null,
   className,
 }: LoadingIndicatorProps) {
+  const loadingText = getLoadingText(latestReasoning);
   return (
     <div className={cn('flex items-center gap-2 text-muted-foreground', className)}>
       <Loader2 className="h-4 w-4 animate-spin" />
-      <span className="text-sm">Agent is working...</span>
+      <span className="text-sm">{loadingText}</span>
     </div>
   );
 });

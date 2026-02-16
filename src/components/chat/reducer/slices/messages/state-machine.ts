@@ -25,7 +25,9 @@ function applyMessageStateChange(
 
   switch (newState) {
     case MessageState.ACCEPTED:
-      return userMessage ? handleAcceptedState(state, id, userMessage, queuePosition) : state;
+      return userMessage
+        ? handleAcceptedState(state, id, userMessage, queuePosition)
+        : { ...state, latestThinking: null };
     case MessageState.DISPATCHED:
       return userMessage
         ? handleDispatchedState(state, id, userMessage)
@@ -74,6 +76,7 @@ function handleAcceptedState(
       ...state,
       queuedMessages: newQueuedMessages,
       pendingMessages: newPendingMessages,
+      latestThinking: null,
     };
   }
 
@@ -126,6 +129,7 @@ function handleAcceptedState(
     messages: insertMessageByOrder(state.messages, newMessage),
     queuedMessages: newQueuedMessages,
     pendingMessages: newPendingMessages,
+    latestThinking: null,
     messageIdToUuid: newMessageIdToUuid,
     pendingUserMessageUuids: newPendingUuids,
     localUserMessageIds: newLocalUserMessageIds,
