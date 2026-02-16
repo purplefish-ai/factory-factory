@@ -30,24 +30,17 @@ const logger = createLogger('ratchet');
 
 const RATCHET_WORKFLOW = 'ratchet';
 
-/** Absolute offsets (ms) from first "clean PR" detection for review comment re-polls. */
-const REVIEW_POLL_OFFSETS_MS = [
-  2 * 60_000, //   2 min — catches fast bots
-  5 * 60_000, //   5 min
-  15 * 60_000, //  15 min
-  45 * 60_000, //  45 min
-  120 * 60_000, // 120 min — final check at 2 hours
-];
+/** Interval (ms) between review comment re-polls while PR is open and clean. */
+const REVIEW_POLL_INTERVAL_MS = 2 * 60_000; // 2 min
 
 interface ReviewPollTracker {
   snapshotKey: string;
-  startedAt: number;
+  lastPolledAt: number;
   pollCount: number;
 }
 
 type ReviewPollResult =
   | { action: 'waiting' }
-  | { action: 'exhausted' }
   | { action: 'comments-found'; freshPrState: PRStateInfo };
 
 interface PRStateInfo {
@@ -63,6 +56,13 @@ interface PRStateInfo {
   }> | null;
   prState: string;
   prNumber: number;
+  reviewComments: Array<{
+    author: string;
+    body: string;
+    path: string;
+    line: number | null;
+    url: string;
+  }>;
 }
 
 interface RatchetDecisionContext {
@@ -389,12 +389,13 @@ class RatchetService extends EventEmitter {
       const decisionContext = await this.buildRatchetDecisionContext(workspace, prStateInfo);
       const decision = this.decideRatchetAction(decisionContext);
 
-      if (decisionContext.isCleanPrWithNoNewReviewActivity) {
+      if (prStateInfo.prState === 'MERGED') {
+        this.reviewPollTrackers.delete(workspace.id);
+      } else if (decisionContext.isCleanPrWithNoNewReviewActivity) {
         const pollDispatch = await this.processReviewCommentPoll(
           workspace,
           prStateInfo,
-          authenticatedUsername,
-          decisionContext
+          authenticatedUsername
         );
         if (pollDispatch) {
           return pollDispatch;
@@ -843,14 +844,12 @@ class RatchetService extends EventEmitter {
   private async processReviewCommentPoll(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
-    authenticatedUsername: string | null,
-    decisionContext: RatchetDecisionContext
+    authenticatedUsername: string | null
   ): Promise<WorkspaceRatchetResult | null> {
     const pollResult = await this.handleReviewCommentPoll(
       workspace,
       prStateInfo,
-      authenticatedUsername,
-      decisionContext.hasStateChangedSinceLastDispatch
+      authenticatedUsername
     );
 
     if (pollResult.action === 'comments-found') {
@@ -891,33 +890,23 @@ class RatchetService extends EventEmitter {
       };
     }
 
-    if (pollResult.action === 'exhausted') {
-      await workspaceAccessor.update(workspace.id, {
-        ratchetLastCiRunId: prStateInfo.snapshotKey,
-      });
-    }
-
     return null;
   }
 
   private async handleReviewCommentPoll(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo,
-    authenticatedUsername: string | null,
-    hasStateChangedSinceLastDispatch: boolean
+    authenticatedUsername: string | null
   ): Promise<ReviewPollResult> {
     const existing = this.reviewPollTrackers.get(workspace.id);
 
     if (!existing) {
-      if (!hasStateChangedSinceLastDispatch) {
-        return { action: 'waiting' };
-      }
       this.reviewPollTrackers.set(workspace.id, {
         snapshotKey: prStateInfo.snapshotKey,
-        startedAt: Date.now(),
+        lastPolledAt: Date.now(),
         pollCount: 0,
       });
-      logger.info('Started review comment backoff polling', {
+      logger.info('Started review comment polling', {
         workspaceId: workspace.id,
         snapshotKey: prStateInfo.snapshotKey,
       });
@@ -927,32 +916,17 @@ class RatchetService extends EventEmitter {
     if (existing.snapshotKey !== prStateInfo.snapshotKey) {
       this.reviewPollTrackers.set(workspace.id, {
         snapshotKey: prStateInfo.snapshotKey,
-        startedAt: Date.now(),
+        lastPolledAt: Date.now(),
         pollCount: 0,
       });
-      logger.info('Reset review comment backoff polling (new snapshot)', {
+      logger.info('Reset review comment polling (new snapshot)', {
         workspaceId: workspace.id,
         snapshotKey: prStateInfo.snapshotKey,
       });
       return { action: 'waiting' };
     }
 
-    if (existing.pollCount >= REVIEW_POLL_OFFSETS_MS.length) {
-      this.reviewPollTrackers.delete(workspace.id);
-      logger.info('Review comment backoff polling exhausted', {
-        workspaceId: workspace.id,
-        totalPolls: existing.pollCount,
-        elapsedMs: Date.now() - existing.startedAt,
-      });
-      return { action: 'exhausted' };
-    }
-
-    const offset = REVIEW_POLL_OFFSETS_MS[existing.pollCount];
-    if (offset === undefined) {
-      return { action: 'waiting' };
-    }
-    const nextPollAt = existing.startedAt + offset;
-    if (Date.now() < nextPollAt) {
+    if (Date.now() - existing.lastPolledAt < REVIEW_POLL_INTERVAL_MS) {
       return { action: 'waiting' };
     }
 
@@ -967,26 +941,16 @@ class RatchetService extends EventEmitter {
     }
 
     existing.pollCount++;
+    existing.lastPolledAt = Date.now();
 
     if (!this.shouldSkipCleanPR(workspace, freshPrState)) {
       this.reviewPollTrackers.delete(workspace.id);
-      logger.info('Review comments detected during backoff poll', {
+      logger.info('Review comments detected during poll', {
         workspaceId: workspace.id,
         pollNumber: existing.pollCount,
-        elapsedMs: Date.now() - existing.startedAt,
         latestReviewActivityAtMs: freshPrState.latestReviewActivityAtMs,
       });
       return { action: 'comments-found', freshPrState };
-    }
-
-    if (existing.pollCount >= REVIEW_POLL_OFFSETS_MS.length) {
-      this.reviewPollTrackers.delete(workspace.id);
-      logger.info('Review comment backoff polling exhausted', {
-        workspaceId: workspace.id,
-        totalPolls: existing.pollCount,
-        elapsedMs: Date.now() - existing.startedAt,
-      });
-      return { action: 'exhausted' };
     }
 
     return { action: 'waiting' };
@@ -1199,6 +1163,16 @@ class RatchetService extends EventEmitter {
         statusCheckRollup
       );
 
+      const filteredReviewComments = reviewComments
+        .filter((c) => !this.isIgnoredReviewAuthor(c.author.login, authenticatedUsername))
+        .map((c) => ({
+          author: c.author.login,
+          body: c.body,
+          path: c.path,
+          line: c.line,
+          url: c.url,
+        }));
+
       return {
         ciStatus,
         snapshotKey,
@@ -1207,6 +1181,7 @@ class RatchetService extends EventEmitter {
         statusCheckRollup,
         prState: prDetails.state,
         prNumber: prDetails.number,
+        reviewComments: filteredReviewComments,
       };
     } catch (error) {
       this.backoff.handleError(
@@ -1370,7 +1345,12 @@ class RatchetService extends EventEmitter {
         sessionName: 'Ratchet',
         runningIdleAction: 'restart',
         dispatchMode: 'start_empty_and_send',
-        buildPrompt: () => buildRatchetDispatchPrompt(workspace.prUrl, prStateInfo.prNumber),
+        buildPrompt: () =>
+          buildRatchetDispatchPrompt(
+            workspace.prUrl,
+            prStateInfo.prNumber,
+            prStateInfo.reviewComments
+          ),
         beforeStart: ({ sessionId, prompt }) => {
           this.session.injectCommittedUserMessage(sessionId, prompt);
         },

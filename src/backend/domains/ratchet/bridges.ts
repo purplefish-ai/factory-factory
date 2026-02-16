@@ -40,8 +40,12 @@ export interface RatchetPRFullDetails {
 
 /** Review comment as returned by the GitHub bridge */
 export interface RatchetReviewComment {
-  updatedAt: string;
   author: { login: string };
+  body: string;
+  path: string;
+  line: number | null;
+  updatedAt: string;
+  url: string;
 }
 
 /** Input shape for CI status computation */
