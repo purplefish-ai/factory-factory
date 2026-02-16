@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 describe('LoadingIndicator', () => {
-  it('renders reasoning text with markdown formatting', () => {
+  it('renders reasoning text as plain text with markdown stripped', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -19,14 +19,16 @@ describe('LoadingIndicator', () => {
     flushSync(() => {
       root.render(
         createElement(LoadingIndicator, {
-          latestReasoning: '**Testing API calls with escalation**',
+          latestReasoning: '**Testing** `API` ~~calls~~ with _escalation_',
         })
       );
     });
 
-    const strong = container.querySelector('strong');
-    expect(strong?.textContent).toBe('Testing API calls with escalation');
-    expect(container.textContent).not.toContain('**Testing API calls with escalation**');
+    expect(container.textContent).toContain('Testing API calls with escalation');
+    expect(container.textContent).not.toContain('**');
+    expect(container.textContent).not.toContain('`');
+    expect(container.textContent).not.toContain('~~');
+    expect(container.querySelector('strong')).toBeNull();
 
     root.unmount();
   });
@@ -45,7 +47,7 @@ describe('LoadingIndicator', () => {
     root.unmount();
   });
 
-  it('avoids malformed markdown when truncation cuts through syntax', () => {
+  it('strips markdown links to plain text', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -53,19 +55,39 @@ describe('LoadingIndicator', () => {
     flushSync(() => {
       root.render(
         createElement(LoadingIndicator, {
-          latestReasoning: `${'a'.repeat(190)} **broken markdown that should be truncated safely**`,
+          latestReasoning: 'Read [the docs](https://example.com/docs) before running this.',
         })
       );
     });
 
-    expect(container.querySelector('strong')).toBeNull();
+    expect(container.textContent).toContain('Read the docs before running this.');
+    expect(container.textContent).not.toContain('[');
+    expect(container.textContent).not.toContain('https://example.com/docs');
+
+    root.unmount();
+  });
+
+  it('truncates long stripped text to 200 chars with ellipsis', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'a'.repeat(190)} **bold** ${'b'.repeat(40)}`,
+        })
+      );
+    });
+
     expect(container.textContent).toContain('...');
+    expect(container.textContent?.length).toBeLessThanOrEqual(200);
     expect(container.textContent).not.toContain('**');
 
     root.unmount();
   });
 
-  it('removes dangling underscore markdown when truncation cuts mid-token', () => {
+  it('shows fallback text when markdown-only input strips to empty content', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
@@ -73,112 +95,12 @@ describe('LoadingIndicator', () => {
     flushSync(() => {
       root.render(
         createElement(LoadingIndicator, {
-          latestReasoning: `${'b'.repeat(190)} _broken emphasis that should be truncated safely_`,
+          latestReasoning: '***~~~```',
         })
       );
     });
 
-    expect(container.querySelector('em')).toBeNull();
-    expect(container.textContent).toContain('...');
-    expect(container.textContent).not.toContain('_');
-
-    root.unmount();
-  });
-
-  it('removes dangling strikethrough markdown when truncation cuts mid-token', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(
-        createElement(LoadingIndicator, {
-          latestReasoning: `${'c'.repeat(190)} ~~broken strikethrough that should be truncated safely~~`,
-        })
-      );
-    });
-
-    expect(container.querySelector('del')).toBeNull();
-    expect(container.textContent).toContain('...');
-    expect(container.textContent).not.toContain('~~');
-
-    root.unmount();
-  });
-
-  it('preserves parentheses when truncation includes unmatched literal punctuation', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(
-        createElement(LoadingIndicator, {
-          latestReasoning: `${'d'.repeat(150)} processData(input) ${'e'.repeat(43)} (`,
-        })
-      );
-    });
-
-    expect(container.textContent).toContain('processData(input)');
-    expect(container.textContent).not.toContain('processDatainput');
-
-    root.unmount();
-  });
-
-  it('keeps balanced markdown formatting when truncated text ends with a marker character', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(
-        createElement(LoadingIndicator, {
-          latestReasoning: `${'f'.repeat(190)} **ok** additional trailing text`,
-        })
-      );
-    });
-
-    const strong = container.querySelector('strong');
-    expect(strong?.textContent).toBe('ok');
-
-    root.unmount();
-  });
-
-  it('preserves literal math and identifier characters when fallback sanitizes markdown', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(
-        createElement(LoadingIndicator, {
-          latestReasoning: `${'g'.repeat(110)} 5 * 3 = 15 my_var my__var ${'h'.repeat(60)} **broken`,
-        })
-      );
-    });
-
-    expect(container.textContent).toContain('5 * 3 = 15');
-    expect(container.textContent).toContain('my_var');
-    expect(container.textContent).toContain('my__var');
-    expect(container.textContent).not.toContain('**broken');
-
-    root.unmount();
-  });
-
-  it('avoids leaving a dangling underscore when double-underscore cleanup mutates text', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-
-    flushSync(() => {
-      root.render(
-        createElement(LoadingIndicator, {
-          latestReasoning: `${'i'.repeat(189)} abc ___trailing text that forces truncation`,
-        })
-      );
-    });
-
-    expect(container.textContent).toContain('abc...');
-    expect(container.textContent).not.toContain('abc _...');
+    expect(container.textContent).toContain('Agent is working...');
 
     root.unmount();
   });
