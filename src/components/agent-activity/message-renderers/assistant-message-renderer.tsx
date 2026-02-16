@@ -163,12 +163,44 @@ interface LoadingIndicatorProps {
   className?: string;
 }
 
+const LOADING_TEXT_MAX_LENGTH = 200;
+const LOADING_TEXT_ELLIPSIS = '...';
+const LOADING_TEXT_BODY_MAX_LENGTH = LOADING_TEXT_MAX_LENGTH - LOADING_TEXT_ELLIPSIS.length;
+
+function stripMarkdownSyntax(input: string): string {
+  return input
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/[`*~_]/g, '');
+}
+
+function truncateLoadingText(input: string): string {
+  if (input.length <= LOADING_TEXT_MAX_LENGTH) {
+    return input;
+  }
+
+  const truncated = input.slice(0, LOADING_TEXT_BODY_MAX_LENGTH).trimEnd();
+  return `${truncated}${LOADING_TEXT_ELLIPSIS}`;
+}
+
 function getLoadingText(latestReasoning: string | null | undefined): string {
   const normalized = latestReasoning?.replace(/\s+/g, ' ').trim();
   if (!normalized) {
     return 'Agent is working...';
   }
-  return normalized.length > 200 ? `${normalized.slice(0, 197)}...` : normalized;
+
+  const stripped = stripMarkdownSyntax(normalized).trim();
+  if (!stripped) {
+    return 'Agent is working...';
+  }
+
+  return truncateLoadingText(stripped);
 }
 
 /**
@@ -180,9 +212,9 @@ export const LoadingIndicator = memo(function LoadingIndicator({
 }: LoadingIndicatorProps) {
   const loadingText = getLoadingText(latestReasoning);
   return (
-    <div className={cn('flex items-center gap-2 text-muted-foreground', className)}>
-      <Loader2 className="h-4 w-4 animate-spin" />
-      <span className="text-sm">{loadingText}</span>
+    <div className={cn('flex items-start gap-2 text-muted-foreground', className)}>
+      <Loader2 className="h-4 w-4 animate-spin shrink-0 mt-0.5" />
+      <span className="min-w-0 flex-1 text-sm leading-normal break-words">{loadingText}</span>
     </div>
   );
 });
