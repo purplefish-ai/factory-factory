@@ -58,7 +58,13 @@ export const LatestThinking = memo(function LatestThinking({
         </span>
       </div>
       <div ref={scrollRef} className="max-h-40 overflow-y-auto">
-        <MarkdownRenderer content={thinking} className="text-muted-foreground" />
+        {running ? (
+          <div className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+            {thinking}
+          </div>
+        ) : (
+          <MarkdownRenderer content={thinking} className="text-muted-foreground" />
+        )}
       </div>
     </div>
   );
