@@ -18,6 +18,12 @@ interface PermissionPromptProps {
   onApprove: (requestId: string, allow: boolean, optionId?: string) => void;
 }
 
+interface PermissionOption {
+  optionId: string;
+  name: string;
+  kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
+}
+
 interface PermissionDecisionActionsProps {
   allowButtonRef: React.RefObject<HTMLButtonElement | null>;
   onAllow: () => void;
@@ -166,6 +172,21 @@ function resolvePlanContent(permission: PermissionRequest): string | null {
   return null;
 }
 
+function getPermissionOptionStyle(kind: PermissionOption['kind']) {
+  switch (kind) {
+    case 'allow_once':
+      return { variant: 'outline' as const, icon: ShieldCheck };
+    case 'allow_always':
+      return { variant: 'default' as const, icon: ShieldCheck };
+    case 'reject_once':
+      return { variant: 'outline' as const, icon: ShieldX };
+    case 'reject_always':
+      return { variant: 'destructive' as const, icon: ShieldX };
+    default:
+      return { variant: 'outline' as const, icon: ShieldCheck };
+  }
+}
+
 // =============================================================================
 // Plan View Toggle
 // =============================================================================
@@ -207,7 +228,7 @@ function PlanViewToggle({ value, onChange }: PlanViewToggleProps) {
  * Displays the plan content with expand/collapse functionality.
  */
 function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
-  const approveButtonRef = useRef<HTMLButtonElement>(null);
+  const firstActionButtonRef = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(true);
   const [viewMode, setViewMode] = usePlanViewMode();
   const permissionRequestId = permission?.requestId;
@@ -217,7 +238,7 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
       return;
     }
     const timeoutId = setTimeout(() => {
-      approveButtonRef.current?.focus();
+      firstActionButtonRef.current?.focus();
     }, 100);
     return () => clearTimeout(timeoutId);
   }, [permissionRequestId]);
@@ -228,13 +249,23 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
 
   const { requestId } = permission;
   const planContent = resolvePlanContent(permission);
+  const options: PermissionOption[] =
+    permission.acpOptions && permission.acpOptions.length > 0
+      ? [...permission.acpOptions].sort((left, right) => {
+          const leftAllow = left.kind.startsWith('allow');
+          const rightAllow = right.kind.startsWith('allow');
+          if (leftAllow === rightAllow) {
+            return 0;
+          }
+          return leftAllow ? -1 : 1;
+        })
+      : [
+          { optionId: 'default', name: 'Approve Plan', kind: 'allow_once' },
+          { optionId: 'plan', name: 'Keep Planning', kind: 'reject_once' },
+        ];
 
-  const handleApprove = () => {
-    onApprove(requestId, true);
-  };
-
-  const handleReject = () => {
-    onApprove(requestId, false);
+  const handleOptionClick = (option: PermissionOption) => {
+    onApprove(requestId, option.kind.startsWith('allow'), option.optionId);
   };
 
   return (
@@ -278,19 +309,28 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
         )}
 
         <p className="text-[11px] text-muted-foreground">
-          You can also type feedback in the chat input below to request changes.
+          Choose Keep planning to request revisions, then send follow-up guidance in chat.
         </p>
 
         {/* Actions */}
         <div className="flex justify-end gap-2">
-          <Button variant="outline" size="sm" onClick={handleReject} className="gap-1.5">
-            <ShieldX className="h-3.5 w-3.5" aria-hidden="true" />
-            Reject Plan
-          </Button>
-          <Button ref={approveButtonRef} size="sm" onClick={handleApprove} className="gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            Approve Plan
-          </Button>
+          {options.map((option, index) => {
+            const style = getPermissionOptionStyle(option.kind);
+            const Icon = style.icon;
+            return (
+              <Button
+                key={option.optionId}
+                ref={index === 0 ? firstActionButtonRef : undefined}
+                variant={style.variant}
+                size="sm"
+                onClick={() => handleOptionClick(option)}
+                className="gap-1.5"
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                {option.name}
+              </Button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -334,22 +374,6 @@ function AcpPermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
     onApprove(requestId, isAllow, optionId);
   };
 
-  // Icon and color based on option kind
-  const getOptionStyle = (kind: string) => {
-    switch (kind) {
-      case 'allow_once':
-        return { variant: 'outline' as const, icon: ShieldCheck };
-      case 'allow_always':
-        return { variant: 'default' as const, icon: ShieldCheck };
-      case 'reject_once':
-        return { variant: 'outline' as const, icon: ShieldX };
-      case 'reject_always':
-        return { variant: 'destructive' as const, icon: ShieldX };
-      default:
-        return { variant: 'outline' as const, icon: ShieldCheck };
-    }
-  };
-
   return (
     <PromptCard
       icon={<Terminal className="h-5 w-5 text-muted-foreground" aria-hidden="true" />}
@@ -357,7 +381,7 @@ function AcpPermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
       actions={
         <div className="flex flex-wrap gap-2">
           {[...allowOptions, ...rejectOptions].map((option, index) => {
-            const style = getOptionStyle(option.kind);
+            const style = getPermissionOptionStyle(option.kind);
             const Icon = style.icon;
             return (
               <Button
@@ -396,20 +420,22 @@ function AcpPermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
  */
 export function PermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
-  useAutoFocusPermissionButton(allowButtonRef, permission?.requestId);
+  const permissionRequestId =
+    permission?.toolName === 'ExitPlanMode' ? undefined : permission?.requestId;
+  useAutoFocusPermissionButton(allowButtonRef, permissionRequestId);
 
   if (!permission) {
     return null;
   }
 
+  // ExitPlanMode always uses plan-specific view so plan content is visible.
+  if (permission.toolName === 'ExitPlanMode') {
+    return <PlanApprovalPrompt permission={permission} onApprove={onApprove} />;
+  }
+
   // ACP multi-option permissions
   if (permission.acpOptions && permission.acpOptions.length > 0) {
     return <AcpPermissionPrompt permission={permission} onApprove={onApprove} />;
-  }
-
-  // Use specialized view for ExitPlanMode
-  if (permission.toolName === 'ExitPlanMode') {
-    return <PlanApprovalPrompt permission={permission} onApprove={onApprove} />;
   }
 
   const { requestId, toolName, toolInput } = permission;

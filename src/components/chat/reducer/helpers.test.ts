@@ -70,16 +70,21 @@ describe('convertPendingRequest', () => {
   });
 
   it('keeps non-question tools as permission requests', () => {
+    const acpOptions = [{ optionId: 'default', name: 'Default', kind: 'allow_once' as const }];
     const request: PendingInteractiveRequest = {
       requestId: 'req-3',
       toolName: 'ReadFile',
       toolUseId: 'tool-3',
       input: { path: 'README.md' },
       planContent: null,
+      acpOptions,
       timestamp: '2026-02-09T00:00:00.000Z',
     };
 
     const result = convertPendingRequest(request);
     expect(result.type).toBe('permission');
+    if (result.type === 'permission') {
+      expect(result.request.acpOptions).toEqual(acpOptions);
+    }
   });
 });

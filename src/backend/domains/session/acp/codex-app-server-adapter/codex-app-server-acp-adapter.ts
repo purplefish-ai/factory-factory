@@ -1974,32 +1974,59 @@ export class CodexAppServerAcpAdapter implements Agent {
     return null;
   }
 
-  private isPlanApprovalSelected(optionId: string | null): boolean {
-    if (!optionId) {
-      return false;
-    }
-    return optionId.startsWith('allow') || optionId === 'default';
+  private getPlanExitModePriority(modeId: string): number {
+    const normalized = modeId.toLowerCase();
+    const index = PLAN_EXIT_MODE_PREFERENCE.findIndex(
+      (preferred) => preferred.toLowerCase() === normalized
+    );
+    return index >= 0 ? index : PLAN_EXIT_MODE_PREFERENCE.length;
   }
 
-  private resolvePostPlanApprovalMode(currentMode: string): string | null {
-    if (!isPlanLikeMode(currentMode)) {
-      return null;
+  private comparePlanExitModePreference(left: string, right: string): number {
+    const priorityDiff = this.getPlanExitModePriority(left) - this.getPlanExitModePriority(right);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
     }
+    return left.localeCompare(right);
+  }
 
+  private resolveCollaborationModeLabel(modeId: string): string {
+    const entry = this.collaborationModes.find((candidate) => candidate.mode === modeId);
+    if (entry?.name) {
+      return entry.name;
+    }
+    return sanitizeModeName(modeId);
+  }
+
+  private buildPlanApprovalOptions(session: AdapterSession): {
+    options: Array<{
+      optionId: string;
+      name: string;
+      kind: 'allow_once' | 'reject_once';
+    }>;
+    approvableModeIds: Set<string>;
+  } {
+    const currentMode = session.defaults.collaborationMode;
     const availableModes = this.getCollaborationModeValues(currentMode);
-    for (const preferred of PLAN_EXIT_MODE_PREFERENCE) {
-      const match = availableModes.find((mode) => mode.toLowerCase() === preferred.toLowerCase());
-      if (match) {
-        return match;
-      }
-    }
+    const nonPlanModes = availableModes
+      .filter((modeId) => !isPlanLikeMode(modeId))
+      .sort((left, right) => this.comparePlanExitModePreference(left, right));
 
-    const firstNonPlan = availableModes.find((mode) => !isPlanLikeMode(mode));
-    if (firstNonPlan) {
-      return firstNonPlan;
-    }
+    const approvableModeIds = new Set<string>(nonPlanModes);
+    const options: Array<{ optionId: string; name: string; kind: 'allow_once' | 'reject_once' }> =
+      nonPlanModes.map((modeId) => ({
+        optionId: modeId,
+        name: `Approve and switch to ${this.resolveCollaborationModeLabel(modeId)}`,
+        kind: 'allow_once' as const,
+      }));
 
-    return currentMode.toLowerCase() === 'default' ? null : 'default';
+    options.push({
+      optionId: currentMode,
+      name: 'Keep planning',
+      kind: 'reject_once',
+    });
+
+    return { options, approvableModeIds };
   }
 
   private holdTurnUntilPlanApprovalResolves(session: AdapterSession, turnId: string): void {
@@ -2080,6 +2107,20 @@ export class CodexAppServerAcpAdapter implements Agent {
     });
 
     try {
+      const { options: planApprovalOptions, approvableModeIds } =
+        this.buildPlanApprovalOptions(session);
+      if (approvableModeIds.size === 0) {
+        await this.emitSessionUpdate(session.sessionId, {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: approvalToolCallId,
+          kind: 'switch_mode',
+          title: 'ExitPlanMode',
+          status: 'failed',
+          rawOutput: 'Plan proposed, but no non-plan collaboration mode is available.',
+        });
+        return;
+      }
+
       const permissionResult = await this.connection.requestPermission({
         sessionId: session.sessionId,
         toolCall: {
@@ -2089,35 +2130,22 @@ export class CodexAppServerAcpAdapter implements Agent {
           status: 'pending',
           rawInput: approvalInput,
         },
-        options: [
-          {
-            optionId: 'allow_once',
-            name: 'Approve plan',
-            kind: 'allow_once',
-          },
-          {
-            optionId: 'reject_once',
-            name: 'Request changes',
-            kind: 'reject_once',
-          },
-        ],
+        options: planApprovalOptions,
       });
 
-      const selectedOptionId =
-        permissionResult.outcome.outcome === 'selected' ? permissionResult.outcome.optionId : null;
-      const approved = this.isPlanApprovalSelected(selectedOptionId);
+      const selectedMode =
+        permissionResult.outcome.outcome === 'selected' &&
+        approvableModeIds.has(permissionResult.outcome.optionId)
+          ? permissionResult.outcome.optionId
+          : null;
+      const approved = selectedMode !== null;
 
-      if (approved) {
-        const postApprovalMode = this.resolvePostPlanApprovalMode(
-          session.defaults.collaborationMode
-        );
-        if (postApprovalMode) {
-          session.defaults.collaborationMode = postApprovalMode;
-          await this.emitSessionUpdate(session.sessionId, {
-            sessionUpdate: 'config_option_update',
-            configOptions: this.buildConfigOptions(session),
-          });
-        }
+      if (selectedMode && session.defaults.collaborationMode !== selectedMode) {
+        session.defaults.collaborationMode = selectedMode;
+        await this.emitSessionUpdate(session.sessionId, {
+          sessionUpdate: 'config_option_update',
+          configOptions: this.buildConfigOptions(session),
+        });
       }
 
       await this.emitSessionUpdate(session.sessionId, {

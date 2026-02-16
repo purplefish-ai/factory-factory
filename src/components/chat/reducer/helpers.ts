@@ -377,6 +377,7 @@ export function convertPendingRequest(
       toolInput: req.input,
       timestamp: req.timestamp,
       planContent: req.planContent,
+      ...(Array.isArray(req.acpOptions) ? { acpOptions: req.acpOptions } : {}),
     },
   };
 }

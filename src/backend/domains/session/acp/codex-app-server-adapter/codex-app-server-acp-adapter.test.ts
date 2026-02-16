@@ -78,7 +78,10 @@ const DEFAULT_COLLABORATION_MODES = [
 
 async function initializeAdapterWithDefaultModel(
   adapter: CodexAppServerAcpAdapter,
-  codex: CodexMocks
+  codex: CodexMocks,
+  options?: {
+    collaborationModes?: Array<{ name: string; mode: string }>;
+  }
 ): Promise<void> {
   codex.request.mockResolvedValueOnce({});
   codex.request.mockResolvedValueOnce({
@@ -88,7 +91,7 @@ async function initializeAdapterWithDefaultModel(
     },
   });
   codex.request.mockResolvedValueOnce({
-    data: DEFAULT_COLLABORATION_MODES,
+    data: options?.collaborationModes ?? DEFAULT_COLLABORATION_MODES,
     nextCursor: null,
   });
   codex.request.mockResolvedValueOnce({
@@ -708,7 +711,7 @@ describe('CodexAppServerAcpAdapter', () => {
   it('requests ExitPlanMode approval after completed plan item in plan mode', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
-      outcome: { outcome: 'selected', optionId: 'allow_once' },
+      outcome: { outcome: 'selected', optionId: 'default' },
     } satisfies RequestPermissionResponse);
 
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -773,8 +776,8 @@ describe('CodexAppServerAcpAdapter', () => {
           kind: 'switch_mode',
         }),
         options: [
-          { optionId: 'allow_once', name: 'Approve plan', kind: 'allow_once' },
-          { optionId: 'reject_once', name: 'Request changes', kind: 'reject_once' },
+          { optionId: 'default', name: 'Approve and switch to Default', kind: 'allow_once' },
+          { optionId: 'plan', name: 'Keep planning', kind: 'reject_once' },
         ],
       })
     );
@@ -817,6 +820,102 @@ describe('CodexAppServerAcpAdapter', () => {
               title: 'ExitPlanMode',
               kind: 'switch_mode',
               status: 'completed',
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
+  it('switches to the selected non-plan mode id when plan approval is accepted', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
+      outcome: { outcome: 'selected', optionId: 'code' },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex, {
+      collaborationModes: [
+        { name: 'Default', mode: 'default' },
+        { name: 'Code', mode: 'code' },
+        { name: 'Plan', mode: 'plan' },
+      ],
+    });
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_plan_mode_switch', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+    await adapter.setSessionMode({ sessionId: session.sessionId, modeId: 'plan' });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_plan_mode_switch',
+      turnId: 'turn_plan_mode_switch',
+      item: {
+        type: 'plan',
+        id: 'item_plan_mode_switch',
+        status: 'inProgress',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/plan/delta', {
+      threadId: 'thread_plan_mode_switch',
+      turnId: 'turn_plan_mode_switch',
+      itemId: 'item_plan_mode_switch',
+      delta: '# Plan\n- implement this',
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_plan_mode_switch',
+      turnId: 'turn_plan_mode_switch',
+      item: {
+        type: 'plan',
+        id: 'item_plan_mode_switch',
+        status: 'completed',
+      },
+    });
+
+    expect(connection.requestPermission).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.arrayContaining([
+          expect.objectContaining({ optionId: 'default', kind: 'allow_once' }),
+          expect.objectContaining({ optionId: 'code', kind: 'allow_once' }),
+          expect.objectContaining({ optionId: 'plan', kind: 'reject_once' }),
+        ]),
+      })
+    );
+
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'config_option_update',
+              configOptions: expect.arrayContaining([
+                expect.objectContaining({
+                  id: 'mode',
+                  currentValue: 'code',
+                }),
+              ]),
             }),
           }),
         ],
@@ -927,7 +1026,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(promptSettled).toBe(false);
 
     resolvePlanApproval({
-      outcome: { outcome: 'selected', optionId: 'allow_once' },
+      outcome: { outcome: 'selected', optionId: 'default' },
     });
 
     await itemCompletedPromise;
@@ -958,7 +1057,7 @@ describe('CodexAppServerAcpAdapter', () => {
   it('marks synthetic ExitPlanMode approval as failed when user rejects', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValue({
-      outcome: { outcome: 'selected', optionId: 'reject_once' },
+      outcome: { outcome: 'selected', optionId: 'plan' },
     } satisfies RequestPermissionResponse);
 
     const { client: codexClient, mocks: codex } = createMockCodexClient();
