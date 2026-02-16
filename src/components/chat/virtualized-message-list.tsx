@@ -122,6 +122,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const isAutoScrollingRef = useRef(false);
   const autoScrollResetRafRef = useRef<number | null>(null);
   const resizeStickRafRef = useRef<number | null>(null);
+  const newMessagePinRafRef = useRef<number | null>(null);
   // Track isNearBottom in a ref to avoid stale closures in effects
   const isNearBottomRef = useRef(isNearBottom);
   isNearBottomRef.current = isNearBottom;
@@ -196,6 +197,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
     // If messages were added and user is near bottom, scroll to bottom
     if (currentCount > prevCount && isNearBottomRef.current && scrollContainerRef.current) {
+      if (newMessagePinRafRef.current !== null) {
+        cancelAnimationFrame(newMessagePinRafRef.current);
+        newMessagePinRafRef.current = null;
+      }
       // Use 'auto' behavior instead of smooth to prevent animation jitter during rapid updates
       // Wrap in try-catch to handle edge cases where scroll element becomes null during unmount
       // or rapid component updates (see: https://github.com/TanStack/virtual/issues/696)
@@ -207,7 +212,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         isAutoScrollingRef.current = false;
       }
       // Pin to real bottom after measurement/layout settles.
-      requestAnimationFrame(() => {
+      newMessagePinRafRef.current = requestAnimationFrame(() => {
+        newMessagePinRafRef.current = null;
         if (isNearBottomRef.current) {
           stickToBottom();
         } else {
@@ -291,6 +297,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       }
       if (resizeStickRafRef.current !== null) {
         cancelAnimationFrame(resizeStickRafRef.current);
+      }
+      if (newMessagePinRafRef.current !== null) {
+        cancelAnimationFrame(newMessagePinRafRef.current);
       }
     },
     []
