@@ -29,7 +29,7 @@ export function createChatMessageHandlerRegistry(
     queue_message: createQueueMessageHandler(deps),
     remove_queued_message: createRemoveQueuedMessageHandler(),
     resume_queued_messages: createResumeQueuedMessagesHandler(deps),
-    stop: createStopHandler(),
+    stop: createStopHandler(deps),
     load_session: createLoadSessionHandler(deps),
     permission_response: createPermissionResponseHandler(),
     set_model: createSetModelHandler(),
