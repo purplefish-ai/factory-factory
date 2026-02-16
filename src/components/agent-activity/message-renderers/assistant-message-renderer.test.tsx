@@ -142,4 +142,24 @@ describe('LoadingIndicator', () => {
 
     root.unmount();
   });
+
+  it('preserves literal math and identifier characters when fallback sanitizes markdown', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'g'.repeat(120)} 5 * 3 = 15 my_var ${'h'.repeat(60)} **broken`,
+        })
+      );
+    });
+
+    expect(container.textContent).toContain('5 * 3 = 15');
+    expect(container.textContent).toContain('my_var');
+    expect(container.textContent).not.toContain('**broken');
+
+    root.unmount();
+  });
 });

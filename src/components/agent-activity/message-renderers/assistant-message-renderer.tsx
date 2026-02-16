@@ -171,6 +171,82 @@ function countMatches(input: string, pattern: RegExp): number {
   return (input.match(pattern) ?? []).length;
 }
 
+function isEscaped(input: string, index: number): boolean {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && input[cursor] === '\\'; cursor--) {
+    backslashCount++;
+  }
+  return backslashCount % 2 !== 0;
+}
+
+function isSingleAsteriskDelimiter(input: string, index: number): boolean {
+  if (input[index] !== '*') {
+    return false;
+  }
+
+  if (input[index - 1] === '*' || input[index + 1] === '*') {
+    return false;
+  }
+
+  if (isEscaped(input, index)) {
+    return false;
+  }
+
+  const prev = index > 0 ? input[index - 1] : ' ';
+  const next = index + 1 < input.length ? input[index + 1] : ' ';
+  return !(prev.trim().length === 0 && next.trim().length === 0);
+}
+
+function countSingleAsteriskDelimiters(input: string): number {
+  let count = 0;
+  for (let index = 0; index < input.length; index++) {
+    if (isSingleAsteriskDelimiter(input, index)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function removeLastSingleAsteriskDelimiter(input: string): string {
+  for (let index = input.length - 1; index >= 0; index--) {
+    if (isSingleAsteriskDelimiter(input, index)) {
+      return input.slice(0, index) + input.slice(index + 1);
+    }
+  }
+
+  return input;
+}
+
+function findLastUnescapedToken(input: string, token: string): number {
+  let lastMatchIndex = -1;
+
+  for (let index = 0; index <= input.length - token.length; index++) {
+    if (input.slice(index, index + token.length) !== token) {
+      continue;
+    }
+
+    let backslashCount = 0;
+    for (let cursor = index - 1; cursor >= 0 && input[cursor] === '\\'; cursor--) {
+      backslashCount++;
+    }
+
+    if (backslashCount % 2 === 0) {
+      lastMatchIndex = index;
+    }
+  }
+
+  return lastMatchIndex;
+}
+
+function removeLastUnescapedToken(input: string, token: string): string {
+  const index = findLastUnescapedToken(input, token);
+  if (index === -1) {
+    return input;
+  }
+
+  return input.slice(0, index) + input.slice(index + token.length);
+}
+
 function hasUnbalancedMarkdown(input: string): boolean {
   if (input.length === 0) {
     return false;
@@ -187,7 +263,7 @@ function hasUnbalancedMarkdown(input: string): boolean {
   }
 
   const withoutDoubleAsterisks = input.replace(/(?<!\\)\*\*/g, '');
-  if (countMatches(withoutDoubleAsterisks, /(?<!\\)\*/g) % 2 !== 0) {
+  if (countSingleAsteriskDelimiters(withoutDoubleAsterisks) % 2 !== 0) {
     return true;
   }
 
@@ -208,7 +284,7 @@ function hasUnbalancedMarkdown(input: string): boolean {
 }
 
 function stripMarkdownSyntax(input: string): string {
-  return input
+  let stripped = input
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/(?<!\\)`([^`]+)`/g, '$1')
@@ -216,8 +292,36 @@ function stripMarkdownSyntax(input: string): string {
     .replace(/(?<!\\)\*([^*]+)\*/g, '$1')
     .replace(/(?<!\\)__([^_]+)__/g, '$1')
     .replace(/(?<!\\)_([^_]+)_/g, '$1')
-    .replace(/(?<!\\)~~([^~]+)~~/g, '$1')
-    .replace(/(?<!\\)[`~*_]/g, '');
+    .replace(/(?<!\\)~~([^~]+)~~/g, '$1');
+
+  if (countMatches(stripped, /(?<!\\)`/g) % 2 !== 0) {
+    stripped = removeLastUnescapedToken(stripped, '`');
+  }
+
+  if (countMatches(stripped, /(?<!\\)\*\*/g) % 2 !== 0) {
+    stripped = removeLastUnescapedToken(stripped, '**');
+  }
+
+  const withoutDoubleAsterisks = stripped.replace(/(?<!\\)\*\*/g, '');
+  if (countSingleAsteriskDelimiters(withoutDoubleAsterisks) % 2 !== 0) {
+    stripped = removeLastSingleAsteriskDelimiter(stripped);
+  }
+
+  if (countMatches(stripped, /(?<!\\)__/g) % 2 !== 0) {
+    stripped = removeLastUnescapedToken(stripped, '__');
+  }
+
+  const withoutInlineWordUnderscores = stripped.replace(/\B_\B/g, '');
+  const withoutDoubleUnderscores = withoutInlineWordUnderscores.replace(/(?<!\\)__/g, '');
+  if (countMatches(withoutDoubleUnderscores, /(?<!\\)_/g) % 2 !== 0) {
+    stripped = removeLastUnescapedToken(stripped, '_');
+  }
+
+  if (countMatches(stripped, /(?<!\\)~~/g) % 2 !== 0) {
+    stripped = removeLastUnescapedToken(stripped, '~~');
+  }
+
+  return stripped;
 }
 
 function truncateLoadingText(input: string): string {
