@@ -100,6 +100,8 @@ type ActiveTurnState = {
 
 const PENDING_TURN_ID = '__pending_turn__';
 const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
+const DEFAULT_APPROVAL_POLICIES: ApprovalPolicy[] = ['on-failure', 'on-request', 'never'];
+const DEFAULT_SANDBOX_MODES: SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
 
 type PendingTurnCompletion = {
   stopReason: StopReason;
@@ -1375,19 +1377,32 @@ export class CodexAppServerAcpAdapter implements Agent {
   }> {
     const raw = await this.codex.request('configRequirements/read', undefined);
     const parsed = configRequirementsReadResponseSchema.parse(raw);
+    const requirements = parsed.requirements;
     const allowedApprovalPolicies = dedupeStrings(
-      (parsed.requirements?.allowedApprovalPolicies ?? []).filter(isNonEmptyString)
+      (requirements?.allowedApprovalPolicies ?? []).filter(isNonEmptyString)
     );
     const allowedSandboxModes = dedupeStrings(
-      (parsed.requirements?.allowedSandboxModes ?? []).filter(
+      (requirements?.allowedSandboxModes ?? []).filter(
         (mode): mode is SandboxMode =>
           mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access'
       )
     );
+    const hasExplicitApprovalPolicies = Array.isArray(requirements?.allowedApprovalPolicies);
+    const hasExplicitSandboxModes = Array.isArray(requirements?.allowedSandboxModes);
 
     return {
-      allowedApprovalPolicies,
-      allowedSandboxModes,
+      allowedApprovalPolicies:
+        allowedApprovalPolicies.length > 0
+          ? allowedApprovalPolicies
+          : hasExplicitApprovalPolicies
+            ? []
+            : DEFAULT_APPROVAL_POLICIES,
+      allowedSandboxModes:
+        allowedSandboxModes.length > 0
+          ? allowedSandboxModes
+          : hasExplicitSandboxModes
+            ? []
+            : DEFAULT_SANDBOX_MODES,
     };
   }
 

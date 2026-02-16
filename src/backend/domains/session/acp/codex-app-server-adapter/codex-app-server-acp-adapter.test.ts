@@ -510,6 +510,76 @@ describe('CodexAppServerAcpAdapter', () => {
     ).rejects.toBeInstanceOf(Error);
   });
 
+  it('falls back to default execution presets when config requirements are missing', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({
+      requirements: null,
+    });
+    codex.request.mockResolvedValueOnce({
+      data: DEFAULT_COLLABORATION_MODES,
+      nextCursor: null,
+    });
+    codex.request.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'gpt-5',
+          displayName: 'GPT-5',
+          description: 'Default model',
+          defaultReasoningEffort: 'medium',
+          supportedReasoningEfforts: [],
+          inputModalities: ['text'],
+          isDefault: true,
+        },
+      ],
+      nextCursor: null,
+    });
+
+    await adapter.initialize({
+      protocolVersion: 1,
+      clientCapabilities: {},
+      clientInfo: { name: 'test-client', version: '0.0.1' },
+    });
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_defaults', cwd: '/tmp/workspace' },
+      approvalPolicy: 'on-request',
+      sandbox: {
+        type: 'workspaceWrite',
+        writableRoots: ['/tmp/workspace'],
+        readOnlyAccess: { type: 'fullAccess' },
+        networkAccess: true,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: false,
+      },
+      reasoningEffort: 'medium',
+    });
+
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    const executionModeOption = (session.configOptions ?? []).find(
+      (option) => option.id === 'execution_mode'
+    );
+    expect(executionModeOption?.type).toBe('select');
+    if (executionModeOption?.type !== 'select') {
+      throw new Error('expected execution_mode select option');
+    }
+
+    const presetValues = executionModeOption.options.flatMap((option) =>
+      'value' in option ? [option.value] : []
+    );
+
+    expect(presetValues.length).toBeGreaterThan(1);
+    expect(presetValues).toContain(JSON.stringify(['never', 'danger-full-access']));
+    expect(presetValues).toContain(JSON.stringify(['on-failure', 'workspace-write']));
+  });
+
   it('applies discovered execution mode and plan collaboration mode to turn/start', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
