@@ -571,7 +571,7 @@ function sanitizeCommandToken(token: string): string {
 }
 
 function tokenizeCommand(command: string): string[] {
-  return (command.match(/"[^"]*"|'[^']*'|\S+/g) ?? [])
+  return (command.match(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S+/g) ?? [])
     .map((token) => sanitizeCommandToken(token))
     .filter((token) => token.length > 0);
 }

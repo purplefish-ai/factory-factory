@@ -520,6 +520,79 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('parses escaped quotes in quoted command arguments for metadata', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_escaped_quotes', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_escaped_quotes',
+      turnId: 'turn_escaped_quotes',
+      item: {
+        type: 'commandExecution',
+        id: 'item_escaped_quotes',
+        status: 'inProgress',
+        command: 'cat "nested \\"quotes\\".md"',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_escaped_quotes',
+      turnId: 'turn_escaped_quotes',
+      item: {
+        type: 'commandExecution',
+        id: 'item_escaped_quotes',
+        status: 'completed',
+        command: 'cat "nested \\"quotes\\".md"',
+      },
+    });
+
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call',
+              title: 'Read nested \\"quotes\\".md',
+              kind: 'read',
+              locations: [{ path: '/tmp/workspace/nested \\"quotes\\".md' }],
+            }),
+          }),
+        ],
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call_update',
+              title: 'Read nested \\"quotes\\".md',
+              kind: 'read',
+              locations: [{ path: '/tmp/workspace/nested \\"quotes\\".md' }],
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
   it('avoids duplicate thought chunks when reasoning started item already contains summary text', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
