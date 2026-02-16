@@ -444,7 +444,7 @@ describe('CodexAppServerAcpAdapter', () => {
     ).toBe(true);
   });
 
-  it('emits reasoning updates as thought chunks instead of tool calls', async () => {
+  it('avoids duplicate thought chunks when reasoning started item already contains summary text', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
     const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
@@ -472,6 +472,7 @@ describe('CodexAppServerAcpAdapter', () => {
         type: 'reasoning',
         id: 'item_reasoning',
         status: 'inProgress',
+        summary: [{ type: 'summary_text', text: '**Analyzing approach**' }],
       },
     });
 

@@ -1980,7 +1980,9 @@ export class CodexAppServerAcpAdapter implements Agent {
     turnId: string
   ): Promise<void> {
     if (item.type === 'reasoning') {
-      await this.emitReasoningThoughtChunkFromItem(session.sessionId, item);
+      // Reasoning text is emitted from deltas and/or completion fallback.
+      // Skipping started-item text avoids duplicate thought chunks when a started
+      // payload includes summary text and deltas arrive afterward.
       return;
     }
 
