@@ -261,6 +261,10 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
       configurable: true,
       get: () => scrollHeight,
     });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 560,
+    });
     harness.viewport.scrollTop = 80;
 
     await flushEffects();
@@ -294,6 +298,10 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
       configurable: true,
       get: () => scrollHeight,
     });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
     harness.viewport.scrollTop = 120;
 
     await flushEffects();
@@ -310,6 +318,38 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
+  it('does not pin content growth when isNearBottom prop is stale during scroll restore', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    let scrollHeight = 1000;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 200;
+
+    await flushEffects();
+
+    triggerResize(100);
+    await flushAnimationFrame();
+
+    scrollHeight = 1200;
+    triggerResize(300);
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(200);
+
+    harness.cleanup();
+  });
+
   it('does not pin on content growth when user is away from bottom', async () => {
     const harness = createHarness({
       loadingSession: false,
@@ -319,7 +359,11 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
 
     Object.defineProperty(harness.viewport, 'scrollHeight', {
       configurable: true,
-      value: 640,
+      value: 1000,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
     });
     harness.viewport.scrollTop = 120;
 

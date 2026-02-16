@@ -41,6 +41,8 @@ interface VirtualizedMessageListProps {
   initBanner?: WorkspaceInitBanner | null;
 }
 
+const STICK_TO_BOTTOM_THRESHOLD = 150;
+
 // =============================================================================
 // Empty State Component
 // =============================================================================
@@ -119,8 +121,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(messages.length);
   const prevLatestThinkingRef = useRef<string | null>(latestThinking);
-  const isAutoScrollingRef = useRef(false);
-  const autoScrollResetRafRef = useRef<number | null>(null);
   const resizeStickRafRef = useRef<number | null>(null);
   const newMessagePinRafRef = useRef<number | null>(null);
   // Track isNearBottom in a ref to avoid stale closures in effects
@@ -166,25 +166,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
 
-  const scheduleAutoScrollReset = useCallback(() => {
-    if (autoScrollResetRafRef.current !== null) {
-      cancelAnimationFrame(autoScrollResetRafRef.current);
-    }
-    autoScrollResetRafRef.current = requestAnimationFrame(() => {
-      isAutoScrollingRef.current = false;
-      autoScrollResetRafRef.current = null;
-    });
-  }, []);
-
   const stickToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
     if (!container) {
       return;
     }
-    isAutoScrollingRef.current = true;
     container.scrollTop = container.scrollHeight;
-    scheduleAutoScrollReset();
-  }, [scheduleAutoScrollReset, scrollContainerRef]);
+  }, [scrollContainerRef]);
 
   // Auto-scroll to bottom when new messages are added (only if user is near bottom)
   useEffect(() => {
@@ -208,30 +196,19 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       // Wrap in try-catch to handle edge cases where scroll element becomes null during unmount
       // or rapid component updates (see: https://github.com/TanStack/virtual/issues/696)
       try {
-        isAutoScrollingRef.current = true;
         virtualizer.scrollToIndex(currentCount - 1, { align: 'end', behavior: 'auto' });
       } catch {
-        // Scroll element likely became null during unmount - safe to ignore
-        isAutoScrollingRef.current = false;
+        // Scroll element likely became null during unmount - safe to ignore.
       }
       // Pin to real bottom after measurement/layout settles.
       newMessagePinRafRef.current = requestAnimationFrame(() => {
         newMessagePinRafRef.current = null;
         if (isNearBottomRef.current) {
           stickToBottom();
-        } else {
-          scheduleAutoScrollReset();
         }
       });
     }
-  }, [
-    loadingSession,
-    messages.length,
-    scheduleAutoScrollReset,
-    scrollContainerRef,
-    stickToBottom,
-    virtualizer,
-  ]);
+  }, [loadingSession, messages.length, scrollContainerRef, stickToBottom, virtualizer]);
 
   // Keep viewport pinned when inline reasoning text grows while user is at bottom.
   useEffect(() => {
@@ -267,9 +244,23 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         return;
       }
       const nextHeight = entry.contentRect.height;
-      const grew = nextHeight > previousHeight;
+      const growthAmount = nextHeight - previousHeight;
+      const grew = growthAmount > 0;
       previousHeight = nextHeight;
-      if (!(grew && isNearBottomRef.current)) {
+      if (!grew) {
+        return;
+      }
+
+      const container = scrollContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const wasNearBottomBeforeGrowth =
+        distanceFromBottom - growthAmount < STICK_TO_BOTTOM_THRESHOLD;
+      if (!wasNearBottomBeforeGrowth) {
         return;
       }
       if (resizeStickRafRef.current !== null) {
@@ -277,9 +268,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       }
       resizeStickRafRef.current = requestAnimationFrame(() => {
         resizeStickRafRef.current = null;
-        if (isNearBottomRef.current) {
-          stickToBottom();
-        }
+        stickToBottom();
       });
     });
 
@@ -291,13 +280,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         resizeStickRafRef.current = null;
       }
     };
-  }, [hasScrollableContent, loadingSession, stickToBottom]);
+  }, [hasScrollableContent, loadingSession, scrollContainerRef, stickToBottom]);
 
   useEffect(
     () => () => {
-      if (autoScrollResetRafRef.current !== null) {
-        cancelAnimationFrame(autoScrollResetRafRef.current);
-      }
       if (resizeStickRafRef.current !== null) {
         cancelAnimationFrame(resizeStickRafRef.current);
       }
@@ -310,9 +296,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
-    if (!isAutoScrollingRef.current) {
-      onScroll?.();
-    }
+    onScroll?.();
   }, [onScroll]);
 
   // Attach scroll listener
