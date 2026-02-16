@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Group new-session controls and clarify provider affordance (#1053)
 - Render stripped plaintext in live reasoning indicator (#1054)
 - Improve Storybook coverage for key app views (#1051)
+- Poll for review comments every 2 minutes and include them in fixer prompt (#1059)
 
 ### Fixed
 
