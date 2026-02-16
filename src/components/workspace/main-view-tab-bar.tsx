@@ -244,53 +244,54 @@ export function MainViewTabBar({
         );
       })}
 
-      {/* Session provider selector */}
+      {/* Session creation controls (provider + add button) */}
       {onCreateSession && (
-        <Select
-          value={selectedProvider}
-          onValueChange={(value) => {
-            setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
-          }}
-          disabled={isButtonDisabled}
-        >
-          <SelectTrigger
-            aria-label="New session provider"
-            className="h-6 w-[96px] text-xs shrink-0"
+        <div className="ml-0.5 flex shrink-0 items-center overflow-hidden rounded-md border border-input bg-background">
+          <Select
+            value={selectedProvider}
+            onValueChange={(value) => {
+              setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
+            }}
+            disabled={isButtonDisabled}
           >
-            <span className="truncate">{providerTriggerLabel}</span>
-          </SelectTrigger>
-          <SelectContent>
-            {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      {/* Add session button */}
-      {onCreateSession && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={onCreateSession}
-              disabled={isButtonDisabled}
-              className={cn(
-                'flex items-center justify-center h-6 w-6 rounded-md',
-                'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-                'transition-colors disabled:opacity-50 disabled:pointer-events-none'
-              )}
-              aria-label="New chat session"
+            <SelectTrigger
+              aria-label="New session provider"
+              className="h-[30px] w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
             >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {isAtLimit ? `Maximum ${maxSessions} sessions per workspace` : 'New chat session'}
-          </TooltipContent>
-        </Tooltip>
+              <span>{providerTriggerLabel}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onCreateSession}
+                disabled={isButtonDisabled}
+                className={cn(
+                  'flex h-[30px] w-[30px] items-center justify-center rounded-none',
+                  'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
+                  'transition-colors disabled:pointer-events-none'
+                )}
+                aria-label={`New ${providerTriggerLabel} session`}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {isAtLimit
+                ? `Maximum ${maxSessions} sessions per workspace`
+                : `New ${providerTriggerLabel} session`}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       )}
 
       {/* Separator between sessions and file tabs */}
