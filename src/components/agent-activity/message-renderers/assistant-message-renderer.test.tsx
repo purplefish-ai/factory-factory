@@ -151,13 +151,14 @@ describe('LoadingIndicator', () => {
     flushSync(() => {
       root.render(
         createElement(LoadingIndicator, {
-          latestReasoning: `${'g'.repeat(120)} 5 * 3 = 15 my_var ${'h'.repeat(60)} **broken`,
+          latestReasoning: `${'g'.repeat(110)} 5 * 3 = 15 my_var my__var ${'h'.repeat(60)} **broken`,
         })
       );
     });
 
     expect(container.textContent).toContain('5 * 3 = 15');
     expect(container.textContent).toContain('my_var');
+    expect(container.textContent).toContain('my__var');
     expect(container.textContent).not.toContain('**broken');
 
     root.unmount();

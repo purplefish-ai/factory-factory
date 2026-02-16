@@ -217,6 +217,47 @@ function removeLastSingleAsteriskDelimiter(input: string): string {
   return input;
 }
 
+function isWordChar(char: string): boolean {
+  return /[A-Za-z0-9]/.test(char);
+}
+
+function isDoubleUnderscoreDelimiter(input: string, index: number): boolean {
+  if (input.slice(index, index + 2) !== '__') {
+    return false;
+  }
+
+  if (isEscaped(input, index)) {
+    return false;
+  }
+
+  const prev = input.charAt(index - 1);
+  const next = input.charAt(index + 2);
+  return !(isWordChar(prev) && isWordChar(next));
+}
+
+function countDoubleUnderscoreDelimiters(input: string): number {
+  let count = 0;
+
+  for (let index = 0; index < input.length - 1; index++) {
+    if (isDoubleUnderscoreDelimiter(input, index)) {
+      count++;
+      index++;
+    }
+  }
+
+  return count;
+}
+
+function removeLastDoubleUnderscoreDelimiter(input: string): string {
+  for (let index = input.length - 2; index >= 0; index--) {
+    if (isDoubleUnderscoreDelimiter(input, index)) {
+      return input.slice(0, index) + input.slice(index + 2);
+    }
+  }
+
+  return input;
+}
+
 function findLastUnescapedToken(input: string, token: string): number {
   let lastMatchIndex = -1;
 
@@ -267,7 +308,7 @@ function hasUnbalancedMarkdown(input: string): boolean {
     return true;
   }
 
-  if (countMatches(withoutInlineWordUnderscores, /(?<!\\)__/g) % 2 !== 0) {
+  if (countDoubleUnderscoreDelimiters(withoutInlineWordUnderscores) % 2 !== 0) {
     return true;
   }
 
@@ -307,11 +348,11 @@ function stripMarkdownSyntax(input: string): string {
     stripped = removeLastSingleAsteriskDelimiter(stripped);
   }
 
-  if (countMatches(stripped, /(?<!\\)__/g) % 2 !== 0) {
-    stripped = removeLastUnescapedToken(stripped, '__');
+  const withoutInlineWordUnderscores = stripped.replace(/\B_\B/g, '');
+  if (countDoubleUnderscoreDelimiters(withoutInlineWordUnderscores) % 2 !== 0) {
+    stripped = removeLastDoubleUnderscoreDelimiter(stripped);
   }
 
-  const withoutInlineWordUnderscores = stripped.replace(/\B_\B/g, '');
   const withoutDoubleUnderscores = withoutInlineWordUnderscores.replace(/(?<!\\)__/g, '');
   if (countMatches(withoutDoubleUnderscores, /(?<!\\)_/g) % 2 !== 0) {
     stripped = removeLastUnescapedToken(stripped, '_');
