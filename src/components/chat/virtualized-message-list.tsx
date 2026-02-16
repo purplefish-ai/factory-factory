@@ -41,6 +41,8 @@ interface VirtualizedMessageListProps {
   initBanner?: WorkspaceInitBanner | null;
 }
 
+const STICK_TO_BOTTOM_THRESHOLD = 150;
+
 // =============================================================================
 // Empty State Component
 // =============================================================================
@@ -116,12 +118,19 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onRewindToMessage,
   initBanner,
 }: VirtualizedMessageListProps) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(messages.length);
   const prevLatestThinkingRef = useRef<string | null>(latestThinking);
-  const isAutoScrollingRef = useRef(false);
+  const loadingSessionRef = useRef(loadingSession);
+  const resizeStickRafRef = useRef<number | null>(null);
+  const newMessagePinRafRef = useRef<number | null>(null);
   // Track isNearBottom in a ref to avoid stale closures in effects
   const isNearBottomRef = useRef(isNearBottom);
   isNearBottomRef.current = isNearBottom;
+  loadingSessionRef.current = loadingSession;
+  const showingInitSpinner = initBanner?.kind === 'info';
+  const hasScrollableContent =
+    messages.length > 0 || running || startingSession || showingInitSpinner;
 
   const lastThinkingMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -159,6 +168,14 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
 
+  const stickToBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
+  }, [scrollContainerRef]);
+
   // Auto-scroll to bottom when new messages are added (only if user is near bottom)
   useEffect(() => {
     const currentCount = messages.length;
@@ -171,23 +188,43 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    // If messages were added and user is near bottom, scroll to bottom
-    if (currentCount > prevCount && isNearBottomRef.current && scrollContainerRef.current) {
-      isAutoScrollingRef.current = true;
+    // If messages were added and user was near bottom at append time, scroll to bottom.
+    // This snapshot prevents programmatic scroll events from clearing the follow-up pin.
+    const shouldPinAfterAppend =
+      currentCount > prevCount && isNearBottomRef.current && !!scrollContainerRef.current;
+    if (shouldPinAfterAppend) {
+      if (newMessagePinRafRef.current !== null) {
+        cancelAnimationFrame(newMessagePinRafRef.current);
+        newMessagePinRafRef.current = null;
+      }
       // Use 'auto' behavior instead of smooth to prevent animation jitter during rapid updates
       // Wrap in try-catch to handle edge cases where scroll element becomes null during unmount
       // or rapid component updates (see: https://github.com/TanStack/virtual/issues/696)
       try {
         virtualizer.scrollToIndex(currentCount - 1, { align: 'end', behavior: 'auto' });
       } catch {
-        // Scroll element likely became null during unmount - safe to ignore
+        // Scroll element likely became null during unmount - safe to ignore.
       }
-      // Reset flag immediately for instant scroll
-      requestAnimationFrame(() => {
-        isAutoScrollingRef.current = false;
+      // Pin to real bottom after measurement/layout settles.
+      newMessagePinRafRef.current = requestAnimationFrame(() => {
+        newMessagePinRafRef.current = null;
+        if (shouldPinAfterAppend) {
+          stickToBottom();
+        }
       });
     }
-  }, [loadingSession, messages.length, virtualizer, scrollContainerRef]);
+  }, [loadingSession, messages.length, scrollContainerRef, stickToBottom, virtualizer]);
+
+  // Cancel pending append pins when switching into loading/hydration states.
+  useEffect(() => {
+    if (!loadingSession) {
+      return;
+    }
+    if (newMessagePinRafRef.current !== null) {
+      cancelAnimationFrame(newMessagePinRafRef.current);
+      newMessagePinRafRef.current = null;
+    }
+  }, [loadingSession]);
 
   // Keep viewport pinned when inline reasoning text grows while user is at bottom.
   useEffect(() => {
@@ -201,23 +238,100 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    const container = scrollContainerRef.current;
-    if (!container) {
+    stickToBottom();
+  }, [latestThinking, loadingSession, stickToBottom]);
+
+  // Keep viewport pinned while content grows (e.g., large messages/images/measurements)
+  // when the user is already at the bottom.
+  useEffect(() => {
+    if (loadingSession || typeof ResizeObserver === 'undefined' || !hasScrollableContent) {
       return;
     }
 
-    isAutoScrollingRef.current = true;
-    container.scrollTop = container.scrollHeight;
-    requestAnimationFrame(() => {
-      isAutoScrollingRef.current = false;
+    const content = contentRef.current;
+    if (!content) {
+      return;
+    }
+
+    let previousContentHeight: number | null = null;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      const nextContentHeight = entry.contentRect.height;
+      if (previousContentHeight === null) {
+        // Seed baseline from ResizeObserver's content-box measurements.
+        previousContentHeight = nextContentHeight;
+        return;
+      }
+
+      const growthAmount = nextContentHeight - previousContentHeight;
+      const grew = growthAmount > 0;
+      previousContentHeight = nextContentHeight;
+      if (!grew) {
+        return;
+      }
+
+      const container = scrollContainerRef.current;
+      if (!container) {
+        return;
+      }
+
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const wasNearBottomBeforeGrowth =
+        distanceFromBottom - growthAmount < STICK_TO_BOTTOM_THRESHOLD;
+      if (!wasNearBottomBeforeGrowth) {
+        return;
+      }
+      if (resizeStickRafRef.current !== null) {
+        return;
+      }
+      resizeStickRafRef.current = requestAnimationFrame(() => {
+        resizeStickRafRef.current = null;
+        if (loadingSessionRef.current) {
+          return;
+        }
+        stickToBottom();
+      });
     });
-  }, [latestThinking, loadingSession, scrollContainerRef]);
+
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      if (resizeStickRafRef.current !== null) {
+        cancelAnimationFrame(resizeStickRafRef.current);
+        resizeStickRafRef.current = null;
+      }
+    };
+  }, [hasScrollableContent, loadingSession, scrollContainerRef, stickToBottom]);
+
+  useEffect(() => {
+    if (!loadingSession) {
+      return;
+    }
+    if (resizeStickRafRef.current !== null) {
+      cancelAnimationFrame(resizeStickRafRef.current);
+      resizeStickRafRef.current = null;
+    }
+  }, [loadingSession]);
+
+  useEffect(
+    () => () => {
+      if (resizeStickRafRef.current !== null) {
+        cancelAnimationFrame(resizeStickRafRef.current);
+      }
+      if (newMessagePinRafRef.current !== null) {
+        cancelAnimationFrame(newMessagePinRafRef.current);
+      }
+    },
+    []
+  );
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
-    if (!isAutoScrollingRef.current) {
-      onScroll?.();
-    }
+    onScroll?.();
   }, [onScroll]);
 
   // Attach scroll listener
@@ -233,14 +347,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   // Show loading state while session is loading (prevents flicker during event replay)
   // If there's also an init banner, show both spinners
-  const showingInitSpinner = initBanner && initBanner.kind === 'info';
   if (loadingSession) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
         {showingInitSpinner && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">{initBanner.message}</span>
+            <span className="text-sm">{initBanner?.message}</span>
           </div>
         )}
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -252,13 +365,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   }
 
   // Show empty state if no messages and not starting/initializing
-  if (messages.length === 0 && !(running || startingSession || showingInitSpinner)) {
+  if (!hasScrollableContent) {
     return <EmptyState />;
   }
 
   return (
     <ThinkingCompletionProvider lastThinkingMessageId={lastThinkingMessageId} running={running}>
-      <div className="p-4 min-w-0">
+      <div ref={contentRef} className="p-4 min-w-0">
         {/* Virtualized message container */}
         <div
           style={{
