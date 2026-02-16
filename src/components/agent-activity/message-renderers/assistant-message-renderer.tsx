@@ -176,6 +176,8 @@ function hasUnbalancedMarkdown(input: string): boolean {
     return false;
   }
 
+  const withoutInlineWordUnderscores = input.replace(/(?<=\w)_(?=\w)/g, '');
+
   if (countMatches(input, /(?<!\\)`/g) % 2 !== 0) {
     return true;
   }
@@ -189,6 +191,19 @@ function hasUnbalancedMarkdown(input: string): boolean {
     return true;
   }
 
+  if (countMatches(withoutInlineWordUnderscores, /(?<!\\)__/g) % 2 !== 0) {
+    return true;
+  }
+
+  const withoutDoubleUnderscores = withoutInlineWordUnderscores.replace(/(?<!\\)__/g, '');
+  if (countMatches(withoutDoubleUnderscores, /(?<!\\)_/g) % 2 !== 0) {
+    return true;
+  }
+
+  if (countMatches(input, /(?<!\\)~~/g) % 2 !== 0) {
+    return true;
+  }
+
   if (countMatches(input, /(?<!\\)\[/g) !== countMatches(input, /(?<!\\)\]/g)) {
     return true;
   }
@@ -199,7 +214,12 @@ function hasUnbalancedMarkdown(input: string): boolean {
 
   const lastChar = input[input.length - 1];
   return (
-    lastChar === '*' || lastChar === '_' || lastChar === '`' || lastChar === '[' || lastChar === '('
+    lastChar === '*' ||
+    lastChar === '_' ||
+    lastChar === '`' ||
+    lastChar === '[' ||
+    lastChar === '(' ||
+    lastChar === '~'
   );
 }
 
@@ -213,7 +233,7 @@ function stripMarkdownSyntax(input: string): string {
     .replace(/(?<!\\)__([^_]+)__/g, '$1')
     .replace(/(?<!\\)_([^_]+)_/g, '$1')
     .replace(/(?<!\\)~~([^~]+)~~/g, '$1')
-    .replace(/(?<!\\)[`*_[\]()]/g, '');
+    .replace(/(?<!\\)[`~*_[\]()]/g, '');
 }
 
 function truncateLoadingText(input: string): string {

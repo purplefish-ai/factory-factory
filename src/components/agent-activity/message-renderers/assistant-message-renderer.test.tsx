@@ -64,4 +64,44 @@ describe('LoadingIndicator', () => {
 
     root.unmount();
   });
+
+  it('removes dangling underscore markdown when truncation cuts mid-token', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'b'.repeat(190)} _broken emphasis that should be truncated safely_`,
+        })
+      );
+    });
+
+    expect(container.querySelector('em')).toBeNull();
+    expect(container.textContent).toContain('...');
+    expect(container.textContent).not.toContain('_');
+
+    root.unmount();
+  });
+
+  it('removes dangling strikethrough markdown when truncation cuts mid-token', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'c'.repeat(190)} ~~broken strikethrough that should be truncated safely~~`,
+        })
+      );
+    });
+
+    expect(container.querySelector('del')).toBeNull();
+    expect(container.textContent).toContain('...');
+    expect(container.textContent).not.toContain('~~');
+
+    root.unmount();
+  });
 });
