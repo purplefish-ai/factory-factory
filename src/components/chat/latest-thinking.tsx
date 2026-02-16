@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
+import { MarkdownRenderer } from '@/components/ui/markdown';
 import { cn } from '@/lib/utils';
 
 // =============================================================================
@@ -21,7 +22,7 @@ interface LatestThinkingProps {
 
 /**
  * Displays the latest thinking content from extended thinking mode.
- * Shown below messages while the agent is running and has thinking content.
+ * Shown inline in the main chat area whenever thinking content exists.
  * Auto-scrolls to keep the latest thinking visible.
  */
 export const LatestThinking = memo(function LatestThinking({
@@ -52,13 +53,12 @@ export const LatestThinking = memo(function LatestThinking({
     >
       <div className="flex items-center gap-2 mb-2">
         <Loader2 className={cn('h-3 w-3 text-muted-foreground', running && 'animate-spin')} />
-        <span className="text-xs font-medium text-muted-foreground">Thinking</span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {running ? 'Thinking' : 'Latest reasoning'}
+        </span>
       </div>
-      <div
-        ref={scrollRef}
-        className="text-sm text-muted-foreground italic max-h-32 overflow-y-auto whitespace-pre-wrap"
-      >
-        {thinking}
+      <div ref={scrollRef} className="max-h-40 overflow-y-auto">
+        <MarkdownRenderer content={thinking} className="text-muted-foreground" />
       </div>
     </div>
   );

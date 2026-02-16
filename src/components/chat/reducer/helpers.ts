@@ -134,6 +134,32 @@ function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
   return block.id === toolUseId;
 }
 
+function isReasoningToolStartMessage(claudeMsg: AgentMessage): boolean {
+  if (!isStreamEventMessage(claudeMsg)) {
+    return false;
+  }
+  const event = claudeMsg.event;
+  if (event.type !== 'content_block_start' || event.content_block.type !== 'tool_use') {
+    return false;
+  }
+
+  const normalizedName = event.content_block.name.trim().toLowerCase();
+  if (
+    normalizedName === 'reasoning' ||
+    normalizedName === 'thinking' ||
+    normalizedName === 'think'
+  ) {
+    return true;
+  }
+
+  const input = event.content_block.input;
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return false;
+  }
+  const type = (input as Record<string, unknown>).type;
+  return typeof type === 'string' && type.trim().toLowerCase() === 'reasoning';
+}
+
 /**
  * Gets the tool use ID from a Claude message if it's a tool_use start event.
  */
@@ -221,6 +247,10 @@ export function handleClaudeMessage(
   }
 
   if (isStreamEventMessage(claudeMsg) && claudeMsg.event.type === 'message_start') {
+    baseState = { ...baseState, latestThinking: null };
+  }
+
+  if (isReasoningToolStartMessage(claudeMsg)) {
     baseState = { ...baseState, latestThinking: null };
   }
 

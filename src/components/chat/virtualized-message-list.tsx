@@ -7,6 +7,7 @@ import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { CompactingIndicator } from './compacting-indicator';
+import { LatestThinking } from './latest-thinking';
 
 // =============================================================================
 // Types
@@ -17,6 +18,7 @@ interface VirtualizedMessageListProps {
   running: boolean;
   startingSession: boolean;
   loadingSession: boolean;
+  latestThinking?: string | null;
   startingLabel?: string;
   /** Ref to the scroll container (viewport) */
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -102,6 +104,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   running,
   startingSession,
   loadingSession,
+  latestThinking = null,
   startingLabel = 'Starting agent...',
   scrollContainerRef,
   onScroll,
@@ -284,6 +287,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />
+
+        {/* Inline thinking/reasoning stream */}
+        {latestThinking !== null && (
+          <LatestThinking thinking={latestThinking} running={running} className="mb-4" />
+        )}
 
         {/* Workspace initialization spinner (e.g., creating worktree, running init script) */}
         {initBanner && initBanner.kind === 'info' && (

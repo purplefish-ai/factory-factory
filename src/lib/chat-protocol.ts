@@ -451,12 +451,28 @@ function tryCreatePairedToolCall(msg: ChatMessage): PairedToolCall | null {
   if (!toolInfo) {
     return null;
   }
+  if (isReasoningToolCall(toolInfo.name, toolInfo.input)) {
+    return null;
+  }
   return {
     id: toolInfo.id,
     name: toolInfo.name,
     input: toolInfo.input,
     status: 'pending',
   };
+}
+
+function isReasoningToolCall(name: string, input: Record<string, unknown>): boolean {
+  const normalizedName = name.trim().toLowerCase();
+  if (
+    normalizedName === 'reasoning' ||
+    normalizedName === 'thinking' ||
+    normalizedName === 'think'
+  ) {
+    return true;
+  }
+  const inputType = input.type;
+  return typeof inputType === 'string' && inputType.trim().toLowerCase() === 'reasoning';
 }
 
 /**
@@ -540,7 +556,9 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
       id: `tool-seq-${firstToolMessage.id}`,
       pairedCalls,
     };
-    result.push(sequence);
+    if (sequence.pairedCalls.length > 0) {
+      result.push(sequence);
+    }
     currentToolSequence = [];
   };
 

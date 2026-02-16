@@ -86,6 +86,22 @@ function createTestToolUseMessage(toolUseId: string): AgentMessage {
   };
 }
 
+function createReasoningToolUseMessage(toolUseId: string): AgentMessage {
+  return {
+    type: 'stream_event',
+    event: {
+      type: 'content_block_start',
+      index: 0,
+      content_block: {
+        type: 'tool_use',
+        id: toolUseId,
+        name: 'reasoning',
+        input: { type: 'reasoning' },
+      },
+    },
+  };
+}
+
 function createTestAssistantMessage(): AgentMessage {
   return {
     type: 'assistant',
@@ -718,6 +734,20 @@ describe('chatReducer', () => {
         | undefined;
       expect(event?.content_block?.thinking).toBe('Analyzing the problem... +delta');
       expect(state.latestThinking).toBe(' +delta');
+    });
+
+    it('clears latest thinking when a reasoning tool starts', () => {
+      let state: ChatState = {
+        ...initialState,
+        latestThinking: 'Previous reasoning text',
+      };
+
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: createReasoningToolUseMessage('reasoning-1'), order: 0 },
+      });
+
+      expect(state.latestThinking).toBeNull();
     });
   });
 
