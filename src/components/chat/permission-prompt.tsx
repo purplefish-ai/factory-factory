@@ -420,7 +420,9 @@ function AcpPermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
  */
 export function PermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
   const allowButtonRef = useRef<HTMLButtonElement>(null);
-  useAutoFocusPermissionButton(allowButtonRef, permission?.requestId);
+  const permissionRequestId =
+    permission?.toolName === 'ExitPlanMode' ? undefined : permission?.requestId;
+  useAutoFocusPermissionButton(allowButtonRef, permissionRequestId);
 
   if (!permission) {
     return null;
