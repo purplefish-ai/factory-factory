@@ -750,6 +750,29 @@ describe('chatReducer', () => {
       expect(state.latestThinking).toBeNull();
     });
 
+    it('ignores malformed tool_use input without crashing', () => {
+      const malformedToolUse: AgentMessage = {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'bad-input-1',
+            name: 'Bash',
+            input: null as unknown as Record<string, unknown>,
+          },
+        },
+      };
+
+      const newState = chatReducer(initialState, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: malformedToolUse, order: 0 },
+      });
+
+      expect(newState.messages).toHaveLength(0);
+    });
+
     it('does not clear latest thinking for duplicate reasoning tool start replay', () => {
       let state: ChatState = {
         ...initialState,

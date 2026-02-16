@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
-import { groupAdjacentToolCalls, isToolSequence } from '@/lib/chat-protocol';
+import { groupAdjacentToolCalls, isReasoningToolCall, isToolSequence } from '@/lib/chat-protocol';
 
 function createToolUseMessage(params: {
   id: string;
@@ -112,5 +112,21 @@ describe('groupAdjacentToolCalls', () => {
 
     expect(grouped).toHaveLength(1);
     expect(isToolSequence(grouped[0]!)).toBe(false);
+  });
+});
+
+describe('isReasoningToolCall', () => {
+  it('does not throw for malformed non-object input values', () => {
+    expect(() => isReasoningToolCall('Bash', null)).not.toThrow();
+    expect(() => isReasoningToolCall('Bash', 'oops')).not.toThrow();
+    expect(() => isReasoningToolCall('Bash', 123)).not.toThrow();
+    expect(() => isReasoningToolCall('Bash', ['reasoning'])).not.toThrow();
+  });
+
+  it('returns false for malformed non-reasoning input values', () => {
+    expect(isReasoningToolCall('Bash', null)).toBe(false);
+    expect(isReasoningToolCall('Bash', 'oops')).toBe(false);
+    expect(isReasoningToolCall('Bash', 123)).toBe(false);
+    expect(isReasoningToolCall('Bash', ['reasoning'])).toBe(false);
   });
 });

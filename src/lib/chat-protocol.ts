@@ -462,7 +462,7 @@ function tryCreatePairedToolCall(msg: ChatMessage): PairedToolCall | null {
   };
 }
 
-export function isReasoningToolCall(name: string, input: Record<string, unknown>): boolean {
+export function isReasoningToolCall(name: string, input: unknown): boolean {
   const normalizedName = name.trim().toLowerCase();
   if (
     normalizedName === 'reasoning' ||
@@ -471,7 +471,12 @@ export function isReasoningToolCall(name: string, input: Record<string, unknown>
   ) {
     return true;
   }
-  const inputType = input.type;
+
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return false;
+  }
+
+  const inputType = (input as Record<string, unknown>).type;
   return typeof inputType === 'string' && inputType.trim().toLowerCase() === 'reasoning';
 }
 
