@@ -204,23 +204,8 @@ function hasUnbalancedMarkdown(input: string): boolean {
     return true;
   }
 
-  if (countMatches(input, /(?<!\\)\[/g) !== countMatches(input, /(?<!\\)\]/g)) {
-    return true;
-  }
-
-  if (countMatches(input, /(?<!\\)\(/g) !== countMatches(input, /(?<!\\)\)/g)) {
-    return true;
-  }
-
   const lastChar = input[input.length - 1];
-  return (
-    lastChar === '*' ||
-    lastChar === '_' ||
-    lastChar === '`' ||
-    lastChar === '[' ||
-    lastChar === '(' ||
-    lastChar === '~'
-  );
+  return lastChar === '*' || lastChar === '_' || lastChar === '`' || lastChar === '~';
 }
 
 function stripMarkdownSyntax(input: string): string {
@@ -233,7 +218,7 @@ function stripMarkdownSyntax(input: string): string {
     .replace(/(?<!\\)__([^_]+)__/g, '$1')
     .replace(/(?<!\\)_([^_]+)_/g, '$1')
     .replace(/(?<!\\)~~([^~]+)~~/g, '$1')
-    .replace(/(?<!\\)[`~*_[\]()]/g, '');
+    .replace(/(?<!\\)[`~*_]/g, '');
 }
 
 function truncateLoadingText(input: string): string {

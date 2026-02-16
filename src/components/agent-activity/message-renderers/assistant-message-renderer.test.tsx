@@ -104,4 +104,23 @@ describe('LoadingIndicator', () => {
 
     root.unmount();
   });
+
+  it('preserves parentheses when truncation includes unmatched literal punctuation', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'d'.repeat(150)} processData(input) ${'e'.repeat(43)} (`,
+        })
+      );
+    });
+
+    expect(container.textContent).toContain('processData(input)');
+    expect(container.textContent).not.toContain('processDatainput');
+
+    root.unmount();
+  });
 });
