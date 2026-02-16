@@ -104,4 +104,23 @@ describe('LoadingIndicator', () => {
 
     root.unmount();
   });
+
+  it('removes dangling underscores from unmatched markdown tokens', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: 'Working through ___partial markdown',
+        })
+      );
+    });
+
+    expect(container.textContent).toContain('Working through partial markdown');
+    expect(container.textContent).not.toContain('_');
+
+    root.unmount();
+  });
 });
