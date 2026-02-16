@@ -175,12 +175,27 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
   const isOpen = open ?? internalOpen;
   const setIsOpen = onOpenChange ?? setInternalOpen;
+  const previousShouldAutoOpenRef = React.useRef(defaultOpen);
 
   const { pairedCalls } = sequence;
   // For the header summary, use the specified order
   const summaryCalls = summaryOrder === 'latest-first' ? [...pairedCalls].reverse() : pairedCalls;
   // For the expanded view, always show oldest-first (chronological order)
   const expandedCalls = pairedCalls;
+  const shouldAutoOpen = defaultOpen && pairedCalls.length > 1;
+
+  React.useEffect(() => {
+    if (isControlled) {
+      previousShouldAutoOpenRef.current = shouldAutoOpen;
+      return;
+    }
+
+    const wasAutoOpen = previousShouldAutoOpenRef.current;
+    if (shouldAutoOpen && !wasAutoOpen) {
+      setInternalOpen(true);
+    }
+    previousShouldAutoOpenRef.current = shouldAutoOpen;
+  }, [isControlled, shouldAutoOpen]);
 
   if (pairedCalls.length === 0) {
     return null;

@@ -34,6 +34,7 @@ vi.mock('@/components/agent-activity/message-renderers', () => ({
 
 interface RenderHarness {
   render: (overrides: Partial<ComponentProps<typeof VirtualizedMessageList>>) => void;
+  viewport: HTMLDivElement;
   cleanup: () => void;
 }
 
@@ -74,6 +75,7 @@ function createHarness(
 
   return {
     render,
+    viewport,
     cleanup: () => {
       root.unmount();
       container.remove();
@@ -135,6 +137,62 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
       align: 'end',
       behavior: 'auto',
     });
+
+    harness.cleanup();
+  });
+
+  it('auto-scrolls to bottom when latestThinking grows and user is near bottom', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      latestThinking: 'thinking 1',
+      isNearBottom: true,
+    });
+
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 480,
+    });
+    harness.viewport.scrollTop = 120;
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      latestThinking: 'thinking 1 more',
+      isNearBottom: true,
+    });
+
+    await flushEffects();
+
+    expect(harness.viewport.scrollTop).toBe(480);
+
+    harness.cleanup();
+  });
+
+  it('does not auto-scroll latestThinking updates when user is away from bottom', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      latestThinking: 'thinking 1',
+      isNearBottom: false,
+    });
+
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 480,
+    });
+    harness.viewport.scrollTop = 120;
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      latestThinking: 'thinking 1 more',
+      isNearBottom: false,
+    });
+
+    await flushEffects();
+
+    expect(harness.viewport.scrollTop).toBe(120);
 
     harness.cleanup();
   });

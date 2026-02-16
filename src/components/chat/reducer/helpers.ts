@@ -7,6 +7,7 @@ import type {
 } from '@/lib/chat-protocol';
 import {
   getToolUseIdFromEvent,
+  isReasoningToolCall,
   isStreamEventMessage,
   shouldPersistAgentMessage,
   shouldSuppressDuplicateResultMessage,
@@ -134,6 +135,21 @@ function isToolUseMessageWithId(msg: ChatMessage, toolUseId: string): boolean {
   return block.id === toolUseId;
 }
 
+function isReasoningToolStartMessage(claudeMsg: AgentMessage): boolean {
+  if (!isStreamEventMessage(claudeMsg)) {
+    return false;
+  }
+  const event = claudeMsg.event;
+  if (event.type !== 'content_block_start' || event.content_block.type !== 'tool_use') {
+    return false;
+  }
+  return isReasoningToolCall(event.content_block.name, event.content_block.input);
+}
+
+function hasExistingAgentMessageAtOrder(state: ChatState, order: number): boolean {
+  return state.messages.some((msg) => msg.source === 'agent' && msg.order === order);
+}
+
 /**
  * Gets the tool use ID from a Claude message if it's a tool_use start event.
  */
@@ -221,6 +237,10 @@ export function handleClaudeMessage(
   }
 
   if (isStreamEventMessage(claudeMsg) && claudeMsg.event.type === 'message_start') {
+    baseState = { ...baseState, latestThinking: null };
+  }
+
+  if (isReasoningToolStartMessage(claudeMsg) && !hasExistingAgentMessageAtOrder(baseState, order)) {
     baseState = { ...baseState, latestThinking: null };
   }
 

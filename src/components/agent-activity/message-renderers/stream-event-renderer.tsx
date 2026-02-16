@@ -1,5 +1,4 @@
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import * as React from 'react';
 import { memo } from 'react';
 import { CompactBoundaryIndicator } from '@/components/chat/compact-boundary-indicator';
 import { MarkdownRenderer } from '@/components/ui/markdown';
@@ -82,7 +81,7 @@ export const StreamDeltaRenderer = memo(function StreamDeltaRenderer({
   }
 
   if (delta.type === 'thinking_delta') {
-    return <span className={cn('text-muted-foreground italic', className)}>{delta.thinking}</span>;
+    return null;
   }
 
   return null;
@@ -107,15 +106,10 @@ const TextRenderer = memo(function TextRenderer({ text }: TextRendererProps) {
 // Thinking Renderer
 // =============================================================================
 
-/** Default number of characters to show before truncating thinking content */
-const DEFAULT_THINKING_TRUNCATE_LENGTH = 200;
-
 interface ThinkingRendererProps {
   text: string;
   /** The ID of the ChatMessage containing this thinking block (for completion tracking) */
   messageId?: string;
-  /** Number of characters to show before truncating (default: 200) */
-  truncateLength?: number;
   className?: string;
 }
 
@@ -129,15 +123,9 @@ interface ThinkingRendererProps {
 export const ThinkingRenderer = memo(function ThinkingRenderer({
   text,
   messageId,
-  truncateLength = DEFAULT_THINKING_TRUNCATE_LENGTH,
   className,
 }: ThinkingRendererProps) {
-  const [isExpanded, setIsExpanded] = React.useState(false);
   const isInProgress = useIsThinkingInProgress(messageId);
-
-  // Show truncated version if long
-  const shouldTruncate = text.length > truncateLength;
-  const displayText = shouldTruncate && !isExpanded ? `${text.slice(0, truncateLength)}...` : text;
 
   return (
     <div
@@ -150,15 +138,7 @@ export const ThinkingRenderer = memo(function ThinkingRenderer({
         <Loader2 className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
         <span>Thinking</span>
       </div>
-      <div className="text-sm text-muted-foreground italic whitespace-pre-wrap">{displayText}</div>
-      {shouldTruncate && (
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="text-xs text-primary hover:underline mt-1"
-        >
-          {isExpanded ? 'Show less' : 'Show more'}
-        </button>
-      )}
+      <MarkdownRenderer content={text} className="text-muted-foreground" />
     </div>
   );
 });

@@ -212,7 +212,13 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRewindToMessage,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
-    return <ToolSequenceGroup sequence={item} summaryOrder="latest-first" />;
+    return (
+      <ToolSequenceGroup
+        sequence={item}
+        summaryOrder="latest-first"
+        defaultOpen={item.pairedCalls.length > 1}
+      />
+    );
   }
   return (
     <MessageItem

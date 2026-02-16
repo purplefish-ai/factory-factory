@@ -2,7 +2,6 @@ import { AlertTriangle, ArrowDown, Loader2, Play, RefreshCw } from 'lucide-react
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import type { useChatWebSocket } from '@/components/chat';
 import {
-  AgentLiveDock,
   ChatInput,
   PermissionPrompt,
   QuestionPrompt,
@@ -42,10 +41,8 @@ export interface ChatContentProps {
   removeQueuedMessage: ReturnType<typeof useChatWebSocket>['removeQueuedMessage'];
   resumeQueuedMessages: ReturnType<typeof useChatWebSocket>['resumeQueuedMessages'];
   latestThinking: ReturnType<typeof useChatWebSocket>['latestThinking'];
-  sessionRuntime: ReturnType<typeof useChatWebSocket>['sessionRuntime'];
   pendingMessages: ReturnType<typeof useChatWebSocket>['pendingMessages'];
   isCompacting: ReturnType<typeof useChatWebSocket>['isCompacting'];
-  permissionMode: ReturnType<typeof useChatWebSocket>['permissionMode'];
   slashCommands: CommandInfo[];
   slashCommandsLoaded: ReturnType<typeof useChatWebSocket>['slashCommandsLoaded'];
   tokenStats: TokenStats;
@@ -54,10 +51,8 @@ export interface ChatContentProps {
   confirmRewind: ReturnType<typeof useChatWebSocket>['confirmRewind'];
   cancelRewind: ReturnType<typeof useChatWebSocket>['cancelRewind'];
   getUuidForMessageId: ReturnType<typeof useChatWebSocket>['getUuidForMessageId'];
-  acpPlan: ReturnType<typeof useChatWebSocket>['acpPlan'];
   acpConfigOptions: ReturnType<typeof useChatWebSocket>['acpConfigOptions'];
   setConfigOption: ReturnType<typeof useChatWebSocket>['setConfigOption'];
-  toolProgress: ReturnType<typeof useChatWebSocket>['toolProgress'];
   autoStartPending?: boolean;
   initBanner: WorkspaceInitBanner | null;
 }
@@ -188,10 +183,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     }
   }, [props.isNearBottom, props.viewportRef]);
 
-  const focusInput = useCallback(() => {
-    props.inputRef.current?.focus();
-  }, [props.inputRef]);
-
   const running = props.sessionStatus.phase === 'running';
   const stopping = props.sessionStatus.phase === 'stopping';
   const displayStartingState = shouldShowStartingState(props.sessionStatus.phase, autoStartPending);
@@ -241,6 +232,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           running={running}
           startingSession={displayStartingState}
           loadingSession={loadingSession}
+          latestThinking={props.latestThinking ?? null}
           scrollContainerRef={props.viewportRef}
           onScroll={props.onScroll}
           messagesEndRef={props.messagesEndRef}
@@ -269,21 +261,6 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
       )}
 
       <div className="border-t">
-        <AgentLiveDock
-          workspaceId={props.workspaceId}
-          groupedMessages={groupedMessages}
-          pendingRequest={props.pendingRequest}
-          running={running}
-          starting={displayStartingState}
-          stopping={stopping}
-          permissionMode={props.permissionMode}
-          latestThinking={props.latestThinking ?? null}
-          acpPlan={props.acpPlan}
-          toolProgress={props.toolProgress}
-          onApprovePermission={props.approvePermission}
-          onJumpIn={focusInput}
-          lastUpdatedAt={props.sessionRuntime.updatedAt}
-        />
         <PermissionPrompt
           permission={
             props.pendingRequest.type === 'permission' ? props.pendingRequest.request : null

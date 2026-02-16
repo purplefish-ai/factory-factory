@@ -86,6 +86,22 @@ function createTestToolUseMessage(toolUseId: string): AgentMessage {
   };
 }
 
+function createReasoningToolUseMessage(toolUseId: string): AgentMessage {
+  return {
+    type: 'stream_event',
+    event: {
+      type: 'content_block_start',
+      index: 0,
+      content_block: {
+        type: 'tool_use',
+        id: toolUseId,
+        name: 'reasoning',
+        input: { type: 'reasoning' },
+      },
+    },
+  };
+}
+
 function createTestAssistantMessage(): AgentMessage {
   return {
     type: 'assistant',
@@ -718,6 +734,90 @@ describe('chatReducer', () => {
         | undefined;
       expect(event?.content_block?.thinking).toBe('Analyzing the problem... +delta');
       expect(state.latestThinking).toBe(' +delta');
+    });
+
+    it('clears latest thinking when a reasoning tool starts', () => {
+      let state: ChatState = {
+        ...initialState,
+        latestThinking: 'Previous reasoning text',
+      };
+
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: createReasoningToolUseMessage('reasoning-1'), order: 0 },
+      });
+
+      expect(state.latestThinking).toBeNull();
+    });
+
+    it('ignores malformed tool_use input without crashing', () => {
+      const malformedToolUse: AgentMessage = {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'bad-input-1',
+            name: 'Bash',
+            input: null as unknown as Record<string, unknown>,
+          },
+        },
+      };
+
+      const newState = chatReducer(initialState, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: malformedToolUse, order: 0 },
+      });
+
+      expect(newState.messages).toHaveLength(0);
+    });
+
+    it('ignores malformed tool_use name without crashing', () => {
+      const malformedToolUseName: AgentMessage = {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'bad-name-1',
+            name: null as unknown as string,
+            input: {},
+          },
+        },
+      };
+
+      const newState = chatReducer(initialState, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: malformedToolUseName, order: 0 },
+      });
+
+      expect(newState.messages).toHaveLength(0);
+    });
+
+    it('does not clear latest thinking for duplicate reasoning tool start replay', () => {
+      let state: ChatState = {
+        ...initialState,
+        latestThinking: 'Current reasoning text',
+      };
+
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: createReasoningToolUseMessage('reasoning-1'), order: 4 },
+      });
+
+      state = {
+        ...state,
+        latestThinking: 'Current reasoning text',
+      };
+
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: createReasoningToolUseMessage('reasoning-1'), order: 4 },
+      });
+
+      expect(state.latestThinking).toBe('Current reasoning text');
     });
   });
 
