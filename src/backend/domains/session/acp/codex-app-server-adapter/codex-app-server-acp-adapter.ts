@@ -265,10 +265,6 @@ function toThreadId(sessionId: string): string {
   return sessionId.startsWith('sess_') ? sessionId.slice('sess_'.length) : sessionId;
 }
 
-function createToolCallId(threadId: string, turnId: string, itemId: string): string {
-  return `codex:${threadId}:${turnId}:${itemId}`;
-}
-
 function extractToolCallIdFromUnknown(value: unknown): string | null {
   if (!isRecord(value)) {
     return null;
@@ -276,17 +272,8 @@ function extractToolCallIdFromUnknown(value: unknown): string | null {
   return asString(value.callId) ?? asString(value.call_id) ?? null;
 }
 
-function resolveToolCallId(params: {
-  threadId: string;
-  turnId: string;
-  itemId: string;
-  source?: unknown;
-}): string {
-  return (
-    extractToolCallIdFromUnknown(params.source) ??
-    asString(params.itemId) ??
-    createToolCallId(params.threadId, params.turnId, params.itemId)
-  );
+function resolveToolCallId(params: { itemId: string; source?: unknown }): string {
+  return extractToolCallIdFromUnknown(params.source) ?? params.itemId;
 }
 
 function isPlanLikeMode(mode: string): boolean {
@@ -2376,7 +2363,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private buildToolCallState(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
-    turnId: string
+    _turnId: string
   ): ToolCallState | null {
     const kindByType: Record<string, ToolCallState['kind']> = {
       commandExecution: 'execute',
@@ -2416,8 +2403,6 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     return {
       toolCallId: resolveToolCallId({
-        threadId: session.threadId,
-        turnId,
         itemId: item.id,
         source: item,
       }),
@@ -2607,7 +2592,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       | 'item/fileChange/requestApproval'
       | 'item/tool/requestUserInput',
     itemId: string,
-    turnId: string,
+    _turnId: string,
     params: Record<string, unknown>
   ): ToolCallState {
     if (method === 'item/commandExecution/requestApproval') {
@@ -2616,8 +2601,6 @@ export class CodexAppServerAcpAdapter implements Agent {
       const parsed = resolveCommandDisplay({ command, cwd });
       return {
         toolCallId: resolveToolCallId({
-          threadId: session.threadId,
-          turnId,
           itemId,
           source: params,
         }),
@@ -2631,8 +2614,6 @@ export class CodexAppServerAcpAdapter implements Agent {
       const grantRoot = asString(params.grantRoot);
       return {
         toolCallId: resolveToolCallId({
-          threadId: session.threadId,
-          turnId,
           itemId,
           source: params,
         }),
@@ -2644,8 +2625,6 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     return {
       toolCallId: resolveToolCallId({
-        threadId: session.threadId,
-        turnId,
         itemId,
         source: params,
       }),
