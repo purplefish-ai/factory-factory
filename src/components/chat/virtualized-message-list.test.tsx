@@ -249,6 +249,39 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
+  it('attaches growth pinning after transitioning from empty state to messages', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [],
+      isNearBottom: true,
+    });
+
+    let scrollHeight = 640;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    harness.viewport.scrollTop = 80;
+
+    await flushEffects();
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+    await flushEffects();
+    await flushAnimationFrame();
+
+    scrollHeight = 920;
+    triggerResize(220);
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(920);
+
+    harness.cleanup();
+  });
+
   it('keeps viewport pinned when content grows and user is near bottom', async () => {
     const harness = createHarness({
       loadingSession: false,

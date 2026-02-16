@@ -126,6 +126,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   // Track isNearBottom in a ref to avoid stale closures in effects
   const isNearBottomRef = useRef(isNearBottom);
   isNearBottomRef.current = isNearBottom;
+  const showingInitSpinner = initBanner?.kind === 'info';
+  const hasScrollableContent =
+    messages.length > 0 || running || startingSession || showingInitSpinner;
 
   const lastThinkingMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -248,7 +251,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   // Keep viewport pinned while content grows (e.g., large messages/images/measurements)
   // when the user is already at the bottom.
   useEffect(() => {
-    if (loadingSession || typeof ResizeObserver === 'undefined') {
+    if (loadingSession || typeof ResizeObserver === 'undefined' || !hasScrollableContent) {
       return;
     }
 
@@ -288,7 +291,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         resizeStickRafRef.current = null;
       }
     };
-  }, [loadingSession, stickToBottom]);
+  }, [hasScrollableContent, loadingSession, stickToBottom]);
 
   useEffect(
     () => () => {
@@ -325,14 +328,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   // Show loading state while session is loading (prevents flicker during event replay)
   // If there's also an init banner, show both spinners
-  const showingInitSpinner = initBanner && initBanner.kind === 'info';
   if (loadingSession) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8 gap-4">
         {showingInitSpinner && (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">{initBanner.message}</span>
+            <span className="text-sm">{initBanner?.message}</span>
           </div>
         )}
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -344,7 +346,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   }
 
   // Show empty state if no messages and not starting/initializing
-  if (messages.length === 0 && !(running || startingSession || showingInitSpinner)) {
+  if (!hasScrollableContent) {
     return <EmptyState />;
   }
 
