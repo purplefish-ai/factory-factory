@@ -115,12 +115,12 @@ function parseCodexEventMessage(
   }
 
   const eventType = entry.payload.type;
-  const message = entry.payload.message;
-  if (typeof message !== 'string' || message.trim().length === 0) {
-    return null;
-  }
-
   if (eventType === 'user_message') {
+    const message = entry.payload.message;
+    if (typeof message !== 'string' || message.trim().length === 0) {
+      return null;
+    }
+
     return {
       type: 'user',
       content: message,
@@ -129,9 +129,27 @@ function parseCodexEventMessage(
   }
 
   if (eventType === 'agent_message') {
+    const message = entry.payload.message;
+    if (typeof message !== 'string' || message.trim().length === 0) {
+      return null;
+    }
+
     return {
       type: 'assistant',
       content: message,
+      timestamp,
+    };
+  }
+
+  if (eventType === 'agent_reasoning') {
+    const text = entry.payload.text;
+    if (typeof text !== 'string' || text.trim().length === 0) {
+      return null;
+    }
+
+    return {
+      type: 'thinking',
+      content: text,
       timestamp,
     };
   }
@@ -171,27 +189,6 @@ function normalizeCodexFunctionOutput(output: unknown): string {
   } catch {
     return String(output);
   }
-}
-
-function extractReasoningSummary(payload: Record<string, unknown>): string[] {
-  const summary = payload.summary;
-  if (!Array.isArray(summary)) {
-    return [];
-  }
-
-  const values: string[] = [];
-  for (const entry of summary) {
-    if (isRecord(entry) && typeof entry.text === 'string' && entry.text.trim().length > 0) {
-      values.push(entry.text);
-      continue;
-    }
-
-    if (typeof entry === 'string' && entry.trim().length > 0) {
-      values.push(entry);
-    }
-  }
-
-  return values;
 }
 
 function parseFunctionCallResponseItem(
@@ -240,49 +237,9 @@ function parseFunctionCallOutputResponseItem(
   ];
 }
 
-function parseReasoningResponseItem(
-  payload: Record<string, unknown>,
-  timestamp: string,
-  lineNumber: number
-): HistoryMessage[] {
-  const summary = extractReasoningSummary(payload);
-  const toolId =
-    typeof payload.id === 'string' && payload.id.trim().length > 0
-      ? payload.id
-      : `reasoning-${lineNumber}`;
-
-  const toolResultPayload: Record<string, unknown> = {
-    type: 'reasoning',
-    id: toolId,
-    summary,
-    content: Array.isArray(payload.content) ? payload.content : [],
-  };
-
-  return [
-    {
-      type: 'tool_use',
-      content: '',
-      timestamp,
-      toolName: 'reasoning',
-      toolId,
-      toolInput: {
-        type: 'reasoning',
-        ...(summary.length > 0 ? { summary } : {}),
-      },
-    },
-    {
-      type: 'tool_result',
-      content: normalizeCodexFunctionOutput(toolResultPayload),
-      timestamp,
-      toolId,
-    },
-  ];
-}
-
 function parseCodexResponseItemMessages(
   entry: CodexHistoryEntry,
-  timestamp: string,
-  lineNumber: number
+  timestamp: string
 ): HistoryMessage[] {
   if (entry.type !== 'response_item' || !isRecord(entry.payload)) {
     return [];
@@ -295,10 +252,6 @@ function parseCodexResponseItemMessages(
 
   if (payloadType === 'function_call_output') {
     return parseFunctionCallOutputResponseItem(entry.payload, timestamp);
-  }
-
-  if (payloadType === 'reasoning') {
-    return parseReasoningResponseItem(entry.payload, timestamp, lineNumber);
   }
 
   return [];
@@ -506,24 +459,20 @@ class CodexSessionHistoryLoaderService {
     }
 
     const timestamp = normalizeTimestamp(entry, lineNumber, fallbackBaseTimestampMs);
-    const parsedMessages = parseCodexHistoryMessages(entry, timestamp, lineNumber);
+    const parsedMessages = parseCodexHistoryMessages(entry, timestamp);
     if (parsedMessages.length > 0) {
       history.push(...parsedMessages);
     }
   }
 }
 
-function parseCodexHistoryMessages(
-  entry: CodexHistoryEntry,
-  timestamp: string,
-  lineNumber: number
-): HistoryMessage[] {
+function parseCodexHistoryMessages(entry: CodexHistoryEntry, timestamp: string): HistoryMessage[] {
   const eventMessage = parseCodexEventMessage(entry, timestamp);
   if (eventMessage) {
     return [eventMessage];
   }
 
-  return parseCodexResponseItemMessages(entry, timestamp, lineNumber);
+  return parseCodexResponseItemMessages(entry, timestamp);
 }
 
 export const codexSessionHistoryLoaderService = new CodexSessionHistoryLoaderService();

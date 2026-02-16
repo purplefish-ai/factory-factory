@@ -129,6 +129,7 @@ type AdapterSession = {
   };
   activeTurn: ActiveTurnState | null;
   toolCallsByItemId: Map<string, ToolCallState>;
+  reasoningDeltaItemIds: Set<string>;
   planTextByItemId: Map<string, string>;
   planApprovalRequestedByTurnId: Set<string>;
   pendingPlanApprovalsByTurnId: Map<string, number>;
@@ -282,6 +283,16 @@ const PLAN_TEXT_PREFERRED_KEYS = [
   'value',
   'message',
 ] as const;
+const REASONING_TEXT_MAX_DEPTH = 8;
+const REASONING_TEXT_PREFERRED_KEYS = [
+  'summary',
+  'summaryText',
+  'text',
+  'delta',
+  'message',
+  'content',
+  'reasoning',
+] as const;
 
 function extractFirstPlanText(values: Iterable<unknown>, depth: number): string | null {
   for (const entry of values) {
@@ -323,6 +334,44 @@ function extractPlanTextLocal(value: unknown, depth = 0): string | null {
   }
 
   return extractPlanTextFromRecord(value, depth);
+}
+
+function collectReasoningText(values: string[], value: unknown, depth = 0): void {
+  if (depth > REASONING_TEXT_MAX_DEPTH) {
+    return;
+  }
+
+  if (typeof value === 'string') {
+    if (value.trim().length > 0) {
+      values.push(value);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      collectReasoningText(values, entry, depth + 1);
+    }
+    return;
+  }
+
+  if (!isRecord(value)) {
+    return;
+  }
+
+  for (const key of REASONING_TEXT_PREFERRED_KEYS) {
+    collectReasoningText(values, value[key], depth + 1);
+  }
+}
+
+function extractReasoningTextLocal(value: unknown): string | null {
+  const collected: string[] = [];
+  collectReasoningText(collected, value);
+  if (collected.length === 0) {
+    return null;
+  }
+
+  return dedupeStrings(collected).join('\n\n');
 }
 
 function toMcpEnvRecord(envVars: Array<{ name: string; value: string }>): Record<string, string> {
@@ -810,6 +859,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       },
       activeTurn: null,
       toolCallsByItemId: new Map(),
+      reasoningDeltaItemIds: new Set(),
       planTextByItemId: new Map(),
       planApprovalRequestedByTurnId: new Set(),
       pendingPlanApprovalsByTurnId: new Map(),
@@ -858,6 +908,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       },
       activeTurn: null,
       toolCallsByItemId: new Map(),
+      reasoningDeltaItemIds: new Set(),
       planTextByItemId: new Map(),
       planApprovalRequestedByTurnId: new Set(),
       pendingPlanApprovalsByTurnId: new Map(),
@@ -1652,6 +1703,11 @@ export class CodexAppServerAcpAdapter implements Agent {
     turnId: string,
     item: { type: string; id: string } & Record<string, unknown>
   ): Promise<void> {
+    if (item.type === 'reasoning') {
+      await this.emitReasoningThoughtChunkFromItem(sessionId, item);
+      return;
+    }
+
     const toolInfo = this.buildToolCallState(session, item, turnId);
     if (!toolInfo) {
       return;
@@ -1703,6 +1759,16 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     if (notification.method === 'item/plan/delta') {
       await this.handlePlanDelta(
+        sessionId,
+        session,
+        notification.params.itemId,
+        notification.params.delta
+      );
+      return;
+    }
+
+    if (notification.method === 'item/reasoning/summaryTextDelta') {
+      await this.emitReasoningThoughtDelta(
         sessionId,
         session,
         notification.params.itemId,
@@ -1788,6 +1854,38 @@ export class CodexAppServerAcpAdapter implements Agent {
           status: 'in_progress',
         },
       ],
+    });
+  }
+
+  private async emitReasoningThoughtChunkFromItem(
+    sessionId: string,
+    item: Record<string, unknown>
+  ): Promise<void> {
+    const text = extractReasoningTextLocal(item);
+    if (!text) {
+      return;
+    }
+
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: 'agent_thought_chunk',
+      content: { type: 'text', text },
+    });
+  }
+
+  private async emitReasoningThoughtDelta(
+    sessionId: string,
+    session: AdapterSession,
+    itemId: string,
+    delta: string
+  ): Promise<void> {
+    if (delta.length === 0) {
+      return;
+    }
+
+    session.reasoningDeltaItemIds.add(itemId);
+    await this.emitSessionUpdate(sessionId, {
+      sessionUpdate: 'agent_thought_chunk',
+      content: { type: 'text', text: delta },
     });
   }
 
@@ -1881,6 +1979,11 @@ export class CodexAppServerAcpAdapter implements Agent {
     item: { type: string; id: string } & Record<string, unknown>,
     turnId: string
   ): Promise<void> {
+    if (item.type === 'reasoning') {
+      await this.emitReasoningThoughtChunkFromItem(session.sessionId, item);
+      return;
+    }
+
     const toolInfo = this.buildToolCallState(session, item, turnId);
     if (!toolInfo) {
       return;
@@ -1912,6 +2015,15 @@ export class CodexAppServerAcpAdapter implements Agent {
     item: { type: string; id: string } & Record<string, unknown>,
     turnId: string
   ): Promise<void> {
+    if (item.type === 'reasoning') {
+      const sawDelta = session.reasoningDeltaItemIds.has(item.id);
+      session.reasoningDeltaItemIds.delete(item.id);
+      if (!sawDelta) {
+        await this.emitReasoningThoughtChunkFromItem(session.sessionId, item);
+      }
+      return;
+    }
+
     const existing = session.toolCallsByItemId.get(item.id);
     if (!existing) {
       return;
@@ -2207,7 +2319,6 @@ export class CodexAppServerAcpAdapter implements Agent {
       mcpToolCall: 'fetch',
       webSearch: 'search',
       plan: 'think',
-      reasoning: 'think',
     };
 
     const kind = kindByType[item.type];
@@ -2447,6 +2558,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     session.planApprovalRequestedByTurnId.clear();
     session.pendingPlanApprovalsByTurnId.clear();
     session.toolCallsByItemId.clear();
+    session.reasoningDeltaItemIds.clear();
     session.pendingTurnCompletionsByTurnId.clear();
   }
 

@@ -103,7 +103,7 @@ describe('codexSessionHistoryLoaderService', () => {
           type: 'event_msg',
           payload: {
             type: 'agent_reasoning',
-            text: 'ignore reasoning',
+            text: 'reasoning text',
           },
         },
         {
@@ -148,6 +148,11 @@ describe('codexSessionHistoryLoaderService', () => {
         type: 'assistant',
         content: 'hi',
         timestamp: '2026-02-14T00:00:02.000Z',
+      },
+      {
+        type: 'thinking',
+        content: 'reasoning text',
+        timestamp: '2026-02-14T00:00:03.000Z',
       },
       {
         type: 'tool_use',
@@ -216,7 +221,7 @@ describe('codexSessionHistoryLoaderService', () => {
     ]);
   });
 
-  it('replays response_item reasoning as completed reasoning tool sequence', async () => {
+  it('ignores response_item reasoning because event_msg reasoning is the source of thought history', async () => {
     const providerSessionId = 'session-reasoning-1';
     const cwd = '/Users/test/project';
     writeSessionFile({
@@ -253,26 +258,7 @@ describe('codexSessionHistoryLoaderService', () => {
       return;
     }
 
-    expect(result.history).toEqual([
-      {
-        type: 'tool_use',
-        content: '',
-        timestamp: '2026-02-15T00:00:04.000Z',
-        toolName: 'reasoning',
-        toolId: 'reasoning-2',
-        toolInput: {
-          type: 'reasoning',
-          summary: ['**Counting files in directory**'],
-        },
-      },
-      {
-        type: 'tool_result',
-        content:
-          '{"type":"reasoning","id":"reasoning-2","summary":["**Counting files in directory**"],"content":[]}',
-        timestamp: '2026-02-15T00:00:04.000Z',
-        toolId: 'reasoning-2',
-      },
-    ]);
+    expect(result.history).toEqual([]);
   });
 
   it('prefers a matching cwd when multiple files have the same providerSessionId', async () => {

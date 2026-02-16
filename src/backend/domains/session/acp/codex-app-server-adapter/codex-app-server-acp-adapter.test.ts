@@ -404,6 +404,11 @@ describe('CodexAppServerAcpAdapter', () => {
                 id: 'item_c1',
                 command: 'pwd',
               },
+              {
+                type: 'reasoning',
+                id: 'item_r1',
+                summary: [{ type: 'summary_text', text: '**Thinking through replay**' }],
+              },
             ],
           },
         ],
@@ -424,11 +429,87 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(
       updates.some(
         (update) =>
+          update.sessionUpdate === 'agent_thought_chunk' &&
+          update.content?.type === 'text' &&
+          update.content.text === '**Thinking through replay**'
+      )
+    ).toBe(true);
+    expect(
+      updates.some(
+        (update) =>
           update.sessionUpdate === 'tool_call' &&
           update.status === 'completed' &&
           update.toolCallId === 'codex:thread_abc:turn_1:item_c1'
       )
     ).toBe(true);
+  });
+
+  it('emits reasoning updates as thought chunks instead of tool calls', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_reasoning', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_reasoning',
+      turnId: 'turn_reasoning',
+      item: {
+        type: 'reasoning',
+        id: 'item_reasoning',
+        status: 'inProgress',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/reasoning/summaryTextDelta', {
+      threadId: 'thread_reasoning',
+      turnId: 'turn_reasoning',
+      itemId: 'item_reasoning',
+      delta: '**Analyzing approach**',
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_reasoning',
+      turnId: 'turn_reasoning',
+      item: {
+        type: 'reasoning',
+        id: 'item_reasoning',
+        status: 'completed',
+        summary: [{ type: 'summary_text', text: '**Analyzing approach**' }],
+      },
+    });
+
+    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0].update
+    );
+    expect(updates).toEqual([
+      {
+        sessionUpdate: 'agent_thought_chunk',
+        content: { type: 'text', text: '**Analyzing approach**' },
+      },
+    ]);
   });
 
   it('writes provided MCP servers to Codex config and reloads on loadSession', async () => {

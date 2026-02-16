@@ -115,6 +115,16 @@ const planDeltaNotificationSchema = z.object({
   }),
 });
 
+const reasoningSummaryTextDeltaNotificationSchema = z.object({
+  method: z.literal('item/reasoning/summaryTextDelta'),
+  params: z.object({
+    threadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string(),
+    delta: z.string(),
+  }),
+});
+
 const commandOutputDeltaNotificationSchema = z.object({
   method: z.literal('item/commandExecution/outputDelta'),
   params: z.object({
@@ -175,6 +185,7 @@ export const knownCodexNotificationSchema = z.union([
   itemCompletedNotificationSchema,
   agentMessageDeltaNotificationSchema,
   planDeltaNotificationSchema,
+  reasoningSummaryTextDeltaNotificationSchema,
   commandOutputDeltaNotificationSchema,
   fileChangeOutputDeltaNotificationSchema,
   mcpToolCallProgressNotificationSchema,
