@@ -103,7 +103,7 @@ function getInputPlaceholder({
     return 'Agent is starting...';
   }
   if (pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode') {
-    return 'Type feedback to revise the plan...';
+    return 'Approve the plan or keep planning...';
   }
   if (running) {
     return 'Message will be queued...';
