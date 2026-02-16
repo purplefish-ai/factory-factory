@@ -5,6 +5,37 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2026-02-16
+
+### Added
+
+- Implement Codex ACP semantic follow-ups (#1044)
+- Add provider CLI warning for missing installation or authentication (#1049)
+
+### Changed
+
+- Move agent activity into main chat and remove live activity dock (#1046)
+- Simplify running status to latest reasoning (#1050)
+- Unify side-panel changes and add status dots (#1052)
+- Group new-session controls and clarify provider affordance (#1053)
+- Render stripped plaintext in live reasoning indicator (#1054)
+- Improve Storybook coverage for key app views (#1051)
+
+### Fixed
+
+- Fix ExitPlanMode plan visibility and mode selection (#1041)
+- Align Codex ACP tool IDs and approval semantics (#1043)
+- Fix quick action prompt not auto-sending after session creation (#1045)
+- Fix disappearing chat messages after refresh (#1047)
+- Fix Codex PR interception for created pull requests (#1048)
+- Retry queued dispatch after session stop (#1055)
+- Fix chat auto-scroll when large messages expand (#1057)
+
+### Refactored
+
+- Refactor diff parsing to reduce cognitive complexity (#568, #999)
+- Extract file processing logic to reduce cognitive complexity (#998)
+
 ## [0.3.4] - 2026-02-16
 
 ### Added
