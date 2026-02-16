@@ -56,8 +56,6 @@ type PendingAcpToolCall = {
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
 
-const TERMINAL_TOOL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
-
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
@@ -65,7 +63,7 @@ class SessionService {
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
   private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
-  /** Per-session ACP tool calls that have started but not reached terminal status. */
+  /** Per-session ACP tool calls that have started but not yet been completed by tool_result. */
   private readonly pendingAcpToolCalls = new Map<string, Map<string, PendingAcpToolCall>>();
   /**
    * Suppress transcript-mutating ACP replay events for sessions whose transcript was
@@ -378,10 +376,8 @@ class SessionService {
     if (!progress.tool_use_id) {
       return;
     }
-    if (progress.acpStatus && TERMINAL_TOOL_STATUSES.has(progress.acpStatus)) {
-      this.removePendingToolCall(sid, progress.tool_use_id);
-      return;
-    }
+    // ACP translator emits terminal tool_progress before tool_result in the same batch.
+    // Keep pending metadata here and clear only after processing tool_result.
     const existing = this.getPendingToolCall(sid, progress.tool_use_id);
     this.upsertPendingToolCall(sid, progress.tool_use_id, {
       toolName: progress.tool_name ?? 'ACP Tool',

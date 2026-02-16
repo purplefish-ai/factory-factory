@@ -601,6 +601,14 @@ describe('SessionService', () => {
     });
 
     serviceState.handleAcpDelta('session-1', {
+      type: 'tool_progress',
+      tool_use_id: 'call-1',
+      tool_name: 'commandExecution',
+      acpStatus: 'completed',
+      elapsed_time_seconds: 1,
+    });
+
+    serviceState.handleAcpDelta('session-1', {
       type: 'agent_message',
       data: {
         type: 'user',
@@ -630,6 +638,7 @@ describe('SessionService', () => {
         timestamp: expect.any(Date),
       })
     );
+    expect(mockNotifyToolStart).toHaveBeenCalledTimes(1);
 
     expect(mockNotifyToolComplete).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -648,6 +657,7 @@ describe('SessionService', () => {
         timestamp: expect.any(Date),
       })
     );
+    expect(mockNotifyToolComplete).toHaveBeenCalledTimes(1);
   });
 
   it('creates client from preloaded session without re-querying session row', async () => {
