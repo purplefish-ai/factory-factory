@@ -20,12 +20,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function extractCommand(event: ToolEvent): string | undefined {
   const directCommand = extractInputValue(event.input, 'command', isString, event.toolName, logger);
-  if (directCommand) {
+  if (directCommand && GH_PR_CREATE_REGEX.test(directCommand)) {
     return directCommand;
   }
 
   const title = extractInputValue(event.input, 'title', isString, event.toolName, logger);
-  if (title) {
+  if (title && GH_PR_CREATE_REGEX.test(title)) {
     return title;
   }
 
@@ -34,7 +34,7 @@ function extractCommand(event: ToolEvent): string | undefined {
     return event.toolName;
   }
 
-  return undefined;
+  return directCommand ?? title;
 }
 
 function extractPrUrlFromEvent(event: ToolEvent): string | null {

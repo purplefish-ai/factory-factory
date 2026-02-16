@@ -107,6 +107,24 @@ describe('prDetectionInterceptor', () => {
     );
   });
 
+  it('falls back to title when command is present but not gh pr create', async () => {
+    const event = createEvent({
+      toolName: 'commandExecution',
+      input: {
+        command: 'echo "run wrapper"',
+        title: '/bin/zsh -lc \'gh pr create --title "Fix bug" --body-file /tmp/body.md\'',
+        aggregatedOutput: 'https://github.com/purplefish-ai/factory-factory/pull/1039\n',
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/1039'
+    );
+  });
+
   it('ignores non-create gh commands', async () => {
     const event = createEvent({
       toolName: 'commandExecution',
