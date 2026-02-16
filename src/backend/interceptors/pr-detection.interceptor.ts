@@ -1,7 +1,7 @@
 /**
  * PR Detection Interceptor
  *
- * Monitors Bash tool executions for `gh pr create` commands
+ * Monitors tool executions for `gh pr create` commands
  * and updates the workspace with the PR URL when detected.
  */
 
@@ -11,10 +11,80 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('pr-detection');
+const GH_PR_CREATE_REGEX = /\bgh\s+pr\s+create\b/;
+const GITHUB_PR_URL_REGEX = /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function extractCommand(event: ToolEvent): string | undefined {
+  const directCommand = extractInputValue(event.input, 'command', isString, event.toolName, logger);
+  if (directCommand && GH_PR_CREATE_REGEX.test(directCommand)) {
+    return directCommand;
+  }
+
+  const title = extractInputValue(event.input, 'title', isString, event.toolName, logger);
+  if (title && GH_PR_CREATE_REGEX.test(title)) {
+    return title;
+  }
+
+  // Some providers may set toolName to the command text.
+  if (GH_PR_CREATE_REGEX.test(event.toolName)) {
+    return event.toolName;
+  }
+
+  return directCommand ?? title;
+}
+
+function extractPrUrlFromEvent(event: ToolEvent): string | null {
+  const candidates: string[] = [];
+
+  if (event.output?.content) {
+    candidates.push(event.output.content);
+  }
+
+  const aggregatedOutput = extractInputValue(
+    event.input,
+    'aggregatedOutput',
+    isString,
+    event.toolName,
+    logger
+  );
+  if (aggregatedOutput) {
+    candidates.push(aggregatedOutput);
+  }
+
+  const rawOutput = event.input.rawOutput;
+  if (isString(rawOutput)) {
+    candidates.push(rawOutput);
+  } else if (isRecord(rawOutput)) {
+    const nestedAggregatedOutput = extractInputValue(
+      rawOutput,
+      'aggregatedOutput',
+      isString,
+      event.toolName,
+      logger
+    );
+    if (nestedAggregatedOutput) {
+      candidates.push(nestedAggregatedOutput);
+    }
+    candidates.push(JSON.stringify(rawOutput));
+  }
+
+  for (const candidate of candidates) {
+    const match = candidate.match(GITHUB_PR_URL_REGEX);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return null;
+}
 
 export const prDetectionInterceptor: ToolInterceptor = {
   name: 'pr-detection',
-  tools: ['Bash'],
+  tools: '*',
 
   async onToolComplete(event: ToolEvent, context: InterceptorContext): Promise<void> {
     // Skip if tool execution failed
@@ -23,24 +93,21 @@ export const prDetectionInterceptor: ToolInterceptor = {
     }
 
     // Check if this was a `gh pr create` command
-    const command = extractInputValue(event.input, 'command', isString, 'Bash', logger);
-    if (!command?.includes('gh pr create')) {
+    const command = extractCommand(event);
+    if (!(command && GH_PR_CREATE_REGEX.test(command))) {
       return;
     }
 
     // Extract PR URL from output
-    const output = event.output?.content ?? '';
-    const prUrlMatch = output.match(/https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/);
-
-    if (!prUrlMatch) {
+    const prUrl = extractPrUrlFromEvent(event);
+    if (!prUrl) {
       logger.debug('No PR URL found in gh pr create output', {
         workspaceId: context.workspaceId,
-        outputLength: output.length,
+        toolName: event.toolName,
       });
       return;
     }
 
-    const prUrl = prUrlMatch[0];
     logger.info('Detected PR creation', {
       workspaceId: context.workspaceId,
       prUrl,
