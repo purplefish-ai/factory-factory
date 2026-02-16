@@ -123,4 +123,23 @@ describe('LoadingIndicator', () => {
 
     root.unmount();
   });
+
+  it('keeps balanced markdown formatting when truncated text ends with a marker character', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'f'.repeat(190)} **ok** additional trailing text`,
+        })
+      );
+    });
+
+    const strong = container.querySelector('strong');
+    expect(strong?.textContent).toBe('ok');
+
+    root.unmount();
+  });
 });

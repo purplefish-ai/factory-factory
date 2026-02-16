@@ -176,7 +176,7 @@ function hasUnbalancedMarkdown(input: string): boolean {
     return false;
   }
 
-  const withoutInlineWordUnderscores = input.replace(/(?<=\w)_(?=\w)/g, '');
+  const withoutInlineWordUnderscores = input.replace(/\B_\B/g, '');
 
   if (countMatches(input, /(?<!\\)`/g) % 2 !== 0) {
     return true;
@@ -204,8 +204,7 @@ function hasUnbalancedMarkdown(input: string): boolean {
     return true;
   }
 
-  const lastChar = input[input.length - 1];
-  return lastChar === '*' || lastChar === '_' || lastChar === '`' || lastChar === '~';
+  return false;
 }
 
 function stripMarkdownSyntax(input: string): string {
