@@ -34,6 +34,7 @@ interface CombinedChangesPanelProps {
 interface CombinedChangesContentProps {
   entries: ChangeListEntry[];
   noMergeBase: boolean;
+  partialDataWarning?: string;
   onFileClick: (path: string) => void;
 }
 
@@ -52,16 +53,24 @@ function NoMergeBaseState() {
 function ChangesDecorators({
   noMergeBase,
   hasIndicatorEntries,
+  partialDataWarning,
 }: {
   noMergeBase: boolean;
   hasIndicatorEntries: boolean;
+  partialDataWarning?: string;
 }) {
-  if (!(noMergeBase || hasIndicatorEntries)) {
+  if (!(noMergeBase || hasIndicatorEntries || partialDataWarning)) {
     return null;
   }
 
   return (
     <div className="space-y-2">
+      {partialDataWarning && (
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
+          <span>{partialDataWarning}</span>
+        </div>
+      )}
       {noMergeBase && (
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-px" />
@@ -114,11 +123,15 @@ function buildCombinedEntries(gitFiles: GitStatusFile[], diffFiles: DiffFile[]):
 function CombinedChangesContent({
   entries,
   noMergeBase,
+  partialDataWarning,
   onFileClick,
 }: CombinedChangesContentProps) {
   if (entries.length === 0) {
     if (noMergeBase) {
       return <NoMergeBaseState />;
+    }
+    if (partialDataWarning) {
+      return <PanelEmptyState title="No visible changes" description={partialDataWarning} />;
     }
     return (
       <PanelEmptyState title="No changes" description="Working tree is clean and up to date" />
@@ -127,13 +140,19 @@ function CombinedChangesContent({
 
   const hasIndicatorEntries = entries.some((entry) => entry.showIndicatorDot);
   const decorators = (
-    <ChangesDecorators noMergeBase={noMergeBase} hasIndicatorEntries={hasIndicatorEntries} />
+    <ChangesDecorators
+      noMergeBase={noMergeBase}
+      hasIndicatorEntries={hasIndicatorEntries}
+      partialDataWarning={partialDataWarning}
+    />
   );
 
   if (entries.length > 200) {
     return (
       <div className="h-full flex flex-col">
-        {(noMergeBase || hasIndicatorEntries) && <div className="p-2 border-b">{decorators}</div>}
+        {(noMergeBase || hasIndicatorEntries || partialDataWarning) && (
+          <div className="p-2 border-b">{decorators}</div>
+        )}
         <VirtualizedChangeList entries={entries} onFileClick={onFileClick} className="flex-1" />
       </div>
     );
@@ -173,7 +192,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     return <PanelLoadingState />;
   }
 
-  if (gitError || diffError) {
+  if (gitError && diffError) {
     return (
       <PanelErrorState
         title="Failed to load changes"
@@ -182,13 +201,25 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     );
   }
 
-  const gitFiles: GitStatusFile[] = gitData?.files ?? [];
-  const snapshot = diffData ?? {
-    added: [] as DiffFile[],
-    modified: [] as DiffFile[],
-    deleted: [] as DiffFile[],
-    noMergeBase: false,
-  };
+  const gitFiles: GitStatusFile[] = gitError ? [] : (gitData?.files ?? []);
+  const snapshot = diffError
+    ? {
+        added: [] as DiffFile[],
+        modified: [] as DiffFile[],
+        deleted: [] as DiffFile[],
+        noMergeBase: false,
+      }
+    : (diffData ?? {
+        added: [] as DiffFile[],
+        modified: [] as DiffFile[],
+        deleted: [] as DiffFile[],
+        noMergeBase: false,
+      });
+  const partialDataWarning = gitError
+    ? 'Git status unavailable; showing diff vs main only.'
+    : diffError
+      ? 'Diff vs main unavailable; showing working tree changes only.'
+      : undefined;
   const entries = buildCombinedEntries(gitFiles, [
     ...snapshot.added,
     ...snapshot.modified,
@@ -199,6 +230,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     <CombinedChangesContent
       entries={entries}
       noMergeBase={snapshot.noMergeBase}
+      partialDataWarning={partialDataWarning}
       onFileClick={openDiffTab}
     />
   );
