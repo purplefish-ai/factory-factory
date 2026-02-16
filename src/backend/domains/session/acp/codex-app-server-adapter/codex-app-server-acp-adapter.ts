@@ -100,6 +100,8 @@ type ActiveTurnState = {
 
 const PENDING_TURN_ID = '__pending_turn__';
 const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
+const DEFAULT_APPROVAL_POLICIES: ApprovalPolicy[] = ['on-failure', 'on-request', 'never'];
+const DEFAULT_SANDBOX_MODES: SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
 
 type PendingTurnCompletion = {
   stopReason: StopReason;
@@ -151,11 +153,59 @@ function dedupeStrings<T extends string>(values: Iterable<T>): T[] {
   return Array.from(new Set(values));
 }
 
+function humanizeToken(value: string): string {
+  return value
+    .split(/[-_]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function sanitizeModeName(mode: string): string {
   return mode
     .split('_')
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(' ');
+}
+
+function formatApprovalPolicyLabel(policy: ApprovalPolicy): string {
+  if (policy === 'on-request') {
+    return 'On Request';
+  }
+  if (policy === 'on-failure') {
+    return 'On Failure';
+  }
+  if (policy === 'never') {
+    return 'Never Ask';
+  }
+  if (policy === 'untrusted') {
+    return 'Untrusted';
+  }
+  return humanizeToken(policy);
+}
+
+function formatSandboxModeLabel(mode: SandboxMode): string {
+  if (mode === 'workspace-write') {
+    return 'Workspace Write';
+  }
+  if (mode === 'read-only') {
+    return 'Read-only';
+  }
+  if (mode === 'danger-full-access') {
+    return 'Full Access';
+  }
+  return humanizeToken(mode);
+}
+
+function formatExecutionPresetName(
+  approvalPolicy: ApprovalPolicy,
+  sandboxMode: SandboxMode
+): string {
+  if (approvalPolicy === 'never' && sandboxMode === 'danger-full-access') {
+    return 'YOLO (Full Access)';
+  }
+
+  return `${formatApprovalPolicyLabel(approvalPolicy)} (${formatSandboxModeLabel(sandboxMode)})`;
 }
 
 function createWorkspaceWriteSandboxPolicy(cwd: string): Record<string, unknown> {
@@ -1322,7 +1372,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       seen.add(id);
       presets.push({
         id,
-        name: `${approvalPolicy} + ${sandboxMode}`,
+        name: formatExecutionPresetName(approvalPolicy, sandboxMode),
         ...(description ? { description } : {}),
         approvalPolicy,
         sandboxMode,
@@ -1332,7 +1382,10 @@ export class CodexAppServerAcpAdapter implements Agent {
     addPreset(
       session.defaults.approvalPolicy,
       currentSandboxMode,
-      `Current session: ${session.defaults.approvalPolicy} + ${currentSandboxMode}`
+      `Current session: ${formatExecutionPresetName(
+        session.defaults.approvalPolicy,
+        currentSandboxMode
+      )}`
     );
     for (const policy of policies) {
       for (const sandboxMode of sandboxModes) {
@@ -1375,19 +1428,32 @@ export class CodexAppServerAcpAdapter implements Agent {
   }> {
     const raw = await this.codex.request('configRequirements/read', undefined);
     const parsed = configRequirementsReadResponseSchema.parse(raw);
+    const requirements = parsed.requirements;
     const allowedApprovalPolicies = dedupeStrings(
-      (parsed.requirements?.allowedApprovalPolicies ?? []).filter(isNonEmptyString)
+      (requirements?.allowedApprovalPolicies ?? []).filter(isNonEmptyString)
     );
     const allowedSandboxModes = dedupeStrings(
-      (parsed.requirements?.allowedSandboxModes ?? []).filter(
+      (requirements?.allowedSandboxModes ?? []).filter(
         (mode): mode is SandboxMode =>
           mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access'
       )
     );
+    const hasExplicitApprovalPolicies = Array.isArray(requirements?.allowedApprovalPolicies);
+    const hasExplicitSandboxModes = Array.isArray(requirements?.allowedSandboxModes);
 
     return {
-      allowedApprovalPolicies,
-      allowedSandboxModes,
+      allowedApprovalPolicies:
+        allowedApprovalPolicies.length > 0
+          ? allowedApprovalPolicies
+          : hasExplicitApprovalPolicies
+            ? []
+            : DEFAULT_APPROVAL_POLICIES,
+      allowedSandboxModes:
+        allowedSandboxModes.length > 0
+          ? allowedSandboxModes
+          : hasExplicitSandboxModes
+            ? []
+            : DEFAULT_SANDBOX_MODES,
     };
   }
 
