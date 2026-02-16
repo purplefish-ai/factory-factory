@@ -22,37 +22,9 @@ import type {
   ToolProgressInfo,
 } from './reducer';
 import { useChatState } from './use-chat-state';
+import { evaluateHydrationBatch, parseHydrationBatch } from './use-chat-websocket-hydration';
 
 const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
-type HydrationBatch = { loadRequestId?: string; type?: string };
-type HydrationBatchDecision = 'pass' | 'drop' | 'match';
-
-function parseHydrationBatch(data: unknown): HydrationBatch | null {
-  if (typeof data !== 'object' || data === null || !('type' in data)) {
-    return null;
-  }
-
-  const maybeType = (data as { type?: string }).type;
-  if (maybeType !== 'session_replay_batch' && maybeType !== 'session_snapshot') {
-    return null;
-  }
-
-  return data as HydrationBatch;
-}
-
-function evaluateHydrationBatch(
-  batch: HydrationBatch,
-  pendingLoadRequestId: string | null
-): HydrationBatchDecision {
-  if (pendingLoadRequestId) {
-    if (!batch.loadRequestId) {
-      return 'drop';
-    }
-    return batch.loadRequestId === pendingLoadRequestId ? 'match' : 'drop';
-  }
-
-  return batch.loadRequestId ? 'drop' : 'pass';
-}
 
 // =============================================================================
 // Types

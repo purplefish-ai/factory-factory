@@ -9,42 +9,13 @@
  * clears the guard when a matching response is received.
  */
 import { describe, expect, it } from 'vitest';
+import { evaluateHydrationBatch, parseHydrationBatch } from './use-chat-websocket-hydration';
 
 // Helper type to simulate the guard state
 interface GuardState {
   currentLoadRequestId: string | null;
   clearLoadTimeoutCalled: boolean;
   messageProcessed: boolean;
-}
-
-type HydrationBatch = { loadRequestId?: string; type?: string };
-type HydrationBatchDecision = 'pass' | 'drop' | 'match';
-
-function parseHydrationBatch(data: unknown): HydrationBatch | null {
-  if (typeof data !== 'object' || data === null || !('type' in data)) {
-    return null;
-  }
-
-  const maybeType = (data as { type?: string }).type;
-  if (maybeType !== 'session_replay_batch' && maybeType !== 'session_snapshot') {
-    return null;
-  }
-
-  return data as HydrationBatch;
-}
-
-function evaluateHydrationBatch(
-  batch: HydrationBatch,
-  pendingLoadRequestId: string | null
-): HydrationBatchDecision {
-  if (pendingLoadRequestId) {
-    if (!batch.loadRequestId) {
-      return 'drop';
-    }
-    return batch.loadRequestId === pendingLoadRequestId ? 'match' : 'drop';
-  }
-
-  return batch.loadRequestId ? 'drop' : 'pass';
 }
 
 // Helper function that simulates the handleMessage logic from the hook

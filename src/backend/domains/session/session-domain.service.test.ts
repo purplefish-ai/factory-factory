@@ -188,4 +188,31 @@ describe('SessionDomainService', () => {
     const snapshot = sessionDomainService.getTranscriptSnapshot('s1');
     expect(snapshot.map((entry) => entry.id)).toEqual(['u1', 'u2']);
   });
+
+  it('removes transcript entries by message id', () => {
+    sessionDomainService.commitSentUserMessage('s1', {
+      id: 'u1',
+      text: 'hello',
+      timestamp: '2026-02-14T00:00:00.000Z',
+      settings: {
+        selectedModel: null,
+        reasoningEffort: null,
+        thinkingEnabled: false,
+        planModeEnabled: false,
+      },
+    });
+
+    mockedConnectionService.forwardToSession.mockClear();
+    const removed = sessionDomainService.removeTranscriptMessageById('s1', 'u1');
+
+    expect(removed).toBe(true);
+    expect(sessionDomainService.getTranscriptSnapshot('s1')).toEqual([]);
+    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        type: 'session_snapshot',
+        messages: [],
+      })
+    );
+  });
 });

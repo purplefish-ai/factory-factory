@@ -12,6 +12,7 @@ const { mockSessionDomainService, mockSessionService, mockSessionDataService } =
     allocateOrder: vi.fn(),
     emitDelta: vi.fn(),
     commitSentUserMessageAtOrder: vi.fn(),
+    removeTranscriptMessageById: vi.fn(),
     getQueueLength: vi.fn(),
   },
   mockSessionService: {
@@ -103,8 +104,17 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionService.setSessionModel).toHaveBeenCalledWith('s1', undefined);
     expect(mockSessionService.setSessionReasoningEffort).toHaveBeenCalledWith('s1', null);
     expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+    expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith('s1', 'm1', {
+      emitSnapshot: false,
+    });
     expect(mockSessionDomainService.markIdle).toHaveBeenCalledWith('s1', 'alive');
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+    const removeCallOrder =
+      mockSessionDomainService.removeTranscriptMessageById.mock.invocationCallOrder[0];
+    const requeueCallOrder = mockSessionDomainService.requeueFront.mock.invocationCallOrder[0];
+    expect(removeCallOrder).toBeDefined();
+    expect(requeueCallOrder).toBeDefined();
+    expect(removeCallOrder!).toBeLessThan(requeueCallOrder!);
   });
 
   it('does not call markIdle when process has already stopped during dispatch failure', async () => {
@@ -121,6 +131,9 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
     expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
+    expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith('s1', 'm1', {
+      emitSnapshot: false,
+    });
     expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
   });
