@@ -5,7 +5,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 export function NewWorkspaceButton({
   onClick,
   isCreating,
-  children = 'New Workspace',
+  children = 'Workspace',
 }: {
   onClick: () => void;
   isCreating: boolean;
