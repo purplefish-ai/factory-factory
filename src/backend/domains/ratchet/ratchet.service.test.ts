@@ -1293,7 +1293,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
-  describe('review comment backoff polling', () => {
+  describe('review comment polling', () => {
     const cleanWorkspace = {
       id: 'ws-poll',
       prUrl: 'https://github.com/example/repo/pull/100',
@@ -1328,7 +1328,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       unsafeCoerce<{
         reviewPollTrackers: Map<
           string,
-          { snapshotKey: string; startedAt: number; pollCount: number }
+          { snapshotKey: string; lastPolledAt: number; pollCount: number }
         >;
       }>(ratchetService).reviewPollTrackers;
 
@@ -1356,7 +1356,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(getTrackers().get('ws-poll')?.pollCount).toBe(0);
     });
 
-    it('does not create tracker when state has not changed', async () => {
+    it('creates tracker even when state has not changed (continuous polling)', async () => {
       const workspace = { ...cleanWorkspace, ratchetLastCiRunId: 'new-snapshot' };
       vi.spyOn(
         unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
@@ -1367,13 +1367,14 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       await callProcessWorkspace(workspace);
 
-      expect(getTrackers().has('ws-poll')).toBe(false);
+      expect(getTrackers().has('ws-poll')).toBe(true);
+      expect(getTrackers().get('ws-poll')?.pollCount).toBe(0);
     });
 
     it('skips re-poll when not enough time has elapsed', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'new-snapshot',
-        startedAt: Date.now(),
+        lastPolledAt: Date.now(),
         pollCount: 0,
       });
 
@@ -1396,7 +1397,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('re-polls and finds comments when time has elapsed', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'new-snapshot',
-        startedAt: Date.now() - 3 * 60_000, // 3 min ago, past the 2-min first offset
+        lastPolledAt: Date.now() - 3 * 60_000, // 3 min ago, past the 2-min interval
         pollCount: 0,
       });
 
@@ -1427,7 +1428,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('increments pollCount when re-poll still finds clean PR', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'new-snapshot',
-        startedAt: Date.now() - 3 * 60_000,
+        lastPolledAt: Date.now() - 3 * 60_000,
         pollCount: 0,
       });
 
@@ -1446,32 +1447,32 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       expect(getTrackers().get('ws-poll')?.pollCount).toBe(1);
     });
 
-    it('stamps snapshot after exhausting all polls', async () => {
+    it('continues polling after many cycles without exhausting', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'new-snapshot',
-        startedAt: Date.now() - 130 * 60_000, // well past 2 hours
-        pollCount: 5,
+        lastPolledAt: Date.now() - 3 * 60_000,
+        pollCount: 50,
       });
 
-      vi.spyOn(
+      const fetchSpy = vi.spyOn(
         unsafeCoerce<{ fetchPRState: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
         'fetchPRState'
-      ).mockResolvedValue(cleanPrState);
+      );
+      fetchSpy.mockResolvedValue(cleanPrState);
+
       vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
       vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
 
       await callProcessWorkspace(cleanWorkspace);
 
-      expect(getTrackers().has('ws-poll')).toBe(false);
-      expect(workspaceAccessor.update).toHaveBeenCalledWith('ws-poll', {
-        ratchetLastCiRunId: 'new-snapshot',
-      });
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(getTrackers().get('ws-poll')?.pollCount).toBe(51);
     });
 
     it('resets tracker when snapshotKey changes', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'different-snapshot',
-        startedAt: Date.now() - 10 * 60_000,
+        lastPolledAt: Date.now() - 10 * 60_000,
         pollCount: 3,
       });
 
@@ -1492,7 +1493,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('cleans up tracker when decision is not clean PR', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'new-snapshot',
-        startedAt: Date.now(),
+        lastPolledAt: Date.now(),
         pollCount: 1,
       });
 
@@ -1522,7 +1523,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('continues to next cycle when fetchPRState returns null during re-poll', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'new-snapshot',
-        startedAt: Date.now() - 3 * 60_000,
+        lastPolledAt: Date.now() - 3 * 60_000,
         pollCount: 0,
       });
 
@@ -1546,7 +1547,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     it('skips re-poll when shutting down', async () => {
       getTrackers().set('ws-poll', {
         snapshotKey: 'new-snapshot',
-        startedAt: Date.now() - 3 * 60_000,
+        lastPolledAt: Date.now() - 3 * 60_000,
         pollCount: 0,
       });
 

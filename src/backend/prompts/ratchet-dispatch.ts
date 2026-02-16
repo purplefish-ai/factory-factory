@@ -16,6 +16,10 @@ Context:
 - PR Number: {{PR_NUMBER}}
 - PR URL: {{PR_URL}}
 
+## Review Comments
+
+{{REVIEW_COMMENTS}}
+
 Execute autonomously in this order:
 1. Merge latest main and resolve conflicts.
 2. Check CI failures and fix them.
@@ -53,10 +57,37 @@ function getTemplate(): string {
   }
 }
 
-export function buildRatchetDispatchPrompt(prUrl: string, prNumber: number): string {
+export interface ReviewCommentForPrompt {
+  author: string;
+  body: string;
+  path: string;
+  line: number | null;
+  url: string;
+}
+
+function formatReviewComments(comments: ReviewCommentForPrompt[]): string {
+  if (comments.length === 0) {
+    return 'No review comments found.';
+  }
+
+  return comments
+    .map((c) => {
+      const location = c.line ? `${c.path}:${c.line}` : c.path;
+      return `- **@${c.author}** on \`${location}\` ([link](${c.url})):\n  > ${c.body.replaceAll('\n', '\n  > ')}`;
+    })
+    .join('\n\n');
+}
+
+export function buildRatchetDispatchPrompt(
+  prUrl: string,
+  prNumber: number,
+  reviewComments: ReviewCommentForPrompt[] = []
+): string {
+  const comments = formatReviewComments(reviewComments);
   return getTemplate()
-    .replaceAll('{{PR_URL}}', prUrl)
-    .replaceAll('{{PR_NUMBER}}', String(prNumber));
+    .replaceAll('{{PR_URL}}', () => prUrl)
+    .replaceAll('{{PR_NUMBER}}', () => String(prNumber))
+    .replaceAll('{{REVIEW_COMMENTS}}', () => comments);
 }
 
 export function clearRatchetDispatchPromptCache(): void {

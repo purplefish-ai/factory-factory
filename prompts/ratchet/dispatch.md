@@ -6,6 +6,10 @@ Context:
 - PR Number: {{PR_NUMBER}}
 - PR URL: {{PR_URL}}
 
+## Review Comments
+
+{{REVIEW_COMMENTS}}
+
 Goal:
 - Move this PR forward safely without waiting for user input.
 
