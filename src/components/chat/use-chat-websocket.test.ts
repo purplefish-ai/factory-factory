@@ -17,22 +17,46 @@ interface GuardState {
   messageProcessed: boolean;
 }
 
+type HydrationBatch = { loadRequestId?: string; type?: string };
+type HydrationBatchDecision = 'pass' | 'drop' | 'match';
+
+function parseHydrationBatch(data: unknown): HydrationBatch | null {
+  if (typeof data !== 'object' || data === null || !('type' in data)) {
+    return null;
+  }
+
+  const maybeType = (data as { type?: string }).type;
+  if (maybeType !== 'session_replay_batch' && maybeType !== 'session_snapshot') {
+    return null;
+  }
+
+  return data as HydrationBatch;
+}
+
+function evaluateHydrationBatch(
+  batch: HydrationBatch,
+  pendingLoadRequestId: string | null
+): HydrationBatchDecision {
+  if (pendingLoadRequestId) {
+    if (!batch.loadRequestId) {
+      return 'drop';
+    }
+    return batch.loadRequestId === pendingLoadRequestId ? 'match' : 'drop';
+  }
+
+  return batch.loadRequestId ? 'drop' : 'pass';
+}
+
 // Helper function that simulates the handleMessage logic from the hook
 function createHandleMessage(guardState: GuardState) {
   return (data: unknown) => {
-    if (
-      typeof data === 'object' &&
-      data !== null &&
-      'type' in data &&
-      ((data as { type?: string }).type === 'session_replay_batch' ||
-        (data as { type?: string }).type === 'session_snapshot')
-    ) {
-      const batch = data as { loadRequestId?: string; type?: string };
-      if (guardState.currentLoadRequestId && batch.loadRequestId) {
-        if (batch.loadRequestId !== guardState.currentLoadRequestId) {
-          return;
-        }
-        // Only clear when we have a matching ID
+    const batch = parseHydrationBatch(data);
+    if (batch) {
+      const decision = evaluateHydrationBatch(batch, guardState.currentLoadRequestId);
+      if (decision === 'drop') {
+        return;
+      }
+      if (decision === 'match') {
         guardState.currentLoadRequestId = null;
         guardState.clearLoadTimeoutCalled = true;
       }
@@ -120,7 +144,7 @@ describe('useChatWebSocket hydration guard logic', () => {
       expect(guardState.messageProcessed).toBe(false);
     });
 
-    it('should allow message processing when guard is not set', () => {
+    it('should reject hydration responses with loadRequestId when guard is not set', () => {
       const guardState: GuardState = {
         currentLoadRequestId: null,
         clearLoadTimeoutCalled: false,
@@ -128,8 +152,23 @@ describe('useChatWebSocket hydration guard logic', () => {
       };
       const handleMessage = createHandleMessage(guardState);
 
-      // When no hydration is pending, messages should pass through
+      // Late load responses should be ignored once hydration has completed
       handleMessage({ type: 'session_snapshot', loadRequestId: 'load-999' });
+
+      expect(guardState.currentLoadRequestId).toBe(null);
+      expect(guardState.clearLoadTimeoutCalled).toBe(false);
+      expect(guardState.messageProcessed).toBe(false);
+    });
+
+    it('should allow non-hydration snapshots when guard is not set', () => {
+      const guardState: GuardState = {
+        currentLoadRequestId: null,
+        clearLoadTimeoutCalled: false,
+        messageProcessed: false,
+      };
+      const handleMessage = createHandleMessage(guardState);
+
+      handleMessage({ type: 'session_snapshot' });
 
       expect(guardState.currentLoadRequestId).toBe(null);
       expect(guardState.clearLoadTimeoutCalled).toBe(false);

@@ -351,8 +351,11 @@ class ChatMessageHandlerService {
     }
 
     try {
-      await sessionService.sendSessionMessage(dbSessionId, content);
+      const sendPromise = sessionService.sendSessionMessage(dbSessionId, content);
+      // Persist immediately after dispatch so refresh/replay keeps this user message
+      // visible while the provider is still working on the turn.
       sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
+      await sendPromise;
       sessionDomainService.emitDelta(dbSessionId, {
         type: 'message_state_changed',
         id: msg.id,

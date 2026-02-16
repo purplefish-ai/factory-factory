@@ -169,6 +169,54 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     );
   });
 
+  it('persists dispatched user message before turn completion', async () => {
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    mockSessionService.getSessionClient.mockReturnValue(client);
+
+    let resolveSend: (() => void) | undefined;
+    const sendPromise = new Promise<void>((resolve) => {
+      resolveSend = resolve;
+    });
+    mockSessionService.sendSessionMessage.mockReturnValue(sendPromise);
+
+    const dispatchPromise = chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    await vi.waitFor(() => {
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+    });
+
+    expect(mockSessionDomainService.commitSentUserMessageAtOrder).toHaveBeenCalledWith(
+      's1',
+      queuedMessage,
+      0
+    );
+    expect(mockSessionDomainService.emitDelta).not.toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        type: 'message_state_changed',
+        id: 'm1',
+        newState: 'COMMITTED',
+      })
+    );
+
+    resolveSend?.();
+    await dispatchPromise;
+
+    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        type: 'message_state_changed',
+        id: 'm1',
+        newState: 'COMMITTED',
+      })
+    );
+  });
+
   it('leaves message in queue when dispatch gate evaluation throws', async () => {
     const client = {
       isCompactingActive: vi.fn().mockReturnValue(false),
