@@ -5,6 +5,37 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-02-16
+
+### Added
+
+- Add Codex app-server ACP adapter (#1030)
+- Add pending user-input state visibility across workspace views (#1022)
+- Add queued message auto-dispatch after prompt completion (#1029)
+
+### Changed
+
+- Simplify live activity dock and summarize agent progress (#1026)
+- Simplify workspace right-panel tabs (#1021)
+- Enforce non-interactive mode for ratchet and issue dispatch (#1025)
+
+### Fixed
+
+- Fix Codex execution mode options when requirements are missing (#1039)
+- Handle Codex `commandExecution` payloads in PR detector flow (#1038)
+- Fix missing transcript entry for dequeued queued messages (#1037)
+- Propagate idle transition and queue-clear snapshots on session stop (#1034, #1035)
+- Avoid chat auto-scroll during hydration (#1036)
+- Fix false frontend force-kill log on shutdown (#1033)
+- Fix false orphan agent sessions in admin process list (#1031)
+- Fix `/logs` hanging on large log files (#1027)
+- Hide workspace immediately during archive to avoid stale visibility (#1028)
+
+### Refactored
+
+- Refactor duplicate code paths across UI and session loaders (#1023)
+- Remove deprecated auto-fix monitor/fixer stack and unused workspace ratchet fields (#1019, #1020)
+
 ## [0.3.3] - 2026-02-14
 
 ### Fixed
