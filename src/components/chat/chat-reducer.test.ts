@@ -749,6 +749,30 @@ describe('chatReducer', () => {
 
       expect(state.latestThinking).toBeNull();
     });
+
+    it('does not clear latest thinking for duplicate reasoning tool start replay', () => {
+      let state: ChatState = {
+        ...initialState,
+        latestThinking: 'Current reasoning text',
+      };
+
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: createReasoningToolUseMessage('reasoning-1'), order: 4 },
+      });
+
+      state = {
+        ...state,
+        latestThinking: 'Current reasoning text',
+      };
+
+      state = chatReducer(state, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: createReasoningToolUseMessage('reasoning-1'), order: 4 },
+      });
+
+      expect(state.latestThinking).toBe('Current reasoning text');
+    });
   });
 
   // -------------------------------------------------------------------------
