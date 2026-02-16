@@ -754,6 +754,68 @@ describe('SessionService', () => {
     expect(pendingToolCalls.has('session-1')).toBe(false);
   });
 
+  it('continues stop cleanup when orphaned tool-call finalization throws', async () => {
+    const markSessionIdle = vi.fn();
+    sessionService.configure({
+      workspace: {
+        markSessionRunning: vi.fn(),
+        markSessionIdle,
+      },
+    });
+
+    const pendingToolCalls = (
+      sessionService as unknown as {
+        pendingAcpToolCalls: Map<
+          string,
+          Map<
+            string,
+            {
+              toolUseId: string;
+              toolName: string;
+              acpKind?: string;
+              acpLocations?: Array<{ path: string; line?: number | null }>;
+            }
+          >
+        >;
+      }
+    ).pendingAcpToolCalls;
+
+    pendingToolCalls.set(
+      'session-1',
+      new Map([
+        [
+          'call-1',
+          {
+            toolUseId: 'call-1',
+            toolName: 'Run pwd',
+            acpKind: 'execute',
+          },
+        ],
+      ])
+    );
+
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    vi.spyOn(sessionDomainService, 'emitDelta').mockImplementationOnce(() => {
+      throw new Error('emit failed');
+    });
+
+    await sessionService.stopSession('session-1');
+
+    expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.IDLE,
+    });
+    expect(markSessionIdle).toHaveBeenCalledWith('workspace-1', 'session-1');
+    expect(pendingToolCalls.has('session-1')).toBe(false);
+  });
+
   it('deletes ratchet session record during manual stop', async () => {
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();

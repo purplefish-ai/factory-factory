@@ -877,7 +877,7 @@ class SessionService {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
+      this.finalizeOrphanedToolCallsOnStop(sessionId);
       await this.updateStoppedSessionState(sessionId);
       sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: false });
       sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -904,6 +904,18 @@ class SessionService {
         ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
       });
       acpTraceLogger.closeSession(sessionId);
+    }
+  }
+
+  private finalizeOrphanedToolCallsOnStop(sessionId: string): void {
+    try {
+      this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
+    } catch (error) {
+      logger.warn('Failed finalizing orphaned ACP tool calls during stop', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.pendingAcpToolCalls.delete(sessionId);
     }
   }
 
