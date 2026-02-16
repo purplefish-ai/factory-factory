@@ -203,7 +203,6 @@ export function WorkspaceDetailContainer() {
   });
 
   const loadingSession = sessionStatus.phase === 'loading';
-  const isSessionReady = sessionStatus.phase === 'ready' || sessionStatus.phase === 'running';
   const isIssueAutoStartPending =
     workspace?.creationSource === 'GITHUB_ISSUE' &&
     selectedDbSessionId !== null &&
@@ -281,13 +280,11 @@ export function WorkspaceDetailContainer() {
     workspaceId: workspaceId,
     slug: slug,
     sessions,
-    sendMessage,
     inputRef,
     selectedDbSessionId,
     setSelectedDbSessionId,
     selectedModel: chatSettings.selectedModel,
     selectedProvider,
-    isSessionReady,
   });
 
   const handleArchiveError = useCallback((error: unknown) => {
