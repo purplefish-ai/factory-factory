@@ -118,6 +118,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   initBanner,
 }: VirtualizedMessageListProps) {
   const prevMessageCountRef = useRef(messages.length);
+  const prevLatestThinkingRef = useRef<string | null>(latestThinking);
   const isAutoScrollingRef = useRef(false);
   // Track isNearBottom in a ref to avoid stale closures in effects
   const isNearBottomRef = useRef(isNearBottom);
@@ -188,6 +189,30 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       });
     }
   }, [loadingSession, messages.length, virtualizer, scrollContainerRef]);
+
+  // Keep viewport pinned when inline reasoning text grows while user is at bottom.
+  useEffect(() => {
+    const prevLatestThinking = prevLatestThinkingRef.current;
+    prevLatestThinkingRef.current = latestThinking;
+
+    if (loadingSession || !isNearBottomRef.current) {
+      return;
+    }
+    if (latestThinking === null || latestThinking === prevLatestThinking) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    isAutoScrollingRef.current = true;
+    container.scrollTop = container.scrollHeight;
+    requestAnimationFrame(() => {
+      isAutoScrollingRef.current = false;
+    });
+  }, [latestThinking, loadingSession, scrollContainerRef]);
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
