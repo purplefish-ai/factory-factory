@@ -83,10 +83,11 @@ export function buildRatchetDispatchPrompt(
   prNumber: number,
   reviewComments: ReviewCommentForPrompt[] = []
 ): string {
+  const comments = formatReviewComments(reviewComments);
   return getTemplate()
-    .replaceAll('{{PR_URL}}', prUrl)
-    .replaceAll('{{PR_NUMBER}}', String(prNumber))
-    .replaceAll('{{REVIEW_COMMENTS}}', formatReviewComments(reviewComments));
+    .replaceAll('{{PR_URL}}', () => prUrl)
+    .replaceAll('{{PR_NUMBER}}', () => String(prNumber))
+    .replaceAll('{{REVIEW_COMMENTS}}', () => comments);
 }
 
 export function clearRatchetDispatchPromptCache(): void {
