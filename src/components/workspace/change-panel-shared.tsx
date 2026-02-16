@@ -12,6 +12,7 @@ export interface ChangeListEntry {
   path: string;
   kind: FileChangeKind;
   statusCode?: string;
+  showIndicatorDot?: boolean;
 }
 
 export interface ChangeSection {
@@ -39,6 +40,7 @@ export const ChangeList = memo(function ChangeList({
           path={entry.path}
           kind={entry.kind}
           statusCode={entry.statusCode}
+          showIndicatorDot={entry.showIndicatorDot}
           onClick={() => onFileClick(entry.path)}
         />
       ))}
@@ -126,6 +128,7 @@ export const VirtualizedChangeList = memo(function VirtualizedChangeList({
                 path={entry.path}
                 kind={entry.kind}
                 statusCode={entry.statusCode}
+                showIndicatorDot={entry.showIndicatorDot}
                 onClick={() => onFileClick(entry.path)}
               />
             </div>

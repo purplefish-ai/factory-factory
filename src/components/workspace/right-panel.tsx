@@ -1,13 +1,4 @@
-import {
-  Camera,
-  FileQuestion,
-  Files,
-  GitCompare,
-  ListTodo,
-  Play,
-  Plus,
-  Terminal,
-} from 'lucide-react';
+import { Camera, FileQuestion, Files, ListTodo, Play, Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ChatMessage } from '@/components/chat';
@@ -17,15 +8,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
+import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
-import { DiffVsMainPanel } from './diff-vs-main-panel';
 import { FileBrowserPanel } from './file-browser-panel';
 import { ScreenshotsPanel } from './screenshots-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
 import { TerminalTabBar } from './terminal-tab-bar';
 import { TodoPanelContainer } from './todo-panel-container';
-import { UnstagedChangesPanel } from './unstaged-changes-panel';
 import { useDevLogs } from './use-dev-logs';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
@@ -34,36 +24,30 @@ import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-contex
 // =============================================================================
 
 const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
-const STORAGE_KEY_CHANGES_VIEW_PREFIX = 'workspace-right-panel-changes-view-';
 
 // =============================================================================
 // Types
 // =============================================================================
 
 type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots';
-type ChangesView = 'unstaged' | 'diff-vs-main';
 
 interface PersistedTopPanelState {
   topTab: TopPanelTab;
-  changesView: ChangesView;
-}
-
-function parseStoredChangesView(value: string | null): ChangesView | null {
-  if (value === 'unstaged' || value === 'diff-vs-main') {
-    return value;
-  }
-  return null;
 }
 
 function parseStoredTopTab(value: string | null): TopPanelTab | null {
   if (value === 'changes' || value === 'files' || value === 'tasks' || value === 'screenshots') {
     return value;
   }
+  // Legacy migration: old values were direct changes sub-views.
+  if (value === 'unstaged' || value === 'diff-vs-main') {
+    return 'changes';
+  }
   return null;
 }
 
 function loadPersistedTopPanelState(workspaceId: string): PersistedTopPanelState {
-  const defaultState: PersistedTopPanelState = { topTab: 'changes', changesView: 'unstaged' };
+  const defaultState: PersistedTopPanelState = { topTab: 'changes' };
 
   if (typeof window === 'undefined') {
     return defaultState;
@@ -71,29 +55,14 @@ function loadPersistedTopPanelState(workspaceId: string): PersistedTopPanelState
 
   try {
     const storedTop = localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`);
-    const storedChangesView = localStorage.getItem(
-      `${STORAGE_KEY_CHANGES_VIEW_PREFIX}${workspaceId}`
-    );
-
     const topTab = parseStoredTopTab(storedTop);
-    const changesView = parseStoredChangesView(storedChangesView);
     if (topTab) {
-      return {
-        topTab,
-        changesView: changesView ?? defaultState.changesView,
-      };
-    }
-
-    const legacyChangesView = parseStoredChangesView(storedTop);
-    if (legacyChangesView) {
-      const migratedChangesView = changesView ?? legacyChangesView;
       // Migrate legacy top-level tab values to the new "changes" tab key.
-      localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, 'changes');
-      localStorage.setItem(`${STORAGE_KEY_CHANGES_VIEW_PREFIX}${workspaceId}`, migratedChangesView);
-      return {
-        topTab: 'changes',
-        changesView: migratedChangesView,
-      };
+      if (storedTop === 'unstaged' || storedTop === 'diff-vs-main') {
+        localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, 'changes');
+        return { topTab: 'changes' };
+      }
+      return { topTab };
     }
   } catch {
     // Ignore storage errors
@@ -117,9 +86,7 @@ interface TopPanelAreaProps {
   workspaceId: string;
   messages: ChatMessage[];
   activeTopTab: TopPanelTab;
-  activeChangesView: ChangesView;
   onTopTabChange: (tab: TopPanelTab) => void;
-  onChangesViewChange: (view: ChangesView) => void;
   onTakeScreenshots: () => void;
 }
 
@@ -127,9 +94,7 @@ function TopPanelArea({
   workspaceId,
   messages,
   activeTopTab,
-  activeChangesView,
   onTopTabChange,
-  onChangesViewChange,
   onTakeScreenshots,
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
@@ -190,32 +155,7 @@ function TopPanelArea({
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {showChanges && (
-          <div className="h-full flex flex-col min-h-0">
-            <div className="flex items-center gap-0.5 p-1 bg-muted/30 border-b">
-              <TabButton
-                label="Unstaged"
-                icon={<FileQuestion className="h-3.5 w-3.5" />}
-                isActive={activeChangesView === 'unstaged'}
-                onSelect={() => onChangesViewChange('unstaged')}
-              />
-              <TabButton
-                label="Diff vs Main"
-                icon={<GitCompare className="h-3.5 w-3.5" />}
-                isActive={activeChangesView === 'diff-vs-main'}
-                onSelect={() => onChangesViewChange('diff-vs-main')}
-              />
-            </div>
-            <div className="flex-1 overflow-hidden">
-              {activeChangesView === 'unstaged' && (
-                <UnstagedChangesPanel workspaceId={workspaceId} />
-              )}
-              {activeChangesView === 'diff-vs-main' && (
-                <DiffVsMainPanel workspaceId={workspaceId} />
-              )}
-            </div>
-          </div>
-        )}
+        {showChanges && <CombinedChangesPanel workspaceId={workspaceId} />}
         {showFiles && <FileBrowserPanel workspaceId={workspaceId} />}
         {showTasks && <TodoPanelContainer messages={messages} />}
         {showScreenshots && (
@@ -235,7 +175,6 @@ export function RightPanel({
   // Track which workspaceId has been loaded to handle workspace changes
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const [activeTopTab, setActiveTopTab] = useState<TopPanelTab>('changes');
-  const [activeChangesView, setActiveChangesView] = useState<ChangesView>('unstaged');
   const { activeBottomTab, setActiveBottomTab } = useWorkspacePanel();
   const terminalPanelRef = useRef<TerminalPanelRef>(null);
 
@@ -284,7 +223,6 @@ export function RightPanel({
 
     const persisted = loadPersistedTopPanelState(workspaceId);
     setActiveTopTab(persisted.topTab);
-    setActiveChangesView(persisted.changesView);
   }, [workspaceId]);
 
   // Persist top-level tab selection to localStorage
@@ -293,19 +231,6 @@ export function RightPanel({
       setActiveTopTab(tab);
       try {
         localStorage.setItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`, tab);
-      } catch {
-        // Ignore storage errors
-      }
-    },
-    [workspaceId]
-  );
-
-  // Persist changes sub-view selection to localStorage
-  const handleChangesViewChange = useCallback(
-    (view: ChangesView) => {
-      setActiveChangesView(view);
-      try {
-        localStorage.setItem(`${STORAGE_KEY_CHANGES_VIEW_PREFIX}${workspaceId}`, view);
       } catch {
         // Ignore storage errors
       }
@@ -342,9 +267,7 @@ export function RightPanel({
           workspaceId={workspaceId}
           messages={messages}
           activeTopTab={activeTopTab}
-          activeChangesView={activeChangesView}
           onTopTabChange={handleTopTabChange}
-          onChangesViewChange={handleChangesViewChange}
           onTakeScreenshots={handleTakeScreenshots}
         />
       </ResizablePanel>
