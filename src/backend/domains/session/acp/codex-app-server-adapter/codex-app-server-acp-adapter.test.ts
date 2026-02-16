@@ -444,6 +444,107 @@ describe('CodexAppServerAcpAdapter', () => {
     ).toBe(true);
   });
 
+  it('does not duplicate replayed tool and reasoning updates when matching live events arrive', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_replay_dedupe', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    codex.request.mockResolvedValueOnce({
+      thread: {
+        id: 'thread_replay_dedupe',
+        turns: [
+          {
+            id: 'turn_replay_dedupe',
+            items: [
+              {
+                type: 'commandExecution',
+                id: 'item_replayed_command',
+                command: 'cat README.md',
+              },
+              {
+                type: 'reasoning',
+                id: 'item_replayed_reasoning',
+                summary: [{ type: 'summary_text', text: '**From replay**' }],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    await adapter.loadSession({
+      sessionId: 'sess_thread_replay_dedupe',
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+    (connection.sessionUpdate as ReturnType<typeof vi.fn>).mockClear();
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_replay_dedupe',
+      turnId: 'turn_replay_dedupe',
+      item: {
+        type: 'commandExecution',
+        id: 'item_replayed_command',
+        status: 'inProgress',
+        command: 'cat README.md',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_replay_dedupe',
+      turnId: 'turn_replay_dedupe',
+      item: {
+        type: 'commandExecution',
+        id: 'item_replayed_command',
+        status: 'completed',
+        command: 'cat README.md',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/reasoning/summaryTextDelta', {
+      threadId: 'thread_replay_dedupe',
+      turnId: 'turn_replay_dedupe',
+      itemId: 'item_replayed_reasoning',
+      delta: '**From live**',
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_replay_dedupe',
+      turnId: 'turn_replay_dedupe',
+      item: {
+        type: 'reasoning',
+        id: 'item_replayed_reasoning',
+        status: 'completed',
+        summary: [{ type: 'summary_text', text: '**From live**' }],
+      },
+    });
+
+    expect(connection.sessionUpdate).not.toHaveBeenCalled();
+  });
+
   it('prefers codex callId for tool call ids and enriches command metadata', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -573,9 +674,9 @@ describe('CodexAppServerAcpAdapter', () => {
           expect.objectContaining({
             update: expect.objectContaining({
               sessionUpdate: 'tool_call',
-              title: 'Read nested \\"quotes\\".md',
+              title: 'Read nested "quotes".md',
               kind: 'read',
-              locations: [{ path: '/tmp/workspace/nested \\"quotes\\".md' }],
+              locations: [{ path: '/tmp/workspace/nested "quotes".md' }],
             }),
           }),
         ],
@@ -583,9 +684,130 @@ describe('CodexAppServerAcpAdapter', () => {
           expect.objectContaining({
             update: expect.objectContaining({
               sessionUpdate: 'tool_call_update',
-              title: 'Read nested \\"quotes\\".md',
+              title: 'Read nested "quotes".md',
               kind: 'read',
-              locations: [{ path: '/tmp/workspace/nested \\"quotes\\".md' }],
+              locations: [{ path: '/tmp/workspace/nested "quotes".md' }],
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
+  it('parses escaped single quotes and escaped spaces in command metadata', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_escaped_single_quotes', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_escaped_single_quotes',
+      turnId: 'turn_escaped_single_quotes',
+      item: {
+        type: 'commandExecution',
+        id: 'item_escaped_single_quotes',
+        status: 'inProgress',
+        command: "cat 'it\\'s file.txt'",
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/completed', {
+      threadId: 'thread_escaped_single_quotes',
+      turnId: 'turn_escaped_single_quotes',
+      item: {
+        type: 'commandExecution',
+        id: 'item_escaped_single_quotes',
+        status: 'completed',
+        command: "cat 'it\\'s file.txt'",
+      },
+    });
+
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call',
+              title: "Read it's file.txt",
+              kind: 'read',
+              locations: [{ path: "/tmp/workspace/it's file.txt" }],
+            }),
+          }),
+        ],
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call_update',
+              title: "Read it's file.txt",
+              kind: 'read',
+              locations: [{ path: "/tmp/workspace/it's file.txt" }],
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
+  it('derives command metadata from actionable chained subcommands', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_chained_command', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_chained_command',
+      turnId: 'turn_chained_command',
+      item: {
+        type: 'commandExecution',
+        id: 'item_chained_command',
+        status: 'inProgress',
+        command: 'cd src && rg "TODO" README.md',
+      },
+    });
+
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call',
+              title: 'Search TODO in README.md',
+              kind: 'search',
+              locations: [{ path: '/tmp/workspace/README.md' }],
             }),
           }),
         ],
@@ -654,12 +876,40 @@ describe('CodexAppServerAcpAdapter', () => {
     const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
       (call) => call[0].update
     );
-    expect(updates).toEqual([
+    const thoughtChunks = updates.filter(
+      (update) => update.sessionUpdate === 'agent_thought_chunk'
+    );
+    expect(thoughtChunks).toEqual([
       {
         sessionUpdate: 'agent_thought_chunk',
         content: { type: 'text', text: '**Analyzing approach**' },
       },
     ]);
+    expect(
+      updates.some(
+        (update) =>
+          update.sessionUpdate === 'tool_call' &&
+          update.toolCallId === 'item_reasoning' &&
+          update.kind === 'think' &&
+          update.status === 'pending'
+      )
+    ).toBe(true);
+    expect(
+      updates.some(
+        (update) =>
+          update.sessionUpdate === 'tool_call_update' &&
+          update.toolCallId === 'item_reasoning' &&
+          update.status === 'in_progress'
+      )
+    ).toBe(true);
+    expect(
+      updates.some(
+        (update) =>
+          update.sessionUpdate === 'tool_call_update' &&
+          update.toolCallId === 'item_reasoning' &&
+          update.status === 'completed'
+      )
+    ).toBe(true);
   });
 
   it('writes provided MCP servers to Codex config and reloads on loadSession', async () => {
@@ -1983,6 +2233,22 @@ describe('CodexAppServerAcpAdapter', () => {
     });
 
     expect(codex.respondSuccess).toHaveBeenCalledWith(18, { decision: 'decline' });
+    const sessionUpdateMock = connection.sessionUpdate as ReturnType<typeof vi.fn>;
+    const pendingPermissionUpdateIndex = sessionUpdateMock.mock.calls.findIndex(
+      (call) =>
+        call[0].update?.sessionUpdate === 'tool_call_update' && call[0].update?.status === 'pending'
+    );
+    expect(pendingPermissionUpdateIndex).toBeGreaterThanOrEqual(0);
+    const pendingPermissionInvocationOrder =
+      sessionUpdateMock.mock.invocationCallOrder[pendingPermissionUpdateIndex];
+    const requestPermissionInvocationOrder = (
+      connection.requestPermission as ReturnType<typeof vi.fn>
+    ).mock.invocationCallOrder[0];
+    expect(pendingPermissionInvocationOrder).toBeDefined();
+    expect(requestPermissionInvocationOrder).toBeDefined();
+    expect(
+      (pendingPermissionInvocationOrder as number) < (requestPermissionInvocationOrder as number)
+    ).toBe(true);
     expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
       expect.arrayContaining([
         [
@@ -1997,7 +2263,7 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
-  it('supports allow_always for command approvals and auto-approves subsequent requests', async () => {
+  it('scopes allow_always command approvals by command pattern and cwd', async () => {
     const { connection } = createMockConnection();
     (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       outcome: { outcome: 'selected', optionId: 'allow_always' },
@@ -2063,13 +2329,56 @@ describe('CodexAppServerAcpAdapter', () => {
         threadId: 'thread_allow_always',
         turnId: 'turn_allow_always',
         itemId: 'item_allow_always_2',
-        command: 'ls src',
+        command: 'cat README.md',
         cwd: '/tmp/workspace',
       },
     });
 
     expect(connection.requestPermission).not.toHaveBeenCalled();
     expect(codex.respondSuccess).toHaveBeenCalledWith(92, { decision: 'accept' });
+
+    codex.respondSuccess.mockClear();
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 93,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thread_allow_always',
+        turnId: 'turn_allow_always',
+        itemId: 'item_allow_always_3',
+        command: 'ls src',
+        cwd: '/tmp/workspace',
+      },
+    });
+
+    expect(connection.requestPermission).toHaveBeenCalledTimes(1);
+    expect(codex.respondSuccess).toHaveBeenCalledWith(93, { decision: 'accept' });
+
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockClear();
+    codex.respondSuccess.mockClear();
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 94,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thread_allow_always',
+        turnId: 'turn_allow_always',
+        itemId: 'item_allow_always_4',
+        command: 'cat README.md',
+        cwd: '/tmp/other-workspace',
+      },
+    });
+
+    expect(connection.requestPermission).toHaveBeenCalledTimes(1);
+    expect(codex.respondSuccess).toHaveBeenCalledWith(94, { decision: 'accept' });
   });
 
   it('reconciles turn/completed notifications that arrive before prompt attaches active turn', async () => {

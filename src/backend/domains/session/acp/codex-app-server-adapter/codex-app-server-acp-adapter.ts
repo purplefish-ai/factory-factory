@@ -103,6 +103,7 @@ const PENDING_TURN_ID = '__pending_turn__';
 const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
 const DEFAULT_APPROVAL_POLICIES: ApprovalPolicy[] = ['on-failure', 'on-request', 'never'];
 const DEFAULT_SANDBOX_MODES: SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
+const SHAPE_DRIFT_DETAILS_LIMIT = 700;
 
 type PendingTurnCompletion = {
   stopReason: StopReason;
@@ -135,7 +136,8 @@ type AdapterSession = {
   planApprovalRequestedByTurnId: Set<string>;
   pendingPlanApprovalsByTurnId: Map<string, number>;
   pendingTurnCompletionsByTurnId: Map<string, PendingTurnCompletion>;
-  commandApprovalAlways: boolean;
+  commandApprovalScopes: Set<string>;
+  replayedTurnItemKeys: Set<string>;
 };
 
 type PromptContentBlock = PromptRequest['prompt'][number];
@@ -147,6 +149,24 @@ type CodexClient = Pick<
   CodexRpcClient,
   'start' | 'stop' | 'request' | 'notify' | 'respondSuccess' | 'respondError'
 >;
+
+function toTurnItemKey(turnId: string, itemId: string): string {
+  return `${turnId}:${itemId}`;
+}
+
+function toShapeDriftDetails(value: unknown): string {
+  try {
+    const text = JSON.stringify(value);
+    if (typeof text !== 'string') {
+      return '[unserializable]';
+    }
+    return text.length > SHAPE_DRIFT_DETAILS_LIMIT
+      ? `${text.slice(0, SHAPE_DRIFT_DETAILS_LIMIT)}...`
+      : text;
+  } catch {
+    return '[unserializable]';
+  }
+}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -566,8 +586,27 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+function trimOptionalQuotes(token: string): { text: string; quote: '"' | "'" | null } {
+  if (token.length >= 2 && token.startsWith('"') && token.endsWith('"')) {
+    return { text: token.slice(1, -1), quote: '"' };
+  }
+  if (token.length >= 2 && token.startsWith("'") && token.endsWith("'")) {
+    return { text: token.slice(1, -1), quote: "'" };
+  }
+  return { text: token, quote: null };
+}
+
+function unescapeCommandToken(token: string, quote: '"' | "'" | null): string {
+  if (quote === "'") {
+    return token.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+  }
+  return token.replace(/\\(["'\\\s|&;])/g, '$1');
+}
+
 function sanitizeCommandToken(token: string): string {
-  return token.replace(/^['"]|['"]$/g, '').trim();
+  const trimmed = token.trim();
+  const { text, quote } = trimOptionalQuotes(trimmed);
+  return unescapeCommandToken(text, quote).trim();
 }
 
 function tokenizeCommand(command: string): string[] {
@@ -579,6 +618,22 @@ function tokenizeCommand(command: string): string[] {
 function commandName(token: string): string {
   const unix = token.split('/').at(-1) ?? token;
   return (unix.split('\\').at(-1) ?? unix).toLowerCase();
+}
+
+function isChainSeparatorChar(char: string): boolean {
+  return char === ';' || char === '\n' || char === '|' || char === '&';
+}
+
+function readChainSeparatorLength(command: string, index: number): number {
+  const char = command[index];
+  if (!(char && isChainSeparatorChar(char))) {
+    return 0;
+  }
+  const next = command[index + 1];
+  if ((char === '|' || char === '&') && next === char) {
+    return 2;
+  }
+  return 1;
 }
 
 function isLikelyPathToken(token: string): boolean {
@@ -615,6 +670,7 @@ function normalizeLocationPath(pathToken: string, cwd: string): string {
 const READ_COMMANDS = new Set(['cat', 'head', 'tail', 'less', 'more']);
 const LIST_OR_FIND_COMMANDS = new Set(['ls', 'tree', 'find', 'fd']);
 const GREP_LIKE_COMMANDS = new Set(['rg', 'ripgrep', 'grep', 'ag']);
+const SHELL_META_COMMANDS = new Set(['cd', 'export', 'set', 'unset', 'alias', 'unalias', 'source']);
 
 type CommandDisplayContext = {
   command: string;
@@ -623,50 +679,196 @@ type CommandDisplayContext = {
   pathArg: string | null;
   cwd: string;
   locations: Array<{ path: string }>;
+  isShellMeta: boolean;
 };
+
+type CommandChainSplitState = {
+  parts: string[];
+  current: string;
+  quote: '"' | "'" | null;
+  escaped: boolean;
+};
+
+function pushCommandChainPart(state: CommandChainSplitState): void {
+  const trimmed = state.current.trim();
+  if (trimmed.length > 0) {
+    state.parts.push(trimmed);
+  }
+  state.current = '';
+}
+
+function consumeEscapedCommandChar(state: CommandChainSplitState, char: string): boolean {
+  if (!state.escaped) {
+    return false;
+  }
+  state.current += char;
+  state.escaped = false;
+  return true;
+}
+
+function consumeEscapeInitiator(state: CommandChainSplitState, char: string): boolean {
+  if (!(char === '\\' && state.quote !== "'")) {
+    return false;
+  }
+  state.current += char;
+  state.escaped = true;
+  return true;
+}
+
+function consumeQuotedCommandChar(state: CommandChainSplitState, char: string): boolean {
+  if (!state.quote) {
+    return false;
+  }
+  state.current += char;
+  if (char === state.quote) {
+    state.quote = null;
+  }
+  return true;
+}
+
+function consumeQuoteStart(state: CommandChainSplitState, char: string): boolean {
+  if (!(char === '"' || char === "'")) {
+    return false;
+  }
+  state.quote = char;
+  state.current += char;
+  return true;
+}
+
+function consumeCommandChainSeparator(
+  state: CommandChainSplitState,
+  command: string,
+  index: number
+): number {
+  const separatorLength = readChainSeparatorLength(command, index);
+  if (separatorLength <= 0) {
+    return 0;
+  }
+  pushCommandChainPart(state);
+  return separatorLength;
+}
+
+function splitCommandChain(command: string): string[] {
+  const state: CommandChainSplitState = {
+    parts: [],
+    current: '',
+    quote: null,
+    escaped: false,
+  };
+
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+    if (!char) {
+      continue;
+    }
+
+    if (consumeEscapedCommandChar(state, char)) {
+      continue;
+    }
+
+    if (consumeEscapeInitiator(state, char)) {
+      continue;
+    }
+
+    if (consumeQuotedCommandChar(state, char)) {
+      continue;
+    }
+
+    if (consumeQuoteStart(state, char)) {
+      continue;
+    }
+
+    const consumedSeparatorLength = consumeCommandChainSeparator(state, command, index);
+    if (consumedSeparatorLength > 0) {
+      index += consumedSeparatorLength - 1;
+      continue;
+    }
+
+    state.current += char;
+  }
+
+  pushCommandChainPart(state);
+  return state.parts;
+}
+
+function buildCommandDisplayContexts(
+  rawCommand: string | null,
+  cwd: string
+): CommandDisplayContext[] {
+  const command = rawCommand?.trim();
+  if (!command) {
+    return [];
+  }
+
+  const contexts: CommandDisplayContext[] = [];
+  const segments = splitCommandChain(command);
+  for (const segment of segments) {
+    const tokens = tokenizeCommand(segment);
+    if (tokens.length === 0) {
+      continue;
+    }
+
+    const [firstToken] = tokens;
+    if (!firstToken) {
+      continue;
+    }
+    const firstCommand = commandName(firstToken);
+    const nonFlagArgs = tokens.slice(1).filter((token) => !token.startsWith('-'));
+    const pathArg = nonFlagArgs.find(isLikelyPathToken) ?? null;
+    const commandPath = pathArg ? normalizeLocationPath(pathArg, cwd) : null;
+    const locations = commandPath ? [{ path: commandPath }] : [];
+    contexts.push({
+      command: segment,
+      firstCommand,
+      nonFlagArgs,
+      pathArg,
+      cwd,
+      locations,
+      isShellMeta: SHELL_META_COMMANDS.has(firstCommand),
+    });
+  }
+
+  return contexts;
+}
+
+function chooseActionableCommandContexts(
+  contexts: CommandDisplayContext[]
+): CommandDisplayContext[] {
+  const actionable = contexts.filter((context) => !context.isShellMeta);
+  return actionable.length > 0 ? actionable : contexts;
+}
+
+function selectCombinedCommandKind(
+  displays: Array<{ kind: NonNullable<ToolCallUpdate['kind']> }>
+): NonNullable<ToolCallUpdate['kind']> {
+  const firstNonExecute = displays.find((display) => display.kind !== 'execute');
+  return firstNonExecute?.kind ?? 'execute';
+}
 
 function resolveCommandDisplay(params: { command: string | null; cwd: string }): {
   title: string;
   kind: NonNullable<ToolCallUpdate['kind']>;
   locations: Array<{ path: string }>;
 } {
-  const context = buildCommandDisplayContext(params.command, params.cwd);
-  if (!context) {
+  const contexts = chooseActionableCommandContexts(
+    buildCommandDisplayContexts(params.command, params.cwd)
+  );
+  if (contexts.length === 0) {
     return { title: 'commandExecution', kind: 'execute', locations: [] };
   }
-  return resolveCommandDisplayFromContext(context);
-}
 
-function buildCommandDisplayContext(
-  rawCommand: string | null,
-  cwd: string
-): CommandDisplayContext | null {
-  const command = rawCommand?.trim();
-  if (!command) {
-    return null;
-  }
-  const tokens = tokenizeCommand(command);
-  if (tokens.length === 0) {
-    return null;
+  const [singleContext] = contexts;
+  if (singleContext && contexts.length === 1) {
+    return resolveCommandDisplayFromContext(singleContext);
   }
 
-  const [firstToken] = tokens;
-  if (!firstToken) {
-    return null;
-  }
-  const firstCommand = commandName(firstToken);
-  const nonFlagArgs = tokens.slice(1).filter((token) => !token.startsWith('-'));
-  const pathArg = nonFlagArgs.find(isLikelyPathToken) ?? null;
-  const commandPath = pathArg ? normalizeLocationPath(pathArg, cwd) : null;
-  const locations = commandPath ? [{ path: commandPath }] : [];
-  return {
-    command,
-    firstCommand,
-    nonFlagArgs,
-    pathArg,
-    cwd,
-    locations,
-  };
+  const displays = contexts.map((context) => resolveCommandDisplayFromContext(context));
+  const title = dedupeStrings(displays.map((display) => display.title)).join(', ');
+  const kind = selectCombinedCommandKind(displays);
+  const locations = dedupeLocations(displays.flatMap((display) => display.locations)).map(
+    (location) => ({ path: location.path })
+  );
+  return { title, kind, locations };
 }
 
 function resolveCommandDisplayFromContext(context: CommandDisplayContext): {
@@ -698,6 +900,42 @@ function resolveCommandDisplayFromContext(context: CommandDisplayContext): {
   }
 
   return { title: context.command, kind: 'execute', locations: context.locations };
+}
+
+function normalizeCwdForScope(cwd: string): string {
+  if (cwd.length > 1 && cwd.endsWith('/')) {
+    return cwd.slice(0, -1);
+  }
+  return cwd;
+}
+
+function normalizeScopeToken(token: string): string {
+  return token.replace(/\s+/g, ' ').trim();
+}
+
+function buildCommandApprovalScopeKey(params: {
+  command: string | null;
+  cwd: string;
+}): string | null {
+  const contexts = chooseActionableCommandContexts(
+    buildCommandDisplayContexts(params.command, params.cwd)
+  );
+  if (contexts.length === 0) {
+    return null;
+  }
+
+  const segments = contexts.map((context) => {
+    const args = context.nonFlagArgs.map(normalizeScopeToken).filter((arg) => arg.length > 0);
+    return [context.firstCommand, ...args].join(' ');
+  });
+  const normalizedSegments = segments
+    .map(normalizeScopeToken)
+    .filter((segment) => segment.length > 0);
+  if (normalizedSegments.length === 0) {
+    return null;
+  }
+
+  return `cwd=${normalizeCwdForScope(params.cwd)}|${normalizedSegments.join(' && ')}`;
 }
 
 function dedupeLocations(
@@ -890,6 +1128,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private collaborationModes: CollaborationModeEntry[] = [];
   private readonly mcpServersByThreadId = new Map<string, Record<string, CodexMcpServerConfig>>();
   private appliedMcpServerConfigJson = '{}';
+  private readonly shapeDriftCounts = new Map<string, number>();
 
   constructor(connection: AgentSideConnection, codexClient?: CodexClient) {
     this.connection = connection;
@@ -1023,7 +1262,8 @@ export class CodexAppServerAcpAdapter implements Agent {
       planApprovalRequestedByTurnId: new Set(),
       pendingPlanApprovalsByTurnId: new Map(),
       pendingTurnCompletionsByTurnId: new Map(),
-      commandApprovalAlways: false,
+      commandApprovalScopes: new Set(),
+      replayedTurnItemKeys: new Set(),
     };
 
     this.sessions.set(sessionId, session);
@@ -1073,7 +1313,8 @@ export class CodexAppServerAcpAdapter implements Agent {
       planApprovalRequestedByTurnId: new Set(),
       pendingPlanApprovalsByTurnId: new Map(),
       pendingTurnCompletionsByTurnId: new Map(),
-      commandApprovalAlways: false,
+      commandApprovalScopes: new Set(),
+      replayedTurnItemKeys: new Set(),
     };
 
     this.sessions.set(session.sessionId, session);
@@ -1865,12 +2106,27 @@ export class CodexAppServerAcpAdapter implements Agent {
     item: { type: string; id: string } & Record<string, unknown>
   ): Promise<void> {
     if (item.type === 'reasoning') {
+      await this.emitSessionUpdate(sessionId, {
+        sessionUpdate: 'tool_call',
+        toolCallId: resolveToolCallId({ itemId: item.id, source: item }),
+        title: 'reasoning',
+        kind: 'think',
+        status: 'completed',
+        rawInput: item,
+        rawOutput: item,
+      });
       await this.emitReasoningThoughtChunkFromItem(sessionId, item);
+      session.replayedTurnItemKeys.add(toTurnItemKey(turnId, item.id));
       return;
     }
 
     const toolInfo = this.buildToolCallState(session, item, turnId);
     if (!toolInfo) {
+      this.reportShapeDrift('unhandled_replay_item', {
+        turnId,
+        itemType: item.type,
+        itemId: item.id,
+      });
       return;
     }
 
@@ -1883,12 +2139,16 @@ export class CodexAppServerAcpAdapter implements Agent {
       rawInput: item,
       rawOutput: item,
     });
+    session.replayedTurnItemKeys.add(toTurnItemKey(turnId, item.id));
   }
 
   private async handleCodexNotification(method: string, params: unknown): Promise<void> {
     const parsed = knownCodexNotificationSchema.safeParse({ method, params });
     if (!parsed.success) {
-      process.stderr.write(`[codex-app-server-acp] dropped malformed notification: ${method}\n`);
+      this.reportShapeDrift('malformed_notification', {
+        method,
+        issues: parsed.error.issues.slice(0, 3).map((issue) => issue.message),
+      });
       return;
     }
 
@@ -1932,6 +2192,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       await this.emitReasoningThoughtDelta(
         sessionId,
         session,
+        notification.params.turnId,
         notification.params.itemId,
         notification.params.delta
       );
@@ -1942,6 +2203,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       await this.emitToolCallProgress(
         sessionId,
         session,
+        notification.params.turnId,
         notification.params.itemId,
         notification.params.delta
       );
@@ -1952,6 +2214,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       await this.emitToolCallProgress(
         sessionId,
         session,
+        notification.params.turnId,
         notification.params.itemId,
         notification.params.delta
       );
@@ -1962,6 +2225,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       await this.emitToolCallProgress(
         sessionId,
         session,
+        notification.params.turnId,
         notification.params.itemId,
         notification.params.message
       );
@@ -2033,14 +2297,53 @@ export class CodexAppServerAcpAdapter implements Agent {
     });
   }
 
+  private isReplayedTurnItem(session: AdapterSession, turnId: string, itemId: string): boolean {
+    return session.replayedTurnItemKeys.has(toTurnItemKey(turnId, itemId));
+  }
+
   private async emitReasoningThoughtDelta(
     sessionId: string,
     session: AdapterSession,
+    turnId: string,
     itemId: string,
     delta: string
   ): Promise<void> {
+    if (this.isReplayedTurnItem(session, turnId, itemId)) {
+      return;
+    }
     if (delta.length === 0) {
       return;
+    }
+
+    const existing = session.toolCallsByItemId.get(itemId);
+    if (!existing) {
+      const toolCallId = resolveToolCallId({
+        itemId,
+      });
+      session.toolCallsByItemId.set(itemId, {
+        toolCallId,
+        title: 'reasoning',
+        kind: 'think',
+        locations: [],
+      });
+      await this.emitSessionUpdate(sessionId, {
+        sessionUpdate: 'tool_call',
+        toolCallId,
+        title: 'reasoning',
+        kind: 'think',
+        status: 'pending',
+        rawInput: {
+          type: 'reasoning',
+          id: itemId,
+        },
+      });
+      await this.emitSessionUpdate(sessionId, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId,
+        title: 'reasoning',
+        kind: 'think',
+        status: 'in_progress',
+      });
     }
 
     session.reasoningDeltaItemIds.add(itemId);
@@ -2053,11 +2356,16 @@ export class CodexAppServerAcpAdapter implements Agent {
   private async emitToolCallProgress(
     sessionId: string,
     session: AdapterSession,
+    turnId: string,
     itemId: string,
     output: string
   ): Promise<void> {
+    if (this.isReplayedTurnItem(session, turnId, itemId)) {
+      return;
+    }
     const toolCall = session.toolCallsByItemId.get(itemId);
     if (!toolCall) {
+      this.reportShapeDrift('tool_progress_without_tool_call', { turnId, itemId });
       return;
     }
 
@@ -2141,15 +2449,51 @@ export class CodexAppServerAcpAdapter implements Agent {
     item: { type: string; id: string } & Record<string, unknown>,
     turnId: string
   ): Promise<void> {
+    if (this.isReplayedTurnItem(session, turnId, item.id)) {
+      return;
+    }
+
     if (item.type === 'reasoning') {
-      // Reasoning text is emitted from deltas and/or completion fallback.
-      // Skipping started-item text avoids duplicate thought chunks when a started
-      // payload includes summary text and deltas arrive afterward.
+      const existing = session.toolCallsByItemId.get(item.id);
+      const toolInfo =
+        existing ??
+        ({
+          toolCallId: resolveToolCallId({
+            itemId: item.id,
+            source: item,
+          }),
+          title: 'reasoning',
+          kind: 'think',
+          locations: [],
+        } satisfies ToolCallState);
+      if (!existing) {
+        session.toolCallsByItemId.set(item.id, toolInfo);
+        await this.emitSessionUpdate(session.sessionId, {
+          sessionUpdate: 'tool_call',
+          toolCallId: toolInfo.toolCallId,
+          title: toolInfo.title,
+          kind: toolInfo.kind,
+          status: 'pending',
+          rawInput: item,
+        });
+      }
+      await this.emitSessionUpdate(session.sessionId, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: toolInfo.toolCallId,
+        title: toolInfo.title,
+        kind: toolInfo.kind,
+        status: 'in_progress',
+      });
       return;
     }
 
     const toolInfo = this.buildToolCallState(session, item, turnId);
     if (!toolInfo) {
+      this.reportShapeDrift('unhandled_item_started_type', {
+        turnId,
+        itemType: item.type,
+        itemId: item.id,
+      });
       return;
     }
 
@@ -2180,7 +2524,40 @@ export class CodexAppServerAcpAdapter implements Agent {
     item: { type: string; id: string } & Record<string, unknown>,
     turnId: string
   ): Promise<void> {
+    if (this.isReplayedTurnItem(session, turnId, item.id)) {
+      return;
+    }
+
     if (item.type === 'reasoning') {
+      const existing = session.toolCallsByItemId.get(item.id);
+      const reasoningToolCallId =
+        existing?.toolCallId ??
+        resolveToolCallId({
+          itemId: item.id,
+          source: item,
+        });
+      if (existing) {
+        await this.emitSessionUpdate(session.sessionId, {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: reasoningToolCallId,
+          title: existing.title,
+          kind: existing.kind,
+          status: toToolStatus(item.status) ?? 'completed',
+          rawOutput: item,
+        });
+      } else {
+        await this.emitSessionUpdate(session.sessionId, {
+          sessionUpdate: 'tool_call',
+          toolCallId: reasoningToolCallId,
+          title: 'reasoning',
+          kind: 'think',
+          status: toToolStatus(item.status) ?? 'completed',
+          rawInput: item,
+          rawOutput: item,
+        });
+      }
+      session.toolCallsByItemId.delete(item.id);
+
       const sawDelta = session.reasoningDeltaItemIds.has(item.id);
       session.reasoningDeltaItemIds.delete(item.id);
       if (!sawDelta) {
@@ -2191,6 +2568,11 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     const existing = session.toolCallsByItemId.get(item.id);
     if (!existing) {
+      this.reportShapeDrift('item_completed_without_started_state', {
+        turnId,
+        itemType: item.type,
+        itemId: item.id,
+      });
       return;
     }
 
@@ -2577,10 +2959,14 @@ export class CodexAppServerAcpAdapter implements Agent {
     session: AdapterSession;
     toolCallId: string;
   }): Promise<boolean> {
-    if (
-      params.request.method !== 'item/commandExecution/requestApproval' ||
-      !params.session.commandApprovalAlways
-    ) {
+    if (params.request.method !== 'item/commandExecution/requestApproval') {
+      return false;
+    }
+    const scopeKey = buildCommandApprovalScopeKey({
+      command: asString(params.request.params.command),
+      cwd: asString(params.request.params.cwd) ?? params.session.cwd,
+    });
+    if (!(scopeKey && params.session.commandApprovalScopes.has(scopeKey))) {
       return false;
     }
     await this.respondToCodexPermissionRequest({
@@ -2603,6 +2989,10 @@ export class CodexAppServerAcpAdapter implements Agent {
     try {
       const parsed = knownCodexServerRequestSchema.safeParse(request);
       if (!parsed.success) {
+        this.reportShapeDrift('malformed_server_request', {
+          method: request.method,
+          issues: parsed.error.issues.slice(0, 3).map((issue) => issue.message),
+        });
         this.codex.respondError(request.id, {
           code: -32_602,
           message: 'Unsupported codex server request payload',
@@ -2613,6 +3003,11 @@ export class CodexAppServerAcpAdapter implements Agent {
       const typed = parsed.data;
       const sessionId = this.sessionIdByThreadId.get(typed.params.threadId);
       if (!sessionId) {
+        this.reportShapeDrift('request_for_unknown_thread', {
+          method: typed.method,
+          threadId: typed.params.threadId,
+          itemId: typed.params.itemId,
+        });
         this.codex.respondError(typed.id, {
           code: -32_603,
           message: 'No ACP session mapped for this thread',
@@ -2622,6 +3017,11 @@ export class CodexAppServerAcpAdapter implements Agent {
 
       const session = this.sessions.get(sessionId);
       if (!session) {
+        this.reportShapeDrift('request_for_missing_session', {
+          method: typed.method,
+          sessionId,
+          itemId: typed.params.itemId,
+        });
         this.codex.respondError(typed.id, {
           code: -32_603,
           message: 'No ACP session mapped for this thread',
@@ -2667,6 +3067,15 @@ export class CodexAppServerAcpAdapter implements Agent {
       const permissionOptions = this.buildPermissionOptions({
         method: typed.method,
         questions,
+      });
+
+      await this.emitSessionUpdate(sessionId, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: toolCall.toolCallId,
+        title: toolCall.title,
+        kind: toolCall.kind,
+        status: 'pending',
+        ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
       });
 
       const permissionResult = await this.connection.requestPermission({
@@ -2822,7 +3231,18 @@ export class CodexAppServerAcpAdapter implements Agent {
       params.request.method === 'item/commandExecution/requestApproval' &&
       selected === 'allow_always'
     ) {
-      params.session.commandApprovalAlways = true;
+      const scopeKey = buildCommandApprovalScopeKey({
+        command: asString(params.request.params.command),
+        cwd: asString(params.request.params.cwd) ?? params.session.cwd,
+      });
+      if (scopeKey) {
+        params.session.commandApprovalScopes.add(scopeKey);
+      } else {
+        this.reportShapeDrift('allow_always_without_scope_key', {
+          itemId: params.request.params.itemId,
+          command: params.request.params.command,
+        });
+      }
     }
     const allow = this.isAllowedPermissionSelection(selected);
 
@@ -2852,6 +3272,17 @@ export class CodexAppServerAcpAdapter implements Agent {
     session.toolCallsByItemId.clear();
     session.reasoningDeltaItemIds.clear();
     session.pendingTurnCompletionsByTurnId.clear();
+  }
+
+  private reportShapeDrift(event: string, details?: unknown): void {
+    const count = (this.shapeDriftCounts.get(event) ?? 0) + 1;
+    this.shapeDriftCounts.set(event, count);
+
+    const includeDetails = details !== undefined && (count <= 5 || count % 50 === 0);
+    const detailsSuffix = includeDetails ? ` details=${toShapeDriftDetails(details)}` : '';
+    process.stderr.write(
+      `[codex-app-server-acp] shape-drift event=${event} count=${count}${detailsSuffix}\n`
+    );
   }
 
   private async emitSessionUpdate(sessionId: string, update: SessionUpdate): Promise<void> {
