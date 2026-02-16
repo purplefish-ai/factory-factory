@@ -31,6 +31,7 @@ describe('cliHealthService', () => {
     });
     vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({
       isInstalled: false,
+      isAuthenticated: false,
       error: 'Codex not installed',
     });
     vi.mocked(githubCLIService.checkHealth).mockResolvedValue({
@@ -45,6 +46,30 @@ describe('cliHealthService', () => {
     expect(status.allHealthy).toBe(true);
   });
 
+  it('reports Codex as installed but unauthenticated', async () => {
+    vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue({
+      isInstalled: true,
+      version: 'claude 1.2.3',
+    });
+    vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: false,
+      version: 'codex-cli 0.99.0',
+      error: 'Codex CLI is not authenticated. Run `codex login` to authenticate.',
+    });
+    vi.mocked(githubCLIService.checkHealth).mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: true,
+      version: '2.0.0',
+    });
+
+    const status = await cliHealthService.checkHealth(true);
+
+    expect(status.codex.isInstalled).toBe(true);
+    expect(status.codex.isAuthenticated).toBe(false);
+    expect(status.allHealthy).toBe(true); // Codex auth is optional for allHealthy
+  });
+
   it('reports unhealthy when required GitHub auth is missing', async () => {
     vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue({
       isInstalled: true,
@@ -52,6 +77,7 @@ describe('cliHealthService', () => {
     });
     vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({
       isInstalled: true,
+      isAuthenticated: true,
       version: 'codex-cli 0.99.0',
     });
     vi.mocked(githubCLIService.checkHealth).mockResolvedValue({

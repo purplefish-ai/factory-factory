@@ -36,11 +36,13 @@ import {
   RunScriptPortBadge,
   useWorkspacePanel,
 } from '@/components/workspace';
+import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
 import { trpc } from '@/frontend/lib/trpc';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
   getWorkspaceDefaultOptionLabel,
   type NewSessionProviderSelection,
+  resolveEffectiveSessionProvider,
   resolveProviderSelection,
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
@@ -281,6 +283,9 @@ function WorkspaceProviderSettings({
                 ))}
               </SelectContent>
             </Select>
+            <ProviderCliWarning
+              provider={resolveEffectiveSessionProvider(defaultProvider, userDefaultProvider)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="workspace-ratchet-provider">Ratchet Session Provider</Label>
@@ -302,6 +307,12 @@ function WorkspaceProviderSettings({
                 ))}
               </SelectContent>
             </Select>
+            <ProviderCliWarning
+              provider={resolveEffectiveSessionProvider(
+                ratchetProvider === 'WORKSPACE_DEFAULT' ? defaultProvider : ratchetProvider,
+                userDefaultProvider
+              )}
+            />
           </div>
         </div>
         <DialogFooter>
