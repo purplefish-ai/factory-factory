@@ -240,10 +240,7 @@ export function handleClaudeMessage(
     baseState = { ...baseState, latestThinking: null };
   }
 
-  if (
-    isReasoningToolStartMessage(claudeMsg) &&
-    !hasExistingAgentMessageAtOrder(baseState, order)
-  ) {
+  if (isReasoningToolStartMessage(claudeMsg) && !hasExistingAgentMessageAtOrder(baseState, order)) {
     baseState = { ...baseState, latestThinking: null };
   }
 
