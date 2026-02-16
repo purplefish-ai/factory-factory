@@ -13,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   isHistoryHydrated: vi.fn(),
   markHistoryHydrated: vi.fn(),
   replaceTranscript: vi.fn(),
+  consumeInitialMessage: vi.fn(),
+  enqueue: vi.fn(),
   getCachedCommands: vi.fn(),
+  tryDispatchNextMessage: vi.fn(),
 }));
 
 vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
@@ -50,6 +53,8 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
     isHistoryHydrated: mocks.isHistoryHydrated,
     markHistoryHydrated: mocks.markHistoryHydrated,
     replaceTranscript: mocks.replaceTranscript,
+    consumeInitialMessage: mocks.consumeInitialMessage,
+    enqueue: mocks.enqueue,
   },
 }));
 
@@ -99,6 +104,8 @@ describe('createLoadSessionHandler', () => {
     mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([]);
     mocks.getTranscriptSnapshot.mockReturnValue([]);
     mocks.isHistoryHydrated.mockReturnValue(true);
+    mocks.consumeInitialMessage.mockReturnValue(null);
+    mocks.enqueue.mockReturnValue({ position: 0 });
     mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
     mocks.loadCodexSessionHistory.mockResolvedValue({ status: 'not_found' });
   });
@@ -124,7 +131,11 @@ describe('createLoadSessionHandler', () => {
       ],
     });
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -166,7 +177,11 @@ describe('createLoadSessionHandler', () => {
     mocks.isHistoryHydrated.mockReturnValue(false);
     mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -193,7 +208,11 @@ describe('createLoadSessionHandler', () => {
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
     });
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -222,7 +241,11 @@ describe('createLoadSessionHandler', () => {
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
     });
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -257,7 +280,11 @@ describe('createLoadSessionHandler', () => {
       filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
     });
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
 
     for (let i = 0; i <= 1024; i += 1) {
@@ -297,7 +324,11 @@ describe('createLoadSessionHandler', () => {
         filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session.jsonl',
       });
 
-      const handler = createLoadSessionHandler();
+      const handler = createLoadSessionHandler({
+        getClientCreator: () => null,
+        tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+        setManualDispatchResume: vi.fn(),
+      });
       const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
 
       await handler({
@@ -347,7 +378,11 @@ describe('createLoadSessionHandler', () => {
       providerProjectPath: null,
     });
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -383,7 +418,11 @@ describe('createLoadSessionHandler', () => {
       ],
     });
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -435,7 +474,11 @@ describe('createLoadSessionHandler', () => {
       },
     ]);
 
-    const handler = createLoadSessionHandler();
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
@@ -457,5 +500,41 @@ describe('createLoadSessionHandler', () => {
         },
       ],
     });
+  });
+
+  it('auto-enqueues and dispatches initial message when present', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+      providerSessionId: null,
+      providerProjectPath: null,
+    });
+    mocks.consumeInitialMessage.mockReturnValue('Take a screenshot of the app');
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session', loadRequestId: 'load-1' } as never,
+    });
+
+    expect(mocks.consumeInitialMessage).toHaveBeenCalledWith('session-1');
+    expect(mocks.enqueue).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ text: 'Take a screenshot of the app' })
+    );
+    expect(mocks.emitDelta).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({ type: 'message_state_changed' })
+    );
+    expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
 });

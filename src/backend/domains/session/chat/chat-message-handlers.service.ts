@@ -162,12 +162,8 @@ class ChatMessageHandlerService {
         return;
       }
 
-      const client = await this.ensureClientReady(dbSessionId, peeked);
-      if (!client) {
-        return;
-      }
-
-      if (this.getRequeueReason(dbSessionId, client)) {
+      const clientResult = await this.resolveClientForDispatch(dbSessionId, peeked);
+      if (!clientResult) {
         return;
       }
 
@@ -178,7 +174,7 @@ class ChatMessageHandlerService {
       }
 
       try {
-        await this.dispatchMessage(dbSessionId, msg, client);
+        await this.dispatchMessage(dbSessionId, msg, clientResult.client);
       } catch (error) {
         // If dispatch fails (e.g., setMaxThinkingTokens throws before state change),
         // the message is still in ACCEPTED state and can be safely requeued
@@ -241,22 +237,35 @@ class ChatMessageHandlerService {
   // ============================================================================
 
   /**
-   * Ensure a session client is ready for dispatch. Auto-starts if needed.
-   * Returns the client or undefined if startup failed.
+   * Resolve (or auto-start) the client for dispatching a queued message.
+   * Returns null if the message should not be dispatched (requeue reason found).
    */
-  private async ensureClientReady(
+  private async resolveClientForDispatch(
     dbSessionId: string,
     msg: QueuedMessage
-  ): Promise<unknown | undefined> {
+  ): Promise<{ client: unknown } | null> {
     let client = sessionService.getSessionClient(dbSessionId);
+
+    let justAutoStarted = false;
     if (!client) {
       const started = await this.autoStartClientForQueue(dbSessionId, msg);
       if (!started) {
-        return undefined;
+        return null;
       }
       client = sessionService.getSessionClient(dbSessionId);
+      justAutoStarted = true;
     }
-    return client;
+
+    // Skip requeue check when the client was just auto-started: the "working" state
+    // comes from the startup itself, not from a prior user message being processed.
+    if (!justAutoStarted) {
+      const reason = this.getRequeueReason(dbSessionId, client);
+      if (reason) {
+        return null;
+      }
+    }
+
+    return { client };
   }
 
   /**

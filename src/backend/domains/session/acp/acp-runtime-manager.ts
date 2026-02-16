@@ -611,7 +611,11 @@ export class AcpRuntimeManager {
       workingDir: options.workingDir,
     });
 
-    const spawnEnv = isCodex ? { ...process.env, DOTENV_CONFIG_QUIET: 'true' } : { ...process.env };
+    const spawnEnv = {
+      ...process.env,
+      BROWSER: 'none',
+      ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true' } : {}),
+    };
 
     // Spawn subprocess (CRITICAL: detached MUST be false for orphan prevention)
     const child: ChildProcess = spawn(spawnCommand.command, spawnCommand.args, {

@@ -1,7 +1,11 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { sessionDataService, sessionProviderResolverService } from '@/backend/domains/session';
+import {
+  sessionDataService,
+  sessionDomainService,
+  sessionProviderResolverService,
+} from '@/backend/domains/session';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { SessionStatus } from '@/shared/core';
 import { publicProcedure, router } from './trpc';
@@ -67,6 +71,7 @@ export const sessionRouter = router({
         workflow: z.string(),
         model: z.string().optional(),
         provider: z.nativeEnum(SessionProvider).optional(),
+        initialMessage: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -95,6 +100,9 @@ export const sessionRouter = router({
         model: input.model,
         provider,
       });
+      if (input.initialMessage) {
+        sessionDomainService.storeInitialMessage(session.id, input.initialMessage);
+      }
       return session;
     }),
 
