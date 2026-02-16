@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   stopSession: vi.fn(),
   clearPendingRequest: vi.fn(),
+  tryDispatchNextMessage: vi.fn(),
 }));
 
 vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
@@ -26,7 +27,11 @@ describe('createStopHandler', () => {
 
   it('stops via provider-neutral lifecycle API and clears pending request', async () => {
     mocks.stopSession.mockResolvedValue(undefined);
-    const handler = createStopHandler();
+    const handler = createStopHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
 
     await handler({
       ws: { send: vi.fn() } as never,
@@ -37,5 +42,6 @@ describe('createStopHandler', () => {
 
     expect(mocks.stopSession).toHaveBeenCalledWith('session-1');
     expect(mocks.clearPendingRequest).toHaveBeenCalledWith('session-1');
+    expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
 });
