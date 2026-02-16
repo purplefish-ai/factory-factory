@@ -574,10 +574,25 @@ describe('CodexAppServerAcpAdapter', () => {
     const presetValues = executionModeOption.options.flatMap((option) =>
       'value' in option ? [option.value] : []
     );
+    const presetEntries = executionModeOption.options.flatMap((option) =>
+      'value' in option ? [option] : []
+    );
 
     expect(presetValues.length).toBeGreaterThan(1);
     expect(presetValues).toContain(JSON.stringify(['never', 'danger-full-access']));
     expect(presetValues).toContain(JSON.stringify(['on-failure', 'workspace-write']));
+    expect(presetEntries).toContainEqual(
+      expect.objectContaining({
+        value: JSON.stringify(['never', 'danger-full-access']),
+        name: 'YOLO (Full Access)',
+      })
+    );
+    expect(presetEntries).toContainEqual(
+      expect.objectContaining({
+        value: JSON.stringify(['on-request', 'workspace-write']),
+        name: 'On Request (Workspace Write)',
+      })
+    );
   });
 
   it('applies discovered execution mode and plan collaboration mode to turn/start', async () => {
