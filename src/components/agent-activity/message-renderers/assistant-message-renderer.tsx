@@ -180,9 +180,12 @@ export const LoadingIndicator = memo(function LoadingIndicator({
 }: LoadingIndicatorProps) {
   const loadingText = getLoadingText(latestReasoning);
   return (
-    <div className={cn('flex items-center gap-2 text-muted-foreground', className)}>
-      <Loader2 className="h-4 w-4 animate-spin" />
-      <span className="text-sm">{loadingText}</span>
+    <div className={cn('flex items-start gap-2 text-muted-foreground', className)}>
+      <Loader2 className="h-4 w-4 animate-spin shrink-0 mt-0.5" />
+      <MarkdownRenderer
+        content={loadingText}
+        className="min-w-0 flex-1 text-muted-foreground text-sm leading-normal [&_p]:m-0 [&_ul]:my-0 [&_ol]:my-0"
+      />
     </div>
   );
 });
