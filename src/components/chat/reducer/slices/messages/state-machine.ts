@@ -3,6 +3,11 @@ import type { ChatAction, ChatState } from '@/components/chat/reducer/types';
 import type { ChatMessage } from '@/lib/chat-protocol';
 import { MessageState, QUEUED_MESSAGE_ORDER_BASE } from '@/lib/chat-protocol';
 
+type StateChangeUserMessage = Extract<
+  Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
+  object
+>;
+
 export function reduceMessageStateMachineSlice(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case 'MESSAGE_STATE_CHANGED':
@@ -26,6 +31,9 @@ function applyMessageStateChange(
         ? handleDispatchedState(state, id, userMessage)
         : handleRemoveFromQueue(state, id);
     case MessageState.COMMITTED:
+      return userMessage
+        ? handleCommittedState(state, id, userMessage)
+        : handleRemoveFromQueue(state, id);
     case MessageState.COMPLETE:
       return handleRemoveFromQueue(state, id);
     case MessageState.CANCELLED:
@@ -42,10 +50,7 @@ function applyMessageStateChange(
 function handleAcceptedState(
   state: ChatState,
   id: string,
-  userMessage: Extract<
-    Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
-    object
-  >,
+  userMessage: StateChangeUserMessage,
   queuePosition?: number
 ): ChatState {
   const newPendingMessages = new Map(state.pendingMessages);
@@ -130,35 +135,62 @@ function handleAcceptedState(
 function handleDispatchedState(
   state: ChatState,
   id: string,
-  userMessage: Extract<
-    Extract<ChatAction, { type: 'MESSAGE_STATE_CHANGED' }>['payload']['userMessage'],
-    object
-  >
+  userMessage: StateChangeUserMessage
 ): ChatState {
-  // Remove from queue styling
+  // Remove from queue styling first, then upsert transcript entry from authoritative payload.
   const newQueuedMessages = new Map(state.queuedMessages);
   newQueuedMessages.delete(id);
+  return upsertUserMessageFromStateChange(
+    {
+      ...state,
+      queuedMessages: newQueuedMessages,
+    },
+    id,
+    userMessage
+  );
+}
 
-  // DISPATCHED messages must have an order assigned
+function upsertUserMessageFromStateChange(
+  state: ChatState,
+  id: string,
+  userMessage: StateChangeUserMessage
+): ChatState {
+  // DISPATCHED/COMMITTED user messages must have an order assigned
   if (userMessage.order === undefined) {
-    return { ...state, queuedMessages: newQueuedMessages };
+    return state;
   }
+
+  // Build a full transcript entry from server payload for recovery and updates.
+  const messageFromDelta: ChatMessage = {
+    id,
+    source: 'user',
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
+    order: userMessage.order,
+  };
 
   // Find the existing message and update its order
   const existingMessageIndex = state.messages.findIndex((m) => m.id === id);
   if (existingMessageIndex === -1) {
-    // Message not found in transcript yet - shouldn't happen but handle gracefully
-    return { ...state, queuedMessages: newQueuedMessages };
+    // If this tab missed earlier transitions (reconnect/race), recover from payload.
+    return {
+      ...state,
+      messages: insertMessageByOrder(state.messages, messageFromDelta),
+    };
   }
 
   // Update the message with the new order and re-insert at correct position
   const existingMessage = state.messages[existingMessageIndex];
   if (!existingMessage) {
-    return { ...state, queuedMessages: newQueuedMessages };
+    return state;
   }
 
   const updatedMessage: ChatMessage = {
     ...existingMessage,
+    text: userMessage.text,
+    timestamp: userMessage.timestamp,
+    attachments: userMessage.attachments,
     order: userMessage.order,
   };
 
@@ -172,8 +204,15 @@ function handleDispatchedState(
   return {
     ...state,
     messages: newMessages,
-    queuedMessages: newQueuedMessages,
   };
+}
+
+function handleCommittedState(
+  state: ChatState,
+  id: string,
+  userMessage: StateChangeUserMessage
+): ChatState {
+  return upsertUserMessageFromStateChange(handleRemoveFromQueue(state, id), id, userMessage);
 }
 
 function handleRemoveFromQueue(state: ChatState, id: string): ChatState {
