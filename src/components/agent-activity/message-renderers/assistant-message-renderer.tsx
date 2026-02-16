@@ -163,12 +163,79 @@ interface LoadingIndicatorProps {
   className?: string;
 }
 
+const LOADING_TEXT_MAX_LENGTH = 200;
+const LOADING_TEXT_ELLIPSIS = '...';
+const LOADING_TEXT_BODY_MAX_LENGTH = LOADING_TEXT_MAX_LENGTH - LOADING_TEXT_ELLIPSIS.length;
+
+function countMatches(input: string, pattern: RegExp): number {
+  return (input.match(pattern) ?? []).length;
+}
+
+function hasUnbalancedMarkdown(input: string): boolean {
+  if (input.length === 0) {
+    return false;
+  }
+
+  if (countMatches(input, /(?<!\\)`/g) % 2 !== 0) {
+    return true;
+  }
+
+  if (countMatches(input, /(?<!\\)\*\*/g) % 2 !== 0) {
+    return true;
+  }
+
+  const withoutDoubleAsterisks = input.replace(/(?<!\\)\*\*/g, '');
+  if (countMatches(withoutDoubleAsterisks, /(?<!\\)\*/g) % 2 !== 0) {
+    return true;
+  }
+
+  if (countMatches(input, /(?<!\\)\[/g) !== countMatches(input, /(?<!\\)\]/g)) {
+    return true;
+  }
+
+  if (countMatches(input, /(?<!\\)\(/g) !== countMatches(input, /(?<!\\)\)/g)) {
+    return true;
+  }
+
+  const lastChar = input[input.length - 1];
+  return (
+    lastChar === '*' || lastChar === '_' || lastChar === '`' || lastChar === '[' || lastChar === '('
+  );
+}
+
+function stripMarkdownSyntax(input: string): string {
+  return input
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/(?<!\\)`([^`]+)`/g, '$1')
+    .replace(/(?<!\\)\*\*([^*]+)\*\*/g, '$1')
+    .replace(/(?<!\\)\*([^*]+)\*/g, '$1')
+    .replace(/(?<!\\)__([^_]+)__/g, '$1')
+    .replace(/(?<!\\)_([^_]+)_/g, '$1')
+    .replace(/(?<!\\)~~([^~]+)~~/g, '$1')
+    .replace(/(?<!\\)[`*_[\]()]/g, '');
+}
+
+function truncateLoadingText(input: string): string {
+  if (input.length <= LOADING_TEXT_MAX_LENGTH) {
+    return input;
+  }
+
+  const truncated = input.slice(0, LOADING_TEXT_BODY_MAX_LENGTH).trimEnd();
+  if (!hasUnbalancedMarkdown(truncated)) {
+    return `${truncated}${LOADING_TEXT_ELLIPSIS}`;
+  }
+
+  const stripped = stripMarkdownSyntax(truncated).trimEnd();
+  return `${stripped}${LOADING_TEXT_ELLIPSIS}`;
+}
+
 function getLoadingText(latestReasoning: string | null | undefined): string {
   const normalized = latestReasoning?.replace(/\s+/g, ' ').trim();
   if (!normalized) {
     return 'Agent is working...';
   }
-  return normalized.length > 200 ? `${normalized.slice(0, 197)}...` : normalized;
+  return truncateLoadingText(normalized);
 }
 
 /**

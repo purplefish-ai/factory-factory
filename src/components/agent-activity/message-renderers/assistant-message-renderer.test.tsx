@@ -44,4 +44,24 @@ describe('LoadingIndicator', () => {
 
     root.unmount();
   });
+
+  it('avoids malformed markdown when truncation cuts through syntax', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'a'.repeat(190)} **broken markdown that should be truncated safely**`,
+        })
+      );
+    });
+
+    expect(container.querySelector('strong')).toBeNull();
+    expect(container.textContent).toContain('...');
+    expect(container.textContent).not.toContain('**');
+
+    root.unmount();
+  });
 });
