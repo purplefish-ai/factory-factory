@@ -192,8 +192,8 @@ function isSingleAsteriskDelimiter(input: string, index: number): boolean {
     return false;
   }
 
-  const prev = index > 0 ? input[index - 1] : ' ';
-  const next = index + 1 < input.length ? input[index + 1] : ' ';
+  const prev = input.charAt(index - 1);
+  const next = input.charAt(index + 1);
   return !(prev.trim().length === 0 && next.trim().length === 0);
 }
 
