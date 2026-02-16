@@ -5,7 +5,6 @@ export type { ChatMessage } from '@/lib/chat-protocol';
 export type { ChatInputProps } from './chat-input/chat-input';
 export { ChatInput } from './chat-input/chat-input';
 export { CompactingIndicator } from './compacting-indicator';
-export { LatestThinking } from './latest-thinking';
 export { PermissionPrompt, PermissionPromptExpanded } from './permission-prompt';
 export { QuestionPrompt } from './question-prompt';
 export { QueuedMessages } from './queued-messages';

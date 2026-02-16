@@ -7,7 +7,6 @@ import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { CompactingIndicator } from './compacting-indicator';
-import { LatestThinking } from './latest-thinking';
 
 // =============================================================================
 // Types
@@ -313,11 +312,6 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         {/* Context compaction indicator */}
         <CompactingIndicator isCompacting={isCompacting} className="mb-4" />
 
-        {/* Inline thinking/reasoning stream */}
-        {latestThinking !== null && (
-          <LatestThinking thinking={latestThinking} running={running} className="mb-4" />
-        )}
-
         {/* Workspace initialization spinner (e.g., creating worktree, running init script) */}
         {initBanner && initBanner.kind === 'info' && (
           <div className="flex items-center gap-2 text-muted-foreground py-4">
@@ -335,7 +329,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
         )}
 
         {/* Loading indicators after messages */}
-        {running && <LoadingIndicator className="py-4" />}
+        {running && <LoadingIndicator latestReasoning={latestThinking} className="py-4" />}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} className="h-px" />

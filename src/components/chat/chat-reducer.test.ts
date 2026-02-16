@@ -2151,6 +2151,7 @@ describe('chatReducer', () => {
     it('should handle ACCEPTED state with queue position', () => {
       const state: ChatState = {
         ...initialState,
+        latestThinking: 'Old reasoning',
         queuedMessages: toQueuedMessagesMap([
           {
             id: 'msg-1',
@@ -2179,6 +2180,30 @@ describe('chatReducer', () => {
       // Message should still be in queue
       expect(newState.queuedMessages.size).toBe(1);
       expect(newState.queuedMessages.has('msg-1')).toBe(true);
+      expect(newState.latestThinking).toBeNull();
+    });
+
+    it('clears latest thinking when a message is accepted', () => {
+      const state: ChatState = {
+        ...initialState,
+        latestThinking: 'Working through a plan',
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-accepted',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Do the next task',
+            timestamp: '2024-01-01T12:00:00.000Z',
+            order: 1,
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.latestThinking).toBeNull();
     });
 
     it('should insert ACCEPTED messages in order by backend-assigned order', () => {
