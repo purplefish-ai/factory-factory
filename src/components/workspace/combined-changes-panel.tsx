@@ -93,7 +93,7 @@ function buildCombinedEntries(gitFiles: GitStatusFile[], diffFiles: DiffFile[]):
         path,
         kind: fileChangeKindFromGitStatus(gitFile.status),
         statusCode: gitFile.status,
-        showIndicatorDot: gitFile.staged,
+        showIndicatorDot: gitFile.staged || Boolean(diffFile),
       });
       continue;
     }
