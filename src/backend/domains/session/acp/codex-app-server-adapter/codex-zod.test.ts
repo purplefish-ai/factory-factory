@@ -26,6 +26,23 @@ describe('codex-zod', () => {
     }
   });
 
+  it('parses reasoning summary text delta notifications', () => {
+    const parsed = knownCodexNotificationSchema.parse({
+      method: 'item/reasoning/summaryTextDelta',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        itemId: 'item_1',
+        delta: '**Thinking**',
+      },
+    });
+
+    expect(parsed.method).toBe('item/reasoning/summaryTextDelta');
+    if (parsed.method === 'item/reasoning/summaryTextDelta') {
+      expect(parsed.params.delta).toBe('**Thinking**');
+    }
+  });
+
   it('rejects malformed known notification payload', () => {
     const parsed = knownCodexNotificationSchema.safeParse({
       method: 'item/agentMessage/delta',
