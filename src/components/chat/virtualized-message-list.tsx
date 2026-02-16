@@ -251,16 +251,22 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    let previousHeight = content.getBoundingClientRect().height;
+    let previousContentHeight: number | null = null;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
         return;
       }
-      const nextHeight = entry.contentRect.height;
-      const growthAmount = nextHeight - previousHeight;
+      const nextContentHeight = entry.contentRect.height;
+      if (previousContentHeight === null) {
+        // Seed baseline from ResizeObserver's content-box measurements.
+        previousContentHeight = nextContentHeight;
+        return;
+      }
+
+      const growthAmount = nextContentHeight - previousContentHeight;
       const grew = growthAmount > 0;
-      previousHeight = nextHeight;
+      previousContentHeight = nextContentHeight;
       if (!grew) {
         return;
       }

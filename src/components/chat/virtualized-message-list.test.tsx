@@ -341,6 +341,9 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     await flushEffects();
     await flushAnimationFrame();
 
+    triggerResize(100);
+    await flushAnimationFrame();
+
     scrollHeight = 920;
     triggerResize(220);
     await flushAnimationFrame();
@@ -370,12 +373,16 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
 
     await flushEffects();
 
-    triggerResize(100);
+    triggerResize(220);
+    await flushAnimationFrame();
+    expect(harness.viewport.scrollTop).toBe(120);
+
+    triggerResize(300);
     await flushAnimationFrame();
     expect(harness.viewport.scrollTop).toBe(640);
 
     scrollHeight = 920;
-    triggerResize(220);
+    triggerResize(380);
     await flushAnimationFrame();
     expect(harness.viewport.scrollTop).toBe(920);
 
@@ -434,6 +441,9 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     await flushEffects();
 
     triggerResize(200);
+    await flushAnimationFrame();
+
+    triggerResize(260);
     await flushAnimationFrame();
 
     expect(harness.viewport.scrollTop).toBe(120);
