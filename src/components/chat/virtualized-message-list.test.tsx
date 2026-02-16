@@ -389,6 +389,44 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
+  it('cancels pending growth pin RAF when session transitions to loading', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    let scrollHeight = 640;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 120;
+
+    await flushEffects();
+
+    triggerResize(220);
+    triggerResize(300);
+    harness.render({
+      loadingSession: true,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(120);
+
+    scrollHeight = 920;
+    await flushAnimationFrame();
+    expect(harness.viewport.scrollTop).toBe(120);
+
+    harness.cleanup();
+  });
+
   it('does not pin content growth when isNearBottom prop is stale during scroll restore', async () => {
     const harness = createHarness({
       loadingSession: false,

@@ -121,11 +121,13 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(messages.length);
   const prevLatestThinkingRef = useRef<string | null>(latestThinking);
+  const loadingSessionRef = useRef(loadingSession);
   const resizeStickRafRef = useRef<number | null>(null);
   const newMessagePinRafRef = useRef<number | null>(null);
   // Track isNearBottom in a ref to avoid stale closures in effects
   const isNearBottomRef = useRef(isNearBottom);
   isNearBottomRef.current = isNearBottom;
+  loadingSessionRef.current = loadingSession;
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
     messages.length > 0 || running || startingSession || showingInitSpinner;
@@ -288,6 +290,9 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       }
       resizeStickRafRef.current = requestAnimationFrame(() => {
         resizeStickRafRef.current = null;
+        if (loadingSessionRef.current) {
+          return;
+        }
         stickToBottom();
       });
     });
@@ -301,6 +306,16 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       }
     };
   }, [hasScrollableContent, loadingSession, scrollContainerRef, stickToBottom]);
+
+  useEffect(() => {
+    if (!loadingSession) {
+      return;
+    }
+    if (resizeStickRafRef.current !== null) {
+      cancelAnimationFrame(resizeStickRafRef.current);
+      resizeStickRafRef.current = null;
+    }
+  }, [loadingSession]);
 
   useEffect(
     () => () => {
