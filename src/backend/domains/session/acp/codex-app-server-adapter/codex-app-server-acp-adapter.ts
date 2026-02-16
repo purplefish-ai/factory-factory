@@ -89,6 +89,7 @@ type ToolCallState = {
   toolCallId: string;
   kind: NonNullable<ToolCallUpdate['kind']>;
   title: string;
+  locations: Array<{ path: string; line?: number | null }>;
 };
 
 type ActiveTurnState = {
@@ -134,6 +135,7 @@ type AdapterSession = {
   planApprovalRequestedByTurnId: Set<string>;
   pendingPlanApprovalsByTurnId: Map<string, number>;
   pendingTurnCompletionsByTurnId: Map<string, PendingTurnCompletion>;
+  commandApprovalAlways: boolean;
 };
 
 type PromptContentBlock = PromptRequest['prompt'][number];
@@ -264,8 +266,15 @@ function toThreadId(sessionId: string): string {
   return sessionId.startsWith('sess_') ? sessionId.slice('sess_'.length) : sessionId;
 }
 
-function createToolCallId(threadId: string, turnId: string, itemId: string): string {
-  return `codex:${threadId}:${turnId}:${itemId}`;
+function extractToolCallIdFromUnknown(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return asString(value.callId) ?? asString(value.call_id) ?? null;
+}
+
+function resolveToolCallId(params: { itemId: string; source?: unknown }): string {
+  return extractToolCallIdFromUnknown(params.source) ?? params.itemId;
 }
 
 function isPlanLikeMode(mode: string): boolean {
@@ -555,6 +564,156 @@ function parseToolUserInputAnswersFromPermissionMeta(params: {
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
+}
+
+function sanitizeCommandToken(token: string): string {
+  return token.replace(/^['"]|['"]$/g, '').trim();
+}
+
+function tokenizeCommand(command: string): string[] {
+  return (command.match(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S+/g) ?? [])
+    .map((token) => sanitizeCommandToken(token))
+    .filter((token) => token.length > 0);
+}
+
+function commandName(token: string): string {
+  const unix = token.split('/').at(-1) ?? token;
+  return (unix.split('\\').at(-1) ?? unix).toLowerCase();
+}
+
+function isLikelyPathToken(token: string): boolean {
+  if (!token || token.startsWith('-')) {
+    return false;
+  }
+  if (
+    token.startsWith('./') ||
+    token.startsWith('../') ||
+    token.startsWith('/') ||
+    token.startsWith('~')
+  ) {
+    return true;
+  }
+  return (
+    token.includes('/') ||
+    token.includes('\\') ||
+    token.endsWith('.') ||
+    /\.[a-z0-9]+$/i.test(token)
+  );
+}
+
+function normalizeLocationPath(pathToken: string, cwd: string): string {
+  if (pathToken.startsWith('/')) {
+    return pathToken;
+  }
+  if (pathToken.startsWith('~')) {
+    return pathToken;
+  }
+  const base = cwd.endsWith('/') ? cwd.slice(0, -1) : cwd;
+  return `${base}/${pathToken}`;
+}
+
+const READ_COMMANDS = new Set(['cat', 'head', 'tail', 'less', 'more']);
+const LIST_OR_FIND_COMMANDS = new Set(['ls', 'tree', 'find', 'fd']);
+const GREP_LIKE_COMMANDS = new Set(['rg', 'ripgrep', 'grep', 'ag']);
+
+type CommandDisplayContext = {
+  command: string;
+  firstCommand: string;
+  nonFlagArgs: string[];
+  pathArg: string | null;
+  cwd: string;
+  locations: Array<{ path: string }>;
+};
+
+function resolveCommandDisplay(params: { command: string | null; cwd: string }): {
+  title: string;
+  kind: NonNullable<ToolCallUpdate['kind']>;
+  locations: Array<{ path: string }>;
+} {
+  const context = buildCommandDisplayContext(params.command, params.cwd);
+  if (!context) {
+    return { title: 'commandExecution', kind: 'execute', locations: [] };
+  }
+  return resolveCommandDisplayFromContext(context);
+}
+
+function buildCommandDisplayContext(
+  rawCommand: string | null,
+  cwd: string
+): CommandDisplayContext | null {
+  const command = rawCommand?.trim();
+  if (!command) {
+    return null;
+  }
+  const tokens = tokenizeCommand(command);
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  const [firstToken] = tokens;
+  if (!firstToken) {
+    return null;
+  }
+  const firstCommand = commandName(firstToken);
+  const nonFlagArgs = tokens.slice(1).filter((token) => !token.startsWith('-'));
+  const pathArg = nonFlagArgs.find(isLikelyPathToken) ?? null;
+  const commandPath = pathArg ? normalizeLocationPath(pathArg, cwd) : null;
+  const locations = commandPath ? [{ path: commandPath }] : [];
+  return {
+    command,
+    firstCommand,
+    nonFlagArgs,
+    pathArg,
+    cwd,
+    locations,
+  };
+}
+
+function resolveCommandDisplayFromContext(context: CommandDisplayContext): {
+  title: string;
+  kind: NonNullable<ToolCallUpdate['kind']>;
+  locations: Array<{ path: string }>;
+} {
+  if (READ_COMMANDS.has(context.firstCommand)) {
+    const label = context.pathArg ?? context.command;
+    return { title: `Read ${label}`, kind: 'read', locations: context.locations };
+  }
+
+  if (LIST_OR_FIND_COMMANDS.has(context.firstCommand)) {
+    const target = context.pathArg
+      ? normalizeLocationPath(context.pathArg, context.cwd)
+      : context.cwd;
+    const title =
+      context.firstCommand === 'find' || context.firstCommand === 'fd'
+        ? `Search ${target}`
+        : `List ${target}`;
+    return { title, kind: 'search', locations: context.locations };
+  }
+
+  if (GREP_LIKE_COMMANDS.has(context.firstCommand)) {
+    const query = context.nonFlagArgs.find((token) => !isLikelyPathToken(token));
+    const target = context.pathArg ? ` in ${context.pathArg}` : '';
+    const title = query ? `Search ${query}${target}` : `Search ${context.command}`;
+    return { title, kind: 'search', locations: context.locations };
+  }
+
+  return { title: context.command, kind: 'execute', locations: context.locations };
+}
+
+function dedupeLocations(
+  locations: Array<{ path: string; line?: number | null }>
+): Array<{ path: string; line?: number | null }> {
+  const seen = new Set<string>();
+  const result: Array<{ path: string; line?: number | null }> = [];
+  for (const location of locations) {
+    const key = `${location.path}:${location.line ?? ''}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(location);
+  }
+  return result;
 }
 
 function parseTextFromPromptBlock(block: PromptContentBlock): string {
@@ -864,6 +1023,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       planApprovalRequestedByTurnId: new Set(),
       pendingPlanApprovalsByTurnId: new Map(),
       pendingTurnCompletionsByTurnId: new Map(),
+      commandApprovalAlways: false,
     };
 
     this.sessions.set(sessionId, session);
@@ -913,6 +1073,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       planApprovalRequestedByTurnId: new Set(),
       pendingPlanApprovalsByTurnId: new Map(),
       pendingTurnCompletionsByTurnId: new Map(),
+      commandApprovalAlways: false,
     };
 
     this.sessions.set(session.sessionId, session);
@@ -1904,6 +2065,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       sessionUpdate: 'tool_call_update',
       toolCallId: toolCall.toolCallId,
       status: 'in_progress',
+      ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
       rawOutput: output,
     });
   }
@@ -1999,6 +2161,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       title: toolInfo.title,
       kind: toolInfo.kind,
       status: 'pending',
+      ...(toolInfo.locations.length > 0 ? { locations: toolInfo.locations } : {}),
       rawInput: item,
     });
 
@@ -2042,7 +2205,8 @@ export class CodexAppServerAcpAdapter implements Agent {
 
     const statusFromItem = toToolStatus(item.status);
     const status = statusFromItem ?? 'completed';
-    const locations = this.extractLocations(item);
+    const completionLocations = this.extractLocations(item);
+    const locations = dedupeLocations([...existing.locations, ...completionLocations]);
 
     await this.emitSessionUpdate(session.sessionId, {
       sessionUpdate: 'tool_call_update',
@@ -2313,7 +2477,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   private buildToolCallState(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
-    turnId: string
+    _turnId: string
   ): ToolCallState | null {
     const kindByType: Record<string, ToolCallState['kind']> = {
       commandExecution: 'execute',
@@ -2329,11 +2493,18 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
 
     let title = item.type;
+    let kindToEmit = kind;
+    let locations: Array<{ path: string; line?: number | null }> = [];
     if (item.type === 'commandExecution') {
       const command = asString(item.command);
-      title = command ?? 'commandExecution';
+      const cwd = asString(item.cwd) ?? session.cwd;
+      const parsed = resolveCommandDisplay({ command, cwd });
+      title = parsed.title;
+      kindToEmit = parsed.kind;
+      locations = parsed.locations;
     } else if (item.type === 'fileChange') {
       title = 'fileChange';
+      locations = this.extractLocations(item);
     } else if (item.type === 'mcpToolCall') {
       const server = asString(item.server) ?? 'mcp';
       const tool = asString(item.tool) ?? 'tool';
@@ -2344,10 +2515,84 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
 
     return {
-      toolCallId: createToolCallId(session.threadId, turnId, item.id),
-      kind,
+      toolCallId: resolveToolCallId({
+        itemId: item.id,
+        source: item,
+      }),
+      kind: kindToEmit,
       title,
+      locations,
     };
+  }
+
+  private buildPermissionOptions(params: {
+    method:
+      | 'item/commandExecution/requestApproval'
+      | 'item/fileChange/requestApproval'
+      | 'item/tool/requestUserInput';
+    questions: ToolUserInputQuestion[];
+  }): Array<{
+    optionId: string;
+    name: string;
+    kind: 'allow_once' | 'allow_always' | 'reject_once';
+  }> {
+    if (params.method === 'item/tool/requestUserInput') {
+      return buildToolUserInputPermissionOptions(params.questions);
+    }
+    if (params.method === 'item/commandExecution/requestApproval') {
+      return [
+        {
+          optionId: 'allow_always',
+          name: 'Allow for session',
+          kind: 'allow_always',
+        },
+        {
+          optionId: 'allow_once',
+          name: 'Allow once',
+          kind: 'allow_once',
+        },
+        {
+          optionId: 'reject_once',
+          name: 'Reject',
+          kind: 'reject_once',
+        },
+      ];
+    }
+    return [
+      {
+        optionId: 'allow_once',
+        name: 'Allow once',
+        kind: 'allow_once',
+      },
+      {
+        optionId: 'reject_once',
+        name: 'Reject',
+        kind: 'reject_once',
+      },
+    ];
+  }
+
+  private async maybeAutoApproveCommandRequest(params: {
+    request: ReturnType<typeof knownCodexServerRequestSchema.parse>;
+    session: AdapterSession;
+    toolCallId: string;
+  }): Promise<boolean> {
+    if (
+      params.request.method !== 'item/commandExecution/requestApproval' ||
+      !params.session.commandApprovalAlways
+    ) {
+      return false;
+    }
+    await this.respondToCodexPermissionRequest({
+      request: params.request,
+      permission: {
+        outcome: { outcome: 'selected', optionId: 'allow_always' },
+      },
+      session: params.session,
+      toolCallId: params.toolCallId,
+      questions: [],
+    });
+    return true;
   }
 
   private async handleCodexServerRequest(request: {
@@ -2403,26 +2648,26 @@ export class CodexAppServerAcpAdapter implements Agent {
           title: toolCall.title,
           kind: toolCall.kind,
           status: 'pending',
+          ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
           rawInput: typed.params,
         });
       }
 
+      if (
+        await this.maybeAutoApproveCommandRequest({
+          request: typed,
+          session,
+          toolCallId: toolCall.toolCallId,
+        })
+      ) {
+        return;
+      }
+
       const questions = typed.method === 'item/tool/requestUserInput' ? typed.params.questions : [];
-      const permissionOptions =
-        typed.method === 'item/tool/requestUserInput'
-          ? buildToolUserInputPermissionOptions(questions)
-          : [
-              {
-                optionId: 'allow_once',
-                name: 'Allow once',
-                kind: 'allow_once' as const,
-              },
-              {
-                optionId: 'reject_once',
-                name: 'Reject',
-                kind: 'reject_once' as const,
-              },
-            ];
+      const permissionOptions = this.buildPermissionOptions({
+        method: typed.method,
+        questions,
+      });
 
       const permissionResult = await this.connection.requestPermission({
         sessionId,
@@ -2460,31 +2705,99 @@ export class CodexAppServerAcpAdapter implements Agent {
       | 'item/fileChange/requestApproval'
       | 'item/tool/requestUserInput',
     itemId: string,
-    turnId: string,
+    _turnId: string,
     params: Record<string, unknown>
   ): ToolCallState {
     if (method === 'item/commandExecution/requestApproval') {
       const command = asString(params.command);
+      const cwd = asString(params.cwd) ?? session.cwd;
+      const parsed = resolveCommandDisplay({ command, cwd });
       return {
-        toolCallId: createToolCallId(session.threadId, turnId, itemId),
-        title: command ? command : 'commandExecution',
-        kind: 'execute',
+        toolCallId: resolveToolCallId({
+          itemId,
+          source: params,
+        }),
+        title: parsed.title,
+        kind: parsed.kind,
+        locations: parsed.locations,
       };
     }
 
     if (method === 'item/fileChange/requestApproval') {
+      const grantRoot = asString(params.grantRoot);
       return {
-        toolCallId: createToolCallId(session.threadId, turnId, itemId),
+        toolCallId: resolveToolCallId({
+          itemId,
+          source: params,
+        }),
         title: 'fileChange',
         kind: 'edit',
+        locations: grantRoot ? [{ path: grantRoot }] : [],
       };
     }
 
     return {
-      toolCallId: createToolCallId(session.threadId, turnId, itemId),
+      toolCallId: resolveToolCallId({
+        itemId,
+        source: params,
+      }),
       title: 'item/tool/requestUserInput',
       kind: 'other',
+      locations: [],
     };
+  }
+
+  private isAllowedPermissionSelection(selectedOptionId: string | null): boolean {
+    return selectedOptionId === 'allow_once' || selectedOptionId === 'allow_always';
+  }
+
+  private async handleToolUserInputPermissionResponse(params: {
+    request: ReturnType<typeof knownCodexServerRequestSchema.parse>;
+    permission: RequestPermissionResponse;
+    session: AdapterSession;
+    toolCallId: string;
+    questions: ToolUserInputQuestion[];
+    selectedOptionId: string | null;
+  }): Promise<boolean> {
+    if (params.request.method !== 'item/tool/requestUserInput') {
+      return false;
+    }
+
+    const rejected = params.selectedOptionId === null || params.selectedOptionId === 'reject_once';
+    let answers: UserInputAnswers;
+    try {
+      answers = buildToolUserInputAnswers({
+        questions: params.questions,
+        permission: params.permission,
+        selectedOptionId: params.selectedOptionId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.codex.respondError(params.request.id, {
+        code: -32_602,
+        message: 'Failed to map requestUserInput answers',
+        data: { error: message },
+      });
+      await this.emitSessionUpdate(params.session.sessionId, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: params.toolCallId,
+        status: 'failed',
+        rawOutput: { error: message },
+      });
+      return true;
+    }
+
+    this.codex.respondSuccess(params.request.id, {
+      answers,
+    });
+
+    await this.emitSessionUpdate(params.session.sessionId, {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: params.toolCallId,
+      status: rejected ? 'failed' : 'completed',
+      rawOutput: rejected ? { outcome: 'rejected' } : { answers },
+    });
+    return true;
   }
 
   private async respondToCodexPermissionRequest(params: {
@@ -2496,45 +2809,22 @@ export class CodexAppServerAcpAdapter implements Agent {
   }): Promise<void> {
     const selected =
       params.permission.outcome.outcome === 'selected' ? params.permission.outcome.optionId : null;
-    const allow = selected === 'allow_once';
-
-    if (params.request.method === 'item/tool/requestUserInput') {
-      const rejected = selected === null || selected === 'reject_once';
-      let answers: UserInputAnswers;
-      try {
-        answers = buildToolUserInputAnswers({
-          questions: params.questions,
-          permission: params.permission,
-          selectedOptionId: selected,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.codex.respondError(params.request.id, {
-          code: -32_602,
-          message: 'Failed to map requestUserInput answers',
-          data: { error: message },
-        });
-        await this.emitSessionUpdate(params.session.sessionId, {
-          sessionUpdate: 'tool_call_update',
-          toolCallId: params.toolCallId,
-          status: 'failed',
-          rawOutput: { error: message },
-        });
-        return;
-      }
-
-      this.codex.respondSuccess(params.request.id, {
-        answers,
-      });
-
-      await this.emitSessionUpdate(params.session.sessionId, {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: params.toolCallId,
-        status: rejected ? 'failed' : 'completed',
-        rawOutput: rejected ? { outcome: 'rejected' } : { answers },
-      });
+    if (
+      await this.handleToolUserInputPermissionResponse({
+        ...params,
+        selectedOptionId: selected,
+      })
+    ) {
       return;
     }
+
+    if (
+      params.request.method === 'item/commandExecution/requestApproval' &&
+      selected === 'allow_always'
+    ) {
+      params.session.commandApprovalAlways = true;
+    }
+    const allow = this.isAllowedPermissionSelection(selected);
 
     this.codex.respondSuccess(params.request.id, {
       decision: allow ? 'accept' : 'decline',
