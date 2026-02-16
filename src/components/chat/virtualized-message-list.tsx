@@ -186,8 +186,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    // If messages were added and user is near bottom, scroll to bottom
-    if (currentCount > prevCount && isNearBottomRef.current && scrollContainerRef.current) {
+    // If messages were added and user was near bottom at append time, scroll to bottom.
+    // This snapshot prevents programmatic scroll events from clearing the follow-up pin.
+    const shouldPinAfterAppend =
+      currentCount > prevCount && isNearBottomRef.current && !!scrollContainerRef.current;
+    if (shouldPinAfterAppend) {
       if (newMessagePinRafRef.current !== null) {
         cancelAnimationFrame(newMessagePinRafRef.current);
         newMessagePinRafRef.current = null;
@@ -203,12 +206,23 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       // Pin to real bottom after measurement/layout settles.
       newMessagePinRafRef.current = requestAnimationFrame(() => {
         newMessagePinRafRef.current = null;
-        if (isNearBottomRef.current) {
+        if (shouldPinAfterAppend) {
           stickToBottom();
         }
       });
     }
   }, [loadingSession, messages.length, scrollContainerRef, stickToBottom, virtualizer]);
+
+  // Cancel pending append pins when switching into loading/hydration states.
+  useEffect(() => {
+    if (!loadingSession) {
+      return;
+    }
+    if (newMessagePinRafRef.current !== null) {
+      cancelAnimationFrame(newMessagePinRafRef.current);
+      newMessagePinRafRef.current = null;
+    }
+  }, [loadingSession]);
 
   // Keep viewport pinned when inline reasoning text grows while user is at bottom.
   useEffect(() => {

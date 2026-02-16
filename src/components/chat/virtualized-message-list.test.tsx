@@ -193,6 +193,70 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
+  it('keeps append pin scheduled even if isNearBottom prop flips before RAF', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [],
+      isNearBottom: true,
+    });
+
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 640,
+    });
+    harness.viewport.scrollTop = 120;
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: false,
+    });
+
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(640);
+
+    harness.cleanup();
+  });
+
+  it('cancels pending append pin RAF when session transitions to loading', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [],
+      isNearBottom: true,
+    });
+
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 640,
+    });
+    harness.viewport.scrollTop = 120;
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    harness.render({
+      loadingSession: true,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(120);
+
+    harness.cleanup();
+  });
+
   it('auto-scrolls to bottom when latestThinking grows and user is near bottom', async () => {
     const harness = createHarness({
       loadingSession: false,
