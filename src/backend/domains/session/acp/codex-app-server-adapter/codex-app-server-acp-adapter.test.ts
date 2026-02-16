@@ -815,6 +815,57 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('keeps escaped apostrophes inside single quotes when splitting chained commands', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_chain_single_quote_escape', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_chain_single_quote_escape',
+      turnId: 'turn_chain_single_quote_escape',
+      item: {
+        type: 'commandExecution',
+        id: 'item_chain_single_quote_escape',
+        status: 'inProgress',
+        command: "cat 'it\\'s file.txt' && rg TODO README.md",
+      },
+    });
+
+    expect((connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            update: expect.objectContaining({
+              sessionUpdate: 'tool_call',
+              title: "Read it's file.txt, Search TODO in README.md",
+              kind: 'read',
+              locations: [
+                { path: "/tmp/workspace/it's file.txt" },
+                { path: '/tmp/workspace/README.md' },
+              ],
+            }),
+          }),
+        ],
+      ])
+    );
+  });
+
   it('avoids duplicate thought chunks when reasoning started item already contains summary text', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
@@ -2379,6 +2430,91 @@ describe('CodexAppServerAcpAdapter', () => {
 
     expect(connection.requestPermission).toHaveBeenCalledTimes(1);
     expect(codex.respondSuccess).toHaveBeenCalledWith(94, { decision: 'accept' });
+  });
+
+  it('does not reuse allow_always scope when a chained command changes cwd', async () => {
+    const { connection } = createMockConnection();
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      outcome: { outcome: 'selected', optionId: 'allow_always' },
+    } satisfies RequestPermissionResponse);
+
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_allow_always_cd_scope', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 101,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thread_allow_always_cd_scope',
+        turnId: 'turn_allow_always_cd_scope',
+        itemId: 'item_allow_always_cd_scope_1',
+        command: 'cd nested && cat README.md',
+        cwd: '/tmp/workspace',
+      },
+    });
+
+    expect(connection.requestPermission).toHaveBeenCalledTimes(1);
+    expect(codex.respondSuccess).toHaveBeenCalledWith(101, { decision: 'accept' });
+
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockClear();
+    codex.respondSuccess.mockClear();
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 102,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thread_allow_always_cd_scope',
+        turnId: 'turn_allow_always_cd_scope',
+        itemId: 'item_allow_always_cd_scope_2',
+        command: 'cat README.md',
+        cwd: '/tmp/workspace',
+      },
+    });
+
+    expect(connection.requestPermission).toHaveBeenCalledTimes(1);
+    expect(codex.respondSuccess).toHaveBeenCalledWith(102, { decision: 'accept' });
+
+    (connection.requestPermission as ReturnType<typeof vi.fn>).mockClear();
+    codex.respondSuccess.mockClear();
+
+    await (
+      adapter as unknown as {
+        handleCodexServerRequest: (request: unknown) => Promise<void>;
+      }
+    ).handleCodexServerRequest({
+      id: 103,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thread_allow_always_cd_scope',
+        turnId: 'turn_allow_always_cd_scope',
+        itemId: 'item_allow_always_cd_scope_3',
+        command: 'cd nested && cat README.md',
+        cwd: '/tmp/workspace',
+      },
+    });
+
+    expect(connection.requestPermission).not.toHaveBeenCalled();
+    expect(codex.respondSuccess).toHaveBeenCalledWith(103, { decision: 'accept' });
   });
 
   it('reconciles turn/completed notifications that arrive before prompt attaches active turn', async () => {

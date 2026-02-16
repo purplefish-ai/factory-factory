@@ -715,12 +715,25 @@ function consumeEscapeInitiator(state: CommandChainSplitState, char: string): bo
   return true;
 }
 
+function hasOddTrailingBackslashes(value: string): boolean {
+  let count = 0;
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    if (value[index] !== '\\') {
+      break;
+    }
+    count += 1;
+  }
+  return count % 2 === 1;
+}
+
 function consumeQuotedCommandChar(state: CommandChainSplitState, char: string): boolean {
   if (!state.quote) {
     return false;
   }
+  const escapedSingleQuote =
+    state.quote === "'" && char === "'" && hasOddTrailingBackslashes(state.current);
   state.current += char;
-  if (char === state.quote) {
+  if (char === state.quote && !escapedSingleQuote) {
     state.quote = null;
   }
   return true;
@@ -917,17 +930,34 @@ function buildCommandApprovalScopeKey(params: {
   command: string | null;
   cwd: string;
 }): string | null {
-  const contexts = chooseActionableCommandContexts(
-    buildCommandDisplayContexts(params.command, params.cwd)
-  );
+  const contexts = buildCommandDisplayContexts(params.command, params.cwd);
   if (contexts.length === 0) {
     return null;
   }
 
-  const segments = contexts.map((context) => {
+  let scopeCwd = normalizeCwdForScope(params.cwd);
+  const segments: string[] = [];
+  for (const context of contexts) {
+    if (context.firstCommand === 'cd') {
+      const rawTarget = context.nonFlagArgs[0];
+      const target = rawTarget ? normalizeScopeToken(rawTarget) : '';
+      if (target.length > 0) {
+        scopeCwd = normalizeCwdForScope(normalizeLocationPath(target, scopeCwd));
+        segments.push(`cd ${target} -> ${scopeCwd}`);
+      } else {
+        segments.push('cd');
+      }
+      continue;
+    }
+
     const args = context.nonFlagArgs.map(normalizeScopeToken).filter((arg) => arg.length > 0);
-    return [context.firstCommand, ...args].join(' ');
-  });
+    const normalized = normalizeScopeToken([context.firstCommand, ...args].join(' '));
+    if (normalized.length === 0) {
+      continue;
+    }
+    segments.push(`[cwd=${scopeCwd}] ${normalized}`);
+  }
+
   const normalizedSegments = segments
     .map(normalizeScopeToken)
     .filter((segment) => segment.length > 0);
