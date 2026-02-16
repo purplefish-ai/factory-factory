@@ -22,6 +22,7 @@ export type SnapshotReason =
   | 'dequeue'
   | 'requeue'
   | 'commit_user_message'
+  | 'remove_transcript_message'
   | 'pending_request_set'
   | 'pending_request_cleared'
   | 'process_exit_reset'

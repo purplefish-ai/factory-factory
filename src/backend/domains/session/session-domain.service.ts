@@ -28,6 +28,7 @@ import {
   commitSentUserMessageWithOrder,
   injectCommittedUserMessage,
   messageSort,
+  removeTranscriptMessageById,
   setNextOrderFromTranscript,
   upsertTranscriptMessage,
 } from './store/session-transcript';
@@ -219,6 +220,24 @@ class SessionDomainService {
     if (options?.emitSnapshot !== false) {
       this.publisher.forwardSnapshot(store, { reason: 'commit_user_message' });
     }
+  }
+
+  removeTranscriptMessageById(
+    sessionId: string,
+    messageId: string,
+    options?: { emitSnapshot?: boolean }
+  ): boolean {
+    const store = this.registry.getOrCreate(sessionId);
+    const removed = removeTranscriptMessageById(store, messageId);
+    if (!removed) {
+      return false;
+    }
+
+    if (options?.emitSnapshot !== false) {
+      this.publisher.forwardSnapshot(store, { reason: 'remove_transcript_message' });
+    }
+
+    return true;
   }
 
   appendClaudeEvent(sessionId: string, claudeMessage: AgentMessage): number {

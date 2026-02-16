@@ -176,12 +176,16 @@ class ChatMessageHandlerService {
       try {
         await this.dispatchMessage(dbSessionId, msg, clientResult.client);
       } catch (error) {
-        // If dispatch fails (e.g., setMaxThinkingTokens throws before state change),
-        // the message is still in ACCEPTED state and can be safely requeued
+        // Dispatch can fail after we pessimistically committed the user message to
+        // transcript for refresh safety. Roll it back before re-queueing so clients
+        // do not see the same message as both queued and committed.
         logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
           dbSessionId,
           messageId: msg.id,
           error: error instanceof Error ? error.message : String(error),
+        });
+        sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
+          emitSnapshot: false,
         });
         // Avoid clobbering markProcessExit() runtime/lastExit when the process
         // has already stopped and exit handling is in flight.
@@ -351,8 +355,11 @@ class ChatMessageHandlerService {
     }
 
     try {
-      await sessionService.sendSessionMessage(dbSessionId, content);
+      const sendPromise = sessionService.sendSessionMessage(dbSessionId, content);
+      // Persist immediately after dispatch so refresh/replay keeps this user message
+      // visible while the provider is still working on the turn.
       sessionDomainService.commitSentUserMessageAtOrder(dbSessionId, msg, order);
+      await sendPromise;
       sessionDomainService.emitDelta(dbSessionId, {
         type: 'message_state_changed',
         id: msg.id,
