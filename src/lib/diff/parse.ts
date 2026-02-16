@@ -5,6 +5,68 @@
 import type { DiffFile, DiffHunk, DiffLine } from './types';
 
 /**
+ * Checks if a line is a diff header (metadata line).
+ */
+function isHeaderLine(line: string): boolean {
+  return (
+    line.startsWith('diff --git') ||
+    line.startsWith('index ') ||
+    line.startsWith('---') ||
+    line.startsWith('+++') ||
+    line.startsWith('new file') ||
+    line.startsWith('deleted file')
+  );
+}
+
+/**
+ * Parses a hunk header line and extracts starting line numbers.
+ * Returns null if the line is not a valid hunk header.
+ */
+function parseHunkHeader(line: string): { oldLine: number; newLine: number } | null {
+  const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+  if (!match) {
+    return null;
+  }
+  return {
+    oldLine: Number.parseInt(match[1] as string, 10),
+    newLine: Number.parseInt(match[2] as string, 10),
+  };
+}
+
+/**
+ * Creates a diff line object for an addition.
+ */
+function createAdditionLine(line: string, newLine: number): DiffLine {
+  return {
+    type: 'addition',
+    content: line.slice(1),
+    lineNumber: { new: newLine },
+  };
+}
+
+/**
+ * Creates a diff line object for a deletion.
+ */
+function createDeletionLine(line: string, oldLine: number): DiffLine {
+  return {
+    type: 'deletion',
+    content: line.slice(1),
+    lineNumber: { old: oldLine },
+  };
+}
+
+/**
+ * Creates a diff line object for a context line.
+ */
+function createContextLine(line: string, oldLine: number, newLine: number): DiffLine {
+  return {
+    type: 'context',
+    content: line.slice(1) || '',
+    lineNumber: { old: oldLine, new: newLine },
+  };
+}
+
+/**
  * Parse a unified diff into detailed line-by-line format with line numbers.
  * Used by the workspace diff viewer for precise line-level navigation.
  *
@@ -20,43 +82,23 @@ export function parseDetailedDiff(diff: string): DiffLine[] {
   let inHunk = false;
 
   for (const line of lines) {
-    if (
-      line.startsWith('diff --git') ||
-      line.startsWith('index ') ||
-      line.startsWith('---') ||
-      line.startsWith('+++') ||
-      line.startsWith('new file') ||
-      line.startsWith('deleted file')
-    ) {
+    if (isHeaderLine(line)) {
       result.push({ type: 'header', content: line });
       inHunk = false;
     } else if (line.startsWith('@@')) {
-      // Parse hunk header: @@ -start,count +start,count @@
-      const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      if (match) {
-        oldLine = Number.parseInt(match[1] as string, 10);
-        newLine = Number.parseInt(match[2] as string, 10);
+      const hunkInfo = parseHunkHeader(line);
+      if (hunkInfo) {
+        oldLine = hunkInfo.oldLine;
+        newLine = hunkInfo.newLine;
         inHunk = true;
       }
       result.push({ type: 'hunk', content: line });
     } else if (inHunk && line.startsWith('+')) {
-      result.push({
-        type: 'addition',
-        content: line.slice(1),
-        lineNumber: { new: newLine++ },
-      });
+      result.push(createAdditionLine(line, newLine++));
     } else if (inHunk && line.startsWith('-')) {
-      result.push({
-        type: 'deletion',
-        content: line.slice(1),
-        lineNumber: { old: oldLine++ },
-      });
+      result.push(createDeletionLine(line, oldLine++));
     } else if (inHunk && (line.startsWith(' ') || line === '')) {
-      result.push({
-        type: 'context',
-        content: line.slice(1) || '',
-        lineNumber: { old: oldLine++, new: newLine++ },
-      });
+      result.push(createContextLine(line, oldLine++, newLine++));
     }
   }
 
