@@ -24,6 +24,11 @@ function extractCommand(event: ToolEvent): string | undefined {
     return directCommand;
   }
 
+  const cmd = extractInputValue(event.input, 'cmd', isString, event.toolName, logger);
+  if (cmd && GH_PR_CREATE_REGEX.test(cmd)) {
+    return cmd;
+  }
+
   const title = extractInputValue(event.input, 'title', isString, event.toolName, logger);
   if (title && GH_PR_CREATE_REGEX.test(title)) {
     return title;
@@ -34,7 +39,7 @@ function extractCommand(event: ToolEvent): string | undefined {
     return event.toolName;
   }
 
-  return directCommand ?? title;
+  return directCommand ?? cmd ?? title;
 }
 
 function extractPrUrlFromEvent(event: ToolEvent): string | null {

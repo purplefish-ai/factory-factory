@@ -3,6 +3,9 @@ import { sessionDomainService } from '@/backend/domains/session/session-domain.s
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
+const mockNotifyToolStart = vi.fn();
+const mockNotifyToolComplete = vi.fn();
+
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
     debug: vi.fn(),
@@ -41,6 +44,13 @@ vi.mock('@/backend/domains/session/acp', async (importOriginal) => {
   };
 });
 
+vi.mock('@/backend/interceptors/registry', () => ({
+  interceptorRegistry: {
+    notifyToolStart: (...args: unknown[]) => mockNotifyToolStart(...args),
+    notifyToolComplete: (...args: unknown[]) => mockNotifyToolComplete(...args),
+  },
+}));
+
 vi.mock('./session.repository', () => ({
   SessionRepository: class {},
   sessionRepository: {
@@ -72,6 +82,16 @@ import { sessionService } from './session.service';
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNotifyToolStart.mockReset();
+    mockNotifyToolComplete.mockReset();
+    const serviceState = sessionService as unknown as {
+      pendingAcpToolCalls: Map<string, Map<string, unknown>>;
+      sessionToWorkspace: Map<string, string>;
+      sessionToWorkingDir: Map<string, string>;
+    };
+    serviceState.pendingAcpToolCalls.clear();
+    serviceState.sessionToWorkspace.clear();
+    serviceState.sessionToWorkingDir.clear();
     sessionService.setPromptTurnCompleteHandler(null);
     sessionService.configure({
       workspace: {
@@ -552,6 +572,82 @@ describe('SessionService', () => {
     });
 
     expect(injectUserMessageSpy).not.toHaveBeenCalled();
+  });
+
+  it('notifies interceptors for ACP tool_use start and tool_result completion', () => {
+    const serviceState = sessionService as unknown as {
+      handleAcpDelta: (sid: string, delta: unknown) => void;
+      sessionToWorkspace: Map<string, string>;
+      sessionToWorkingDir: Map<string, string>;
+    };
+    serviceState.sessionToWorkspace.set('session-1', 'workspace-1');
+    serviceState.sessionToWorkingDir.set('session-1', '/tmp/workspace');
+
+    serviceState.handleAcpDelta('session-1', {
+      type: 'agent_message',
+      data: {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'call-1',
+            name: 'commandExecution',
+            input: { command: 'gh pr create --title "Fix bug"' },
+          },
+        },
+      },
+    });
+
+    serviceState.handleAcpDelta('session-1', {
+      type: 'agent_message',
+      data: {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'call-1',
+              content: 'https://github.com/purplefish-ai/factory-factory/pull/1047',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(mockNotifyToolStart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolUseId: 'call-1',
+        toolName: 'commandExecution',
+        input: { command: 'gh pr create --title "Fix bug"' },
+      }),
+      expect.objectContaining({
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        workingDir: '/tmp/workspace',
+        timestamp: expect.any(Date),
+      })
+    );
+
+    expect(mockNotifyToolComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolUseId: 'call-1',
+        toolName: 'commandExecution',
+        input: { command: 'gh pr create --title "Fix bug"' },
+        output: {
+          content: 'https://github.com/purplefish-ai/factory-factory/pull/1047',
+          isError: false,
+        },
+      }),
+      expect.objectContaining({
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        workingDir: '/tmp/workspace',
+        timestamp: expect.any(Date),
+      })
+    );
   });
 
   it('creates client from preloaded session without re-querying session row', async () => {

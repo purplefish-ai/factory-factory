@@ -107,6 +107,26 @@ describe('prDetectionInterceptor', () => {
     );
   });
 
+  it('detects PR URL when command is provided as cmd', async () => {
+    const event = createEvent({
+      toolName: 'exec_command',
+      input: {
+        cmd: 'gh pr create --title "Fix bug"',
+      },
+      output: {
+        content: 'https://github.com/purplefish-ai/factory-factory/pull/1047\n',
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/1047'
+    );
+  });
+
   it('falls back to title when command is present but not gh pr create', async () => {
     const event = createEvent({
       toolName: 'commandExecution',
