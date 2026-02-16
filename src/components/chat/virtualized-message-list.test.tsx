@@ -14,6 +14,33 @@ const virtualizerMocks = vi.hoisted(() => ({
   scrollToIndex: vi.fn(),
 }));
 
+const resizeObserverMocks = vi.hoisted(() => ({
+  callbacks: new Set<ResizeObserverCallback>(),
+}));
+
+class ResizeObserverMock {
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    resizeObserverMocks.callbacks.add(callback);
+  }
+
+  observe() {
+    // No-op for tests.
+  }
+
+  disconnect() {
+    resizeObserverMocks.callbacks.delete(this.callback);
+  }
+
+  unobserve() {
+    // No-op for tests.
+  }
+}
+
+vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: vi.fn(() => ({
     getVirtualItems: virtualizerMocks.getVirtualItems,
@@ -88,11 +115,36 @@ async function flushEffects(): Promise<void> {
   await Promise.resolve();
 }
 
+async function flushAnimationFrame(): Promise<void> {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function triggerResize(height: number) {
+  const entry = {
+    contentRect: {
+      width: 0,
+      height,
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 0,
+      bottom: height,
+      left: 0,
+      toJSON: () => ({}),
+    },
+  } as unknown as ResizeObserverEntry;
+
+  for (const callback of resizeObserverMocks.callbacks) {
+    callback([entry], {} as ResizeObserver);
+  }
+}
+
 afterEach(() => {
   virtualizerMocks.getVirtualItems.mockClear();
   virtualizerMocks.getTotalSize.mockClear();
   virtualizerMocks.measureElement.mockClear();
   virtualizerMocks.scrollToIndex.mockClear();
+  resizeObserverMocks.callbacks.clear();
   document.body.innerHTML = '';
 });
 
@@ -191,6 +243,57 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     });
 
     await flushEffects();
+
+    expect(harness.viewport.scrollTop).toBe(120);
+
+    harness.cleanup();
+  });
+
+  it('keeps viewport pinned when content grows and user is near bottom', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    let scrollHeight = 640;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    harness.viewport.scrollTop = 120;
+
+    await flushEffects();
+
+    triggerResize(100);
+    await flushAnimationFrame();
+    expect(harness.viewport.scrollTop).toBe(640);
+
+    scrollHeight = 920;
+    triggerResize(220);
+    await flushAnimationFrame();
+    expect(harness.viewport.scrollTop).toBe(920);
+
+    harness.cleanup();
+  });
+
+  it('does not pin on content growth when user is away from bottom', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: false,
+    });
+
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 640,
+    });
+    harness.viewport.scrollTop = 120;
+
+    await flushEffects();
+
+    triggerResize(200);
+    await flushAnimationFrame();
 
     expect(harness.viewport.scrollTop).toBe(120);
 

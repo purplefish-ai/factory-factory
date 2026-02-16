@@ -116,9 +116,12 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onRewindToMessage,
   initBanner,
 }: VirtualizedMessageListProps) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(messages.length);
   const prevLatestThinkingRef = useRef<string | null>(latestThinking);
   const isAutoScrollingRef = useRef(false);
+  const autoScrollResetRafRef = useRef<number | null>(null);
+  const resizeStickRafRef = useRef<number | null>(null);
   // Track isNearBottom in a ref to avoid stale closures in effects
   const isNearBottomRef = useRef(isNearBottom);
   isNearBottomRef.current = isNearBottom;
@@ -159,6 +162,26 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
 
+  const scheduleAutoScrollReset = useCallback(() => {
+    if (autoScrollResetRafRef.current !== null) {
+      cancelAnimationFrame(autoScrollResetRafRef.current);
+    }
+    autoScrollResetRafRef.current = requestAnimationFrame(() => {
+      isAutoScrollingRef.current = false;
+      autoScrollResetRafRef.current = null;
+    });
+  }, []);
+
+  const stickToBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+    isAutoScrollingRef.current = true;
+    container.scrollTop = container.scrollHeight;
+    scheduleAutoScrollReset();
+  }, [scheduleAutoScrollReset, scrollContainerRef]);
+
   // Auto-scroll to bottom when new messages are added (only if user is near bottom)
   useEffect(() => {
     const currentCount = messages.length;
@@ -173,21 +196,33 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
     // If messages were added and user is near bottom, scroll to bottom
     if (currentCount > prevCount && isNearBottomRef.current && scrollContainerRef.current) {
-      isAutoScrollingRef.current = true;
       // Use 'auto' behavior instead of smooth to prevent animation jitter during rapid updates
       // Wrap in try-catch to handle edge cases where scroll element becomes null during unmount
       // or rapid component updates (see: https://github.com/TanStack/virtual/issues/696)
       try {
+        isAutoScrollingRef.current = true;
         virtualizer.scrollToIndex(currentCount - 1, { align: 'end', behavior: 'auto' });
       } catch {
         // Scroll element likely became null during unmount - safe to ignore
-      }
-      // Reset flag immediately for instant scroll
-      requestAnimationFrame(() => {
         isAutoScrollingRef.current = false;
+      }
+      // Pin to real bottom after measurement/layout settles.
+      requestAnimationFrame(() => {
+        if (isNearBottomRef.current) {
+          stickToBottom();
+        } else {
+          scheduleAutoScrollReset();
+        }
       });
     }
-  }, [loadingSession, messages.length, virtualizer, scrollContainerRef]);
+  }, [
+    loadingSession,
+    messages.length,
+    scheduleAutoScrollReset,
+    scrollContainerRef,
+    stickToBottom,
+    virtualizer,
+  ]);
 
   // Keep viewport pinned when inline reasoning text grows while user is at bottom.
   useEffect(() => {
@@ -201,17 +236,65 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    const container = scrollContainerRef.current;
-    if (!container) {
+    stickToBottom();
+  }, [latestThinking, loadingSession, stickToBottom]);
+
+  // Keep viewport pinned while content grows (e.g., large messages/images/measurements)
+  // when the user is already at the bottom.
+  useEffect(() => {
+    if (loadingSession || typeof ResizeObserver === 'undefined') {
       return;
     }
 
-    isAutoScrollingRef.current = true;
-    container.scrollTop = container.scrollHeight;
-    requestAnimationFrame(() => {
-      isAutoScrollingRef.current = false;
+    const content = contentRef.current;
+    if (!content) {
+      return;
+    }
+
+    let previousHeight = content.getBoundingClientRect().height;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+      const nextHeight = entry.contentRect.height;
+      const grew = nextHeight > previousHeight;
+      previousHeight = nextHeight;
+      if (!(grew && isNearBottomRef.current)) {
+        return;
+      }
+      if (resizeStickRafRef.current !== null) {
+        return;
+      }
+      resizeStickRafRef.current = requestAnimationFrame(() => {
+        resizeStickRafRef.current = null;
+        if (isNearBottomRef.current) {
+          stickToBottom();
+        }
+      });
     });
-  }, [latestThinking, loadingSession, scrollContainerRef]);
+
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      if (resizeStickRafRef.current !== null) {
+        cancelAnimationFrame(resizeStickRafRef.current);
+        resizeStickRafRef.current = null;
+      }
+    };
+  }, [loadingSession, stickToBottom]);
+
+  useEffect(
+    () => () => {
+      if (autoScrollResetRafRef.current !== null) {
+        cancelAnimationFrame(autoScrollResetRafRef.current);
+      }
+      if (resizeStickRafRef.current !== null) {
+        cancelAnimationFrame(resizeStickRafRef.current);
+      }
+    },
+    []
+  );
 
   // Handle scroll events
   const handleScroll = useCallback(() => {
@@ -258,7 +341,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
   return (
     <ThinkingCompletionProvider lastThinkingMessageId={lastThinkingMessageId} running={running}>
-      <div className="p-4 min-w-0">
+      <div ref={contentRef} className="p-4 min-w-0">
         {/* Virtualized message container */}
         <div
           style={{
