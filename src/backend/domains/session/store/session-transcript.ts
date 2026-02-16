@@ -156,6 +156,16 @@ export function upsertTranscriptMessage(store: SessionStore, message: ChatMessag
   store.transcript.sort(messageSort);
 }
 
+export function removeTranscriptMessageById(store: SessionStore, messageId: string): boolean {
+  const idx = store.transcript.findIndex((message) => message.id === messageId);
+  if (idx < 0) {
+    return false;
+  }
+
+  store.transcript.splice(idx, 1);
+  return true;
+}
+
 export function setNextOrderFromTranscript(store: SessionStore): void {
   let maxOrder = -1;
   for (const message of store.transcript) {

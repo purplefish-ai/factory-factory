@@ -15,6 +15,7 @@ export interface ClaudeCLIHealthStatus {
 
 export interface CodexCLIHealthStatus {
   isInstalled: boolean;
+  isAuthenticated?: boolean;
   version?: string;
   error?: string;
 }
@@ -61,20 +62,36 @@ class CLIHealthService {
   }
 
   /**
-   * Check if Codex CLI is installed and exposes app-server support.
+   * Check if Codex CLI is installed and authenticated.
+   * Uses `codex --version` for installation and `codex login status` for auth.
    */
   async checkCodexCLI(): Promise<CodexCLIHealthStatus> {
     try {
       const { stdout } = await execFileAsync('codex', ['--version'], {
         timeout: SERVICE_TIMEOUT_MS.codexCliVersionCheck,
       });
-      return { isInstalled: true, version: stdout.trim().split('\n')[0] };
+      const version = stdout.trim().split('\n')[0];
+
+      try {
+        await execFileAsync('codex', ['login', 'status'], {
+          timeout: SERVICE_TIMEOUT_MS.codexCliAuthCheck,
+        });
+        return { isInstalled: true, isAuthenticated: true, version };
+      } catch {
+        return {
+          isInstalled: true,
+          isAuthenticated: false,
+          version,
+          error: 'Codex CLI is not authenticated. Run `codex login` to authenticate.',
+        };
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isNotFound = message.toLowerCase().includes('enoent') || message.includes('not found');
 
       return {
         isInstalled: false,
+        isAuthenticated: false,
         error: isNotFound
           ? 'Codex CLI is not installed. Install from https://developers.openai.com/codex/app-server/'
           : `Failed to check Codex CLI: ${message}`,

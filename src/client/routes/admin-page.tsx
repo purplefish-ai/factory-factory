@@ -22,6 +22,7 @@ import { RatchetWrenchIcon } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
+import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
 import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
 import { downloadFile } from '@/frontend/lib/download-file';
 import { trpc } from '@/frontend/lib/trpc';
@@ -416,6 +417,7 @@ function ChatProviderDefaultsSection() {
             <SelectItem value="CODEX">Codex</SelectItem>
           </SelectContent>
         </Select>
+        <ProviderCliWarning provider={currentProvider} />
       </CardContent>
     </Card>
   );

@@ -22,6 +22,7 @@ import type {
   ToolProgressInfo,
 } from './reducer';
 import { useChatState } from './use-chat-state';
+import { evaluateHydrationBatch, parseHydrationBatch } from './use-chat-websocket-hydration';
 
 const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 
@@ -190,19 +191,16 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Handle incoming messages - delegate to chat state
   const handleMessage = useCallback(
     (data: unknown) => {
-      if (
-        typeof data === 'object' &&
-        data !== null &&
-        'type' in data &&
-        ((data as { type?: string }).type === 'session_replay_batch' ||
-          (data as { type?: string }).type === 'session_snapshot')
-      ) {
-        const batch = data as { loadRequestId?: string; type?: string };
-        if (currentLoadRequestIdRef.current && batch.loadRequestId) {
-          if (batch.loadRequestId !== currentLoadRequestIdRef.current) {
-            return;
-          }
-          // Only clear when we have a matching ID
+      const batch = parseHydrationBatch(data);
+      if (batch) {
+        const decision = evaluateHydrationBatch(batch, currentLoadRequestIdRef.current);
+        if (decision === 'drop') {
+          // A hydration response with a loadRequestId can arrive late (for example
+          // from a prior reconnect attempt). Ignore it so stale replay batches
+          // do not overwrite newer in-memory state.
+          return;
+        }
+        if (decision === 'match') {
           currentLoadRequestIdRef.current = null;
           clearLoadTimeout();
         }

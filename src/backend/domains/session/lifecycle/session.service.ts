@@ -10,6 +10,8 @@ import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { interceptorRegistry } from '@/backend/interceptors/registry';
+import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
@@ -49,11 +51,10 @@ type StoredAcpConfigSnapshot = {
 type PendingAcpToolCall = {
   toolUseId: string;
   toolName: string;
+  toolInput?: Record<string, unknown>;
   acpKind?: string;
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
-
-const TERMINAL_TOOL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 class SessionService {
   private readonly repository: SessionRepository;
@@ -62,7 +63,7 @@ class SessionService {
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
   private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
-  /** Per-session ACP tool calls that have started but not reached terminal status. */
+  /** Per-session ACP tool calls that have started but not yet been completed by tool_result. */
   private readonly pendingAcpToolCalls = new Map<string, Map<string, PendingAcpToolCall>>();
   /**
    * Suppress transcript-mutating ACP replay events for sessions whose transcript was
@@ -73,6 +74,8 @@ class SessionService {
   private workspaceBridge: SessionWorkspaceBridge | null = null;
   /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
   private readonly sessionToWorkspace = new Map<string, string>();
+  /** Maps sessionId → workingDir for interceptor context */
+  private readonly sessionToWorkingDir = new Map<string, string>();
   /** Optional callback invoked after an ACP prompt turn settles. */
   private promptTurnCompleteHandler: PromptTurnCompleteHandler | null = null;
 
@@ -168,6 +171,7 @@ class SessionService {
         this.pendingAcpToolCalls.delete(sid);
         this.suppressAcpReplayForSession.delete(sid);
         this.sessionToWorkspace.delete(sid);
+        this.sessionToWorkingDir.delete(sid);
         const b = this.acpPermissionBridges.get(sid);
         if (b) {
           b.cancelAll();
@@ -309,7 +313,7 @@ class SessionService {
       data as {
         event?: {
           type?: string;
-          content_block?: { type?: string; id?: unknown; name?: unknown };
+          content_block?: { type?: string; id?: unknown; name?: unknown; input?: unknown };
         };
       }
     ).event;
@@ -324,7 +328,16 @@ class SessionService {
       return;
     }
     const toolName = typeof contentBlock?.name === 'string' ? contentBlock.name : 'ACP Tool';
-    this.upsertPendingToolCall(sid, toolUseId, { toolName });
+    const toolInput = this.normalizeToolInput(contentBlock?.input);
+    const existing = this.getPendingToolCall(sid, toolUseId);
+    this.upsertPendingToolCall(sid, toolUseId, { toolName, toolInput });
+    if (!existing) {
+      this.notifyInterceptorToolStart(sid, {
+        toolUseId,
+        toolName,
+        toolInput: toolInput ?? {},
+      });
+    }
   }
 
   private clearPendingFromToolResultMessage(sid: string, data: AgentMessage): void {
@@ -337,6 +350,14 @@ class SessionService {
     }
     for (const item of content) {
       if (item.type === 'tool_result') {
+        const pending = this.getPendingToolCall(sid, item.tool_use_id);
+        this.notifyInterceptorToolComplete(
+          sid,
+          item.tool_use_id,
+          item.content,
+          item.is_error === true,
+          pending
+        );
         this.removePendingToolCall(sid, item.tool_use_id);
       }
     }
@@ -355,32 +376,43 @@ class SessionService {
     if (!progress.tool_use_id) {
       return;
     }
-    if (progress.acpStatus && TERMINAL_TOOL_STATUSES.has(progress.acpStatus)) {
-      this.removePendingToolCall(sid, progress.tool_use_id);
-      return;
-    }
+    // ACP translator emits terminal tool_progress before tool_result in the same batch.
+    // Keep pending metadata here and clear only after processing tool_result.
+    const existing = this.getPendingToolCall(sid, progress.tool_use_id);
     this.upsertPendingToolCall(sid, progress.tool_use_id, {
       toolName: progress.tool_name ?? 'ACP Tool',
       acpKind: progress.acpKind,
       acpLocations: progress.acpLocations,
     });
+    if (!existing) {
+      this.notifyInterceptorToolStart(sid, {
+        toolUseId: progress.tool_use_id,
+        toolName: progress.tool_name ?? 'ACP Tool',
+        toolInput: {},
+      });
+    }
   }
 
   private upsertPendingToolCall(
     sid: string,
     toolUseId: string,
     update: Pick<PendingAcpToolCall, 'toolName'> &
-      Partial<Pick<PendingAcpToolCall, 'acpKind' | 'acpLocations'>>
+      Partial<Pick<PendingAcpToolCall, 'toolInput' | 'acpKind' | 'acpLocations'>>
   ): void {
     const pendingById = this.pendingAcpToolCalls.get(sid) ?? new Map<string, PendingAcpToolCall>();
     const existing = pendingById.get(toolUseId);
     pendingById.set(toolUseId, {
       toolUseId,
       toolName: update.toolName || existing?.toolName || 'ACP Tool',
+      toolInput: update.toolInput ?? existing?.toolInput,
       acpKind: update.acpKind ?? existing?.acpKind,
       acpLocations: update.acpLocations ?? existing?.acpLocations,
     });
     this.pendingAcpToolCalls.set(sid, pendingById);
+  }
+
+  private getPendingToolCall(sid: string, toolUseId: string): PendingAcpToolCall | undefined {
+    return this.pendingAcpToolCalls.get(sid)?.get(toolUseId);
   }
 
   private removePendingToolCall(sid: string, toolUseId: string): void {
@@ -392,6 +424,103 @@ class SessionService {
     if (pendingById.size === 0) {
       this.pendingAcpToolCalls.delete(sid);
     }
+  }
+
+  private normalizeToolInput(input: unknown): Record<string, unknown> | undefined {
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+      return undefined;
+    }
+    return input as Record<string, unknown>;
+  }
+
+  private extractToolResultText(content: unknown): string {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      return content
+        .flatMap((item) => {
+          if (
+            typeof item === 'object' &&
+            item !== null &&
+            (item as { type?: unknown }).type === 'text' &&
+            typeof (item as { text?: unknown }).text === 'string'
+          ) {
+            return [(item as { text: string }).text];
+          }
+          return [];
+        })
+        .join('\n');
+    }
+
+    if (content === undefined || content === null) {
+      return '';
+    }
+
+    try {
+      return JSON.stringify(content);
+    } catch {
+      return String(content);
+    }
+  }
+
+  private getInterceptorContext(sessionId: string): InterceptorContext | null {
+    const workspaceId = this.sessionToWorkspace.get(sessionId);
+    const workingDir = this.sessionToWorkingDir.get(sessionId);
+    if (!(workspaceId && workingDir)) {
+      return null;
+    }
+
+    return {
+      sessionId,
+      workspaceId,
+      workingDir,
+      timestamp: new Date(),
+    };
+  }
+
+  private notifyInterceptorToolStart(
+    sessionId: string,
+    tool: Pick<PendingAcpToolCall, 'toolUseId' | 'toolName'> & {
+      toolInput: Record<string, unknown>;
+    }
+  ): void {
+    const context = this.getInterceptorContext(sessionId);
+    if (!context) {
+      return;
+    }
+
+    const event: ToolEvent = {
+      toolUseId: tool.toolUseId,
+      toolName: tool.toolName,
+      input: tool.toolInput,
+    };
+    interceptorRegistry.notifyToolStart(event, context);
+  }
+
+  private notifyInterceptorToolComplete(
+    sessionId: string,
+    toolUseId: string,
+    content: unknown,
+    isError: boolean,
+    pending: PendingAcpToolCall | undefined
+  ): void {
+    const context = this.getInterceptorContext(sessionId);
+    if (!context) {
+      return;
+    }
+
+    const event: ToolEvent = {
+      toolUseId,
+      toolName: pending?.toolName ?? 'ACP Tool',
+      input: pending?.toolInput ?? {},
+      output: {
+        content: this.extractToolResultText(content),
+        isError,
+      },
+    };
+    interceptorRegistry.notifyToolComplete(event, context);
   }
 
   private finalizeOrphanedToolCalls(sid: string, reason: string): void {
@@ -577,6 +706,7 @@ class SessionService {
 
     await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
     this.sessionToWorkspace.set(sessionId, sessionContext.workspaceId);
+    this.sessionToWorkingDir.set(sessionId, sessionContext.workingDir);
 
     const handlers = this.setupAcpEventHandler(sessionId);
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
@@ -604,6 +734,8 @@ class SessionService {
       });
     } catch (error) {
       this.suppressAcpReplayForSession.delete(sessionId);
+      this.sessionToWorkspace.delete(sessionId);
+      this.sessionToWorkingDir.delete(sessionId);
       throw error;
     }
 
@@ -890,6 +1022,7 @@ class SessionService {
       });
       this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
       this.sessionToWorkspace.delete(sessionId);
+      this.sessionToWorkingDir.delete(sessionId);
 
       if (!stopClientFailed) {
         const shouldCleanupTransientRatchetSession =
