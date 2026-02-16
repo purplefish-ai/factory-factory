@@ -116,6 +116,18 @@ describe('groupAdjacentToolCalls', () => {
 });
 
 describe('isReasoningToolCall', () => {
+  it('does not throw for malformed non-string tool names', () => {
+    expect(() => isReasoningToolCall(null, {})).not.toThrow();
+    expect(() => isReasoningToolCall(123, {})).not.toThrow();
+    expect(() => isReasoningToolCall({}, {})).not.toThrow();
+  });
+
+  it('returns false for malformed non-string tool names', () => {
+    expect(isReasoningToolCall(null, {})).toBe(false);
+    expect(isReasoningToolCall(123, {})).toBe(false);
+    expect(isReasoningToolCall({}, {})).toBe(false);
+  });
+
   it('does not throw for malformed non-object input values', () => {
     expect(() => isReasoningToolCall('Bash', null)).not.toThrow();
     expect(() => isReasoningToolCall('Bash', 'oops')).not.toThrow();

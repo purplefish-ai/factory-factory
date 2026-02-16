@@ -462,7 +462,11 @@ function tryCreatePairedToolCall(msg: ChatMessage): PairedToolCall | null {
   };
 }
 
-export function isReasoningToolCall(name: string, input: unknown): boolean {
+export function isReasoningToolCall(name: unknown, input: unknown): boolean {
+  if (typeof name !== 'string') {
+    return false;
+  }
+
   const normalizedName = name.trim().toLowerCase();
   if (
     normalizedName === 'reasoning' ||

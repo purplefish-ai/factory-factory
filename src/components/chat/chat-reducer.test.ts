@@ -773,6 +773,29 @@ describe('chatReducer', () => {
       expect(newState.messages).toHaveLength(0);
     });
 
+    it('ignores malformed tool_use name without crashing', () => {
+      const malformedToolUseName: AgentMessage = {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'tool_use',
+            id: 'bad-name-1',
+            name: null as unknown as string,
+            input: {},
+          },
+        },
+      };
+
+      const newState = chatReducer(initialState, {
+        type: 'WS_AGENT_MESSAGE',
+        payload: { message: malformedToolUseName, order: 0 },
+      });
+
+      expect(newState.messages).toHaveLength(0);
+    });
+
     it('does not clear latest thinking for duplicate reasoning tool start replay', () => {
       let state: ChatState = {
         ...initialState,
