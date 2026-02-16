@@ -1973,6 +1973,37 @@ describe('chatReducer', () => {
       });
     });
 
+    it('should recover message on COMMITTED even when queue entry is already gone', () => {
+      const state: ChatState = {
+        ...initialState,
+        queuedMessages: new Map(),
+        messages: [],
+      };
+
+      const action: ChatAction = {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.COMMITTED,
+          userMessage: {
+            text: 'Recovered',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 5,
+          },
+        },
+      };
+      const newState = chatReducer(state, action);
+
+      expect(newState.queuedMessages.size).toBe(0);
+      expect(newState.messages).toHaveLength(1);
+      expect(newState.messages[0]).toMatchObject({
+        id: 'msg-1',
+        source: 'user',
+        text: 'Recovered',
+        order: 5,
+      });
+    });
+
     it('should remove message from queuedMessages when complete', () => {
       const state: ChatState = {
         ...initialState,
