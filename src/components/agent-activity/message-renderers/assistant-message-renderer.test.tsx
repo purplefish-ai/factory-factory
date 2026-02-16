@@ -163,4 +163,23 @@ describe('LoadingIndicator', () => {
 
     root.unmount();
   });
+
+  it('avoids leaving a dangling underscore when double-underscore cleanup mutates text', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(LoadingIndicator, {
+          latestReasoning: `${'i'.repeat(189)} abc ___trailing text that forces truncation`,
+        })
+      );
+    });
+
+    expect(container.textContent).toContain('abc...');
+    expect(container.textContent).not.toContain('abc _...');
+
+    root.unmount();
+  });
 });

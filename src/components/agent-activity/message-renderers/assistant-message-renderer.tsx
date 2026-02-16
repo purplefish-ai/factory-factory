@@ -348,9 +348,10 @@ function stripMarkdownSyntax(input: string): string {
     stripped = removeLastSingleAsteriskDelimiter(stripped);
   }
 
-  const withoutInlineWordUnderscores = stripped.replace(/\B_\B/g, '');
+  let withoutInlineWordUnderscores = stripped.replace(/\B_\B/g, '');
   if (countDoubleUnderscoreDelimiters(withoutInlineWordUnderscores) % 2 !== 0) {
     stripped = removeLastDoubleUnderscoreDelimiter(stripped);
+    withoutInlineWordUnderscores = stripped.replace(/\B_\B/g, '');
   }
 
   const withoutDoubleUnderscores = withoutInlineWordUnderscores.replace(/(?<!\\)__/g, '');
