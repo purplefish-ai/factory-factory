@@ -841,6 +841,7 @@ class SessionService {
     options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
     const session = await this.loadSessionForStop(sessionId);
+    const workspaceId = session?.workspaceId ?? this.sessionToWorkspace.get(sessionId);
 
     if (acpRuntimeManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
@@ -857,7 +858,6 @@ class SessionService {
 
     // Cancel pending ACP permissions and clean up streaming state
     this.acpStreamState.delete(sessionId);
-    this.pendingAcpToolCalls.delete(sessionId);
     this.suppressAcpReplayForSession.delete(sessionId);
     const acpBridge = this.acpPermissionBridges.get(sessionId);
     if (acpBridge) {
@@ -877,6 +877,7 @@ class SessionService {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
+      this.finalizeOrphanedToolCallsOnStop(sessionId);
       await this.updateStoppedSessionState(sessionId);
       // Manual stop should clear queued work and publish that change immediately
       // so clients do not retain stale queued-message UI.
@@ -887,6 +888,8 @@ class SessionService {
         activity: 'IDLE',
         updatedAt: new Date().toISOString(),
       });
+      this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
+      this.sessionToWorkspace.delete(sessionId);
 
       if (!stopClientFailed) {
         const shouldCleanupTransientRatchetSession =
@@ -903,6 +906,34 @@ class SessionService {
         ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
       });
       acpTraceLogger.closeSession(sessionId);
+    }
+  }
+
+  private finalizeOrphanedToolCallsOnStop(sessionId: string): void {
+    try {
+      this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
+    } catch (error) {
+      logger.warn('Failed finalizing orphaned ACP tool calls during stop', {
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this.pendingAcpToolCalls.delete(sessionId);
+    }
+  }
+
+  private markWorkspaceSessionIdleOnStop(workspaceId: string | undefined, sessionId: string): void {
+    if (!(workspaceId && this.workspaceBridge)) {
+      return;
+    }
+
+    try {
+      this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
+    } catch (error) {
+      logger.warn('Failed to mark workspace session idle during stop', {
+        sessionId,
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

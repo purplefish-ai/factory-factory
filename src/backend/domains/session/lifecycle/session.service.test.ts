@@ -73,6 +73,12 @@ describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionService.setPromptTurnCompleteHandler(null);
+    sessionService.configure({
+      workspace: {
+        markSessionRunning: vi.fn(),
+        markSessionIdle: vi.fn(),
+      },
+    });
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
     vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(false);
@@ -626,6 +632,29 @@ describe('SessionService', () => {
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
   });
 
+  it('marks workspace session idle during manual stop', async () => {
+    const markSessionIdle = vi.fn();
+    sessionService.configure({
+      workspace: {
+        markSessionRunning: vi.fn(),
+        markSessionIdle,
+      },
+    });
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    await sessionService.stopSession('session-1');
+
+    expect(markSessionIdle).toHaveBeenCalledWith('workspace-1', 'session-1');
+  });
+
   it('still clears queued work and marks idle when runtime stop fails', async () => {
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockRejectedValue(new Error('stop failed'));
@@ -647,6 +676,144 @@ describe('SessionService', () => {
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
     expect(sessionRepository.clearRatchetActiveSession).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('finalizes orphaned ACP tool calls during manual stop', async () => {
+    const pendingToolCalls = (
+      sessionService as unknown as {
+        pendingAcpToolCalls: Map<
+          string,
+          Map<
+            string,
+            {
+              toolUseId: string;
+              toolName: string;
+              acpKind?: string;
+              acpLocations?: Array<{ path: string; line?: number | null }>;
+            }
+          >
+        >;
+      }
+    ).pendingAcpToolCalls;
+
+    pendingToolCalls.set(
+      'session-1',
+      new Map([
+        [
+          'call-1',
+          {
+            toolUseId: 'call-1',
+            toolName: 'Run pwd',
+            acpKind: 'execute',
+          },
+        ],
+      ])
+    );
+
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
+    const appendClaudeEventSpy = vi
+      .spyOn(sessionDomainService, 'appendClaudeEvent')
+      .mockReturnValue(77);
+
+    await sessionService.stopSession('session-1');
+
+    expect(emitDeltaSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'tool_progress',
+        tool_use_id: 'call-1',
+        tool_name: 'Run pwd',
+        acpStatus: 'failed',
+        elapsed_time_seconds: 0,
+      })
+    );
+    expect(appendClaudeEventSpy).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        type: 'user',
+        message: expect.objectContaining({
+          content: [
+            expect.objectContaining({
+              type: 'tool_result',
+              tool_use_id: 'call-1',
+              is_error: true,
+            }),
+          ],
+        }),
+      })
+    );
+    expect(pendingToolCalls.has('session-1')).toBe(false);
+  });
+
+  it('continues stop cleanup when orphaned tool-call finalization throws', async () => {
+    const markSessionIdle = vi.fn();
+    sessionService.configure({
+      workspace: {
+        markSessionRunning: vi.fn(),
+        markSessionIdle,
+      },
+    });
+
+    const pendingToolCalls = (
+      sessionService as unknown as {
+        pendingAcpToolCalls: Map<
+          string,
+          Map<
+            string,
+            {
+              toolUseId: string;
+              toolName: string;
+              acpKind?: string;
+              acpLocations?: Array<{ path: string; line?: number | null }>;
+            }
+          >
+        >;
+      }
+    ).pendingAcpToolCalls;
+
+    pendingToolCalls.set(
+      'session-1',
+      new Map([
+        [
+          'call-1',
+          {
+            toolUseId: 'call-1',
+            toolName: 'Run pwd',
+            acpKind: 'execute',
+          },
+        ],
+      ])
+    );
+
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    vi.spyOn(sessionDomainService, 'emitDelta').mockImplementationOnce(() => {
+      throw new Error('emit failed');
+    });
+
+    await sessionService.stopSession('session-1');
+
+    expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
+      status: SessionStatus.IDLE,
+    });
+    expect(markSessionIdle).toHaveBeenCalledWith('workspace-1', 'session-1');
+    expect(pendingToolCalls.has('session-1')).toBe(false);
   });
 
   it('deletes ratchet session record during manual stop', async () => {
