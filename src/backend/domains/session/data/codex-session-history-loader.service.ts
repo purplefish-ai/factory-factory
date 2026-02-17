@@ -141,19 +141,6 @@ function parseCodexEventMessage(
     };
   }
 
-  if (eventType === 'agent_reasoning') {
-    const text = entry.payload.text;
-    if (typeof text !== 'string' || text.trim().length === 0) {
-      return null;
-    }
-
-    return {
-      type: 'thinking',
-      content: text,
-      timestamp,
-    };
-  }
-
   return null;
 }
 
