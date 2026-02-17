@@ -15,27 +15,25 @@ import {
 } from '@/components/ui/select';
 import { trpc } from '@/frontend/lib/trpc';
 import { IssueProvider } from '@/shared/core/enums';
+import {
+  type IssueTrackerConfig,
+  IssueTrackerConfigSchema,
+  type LinearConfig,
+} from '@/shared/schemas/issue-tracker-config.schema';
 
-function ProjectIssueTrackingCard({
+function LinearConfigFields({
   projectId,
-  projectName,
-  currentProvider,
-  linearTeamName,
-  linearViewerName,
-  hasLinearApiKey,
+  linearConfig,
+  onSave,
+  isSaving,
 }: {
   projectId: string;
-  projectName: string;
-  currentProvider: string;
-  linearTeamName: string | null;
-  linearViewerName: string | null;
-  hasLinearApiKey: boolean;
+  linearConfig: LinearConfig | null;
+  onSave: (config: IssueTrackerConfig) => void;
+  isSaving: boolean;
 }) {
-  const utils = trpc.useUtils();
-
-  const [provider, setProvider] = useState(currentProvider);
   const [apiKey, setApiKey] = useState('');
-  const [viewerName, setViewerName] = useState<string | null>(linearViewerName);
+  const [viewerName, setViewerName] = useState<string | null>(linearConfig?.viewerName ?? null);
   const [teams, setTeams] = useState<Array<{ id: string; name: string; key: string }>>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
@@ -47,22 +45,6 @@ function ProjectIssueTrackingCard({
     onSuccess: (result) => setTeams(result),
     onError: (error) => toast.error(`Failed to load teams: ${error.message}`),
   });
-
-  const updateProject = trpc.project.update.useMutation({
-    onSuccess: () => {
-      toast.success('Issue tracking settings saved');
-      utils.project.list.invalidate();
-      setApiKey('');
-      setTeams([]);
-      setSelectedTeamId(null);
-    },
-    onError: (error) => toast.error(`Failed to save: ${error.message}`),
-  });
-
-  const handleProviderChange = (value: string) => {
-    setProvider(value);
-    updateProject.mutate({ id: projectId, issueProvider: value as IssueProvider });
-  };
 
   const handleValidate = async () => {
     const result = await validateKey.mutateAsync({ apiKey });
@@ -76,24 +58,142 @@ function ProjectIssueTrackingCard({
 
   const handleSave = () => {
     const selectedTeam = teams.find((t) => t.id === selectedTeamId);
-    if (!selectedTeam) {
+    if (!(selectedTeam && viewerName)) {
       return;
     }
+    onSave({
+      linear: {
+        apiKey,
+        teamId: selectedTeam.id,
+        teamName: `${selectedTeam.name} (${selectedTeam.key})`,
+        viewerName,
+      },
+    });
+    setApiKey('');
+    setTeams([]);
+    setSelectedTeamId(null);
+  };
 
+  const isValidated = viewerName !== null;
+  const hasTeamChoices = teams.length > 0;
+  const hasStoredKey = linearConfig?.apiKey != null;
+  const storedTeamName = linearConfig?.teamName ?? null;
+
+  return (
+    <>
+      <div className="flex items-end gap-2">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Label htmlFor={`api-key-${projectId}`}>API Key</Label>
+            {isValidated && (
+              <span className="flex items-center gap-1 text-xs text-green-600">
+                <CheckCircle2 className="w-3 h-3" />
+                Connected as {viewerName}
+              </span>
+            )}
+          </div>
+          <Input
+            id={`api-key-${projectId}`}
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={hasStoredKey ? '••••••••••••••••••••' : 'lin_api_...'}
+            className="font-mono text-sm w-[280px]"
+          />
+        </div>
+        <Button
+          variant="outline"
+          onClick={handleValidate}
+          disabled={validateKey.isPending || !apiKey}
+        >
+          {validateKey.isPending ? 'Validating...' : 'Validate'}
+        </Button>
+      </div>
+
+      {isValidated && hasTeamChoices && (
+        <>
+          <div className="space-y-1.5">
+            <Label>Team</Label>
+            {fetchTeams.isPending ? (
+              <p className="text-sm text-muted-foreground py-2">Loading...</p>
+            ) : (
+              <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Select a team" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>
+                      {team.name} ({team.key})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <Button onClick={handleSave} disabled={!selectedTeamId || isSaving} className="self-end">
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        </>
+      )}
+
+      {storedTeamName && !hasTeamChoices && (
+        <p className="text-sm text-muted-foreground self-end pb-2">Team: {storedTeamName}</p>
+      )}
+
+      {!isValidated && (
+        <p className="text-xs text-muted-foreground mt-2 basis-full">
+          Create a personal API key at{' '}
+          <a
+            href="https://linear.app/purplefish/settings/account/security"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            linear.app/settings/account/security
+          </a>
+        </p>
+      )}
+    </>
+  );
+}
+
+function ProjectIssueTrackingCard({
+  projectId,
+  projectName,
+  currentProvider,
+  issueTrackerConfig,
+}: {
+  projectId: string;
+  projectName: string;
+  currentProvider: string;
+  issueTrackerConfig: IssueTrackerConfig | null;
+}) {
+  const utils = trpc.useUtils();
+  const [provider, setProvider] = useState(currentProvider);
+
+  const updateProject = trpc.project.update.useMutation({
+    onSuccess: () => {
+      toast.success('Issue tracking settings saved');
+      utils.project.list.invalidate();
+    },
+    onError: (error) => toast.error(`Failed to save: ${error.message}`),
+  });
+
+  const handleProviderChange = (value: string) => {
+    setProvider(value);
+    updateProject.mutate({ id: projectId, issueProvider: value as IssueProvider });
+  };
+
+  const handleLinearSave = (config: IssueTrackerConfig) => {
     updateProject.mutate({
       id: projectId,
       issueProvider: IssueProvider.LINEAR,
-      linearApiKey: apiKey,
-      linearTeamId: selectedTeam.id,
-      linearTeamName: `${selectedTeam.name} (${selectedTeam.key})`,
-      linearViewerName: viewerName,
+      issueTrackerConfig: config,
     });
   };
 
   const isLinear = provider === IssueProvider.LINEAR;
-  const isValidated = viewerName !== null;
-  const hasTeamChoices = teams.length > 0;
-  const showStoredTeam = isLinear && linearTeamName && !hasTeamChoices;
 
   return (
     <div className="rounded-lg border bg-card">
@@ -109,7 +209,6 @@ function ProjectIssueTrackingCard({
 
       <div className="p-4">
         <div className="flex flex-wrap items-end gap-3">
-          {/* Issue Provider dropdown */}
           <div className="space-y-1.5">
             <Label>Issue Provider</Label>
             <Select
@@ -127,90 +226,15 @@ function ProjectIssueTrackingCard({
             </Select>
           </div>
 
-          {/* API key — always visible when Linear */}
           {isLinear && (
-            <div className="flex items-end gap-2">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor={`api-key-${projectId}`}>API Key</Label>
-                  {isValidated && (
-                    <span className="flex items-center gap-1 text-xs text-green-600">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Connected as {viewerName}
-                    </span>
-                  )}
-                </div>
-                <Input
-                  id={`api-key-${projectId}`}
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={hasLinearApiKey ? '••••••••••••••••••••' : 'lin_api_...'}
-                  className="font-mono text-sm w-[280px]"
-                />
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleValidate}
-                disabled={validateKey.isPending || !apiKey}
-              >
-                {validateKey.isPending ? 'Validating...' : 'Validate'}
-              </Button>
-            </div>
-          )}
-
-          {/* Team dropdown — after validation */}
-          {isLinear && isValidated && hasTeamChoices && (
-            <>
-              <div className="space-y-1.5">
-                <Label>Team</Label>
-                {fetchTeams.isPending ? (
-                  <p className="text-sm text-muted-foreground py-2">Loading...</p>
-                ) : (
-                  <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId}>
-                    <SelectTrigger className="w-[220px]">
-                      <SelectValue placeholder="Select a team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name} ({team.key})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <Button
-                onClick={handleSave}
-                disabled={!selectedTeamId || updateProject.isPending}
-                className="self-end"
-              >
-                {updateProject.isPending ? 'Saving...' : 'Save'}
-              </Button>
-            </>
-          )}
-
-          {/* Current team name — when configured but not re-validating */}
-          {showStoredTeam && (
-            <p className="text-sm text-muted-foreground self-end pb-2">Team: {linearTeamName}</p>
+            <LinearConfigFields
+              projectId={projectId}
+              linearConfig={issueTrackerConfig?.linear ?? null}
+              onSave={handleLinearSave}
+              isSaving={updateProject.isPending}
+            />
           )}
         </div>
-
-        {/* Help text for API key */}
-        {isLinear && !isValidated && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Create a personal API key at{' '}
-            <a
-              href="https://linear.app/purplefish/settings/account/security"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              linear.app/settings/account/security
-            </a>
-          </p>
-        )}
       </div>
     </div>
   );
@@ -223,9 +247,7 @@ export function IssueTrackingSection({
     id: string;
     name: string;
     issueProvider: string;
-    linearTeamName: string | null;
-    linearViewerName: string | null;
-    linearApiKey: string | null;
+    issueTrackerConfig: unknown;
   }>;
 }) {
   return (
@@ -243,17 +265,18 @@ export function IssueTrackingSection({
         {projects.length === 0 ? (
           <p className="text-sm text-muted-foreground">No projects found.</p>
         ) : (
-          projects.map((project) => (
-            <ProjectIssueTrackingCard
-              key={project.id}
-              projectId={project.id}
-              projectName={project.name}
-              currentProvider={project.issueProvider}
-              linearTeamName={project.linearTeamName}
-              linearViewerName={project.linearViewerName}
-              hasLinearApiKey={!!project.linearApiKey}
-            />
-          ))
+          projects.map((project) => {
+            const parsed = IssueTrackerConfigSchema.safeParse(project.issueTrackerConfig);
+            return (
+              <ProjectIssueTrackingCard
+                key={project.id}
+                projectId={project.id}
+                projectName={project.name}
+                currentProvider={project.issueProvider}
+                issueTrackerConfig={parsed.success ? parsed.data : null}
+              />
+            );
+          })
         )}
       </CardContent>
     </Card>

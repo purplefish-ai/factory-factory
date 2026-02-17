@@ -7,6 +7,7 @@ import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
+import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
@@ -210,10 +211,7 @@ export const projectRouter = router({
         startupScriptTimeout: z.number().min(1).max(3600).optional(),
         // Issue provider configuration
         issueProvider: z.enum([IssueProvider.GITHUB, IssueProvider.LINEAR]).optional(),
-        linearApiKey: z.string().nullable().optional(),
-        linearTeamId: z.string().nullable().optional(),
-        linearTeamName: z.string().nullable().optional(),
-        linearViewerName: z.string().nullable().optional(),
+        issueTrackerConfig: IssueTrackerConfigSchema.nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -230,8 +228,14 @@ export const projectRouter = router({
       await validateStartupScriptFields(id, updates);
 
       // Encrypt Linear API key before persisting
-      if (updates.linearApiKey) {
-        updates.linearApiKey = cryptoService.encrypt(updates.linearApiKey);
+      if (updates.issueTrackerConfig?.linear?.apiKey) {
+        updates.issueTrackerConfig = {
+          ...updates.issueTrackerConfig,
+          linear: {
+            ...updates.issueTrackerConfig.linear,
+            apiKey: cryptoService.encrypt(updates.issueTrackerConfig.linear.apiKey),
+          },
+        };
       }
 
       return projectManagementService.update(id, updates);
