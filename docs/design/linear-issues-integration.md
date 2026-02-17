@@ -43,10 +43,20 @@ enum WorkspaceCreationSource {
 **Add to `Project` model:**
 ```prisma
 issueProvider     IssueProvider  @default(GITHUB)
-linearApiKey    String?   // Linear API token (stored locally in SQLite)
+linearApiKey      String?        // Linear API token (AES-256-GCM encrypted at rest)
 linearTeamId      String?        // Selected Linear team UUID
 linearTeamName    String?        // Cached display name
 ```
+
+### API Key Encryption (`src/backend/services/crypto.service.ts`)
+
+New infrastructure service for encrypting/decrypting secrets at rest:
+- Uses Node.js `crypto` module with AES-256-GCM
+- Encryption key is a randomly-generated 32-byte secret stored at `{baseDir}/encryption.key`
+- Key file is created on first use (auto-generated, never committed)
+- Encrypted values stored as `iv:authTag:ciphertext` (all base64-encoded)
+- Exposes `encrypt(plaintext): string` and `decrypt(encrypted): string`
+- The linear domain calls `decrypt()` when reading the API key from the project, and `encrypt()` when saving it via the tRPC mutation
 
 **Add to `Workspace` model:**
 ```prisma
@@ -87,6 +97,7 @@ Note: All methods accept `apiKey` because the key is per-project (fetched from t
 - `prisma/schema.prisma` — schema changes above
 - `src/shared/core/enums.ts` — new enum values
 - `src/backend/domains/linear/` — new domain (all files)
+- `src/backend/services/crypto.service.ts` — AES-256-GCM encrypt/decrypt utility
 - `package.json` — add `@linear/sdk` dependency
 
 ---
@@ -145,6 +156,7 @@ interface KanbanIssue {
   title: string;
   body: string;
   url: string;
+  state: string;           // GitHub: 'OPEN'/'CLOSED', Linear: state name e.g. 'Todo'
   createdAt: string;
   author: string;
   provider: 'github' | 'linear';
@@ -303,11 +315,24 @@ class LinearStateSyncService {
 
 1. **On workspace init** (`workspace-init.orchestrator.ts`): After workspace creation, if `linearIssueId` exists, call `markIssueStarted()` (fire-and-forget with error logging)
 
-2. **On PR merge** (via PR snapshot service bridge): When `prState` transitions to `MERGED`, check if workspace has `linearIssueId`, call `markIssueCompleted()`
+2. **On PR merge** — subscribe to the existing `PR_SNAPSHOT_UPDATED` event from `prSnapshotService` (an `EventEmitter`). The event includes `{ workspaceId, prState, prNumber, prCiStatus, prReviewState }`. Wire a new listener in the orchestration layer (similar to how `event-collector.orchestrator.ts` subscribes at line 242):
+
+```ts
+// In a new linear-sync.orchestrator.ts or in domain-bridges.orchestrator.ts
+prSnapshotService.on(PR_SNAPSHOT_UPDATED, async (event: PRSnapshotUpdatedEvent) => {
+  if (event.prState !== 'MERGED') return;
+  // Look up workspace to check for linearIssueId
+  const workspace = await workspaceAccessor.findById(event.workspaceId);
+  if (!workspace?.linearIssueId) return;
+  await linearStateSyncService.markIssueCompleted(event.workspaceId);
+});
+```
+
+Note: `prSnapshotService` lives in the `github` domain and is already consumed by orchestration-layer listeners. This follows the same cross-domain event pattern.
 
 ### Bridge Wiring
 
-**`src/backend/orchestration/domain-bridges.orchestrator.ts`:** Wire linear domain bridges for workspace data access.
+**`src/backend/orchestration/domain-bridges.orchestrator.ts`:** Wire linear domain bridges for workspace data access and register the `PR_SNAPSHOT_UPDATED` listener for Linear state sync.
 
 ### Error Handling
 
@@ -325,7 +350,7 @@ class LinearStateSyncService {
 ## Deliverable 6: Polish + Workspace Detail UI
 
 - **Workspace detail header**: Show Linear issue link (identifier + URL) when `linearIssueIdentifier` is set (similar to existing GitHub issue link display)
-- **Export data schema** (`src/shared/schemas/export-data.schema.ts`): Update to schema version with new fields
+- **Export data schema** (`src/shared/schemas/export-data.schema.ts`): Bump to schema version 4. Add new fields to `exportedProjectSchema` (`issueProvider`, `linearTeamId`, `linearTeamName`) and `exportedWorkspaceSchema` (`linearIssueId`, `linearIssueIdentifier`, `linearIssueUrl`). **Exclude `linearApiKey` from exports** — API keys must never appear in database backups. On import, strip `linearApiKey` if present (defensive).
 - Edge case handling: expired API key UI states, team deleted, connection errors
 - Run full verification suite
 
