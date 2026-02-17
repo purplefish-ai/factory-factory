@@ -89,6 +89,7 @@ const mockProject: Project = {
   linearApiKey: null,
   linearTeamId: null,
   linearTeamName: null,
+  linearViewerName: null,
   isArchived: false,
   startupScriptCommand: 'npm install',
   startupScriptPath: null,

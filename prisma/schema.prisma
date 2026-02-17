@@ -110,6 +110,7 @@ model Project {
   linearApiKey          String?       // Linear API token (AES-256-GCM encrypted at rest)
   linearTeamId          String?       // Selected Linear team UUID
   linearTeamName        String?       // Cached display name
+  linearViewerName      String?       // Cached Linear viewer display name
 
   // Startup script configuration
   startupScriptCommand  String?   // Inline shell command

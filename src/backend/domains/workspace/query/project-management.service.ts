@@ -3,6 +3,7 @@ import {
   type ProjectAccessorContext,
   projectAccessor,
 } from '@/backend/resource_accessors/project.accessor';
+import type { IssueProvider } from '@/shared/core/enums';
 
 class ProjectManagementService {
   list(filters?: { isArchived?: boolean; limit?: number; offset?: number }) {
@@ -45,10 +46,11 @@ class ProjectManagementService {
       startupScriptCommand?: string | null;
       startupScriptPath?: string | null;
       startupScriptTimeout?: number;
-      issueProvider?: 'GITHUB' | 'LINEAR';
+      issueProvider?: IssueProvider;
       linearApiKey?: string | null;
       linearTeamId?: string | null;
       linearTeamName?: string | null;
+      linearViewerName?: string | null;
     }
   ): Promise<Project> {
     return projectAccessor.update(id, data);

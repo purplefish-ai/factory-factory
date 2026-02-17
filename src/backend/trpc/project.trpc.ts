@@ -5,6 +5,7 @@ import { projectManagementService } from '@/backend/domains/workspace';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import { publicProcedure, router } from './trpc';
 
@@ -208,10 +209,11 @@ export const projectRouter = router({
         startupScriptPath: z.string().nullable().optional(),
         startupScriptTimeout: z.number().min(1).max(3600).optional(),
         // Issue provider configuration
-        issueProvider: z.enum(['GITHUB', 'LINEAR']).optional(),
+        issueProvider: z.enum([IssueProvider.GITHUB, IssueProvider.LINEAR]).optional(),
         linearApiKey: z.string().nullable().optional(),
         linearTeamId: z.string().nullable().optional(),
         linearTeamName: z.string().nullable().optional(),
+        linearViewerName: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -230,13 +232,6 @@ export const projectRouter = router({
       // Encrypt Linear API key before persisting
       if (updates.linearApiKey) {
         updates.linearApiKey = cryptoService.encrypt(updates.linearApiKey);
-      }
-
-      // When switching to GitHub, clear all Linear fields
-      if (updates.issueProvider === 'GITHUB') {
-        updates.linearApiKey = null;
-        updates.linearTeamId = null;
-        updates.linearTeamName = null;
       }
 
       return projectManagementService.update(id, updates);

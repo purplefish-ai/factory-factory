@@ -91,6 +91,7 @@ describe('WorkspaceCreationService', () => {
     linearApiKey: null,
     linearTeamId: null,
     linearTeamName: null,
+    linearViewerName: null,
     isArchived: false,
     startupScriptCommand: null,
     startupScriptPath: null,

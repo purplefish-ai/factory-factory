@@ -5,6 +5,7 @@ import type { Prisma, Project } from '@prisma-gen/client';
 import { GitClientFactory } from '@/backend/clients/git.client';
 import { prisma } from '@/backend/db';
 import { gitCommandC } from '@/backend/lib/shell';
+import type { IssueProvider } from '@/shared/core/enums';
 
 /**
  * Execute a command with proper argument separation (no shell injection).
@@ -60,10 +61,11 @@ interface UpdateProjectInput {
   startupScriptPath?: string | null;
   startupScriptTimeout?: number;
   // Issue provider configuration
-  issueProvider?: 'GITHUB' | 'LINEAR';
+  issueProvider?: IssueProvider;
   linearApiKey?: string | null;
   linearTeamId?: string | null;
   linearTeamName?: string | null;
+  linearViewerName?: string | null;
 }
 
 interface ListProjectsFilters {
