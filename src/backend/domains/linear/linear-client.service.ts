@@ -74,6 +74,18 @@ class LinearClientService {
     }));
   }
 
+  /** Validate an API key and, on success, list accessible teams in a single call. */
+  async validateKeyAndListTeams(
+    apiKey: string
+  ): Promise<LinearValidationResult & { teams?: LinearTeam[] }> {
+    const validation = await this.validateApiKey(apiKey);
+    if (!validation.valid) {
+      return validation;
+    }
+    const teams = await this.listTeams(apiKey);
+    return { ...validation, teams };
+  }
+
   /**
    * List issues assigned to the authenticated user for a given team.
    * Filters to unstarted state type (works regardless of whether the team uses Cycles).

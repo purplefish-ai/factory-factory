@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const LinearConfigSchema = z.object({
-  apiKey: z.string(),
+  apiKey: z.string().min(1),
   teamId: z.string(),
   teamName: z.string(),
   viewerName: z.string(),

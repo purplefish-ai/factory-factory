@@ -37,21 +37,16 @@ function LinearConfigFields({
   const [teams, setTeams] = useState<Array<{ id: string; name: string; key: string }>>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
-  const validateKey = trpc.linear.validateApiKey.useMutation({
+  const validateAndList = trpc.linear.validateKeyAndListTeams.useMutation({
     onError: (error) => toast.error(`Validation failed: ${error.message}`),
-  });
-
-  const fetchTeams = trpc.linear.listTeams.useMutation({
-    onSuccess: (result) => setTeams(result),
-    onError: (error) => toast.error(`Failed to load teams: ${error.message}`),
   });
 
   const handleValidate = async () => {
     try {
-      const result = await validateKey.mutateAsync({ apiKey });
+      const result = await validateAndList.mutateAsync({ apiKey });
       if (result.valid) {
         setViewerName(result.viewerName ?? null);
-        fetchTeams.mutate({ apiKey });
+        setTeams(result.teams ?? []);
       } else {
         toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
       }
@@ -74,6 +69,7 @@ function LinearConfigFields({
       },
     });
     setApiKey('');
+    setViewerName(null);
     setTeams([]);
     setSelectedTeamId(null);
   };
@@ -108,9 +104,9 @@ function LinearConfigFields({
         <Button
           variant="outline"
           onClick={handleValidate}
-          disabled={validateKey.isPending || !apiKey}
+          disabled={validateAndList.isPending || !apiKey}
         >
-          {validateKey.isPending ? 'Validating...' : 'Validate'}
+          {validateAndList.isPending ? 'Validating...' : 'Validate'}
         </Button>
       </div>
 
@@ -118,22 +114,18 @@ function LinearConfigFields({
         <>
           <div className="space-y-1.5">
             <Label>Team</Label>
-            {fetchTeams.isPending ? (
-              <p className="text-sm text-muted-foreground py-2">Loading...</p>
-            ) : (
-              <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId}>
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Select a team" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teams.map((team) => (
-                    <SelectItem key={team.id} value={team.id}>
-                      {team.name} ({team.key})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Select a team" />
+              </SelectTrigger>
+              <SelectContent>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id}>
+                    {team.name} ({team.key})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Button onClick={handleSave} disabled={!selectedTeamId || isSaving} className="self-end">
             {isSaving ? 'Saving...' : 'Save'}
