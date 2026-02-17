@@ -1,11 +1,20 @@
 import type { useSortable } from '@dnd-kit/sortable';
-import { Archive, CheckCircle2, GitPullRequest, GripVertical, Play } from 'lucide-react';
+import {
+  Archive,
+  CheckCircle2,
+  FileCheck,
+  GitPullRequest,
+  GripVertical,
+  type LucideIcon,
+  MessageCircleQuestion,
+  Play,
+  ShieldAlert,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton } from '@/components/workspace';
-import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { trpc } from '@/frontend/lib/trpc';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import {
@@ -86,6 +95,7 @@ export function ActiveWorkspaceItem({
   const { gitStats: stats } = workspace;
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
   const sidebarStatus = getWorkspaceSidebarStatus(workspace);
+  const pendingIndicator = getPendingRequestIndicator(workspace.pendingRequestType ?? null);
   const { showAttentionGlow } = getSidebarAttentionState(
     workspace,
     Boolean(disableRatchetAnimation),
@@ -130,10 +140,25 @@ export function ActiveWorkspaceItem({
             <div className="w-5 shrink-0 flex flex-col items-center gap-1.5 self-start mt-1.5">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className={cn('h-2 w-2 rounded-full', getStatusDotClass(sidebarStatus))} />
+                  {pendingIndicator ? (
+                    <span
+                      className={cn(
+                        'flex h-3.5 w-3.5 items-center justify-center',
+                        pendingIndicator.className
+                      )}
+                    >
+                      <pendingIndicator.icon className="h-3.5 w-3.5" />
+                    </span>
+                  ) : (
+                    <span
+                      className={cn('h-2 w-2 rounded-full', getStatusDotClass(sidebarStatus))}
+                    />
+                  )}
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  {getWorkspaceActivityTooltip(sidebarStatus.activityState)}
+                  {pendingIndicator
+                    ? pendingIndicator.tooltip
+                    : getWorkspaceActivityTooltip(sidebarStatus.activityState)}
                 </TooltipContent>
               </Tooltip>
               <RatchetToggleButton
@@ -195,13 +220,6 @@ export function ActiveWorkspaceItem({
                   <TooltipContent side="right">Archive</TooltipContent>
                 </Tooltip>
               </div>
-
-              {/* Pending request indicator */}
-              {workspace.pendingRequestType && (
-                <div className="mt-0.5">
-                  <PendingRequestBadge type={workspace.pendingRequestType} size="xs" />
-                </div>
-              )}
 
               {/* Row 2: branch name */}
               {workspace.branchName && (
@@ -356,4 +374,36 @@ function getStatusDotClass(status: WorkspaceSidebarStatus): string {
     return 'bg-green-500 animate-pulse';
   }
   return 'bg-gray-400';
+}
+
+function getPendingRequestIndicator(pendingRequestType: WorkspaceListItem['pendingRequestType']): {
+  icon: LucideIcon;
+  className: string;
+  tooltip: string;
+} | null {
+  if (!pendingRequestType) {
+    return null;
+  }
+
+  if (pendingRequestType === 'permission_request') {
+    return {
+      icon: ShieldAlert,
+      className: 'text-orange-600 dark:text-orange-400',
+      tooltip: 'Permission needed',
+    };
+  }
+
+  if (pendingRequestType === 'plan_approval') {
+    return {
+      icon: FileCheck,
+      className: 'text-amber-600 dark:text-amber-400',
+      tooltip: 'Plan approval needed',
+    };
+  }
+
+  return {
+    icon: MessageCircleQuestion,
+    className: 'text-blue-600 dark:text-blue-400',
+    tooltip: 'Question waiting',
+  };
 }

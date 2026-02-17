@@ -98,6 +98,15 @@ const mockData = {
   },
 };
 
+function withPendingRequests(
+  pendingByWorkspaceId: Partial<Record<string, ServerWorkspace['pendingRequestType']>>
+): ServerWorkspace[] {
+  return mockWorkspaces.map((workspace) => ({
+    ...workspace,
+    pendingRequestType: pendingByWorkspaceId[workspace.id] ?? null,
+  }));
+}
+
 function SidebarStoryFrame({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
@@ -141,6 +150,51 @@ export const Empty: Story = {
       projectState: {
         workspaces: [],
         reviewCount: 0,
+      },
+    },
+  },
+};
+
+export const PermissionRequestNotification: Story = {
+  args: {
+    mockData: {
+      ...mockData,
+      projectState: {
+        ...mockData.projectState,
+        workspaces: withPendingRequests({
+          'ws-1': 'permission_request',
+        }),
+      },
+    },
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Shows the sidebar permission notification badge on a workspace row.',
+      },
+    },
+  },
+};
+
+export const PendingRequestVariants: Story = {
+  args: {
+    mockData: {
+      ...mockData,
+      projectState: {
+        ...mockData.projectState,
+        workspaces: withPendingRequests({
+          'ws-1': 'permission_request',
+          'ws-2': 'plan_approval',
+          'ws-3': 'user_question',
+        }),
+      },
+    },
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Shows all pending request badge variants used in the sidebar: permission request, plan approval, and user question.',
       },
     },
   },
