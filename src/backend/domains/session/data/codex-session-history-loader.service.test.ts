@@ -150,11 +150,6 @@ describe('codexSessionHistoryLoaderService', () => {
         timestamp: '2026-02-14T00:00:02.000Z',
       },
       {
-        type: 'thinking',
-        content: 'reasoning text',
-        timestamp: '2026-02-14T00:00:03.000Z',
-      },
-      {
         type: 'tool_use',
         content: '',
         timestamp: '2026-02-14T00:00:04.000Z',
@@ -221,7 +216,7 @@ describe('codexSessionHistoryLoaderService', () => {
     ]);
   });
 
-  it('ignores response_item reasoning because event_msg reasoning is the source of thought history', async () => {
+  it('ignores Codex reasoning entries during history hydration', async () => {
     const providerSessionId = 'session-reasoning-1';
     const cwd = '/Users/test/project';
     writeSessionFile({
@@ -234,6 +229,14 @@ describe('codexSessionHistoryLoaderService', () => {
           payload: {
             id: providerSessionId,
             cwd,
+          },
+        },
+        {
+          timestamp: '2026-02-15T00:00:03.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'agent_reasoning',
+            text: 'internal reasoning',
           },
         },
         {
