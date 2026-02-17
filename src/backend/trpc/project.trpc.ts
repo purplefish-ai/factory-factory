@@ -7,7 +7,10 @@ import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
-import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
+import {
+  IssueTrackerConfigSchema,
+  sanitizeIssueTrackerConfig,
+} from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
@@ -107,8 +110,12 @@ export const projectRouter = router({
         })
         .optional()
     )
-    .query(({ input }) => {
-      return projectManagementService.list(input);
+    .query(async ({ input }) => {
+      const projects = await projectManagementService.list(input);
+      return projects.map((project) => ({
+        ...project,
+        issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+      }));
     }),
 
   // Get project by ID

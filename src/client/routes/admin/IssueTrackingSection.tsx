@@ -15,10 +15,10 @@ import {
 } from '@/components/ui/select';
 import { trpc } from '@/frontend/lib/trpc';
 import { IssueProvider } from '@/shared/core/enums';
-import {
-  type IssueTrackerConfig,
-  IssueTrackerConfigSchema,
-  type LinearConfig,
+import type {
+  IssueTrackerConfig,
+  PublicIssueTrackerConfig,
+  PublicLinearConfig,
 } from '@/shared/schemas/issue-tracker-config.schema';
 
 function LinearConfigFields({
@@ -28,7 +28,7 @@ function LinearConfigFields({
   isSaving,
 }: {
   projectId: string;
-  linearConfig: LinearConfig | null;
+  linearConfig: PublicLinearConfig | null;
   onSave: (config: IssueTrackerConfig) => void;
   isSaving: boolean;
 }) {
@@ -47,12 +47,16 @@ function LinearConfigFields({
   });
 
   const handleValidate = async () => {
-    const result = await validateKey.mutateAsync({ apiKey });
-    if (result.valid) {
-      setViewerName(result.viewerName ?? null);
-      fetchTeams.mutate({ apiKey });
-    } else {
-      toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
+    try {
+      const result = await validateKey.mutateAsync({ apiKey });
+      if (result.valid) {
+        setViewerName(result.viewerName ?? null);
+        fetchTeams.mutate({ apiKey });
+      } else {
+        toast.error(`Validation failed: ${result.error ?? 'Unknown error'}`);
+      }
+    } catch {
+      // Transport errors already surfaced by onError callback
     }
   };
 
@@ -76,7 +80,7 @@ function LinearConfigFields({
 
   const isValidated = viewerName !== null;
   const hasTeamChoices = teams.length > 0;
-  const hasStoredKey = linearConfig?.apiKey != null;
+  const hasStoredKey = linearConfig?.hasApiKey ?? false;
   const storedTeamName = linearConfig?.teamName ?? null;
 
   return (
@@ -145,12 +149,12 @@ function LinearConfigFields({
         <p className="text-xs text-muted-foreground mt-2 basis-full">
           Create a personal API key at{' '}
           <a
-            href="https://linear.app/purplefish/settings/account/security"
+            href="https://linear.app/settings/api"
             target="_blank"
             rel="noopener noreferrer"
             className="underline"
           >
-            linear.app/settings/account/security
+            linear.app/settings/api
           </a>
         </p>
       )}
@@ -167,7 +171,7 @@ function ProjectIssueTrackingCard({
   projectId: string;
   projectName: string;
   currentProvider: string;
-  issueTrackerConfig: IssueTrackerConfig | null;
+  issueTrackerConfig: PublicIssueTrackerConfig | null;
 }) {
   const utils = trpc.useUtils();
   const [provider, setProvider] = useState(currentProvider);
@@ -194,16 +198,19 @@ function ProjectIssueTrackingCard({
   };
 
   const isLinear = provider === IssueProvider.LINEAR;
+  const isConfigured = !isLinear || issueTrackerConfig?.linear != null;
 
   return (
     <div className="rounded-lg border bg-card">
       <div className="border-b bg-muted/50 px-4 py-3">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{projectName}</h3>
-          <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-            <CheckCircle2 className="w-3 h-3 mr-1" />
-            {isLinear ? 'Linear' : 'GitHub'}
-          </Badge>
+          {isConfigured && (
+            <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              {isLinear ? 'Linear' : 'GitHub'}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -247,7 +254,7 @@ export function IssueTrackingSection({
     id: string;
     name: string;
     issueProvider: string;
-    issueTrackerConfig: unknown;
+    issueTrackerConfig: PublicIssueTrackerConfig | null;
   }>;
 }) {
   return (
@@ -265,18 +272,15 @@ export function IssueTrackingSection({
         {projects.length === 0 ? (
           <p className="text-sm text-muted-foreground">No projects found.</p>
         ) : (
-          projects.map((project) => {
-            const parsed = IssueTrackerConfigSchema.safeParse(project.issueTrackerConfig);
-            return (
-              <ProjectIssueTrackingCard
-                key={project.id}
-                projectId={project.id}
-                projectName={project.name}
-                currentProvider={project.issueProvider}
-                issueTrackerConfig={parsed.success ? parsed.data : null}
-              />
-            );
-          })
+          projects.map((project) => (
+            <ProjectIssueTrackingCard
+              key={project.id}
+              projectId={project.id}
+              projectName={project.name}
+              currentProvider={project.issueProvider}
+              issueTrackerConfig={project.issueTrackerConfig}
+            />
+          ))
         )}
       </CardContent>
     </Card>
