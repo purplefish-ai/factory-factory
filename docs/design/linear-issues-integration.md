@@ -5,13 +5,14 @@
 Currently, Factory Factory pulls GitHub Issues (assigned to the user) into the Kanban board's intake column. This is hardcoded as the only issue provider. The goal is to make the issue source configurable per-project, supporting both GitHub Issues (default) and Linear Issues as providers.
 
 When Linear is selected, the app should:
-- Fetch the user's Linear issues (Todo state, current cycle, assigned to me) and display them in the Kanban intake column
+- Fetch the user's Linear issues and display them in the Kanban intake column
 - Allow starting workspaces from Linear issues (same as GitHub flow)
 - Auto-update Linear issue status as the workspace lifecycle progresses (started -> in progress, PR merged -> done)
 - Show clear error states if the Linear connection fails, with a link to admin settings
 
 **Key decisions made:**
-- Global Linear API key (user-level), per-project team selection via auto-populated dropdown
+- Per-project Linear API key and team selection (both stored on the `Project` model)
+- After entering an API key, teams are auto-populated in a dropdown for selection
 - Use `@linear/sdk` npm package (official typed SDK)
 - No Linear MCP required — direct SDK integration
 
@@ -39,14 +40,10 @@ enum WorkspaceCreationSource {
 }
 ```
 
-**Add to `UserSettings` model:**
-```prisma
-linearApiKey    String?   // Linear API token (stored locally in SQLite)
-```
-
 **Add to `Project` model:**
 ```prisma
 issueProvider     IssueProvider  @default(GITHUB)
+linearApiKey    String?   // Linear API token (stored locally in SQLite)
 linearTeamId      String?        // Selected Linear team UUID
 linearTeamName    String?        // Cached display name
 ```
@@ -71,13 +68,15 @@ src/backend/domains/linear/
 ```
 
 **`linear-client.service.ts`** key methods:
-- `setApiKey(key)` / `isConfigured()` — manage SDK client lifecycle
-- `validateApiKey()` — test API call, return viewer info
-- `listTeams()` — fetch accessible teams
-- `listMyIssues(teamId)` — assigned to me, active cycle, `unstarted` state type
-- `getIssue(issueId)` — single issue fetch
-- `transitionIssueState(issueId, targetStateType)` — move issue to `started`/`completed`
-- `findWorkflowState(teamId, stateType)` — resolve team-specific state IDs
+- `createClient(apiKey)` — create a Linear SDK client for a given API key
+- `validateApiKey(apiKey)` — test API call, return viewer info
+- `listTeams(apiKey)` — fetch accessible teams
+- `listMyIssues(apiKey, teamId)` — fetch issues assigned to the authenticated user
+- `getIssue(apiKey, issueId)` — single issue fetch
+- `transitionIssueState(apiKey, issueId, targetStateType)` — move issue to `started`/`completed`
+- `findWorkflowState(apiKey, teamId, stateType)` — resolve team-specific state IDs
+
+Note: All methods accept `apiKey` because the key is per-project (fetched from the `Project` model at call time).
 
 **Important:** Use Linear's `stateType` (`unstarted`, `started`, `completed`) for filtering and transitions, NOT state names (which are customizable per team).
 
@@ -97,45 +96,32 @@ src/backend/domains/linear/
 ### New tRPC Router: `src/backend/trpc/linear.trpc.ts`
 
 ```
-validateApiKey  — validate a key, return viewer name
-listTeams       — list teams for configured key
-checkHealth     — connection status check
+validateApiKey  — validate a provided API key, return viewer name
+listTeams       — list teams for a provided API key
+checkHealth     — connection status check for a project's stored key
 ```
 
 Register in `src/backend/trpc/index.ts`.
 
 ### Existing Router Updates
 
-**`src/backend/trpc/user-settings.trpc.ts`:**
-- Add `linearApiKey` to the update mutation input schema
-
 **`src/backend/trpc/project.trpc.ts`:**
-- Add `issueProvider`, `linearTeamId`, `linearTeamName` to the update mutation
-
-**`src/backend/resource_accessors/user-settings.accessor.ts`:**
-- Add `linearApiKey` to update input types
+- Add `issueProvider`, `linearApiKey`, `linearTeamId`, `linearTeamName` to the update mutation
 
 ### Admin Page UI (`src/client/routes/admin-page.tsx`)
 
-**New section: "Linear Integration"** (add between existing sections):
-- Password input for API key with "Validate" button
-- On validation success: show viewer name + green checkmark
-- On failure: show error message
-- Save via `userSettings.update({ linearApiKey })`
-
 **Extend `ProjectFactoryConfigCard`** (lines 41-143):
 - Add "Issue Provider" dropdown: GitHub Issues (default) / Linear Issues
-- When "Linear Issues" selected + valid API key: show team dropdown (populated from `linear.listTeams`)
-- When "Linear Issues" selected + no valid key: show warning linking to Linear Integration section
-- Save via `project.update({ issueProvider, linearTeamId, linearTeamName })`
+- When "Linear Issues" selected: show API key input with "Validate" button
+- On validation success: show viewer name + green checkmark, then show team dropdown (populated from `linear.listTeams`)
+- On validation failure: show error message
+- When team is selected: save via `project.update({ issueProvider, linearApiKey, linearTeamId, linearTeamName })`
 
 ### Files to create/modify:
 - `src/backend/trpc/linear.trpc.ts` — new router
 - `src/backend/trpc/index.ts` — register linear router
-- `src/backend/trpc/user-settings.trpc.ts` — add linearApiKey
-- `src/backend/trpc/project.trpc.ts` — add issueProvider, linearTeamId, linearTeamName
-- `src/backend/resource_accessors/user-settings.accessor.ts` — add linearApiKey
-- `src/client/routes/admin-page.tsx` — new Linear section + extend project config card
+- `src/backend/trpc/project.trpc.ts` — add issueProvider, linearApiKey, linearTeamId, linearTeamName
+- `src/client/routes/admin-page.tsx` — extend project config card with Linear settings
 
 ---
 
@@ -145,8 +131,8 @@ Register in `src/backend/trpc/index.ts`.
 
 **Add to `src/backend/trpc/linear.trpc.ts`:**
 ```
-listIssuesForProject  — fetch issues for a project's configured team
-getIssue              — single issue detail fetch
+listIssuesForProject  — look up project's API key + team, fetch issues
+getIssue              — look up project's API key, fetch single issue detail
 ```
 
 ### Kanban Context Changes (`src/frontend/components/kanban/kanban-context.tsx`)
@@ -210,7 +196,7 @@ Refactor to accept `KanbanIssue`:
 In `IssuesColumn`: if `issueProvider === 'LINEAR'` and connection check fails, show:
 ```
 Linear connection failed.
-Check Admin Settings →
+Check project settings in Admin →
 ```
 
 ### Plumbing: Pass `issueProvider` through
@@ -307,8 +293,9 @@ Add `buildInitialPromptFromLinearIssue` — fetch issue body from Linear API and
 
 ```ts
 class LinearStateSyncService {
-  markIssueStarted(issueId: string): Promise<void>
-  markIssueCompleted(issueId: string): Promise<void>
+  /** Looks up the workspace's project to get the Linear API key, then transitions the issue. */
+  markIssueStarted(workspaceId: string): Promise<void>
+  markIssueCompleted(workspaceId: string): Promise<void>
 }
 ```
 
@@ -350,9 +337,9 @@ class LinearStateSyncService {
 2. **Type check**: `pnpm typecheck`
 3. **Lint**: `pnpm check:fix`
 4. **Manual E2E test**:
-   - Set Linear API key in admin panel → validate → see viewer name
-   - Configure a project to use Linear Issues → select team from dropdown
-   - Navigate to Kanban board → see "Linear Issues" column with your Todo issues
+   - In admin panel, set a project's issue provider to "Linear Issues" → enter API key → validate → see viewer name
+   - Select team from dropdown → save
+   - Navigate to Kanban board → see "Linear Issues" column with your issues
    - Click "Start" on a Linear issue → workspace created → issue moves to "In Progress" in Linear
    - Complete the workspace (merge PR) → issue moves to "Done" in Linear
    - Test error states: invalid API key, no team selected, network failure
