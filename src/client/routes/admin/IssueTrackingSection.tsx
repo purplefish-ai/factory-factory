@@ -125,47 +125,40 @@ function ProjectIssueTrackingCard({
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
-        <div className="space-y-2">
-          <Label>Issue Provider</Label>
-          <Select
-            value={provider}
-            onValueChange={handleProviderChange}
-            disabled={updateProject.isPending}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="GITHUB">GitHub Issues</SelectItem>
-              <SelectItem value="LINEAR">Linear Issues</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Configured view */}
-        {isConfigured && linearTeamName && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Team: {linearTeamName}</p>
-            <Button variant="outline" size="sm" onClick={handleReconfigure}>
-              Reconfigure
-            </Button>
+      <div className="p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          {/* Issue Provider dropdown */}
+          <div className="space-y-1.5">
+            <Label>Issue Provider</Label>
+            <Select
+              value={provider}
+              onValueChange={handleProviderChange}
+              disabled={updateProject.isPending}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="GITHUB">GitHub Issues</SelectItem>
+                <SelectItem value="LINEAR">Linear Issues</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
 
-        {/* API key input */}
-        {isLinear && configMode === 'edit_key' && (
-          <div className="space-y-2">
-            <Label htmlFor={`api-key-${projectId}`}>Linear API Key</Label>
-            <div className="flex gap-2">
-              <Input
-                id={`api-key-${projectId}`}
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="lin_api_..."
-                className="font-mono text-sm flex-1"
-              />
+          {/* API key input — same row as provider */}
+          {isLinear && configMode === 'edit_key' && (
+            <div className="flex items-end gap-2 flex-1 min-w-[250px]">
+              <div className="space-y-1.5 flex-1">
+                <Label htmlFor={`api-key-${projectId}`}>API Key</Label>
+                <Input
+                  id={`api-key-${projectId}`}
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="lin_api_..."
+                  className="font-mono text-sm"
+                />
+              </div>
               <Button
                 variant="outline"
                 onClick={handleValidate}
@@ -174,54 +167,70 @@ function ProjectIssueTrackingCard({
                 {validateKey.isPending ? 'Validating...' : 'Validate'}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Create a personal API key at{' '}
-              <a
-                href="https://linear.app/settings/api"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                linear.app/settings/api
-              </a>
-            </p>
-          </div>
-        )}
+          )}
 
-        {/* Team selection */}
-        {isLinear && configMode === 'edit_team' && (
-          <div className="space-y-4">
-            {viewerName && (
-              <div className="flex items-center gap-2 text-sm text-green-600">
-                <CheckCircle2 className="w-4 h-4" />
-                Connected as &ldquo;{viewerName}&rdquo;
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Team</Label>
-              {fetchTeams.isPending ? (
-                <p className="text-sm text-muted-foreground">Loading teams...</p>
-              ) : (
-                <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId}>
-                  <SelectTrigger className="w-[300px]">
-                    <SelectValue placeholder="Select a team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name} ({team.key})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          {/* Connected label + team dropdown — same row as provider */}
+          {isLinear && configMode === 'edit_team' && (
+            <>
+              {viewerName && (
+                <div className="flex items-center gap-1.5 text-sm text-green-600 self-end pb-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  {viewerName}
+                </div>
               )}
-            </div>
+              <div className="space-y-1.5">
+                <Label>Team</Label>
+                {fetchTeams.isPending ? (
+                  <p className="text-sm text-muted-foreground py-2">Loading...</p>
+                ) : (
+                  <Select value={selectedTeamId ?? ''} onValueChange={setSelectedTeamId}>
+                    <SelectTrigger className="w-[220px]">
+                      <SelectValue placeholder="Select a team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name} ({team.key})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <Button
+                onClick={handleSave}
+                disabled={!selectedTeamId || updateProject.isPending}
+                className="self-end"
+              >
+                {updateProject.isPending ? 'Saving...' : 'Save'}
+              </Button>
+            </>
+          )}
 
-            <Button onClick={handleSave} disabled={!selectedTeamId || updateProject.isPending}>
-              {updateProject.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
+          {/* Configured view — same row as provider */}
+          {isConfigured && linearTeamName && (
+            <>
+              <p className="text-sm text-muted-foreground self-end pb-2">Team: {linearTeamName}</p>
+              <Button variant="outline" size="sm" onClick={handleReconfigure} className="self-end">
+                Reconfigure
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Help text for API key */}
+        {isLinear && configMode === 'edit_key' && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Create a personal API key at{' '}
+            <a
+              href="https://linear.app/settings/api"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              linear.app/settings/api
+            </a>
+          </p>
         )}
       </div>
     </div>
