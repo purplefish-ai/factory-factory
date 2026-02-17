@@ -56,7 +56,13 @@ New infrastructure service for encrypting/decrypting secrets at rest:
 - Key file is created on first use (auto-generated, never committed)
 - Encrypted values stored as `iv:authTag:ciphertext` (all base64-encoded)
 - Exposes `encrypt(plaintext): string` and `decrypt(encrypted): string`
-- The linear domain calls `decrypt()` when reading the API key from the project, and `encrypt()` when saving it via the tRPC mutation
+
+**Ownership: the tRPC layer owns all encrypt/decrypt calls.** The linear domain service is encryption-unaware — it receives plain-text API keys as parameters.
+- **On save** (`project.trpc.ts` update mutation): call `cryptoService.encrypt(apiKey)` before passing to the project accessor for persistence
+- **On read** (`linear.trpc.ts` endpoints like `listIssuesForProject`, `listTeams`, etc.): look up the project, call `cryptoService.decrypt(project.linearApiKey)`, then pass the plain key to `linearClientService` methods
+- **On PR-merge sync** (orchestration layer listener): same pattern — look up project, decrypt, pass to `linearStateSyncService`
+
+This keeps the linear domain purely focused on Linear API interactions with no infrastructure coupling beyond what it receives as arguments.
 
 **Add to `Workspace` model:**
 ```prisma
@@ -158,7 +164,7 @@ interface KanbanIssue {
   url: string;
   state: string;           // GitHub: 'OPEN'/'CLOSED', Linear: state name e.g. 'Todo'
   createdAt: string;
-  author: string;
+  author: string;          // Normalized to plain string (see mapping below)
   provider: 'github' | 'linear';
   // Provider-specific fields for workspace creation
   githubIssueNumber?: number;
@@ -166,6 +172,14 @@ interface KanbanIssue {
   linearIssueIdentifier?: string;
 }
 ```
+
+**Normalization mapping** (applied when converting provider responses to `KanbanIssue`):
+- GitHub: `author` ← `issue.author.login` (existing type is `{ login: string }`, extract the string)
+- Linear: `author` ← `issue.assignee.displayName` (or `issue.creator.displayName` as fallback)
+- GitHub: `state` ← `issue.state` (already a string: `'OPEN'` / `'CLOSED'`)
+- Linear: `state` ← `issue.state.name` (e.g. `'Todo'`, `'In Progress'`)
+
+Note: `issue-card.tsx` currently references `issue.author.login` — this must be updated to `issue.author` (plain string) during the refactor.
 
 **`KanbanProvider` changes:**
 - Accept `issueProvider` prop (from project data — need to pass through from `WorkspacesBoardView`)
@@ -211,11 +225,14 @@ Linear connection failed.
 Check project settings in Admin →
 ```
 
-### Plumbing: Pass `issueProvider` through
+### Plumbing: Pass `issueProvider` as a prop
 
-`WorkspacesBoardView` already receives `projectId`. The `KanbanProvider` can either:
-- Accept `issueProvider` as a prop (preferred — parent already fetches project data), OR
-- Fetch project data internally via a new query
+The parent page that renders `WorkspacesBoardView` already fetches the project to obtain `projectId` and `slug`. Add `issueProvider` to that same project query result and pass it down:
+
+1. **Parent page** → passes `issueProvider` as a new prop to `WorkspacesBoardView`
+2. **`WorkspacesBoardView`** → passes `issueProvider` as a new prop to `KanbanProvider`
+3. **`KanbanProvider`** → uses `issueProvider` to decide which tRPC query to call and passes it through context
+4. **`KanbanBoard`** → reads `issueProvider` from context to generate the correct column config
 
 ### Files to modify:
 - `src/frontend/components/kanban/kanban-context.tsx` — conditional fetching, normalized type
@@ -350,7 +367,7 @@ Note: `prSnapshotService` lives in the `github` domain and is already consumed b
 ## Deliverable 6: Polish + Workspace Detail UI
 
 - **Workspace detail header**: Show Linear issue link (identifier + URL) when `linearIssueIdentifier` is set (similar to existing GitHub issue link display)
-- **Export data schema** (`src/shared/schemas/export-data.schema.ts`): Bump to schema version 4. Add new fields to `exportedProjectSchema` (`issueProvider`, `linearTeamId`, `linearTeamName`) and `exportedWorkspaceSchema` (`linearIssueId`, `linearIssueIdentifier`, `linearIssueUrl`). **Exclude `linearApiKey` from exports** — API keys must never appear in database backups. On import, strip `linearApiKey` if present (defensive).
+- **Export data schema** (`src/shared/schemas/export-data.schema.ts`): Bump to schema version 4. Add a `IssueProvider` Zod enum wrapper (following the established pattern for `WorkspaceStatus`, `PRState`, etc.). Add new fields to `exportedProjectSchema` (`issueProvider`, `linearTeamId`, `linearTeamName`) and `exportedWorkspaceSchema` (`linearIssueId`, `linearIssueIdentifier`, `linearIssueUrl`). **Exclude `linearApiKey` from exports** — API keys must never appear in database backups. On import, strip `linearApiKey` if present (defensive).
 - Edge case handling: expired API key UI states, team deleted, connection errors
 - Run full verification suite
 
