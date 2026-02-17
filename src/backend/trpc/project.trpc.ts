@@ -124,7 +124,10 @@ export const projectRouter = router({
     if (!project) {
       throw new Error(`Project not found: ${input.id}`);
     }
-    return project;
+    return {
+      ...project,
+      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+    };
   }),
 
   // Get project by slug
@@ -133,7 +136,10 @@ export const projectRouter = router({
     if (!project) {
       throw new Error(`Project not found: ${input.slug}`);
     }
-    return project;
+    return {
+      ...project,
+      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+    };
   }),
 
   // List local + remote branches for a project
