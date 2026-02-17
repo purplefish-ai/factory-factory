@@ -123,6 +123,43 @@ class ChatEventForwarderService {
   }
 
   /**
+   * Broadcast an input-required notification to all open WebSocket connections.
+   * Called when an agent requests permission or asks a user question.
+   */
+  broadcastInputRequiredNotification(data: {
+    workspaceId: string;
+    workspaceName: string;
+    sessionId: string;
+    requestType: 'permission_request' | 'user_question';
+  }): void {
+    const { workspaceId, workspaceName, sessionId, requestType } = data;
+
+    logger.debug('Broadcasting input required notification', {
+      workspaceId,
+      sessionId,
+      requestType,
+    });
+
+    const message = JSON.stringify({
+      type: 'workspace_input_required_notification',
+      workspaceId,
+      workspaceName,
+      sessionId,
+      requestType,
+    });
+
+    for (const info of chatConnectionService.values()) {
+      if (info.ws.readyState === WS_READY_STATE.OPEN) {
+        try {
+          info.ws.send(message);
+        } catch (error) {
+          logger.error('Failed to send input required notification', error as Error);
+        }
+      }
+    }
+  }
+
+  /**
    * Get all pending interactive requests indexed by session ID.
    * Used by workspace query service to determine which workspaces have pending requests.
    */

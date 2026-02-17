@@ -202,6 +202,12 @@ interface WebSocketMessagePayloadByType {
     sessionCount?: number;
     finishedAt?: string;
   };
+  workspace_input_required_notification: {
+    workspaceId?: string;
+    workspaceName?: string;
+    sessionId?: string;
+    requestType?: 'permission_request' | 'user_question';
+  };
   slash_commands: {
     slashCommands?: CommandInfo[];
   };
@@ -281,6 +287,7 @@ const WEBSOCKET_MESSAGE_TYPE_MAP: Record<WebSocketMessage['type'], true> = {
   compacting_start: true,
   compacting_end: true,
   workspace_notification_request: true,
+  workspace_input_required_notification: true,
   slash_commands: true,
   user_message_uuid: true,
   chat_capabilities: true,

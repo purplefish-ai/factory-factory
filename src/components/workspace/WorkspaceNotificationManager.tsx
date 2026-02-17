@@ -8,6 +8,13 @@ interface NotificationRequest {
   finishedAt: string;
 }
 
+interface InputRequiredRequest {
+  workspaceId: string;
+  workspaceName: string;
+  sessionId: string;
+  requestType: 'permission_request' | 'user_question';
+}
+
 /**
  * Manages workspace completion notifications.
  * Plays a sound and shows a browser notification when a workspace completes.
@@ -24,6 +31,23 @@ export function WorkspaceNotificationManager() {
       // to avoid playing sound when user may have disabled it
       const playSoundOnComplete = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
       sendWorkspaceNotification(workspaceName, sessionCount, playSoundOnComplete);
+
+      // Dispatch attention event for red glow animation
+      window.dispatchEvent(
+        new CustomEvent('workspace-attention-required', {
+          detail: { workspaceId },
+        })
+      );
+    },
+    [settings?.playSoundOnComplete, isSuccess]
+  );
+
+  const handleInputRequired = useCallback(
+    (request: InputRequiredRequest) => {
+      const { workspaceId, workspaceName, requestType } = request;
+
+      const playSoundEnabled = isSuccess ? (settings?.playSoundOnComplete ?? true) : false;
+      sendInputRequiredNotification(workspaceName, requestType, playSoundEnabled);
 
       // Dispatch attention event for red glow animation
       window.dispatchEvent(
@@ -54,6 +78,21 @@ export function WorkspaceNotificationManager() {
       );
     };
   }, [handleWorkspaceNotification]);
+
+  useEffect(() => {
+    const handleInputRequiredEvent = (event: CustomEvent<InputRequiredRequest>) => {
+      handleInputRequired(event.detail);
+    };
+
+    window.addEventListener('workspace-input-required', handleInputRequiredEvent as EventListener);
+
+    return () => {
+      window.removeEventListener(
+        'workspace-input-required',
+        handleInputRequiredEvent as EventListener
+      );
+    };
+  }, [handleInputRequired]);
 
   return null; // No UI, just notification logic
 }
@@ -99,6 +138,34 @@ function sendWorkspaceNotification(
     });
   } else if (Notification.permission === 'granted') {
     showNotification(workspaceName, sessionCount);
+  }
+}
+
+function sendInputRequiredNotification(
+  workspaceName: string,
+  requestType: 'permission_request' | 'user_question',
+  playSoundEnabled: boolean
+): void {
+  if (playSoundEnabled) {
+    playNotificationSound();
+  }
+
+  if (!('Notification' in window)) {
+    return;
+  }
+
+  const message =
+    requestType === 'user_question'
+      ? 'Agent has a question and needs your input'
+      : 'Agent needs permission to proceed';
+
+  if (Notification.permission === 'granted') {
+    new Notification(`Input Required: ${workspaceName}`, {
+      body: message,
+      icon: '/favicon.ico',
+      tag: `workspace-input-${workspaceName}`,
+      requireInteraction: false,
+    });
   }
 }
 

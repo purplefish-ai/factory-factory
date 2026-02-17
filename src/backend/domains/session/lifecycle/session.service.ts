@@ -7,6 +7,7 @@ import {
   acpRuntimeManager,
 } from '@/backend/domains/session/acp';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
+import { chatEventForwarderService } from '@/backend/domains/session/chat/chat-event-forwarder.service';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
@@ -74,6 +75,8 @@ class SessionService {
   private workspaceBridge: SessionWorkspaceBridge | null = null;
   /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
   private readonly sessionToWorkspace = new Map<string, string>();
+  /** Maps sessionId → workspaceName for input-required notifications */
+  private readonly sessionToWorkspaceName = new Map<string, string>();
   /** Maps sessionId → workingDir for interceptor context */
   private readonly sessionToWorkingDir = new Map<string, string>();
   /** Optional callback invoked after an ACP prompt turn settles. */
@@ -171,6 +174,7 @@ class SessionService {
         this.pendingAcpToolCalls.delete(sid);
         this.suppressAcpReplayForSession.delete(sid);
         this.sessionToWorkspace.delete(sid);
+        this.sessionToWorkspaceName.delete(sid);
         this.sessionToWorkingDir.delete(sid);
         const b = this.acpPermissionBridges.get(sid);
         if (b) {
@@ -673,6 +677,21 @@ class SessionService {
       acpOptions,
       timestamp: new Date().toISOString(),
     });
+
+    // Broadcast notification to all connections so user hears sound even from another workspace
+    const workspaceId = this.sessionToWorkspace.get(sid);
+    const workspaceName = this.sessionToWorkspaceName.get(sid);
+    if (workspaceId && workspaceName) {
+      const requestType = isUserQuestionRequest({ toolName, input: toolInput })
+        ? 'user_question'
+        : 'permission_request';
+      chatEventForwarderService.broadcastInputRequiredNotification({
+        workspaceId,
+        workspaceName,
+        sessionId: sid,
+        requestType: requestType as 'permission_request' | 'user_question',
+      });
+    }
   }
 
   private extractAskUserQuestions(input: Record<string, unknown>): AskUserQuestion[] {
@@ -706,6 +725,7 @@ class SessionService {
 
     await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
     this.sessionToWorkspace.set(sessionId, sessionContext.workspaceId);
+    this.sessionToWorkspaceName.set(sessionId, sessionContext.workspaceName);
     this.sessionToWorkingDir.set(sessionId, sessionContext.workingDir);
 
     const handlers = this.setupAcpEventHandler(sessionId);
@@ -735,6 +755,7 @@ class SessionService {
     } catch (error) {
       this.suppressAcpReplayForSession.delete(sessionId);
       this.sessionToWorkspace.delete(sessionId);
+      this.sessionToWorkspaceName.delete(sessionId);
       this.sessionToWorkingDir.delete(sessionId);
       throw error;
     }
@@ -1022,6 +1043,7 @@ class SessionService {
       });
       this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
       this.sessionToWorkspace.delete(sessionId);
+      this.sessionToWorkspaceName.delete(sessionId);
       this.sessionToWorkingDir.delete(sessionId);
 
       if (!stopClientFailed) {
@@ -2023,6 +2045,7 @@ class SessionService {
     systemPrompt: string | undefined;
     model: string;
     workspaceId: string;
+    workspaceName: string;
   } | null> {
     const session = preloadedSession ?? (await this.repository.getSessionById(sessionId));
     if (!session) {
@@ -2087,6 +2110,7 @@ class SessionService {
       systemPrompt,
       model: session.model,
       workspaceId: workspace.id,
+      workspaceName: workspace.name,
     };
   }
 }

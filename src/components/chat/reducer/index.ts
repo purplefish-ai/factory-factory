@@ -460,6 +460,7 @@ const messageHandlers: MessageHandlerMap = {
   compacting_start: () => ({ type: 'SDK_COMPACTING_START' }),
   compacting_end: () => ({ type: 'SDK_COMPACTING_END' }),
   workspace_notification_request: null,
+  workspace_input_required_notification: null,
   slash_commands: handleSlashCommandsMessage,
   user_message_uuid: handleUserMessageUuidMessage,
   config_options_update: handleConfigOptionsUpdateMessage,

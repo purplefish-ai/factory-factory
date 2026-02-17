@@ -50,6 +50,42 @@ function handleClaudeMessageWithStreaming(
   }
 }
 
+/**
+ * Dispatch broadcast notification messages as DOM custom events.
+ * Returns true if the message was handled (caller should return early).
+ */
+function dispatchBroadcastNotification(wsMessage: WebSocketMessage): boolean {
+  if (wsMessage.type === 'workspace_notification_request') {
+    window.dispatchEvent(
+      new CustomEvent('workspace-notification-request', {
+        detail: {
+          workspaceId: wsMessage.workspaceId,
+          workspaceName: wsMessage.workspaceName,
+          sessionCount: wsMessage.sessionCount,
+          finishedAt: wsMessage.finishedAt,
+        },
+      })
+    );
+    return true;
+  }
+
+  if (wsMessage.type === 'workspace_input_required_notification') {
+    window.dispatchEvent(
+      new CustomEvent('workspace-input-required', {
+        detail: {
+          workspaceId: wsMessage.workspaceId,
+          workspaceName: wsMessage.workspaceName,
+          sessionId: wsMessage.sessionId,
+          requestType: wsMessage.requestType,
+        },
+      })
+    );
+    return true;
+  }
+
+  return false;
+}
+
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -76,19 +112,8 @@ export function useChatTransport(options: UseChatTransportOptions): UseChatTrans
         clearToolInputAccumulator(toolInputAccumulatorRef.current);
       }
 
-      // Handle workspace notification requests
-      if (wsMessage.type === 'workspace_notification_request') {
-        // Dispatch custom event for WorkspaceNotificationManager
-        window.dispatchEvent(
-          new CustomEvent('workspace-notification-request', {
-            detail: {
-              workspaceId: wsMessage.workspaceId,
-              workspaceName: wsMessage.workspaceName,
-              sessionCount: wsMessage.sessionCount,
-              finishedAt: wsMessage.finishedAt,
-            },
-          })
-        );
+      // Handle broadcast notification messages (workspace complete, input required)
+      if (dispatchBroadcastNotification(wsMessage)) {
         return;
       }
 
