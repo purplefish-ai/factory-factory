@@ -26,7 +26,12 @@ import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
 import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
 import { downloadFile } from '@/frontend/lib/download-file';
 import { trpc } from '@/frontend/lib/trpc';
-import { ApiUsageSection, ProcessesSection, ProcessesSectionSkeleton } from './admin/index';
+import {
+  ApiUsageSection,
+  IssueTrackingSection,
+  ProcessesSection,
+  ProcessesSectionSkeleton,
+} from './admin/index';
 
 function getEnabledFeatures(features?: Record<string, boolean>): string {
   if (!features) {
@@ -679,6 +684,9 @@ export default function AdminDashboardPage() {
 
         {/* Factory Configuration */}
         {projects && <FactoryConfigSection projects={projects} />}
+
+        {/* Issue Tracking */}
+        {projects && <IssueTrackingSection projects={projects} />}
 
         {/* User Settings */}
         <NotificationSettingsSection />

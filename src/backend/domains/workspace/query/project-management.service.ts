@@ -45,6 +45,10 @@ class ProjectManagementService {
       startupScriptCommand?: string | null;
       startupScriptPath?: string | null;
       startupScriptTimeout?: number;
+      issueProvider?: 'GITHUB' | 'LINEAR';
+      linearApiKey?: string | null;
+      linearTeamId?: string | null;
+      linearTeamName?: string | null;
     }
   ): Promise<Project> {
     return projectAccessor.update(id, data);

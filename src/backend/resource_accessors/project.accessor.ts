@@ -59,6 +59,11 @@ interface UpdateProjectInput {
   startupScriptCommand?: string | null;
   startupScriptPath?: string | null;
   startupScriptTimeout?: number;
+  // Issue provider configuration
+  issueProvider?: 'GITHUB' | 'LINEAR';
+  linearApiKey?: string | null;
+  linearTeamId?: string | null;
+  linearTeamName?: string | null;
 }
 
 interface ListProjectsFilters {

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { projectManagementService } from '@/backend/domains/workspace';
 import { gitCommandC } from '@/backend/lib/shell';
+import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import { publicProcedure, router } from './trpc';
@@ -57,6 +58,39 @@ function buildRemoteEntries(
   }
 
   return entries;
+}
+
+async function validateStartupScriptFields(
+  id: string,
+  updates: {
+    startupScriptCommand?: string | null;
+    startupScriptPath?: string | null;
+  }
+) {
+  if (updates.startupScriptCommand === undefined && updates.startupScriptPath === undefined) {
+    return;
+  }
+
+  const currentProject = await projectManagementService.findById(id);
+  if (!currentProject) {
+    throw new Error(`Project not found: ${id}`);
+  }
+
+  const finalCommand =
+    updates.startupScriptCommand !== undefined
+      ? updates.startupScriptCommand
+      : currentProject.startupScriptCommand;
+
+  const finalPath =
+    updates.startupScriptPath !== undefined
+      ? updates.startupScriptPath
+      : currentProject.startupScriptPath;
+
+  if (finalCommand && finalPath) {
+    throw new Error(
+      'Cannot have both startupScriptCommand and startupScriptPath set. Please clear one by setting it to null.'
+    );
+  }
 }
 
 export const projectRouter = router({
@@ -173,6 +207,11 @@ export const projectRouter = router({
         startupScriptCommand: z.string().nullable().optional(),
         startupScriptPath: z.string().nullable().optional(),
         startupScriptTimeout: z.number().min(1).max(3600).optional(),
+        // Issue provider configuration
+        issueProvider: z.enum(['GITHUB', 'LINEAR']).optional(),
+        linearApiKey: z.string().nullable().optional(),
+        linearTeamId: z.string().nullable().optional(),
+        linearTeamName: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -186,29 +225,18 @@ export const projectRouter = router({
         }
       }
 
-      // Validate only one of command or path is set (check final state, not just request)
-      if (updates.startupScriptCommand !== undefined || updates.startupScriptPath !== undefined) {
-        const currentProject = await projectManagementService.findById(id);
+      await validateStartupScriptFields(id, updates);
 
-        if (!currentProject) {
-          throw new Error(`Project not found: ${id}`);
-        }
+      // Encrypt Linear API key before persisting
+      if (updates.linearApiKey) {
+        updates.linearApiKey = cryptoService.encrypt(updates.linearApiKey);
+      }
 
-        const finalCommand =
-          updates.startupScriptCommand !== undefined
-            ? updates.startupScriptCommand
-            : currentProject.startupScriptCommand;
-
-        const finalPath =
-          updates.startupScriptPath !== undefined
-            ? updates.startupScriptPath
-            : currentProject.startupScriptPath;
-
-        if (finalCommand && finalPath) {
-          throw new Error(
-            'Cannot have both startupScriptCommand and startupScriptPath set. Please clear one by setting it to null.'
-          );
-        }
+      // When switching to GitHub, clear all Linear fields
+      if (updates.issueProvider === 'GITHUB') {
+        updates.linearApiKey = null;
+        updates.linearTeamId = null;
+        updates.linearTeamName = null;
       }
 
       return projectManagementService.update(id, updates);
