@@ -256,7 +256,7 @@ export function MainViewTabBar({
           >
             <SelectTrigger
               aria-label="New session provider"
-              className="h-[30px] w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
+              className="h-7 w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
             >
               <span>{providerTriggerLabel}</span>
             </SelectTrigger>
@@ -276,7 +276,7 @@ export function MainViewTabBar({
                 onClick={onCreateSession}
                 disabled={isButtonDisabled}
                 className={cn(
-                  'flex h-[30px] w-[30px] items-center justify-center rounded-none',
+                  'flex h-7 w-7 items-center justify-center rounded-none',
                   'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
                   'transition-colors disabled:pointer-events-none disabled:opacity-50'
                 )}
