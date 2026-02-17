@@ -3,8 +3,14 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { projectManagementService } from '@/backend/domains/workspace';
 import { gitCommandC } from '@/backend/lib/shell';
+import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
+import {
+  IssueTrackerConfigSchema,
+  sanitizeIssueTrackerConfig,
+} from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router } from './trpc';
 
 async function getBranchMap(repoPath: string, refPrefix: string): Promise<Map<string, string>> {
@@ -59,6 +65,39 @@ function buildRemoteEntries(
   return entries;
 }
 
+async function validateStartupScriptFields(
+  id: string,
+  updates: {
+    startupScriptCommand?: string | null;
+    startupScriptPath?: string | null;
+  }
+) {
+  if (updates.startupScriptCommand === undefined && updates.startupScriptPath === undefined) {
+    return;
+  }
+
+  const currentProject = await projectManagementService.findById(id);
+  if (!currentProject) {
+    throw new Error(`Project not found: ${id}`);
+  }
+
+  const finalCommand =
+    updates.startupScriptCommand !== undefined
+      ? updates.startupScriptCommand
+      : currentProject.startupScriptCommand;
+
+  const finalPath =
+    updates.startupScriptPath !== undefined
+      ? updates.startupScriptPath
+      : currentProject.startupScriptPath;
+
+  if (finalCommand && finalPath) {
+    throw new Error(
+      'Cannot have both startupScriptCommand and startupScriptPath set. Please clear one by setting it to null.'
+    );
+  }
+}
+
 export const projectRouter = router({
   // List all projects
   list: publicProcedure
@@ -71,8 +110,12 @@ export const projectRouter = router({
         })
         .optional()
     )
-    .query(({ input }) => {
-      return projectManagementService.list(input);
+    .query(async ({ input }) => {
+      const projects = await projectManagementService.list(input);
+      return projects.map((project) => ({
+        ...project,
+        issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+      }));
     }),
 
   // Get project by ID
@@ -81,7 +124,10 @@ export const projectRouter = router({
     if (!project) {
       throw new Error(`Project not found: ${input.id}`);
     }
-    return project;
+    return {
+      ...project,
+      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+    };
   }),
 
   // Get project by slug
@@ -90,7 +136,10 @@ export const projectRouter = router({
     if (!project) {
       throw new Error(`Project not found: ${input.slug}`);
     }
-    return project;
+    return {
+      ...project,
+      issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+    };
   }),
 
   // List local + remote branches for a project
@@ -173,6 +222,9 @@ export const projectRouter = router({
         startupScriptCommand: z.string().nullable().optional(),
         startupScriptPath: z.string().nullable().optional(),
         startupScriptTimeout: z.number().min(1).max(3600).optional(),
+        // Issue provider configuration
+        issueProvider: z.enum([IssueProvider.GITHUB, IssueProvider.LINEAR]).optional(),
+        issueTrackerConfig: IssueTrackerConfigSchema.nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -186,29 +238,17 @@ export const projectRouter = router({
         }
       }
 
-      // Validate only one of command or path is set (check final state, not just request)
-      if (updates.startupScriptCommand !== undefined || updates.startupScriptPath !== undefined) {
-        const currentProject = await projectManagementService.findById(id);
+      await validateStartupScriptFields(id, updates);
 
-        if (!currentProject) {
-          throw new Error(`Project not found: ${id}`);
-        }
-
-        const finalCommand =
-          updates.startupScriptCommand !== undefined
-            ? updates.startupScriptCommand
-            : currentProject.startupScriptCommand;
-
-        const finalPath =
-          updates.startupScriptPath !== undefined
-            ? updates.startupScriptPath
-            : currentProject.startupScriptPath;
-
-        if (finalCommand && finalPath) {
-          throw new Error(
-            'Cannot have both startupScriptCommand and startupScriptPath set. Please clear one by setting it to null.'
-          );
-        }
+      // Encrypt Linear API key before persisting
+      if (updates.issueTrackerConfig?.linear?.apiKey) {
+        updates.issueTrackerConfig = {
+          ...updates.issueTrackerConfig,
+          linear: {
+            ...updates.issueTrackerConfig.linear,
+            apiKey: cryptoService.encrypt(updates.issueTrackerConfig.linear.apiKey),
+          },
+        };
       }
 
       return projectManagementService.update(id, updates);

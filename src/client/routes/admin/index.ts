@@ -1,4 +1,5 @@
 export { type ApiUsageData, ApiUsageSection, type ApiUsageSectionProps } from './ApiUsageSection';
+export { IssueTrackingSection } from './IssueTrackingSection';
 export {
   type ProcessesData,
   ProcessesSection,

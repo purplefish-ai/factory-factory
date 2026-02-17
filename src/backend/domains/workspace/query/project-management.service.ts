@@ -3,6 +3,8 @@ import {
   type ProjectAccessorContext,
   projectAccessor,
 } from '@/backend/resource_accessors/project.accessor';
+import type { IssueProvider } from '@/shared/core/enums';
+import type { IssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
 
 class ProjectManagementService {
   list(filters?: { isArchived?: boolean; limit?: number; offset?: number }) {
@@ -45,6 +47,8 @@ class ProjectManagementService {
       startupScriptCommand?: string | null;
       startupScriptPath?: string | null;
       startupScriptTimeout?: number;
+      issueProvider?: IssueProvider;
+      issueTrackerConfig?: IssueTrackerConfig | null;
     }
   ): Promise<Project> {
     return projectAccessor.update(id, data);
