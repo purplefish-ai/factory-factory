@@ -103,7 +103,7 @@ function TopPanelArea({
   const showScreenshots = activeTopTab === 'screenshots';
 
   const screenshotsButtonClassName = cn(
-    'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
+    'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-none transition-colors',
     showScreenshots
       ? 'bg-background text-foreground shadow-sm border border-border'
       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
@@ -112,7 +112,7 @@ function TopPanelArea({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Tab bar */}
-      <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b">
+      <div className="flex items-center gap-0.5 border-b bg-muted/50">
         <TabButton
           label="Changes"
           icon={<FileQuestion className="h-3.5 w-3.5" />}
@@ -278,7 +278,7 @@ export function RightPanel({
       <ResizablePanel defaultSize="40%" minSize="15%">
         <div className="flex flex-col h-full min-h-0">
           {/* Unified tab bar with terminal tabs inline */}
-          <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
+          <div className="flex min-w-0 items-center gap-0.5 border-b bg-muted/50">
             <TabButton
               label="Setup Logs"
               icon={<Play className="h-3.5 w-3.5" />}
@@ -368,7 +368,7 @@ function NewTerminalButton({ onNewTab }: NewTerminalButtonProps) {
           <button
             type="button"
             onClick={onNewTab}
-            className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
           >
             <Plus className="h-3 w-3" />
           </button>

@@ -73,7 +73,7 @@ export function TabButton({
         type="button"
         onClick={onSelect}
         className={cn(
-          'flex items-center gap-1 px-2 py-1 text-sm font-medium rounded-md transition-colors border',
+          'flex h-7 items-center gap-1 rounded-none border px-2 text-sm font-medium transition-colors',
           isActive
             ? 'bg-background text-foreground shadow-sm border-border'
             : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-transparent',
@@ -96,8 +96,8 @@ export function TabButton({
       onKeyDown={handleKeyDown}
       aria-selected={isActive}
       className={cn(
-        'group relative flex items-center gap-1.5 px-2 py-1 text-sm font-medium cursor-pointer',
-        'rounded-md transition-all whitespace-nowrap',
+        'group relative flex h-7 cursor-pointer items-center gap-1.5 rounded-none px-2 text-sm font-medium',
+        'transition-all whitespace-nowrap',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         'border',
         isActive

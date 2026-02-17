@@ -38,14 +38,14 @@ export function TerminalTabBar({
   className,
 }: TerminalTabBarProps) {
   return (
-    <div className={cn('flex items-center gap-1 min-w-0 overflow-hidden', className)}>
+    <div className={cn('flex min-w-0 items-center gap-0.5 overflow-hidden', className)}>
       {/* Scrollable tabs container */}
-      <div className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap min-w-0">
+      <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto scrollbar-hide">
         {tabs.map((tab) => (
           <div
             key={tab.id}
             className={cn(
-              'flex items-center rounded-md transition-colors group flex-shrink-0',
+              'group flex h-7 flex-shrink-0 items-center rounded-none transition-colors',
               activeTabId === tab.id
                 ? 'bg-zinc-800 text-zinc-100'
                 : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
@@ -53,7 +53,7 @@ export function TerminalTabBar({
           >
             <button
               type="button"
-              className="flex items-center gap-1 px-2 py-1 text-xs cursor-pointer whitespace-nowrap"
+              className="flex h-full cursor-pointer items-center gap-1 whitespace-nowrap px-2 text-xs"
               onClick={() => onSelectTab(tab.id)}
             >
               <Terminal className="h-3 w-3 flex-shrink-0" />
@@ -63,7 +63,7 @@ export function TerminalTabBar({
               type="button"
               onClick={() => onCloseTab(tab.id)}
               className={cn(
-                'mr-1 p-0.5 rounded hover:bg-zinc-600/50 transition-colors',
+                'mr-1 rounded-none p-0.5 transition-colors hover:bg-zinc-600/50',
                 'opacity-0 group-hover:opacity-100',
                 activeTabId === tab.id && 'opacity-100'
               )}
@@ -82,7 +82,7 @@ export function TerminalTabBar({
           <button
             type="button"
             onClick={onNewTab}
-            className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
             title="New terminal"
           >
             <Plus className="h-3 w-3" />

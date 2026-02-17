@@ -220,7 +220,7 @@ export function MainViewTabBar({
   return (
     <div
       role="tablist"
-      className={cn('flex items-center gap-0.5 bg-muted/50 p-1 overflow-x-auto', className)}
+      className={cn('flex items-center gap-0.5 overflow-x-auto bg-muted/50', className)}
       style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
     >
       {/* Session tabs (Chat 1, Chat 2, etc.) */}
@@ -246,7 +246,7 @@ export function MainViewTabBar({
 
       {/* Session creation controls (provider + add button) */}
       {onCreateSession && (
-        <div className="ml-0.5 flex shrink-0 items-center overflow-hidden rounded-md border border-input bg-background">
+        <div className="ml-1.5 flex h-7 shrink-0 items-center overflow-hidden rounded-none border border-input bg-background">
           <Select
             value={selectedProvider}
             onValueChange={(value) => {
@@ -256,7 +256,7 @@ export function MainViewTabBar({
           >
             <SelectTrigger
               aria-label="New session provider"
-              className="h-[30px] w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
+              className="h-full w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
             >
               <span>{providerTriggerLabel}</span>
             </SelectTrigger>
@@ -276,7 +276,7 @@ export function MainViewTabBar({
                 onClick={onCreateSession}
                 disabled={isButtonDisabled}
                 className={cn(
-                  'flex h-[30px] w-[30px] items-center justify-center rounded-none',
+                  'flex h-full w-7 items-center justify-center rounded-none',
                   'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
                   'transition-colors disabled:pointer-events-none disabled:opacity-50'
                 )}
