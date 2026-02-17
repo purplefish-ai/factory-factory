@@ -76,7 +76,7 @@ class LinearClientService {
 
   /**
    * List issues assigned to the authenticated user for a given team.
-   * Filters to active cycle + unstarted state type by default.
+   * Filters to unstarted state type (works regardless of whether the team uses Cycles).
    */
   async listMyIssues(apiKey: string, teamId: string): Promise<LinearIssue[]> {
     const client = this.createClient(apiKey);
@@ -84,29 +84,26 @@ class LinearClientService {
     const issues = await viewer.assignedIssues({
       filter: {
         team: { id: { eq: teamId } },
-        cycle: { isActive: { eq: true } },
         state: { type: { eq: 'unstarted' } },
       },
       first: 50,
     });
 
-    const results: LinearIssue[] = [];
-    for (const issue of issues.nodes) {
-      const state = await issue.state;
-      const assignee = await issue.assignee;
-      results.push({
-        id: issue.id,
-        identifier: issue.identifier,
-        title: issue.title,
-        description: issue.description ?? '',
-        url: issue.url,
-        state: state?.name ?? 'Unknown',
-        createdAt: issue.createdAt.toISOString(),
-        assigneeName: assignee?.displayName ?? assignee?.name ?? null,
-      });
-    }
-
-    return results;
+    return Promise.all(
+      issues.nodes.map(async (issue) => {
+        const [state, assignee] = await Promise.all([issue.state, issue.assignee]);
+        return {
+          id: issue.id,
+          identifier: issue.identifier,
+          title: issue.title,
+          description: issue.description ?? '',
+          url: issue.url,
+          state: state?.name ?? 'Unknown',
+          createdAt: issue.createdAt.toISOString(),
+          assigneeName: assignee?.displayName ?? assignee?.name ?? null,
+        };
+      })
+    );
   }
 
   /** Fetch a single issue by ID. */
