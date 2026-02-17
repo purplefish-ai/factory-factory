@@ -49,8 +49,7 @@
     "vaul",
     "@hookform/resolvers",
     "geist",
-    "@zed-industries/claude-code-acp",
-    "@linear/sdk"
+    "@zed-industries/claude-code-acp"
   ],
   "vitest": {
     "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]
