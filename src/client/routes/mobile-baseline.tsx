@@ -239,7 +239,7 @@ export default function MobileBaselinePage() {
 
         <div data-testid="mobile-chat-demo" className="rounded-lg border bg-card p-2">
           <div className="px-2 py-1.5 text-sm font-medium border-b">Chat Composer Demo</div>
-          <div className="h-[60dvh] min-h-[420px] flex flex-col overflow-hidden">
+          <div className="h-[60dvh] min-h-0 flex flex-col overflow-hidden">
             <div
               data-testid="mobile-chat-messages"
               className="flex-1 overflow-y-auto p-3 space-y-2 text-sm"
