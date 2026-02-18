@@ -34,7 +34,7 @@ export function ResizableLayout({ sidebar, children, className }: ResizableLayou
         isMobile ? (
           <MobileSlotContext.Provider value={slotElement}>
             <div className={cn('h-full w-full flex flex-col', className)}>
-              <header className="flex shrink-0 items-center gap-2 border-b px-2 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
+              <header className="sticky top-0 z-30 flex shrink-0 items-center gap-2 border-b bg-background px-2 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
                 <Link to="/projects" className="shrink-0">
                   <LogoIcon className="size-10" />
                 </Link>
