@@ -26,6 +26,17 @@ function writeStderr(message: string): void {
   process.stderr.write(`${message}\n`);
 }
 
+function classifyPragmaBucket(trimmedPragma: string, foundNonPragma: boolean): 'pre' | 'post' {
+  const normalized = trimmedPragma.toUpperCase().replace(/\s+/g, '');
+  if (normalized === 'PRAGMADEFER_FOREIGN_KEYS=ON;' || normalized === 'PRAGMAFOREIGN_KEYS=OFF;') {
+    return 'pre';
+  }
+  if (normalized === 'PRAGMAFOREIGN_KEYS=ON;' || normalized === 'PRAGMADEFER_FOREIGN_KEYS=OFF;') {
+    return 'post';
+  }
+  return foundNonPragma ? 'post' : 'pre';
+}
+
 /**
  * Parse migration SQL to separate PRAGMAs from DDL/DML statements.
  * PRAGMAs must execute outside a transaction in SQLite.
@@ -62,12 +73,14 @@ function parseMigrationSql(migrationSql: string): {
     }
 
     if (trimmed.toUpperCase().startsWith('PRAGMA ')) {
-      // Collect PRAGMAs before first non-PRAGMA as "pre"
-      // Collect PRAGMAs after non-PRAGMAs as "post"
-      if (foundNonPragma) {
-        postPragmas.push(trimmed);
-      } else {
+      // Prisma may emit FK PRAGMAs in the middle of a migration after some
+      // non-PRAGMA statements (e.g. ALTER TABLE + RedefineTables). Keep
+      // disabling FK checks in pre-pragmas and restoring checks in post-pragmas
+      // regardless of position so DDL still runs atomically in one transaction.
+      if (classifyPragmaBucket(trimmed, foundNonPragma) === 'pre') {
         prePragmas.push(trimmed);
+      } else {
+        postPragmas.push(trimmed);
       }
     } else {
       foundNonPragma = true;
