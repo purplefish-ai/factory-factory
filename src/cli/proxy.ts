@@ -65,6 +65,26 @@ function signValue(value: string, secret: Buffer): string {
   return createHmac('sha256', secret).update(value).digest('hex');
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function matchesMagicToken(candidate: string, expected: string): boolean {
+  const candidateBuffer = Buffer.from(candidate, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+
+  if (candidateBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
 function createSessionValue(secret: Buffer): ProxySession {
   const id = randomBytes(16).toString('hex');
   return { id, signature: signValue(id, secret) };
@@ -352,8 +372,9 @@ async function startFactoryFactoryServer(params: {
 }
 
 function createLoginPage(errorMessage?: string): string {
-  const errorHtml = errorMessage
-    ? `<p style="color:#dc2626;font-family:system-ui, sans-serif;margin:0 0 16px 0;">${errorMessage}</p>`
+  const escapedErrorMessage = errorMessage ? escapeHtml(errorMessage) : '';
+  const errorHtml = escapedErrorMessage
+    ? `<p style="color:#dc2626;font-family:system-ui, sans-serif;margin:0 0 16px 0;">${escapedErrorMessage}</p>`
     : '';
 
   return `<!doctype html>
@@ -544,7 +565,7 @@ function writeUnauthorizedResponse(
 }
 
 function createAuthCookie(session: ProxySession): string {
-  return `${SESSION_COOKIE_NAME}=${session.id}.${session.signature}; HttpOnly; SameSite=Lax; Path=/`;
+  return `${SESSION_COOKIE_NAME}=${session.id}.${session.signature}; HttpOnly; Secure; SameSite=Lax; Path=/`;
 }
 
 function authenticateRequest(params: {
@@ -556,7 +577,7 @@ function authenticateRequest(params: {
   const parsed = new URL(rawUrl, 'http://proxy.local');
 
   const token = parsed.searchParams.get('token');
-  if (token && token === params.magicToken) {
+  if (token && matchesMagicToken(token, params.magicToken)) {
     return {
       authenticated: true,
       viaToken: true,
@@ -658,6 +679,11 @@ function registerFailureAndRespond(params: {
 }): 'handled' | 'global-lockout' {
   const failure = params.guard.registerFailure(params.ip);
   if (failure.globalLocked) {
+    if (!params.res.writableEnded) {
+      params.res.statusCode = 503;
+      params.res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      params.res.end(createLoginPage('Too many failed login attempts. Tunnel is shutting down.'));
+    }
     params.onGlobalLockout();
     return 'global-lockout';
   }
@@ -1169,9 +1195,12 @@ export const proxyInternals = {
   BruteForceGuard,
   createSessionValue,
   createAuthCookie,
+  createLoginPage,
+  escapeHtml,
   extractTryCloudflareUrl,
   generatePassword,
   generateMagicToken,
+  matchesMagicToken,
   toSafeRedirectPath,
   parseCookieHeader,
   signValue,

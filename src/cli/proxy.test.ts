@@ -25,6 +25,16 @@ describe('proxy internals', () => {
     expect(proxyInternals.verifySessionValue(`${session.id}.tampered`, secret)).toBe(false);
   });
 
+  it('creates auth cookies with secure attributes', () => {
+    const secret = Buffer.from('super-secret-key');
+    const session = proxyInternals.createSessionValue(secret);
+    const cookie = proxyInternals.createAuthCookie(session);
+
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('Secure');
+    expect(cookie).toContain('SameSite=Lax');
+  });
+
   it('extracts trycloudflare URL from mixed output', () => {
     const output =
       'INF Starting\nINF Visit this URL to access your application: https://abc-xyz.trycloudflare.com';
@@ -74,5 +84,18 @@ describe('proxy internals', () => {
     expect(proxyInternals.toSafeRedirectPath('//evil.example')).toBe('/');
     expect(proxyInternals.toSafeRedirectPath('/\\evil.example')).toBe('/');
     expect(proxyInternals.toSafeRedirectPath('https://evil.example')).toBe('/');
+  });
+
+  it('matches magic tokens using constant-time comparison semantics', () => {
+    const token = 'ABC123XYZ789';
+    expect(proxyInternals.matchesMagicToken(token, token)).toBe(true);
+    expect(proxyInternals.matchesMagicToken(token, 'ABC123XYZ780')).toBe(false);
+    expect(proxyInternals.matchesMagicToken(token, 'SHORT')).toBe(false);
+  });
+
+  it('escapes HTML in login error messages', () => {
+    const html = proxyInternals.createLoginPage('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>alert(1)</script>');
   });
 });
