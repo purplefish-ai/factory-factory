@@ -24,6 +24,7 @@ const LOCAL_HOST = '127.0.0.1';
 const LOCKOUT_THRESHOLD_PER_IP = 5;
 const LOCKOUT_WINDOW_MS = 5 * 60 * 1000;
 const GLOBAL_FAILURE_THRESHOLD = 20;
+const MAX_BRUTE_FORCE_TRACKED_IPS = 5000;
 
 interface ProxyCommandOptions {
   private?: boolean;
@@ -174,17 +175,39 @@ function getClientIp(req: IncomingMessage): string {
 }
 
 class BruteForceGuard {
-  private readonly attemptsByIp = new Map<string, { failures: number; lockedUntilMs: number }>();
+  private readonly attemptsByIp = new Map<
+    string,
+    { failures: number; lockedUntilMs: number; lastSeenMs: number }
+  >();
   private totalFailures = 0;
 
+  private evictStaleEntries(nowMs: number): void {
+    for (const [ip, state] of this.attemptsByIp.entries()) {
+      const lockExpired = state.lockedUntilMs <= nowMs;
+      const stale = nowMs - state.lastSeenMs > LOCKOUT_WINDOW_MS;
+      if (lockExpired && stale) {
+        this.attemptsByIp.delete(ip);
+      }
+    }
+
+    while (this.attemptsByIp.size > MAX_BRUTE_FORCE_TRACKED_IPS) {
+      const oldest = this.attemptsByIp.keys().next().value;
+      if (!oldest) {
+        break;
+      }
+      this.attemptsByIp.delete(oldest);
+    }
+  }
+
   isLocked(ip: string, nowMs = Date.now()): { locked: boolean; retryAfterSeconds: number } {
+    this.evictStaleEntries(nowMs);
     const state = this.attemptsByIp.get(ip);
     if (!state || state.lockedUntilMs <= 0) {
       return { locked: false, retryAfterSeconds: 0 };
     }
 
     if (state.lockedUntilMs <= nowMs) {
-      this.attemptsByIp.set(ip, { failures: 0, lockedUntilMs: 0 });
+      this.attemptsByIp.delete(ip);
       return { locked: false, retryAfterSeconds: 0 };
     }
 
@@ -195,18 +218,22 @@ class BruteForceGuard {
   }
 
   registerFailure(ip: string, nowMs = Date.now()): { ipLocked: boolean; globalLocked: boolean } {
-    const current = this.attemptsByIp.get(ip) ?? { failures: 0, lockedUntilMs: 0 };
+    this.evictStaleEntries(nowMs);
+    const current = this.attemptsByIp.get(ip) ?? { failures: 0, lockedUntilMs: 0, lastSeenMs: 0 };
     const normalized =
       current.lockedUntilMs > 0 && current.lockedUntilMs <= nowMs
-        ? { failures: 0, lockedUntilMs: 0 }
+        ? { failures: 0, lockedUntilMs: 0, lastSeenMs: nowMs }
         : current;
 
     const nextFailures = normalized.failures + 1;
     const ipLocked = nextFailures >= LOCKOUT_THRESHOLD_PER_IP;
 
+    // Reinsert to keep map order roughly LRU for bounded eviction.
+    this.attemptsByIp.delete(ip);
     this.attemptsByIp.set(ip, {
       failures: ipLocked ? 0 : nextFailures,
       lockedUntilMs: ipLocked ? nowMs + LOCKOUT_WINDOW_MS : 0,
+      lastSeenMs: nowMs,
     });
 
     this.totalFailures += 1;
@@ -545,6 +572,17 @@ function parseFormBody(rawBody: string): Record<string, string> {
   return output;
 }
 
+function mergeSetCookieValues(
+  existing: string | string[] | number | undefined,
+  incoming: string | string[]
+): string[] {
+  const existingValues =
+    typeof existing === 'undefined' ? [] : Array.isArray(existing) ? existing : [String(existing)];
+
+  const incomingValues = Array.isArray(incoming) ? incoming : [incoming];
+  return [...existingValues, ...incomingValues];
+}
+
 function writeRateLimitResponse(
   res: import('node:http').ServerResponse,
   retryAfterSeconds: number
@@ -777,7 +815,13 @@ function proxyAuthenticatedHttpRequest(params: {
       }
       for (const [header, value] of Object.entries(upstreamResponse.headers)) {
         if (typeof value !== 'undefined') {
-          params.res.setHeader(header, value);
+          if (header.toLowerCase() === 'set-cookie') {
+            const existingCookieHeader = params.res.getHeader('set-cookie');
+            const mergedCookieHeader = mergeSetCookieValues(existingCookieHeader, value);
+            params.res.setHeader('set-cookie', mergedCookieHeader);
+          } else {
+            params.res.setHeader(header, value);
+          }
         }
       }
       upstreamResponse.pipe(params.res);
@@ -1220,6 +1264,7 @@ export const proxyInternals = {
   extractTryCloudflareUrl,
   generatePassword,
   generateMagicToken,
+  mergeSetCookieValues,
   matchesMagicToken,
   toSafeRedirectPath,
   parseCookieHeader,

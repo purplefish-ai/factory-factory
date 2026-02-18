@@ -98,4 +98,17 @@ describe('proxy internals', () => {
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).not.toContain('<script>alert(1)</script>');
   });
+
+  it('merges auth and upstream set-cookie headers', () => {
+    expect(proxyInternals.mergeSetCookieValues(undefined, 'upstream=1')).toEqual(['upstream=1']);
+    expect(proxyInternals.mergeSetCookieValues('auth=1', 'upstream=1')).toEqual([
+      'auth=1',
+      'upstream=1',
+    ]);
+    expect(proxyInternals.mergeSetCookieValues(['auth=1'], ['upstream=1', 'upstream=2'])).toEqual([
+      'auth=1',
+      'upstream=1',
+      'upstream=2',
+    ]);
+  });
 });
