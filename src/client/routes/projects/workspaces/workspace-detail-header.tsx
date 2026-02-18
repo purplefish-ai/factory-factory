@@ -703,7 +703,6 @@ function WorkspaceHeaderOverflowMenu({
   archivePending,
   onArchiveRequest,
   handleQuickAction,
-  running,
   isCreatingSession,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
@@ -714,7 +713,6 @@ function WorkspaceHeaderOverflowMenu({
   archivePending: boolean;
   onArchiveRequest: () => void;
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
-  running: boolean;
   isCreatingSession: boolean;
 }) {
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
@@ -764,7 +762,7 @@ function WorkspaceHeaderOverflowMenu({
           />
           <WorkspaceQuickActionsSubmenu
             handleQuickAction={handleQuickAction}
-            disabled={running || isCreatingSession}
+            disabled={isCreatingSession}
           />
           <DropdownMenuSeparator />
           <ArchiveActionButton
@@ -842,7 +840,6 @@ export function WorkspaceHeader({
               archivePending={archivePending}
               onArchiveRequest={onArchiveRequest}
               handleQuickAction={handleQuickAction}
-              running={running}
               isCreatingSession={isCreatingSession}
             />
           </>
@@ -857,7 +854,7 @@ export function WorkspaceHeader({
                   handleQuickAction(action.name, action.content);
                 }
               }}
-              disabled={running || isCreatingSession}
+              disabled={isCreatingSession}
             />
             <OpenInIdeAction
               workspaceId={workspaceId}
