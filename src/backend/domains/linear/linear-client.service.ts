@@ -145,8 +145,9 @@ class LinearClientService {
   }
 
   /**
-   * Find a workflow state for a team by state type.
-   * Returns the first matching state, or null if none found.
+   * Find the first workflow state for a team by state type.
+   * States are sorted by position (ascending) so this returns the earliest
+   * state in the workflow — e.g. "In Progress" before "In Review" for type "started".
    */
   async findWorkflowState(
     apiKey: string,
@@ -159,18 +160,23 @@ class LinearClientService {
         team: { id: { eq: teamId } },
         type: { eq: stateType },
       },
-      first: 1,
     });
 
-    const state = states.nodes[0];
-    if (!state) {
+    if (states.nodes.length === 0) {
+      return null;
+    }
+
+    // Sort by position to get the earliest state in the workflow
+    const sorted = [...states.nodes].sort((a, b) => a.position - b.position);
+    const first = sorted[0];
+    if (!first) {
       return null;
     }
 
     return {
-      id: state.id,
-      name: state.name,
-      type: state.type,
+      id: first.id,
+      name: first.name,
+      type: first.type,
     };
   }
 
