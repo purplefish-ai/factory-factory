@@ -24,11 +24,11 @@ export function StartupScriptForm({
   hideHeader = false,
 }: StartupScriptFormProps) {
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {!hideHeader && (
         <>
           <Label>Startup Script (Optional)</Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground break-words">
             Command or script to run when initializing new workspaces.
           </p>
         </>
@@ -37,17 +37,23 @@ export function StartupScriptForm({
       <RadioGroup
         value={scriptType}
         onValueChange={(v) => onScriptTypeChange(v as ScriptType)}
-        className="flex flex-col gap-2 sm:flex-row sm:gap-4"
+        className="min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4"
       >
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="command" id={`${idPrefix}-command`} />
-          <Label htmlFor={`${idPrefix}-command`} className="font-normal cursor-pointer">
+        <div className="flex min-w-0 items-start gap-2">
+          <RadioGroupItem value="command" id={`${idPrefix}-command`} className="mt-0.5 shrink-0" />
+          <Label
+            htmlFor={`${idPrefix}-command`}
+            className="cursor-pointer break-words font-normal leading-snug"
+          >
             Shell Command
           </Label>
         </div>
-        <div className="flex items-center space-x-2">
-          <RadioGroupItem value="path" id={`${idPrefix}-path`} />
-          <Label htmlFor={`${idPrefix}-path`} className="font-normal cursor-pointer">
+        <div className="flex min-w-0 items-start gap-2">
+          <RadioGroupItem value="path" id={`${idPrefix}-path`} className="mt-0.5 shrink-0" />
+          <Label
+            htmlFor={`${idPrefix}-path`}
+            className="cursor-pointer break-words font-normal leading-snug"
+          >
             Script Path
           </Label>
         </div>
@@ -57,7 +63,7 @@ export function StartupScriptForm({
         type="text"
         value={startupScript}
         onChange={(e) => onStartupScriptChange(e.target.value)}
-        className="font-mono"
+        className="min-w-0 w-full px-2 sm:px-3 font-mono"
         placeholder={
           scriptType === 'command' ? 'npm install && npm run build' : './scripts/setup.sh'
         }

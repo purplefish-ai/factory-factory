@@ -129,15 +129,16 @@ function SingleQuestionLayout({
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Question from Claude"
+      className="px-3 sm:p-3 [&>div>div:nth-of-type(1)]:gap-0 sm:[&>div>div:nth-of-type(1)]:gap-3 [&>div>div:nth-of-type(1)>div:first-child]:hidden sm:[&>div>div:nth-of-type(1)>div:first-child]:block"
       actions={
-        <div className="self-end">
+        <div className="flex self-stretch justify-end sm:self-end">
           <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
             Submit
           </Button>
         </div>
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-2 sm:space-y-3">
         {question.multiSelect ? (
           <MultiSelectQuestion
             question={question}
@@ -187,8 +188,9 @@ function MultiQuestionLayout({
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Questions from Claude"
+      className="px-3 sm:p-3 [&>div>div:nth-of-type(1)]:gap-0 sm:[&>div>div:nth-of-type(1)]:gap-3 [&>div>div:nth-of-type(1)>div:first-child]:hidden sm:[&>div>div:nth-of-type(1)>div:first-child]:block"
       actions={
-        <div className="self-end flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1 self-stretch sm:self-end">
           <Button
             variant="ghost"
             size="sm"
@@ -228,7 +230,7 @@ function MultiQuestionLayout({
         </div>
       }
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
           Question {currentIndex + 1} of {totalQuestions}
         </span>
@@ -300,9 +302,9 @@ function SingleSelectQuestion({
   return (
     <div className="space-y-1.5">
       {question.header && (
-        <h4 className="text-xs font-medium text-muted-foreground">{question.header}</h4>
+        <h4 className="text-xs font-medium text-muted-foreground break-words">{question.header}</h4>
       )}
-      <p className="text-sm font-medium">{question.question}</p>
+      <p className="text-sm font-medium break-words">{question.question}</p>
 
       <RadioGroup value={selectedValue} onValueChange={onChange} className="space-y-1.5">
         {question.options.map((option) => (
@@ -310,19 +312,19 @@ function SingleSelectQuestion({
             key={`${index}-${option.label}`}
             htmlFor={`question-${idPrefix}-option-${option.label}`}
             className={cn(
-              'flex items-center gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
+              'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
               selectedValue === option.label && 'border-primary bg-primary/5'
             )}
           >
             <RadioGroupItem
               value={option.label}
               id={`question-${idPrefix}-option-${option.label}`}
-              className="shrink-0"
+              className="mt-0.5 shrink-0"
             />
             <div className="flex-1 min-w-0">
-              <span className="text-sm">{option.label}</span>
+              <span className="text-sm break-words">{option.label}</span>
               {option.description && (
-                <p className="text-xs text-muted-foreground truncate">{option.description}</p>
+                <p className="text-xs text-muted-foreground break-words">{option.description}</p>
               )}
             </div>
           </label>
@@ -330,7 +332,7 @@ function SingleSelectQuestion({
         <label
           htmlFor={`question-${idPrefix}-option-other`}
           className={cn(
-            'flex items-start gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
+            'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
             selectedValue === OTHER_OPTION_VALUE && 'border-primary bg-primary/5'
           )}
         >
@@ -405,9 +407,9 @@ function MultiSelectQuestion({
   return (
     <div className="space-y-1.5">
       {question.header && (
-        <h4 className="text-xs font-medium text-muted-foreground">{question.header}</h4>
+        <h4 className="text-xs font-medium text-muted-foreground break-words">{question.header}</h4>
       )}
-      <p className="text-sm font-medium">{question.question}</p>
+      <p className="text-sm font-medium break-words">{question.question}</p>
 
       <div className="space-y-1.5">
         {question.options.map((option) => {
@@ -418,7 +420,7 @@ function MultiSelectQuestion({
               key={`${index}-${option.label}`}
               htmlFor={`question-${idPrefix}-option-${option.label}`}
               className={cn(
-                'flex items-center gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
+                'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
                 isSelected && 'border-primary bg-primary/5'
               )}
             >
@@ -426,12 +428,12 @@ function MultiSelectQuestion({
                 id={`question-${idPrefix}-option-${option.label}`}
                 checked={isSelected}
                 onCheckedChange={(checked) => handleCheckboxChange(option.label, checked === true)}
-                className="shrink-0"
+                className="mt-0.5 shrink-0"
               />
               <div className="flex-1 min-w-0">
-                <span className="text-sm">{option.label}</span>
+                <span className="text-sm break-words">{option.label}</span>
                 {option.description && (
-                  <p className="text-xs text-muted-foreground truncate">{option.description}</p>
+                  <p className="text-xs text-muted-foreground break-words">{option.description}</p>
                 )}
               </div>
             </label>
@@ -440,7 +442,7 @@ function MultiSelectQuestion({
         <label
           htmlFor={`question-${idPrefix}-option-other`}
           className={cn(
-            'flex items-start gap-2 p-1.5 rounded-md border transition-colors cursor-pointer hover:bg-background',
+            'flex items-start gap-2 rounded-md border p-1.5 transition-colors cursor-pointer hover:bg-background',
             selectedValues.includes(OTHER_OPTION_VALUE) && 'border-primary bg-primary/5'
           )}
         >
