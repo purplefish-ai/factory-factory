@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
   retries: process.env.CI ? 2 : 0,
+  snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   use: {
     baseURL: 'http://127.0.0.1:5173',
     trace: 'on-first-retry',
@@ -16,7 +17,12 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'VITE_ENABLE_MOBILE_BASELINE=1 pnpm exec vite --host 127.0.0.1 --port 5173',
+    // Intentionally frontend-only: /__mobile-baseline is mounted outside Root and uses mock data.
+    command: 'pnpm exec vite --host 127.0.0.1 --port 5173',
+    env: {
+      ...process.env,
+      VITE_ENABLE_MOBILE_BASELINE: '1',
+    },
     url: 'http://127.0.0.1:5173',
     reuseExistingServer: false,
     timeout: 120_000,

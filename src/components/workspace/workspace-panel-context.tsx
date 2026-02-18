@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { z } from 'zod';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { MOBILE_BREAKPOINT, useIsMobile } from '@/hooks/use-mobile';
 
 import {
   getScrollStateFromRecord,
@@ -86,7 +86,7 @@ const MainViewTabSchema = z
   });
 
 const MainViewTabsSchema = z.array(MainViewTabSchema);
-const MOBILE_MAX_WIDTH_MEDIA_QUERY = '(max-width: 767px)';
+const MOBILE_MAX_WIDTH_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
 
 // =============================================================================
 // Helper Functions

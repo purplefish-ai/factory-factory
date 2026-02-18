@@ -1,5 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router';
+import { ThemeProvider } from '@/frontend/components/theme-provider';
+import { TRPCProvider } from '@/frontend/lib/providers';
 import { ErrorBoundary } from './error-boundary';
 import { ProjectLayout } from './layouts/project-layout';
 import { Root } from './root';
@@ -21,6 +23,24 @@ const enableMobileBaselineRoute =
   isDevelopmentMode || import.meta.env.VITE_ENABLE_MOBILE_BASELINE === '1';
 
 export const router = createBrowserRouter([
+  ...(enableMobileBaselineRoute
+    ? [
+        {
+          path: '/__mobile-baseline',
+          element: (
+            <ErrorBoundary>
+              <ThemeProvider>
+                <TRPCProvider>
+                  <Suspense fallback={null}>
+                    <MobileBaselinePage />
+                  </Suspense>
+                </TRPCProvider>
+              </ThemeProvider>
+            </ErrorBoundary>
+          ),
+        },
+      ]
+    : []),
   {
     path: '/',
     element: (
@@ -85,18 +105,6 @@ export const router = createBrowserRouter([
         path: 'logs',
         element: <LogsPage />,
       },
-      ...(enableMobileBaselineRoute
-        ? [
-            {
-              path: '__mobile-baseline',
-              element: (
-                <Suspense fallback={null}>
-                  <MobileBaselinePage />
-                </Suspense>
-              ),
-            },
-          ]
-        : []),
     ],
   },
 ]);

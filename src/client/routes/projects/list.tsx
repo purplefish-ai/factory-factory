@@ -118,8 +118,15 @@ export default function ProjectsListPage() {
               <div key={project.id} className="rounded-md border bg-background p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 space-y-1">
-                    <div className="font-medium text-foreground truncate">{project.name}</div>
-                    <div className="text-sm text-muted-foreground truncate">{project.slug}</div>
+                    <Link
+                      to={`/projects/${project.slug}/workspaces`}
+                      className="block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <div className="font-medium text-foreground truncate hover:text-primary">
+                        {project.name}
+                      </div>
+                      <div className="text-sm text-muted-foreground truncate">{project.slug}</div>
+                    </Link>
                     <Badge variant="secondary" className="max-w-full truncate font-mono text-xs">
                       {project.repoPath}
                     </Badge>
