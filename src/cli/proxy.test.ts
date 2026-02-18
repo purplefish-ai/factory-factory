@@ -100,6 +100,21 @@ describe('proxy internals', () => {
     );
   });
 
+  it('extracts trycloudflare URL when output arrives across chunks', () => {
+    let outputBuffer = '';
+
+    outputBuffer = proxyInternals.appendBoundedOutputBuffer(
+      outputBuffer,
+      'INF Visit this URL to access your application: https://abc-'
+    );
+    expect(proxyInternals.extractTryCloudflareUrl(outputBuffer)).toBeNull();
+
+    outputBuffer = proxyInternals.appendBoundedOutputBuffer(outputBuffer, 'xyz.trycloudflare.com');
+    expect(proxyInternals.extractTryCloudflareUrl(outputBuffer)).toBe(
+      'https://abc-xyz.trycloudflare.com'
+    );
+  });
+
   it('tracks and expires per-IP lockout', () => {
     const guard = new proxyInternals.BruteForceGuard();
     const ip = '203.0.113.10';

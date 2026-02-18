@@ -21,6 +21,7 @@ const PASSWORD_LENGTH = 6;
 const SESSION_COOKIE_NAME = 'ff_proxy_session';
 const LOGIN_PATH = '/__proxy_auth/login';
 const LOCAL_HOST = '127.0.0.1';
+const MAX_TUNNEL_OUTPUT_BUFFER_CHARS = 8192;
 const LOCKOUT_THRESHOLD_PER_IP = 5;
 const LOCKOUT_WINDOW_MS = 5 * 60 * 1000;
 const MAX_BRUTE_FORCE_TRACKED_IPS = 5000;
@@ -143,6 +144,18 @@ function extractTryCloudflareUrl(input: string): string | null {
     return null;
   }
   return match[0] ?? null;
+}
+
+function appendBoundedOutputBuffer(
+  existing: string,
+  chunk: string,
+  maxChars = MAX_TUNNEL_OUTPUT_BUFFER_CHARS
+): string {
+  const combined = `${existing}${chunk}`;
+  if (combined.length <= maxChars) {
+    return combined;
+  }
+  return combined.slice(-maxChars);
 }
 
 function sanitizePathWithoutToken(rawUrl: string): string {
@@ -1032,38 +1045,51 @@ async function startCloudflaredTunnel(
   });
 
   let resolvedUrl: string | null = null;
+  let outputBuffer = '';
 
   const waitForUrl = new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
+      cleanup();
       reject(new Error('Timed out waiting for cloudflared tunnel URL'));
     }, 30_000);
+    timeout.unref?.();
 
     const onData = (data: Buffer) => {
-      const text = data.toString();
-      const extracted = extractTryCloudflareUrl(text);
+      outputBuffer = appendBoundedOutputBuffer(outputBuffer, data.toString());
+      const extracted = extractTryCloudflareUrl(outputBuffer);
       if (extracted && !resolvedUrl) {
         resolvedUrl = extracted;
-        clearTimeout(timeout);
+        cleanup();
         resolve(extracted);
       }
     };
 
-    cloudflared.stdout?.on('data', onData);
-    cloudflared.stderr?.on('data', onData);
-
-    cloudflared.once('exit', (code) => {
+    const onExit = (code: number | null) => {
       if (!resolvedUrl) {
-        clearTimeout(timeout);
+        cleanup();
         reject(
           new Error(`cloudflared exited before URL was available (code ${code ?? 'unknown'})`)
         );
       }
-    });
+    };
 
-    cloudflared.once('error', (error) => {
-      clearTimeout(timeout);
+    const onError = (error: Error) => {
+      cleanup();
       reject(new Error(`Failed to start cloudflared: ${(error as Error).message}`));
-    });
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      cloudflared.stdout?.off('data', onData);
+      cloudflared.stderr?.off('data', onData);
+      cloudflared.off('exit', onExit);
+      cloudflared.off('error', onError);
+    };
+
+    cloudflared.stdout?.on('data', onData);
+    cloudflared.stderr?.on('data', onData);
+    cloudflared.once('exit', onExit);
+    cloudflared.once('error', onError);
   });
 
   try {
@@ -1265,6 +1291,7 @@ export const proxyInternals = {
   createLoginPage,
   escapeHtml,
   extractTryCloudflareUrl,
+  appendBoundedOutputBuffer,
   generatePassword,
   generateMagicToken,
   mergeSetCookieValues,
