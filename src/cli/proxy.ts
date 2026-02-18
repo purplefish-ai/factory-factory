@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import {
   createServer as createHttpServer,
@@ -16,7 +16,7 @@ import { runMigrations as runDbMigrations } from '@/backend/migrate';
 
 const execFileAsync = promisify(execFile);
 
-const PASSWORD_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+const PASSWORD_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const PASSWORD_LENGTH = 6;
 const SESSION_COOKIE_NAME = 'ff_proxy_session';
 const LOGIN_PATH = '/__proxy_auth/login';
@@ -49,11 +49,10 @@ interface AuthenticationCheck {
 }
 
 function generatePassword(length = PASSWORD_LENGTH): string {
-  const bytes = randomBytes(length);
   let output = '';
   for (let i = 0; i < length; i += 1) {
-    const byte = bytes[i] ?? 0;
-    output += PASSWORD_CHARS[byte % PASSWORD_CHARS.length];
+    const index = randomInt(PASSWORD_CHARS.length);
+    output += PASSWORD_CHARS[index] ?? PASSWORD_CHARS[0] ?? 'A';
   }
   return output;
 }
@@ -131,6 +130,13 @@ function sanitizePathWithoutToken(rawUrl: string): string {
   parsed.searchParams.delete('token');
   const search = parsed.searchParams.toString();
   return `${parsed.pathname}${search ? `?${search}` : ''}`;
+}
+
+function toSafeRedirectPath(path: string): string {
+  if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) {
+    return '/';
+  }
+  return path;
 }
 
 function getClientIp(req: IncomingMessage): string {
@@ -368,12 +374,13 @@ function createLoginPage(errorMessage?: string): string {
       color: #0f172a;
     }
     .card {
-      width: min(420px, calc(100vw - 32px));
+      width: min(420px, calc(100vw - 24px));
       background: rgba(255, 255, 255, 0.95);
       border: 1px solid rgba(15, 23, 42, 0.08);
       border-radius: 18px;
       padding: 24px;
       box-shadow: 0 20px 45px rgba(15, 23, 42, 0.15);
+      box-sizing: border-box;
     }
     h1 {
       margin: 0 0 8px 0;
@@ -393,19 +400,21 @@ function createLoginPage(errorMessage?: string): string {
     }
     .otp {
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 10px;
     }
     .otp input {
       width: 100%;
+      min-width: 0;
       aspect-ratio: 1 / 1;
       border: 1px solid #cbd5e1;
       border-radius: 10px;
       text-align: center;
       font-size: 24px;
       font-weight: 700;
-      text-transform: lowercase;
+      text-transform: uppercase;
       background: #fff;
+      box-sizing: border-box;
     }
     .otp input:focus {
       outline: 2px solid #3b82f6;
@@ -423,6 +432,18 @@ function createLoginPage(errorMessage?: string): string {
       cursor: pointer;
     }
     button:hover { background: #1e293b; }
+    @media (max-width: 420px) {
+      .card {
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .otp {
+        gap: 6px;
+      }
+      .otp input {
+        font-size: 20px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -448,7 +469,7 @@ function createLoginPage(errorMessage?: string): string {
     const hidden = document.getElementById('password');
     const inputs = Array.from(form.querySelectorAll('.otp input'));
 
-    const normalize = (value) => value.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-1);
+    const normalize = (value) => value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(-1);
 
     inputs.forEach((input, index) => {
       input.addEventListener('input', () => {
@@ -466,7 +487,7 @@ function createLoginPage(errorMessage?: string): string {
 
       input.addEventListener('paste', (event) => {
         const pasted = (event.clipboardData || window.clipboardData).getData('text') || '';
-        const chars = pasted.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, inputs.length).split('');
+        const chars = pasted.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, inputs.length).split('');
         if (chars.length === 0) {
           return;
         }
@@ -674,7 +695,7 @@ async function handleLoginSubmission(params: {
   try {
     const body = await readRequestBody(params.req);
     const form = parseFormBody(body);
-    submittedPassword = (form.password || '').trim().toLowerCase();
+    submittedPassword = (form.password || '').trim().toUpperCase();
   } catch {
     submittedPassword = '';
   }
@@ -702,6 +723,15 @@ function proxyAuthenticatedHttpRequest(params: {
   upstreamPort: number;
   path: string;
 }): void {
+  const endProxyErrorResponse = () => {
+    if (!params.res.headersSent) {
+      params.res.statusCode = 502;
+    }
+    if (!params.res.writableEnded) {
+      params.res.end('Proxy error');
+    }
+  };
+
   const upstreamHeaders = removeHopByHopHeaders(params.req.headers);
 
   const upstreamRequest = httpRequest(
@@ -728,11 +758,13 @@ function proxyAuthenticatedHttpRequest(params: {
     }
   );
 
-  upstreamRequest.on('error', () => {
-    if (!params.res.headersSent) {
-      params.res.statusCode = 502;
+  upstreamRequest.on('error', endProxyErrorResponse);
+
+  params.req.on('error', () => {
+    if (!(upstreamRequest.destroyed || upstreamRequest.writableEnded)) {
+      upstreamRequest.destroy();
     }
-    params.res.end('Proxy error');
+    endProxyErrorResponse();
   });
 
   params.req.pipe(upstreamRequest);
@@ -801,7 +833,7 @@ async function handleAuthHttpRequest(params: {
     setSessionCookie(params.res, params.cookieSecret);
     if (auth.sanitizedPath !== params.req.url) {
       params.res.statusCode = 302;
-      params.res.setHeader('Location', auth.sanitizedPath || '/');
+      params.res.setHeader('Location', '/');
       params.res.end();
       return;
     }
@@ -1140,6 +1172,7 @@ export const proxyInternals = {
   extractTryCloudflareUrl,
   generatePassword,
   generateMagicToken,
+  toSafeRedirectPath,
   parseCookieHeader,
   signValue,
   verifySessionValue,

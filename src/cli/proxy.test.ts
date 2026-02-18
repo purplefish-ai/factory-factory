@@ -6,7 +6,7 @@ describe('proxy internals', () => {
     const password = proxyInternals.generatePassword();
 
     expect(password).toHaveLength(6);
-    expect(password).toMatch(/^[a-z0-9]{6}$/);
+    expect(password).toMatch(/^[A-Z0-9]{6}$/);
   });
 
   it('generates a 128-bit magic token as hex', () => {
@@ -66,5 +66,13 @@ describe('proxy internals', () => {
     }
 
     expect(globalLockReached).toBe(true);
+  });
+
+  it('allows only safe relative redirect paths', () => {
+    expect(proxyInternals.toSafeRedirectPath('/')).toBe('/');
+    expect(proxyInternals.toSafeRedirectPath('/dashboard?tab=1')).toBe('/dashboard?tab=1');
+    expect(proxyInternals.toSafeRedirectPath('//evil.example')).toBe('/');
+    expect(proxyInternals.toSafeRedirectPath('/\\evil.example')).toBe('/');
+    expect(proxyInternals.toSafeRedirectPath('https://evil.example')).toBe('/');
   });
 });
