@@ -16,10 +16,53 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { trpc } from '@/frontend/lib/trpc';
+import { useIsMobile } from '@/hooks/use-mobile';
+
+function ProjectActions({
+  projectId,
+  projectName,
+  startupScriptCommand,
+  startupScriptPath,
+  archivePending,
+  onArchive,
+}: {
+  projectId: string;
+  projectName: string;
+  startupScriptCommand: string | null;
+  startupScriptPath: string | null;
+  archivePending: boolean;
+  onArchive: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <ProjectSettingsDialog
+        projectId={projectId}
+        projectName={projectName}
+        currentStartupScriptCommand={startupScriptCommand}
+        currentStartupScriptPath={startupScriptPath}
+      />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onArchive}
+            disabled={archivePending}
+            className="hover:bg-destructive/10 hover:text-destructive"
+          >
+            {archivePending ? <Spinner className="size-4" /> : <Archive className="size-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Archive</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
 
 export default function ProjectsListPage() {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [projectToArchive, setProjectToArchive] = useState<string | null>(null);
+  const isMobile = useIsMobile();
 
   const {
     data: projects,
@@ -43,13 +86,13 @@ export default function ProjectsListPage() {
   }
 
   return (
-    <div className="space-y-4 p-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-4 p-3 md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Projects</h1>
           <p className="text-muted-foreground mt-1">Manage your repositories</p>
         </div>
-        <Button asChild>
+        <Button asChild size={isMobile ? 'sm' : 'default'}>
           <Link to="/projects/new">
             <Plus className="size-5" />
             New Project
@@ -68,6 +111,49 @@ export default function ProjectsListPage() {
             >
               Create your first project
             </Link>
+          </div>
+        ) : isMobile ? (
+          <div className="space-y-2 p-2">
+            {projects.map((project) => (
+              <div key={project.id} className="rounded-md border bg-background p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <Link
+                      to={`/projects/${project.slug}/workspaces`}
+                      className="block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <div className="font-medium text-foreground truncate hover:text-primary">
+                        {project.name}
+                      </div>
+                      <div className="text-sm text-muted-foreground truncate">{project.slug}</div>
+                    </Link>
+                    <Badge variant="secondary" className="max-w-full truncate font-mono text-xs">
+                      {project.repoPath}
+                    </Badge>
+                  </div>
+                  <ProjectActions
+                    projectId={project.id}
+                    projectName={project.name}
+                    startupScriptCommand={project.startupScriptCommand}
+                    startupScriptPath={project.startupScriptPath}
+                    archivePending={archiveMutation.isPending}
+                    onArchive={() => {
+                      setProjectToArchive(project.id);
+                      setArchiveDialogOpen(true);
+                    }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="truncate">Branch: {project.defaultBranch}</span>
+                  <span>
+                    Workspaces:{' '}
+                    {'_count' in project
+                      ? (project._count as { workspaces: number }).workspaces
+                      : '-'}
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <Table>
@@ -103,35 +189,17 @@ export default function ProjectsListPage() {
                       : '-'}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-1">
-                      <ProjectSettingsDialog
-                        projectId={project.id}
-                        projectName={project.name}
-                        currentStartupScriptCommand={project.startupScriptCommand}
-                        currentStartupScriptPath={project.startupScriptPath}
-                      />
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setProjectToArchive(project.id);
-                              setArchiveDialogOpen(true);
-                            }}
-                            disabled={archiveMutation.isPending}
-                            className="hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            {archiveMutation.isPending ? (
-                              <Spinner className="size-4" />
-                            ) : (
-                              <Archive className="size-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Archive</TooltipContent>
-                      </Tooltip>
-                    </div>
+                    <ProjectActions
+                      projectId={project.id}
+                      projectName={project.name}
+                      startupScriptCommand={project.startupScriptCommand}
+                      startupScriptPath={project.startupScriptPath}
+                      archivePending={archiveMutation.isPending}
+                      onArchive={() => {
+                        setProjectToArchive(project.id);
+                        setArchiveDialogOpen(true);
+                      }}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

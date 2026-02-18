@@ -58,10 +58,10 @@ export function AcpConfigSelector({ configOption, onSelect, disabled }: AcpConfi
           variant="ghost"
           size="sm"
           disabled={disabled}
-          className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          className="h-6 max-w-[12rem] gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
         >
-          {displayName}
-          <ChevronDown className="h-3 w-3" />
+          <span className="truncate">{displayName}</span>
+          <ChevronDown className="h-3 w-3 shrink-0" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-48">

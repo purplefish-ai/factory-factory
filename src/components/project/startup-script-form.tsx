@@ -37,7 +37,7 @@ export function StartupScriptForm({
       <RadioGroup
         value={scriptType}
         onValueChange={(v) => onScriptTypeChange(v as ScriptType)}
-        className="flex gap-4"
+        className="flex flex-col gap-2 sm:flex-row sm:gap-4"
       >
         <div className="flex items-center space-x-2">
           <RadioGroupItem value="command" id={`${idPrefix}-command`} />

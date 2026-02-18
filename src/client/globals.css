@@ -208,6 +208,11 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
+/* Mobile safe-area helpers */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 @property --ratchet-dash-rotation {
   syntax: '<angle>';
   inherits: false;

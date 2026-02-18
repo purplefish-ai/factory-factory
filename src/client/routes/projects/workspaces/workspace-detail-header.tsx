@@ -62,7 +62,12 @@ function ToggleRightPanelButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon" onClick={toggleRightPanel} className="h-8 w-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleRightPanel}
+          className="h-9 w-9 md:h-8 md:w-8"
+        >
           <PanelRight className={cn('h-4 w-4', rightPanelVisible && 'text-primary')} />
         </Button>
       </TooltipTrigger>
@@ -78,7 +83,7 @@ function WorkspaceTitle({
 }) {
   if (workspace.branchName) {
     return (
-      <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex min-w-0 items-center gap-1.5">
         <GitBranch className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground shrink-0" />
         <h1 className="text-sm md:text-lg font-semibold font-mono truncate">
           {workspace.branchName}
@@ -356,7 +361,12 @@ function WorkspaceProviderSettings({
       <Tooltip>
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Provider settings">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 md:h-8 md:w-8"
+              aria-label="Provider settings"
+            >
               <Settings2 className="h-4 w-4" />
             </Button>
           </DialogTrigger>
@@ -474,7 +484,7 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   return (
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-2 px-2 py-1.5 md:px-4 md:py-2 border-b">
-      <div className="flex items-center gap-2 md:gap-3 min-w-0">
+      <div className="flex flex-wrap items-center gap-2 md:gap-3 min-w-0">
         <WorkspaceTitle workspace={workspace} />
         <WorkspaceIssueLink workspace={workspace} />
         <RunScriptPortBadge workspaceId={workspaceId} />
@@ -487,7 +497,7 @@ export function WorkspaceHeader({
         />
         <WorkspaceCiStatus workspace={workspace} />
       </div>
-      <div className="flex items-center justify-end gap-0.5 md:gap-1 shrink-0">
+      <div className="flex flex-wrap items-center gap-0.5 md:gap-1 shrink-0 md:justify-end">
         <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
         <WorkspaceBranchLink workspace={workspace} />
@@ -506,7 +516,7 @@ export function WorkspaceHeader({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-9 w-9 md:h-8 md:w-8"
                 onClick={() => openInIde.mutate({ id: workspaceId })}
                 disabled={openInIde.isPending || !workspace.worktreePath}
               >
@@ -528,7 +538,7 @@ export function WorkspaceHeader({
               variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
               size="icon"
               className={cn(
-                'h-8 w-8',
+                'h-9 w-9 md:h-8 md:w-8',
                 workspace.prState === 'MERGED'
                   ? ''
                   : 'hover:bg-destructive/10 hover:text-destructive'

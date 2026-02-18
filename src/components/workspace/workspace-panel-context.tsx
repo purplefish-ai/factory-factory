@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { z } from 'zod';
+import { MOBILE_BREAKPOINT, useIsMobile } from '@/hooks/use-mobile';
 
 import {
   getScrollStateFromRecord,
@@ -85,6 +86,7 @@ const MainViewTabSchema = z
   });
 
 const MainViewTabsSchema = z.array(MainViewTabSchema);
+const MOBILE_MAX_WIDTH_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
 
 // =============================================================================
 // Helper Functions
@@ -166,6 +168,13 @@ function loadRightPanelVisibility(workspaceId: string): boolean {
   }
 }
 
+function isMobileViewport(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.matchMedia(MOBILE_MAX_WIDTH_MEDIA_QUERY).matches;
+}
+
 function saveTabsToStorage(workspaceId: string, tabs: MainViewTab[]): void {
   if (typeof window === 'undefined') {
     return;
@@ -204,6 +213,7 @@ interface WorkspacePanelProviderProps {
 }
 
 export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanelProviderProps) {
+  const isMobile = useIsMobile();
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const scrollStatesRef = useRef<Record<string, ScrollState>>({});
@@ -231,8 +241,8 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     // Load bottom tab (workspace-scoped)
     setActiveBottomTabState(loadBottomTabFromStorage(workspaceId));
 
-    // Load right panel visibility (workspace-scoped)
-    setRightPanelVisibleState(loadRightPanelVisibility(workspaceId));
+    // Load right panel visibility (workspace-scoped). On mobile we start closed.
+    setRightPanelVisibleState(isMobileViewport() ? false : loadRightPanelVisibility(workspaceId));
 
     // Load scroll states (workspace-scoped)
     if (typeof window !== 'undefined') {
@@ -274,7 +284,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   const setRightPanelVisible = useCallback(
     (visible: boolean) => {
       setRightPanelVisibleState(visible);
-      if (typeof window === 'undefined') {
+      if (typeof window === 'undefined' || isMobile) {
         return;
       }
       try {
@@ -283,12 +293,25 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         // Ignore storage errors
       }
     },
-    [workspaceId]
+    [workspaceId, isMobile]
   );
 
   const toggleRightPanel = useCallback(() => {
     setRightPanelVisible(!rightPanelVisible);
   }, [rightPanelVisible, setRightPanelVisible]);
+
+  const prevIsMobileRef = useRef(isMobile);
+  useEffect(() => {
+    const switchedToMobile = isMobile && !prevIsMobileRef.current;
+    const switchedToDesktop = !isMobile && prevIsMobileRef.current;
+    if (switchedToMobile && rightPanelVisible) {
+      setRightPanelVisibleState(false);
+    }
+    if (switchedToDesktop) {
+      setRightPanelVisibleState(loadRightPanelVisibility(workspaceId));
+    }
+    prevIsMobileRef.current = isMobile;
+  }, [isMobile, rightPanelVisible, workspaceId]);
 
   const getScrollState = useCallback(
     (tabId: string, mode: ScrollMode) =>
