@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 const DEFAULT_VIEWPORT_HEIGHT = '100dvh';
 const DEFAULT_VIEWPORT_OFFSET = '0px';
+const SCALE_EPSILON = 0.01;
 
 function toPixels(value: number): string {
   return `${Math.round(value)}px`;
@@ -52,6 +53,12 @@ export function useVisualViewportHeight(): VisualViewportLayout {
     }
 
     const updateFromVisualViewport = () => {
+      // Ignore pinch-zoom viewport metrics; keep layout viewport sizing behavior.
+      if (Math.abs(visualViewport.scale - 1) > SCALE_EPSILON) {
+        updateFromWindow();
+        return;
+      }
+
       updateLayout({
         height: toPixels(visualViewport.height),
         offsetTop: toPixels(visualViewport.offsetTop),
