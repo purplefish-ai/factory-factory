@@ -698,6 +698,89 @@ describe('CodexAppServerAcpAdapter', () => {
     );
   });
 
+  it('does not synthesize completion for normal output that mentions session handoff text', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_command_log_output', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/started', {
+      threadId: 'thread_command_log_output',
+      turnId: 'turn_command_log_output',
+      item: {
+        type: 'commandExecution',
+        id: 'item_command_log_output',
+        callId: 'call_command_log_output',
+        status: 'inProgress',
+        command: 'bash script.sh',
+      },
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/commandExecution/outputDelta', {
+      threadId: 'thread_command_log_output',
+      turnId: 'turn_command_log_output',
+      itemId: 'item_command_log_output',
+      delta: 'worker log: process running with session ID 96081 and waiting',
+    });
+
+    await (
+      adapter as unknown as {
+        handleCodexNotification: (method: string, params: unknown) => Promise<void>;
+      }
+    ).handleCodexNotification('item/commandExecution/outputDelta', {
+      threadId: 'thread_command_log_output',
+      turnId: 'turn_command_log_output',
+      itemId: 'item_command_log_output',
+      delta: 'still running',
+    });
+
+    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0].update
+    );
+    const completedUpdates = updates.filter(
+      (update) =>
+        update.sessionUpdate === 'tool_call_update' &&
+        update.toolCallId === 'call_command_log_output' &&
+        update.status === 'completed'
+    );
+    expect(completedUpdates).toHaveLength(0);
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_command_log_output',
+          status: 'in_progress',
+          rawOutput: 'worker log: process running with session ID 96081 and waiting',
+        }),
+        expect.objectContaining({
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_command_log_output',
+          status: 'in_progress',
+          rawOutput: 'still running',
+        }),
+      ])
+    );
+  });
+
   it('parses escaped quotes in quoted command arguments for metadata', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();

@@ -104,7 +104,8 @@ const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
 const DEFAULT_APPROVAL_POLICIES: ApprovalPolicy[] = ['on-failure', 'on-request', 'never'];
 const DEFAULT_SANDBOX_MODES: SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
 const SHAPE_DRIFT_DETAILS_LIMIT = 700;
-const COMMAND_EXECUTION_SESSION_HANDOFF_PATTERN = /\bprocess running with session id\b/i;
+const COMMAND_EXECUTION_SESSION_HANDOFF_LINE_PATTERN =
+  /^process running with session id(?:\s*[:#-]?\s*[a-z0-9_-]+)?\.?$/i;
 
 type PendingTurnCompletion = {
   stopReason: StopReason;
@@ -300,7 +301,11 @@ function resolveToolCallId(params: { itemId: string; source?: unknown }): string
 }
 
 function isCommandExecutionSessionHandoffOutput(output: string): boolean {
-  return COMMAND_EXECUTION_SESSION_HANDOFF_PATTERN.test(output);
+  const trimmedOutput = output.trim();
+  if (trimmedOutput.length === 0 || /[\r\n]/.test(trimmedOutput)) {
+    return false;
+  }
+  return COMMAND_EXECUTION_SESSION_HANDOFF_LINE_PATTERN.test(trimmedOutput);
 }
 
 function isPlanLikeMode(mode: string): boolean {
