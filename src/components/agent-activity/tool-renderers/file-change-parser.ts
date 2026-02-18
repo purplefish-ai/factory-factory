@@ -1,4 +1,5 @@
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
+import { findTypedPayload, isObjectRecord, unwrapJsonCodeFence } from './tool-result-parse-utils';
 
 const FILE_CHANGE_TYPE = 'filechange';
 const MAX_SEARCH_DEPTH = 6;
@@ -19,10 +20,6 @@ export interface CodexFileChangePayload {
   rawText?: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function asNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
@@ -31,16 +28,11 @@ function normalizeToolName(name: string): string {
   return name.replace(/[\s_-]+/g, '').toLowerCase();
 }
 
-function unwrapJsonCodeFence(raw: string): string {
-  const match = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(raw.trim());
-  return match?.[1] ?? raw;
-}
-
 function parseKind(kindValue: unknown, movePath: string | null): CodexFileChangeKind {
   const rawKind =
     typeof kindValue === 'string'
       ? kindValue
-      : isRecord(kindValue)
+      : isObjectRecord(kindValue)
         ? (asNonEmptyString(kindValue.type) ?? '')
         : '';
 
@@ -66,7 +58,7 @@ function parseKind(kindValue: unknown, movePath: string | null): CodexFileChange
 }
 
 function parseFileChangeEntry(value: unknown): CodexFileChangeEntry | null {
-  if (!isRecord(value)) {
+  if (!isObjectRecord(value)) {
     return null;
   }
 
@@ -77,7 +69,7 @@ function parseFileChangeEntry(value: unknown): CodexFileChangeEntry | null {
 
   const kindValue = value.kind;
   const movePath =
-    (isRecord(kindValue) ? asNonEmptyString(kindValue.move_path) : null) ??
+    (isObjectRecord(kindValue) ? asNonEmptyString(kindValue.move_path) : null) ??
     asNonEmptyString(value.move_path) ??
     asNonEmptyString(value.movePath);
 
@@ -96,7 +88,7 @@ function isCodexFileChangeEntry(value: CodexFileChangeEntry | null): value is Co
 }
 
 function parseFileChangePayload(value: unknown): CodexFileChangePayload | null {
-  if (!isRecord(value)) {
+  if (!isObjectRecord(value)) {
     return null;
   }
 
@@ -119,40 +111,6 @@ function parseFileChangePayload(value: unknown): CodexFileChangePayload | null {
   };
 }
 
-function findFileChangePayload(value: unknown, depth: number): CodexFileChangePayload | null {
-  const direct = parseFileChangePayload(value);
-  if (direct) {
-    return direct;
-  }
-
-  if (depth >= MAX_SEARCH_DEPTH) {
-    return null;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const nested = findFileChangePayload(item, depth + 1);
-      if (nested) {
-        return nested;
-      }
-    }
-    return null;
-  }
-
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  for (const nestedValue of Object.values(value)) {
-    const nested = findFileChangePayload(nestedValue, depth + 1);
-    if (nested) {
-      return nested;
-    }
-  }
-
-  return null;
-}
-
 function parseFileChangeFromText(text: string): CodexFileChangePayload | null {
   const trimmed = text.trim();
   if (trimmed.length === 0) {
@@ -161,7 +119,15 @@ function parseFileChangeFromText(text: string): CodexFileChangePayload | null {
 
   try {
     const parsed = JSON.parse(unwrapJsonCodeFence(trimmed));
-    const payload = findFileChangePayload(parsed, 0);
+    const typedPayload = findTypedPayload(parsed, {
+      type: FILE_CHANGE_TYPE,
+      maxDepth: MAX_SEARCH_DEPTH,
+    });
+    if (!typedPayload) {
+      return null;
+    }
+
+    const payload = parseFileChangePayload(typedPayload);
     return payload ? { ...payload, rawText: text } : null;
   } catch {
     return null;
