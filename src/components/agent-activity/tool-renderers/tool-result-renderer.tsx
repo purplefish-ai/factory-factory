@@ -35,7 +35,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
   isError,
   toolName,
 }: ToolResultContentRendererProps) {
-  const fileChangeResult = parseCodexFileChangeToolResult(content);
+  const fileChangeResult = isError ? null : parseCodexFileChangeToolResult(content);
   if (fileChangeResult && (!toolName || isCodexFileChangeToolName(toolName))) {
     return <CodexFileChangeRenderer payload={fileChangeResult} />;
   }

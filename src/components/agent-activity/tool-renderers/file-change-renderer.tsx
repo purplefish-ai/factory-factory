@@ -40,21 +40,42 @@ function getKindLabel(kind: CodexFileChangeKind): string {
   }
 }
 
-function getKindMeta(kind: CodexFileChangeKind): { icon: LucideIcon; className: string } {
+function getKindMeta(kind: CodexFileChangeKind): {
+  icon: LucideIcon;
+  className: string;
+  iconColorClass: string;
+} {
   switch (kind) {
     case 'create':
-      return { icon: FilePlus, className: 'text-success border-success/40 bg-success/10' };
+      return {
+        icon: FilePlus,
+        className: 'text-success border-success/40 bg-success/10',
+        iconColorClass: 'text-success',
+      };
     case 'update':
-      return { icon: FileCode, className: 'text-yellow-600 border-yellow-500/40 bg-yellow-500/10' };
+      return {
+        icon: FileCode,
+        className: 'text-yellow-600 border-yellow-500/40 bg-yellow-500/10',
+        iconColorClass: 'text-yellow-600',
+      };
     case 'delete':
       return {
         icon: FileMinus,
         className: 'text-destructive border-destructive/40 bg-destructive/10',
+        iconColorClass: 'text-destructive',
       };
     case 'move':
-      return { icon: ArrowRightLeft, className: 'text-sky-600 border-sky-500/40 bg-sky-500/10' };
+      return {
+        icon: ArrowRightLeft,
+        className: 'text-sky-600 border-sky-500/40 bg-sky-500/10',
+        iconColorClass: 'text-sky-600',
+      };
     case 'unknown':
-      return { icon: FileQuestion, className: 'text-muted-foreground border-border bg-muted/50' };
+      return {
+        icon: FileQuestion,
+        className: 'text-muted-foreground border-border bg-muted/50',
+        iconColorClass: 'text-muted-foreground',
+      };
   }
 }
 
@@ -146,7 +167,7 @@ export const CodexFileChangeRenderer = memo(function CodexFileChangeRenderer({
                 className="rounded border bg-muted/20 px-2 py-1.5"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <Icon className={cn('h-4 w-4 shrink-0', meta.className.split(' ')[0])} />
+                  <Icon className={cn('h-4 w-4 shrink-0', meta.iconColorClass)} />
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-xs truncate" title={change.path}>
                       {filename}

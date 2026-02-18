@@ -1,3 +1,5 @@
+import { isCodexFileChangeToolName } from './file-change-parser';
+
 const SUMMARY_TOOL_NAME_MAX = 24;
 const DETAIL_TOOL_NAME_MAX = 96;
 const RUN_COMMAND_PREVIEW_MAX = 84;
@@ -29,13 +31,6 @@ function isShellCommand(commandParts: string[]): boolean {
 export function isRunLikeToolName(name: string): boolean {
   const normalized = normalizeWhitespace(name);
   return /^run(?:\s|$)/i.test(normalized);
-}
-
-function isFileChangeToolName(name: string): boolean {
-  const normalized = normalizeWhitespace(name)
-    .replace(/[\s_-]+/g, '')
-    .toLowerCase();
-  return normalized === 'filechange' || normalized === 'filechanges';
 }
 
 export function extractCommandPreviewFromInput(input: Record<string, unknown>): string | null {
@@ -92,7 +87,7 @@ export function getDisplayToolName(
     return truncateWithEllipsis(`Run ${commandPreview}`, RUN_COMMAND_PREVIEW_MAX);
   }
 
-  if (isFileChangeToolName(normalizedName)) {
+  if (isCodexFileChangeToolName(normalizedName)) {
     return 'File changes';
   }
 
