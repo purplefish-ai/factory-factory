@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { ErrorBoundary } from './error-boundary';
 import { ProjectLayout } from './layouts/project-layout';
@@ -6,7 +7,6 @@ import AdminPage from './routes/admin-page';
 // Route components
 import HomePage from './routes/home';
 import LogsPage from './routes/logs';
-import MobileBaselinePage from './routes/mobile-baseline';
 import ProjectsListPage from './routes/projects/list';
 import NewProjectPage from './routes/projects/new';
 import ProjectRedirectPage from './routes/projects/redirect';
@@ -15,6 +15,7 @@ import WorkspacesListPage from './routes/projects/workspaces/list';
 import NewWorkspacePage from './routes/projects/workspaces/new';
 import ReviewsPage from './routes/reviews';
 
+const MobileBaselinePage = lazy(() => import('./routes/mobile-baseline'));
 const isDevelopmentMode = import.meta.env.MODE === 'development';
 const enableMobileBaselineRoute =
   isDevelopmentMode || import.meta.env.VITE_ENABLE_MOBILE_BASELINE === '1';
@@ -88,7 +89,11 @@ export const router = createBrowserRouter([
         ? [
             {
               path: '__mobile-baseline',
-              element: <MobileBaselinePage />,
+              element: (
+                <Suspense fallback={null}>
+                  <MobileBaselinePage />
+                </Suspense>
+              ),
             },
           ]
         : []),

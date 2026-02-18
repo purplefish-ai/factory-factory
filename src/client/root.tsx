@@ -29,7 +29,7 @@ function RootLayout() {
   }, [isLoading, projects, pathname, navigate]);
 
   return (
-    <div className="flex min-h-screen h-dvh flex-col">
+    <div className="flex h-dvh flex-col">
       <CLIHealthBanner />
       <ResizableLayout
         sidebar={showSidebar ? <AppSidebar /> : null}

@@ -86,6 +86,7 @@ const MainViewTabSchema = z
   });
 
 const MainViewTabsSchema = z.array(MainViewTabSchema);
+const MOBILE_MAX_WIDTH_MEDIA_QUERY = '(max-width: 767px)';
 
 // =============================================================================
 // Helper Functions
@@ -167,6 +168,13 @@ function loadRightPanelVisibility(workspaceId: string): boolean {
   }
 }
 
+function isMobileViewport(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  return window.matchMedia(MOBILE_MAX_WIDTH_MEDIA_QUERY).matches;
+}
+
 function saveTabsToStorage(workspaceId: string, tabs: MainViewTab[]): void {
   if (typeof window === 'undefined') {
     return;
@@ -234,7 +242,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     setActiveBottomTabState(loadBottomTabFromStorage(workspaceId));
 
     // Load right panel visibility (workspace-scoped). On mobile we start closed.
-    setRightPanelVisibleState(isMobile ? false : loadRightPanelVisibility(workspaceId));
+    setRightPanelVisibleState(isMobileViewport() ? false : loadRightPanelVisibility(workspaceId));
 
     // Load scroll states (workspace-scoped)
     if (typeof window !== 'undefined') {
@@ -246,7 +254,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     // Mark as loaded at the end of this effect, so persist effect skips the
     // re-render triggered by the setState calls above
     loadedForWorkspaceRef.current = workspaceId;
-  }, [workspaceId, isMobile]);
+  }, [workspaceId]);
 
   // Persist tabs and active tab when they change (skip until load is complete)
   useEffect(() => {
@@ -295,11 +303,15 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   const prevIsMobileRef = useRef(isMobile);
   useEffect(() => {
     const switchedToMobile = isMobile && !prevIsMobileRef.current;
+    const switchedToDesktop = !isMobile && prevIsMobileRef.current;
     if (switchedToMobile && rightPanelVisible) {
       setRightPanelVisibleState(false);
     }
+    if (switchedToDesktop) {
+      setRightPanelVisibleState(loadRightPanelVisibility(workspaceId));
+    }
     prevIsMobileRef.current = isMobile;
-  }, [isMobile, rightPanelVisible]);
+  }, [isMobile, rightPanelVisible, workspaceId]);
 
   const getScrollState = useCallback(
     (tabId: string, mode: ScrollMode) =>

@@ -105,86 +105,282 @@ function ReviewsListPanel({
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Page coordinates keyboard shortcuts, query caching, and responsive render paths.
-function ReviewsPageContent() {
-  const [searchParams] = useSearchParams();
-  const initialRepo = searchParams.get('repo');
-  const initialPR = searchParams.get('pr');
+function useCacheSelectedDetails({
+  details,
+  selectedKey,
+  hasSelectedDetails,
+  setPrDetails,
+}: {
+  details: PRWithFullDetails | undefined;
+  selectedKey: string | null;
+  hasSelectedDetails: boolean;
+  setPrDetails: React.Dispatch<React.SetStateAction<Map<string, PRWithFullDetails>>>;
+}) {
+  useEffect(() => {
+    if (!(details && selectedKey) || hasSelectedDetails) {
+      return;
+    }
+    setPrDetails((prev) => new Map(prev).set(selectedKey, details));
+  }, [details, selectedKey, hasSelectedDetails, setPrDetails]);
+}
 
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [prDetails, setPrDetails] = useState<Map<string, PRWithFullDetails>>(new Map());
-  const [diffs, setDiffs] = useState<Map<string, string>>(new Map());
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
-  const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
-  const isMobile = useIsMobile();
+function useInitialReviewSelection({
+  initialRepo,
+  initialPR,
+  prs,
+  setSelectedIndex,
+}: {
+  initialRepo: string | null;
+  initialPR: string | null;
+  prs: ReviewRequest[];
+  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  useEffect(() => {
+    if (!(initialRepo && initialPR) || prs.length === 0) {
+      return;
+    }
 
+    const prNum = Number.parseInt(initialPR, 10);
+    const index = prs.findIndex(
+      (pr) => pr.repository.nameWithOwner === initialRepo && pr.number === prNum
+    );
+    if (index >= 0) {
+      setSelectedIndex(index);
+    }
+  }, [initialRepo, initialPR, prs, setSelectedIndex]);
+}
+
+function useReviewKeyboardShortcuts({
+  prsLength,
+  onOpenGitHub,
+  onApprove,
+  reviewDecision,
+  setSelectedIndex,
+}: {
+  prsLength: number;
+  onOpenGitHub: () => void;
+  onApprove: () => void;
+  reviewDecision: PRWithFullDetails['reviewDecision'] | null | undefined;
+  setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const actionByKey: Partial<Record<string, () => void>> = {
+        j: () => setSelectedIndex((prev) => Math.min(prev + 1, prsLength - 1)),
+        k: () => setSelectedIndex((prev) => Math.max(prev - 1, 0)),
+        o: onOpenGitHub,
+        a: () => {
+          if (reviewDecision !== 'APPROVED') {
+            onApprove();
+          }
+        },
+      };
+
+      const action = actionByKey[event.key];
+      if (!action) {
+        return;
+      }
+      event.preventDefault();
+      action();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [prsLength, onOpenGitHub, onApprove, reviewDecision, setSelectedIndex]);
+}
+
+function useScrollToSelectedReview(
+  itemRefs: React.MutableRefObject<Map<number, HTMLButtonElement>>,
+  selectedIndex: number
+) {
+  useEffect(() => {
+    const ref = itemRefs.current.get(selectedIndex);
+    if (ref) {
+      ref.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [itemRefs, selectedIndex]);
+}
+
+function ReviewsHeader({ count, className }: { count: number; className: string }) {
+  return (
+    <div className={className}>
+      <h1 className="text-sm font-semibold">Review Requests</h1>
+      <p className="text-xs text-muted-foreground">
+        {count} PR{count !== 1 ? 's' : ''} awaiting your review
+      </p>
+    </div>
+  );
+}
+
+function ReviewsEmptyState() {
+  return (
+    <div className="h-full flex items-center justify-center text-muted-foreground">
+      <div className="text-center">
+        <p className="text-sm font-medium">No review requests</p>
+        <p className="text-xs">You have no pending PR reviews</p>
+      </div>
+    </div>
+  );
+}
+
+function ReviewsMobileLayout({
+  prs,
+  prDetails,
+  selectedIndex,
+  itemRefs,
+  onSelect,
+  mobileDetailsOpen,
+  setMobileDetailsOpen,
+  selectedPR,
+  selectedDetails,
+  selectedDiff,
+  diffLoading,
+  onFetchDiff,
+  onOpenGitHub,
+  onApprove,
+  approving,
+}: {
+  prs: ReviewRequest[];
+  prDetails: Map<string, PRWithFullDetails>;
+  selectedIndex: number;
+  itemRefs: React.MutableRefObject<Map<number, HTMLButtonElement>>;
+  onSelect: (index: number) => void;
+  mobileDetailsOpen: boolean;
+  setMobileDetailsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  selectedPR: ReviewRequest | undefined;
+  selectedDetails: PRWithFullDetails | null;
+  selectedDiff: string | null;
+  diffLoading: boolean;
+  onFetchDiff: () => Promise<void>;
+  onOpenGitHub: () => void;
+  onApprove: () => void;
+  approving: boolean;
+}) {
+  return (
+    <div className="h-full flex flex-col">
+      <ReviewsHeader count={prs.length} className="px-3 py-3 border-b bg-muted/30" />
+      <ReviewsListPanel
+        prs={prs}
+        prDetails={prDetails}
+        selectedIndex={selectedIndex}
+        itemRefs={itemRefs}
+        onSelect={onSelect}
+      />
+
+      <Sheet open={mobileDetailsOpen && !!selectedPR} onOpenChange={setMobileDetailsOpen}>
+        <SheetContent side="bottom" className="h-[92dvh] w-full max-w-none p-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Pull Request Details</SheetTitle>
+            <SheetDescription>Review request details and actions</SheetDescription>
+          </SheetHeader>
+          <PRDetailPanel
+            pr={selectedDetails ?? null}
+            diff={selectedDiff ?? null}
+            diffLoading={diffLoading}
+            onFetchDiff={onFetchDiff}
+            onOpenGitHub={onOpenGitHub}
+            onApprove={onApprove}
+            approving={approving}
+          />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+function ReviewsDesktopLayout({
+  prs,
+  prDetails,
+  selectedIndex,
+  itemRefs,
+  onSelect,
+  selectedDetails,
+  selectedDiff,
+  diffLoading,
+  onFetchDiff,
+  onOpenGitHub,
+  onApprove,
+  approving,
+}: {
+  prs: ReviewRequest[];
+  prDetails: Map<string, PRWithFullDetails>;
+  selectedIndex: number;
+  itemRefs: React.MutableRefObject<Map<number, HTMLButtonElement>>;
+  onSelect: (index: number) => void;
+  selectedDetails: PRWithFullDetails | null;
+  selectedDiff: string | null;
+  diffLoading: boolean;
+  onFetchDiff: () => Promise<void>;
+  onOpenGitHub: () => void;
+  onApprove: () => void;
+  approving: boolean;
+}) {
+  return (
+    <div className="h-full grid grid-cols-[minmax(380px,440px)_1fr] gap-0">
+      <div className="border-r flex flex-col h-full overflow-hidden">
+        <ReviewsHeader count={prs.length} className="px-4 py-3 border-b bg-muted/30" />
+        <ReviewsListPanel
+          prs={prs}
+          prDetails={prDetails}
+          selectedIndex={selectedIndex}
+          itemRefs={itemRefs}
+          onSelect={onSelect}
+        />
+      </div>
+
+      <div className="h-full overflow-hidden">
+        <PRDetailPanel
+          pr={selectedDetails ?? null}
+          diff={selectedDiff ?? null}
+          diffLoading={diffLoading}
+          onFetchDiff={onFetchDiff}
+          onOpenGitHub={onOpenGitHub}
+          onApprove={onApprove}
+          approving={approving}
+        />
+      </div>
+    </div>
+  );
+}
+
+function useReviewActions({
+  selectedPR,
+  selectedKey,
+  selectedDetails,
+  diffs,
+  setPrDetails,
+  setDiffs,
+  setDiffLoading,
+}: {
+  selectedPR: ReviewRequest | undefined;
+  selectedKey: string | null;
+  selectedDetails: PRWithFullDetails | null;
+  diffs: Map<string, string>;
+  setPrDetails: React.Dispatch<React.SetStateAction<Map<string, PRWithFullDetails>>>;
+  setDiffs: React.Dispatch<React.SetStateAction<Map<string, string>>>;
+  setDiffLoading: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
   const utils = trpc.useUtils();
 
-  // Fetch review requests list
-  const { data, isLoading } = trpc.prReview.listReviewRequests.useQuery(undefined, {
-    refetchInterval: 30_000,
-  });
-
-  const prs: ReviewRequest[] = data?.prs ?? [];
-
-  // Get details for selected PR
-  const selectedPR = prs[selectedIndex];
-  const selectedKey = selectedPR
-    ? `${selectedPR.repository.nameWithOwner}#${selectedPR.number}`
-    : null;
-  const selectedDetails = selectedKey ? prDetails.get(selectedKey) : null;
-  const selectedDiff = selectedKey ? diffs.get(selectedKey) : null;
-
-  // Fetch PR details query
-  const detailsQuery = trpc.prReview.getPRDetails.useQuery(
-    {
-      repo: selectedPR?.repository.nameWithOwner ?? '',
-      number: selectedPR?.number ?? 0,
-    },
-    {
-      enabled: !!selectedPR && !selectedDetails,
-      staleTime: 60_000,
-    }
-  );
-
-  // Update details map when query returns
-  useEffect(() => {
-    if (detailsQuery.data && selectedKey && !prDetails.has(selectedKey)) {
-      setPrDetails((prev) => new Map(prev).set(selectedKey, detailsQuery.data));
-    }
-  }, [detailsQuery.data, selectedKey, prDetails]);
-
-  // Auto-select PR from URL params on initial load
-  useEffect(() => {
-    if (initialRepo && initialPR && prs.length > 0) {
-      const prNum = Number.parseInt(initialPR, 10);
-      const index = prs.findIndex(
-        (pr) => pr.repository.nameWithOwner === initialRepo && pr.number === prNum
-      );
-      if (index >= 0) {
-        setSelectedIndex(index);
-      }
-    }
-  }, [initialRepo, initialPR, prs]);
-
-  // Approve mutation
   const approveMutation = trpc.prReview.submitReview.useMutation({
     onSuccess: () => {
       toast.success('PR approved successfully');
       utils.prReview.listReviewRequests.invalidate();
-      // Update local details cache
-      if (selectedKey && selectedDetails) {
-        const updated = { ...selectedDetails, reviewDecision: 'APPROVED' as const };
-        setPrDetails((prev) => new Map(prev).set(selectedKey, updated));
+      if (!(selectedKey && selectedDetails)) {
+        return;
       }
+      const updated = { ...selectedDetails, reviewDecision: 'APPROVED' as const };
+      setPrDetails((prev) => new Map(prev).set(selectedKey, updated));
     },
     onError: (err) => {
       toast.error(`Failed to approve PR: ${err.message}`);
     },
   });
 
-  // Fetch diff
   const fetchDiff = useCallback(async () => {
     if (!(selectedPR && selectedKey) || diffs.has(selectedKey)) {
       return;
@@ -202,9 +398,8 @@ function ReviewsPageContent() {
     } finally {
       setDiffLoading(false);
     }
-  }, [selectedPR, selectedKey, diffs, utils.client.prReview.getDiff]);
+  }, [selectedPR, selectedKey, diffs, setDiffLoading, setDiffs, utils.client.prReview.getDiff]);
 
-  // Handle approve
   const handleApprove = useCallback(() => {
     if (!selectedPR) {
       return;
@@ -216,142 +411,140 @@ function ReviewsPageContent() {
     });
   }, [selectedPR, approveMutation]);
 
-  // Handle open in GitHub
   const handleOpenGitHub = useCallback(() => {
-    if (selectedPR) {
-      window.open(selectedPR.url, '_blank');
+    if (!selectedPR) {
+      return;
     }
+    window.open(selectedPR.url, '_blank');
   }, [selectedPR]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+  return {
+    fetchDiff,
+    handleApprove,
+    handleOpenGitHub,
+    approving: approveMutation.isPending,
+  };
+}
 
-      switch (e.key) {
-        case 'j':
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.min(prev + 1, prs.length - 1));
-          break;
-        case 'k':
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.max(prev - 1, 0));
-          break;
-        case 'o':
-          e.preventDefault();
-          handleOpenGitHub();
-          break;
-        case 'a':
-          e.preventDefault();
-          if (selectedDetails?.reviewDecision !== 'APPROVED') {
-            handleApprove();
-          }
-          break;
-      }
-    };
+function ReviewsPageContent() {
+  const [searchParams] = useSearchParams();
+  const initialRepo = searchParams.get('repo');
+  const initialPR = searchParams.get('pr');
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [prs.length, handleOpenGitHub, handleApprove, selectedDetails?.reviewDecision]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [prDetails, setPrDetails] = useState<Map<string, PRWithFullDetails>>(new Map());
+  const [diffs, setDiffs] = useState<Map<string, string>>(new Map());
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const isMobile = useIsMobile();
 
-  // Scroll selected item into view
-  useEffect(() => {
-    const ref = itemRefs.current.get(selectedIndex);
-    if (ref) {
-      ref.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  // Fetch review requests list
+  const { data, isLoading } = trpc.prReview.listReviewRequests.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
+
+  const prs: ReviewRequest[] = data?.prs ?? [];
+
+  // Get details for selected PR
+  const selectedPR = prs[selectedIndex];
+  const selectedKey = selectedPR
+    ? `${selectedPR.repository.nameWithOwner}#${selectedPR.number}`
+    : null;
+  const selectedDetails = selectedKey ? (prDetails.get(selectedKey) ?? null) : null;
+  const selectedDiff = selectedKey ? (diffs.get(selectedKey) ?? null) : null;
+
+  // Fetch PR details query
+  const detailsQuery = trpc.prReview.getPRDetails.useQuery(
+    {
+      repo: selectedPR?.repository.nameWithOwner ?? '',
+      number: selectedPR?.number ?? 0,
+    },
+    {
+      enabled: !!selectedPR && !selectedDetails,
+      staleTime: 60_000,
     }
-  }, [selectedIndex]);
+  );
+
+  useCacheSelectedDetails({
+    details: detailsQuery.data,
+    selectedKey,
+    hasSelectedDetails: !!selectedDetails,
+    setPrDetails,
+  });
+  useInitialReviewSelection({
+    initialRepo,
+    initialPR,
+    prs,
+    setSelectedIndex,
+  });
+  const { fetchDiff, handleApprove, handleOpenGitHub, approving } = useReviewActions({
+    selectedPR,
+    selectedKey,
+    selectedDetails,
+    diffs,
+    setPrDetails,
+    setDiffs,
+    setDiffLoading,
+  });
+
+  useReviewKeyboardShortcuts({
+    prsLength: prs.length,
+    onOpenGitHub: handleOpenGitHub,
+    onApprove: handleApprove,
+    reviewDecision: selectedDetails?.reviewDecision,
+    setSelectedIndex,
+  });
+  useScrollToSelectedReview(itemRefs, selectedIndex);
 
   if (isLoading) {
     return isMobile ? <ReviewsDashboardMobileSkeleton /> : <ReviewsDashboardSkeleton />;
   }
 
   if (prs.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <p className="text-sm font-medium">No review requests</p>
-          <p className="text-xs">You have no pending PR reviews</p>
-        </div>
-      </div>
-    );
+    return <ReviewsEmptyState />;
   }
 
   if (isMobile) {
     return (
-      <div className="h-full flex flex-col">
-        <div className="px-3 py-3 border-b bg-muted/30">
-          <h1 className="text-sm font-semibold">Review Requests</h1>
-          <p className="text-xs text-muted-foreground">
-            {prs.length} PR{prs.length !== 1 ? 's' : ''} awaiting your review
-          </p>
-        </div>
-        <ReviewsListPanel
-          prs={prs}
-          prDetails={prDetails}
-          selectedIndex={selectedIndex}
-          itemRefs={itemRefs}
-          onSelect={(index) => {
-            setSelectedIndex(index);
-            setMobileDetailsOpen(true);
-          }}
-        />
-
-        <Sheet open={mobileDetailsOpen && !!selectedPR} onOpenChange={setMobileDetailsOpen}>
-          <SheetContent side="bottom" className="h-[92dvh] w-full max-w-none p-0">
-            <SheetHeader className="sr-only">
-              <SheetTitle>Pull Request Details</SheetTitle>
-              <SheetDescription>Review request details and actions</SheetDescription>
-            </SheetHeader>
-            <PRDetailPanel
-              pr={selectedDetails ?? null}
-              diff={selectedDiff ?? null}
-              diffLoading={diffLoading}
-              onFetchDiff={fetchDiff}
-              onOpenGitHub={handleOpenGitHub}
-              onApprove={handleApprove}
-              approving={approveMutation.isPending}
-            />
-          </SheetContent>
-        </Sheet>
-      </div>
+      <ReviewsMobileLayout
+        prs={prs}
+        prDetails={prDetails}
+        selectedIndex={selectedIndex}
+        itemRefs={itemRefs}
+        onSelect={(index) => {
+          setSelectedIndex(index);
+          setMobileDetailsOpen(true);
+        }}
+        mobileDetailsOpen={mobileDetailsOpen}
+        setMobileDetailsOpen={setMobileDetailsOpen}
+        selectedPR={selectedPR}
+        selectedDetails={selectedDetails}
+        selectedDiff={selectedDiff}
+        diffLoading={diffLoading}
+        onFetchDiff={fetchDiff}
+        onOpenGitHub={handleOpenGitHub}
+        onApprove={handleApprove}
+        approving={approving}
+      />
     );
   }
 
   return (
-    <div className="h-full grid grid-cols-[minmax(380px,440px)_1fr] gap-0">
-      {/* Left panel - PR list */}
-      <div className="border-r flex flex-col h-full overflow-hidden">
-        <div className="px-4 py-3 border-b bg-muted/30">
-          <h1 className="text-sm font-semibold">Review Requests</h1>
-          <p className="text-xs text-muted-foreground">
-            {prs.length} PR{prs.length !== 1 ? 's' : ''} awaiting your review
-          </p>
-        </div>
-        <ReviewsListPanel
-          prs={prs}
-          prDetails={prDetails}
-          selectedIndex={selectedIndex}
-          itemRefs={itemRefs}
-          onSelect={setSelectedIndex}
-        />
-      </div>
-
-      {/* Right panel - Detail view */}
-      <div className="h-full overflow-hidden">
-        <PRDetailPanel
-          pr={selectedDetails ?? null}
-          diff={selectedDiff ?? null}
-          diffLoading={diffLoading}
-          onFetchDiff={fetchDiff}
-          onOpenGitHub={handleOpenGitHub}
-          onApprove={handleApprove}
-          approving={approveMutation.isPending}
-        />
-      </div>
-    </div>
+    <ReviewsDesktopLayout
+      prs={prs}
+      prDetails={prDetails}
+      selectedIndex={selectedIndex}
+      itemRefs={itemRefs}
+      onSelect={setSelectedIndex}
+      selectedDetails={selectedDetails}
+      selectedDiff={selectedDiff}
+      diffLoading={diffLoading}
+      onFetchDiff={fetchDiff}
+      onOpenGitHub={handleOpenGitHub}
+      onApprove={handleApprove}
+      approving={approving}
+    />
   );
 }
 
