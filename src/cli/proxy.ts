@@ -179,7 +179,17 @@ class BruteForceGuard {
     string,
     { failures: number; lockedUntilMs: number; lastSeenMs: number }
   >();
-  private totalFailures = 0;
+  private readonly globalFailureTimestampsMs: number[] = [];
+
+  private evictExpiredGlobalFailures(nowMs: number): void {
+    const cutoffMs = nowMs - LOCKOUT_WINDOW_MS;
+    while (
+      this.globalFailureTimestampsMs.length > 0 &&
+      (this.globalFailureTimestampsMs[0] ?? 0) <= cutoffMs
+    ) {
+      this.globalFailureTimestampsMs.shift();
+    }
+  }
 
   private evictStaleEntries(nowMs: number): void {
     for (const [ip, state] of this.attemptsByIp.entries()) {
@@ -219,6 +229,7 @@ class BruteForceGuard {
 
   registerFailure(ip: string, nowMs = Date.now()): { ipLocked: boolean; globalLocked: boolean } {
     this.evictStaleEntries(nowMs);
+    this.evictExpiredGlobalFailures(nowMs);
     const current = this.attemptsByIp.get(ip) ?? { failures: 0, lockedUntilMs: 0, lastSeenMs: 0 };
     const normalized =
       current.lockedUntilMs > 0 && current.lockedUntilMs <= nowMs
@@ -236,10 +247,10 @@ class BruteForceGuard {
       lastSeenMs: nowMs,
     });
 
-    this.totalFailures += 1;
+    this.globalFailureTimestampsMs.push(nowMs);
     return {
       ipLocked,
-      globalLocked: this.totalFailures >= GLOBAL_FAILURE_THRESHOLD,
+      globalLocked: this.globalFailureTimestampsMs.length >= GLOBAL_FAILURE_THRESHOLD,
     };
   }
 }
@@ -393,7 +404,12 @@ async function startFactoryFactoryServer(params: {
     process.stderr.write(chalk.red(`  [server] ${message}\n`));
   });
 
-  await waitForPort(params.requestedPort);
+  try {
+    await waitForPort(params.requestedPort);
+  } catch (error) {
+    await killProcessTree(backend);
+    throw error;
+  }
 
   return { process: backend, port: params.requestedPort };
 }
@@ -852,8 +868,10 @@ async function handleAuthHttpRequest(params: {
 }): Promise<void> {
   const ip = getClientIp(params.req);
   const lockState = params.guard.isLocked(ip);
+  const isLoginPath = params.req.url?.startsWith(LOGIN_PATH) ?? false;
+  const isLoginSubmission = params.req.method === 'POST' && isLoginPath;
 
-  if (lockState.locked && params.req.url !== LOGIN_PATH) {
+  if (lockState.locked && !isLoginSubmission) {
     writeRateLimitResponse(params.res, lockState.retryAfterSeconds);
     return;
   }
@@ -864,7 +882,7 @@ async function handleAuthHttpRequest(params: {
     magicToken: params.magicToken,
   });
 
-  if (params.req.method === 'POST' && params.req.url?.startsWith(LOGIN_PATH)) {
+  if (isLoginSubmission) {
     await handleLoginSubmission({
       req: params.req,
       res: params.res,
@@ -1092,8 +1110,13 @@ async function startCloudflaredTunnel(
     });
   });
 
-  const publicUrl = await waitForUrl;
-  return { proc: cloudflared, publicUrl };
+  try {
+    const publicUrl = await waitForUrl;
+    return { proc: cloudflared, publicUrl };
+  } catch (error) {
+    await killProcessTree(cloudflared);
+    throw error;
+  }
 }
 
 function createExitPromise(
@@ -1133,12 +1156,14 @@ export async function runProxyCommand({
   const shutdownState = { shuttingDown: false };
   const processes: ProcessRecord[] = [];
   let authProxyClose: (() => Promise<void>) | null = null;
+  let signalHandlersAttached = false;
 
   const shutdown = async (exitCode: number, message?: string) => {
     if (shutdownState.shuttingDown) {
       return;
     }
     shutdownState.shuttingDown = true;
+    detachSignalHandlers();
 
     if (message) {
       if (exitCode === 0) {
@@ -1160,12 +1185,30 @@ export async function runProxyCommand({
     process.exit(exitCode);
   };
 
-  const onSignal = (signal: string) => {
-    void shutdown(0, `${signal} received, shutting down...`);
+  const onSigint = () => {
+    void shutdown(0, 'SIGINT received, shutting down...');
+  };
+  const onSigterm = () => {
+    void shutdown(0, 'SIGTERM received, shutting down...');
   };
 
-  process.on('SIGINT', () => onSignal('SIGINT'));
-  process.on('SIGTERM', () => onSignal('SIGTERM'));
+  const detachSignalHandlers = () => {
+    if (!signalHandlersAttached) {
+      return;
+    }
+    process.off('SIGINT', onSigint);
+    process.off('SIGTERM', onSigterm);
+    signalHandlersAttached = false;
+  };
+
+  const attachSignalHandlers = () => {
+    if (signalHandlersAttached) {
+      return;
+    }
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
+    signalHandlersAttached = true;
+  };
 
   await ensureCloudflaredInstalled();
 
@@ -1175,6 +1218,7 @@ export async function runProxyCommand({
     runMigrations(projectRoot, databasePath);
   } catch (error) {
     console.error(chalk.red(`\n❌ Migration failed: ${(error as Error).message}`));
+    detachSignalHandlers();
     process.exit(1);
     return;
   }
@@ -1183,6 +1227,7 @@ export async function runProxyCommand({
   console.log(chalk.blue(`Starting server on port ${requestedPort}...`));
 
   let backend: { process: ChildProcess; port: number };
+  attachSignalHandlers();
   try {
     backend = await startFactoryFactoryServer({
       projectRoot,
@@ -1191,6 +1236,7 @@ export async function runProxyCommand({
     });
   } catch (error) {
     console.error(chalk.red(`\n❌ ${(error as Error).message}`));
+    detachSignalHandlers();
     process.exit(1);
     return;
   }

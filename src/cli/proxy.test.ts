@@ -78,6 +78,20 @@ describe('proxy internals', () => {
     expect(globalLockReached).toBe(true);
   });
 
+  it('expires global failure lockout window over time', () => {
+    const guard = new proxyInternals.BruteForceGuard();
+
+    let globalLocked = false;
+    for (let i = 0; i < 20; i += 1) {
+      const result = guard.registerFailure(`203.0.113.${i}`, i);
+      globalLocked = result.globalLocked;
+    }
+    expect(globalLocked).toBe(true);
+
+    const afterWindowResult = guard.registerFailure('203.0.113.200', 5 * 60 * 1000 + 21);
+    expect(afterWindowResult.globalLocked).toBe(false);
+  });
+
   it('allows only safe relative redirect paths', () => {
     expect(proxyInternals.toSafeRedirectPath('/')).toBe('/');
     expect(proxyInternals.toSafeRedirectPath('/dashboard?tab=1')).toBe('/dashboard?tab=1');
