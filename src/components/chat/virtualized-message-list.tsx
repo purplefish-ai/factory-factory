@@ -284,8 +284,17 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
+    const container = scrollContainerRef.current;
+    if (container) {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (distanceFromBottom >= -1 && distanceFromBottom <= 1) {
+        return;
+      }
+    }
+
     stickToBottom();
-  }, [latestThinking, loadingSession, stickToBottom]);
+  }, [latestThinking, loadingSession, scrollContainerRef, stickToBottom]);
 
   // Keep viewport pinned while content grows (e.g., large messages/images/measurements)
   // when the user is already at the bottom.
