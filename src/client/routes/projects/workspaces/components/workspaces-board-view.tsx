@@ -8,6 +8,7 @@ import { ViewModeToggle } from './view-mode-toggle';
 export function WorkspacesBoardView({
   projectId,
   slug,
+  issueProvider,
   viewMode,
   onViewModeChange,
   onResumeOpen,
@@ -17,6 +18,7 @@ export function WorkspacesBoardView({
 }: {
   projectId: string;
   slug: string;
+  issueProvider: string;
   viewMode: ViewMode;
   onViewModeChange: (value: ViewMode) => void;
   onResumeOpen: () => void;
@@ -25,7 +27,7 @@ export function WorkspacesBoardView({
   resumeDialog: React.ReactNode;
 }) {
   return (
-    <KanbanProvider projectId={projectId} projectSlug={slug}>
+    <KanbanProvider projectId={projectId} projectSlug={slug} issueProvider={issueProvider}>
       <div className="flex flex-col h-full p-3 md:p-6 gap-3 md:gap-4">
         <PageHeader title="Workspaces">
           <KanbanControls />

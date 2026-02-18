@@ -28,7 +28,7 @@ import { downloadFile } from '@/frontend/lib/download-file';
 import { trpc } from '@/frontend/lib/trpc';
 import {
   ApiUsageSection,
-  // IssueTrackingSection,
+  IssueTrackingSection,
   ProcessesSection,
   ProcessesSectionSkeleton,
 } from './admin/index';
@@ -685,8 +685,7 @@ export default function AdminDashboardPage() {
         {/* Factory Configuration */}
         {projects && <FactoryConfigSection projects={projects} />}
 
-        {/* TODO: Re-enable once Linear integration is complete */}
-        {/* {projects && <IssueTrackingSection projects={projects} />} */}
+        {projects && <IssueTrackingSection projects={projects} />}
 
         {/* User Settings */}
         <NotificationSettingsSection />

@@ -2,7 +2,23 @@ import { createContext, type ReactNode, useContext, useMemo, useState } from 're
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
-export interface GitHubIssue {
+/** Normalized issue type that works for both GitHub and Linear providers. */
+export interface KanbanIssue {
+  id: string;
+  displayId: string;
+  title: string;
+  body: string;
+  url: string;
+  createdAt: string;
+  author: string;
+  provider: 'github' | 'linear';
+  githubIssueNumber?: number;
+  linearIssueId?: string;
+  linearIssueIdentifier?: string;
+}
+
+/** Raw GitHub issue shape from the tRPC response. */
+interface GitHubIssueRaw {
   number: number;
   title: string;
   body: string;
@@ -12,11 +28,53 @@ export interface GitHubIssue {
   author: { login: string };
 }
 
+/** Raw Linear issue shape from the tRPC response. */
+interface LinearIssueRaw {
+  id: string;
+  identifier: string;
+  title: string;
+  description: string;
+  url: string;
+  state: string;
+  createdAt: string;
+  assigneeName: string | null;
+}
+
+function normalizeGitHubIssue(issue: GitHubIssueRaw): KanbanIssue {
+  return {
+    id: String(issue.number),
+    displayId: `#${issue.number}`,
+    title: issue.title,
+    body: issue.body,
+    url: issue.url,
+    createdAt: issue.createdAt,
+    author: issue.author.login,
+    provider: 'github',
+    githubIssueNumber: issue.number,
+  };
+}
+
+function normalizeLinearIssue(issue: LinearIssueRaw): KanbanIssue {
+  return {
+    id: issue.id,
+    displayId: issue.identifier,
+    title: issue.title,
+    body: issue.description,
+    url: issue.url,
+    createdAt: issue.createdAt,
+    author: issue.assigneeName ?? 'Unassigned',
+    provider: 'linear',
+    linearIssueId: issue.id,
+    linearIssueIdentifier: issue.identifier,
+  };
+}
+
 interface KanbanContextValue {
   projectId: string;
   projectSlug: string;
+  issueProvider: string;
   workspaces: WorkspaceWithKanban[] | undefined;
-  issues: GitHubIssue[] | undefined;
+  issues: KanbanIssue[] | undefined;
   isLoading: boolean;
   isError: boolean;
   error: { message: string } | null;
@@ -40,11 +98,19 @@ export function useKanban() {
 interface KanbanProviderProps {
   projectId: string;
   projectSlug: string;
+  issueProvider: string;
   children: ReactNode;
 }
 
-export function KanbanProvider({ projectId, projectSlug, children }: KanbanProviderProps) {
+export function KanbanProvider({
+  projectId,
+  projectSlug,
+  issueProvider,
+  children,
+}: KanbanProviderProps) {
   const utils = trpc.useUtils();
+  const isLinear = issueProvider === 'LINEAR';
+
   const {
     data: workspaces,
     isLoading: isLoadingWorkspaces,
@@ -56,18 +122,33 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     { refetchInterval: 30_000, staleTime: 25_000 }
   );
 
+  // GitHub issues — enabled only when provider is GitHub
   const {
-    data: issuesData,
-    isLoading: isLoadingIssues,
-    refetch: refetchIssues,
+    data: githubIssuesData,
+    isLoading: isLoadingGithubIssues,
+    refetch: refetchGithubIssues,
   } = trpc.github.listIssuesForProject.useQuery(
     { projectId },
-    { refetchInterval: 60_000, staleTime: 30_000 }
+    { refetchInterval: 60_000, staleTime: 30_000, enabled: !isLinear }
   );
+
+  // Linear issues — enabled only when provider is Linear
+  const {
+    data: linearIssuesData,
+    isLoading: isLoadingLinearIssues,
+    refetch: refetchLinearIssues,
+  } = trpc.linear.listIssuesForProject.useQuery(
+    { projectId },
+    { refetchInterval: 60_000, staleTime: 30_000, enabled: isLinear }
+  );
+
+  const isLoadingIssues = isLinear ? isLoadingLinearIssues : isLoadingGithubIssues;
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
+
+  const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
 
   const syncAndRefetch = async () => {
     await syncMutation.mutateAsync({ projectId });
@@ -94,27 +175,46 @@ export function KanbanProvider({ projectId, projectSlug, children }: KanbanProvi
     refetchIssues();
   };
 
+  // Normalize issues from the active provider
+  const normalizedIssues = useMemo(() => {
+    if (isLinear) {
+      return linearIssuesData?.issues?.map(normalizeLinearIssue);
+    }
+    return githubIssuesData?.issues?.map(normalizeGitHubIssue);
+  }, [isLinear, githubIssuesData?.issues, linearIssuesData?.issues]);
+
   // Filter out issues that already have a workspace
   const filteredIssues = useMemo(() => {
-    if (!issuesData?.issues) {
+    if (!normalizedIssues) {
       return undefined;
     }
     if (!workspaces) {
-      return issuesData.issues;
+      return normalizedIssues;
+    }
+
+    if (isLinear) {
+      const workspaceLinearIds = new Set(
+        workspaces.map((w) => w.linearIssueId).filter((id): id is string => id !== null)
+      );
+      return normalizedIssues.filter(
+        (issue) => !(issue.linearIssueId && workspaceLinearIds.has(issue.linearIssueId))
+      );
     }
 
     const workspaceIssueNumbers = new Set(
       workspaces.map((w) => w.githubIssueNumber).filter((n): n is number => n !== null)
     );
-
-    return issuesData.issues.filter((issue) => !workspaceIssueNumbers.has(issue.number));
-  }, [issuesData?.issues, workspaces]);
+    return normalizedIssues.filter(
+      (issue) => !(issue.githubIssueNumber && workspaceIssueNumbers.has(issue.githubIssueNumber))
+    );
+  }, [normalizedIssues, workspaces, isLinear]);
 
   return (
     <KanbanContext.Provider
       value={{
         projectId,
         projectSlug,
+        issueProvider,
         workspaces: workspaces as WorkspaceWithKanban[] | undefined,
         issues: filteredIssues,
         isLoading: isLoadingWorkspaces || isLoadingIssues,

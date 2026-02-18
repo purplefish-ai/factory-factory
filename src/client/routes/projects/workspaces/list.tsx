@@ -119,6 +119,7 @@ export default function WorkspacesListPage() {
       <WorkspacesBoardView
         projectId={project.id}
         slug={slug}
+        issueProvider={project.issueProvider}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         onResumeOpen={() => setResumeOpen(true)}

@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
-import type { GitHubIssue } from './kanban-context';
+import type { KanbanIssue } from './kanban-context';
 
 interface IssueCardProps {
-  issue: GitHubIssue;
+  issue: KanbanIssue;
   projectId: string;
   onClick?: () => void;
 }
@@ -17,7 +17,7 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
-  const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.number}`;
+  const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.id}`;
 
   useEffect(() => {
     if (userSettings?.ratchetEnabled === undefined) {
@@ -57,14 +57,26 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
     e.preventDefault();
     e.stopPropagation();
 
-    createWorkspaceMutation.mutate({
-      type: 'GITHUB_ISSUE',
-      projectId,
-      issueNumber: issue.number,
-      issueUrl: issue.url,
-      name: issue.title,
-      ratchetEnabled,
-    });
+    if (issue.provider === 'linear' && issue.linearIssueId && issue.linearIssueIdentifier) {
+      createWorkspaceMutation.mutate({
+        type: 'LINEAR_ISSUE',
+        projectId,
+        issueId: issue.linearIssueId,
+        issueIdentifier: issue.linearIssueIdentifier,
+        issueUrl: issue.url,
+        name: issue.title,
+        ratchetEnabled,
+      });
+    } else if (issue.githubIssueNumber) {
+      createWorkspaceMutation.mutate({
+        type: 'GITHUB_ISSUE',
+        projectId,
+        issueNumber: issue.githubIssueNumber,
+        issueUrl: issue.url,
+        name: issue.title,
+        ratchetEnabled,
+      });
+    }
   };
 
   const handleOpenIssue = (e: React.MouseEvent) => {
@@ -111,11 +123,11 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
               className="inline-flex items-center gap-1 hover:text-foreground shrink-0"
             >
               <CircleDot className="h-3 w-3 text-green-500" />
-              <span>#{issue.number}</span>
+              <span>{issue.displayId}</span>
             </button>
             <span className="inline-flex items-center gap-1 truncate">
               <User className="h-3 w-3 shrink-0" />
-              {issue.author.login}
+              {issue.author}
             </span>
           </div>
           <Button
