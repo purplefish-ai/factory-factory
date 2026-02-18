@@ -7,8 +7,10 @@ import {
   Github,
   GitPullRequest,
   Loader2,
+  MoreHorizontal,
   PanelRight,
   Settings2,
+  Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
@@ -22,6 +24,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuPortal,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -44,6 +58,7 @@ import {
   updateWorkspaceRatchetState,
 } from '@/frontend/lib/ratchet-toggle-cache';
 import { trpc } from '@/frontend/lib/trpc';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
   getWorkspaceDefaultOptionLabel,
@@ -213,8 +228,10 @@ function WorkspaceCiStatus({
 
 function WorkspaceBranchLink({
   workspace,
+  renderAsMenuItem = false,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  renderAsMenuItem?: boolean;
 }) {
   const { data: project } = trpc.project.getById.useQuery(
     { id: workspace.projectId },
@@ -228,6 +245,17 @@ function WorkspaceBranchLink({
 
   if (!branchUrl) {
     return null;
+  }
+
+  if (renderAsMenuItem) {
+    return (
+      <DropdownMenuItem asChild>
+        <a href={branchUrl} target="_blank" rel="noopener noreferrer">
+          <Github className="h-4 w-4" />
+          Open branch on GitHub
+        </a>
+      </DropdownMenuItem>
+    );
   }
 
   return (
@@ -252,9 +280,11 @@ function WorkspaceBranchLink({
 function RatchetingToggle({
   workspace,
   workspaceId,
+  renderAsMenuItem = false,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   workspaceId: string;
+  renderAsMenuItem?: boolean;
 }) {
   const utils = trpc.useUtils();
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
@@ -295,6 +325,24 @@ function RatchetingToggle({
 
   const workspaceRatchetEnabled = workspace.ratchetEnabled ?? true;
 
+  if (renderAsMenuItem) {
+    return (
+      <DropdownMenuItem
+        onSelect={() => {
+          toggleRatcheting.mutate({ workspaceId, enabled: !workspaceRatchetEnabled });
+        }}
+        disabled={toggleRatcheting.isPending}
+      >
+        {toggleRatcheting.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Zap className="h-4 w-4" />
+        )}
+        {workspaceRatchetEnabled ? 'Turn off auto-fix' : 'Turn on auto-fix'}
+      </DropdownMenuItem>
+    );
+  }
+
   return (
     <RatchetToggleButton
       enabled={workspaceRatchetEnabled}
@@ -311,11 +359,17 @@ function RatchetingToggle({
 function WorkspaceProviderSettings({
   workspace,
   workspaceId,
+  open,
+  onOpenChange,
+  showTrigger = true,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   workspaceId: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  showTrigger?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [defaultProvider, setDefaultProvider] = useState<NewSessionProviderSelection>(
     resolveProviderSelection(workspace.defaultSessionProvider)
   );
@@ -330,17 +384,26 @@ function WorkspaceProviderSettings({
       utils.workspace.get.invalidate({ id: workspaceId });
       utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
-      setOpen(false);
+      setDialogOpen(false);
     },
   });
 
+  const isOpenControlled = open !== undefined;
+  const dialogOpen = isOpenControlled ? open : uncontrolledOpen;
+  const setDialogOpen = (nextOpen: boolean) => {
+    if (!isOpenControlled) {
+      setUncontrolledOpen(nextOpen);
+    }
+    onOpenChange?.(nextOpen);
+  };
+
   useEffect(() => {
-    if (!open) {
+    if (!dialogOpen) {
       return;
     }
     setDefaultProvider(resolveProviderSelection(workspace.defaultSessionProvider));
     setRatchetProvider(resolveProviderSelection(workspace.ratchetSessionProvider));
-  }, [open, workspace.defaultSessionProvider, workspace.ratchetSessionProvider]);
+  }, [dialogOpen, workspace.defaultSessionProvider, workspace.ratchetSessionProvider]);
 
   const currentDefaultProvider = resolveProviderSelection(workspace.defaultSessionProvider);
   const currentRatchetProvider = resolveProviderSelection(workspace.ratchetSessionProvider);
@@ -357,22 +420,24 @@ function WorkspaceProviderSettings({
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 md:h-8 md:w-8"
-              aria-label="Provider settings"
-            >
-              <Settings2 className="h-4 w-4" />
-            </Button>
-          </DialogTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Provider settings</TooltipContent>
-      </Tooltip>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {showTrigger && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 md:h-8 md:w-8"
+                aria-label="Provider settings"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Provider settings</TooltipContent>
+        </Tooltip>
+      )}
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle>Session Provider Defaults</DialogTitle>
@@ -434,7 +499,7 @@ function WorkspaceProviderSettings({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setDialogOpen(false)}>
             Cancel
           </Button>
           <Button
@@ -452,6 +517,265 @@ function WorkspaceProviderSettings({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function OpenInIdeAction({
+  workspaceId,
+  hasWorktreePath,
+  availableIdes,
+  preferredIde,
+  openInIde,
+  renderAsMenuItem = false,
+}: {
+  workspaceId: string;
+  hasWorktreePath: boolean;
+  availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
+  preferredIde: ReturnType<typeof useSessionManagement>['preferredIde'];
+  openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
+  renderAsMenuItem?: boolean;
+}) {
+  if (availableIdes.length === 0) {
+    return null;
+  }
+
+  const preferredIdeName = availableIdes.find((ide) => ide.id === preferredIde)?.name ?? 'IDE';
+  const disabled = openInIde.isPending || !hasWorktreePath;
+
+  if (renderAsMenuItem) {
+    return (
+      <DropdownMenuItem
+        onSelect={() => {
+          openInIde.mutate({ id: workspaceId });
+        }}
+        disabled={disabled}
+      >
+        {openInIde.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <AppWindow className="h-4 w-4" />
+        )}
+        Open in {preferredIdeName}
+      </DropdownMenuItem>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 md:h-8 md:w-8"
+          onClick={() => openInIde.mutate({ id: workspaceId })}
+          disabled={disabled}
+        >
+          {openInIde.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <AppWindow className="h-4 w-4" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Open in {preferredIdeName}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function ArchiveActionButton({
+  workspace,
+  archivePending,
+  onArchiveRequest,
+  renderAsMenuItem = false,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  archivePending: boolean;
+  onArchiveRequest: () => void;
+  renderAsMenuItem?: boolean;
+}) {
+  if (renderAsMenuItem) {
+    return (
+      <DropdownMenuItem
+        onSelect={(event) => {
+          event.preventDefault();
+          requestAnimationFrame(() => {
+            onArchiveRequest();
+          });
+        }}
+        disabled={archivePending}
+        className={cn(
+          workspace.prState === 'MERGED'
+            ? ''
+            : 'text-destructive focus:text-destructive dark:text-destructive'
+        )}
+      >
+        {archivePending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Archive className="h-4 w-4" />
+        )}
+        {archivePending ? 'Archiving...' : 'Archive workspace'}
+      </DropdownMenuItem>
+    );
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
+          size="icon"
+          className={cn(
+            'h-9 w-9 md:h-8 md:w-8',
+            workspace.prState === 'MERGED' ? '' : 'hover:bg-destructive/10 hover:text-destructive'
+          )}
+          onClick={onArchiveRequest}
+          disabled={archivePending}
+        >
+          {archivePending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Archive className="h-4 w-4" />
+          )}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{archivePending ? 'Archiving...' : 'Archive'}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function WorkspaceQuickActionsSubmenu({
+  handleQuickAction,
+  disabled,
+}: {
+  handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
+  disabled: boolean;
+}) {
+  const { data: quickActions, isLoading } = trpc.session.listQuickActions.useQuery();
+  const agentActions = quickActions?.filter((action) => action.type === 'agent') ?? [];
+
+  if (isLoading) {
+    return (
+      <DropdownMenuItem disabled>
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading quick actions...
+      </DropdownMenuItem>
+    );
+  }
+
+  if (agentActions.length === 0) {
+    return null;
+  }
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger disabled={disabled}>
+        <Zap className="h-4 w-4" />
+        Quick actions
+      </DropdownMenuSubTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuSubContent className="w-56">
+          {agentActions.map((action) => (
+            <DropdownMenuItem
+              key={action.id}
+              onSelect={() => {
+                if (action.content) {
+                  handleQuickAction(action.name, action.content);
+                }
+              }}
+              disabled={disabled || !action.content}
+            >
+              {action.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuPortal>
+    </DropdownMenuSub>
+  );
+}
+
+function WorkspaceHeaderOverflowMenu({
+  workspace,
+  workspaceId,
+  availableIdes,
+  preferredIde,
+  openInIde,
+  archivePending,
+  onArchiveRequest,
+  handleQuickAction,
+  running,
+  isCreatingSession,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspaceId: string;
+  availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
+  preferredIde: ReturnType<typeof useSessionManagement>['preferredIde'];
+  openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
+  archivePending: boolean;
+  onArchiveRequest: () => void;
+  handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
+  running: boolean;
+  isCreatingSession: boolean;
+}) {
+  const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
+
+  return (
+    <>
+      <WorkspaceProviderSettings
+        workspace={workspace}
+        workspaceId={workspaceId}
+        open={providerSettingsOpen}
+        onOpenChange={setProviderSettingsOpen}
+        showTrigger={false}
+      />
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="More actions">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>More actions</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end" className="w-60">
+          <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              requestAnimationFrame(() => {
+                setProviderSettingsOpen(true);
+              });
+            }}
+          >
+            <Settings2 className="h-4 w-4" />
+            Provider settings
+          </DropdownMenuItem>
+          <RatchetingToggle workspace={workspace} workspaceId={workspaceId} renderAsMenuItem />
+          <WorkspaceBranchLink workspace={workspace} renderAsMenuItem />
+          <OpenInIdeAction
+            workspaceId={workspaceId}
+            hasWorktreePath={Boolean(workspace.worktreePath)}
+            availableIdes={availableIdes}
+            preferredIde={preferredIde}
+            openInIde={openInIde}
+            renderAsMenuItem
+          />
+          <WorkspaceQuickActionsSubmenu
+            handleQuickAction={handleQuickAction}
+            disabled={running || isCreatingSession}
+          />
+          <DropdownMenuSeparator />
+          <ArchiveActionButton
+            workspace={workspace}
+            archivePending={archivePending}
+            onArchiveRequest={onArchiveRequest}
+            renderAsMenuItem
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   );
 }
 
@@ -482,6 +806,8 @@ export function WorkspaceHeader({
   isCreatingSession,
   hasChanges,
 }: WorkspaceHeaderProps) {
+  const isMobile = useIsMobile();
+
   return (
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-2 px-2 py-1.5 md:px-4 md:py-2 border-b">
       <div className="flex flex-wrap items-center gap-2 md:gap-3 min-w-0">
@@ -497,65 +823,57 @@ export function WorkspaceHeader({
         />
         <WorkspaceCiStatus workspace={workspace} />
       </div>
-      <div className="flex flex-wrap items-center gap-0.5 md:gap-1 shrink-0 md:justify-end">
-        <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
-        <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
-        <WorkspaceBranchLink workspace={workspace} />
-        <RunScriptButton workspaceId={workspaceId} />
-        <QuickActionsMenu
-          onExecuteAgent={(action) => {
-            if (action.content) {
-              handleQuickAction(action.name, action.content);
-            }
-          }}
-          disabled={running || isCreatingSession}
-        />
-        {availableIdes.length > 0 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 md:h-8 md:w-8"
-                onClick={() => openInIde.mutate({ id: workspaceId })}
-                disabled={openInIde.isPending || !workspace.worktreePath}
-              >
-                {openInIde.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <AppWindow className="h-4 w-4" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              Open in {availableIdes.find((ide) => ide.id === preferredIde)?.name ?? 'IDE'}
-            </TooltipContent>
-          </Tooltip>
+      <div
+        className={cn(
+          'flex items-center gap-1 shrink-0 md:justify-end',
+          !isMobile && 'flex-wrap gap-0.5 md:gap-1'
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
-              size="icon"
-              className={cn(
-                'h-9 w-9 md:h-8 md:w-8',
-                workspace.prState === 'MERGED'
-                  ? ''
-                  : 'hover:bg-destructive/10 hover:text-destructive'
-              )}
-              onClick={onArchiveRequest}
-              disabled={archivePending}
-            >
-              {archivePending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Archive className="h-4 w-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{archivePending ? 'Archiving...' : 'Archive'}</TooltipContent>
-        </Tooltip>
-        <ToggleRightPanelButton />
+      >
+        <RunScriptButton workspaceId={workspaceId} />
+        {isMobile ? (
+          <>
+            <ToggleRightPanelButton />
+            <WorkspaceHeaderOverflowMenu
+              workspace={workspace}
+              workspaceId={workspaceId}
+              availableIdes={availableIdes}
+              preferredIde={preferredIde}
+              openInIde={openInIde}
+              archivePending={archivePending}
+              onArchiveRequest={onArchiveRequest}
+              handleQuickAction={handleQuickAction}
+              running={running}
+              isCreatingSession={isCreatingSession}
+            />
+          </>
+        ) : (
+          <>
+            <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
+            <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
+            <WorkspaceBranchLink workspace={workspace} />
+            <QuickActionsMenu
+              onExecuteAgent={(action) => {
+                if (action.content) {
+                  handleQuickAction(action.name, action.content);
+                }
+              }}
+              disabled={running || isCreatingSession}
+            />
+            <OpenInIdeAction
+              workspaceId={workspaceId}
+              hasWorktreePath={Boolean(workspace.worktreePath)}
+              availableIdes={availableIdes}
+              preferredIde={preferredIde}
+              openInIde={openInIde}
+            />
+            <ArchiveActionButton
+              workspace={workspace}
+              archivePending={archivePending}
+              onArchiveRequest={onArchiveRequest}
+            />
+            <ToggleRightPanelButton />
+          </>
+        )}
       </div>
     </div>
   );
