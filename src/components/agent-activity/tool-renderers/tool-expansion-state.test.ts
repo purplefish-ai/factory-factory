@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { createElement, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,6 +55,49 @@ function HookHarness({ workspaceId }: { workspaceId?: string }) {
     },
     'toggle'
   );
+}
+
+function CallbackProbeHarness({
+  workspaceId,
+  onCallbackRef,
+}: {
+  workspaceId?: string;
+  onCallbackRef: (callback: (key: string, defaultOpen: boolean) => boolean) => void;
+}) {
+  const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(workspaceId);
+  const key = 'sequence:tool-seq-1';
+  const isOpen = getExpansionState(key, false);
+
+  useEffect(() => {
+    onCallbackRef(getExpansionState);
+  }, [getExpansionState, onCallbackRef]);
+
+  return createElement(
+    'button',
+    {
+      type: 'button',
+      onClick: () => setExpansionState(key, !isOpen),
+    },
+    'toggle'
+  );
+}
+
+type HookApi = ReturnType<typeof useWorkspaceToolExpansionState>;
+
+function HookApiHarness({
+  workspaceId,
+  onApi,
+}: {
+  workspaceId?: string;
+  onApi: (api: HookApi) => void;
+}) {
+  const api = useWorkspaceToolExpansionState(workspaceId);
+
+  useEffect(() => {
+    onApi(api);
+  }, [api, onApi]);
+
+  return null;
 }
 
 async function flushEffects(): Promise<void> {
@@ -144,6 +187,8 @@ describe('useWorkspaceToolExpansionState', () => {
     flushSync(() => {
       root.render(createElement(HookHarness, { workspaceId: 'workspace-1' }));
     });
+    const button = container.querySelector('button');
+    expect(button?.getAttribute('data-open')).toBe('true');
 
     await flushEffects();
 
@@ -170,6 +215,72 @@ describe('useWorkspaceToolExpansionState', () => {
     expect(JSON.parse(mockStorage.get(storageKey) ?? '{}')).toEqual({
       'sequence:tool-seq-1': true,
     });
+
+    root.unmount();
+  });
+
+  it('keeps getExpansionState callback reference stable across toggles', async () => {
+    const callbacks: Array<(key: string, defaultOpen: boolean) => boolean> = [];
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(CallbackProbeHarness, {
+          workspaceId: 'workspace-1',
+          onCallbackRef: (callback) => callbacks.push(callback),
+        })
+      );
+    });
+    await flushEffects();
+    const firstCallback = callbacks.at(-1);
+
+    const button = container.querySelector('button');
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushEffects();
+    const secondCallback = callbacks.at(-1);
+
+    expect(firstCallback).toBeDefined();
+    expect(secondCallback).toBe(firstCallback);
+
+    root.unmount();
+  });
+
+  it('prunes old entries when expansion state exceeds the max size', async () => {
+    const storageKey = 'workspace-tool-call-expansion-workspace-1';
+    let api: HookApi | null = null;
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(
+        createElement(HookApiHarness, {
+          workspaceId: 'workspace-1',
+          onApi: (nextApi) => {
+            api = nextApi;
+          },
+        })
+      );
+    });
+    await flushEffects();
+
+    expect(api).not.toBeNull();
+    flushSync(() => {
+      for (let i = 0; i <= 500; i += 1) {
+        api?.setExpansionState(`entry-${i}`, true);
+      }
+    });
+    await flushEffects();
+
+    const storedRaw = mockStorage.get(storageKey);
+    expect(storedRaw).toBeTruthy();
+    const stored = loadToolExpansionState('workspace-1');
+    expect(Object.keys(stored)).toHaveLength(500);
+    expect(stored['entry-0']).toBeUndefined();
+    expect(stored['entry-500']).toBe(true);
 
     root.unmount();
   });

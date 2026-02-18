@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY_PREFIX = 'workspace-tool-call-expansion-';
+const MAX_EXPANSION_ENTRIES = 500;
 
 type ExpansionStateRecord = Record<string, boolean>;
 
@@ -52,15 +53,28 @@ export function saveToolExpansionState(
   }
 }
 
+function pruneExpansionState(expansionState: ExpansionStateRecord): ExpansionStateRecord {
+  const entries = Object.entries(expansionState);
+  if (entries.length <= MAX_EXPANSION_ENTRIES) {
+    return expansionState;
+  }
+
+  return Object.fromEntries(entries.slice(entries.length - MAX_EXPANSION_ENTRIES));
+}
+
 interface ToolExpansionStateApi {
   getExpansionState: (key: string, defaultOpen: boolean) => boolean;
   setExpansionState: (key: string, open: boolean) => void;
 }
 
 export function useWorkspaceToolExpansionState(workspaceId?: string): ToolExpansionStateApi {
-  const [expansionState, setExpansionStateStore] = useState<ExpansionStateRecord>({});
-  const loadedForWorkspaceRef = useRef<string | null>(null);
-  const skipNextPersistRef = useRef(false);
+  const [expansionState, setExpansionStateStore] = useState<ExpansionStateRecord>(() =>
+    workspaceId ? loadToolExpansionState(workspaceId) : {}
+  );
+  const loadedForWorkspaceRef = useRef<string | null>(workspaceId ?? null);
+  const skipNextPersistRef = useRef(workspaceId !== undefined);
+  const expansionStateRef = useRef(expansionState);
+  expansionStateRef.current = expansionState;
 
   useEffect(() => {
     if (!workspaceId) {
@@ -92,22 +106,26 @@ export function useWorkspaceToolExpansionState(workspaceId?: string): ToolExpans
     saveToolExpansionState(workspaceId, expansionState);
   }, [workspaceId, expansionState]);
 
-  const getExpansionState = useCallback(
-    (key: string, defaultOpen: boolean) => {
-      if (!Object.hasOwn(expansionState, key)) {
-        return defaultOpen;
-      }
-      return expansionState[key] === true;
-    },
-    [expansionState]
-  );
+  const getExpansionState = useCallback((key: string, defaultOpen: boolean) => {
+    const currentExpansionState = expansionStateRef.current;
+    if (!Object.hasOwn(currentExpansionState, key)) {
+      return defaultOpen;
+    }
+    return currentExpansionState[key] === true;
+  }, []);
 
   const setExpansionState = useCallback((key: string, open: boolean) => {
     setExpansionStateStore((prev) => {
       if (prev[key] === open) {
         return prev;
       }
-      return { ...prev, [key]: open };
+      const next: ExpansionStateRecord = { ...prev };
+      // Keep recently touched keys at the end to support FIFO pruning.
+      if (Object.hasOwn(next, key)) {
+        delete next[key];
+      }
+      next[key] = open;
+      return pruneExpansionState(next);
     });
   }, []);
 
