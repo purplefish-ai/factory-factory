@@ -8,8 +8,8 @@ import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { IssueCard } from './issue-card';
 import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';
-import { type ColumnConfig, KANBAN_COLUMNS, KanbanColumn } from './kanban-column';
-import { type GitHubIssue, useKanban } from './kanban-context';
+import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-column';
+import { type KanbanIssue, useKanban } from './kanban-context';
 
 export function KanbanControls() {
   const { syncAndRefetch, isSyncing } = useKanban();
@@ -37,6 +37,7 @@ export function KanbanBoard() {
   const {
     projectId,
     projectSlug,
+    issueProvider,
     workspaces,
     issues,
     isLoading,
@@ -46,6 +47,8 @@ export function KanbanBoard() {
     toggleWorkspaceRatcheting,
     togglingWorkspaceId,
   } = useKanban();
+
+  const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
 
   // Group workspaces by kanban column (only the 3 database columns)
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
@@ -70,7 +73,7 @@ export function KanbanBoard() {
   if (isLoading) {
     return (
       <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto">
-        {KANBAN_COLUMNS.map((column) => (
+        {columns.map((column) => (
           <div key={column.id} className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
             <Skeleton className="h-10 w-full rounded-t-lg rounded-b-none" />
             <Skeleton className="flex-1 w-full rounded-b-lg rounded-t-none" />
@@ -96,7 +99,7 @@ export function KanbanBoard() {
 
   return (
     <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto">
-      {KANBAN_COLUMNS.map((column) => {
+      {columns.map((column) => {
         // Special handling for the ISSUES column (UI-only, not from database)
         if (column.id === 'ISSUES') {
           return (
@@ -129,16 +132,16 @@ export function KanbanBoard() {
 // Separate component for the Issues column
 interface IssuesColumnProps {
   column: ColumnConfig;
-  issues: GitHubIssue[];
+  issues: KanbanIssue[];
   projectId: string;
 }
 
 function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
   const isEmpty = issues.length === 0;
-  const [selectedIssue, setSelectedIssue] = useState<GitHubIssue | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<KanbanIssue | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  const handleIssueClick = (issue: GitHubIssue) => {
+  const handleIssueClick = (issue: KanbanIssue) => {
     setSelectedIssue(issue);
     setIsSheetOpen(true);
   };
@@ -172,7 +175,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
             </div>
           ) : (
             issues.map((issue) => (
-              <div key={issue.number} className="shrink-0">
+              <div key={issue.id} className="shrink-0">
                 <IssueCard
                   issue={issue}
                   projectId={projectId}

@@ -18,6 +18,19 @@ export const KANBAN_COLUMNS: ColumnConfig[] = [
   { id: 'DONE', label: 'Done', description: 'PR merged' },
 ];
 
+export function getKanbanColumns(issueProvider: string): ColumnConfig[] {
+  return [
+    {
+      id: 'ISSUES',
+      label: issueProvider === 'LINEAR' ? 'Linear Issues' : 'GitHub Issues',
+      description: 'Issues assigned to you',
+    },
+    { id: 'WORKING', label: 'Working', description: 'Agent is working' },
+    { id: 'WAITING', label: 'Waiting', description: 'Waiting for input' },
+    { id: 'DONE', label: 'Done', description: 'PR merged' },
+  ];
+}
+
 interface KanbanColumnProps {
   column: ColumnConfig;
   workspaces: WorkspaceWithKanban[];

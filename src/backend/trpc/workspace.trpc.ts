@@ -54,6 +54,16 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     description: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
   }),
+  z.object({
+    type: z.literal('LINEAR_ISSUE'),
+    projectId: z.string(),
+    issueId: z.string(),
+    issueIdentifier: z.string(),
+    issueUrl: z.string(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    ratchetEnabled: z.boolean().optional(),
+  }),
 ]);
 
 // =============================================================================

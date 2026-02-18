@@ -42,6 +42,16 @@ export type WorkspaceCreationSource =
       name?: string;
       description?: string;
       ratchetEnabled?: boolean;
+    }
+  | {
+      type: 'LINEAR_ISSUE';
+      projectId: string;
+      issueId: string;
+      issueIdentifier: string;
+      issueUrl: string;
+      name?: string;
+      description?: string;
+      ratchetEnabled?: boolean;
     };
 
 /**
@@ -129,7 +139,10 @@ export class WorkspaceCreationService {
       branchName?: string;
       githubIssueNumber?: number;
       githubIssueUrl?: string;
-      creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE';
+      linearIssueId?: string;
+      linearIssueIdentifier?: string;
+      linearIssueUrl?: string;
+      creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
       creationMetadata?: Prisma.InputJsonValue;
     };
     initMode?: {
@@ -197,6 +210,25 @@ export class WorkspaceCreationService {
             creationSource: 'GITHUB_ISSUE',
             creationMetadata: {
               issueNumber: source.issueNumber,
+              issueUrl: source.issueUrl,
+            },
+          },
+        };
+      }
+
+      case 'LINEAR_ISSUE': {
+        return {
+          preparedInput: {
+            projectId: source.projectId,
+            name: source.name || source.issueIdentifier,
+            description: source.description,
+            linearIssueId: source.issueId,
+            linearIssueIdentifier: source.issueIdentifier,
+            linearIssueUrl: source.issueUrl,
+            creationSource: 'LINEAR_ISSUE',
+            creationMetadata: {
+              issueId: source.issueId,
+              issueIdentifier: source.issueIdentifier,
               issueUrl: source.issueUrl,
             },
           },

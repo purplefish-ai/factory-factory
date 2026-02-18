@@ -375,6 +375,55 @@ describe('WorkspaceCreationService', () => {
       });
     });
 
+    describe('LINEAR_ISSUE source', () => {
+      it('should create workspace from Linear issue source', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'LINEAR_ISSUE',
+          projectId: 'proj-1',
+          issueId: 'linear-uuid-123',
+          issueIdentifier: 'ENG-42',
+          issueUrl: 'https://linear.app/team/issue/ENG-42',
+          name: 'Fix ENG-42',
+        };
+
+        const result = await service.create(source);
+
+        expect(result.workspace).toEqual(mockWorkspace);
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith({
+          projectId: 'proj-1',
+          name: 'Fix ENG-42',
+          linearIssueId: 'linear-uuid-123',
+          linearIssueIdentifier: 'ENG-42',
+          linearIssueUrl: 'https://linear.app/team/issue/ENG-42',
+          creationSource: 'LINEAR_ISSUE',
+          creationMetadata: {
+            issueId: 'linear-uuid-123',
+            issueIdentifier: 'ENG-42',
+            issueUrl: 'https://linear.app/team/issue/ENG-42',
+          },
+          ratchetEnabled: true,
+        });
+      });
+
+      it('should generate default name from issue identifier when name not provided', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'LINEAR_ISSUE',
+          projectId: 'proj-1',
+          issueId: 'linear-uuid-123',
+          issueIdentifier: 'ENG-42',
+          issueUrl: 'https://linear.app/team/issue/ENG-42',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'ENG-42',
+          })
+        );
+      });
+    });
+
     describe('default session provisioning', () => {
       it('should create default session when max sessions > 0', async () => {
         const source: WorkspaceCreationSource = {
