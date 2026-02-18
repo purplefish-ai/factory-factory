@@ -129,7 +129,6 @@ function SingleQuestionLayout({
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Question from Claude"
-      className="px-3 sm:p-3"
       hideIconOnMobile
       actions={
         <div className="flex self-stretch justify-end sm:self-end">
@@ -189,7 +188,6 @@ function MultiQuestionLayout({
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Questions from Claude"
-      className="px-3 sm:p-3"
       hideIconOnMobile
       actions={
         <div className="flex flex-wrap items-center justify-end gap-1 self-stretch sm:self-end">

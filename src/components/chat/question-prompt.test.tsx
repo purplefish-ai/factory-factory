@@ -44,7 +44,7 @@ describe('QuestionPrompt', () => {
 
     const promptCard = container.querySelector('[role="form"]');
     expect(promptCard).not.toBeNull();
-    expect(promptCard?.className).toContain('px-3');
+    expect(promptCard?.className).toContain('p-3');
 
     const header = Array.from(container.querySelectorAll('h4')).find((node) =>
       node.textContent?.includes('ExtremelyLongHeaderThatWouldOtherwiseOverflowOnNarrowScreens')
@@ -64,7 +64,7 @@ describe('QuestionPrompt', () => {
     expect(optionDescription?.className).toContain('break-words');
 
     const optionContainer = optionLabel?.closest('label');
-    expect(optionContainer?.className).toContain('p-1');
+    expect(optionContainer?.className).toContain('p-1.5');
 
     const iconWrapper = container.querySelector('svg.lucide-circle-question-mark')?.parentElement;
     expect(iconWrapper?.className).toContain('hidden');
