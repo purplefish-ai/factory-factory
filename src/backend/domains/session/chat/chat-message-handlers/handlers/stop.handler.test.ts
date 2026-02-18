@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   stopSession: vi.fn(),
   clearPendingRequest: vi.fn(),
   tryDispatchNextMessage: vi.fn(),
+  resetDispatchState: vi.fn(),
 }));
 
 vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
@@ -31,6 +32,7 @@ describe('createStopHandler', () => {
       getClientCreator: () => null,
       tryDispatchNextMessage: mocks.tryDispatchNextMessage,
       setManualDispatchResume: vi.fn(),
+      resetDispatchState: mocks.resetDispatchState,
     });
 
     await handler({
@@ -42,6 +44,7 @@ describe('createStopHandler', () => {
 
     expect(mocks.stopSession).toHaveBeenCalledWith('session-1');
     expect(mocks.clearPendingRequest).toHaveBeenCalledWith('session-1');
+    expect(mocks.resetDispatchState).toHaveBeenCalledWith('session-1');
     expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
 });
