@@ -16,7 +16,7 @@ import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
-import { getDecryptedLinearConfig } from './linear-config.helper';
+import { getDecryptedLinearConfig, getWorkspaceLinearContext } from './linear-config.helper';
 import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-init-orchestrator');
@@ -603,20 +603,15 @@ Start with Phase 1: Planning.`;
 
 async function markLinearIssueStartedIfApplicable(workspaceId: string): Promise<void> {
   try {
-    const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
-    if (!workspace?.linearIssueId) {
+    const ctx = await getWorkspaceLinearContext(workspaceId);
+    if (!ctx) {
       return;
     }
 
-    const linearConfig = getDecryptedLinearConfig(workspace.project.issueTrackerConfig);
-    if (!linearConfig) {
-      return;
-    }
-
-    await linearStateSyncService.markIssueStarted(linearConfig.apiKey, workspace.linearIssueId);
+    await linearStateSyncService.markIssueStarted(ctx.apiKey, ctx.linearIssueId);
     logger.info('Marked Linear issue as started', {
       workspaceId,
-      linearIssueId: workspace.linearIssueId,
+      linearIssueId: ctx.linearIssueId,
     });
   } catch (error) {
     logger.warn('Failed to mark Linear issue as started during workspace init', {
@@ -665,7 +660,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       };
       const enqueueResult = sessionDomainService.enqueue(session.id, queued);
       if ('error' in enqueueResult) {
-        logger.warn('Failed to enqueue GitHub issue prompt for auto-started session', {
+        logger.warn('Failed to enqueue issue prompt for auto-started session', {
           workspaceId,
           sessionId: session.id,
           error: enqueueResult.error,
