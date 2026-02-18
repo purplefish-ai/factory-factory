@@ -291,12 +291,20 @@ class SessionDomainService extends EventEmitter {
 
   clearPendingInteractiveRequest(sessionId: string): void {
     const store = this.registry.getOrCreate(sessionId);
-    const requestId = store.pendingInteractiveRequest?.requestId;
+    const pendingRequest = store.pendingInteractiveRequest;
+    if (!pendingRequest) {
+      return;
+    }
+
     if (!clearPendingInteractiveRequest(store)) {
       return;
     }
     this.publisher.forwardSnapshot(store, { reason: 'pending_request_cleared' });
-    this.emit('pending_request_changed', { sessionId, requestId, hasPending: false });
+    this.emit('pending_request_changed', {
+      sessionId,
+      requestId: pendingRequest.requestId,
+      hasPending: false,
+    });
   }
 
   clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): void {

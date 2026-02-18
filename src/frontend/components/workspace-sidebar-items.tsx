@@ -15,6 +15,10 @@ import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton } from '@/components/workspace';
+import {
+  applyRatchetToggleState,
+  updateWorkspaceRatchetState,
+} from '@/frontend/lib/ratchet-toggle-cache';
 import { trpc } from '@/frontend/lib/trpc';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import {
@@ -375,35 +379,6 @@ function getPrTooltipSuffix(workspace: WorkspaceListItem) {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-type RatchetToggleCacheShape = {
-  id: string;
-  ratchetEnabled?: boolean;
-  ratchetState?: string | null;
-  ratchetButtonAnimated?: boolean;
-};
-
-function applyRatchetToggleState<T extends Omit<RatchetToggleCacheShape, 'id'>>(
-  item: T,
-  enabled: boolean
-): T {
-  return {
-    ...item,
-    ratchetEnabled: enabled,
-    ratchetState: enabled ? item.ratchetState : 'IDLE',
-    ratchetButtonAnimated: enabled ? item.ratchetButtonAnimated : false,
-  };
-}
-
-function updateWorkspaceRatchetState<T extends RatchetToggleCacheShape>(
-  items: T[],
-  workspaceId: string,
-  enabled: boolean
-): T[] {
-  return items.map((item) =>
-    item.id === workspaceId ? applyRatchetToggleState(item, enabled) : item
-  );
-}
 
 function getWorkspaceSidebarStatus(workspace: WorkspaceListItem): WorkspaceSidebarStatus {
   return (

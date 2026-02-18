@@ -37,6 +37,10 @@ import {
   useWorkspacePanel,
 } from '@/components/workspace';
 import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
+import {
+  applyRatchetToggleState,
+  updateWorkspaceRatchetState,
+} from '@/frontend/lib/ratchet-toggle-cache';
 import { trpc } from '@/frontend/lib/trpc';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
@@ -178,27 +182,13 @@ function RatchetingToggle({
         if (!old) {
           return old;
         }
-        return {
-          ...old,
-          ratchetEnabled: enabled,
-          ratchetState: enabled ? old.ratchetState : 'IDLE',
-          ratchetButtonAnimated: enabled ? old.ratchetButtonAnimated : false,
-        };
+        return applyRatchetToggleState(old, enabled);
       });
       utils.workspace.listWithKanbanState.setData({ projectId: workspace.projectId }, (old) => {
         if (!old) {
           return old;
         }
-        return old.map((item) =>
-          item.id === workspaceId
-            ? {
-                ...item,
-                ratchetEnabled: enabled,
-                ratchetState: enabled ? item.ratchetState : 'IDLE',
-                ratchetButtonAnimated: enabled ? item.ratchetButtonAnimated : false,
-              }
-            : item
-        );
+        return updateWorkspaceRatchetState(old, workspaceId, enabled);
       });
       utils.workspace.getProjectSummaryState.setData({ projectId: workspace.projectId }, (old) => {
         if (!old) {
@@ -206,16 +196,7 @@ function RatchetingToggle({
         }
         return {
           ...old,
-          workspaces: old.workspaces.map((item) =>
-            item.id === workspaceId
-              ? {
-                  ...item,
-                  ratchetEnabled: enabled,
-                  ratchetState: enabled ? item.ratchetState : 'IDLE',
-                  ratchetButtonAnimated: enabled ? item.ratchetButtonAnimated : false,
-                }
-              : item
-          ),
+          workspaces: updateWorkspaceRatchetState(old.workspaces, workspaceId, enabled),
         };
       });
     },
