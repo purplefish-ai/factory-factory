@@ -16,7 +16,7 @@
 import { useEffect, useRef } from 'react';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import { createDebugLogger } from '@/lib/debug';
-import { loadAllSessionData } from './chat-persistence';
+import { loadDraft, loadSettingsWithDefaults } from './chat-persistence';
 import type { ChatAction } from './reducer';
 import { clearToolInputAccumulator, type ToolInputAccumulatorState } from './streaming-utils';
 
@@ -75,9 +75,8 @@ export function useChatSession(options: UseChatSessionOptions): UseChatSessionRe
 
     // Load persisted data for the new session (queue comes from backend via session_snapshot)
     if (newDbSessionId) {
-      const persistedData = loadAllSessionData(newDbSessionId);
-      loadedDraftRef.current = persistedData.draft;
-      dispatch({ type: 'SET_SETTINGS', payload: persistedData.settings });
+      loadedDraftRef.current = loadDraft(newDbSessionId);
+      dispatch({ type: 'SET_SETTINGS', payload: loadSettingsWithDefaults(newDbSessionId) });
 
       // Set loading state for initial load (when prevDbSessionId was null)
       // This prevents "No messages yet" flash while WebSocket connects and loads session
