@@ -364,6 +364,51 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
+  it('does not rewrite scrollTop when latestThinking grows and viewport is already pinned', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      latestThinking: 'thinking 1',
+      isNearBottom: true,
+    });
+
+    let scrollTopValue = 360;
+    let scrollTopWriteCount = 0;
+    Object.defineProperty(harness.viewport, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = value;
+        scrollTopWriteCount += 1;
+      },
+    });
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 480,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 120,
+    });
+
+    // Reset after test setup assignment so only component writes are counted.
+    scrollTopWriteCount = 0;
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      latestThinking: 'thinking 1 more',
+      isNearBottom: true,
+    });
+
+    await flushEffects();
+
+    expect(scrollTopWriteCount).toBe(0);
+    expect(scrollTopValue).toBe(360);
+
+    harness.cleanup();
+  });
+
   it('does not auto-scroll latestThinking updates when user is away from bottom', async () => {
     const harness = createHarness({
       loadingSession: false,
