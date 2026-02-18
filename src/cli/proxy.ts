@@ -328,7 +328,7 @@ async function startFactoryFactoryServer(params: {
   });
 
   let startupBuffer = '';
-  let actualPort = params.requestedPort;
+  let actualPort: number;
   try {
     actualPort = await new Promise<number>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -868,11 +868,6 @@ async function handleAuthHttpRequest(params: {
   }
 
   if (!auth.authenticated) {
-    if (lockState.locked) {
-      writeRateLimitResponse(params.res, lockState.retryAfterSeconds);
-      return;
-    }
-
     if (auth.invalidToken) {
       registerFailureAndRespond({
         guard: params.guard,
