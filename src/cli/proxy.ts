@@ -638,6 +638,10 @@ function authenticateRequest(params: {
 }): AuthenticationCheck {
   const rawUrl = params.req.url || '/';
   const parsed = new URL(rawUrl, 'http://proxy.local');
+  const sanitizedPath = sanitizePathWithoutToken(rawUrl);
+  const cookies = parseCookieHeader(params.req.headers.cookie);
+  const session = cookies[SESSION_COOKIE_NAME];
+  const hasValidSession = verifySessionValue(session, params.cookieSecret);
 
   const token = parsed.searchParams.get('token');
   if (token && matchesMagicToken(token, params.magicToken)) {
@@ -645,24 +649,29 @@ function authenticateRequest(params: {
       authenticated: true,
       viaToken: true,
       invalidToken: false,
-      sanitizedPath: sanitizePathWithoutToken(rawUrl),
+      sanitizedPath,
     };
   }
 
   if (token) {
+    if (hasValidSession) {
+      return {
+        authenticated: true,
+        viaToken: false,
+        invalidToken: false,
+        sanitizedPath,
+      };
+    }
     return {
       authenticated: false,
       viaToken: false,
       invalidToken: true,
-      sanitizedPath: sanitizePathWithoutToken(rawUrl),
+      sanitizedPath,
     };
   }
 
-  const cookies = parseCookieHeader(params.req.headers.cookie);
-  const session = cookies[SESSION_COOKIE_NAME];
-
   return {
-    authenticated: verifySessionValue(session, params.cookieSecret),
+    authenticated: hasValidSession,
     viaToken: false,
     invalidToken: false,
     sanitizedPath: rawUrl,
@@ -928,12 +937,6 @@ async function handleAuthHttpRequest(params: {
 
   if (auth.viaToken) {
     setSessionCookie(params.res, params.cookieSecret);
-    if (auth.sanitizedPath !== params.req.url) {
-      params.res.statusCode = 302;
-      params.res.setHeader('Location', toSafeRedirectPath(auth.sanitizedPath || '/'));
-      params.res.end();
-      return;
-    }
   }
 
   proxyAuthenticatedHttpRequest({
@@ -1266,17 +1269,23 @@ export async function runProxyCommand({
     password = generatePassword();
     directToken = generateMagicToken();
 
-    const authProxy = await createAuthProxy({
-      upstreamPort: backend.port,
-      password,
-      magicToken: directToken,
-      onGlobalLockout: () => {
-        void shutdown(
-          1,
-          '❌ Too many failed login attempts. Tunnel shut down for safety.\nRe-run the command to start a new tunnel with a new password.'
-        );
-      },
-    });
+    let authProxy: { port: number; close: () => Promise<void> };
+    try {
+      authProxy = await createAuthProxy({
+        upstreamPort: backend.port,
+        password,
+        magicToken: directToken,
+        onGlobalLockout: () => {
+          void shutdown(
+            1,
+            '❌ Too many failed login attempts. Tunnel shut down for safety.\nRe-run the command to start a new tunnel with a new password.'
+          );
+        },
+      });
+    } catch (error) {
+      await shutdown(1, `❌ ${(error as Error).message}`);
+      return;
+    }
 
     targetPort = authProxy.port;
     authProxyClose = authProxy.close;
@@ -1320,6 +1329,7 @@ export const proxyInternals = {
   BruteForceGuard,
   createSessionValue,
   createAuthCookie,
+  authenticateRequest,
   createLoginPage,
   escapeHtml,
   extractTryCloudflareUrl,

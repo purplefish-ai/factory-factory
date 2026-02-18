@@ -108,6 +108,45 @@ describe('proxy internals', () => {
     expect(proxyInternals.matchesMagicToken(token, 'SHORT')).toBe(false);
   });
 
+  it('accepts valid cookie even when token query is invalid', () => {
+    const cookieSecret = Buffer.from('super-secret-key');
+    const session = proxyInternals.createSessionValue(cookieSecret);
+    const request = {
+      url: '/dashboard?token=invalid-token',
+      headers: {
+        cookie: proxyInternals.createAuthCookie(session),
+      },
+    } as unknown as import('node:http').IncomingMessage;
+
+    const result = proxyInternals.authenticateRequest({
+      req: request,
+      cookieSecret,
+      magicToken: 'expected-token',
+    });
+
+    expect(result.authenticated).toBe(true);
+    expect(result.viaToken).toBe(false);
+    expect(result.invalidToken).toBe(false);
+    expect(result.sanitizedPath).toBe('/dashboard');
+  });
+
+  it('marks invalid token as unauthenticated when no valid cookie exists', () => {
+    const request = {
+      url: '/dashboard?token=invalid-token',
+      headers: {},
+    } as unknown as import('node:http').IncomingMessage;
+
+    const result = proxyInternals.authenticateRequest({
+      req: request,
+      cookieSecret: Buffer.from('super-secret-key'),
+      magicToken: 'expected-token',
+    });
+
+    expect(result.authenticated).toBe(false);
+    expect(result.invalidToken).toBe(true);
+    expect(result.sanitizedPath).toBe('/dashboard');
+  });
+
   it('escapes HTML in login error messages', () => {
     const html = proxyInternals.createLoginPage('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
