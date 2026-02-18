@@ -381,6 +381,66 @@ PRAGMA defer_foreign_keys=OFF;`
     }
   });
 
+  it('handles interleaved FK PRAGMAs emitted by Prisma redefine-table migrations', () => {
+    createMigrationDir('001_enable_foreign_keys');
+    setupMigration(
+      '001_enable_foreign_keys',
+      `CREATE TABLE fk_setup (id INTEGER PRIMARY KEY);
+PRAGMA foreign_keys=ON;`
+    );
+
+    createMigrationDir('002_interleaved_pragma_test');
+    setupMigration(
+      '002_interleaved_pragma_test',
+      `CREATE TABLE parent (id INTEGER PRIMARY KEY);
+CREATE TABLE child (
+  id INTEGER PRIMARY KEY,
+  parent_id INTEGER NOT NULL,
+  FOREIGN KEY (parent_id) REFERENCES parent(id)
+);
+INSERT INTO parent (id) VALUES (1);
+INSERT INTO child (id, parent_id) VALUES (10, 1);
+ALTER TABLE child ADD COLUMN name TEXT;
+PRAGMA defer_foreign_keys=ON;
+PRAGMA foreign_keys=OFF;
+CREATE TABLE new_parent (
+  id INTEGER PRIMARY KEY,
+  extra TEXT
+);
+INSERT INTO new_parent (id) SELECT id FROM parent;
+DROP TABLE parent;
+ALTER TABLE new_parent RENAME TO parent;
+PRAGMA foreign_keys=ON;
+PRAGMA defer_foreign_keys=OFF;`
+    );
+
+    runMigrations({
+      databasePath,
+      migrationsPath,
+      log: () => {
+        /* no-op */
+      },
+    });
+
+    const db = new Database(databasePath);
+    try {
+      const appliedMigrations = getAppliedMigrations(db);
+      expect(appliedMigrations).toEqual(['001_enable_foreign_keys', '002_interleaved_pragma_test']);
+
+      const parentRows = db.prepare('SELECT COUNT(*) as count FROM parent').get() as {
+        count: number;
+      };
+      expect(parentRows.count).toBe(1);
+
+      const childColumns = db.prepare("PRAGMA table_info('child')").all() as Array<{
+        name: string;
+      }>;
+      expect(childColumns.some((column) => column.name === 'name')).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
   it('migrates ClaudeSession rows to AgentSession with locked mapping and indexes', () => {
     createMigrationDir('001_agent_session_cutover');
     const migrationSqlPath = join(
