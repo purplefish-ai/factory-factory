@@ -393,7 +393,7 @@ const LeftControls = memo(function LeftControls({
     acpConfigOptions != null && acpConfigOptions.length > 0 && onSetConfigOption != null;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 scrollbar-hide">
       <ProviderIndicator provider={provider} />
       {hasAcpConfigOptions ? (
         <>
@@ -488,7 +488,7 @@ const RightControls = memo(function RightControls({
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="ml-auto flex shrink-0 items-center gap-1">
       {pendingMessageCount > 0 && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin" />
@@ -740,7 +740,7 @@ export const ChatInput = memo(function ChatInput({
         {/* Controls row */}
         <InputGroupAddon
           align="block-end"
-          className="flex items-center justify-between border-t !pt-1 !pb-1"
+          className="flex flex-wrap items-center gap-1 border-t !pt-1 !pb-1"
         >
           {/* Left side: Model selector and toggles */}
           <LeftControls

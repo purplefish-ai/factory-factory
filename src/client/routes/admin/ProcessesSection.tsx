@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/table';
 import type { AppRouter } from '@/frontend/lib/trpc';
 import { trpc } from '@/frontend/lib/trpc';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { formatBytes, formatCpu, formatIdleTime } from '@/lib/formatters';
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
@@ -68,6 +69,78 @@ function WorkspaceCell(props: {
   );
 }
 
+function AgentProcessCard({
+  process,
+  isStopping,
+  onStop,
+}: {
+  process: ProcessesData['agent'][number];
+  isStopping: boolean;
+  onStop: (sessionId: string) => void;
+}) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-medium truncate">{process.workspaceName}</div>
+          {process.workspaceBranch && (
+            <div className="text-xs text-muted-foreground font-mono truncate">
+              {process.workspaceBranch}
+            </div>
+          )}
+          <div className="mt-1 text-xs text-muted-foreground font-mono">
+            {process.name || process.sessionId.slice(0, 8)}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onStop(process.sessionId)}
+          disabled={isStopping || process.status === 'COMPLETED' || process.status === 'FAILED'}
+          title="Stop session"
+        >
+          <XCircle className="w-4 h-4" />
+        </Button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="outline">{process.workflow}</Badge>
+        <Badge variant={getStatusBadgeVariant(process.status)}>{process.status}</Badge>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-xs font-mono text-muted-foreground">
+        <span>CPU: {formatCpu(process.cpuPercent)}</span>
+        <span>Mem: {formatBytes(process.memoryBytes)}</span>
+        <span>Idle: {formatIdleTime(process.idleTimeMs)}</span>
+        <span>PID: {process.pid ?? '-'}</span>
+      </div>
+    </div>
+  );
+}
+
+function TerminalProcessCard({ process }: { process: ProcessesData['terminal'][number] }) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="font-medium truncate">{process.workspaceName}</div>
+      {process.workspaceBranch && (
+        <div className="text-xs text-muted-foreground font-mono truncate">
+          {process.workspaceBranch}
+        </div>
+      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground font-mono">
+        <span>Terminal: {process.terminalId.slice(0, 12)}</span>
+        <span>PID: {process.pid}</span>
+        <span>
+          Size: {process.cols}x{process.rows}
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-mono text-muted-foreground">
+        <span>CPU: {formatCpu(process.cpuPercent)}</span>
+        <span>Mem: {formatBytes(process.memoryBytes)}</span>
+        <span>Created: {new Date(process.createdAt).toLocaleTimeString()}</span>
+      </div>
+    </div>
+  );
+}
+
 export function ProcessesSectionSkeleton() {
   return (
     <Card>
@@ -97,6 +170,7 @@ export interface ProcessesSectionProps {
 }
 
 export function ProcessesSection({ processes }: ProcessesSectionProps) {
+  const isMobile = useIsMobile();
   const hasAgentProcesses = processes?.agent && processes.agent.length > 0;
   const hasTerminalProcesses = processes?.terminal && processes.terminal.length > 0;
   const hasNoProcesses = !(hasAgentProcesses || hasTerminalProcesses);
@@ -152,7 +226,7 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex flex-wrap items-center gap-2">
           Active Processes
           {processes?.summary && (
             <>
@@ -181,77 +255,90 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
               <Bot className="w-4 h-4" />
               Agent Sessions ({processes.agent.length})
             </h4>
-            <div className="border rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Workspace</TableHead>
-                    <TableHead>Session</TableHead>
-                    <TableHead>Workflow</TableHead>
-                    <TableHead>PID</TableHead>
-                    <TableHead>Resources</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {processes.agent.map((process) => (
-                    <TableRow key={process.sessionId}>
-                      <WorkspaceCell process={process} />
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-xs font-mono text-muted-foreground">
-                            {process.name || process.sessionId.slice(0, 8)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">{process.model}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{process.workflow}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{process.pid ?? '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col text-xs font-mono">
-                          <span>CPU: {formatCpu(process.cpuPercent)}</span>
-                          <span>Mem: {formatBytes(process.memoryBytes)}</span>
-                          <span className="text-muted-foreground">
-                            Idle: {formatIdleTime(process.idleTimeMs)}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Badge variant={getStatusBadgeVariant(process.status)}>
-                            {process.status}
-                          </Badge>
-                          {process.memoryStatus &&
-                            process.memoryStatus !== process.status.toLowerCase() && (
-                              <span className="text-xs text-muted-foreground">
-                                ({process.memoryStatus})
-                              </span>
-                            )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleStopSession(process.sessionId)}
-                          disabled={
-                            stoppingSessionIds.has(process.sessionId) ||
-                            process.status === 'COMPLETED' ||
-                            process.status === 'FAILED'
-                          }
-                          title="Stop session"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
+            {isMobile ? (
+              <div className="space-y-2">
+                {processes.agent.map((process) => (
+                  <AgentProcessCard
+                    key={process.sessionId}
+                    process={process}
+                    isStopping={stoppingSessionIds.has(process.sessionId)}
+                    onStop={handleStopSession}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Workspace</TableHead>
+                      <TableHead>Session</TableHead>
+                      <TableHead>Workflow</TableHead>
+                      <TableHead>PID</TableHead>
+                      <TableHead>Resources</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {processes.agent.map((process) => (
+                      <TableRow key={process.sessionId}>
+                        <WorkspaceCell process={process} />
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-mono text-muted-foreground">
+                              {process.name || process.sessionId.slice(0, 8)}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{process.model}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{process.workflow}</Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{process.pid ?? '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col text-xs font-mono">
+                            <span>CPU: {formatCpu(process.cpuPercent)}</span>
+                            <span>Mem: {formatBytes(process.memoryBytes)}</span>
+                            <span className="text-muted-foreground">
+                              Idle: {formatIdleTime(process.idleTimeMs)}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant={getStatusBadgeVariant(process.status)}>
+                              {process.status}
+                            </Badge>
+                            {process.memoryStatus &&
+                              process.memoryStatus !== process.status.toLowerCase() && (
+                                <span className="text-xs text-muted-foreground">
+                                  ({process.memoryStatus})
+                                </span>
+                              )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStopSession(process.sessionId)}
+                            disabled={
+                              stoppingSessionIds.has(process.sessionId) ||
+                              process.status === 'COMPLETED' ||
+                              process.status === 'FAILED'
+                            }
+                            title="Stop session"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         )}
 
@@ -261,45 +348,53 @@ export function ProcessesSection({ processes }: ProcessesSectionProps) {
               <Terminal className="w-4 h-4" />
               Terminal Processes ({processes.terminal.length})
             </h4>
-            <div className="border rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Workspace</TableHead>
-                    <TableHead>Terminal ID</TableHead>
-                    <TableHead>PID</TableHead>
-                    <TableHead>Resources</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {processes.terminal.map((process) => (
-                    <TableRow key={process.terminalId}>
-                      <WorkspaceCell process={process} />
-                      <TableCell>
-                        <span className="text-xs font-mono text-muted-foreground">
-                          {process.terminalId.slice(0, 12)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{process.pid}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col text-xs font-mono">
-                          <span>CPU: {formatCpu(process.cpuPercent)}</span>
-                          <span>Mem: {formatBytes(process.memoryBytes)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {process.cols}x{process.rows}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {new Date(process.createdAt).toLocaleTimeString()}
-                      </TableCell>
+            {isMobile ? (
+              <div className="space-y-2">
+                {processes.terminal.map((process) => (
+                  <TerminalProcessCard key={process.terminalId} process={process} />
+                ))}
+              </div>
+            ) : (
+              <div className="border rounded-md">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Workspace</TableHead>
+                      <TableHead>Terminal ID</TableHead>
+                      <TableHead>PID</TableHead>
+                      <TableHead>Resources</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Created</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {processes.terminal.map((process) => (
+                      <TableRow key={process.terminalId}>
+                        <WorkspaceCell process={process} />
+                        <TableCell>
+                          <span className="text-xs font-mono text-muted-foreground">
+                            {process.terminalId.slice(0, 12)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{process.pid}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col text-xs font-mono">
+                            <span>CPU: {formatCpu(process.cpuPercent)}</span>
+                            <span>Mem: {formatBytes(process.memoryBytes)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {process.cols}x{process.rows}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {new Date(process.createdAt).toLocaleTimeString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

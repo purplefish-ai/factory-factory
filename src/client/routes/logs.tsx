@@ -88,7 +88,7 @@ function DatePicker({
           <Button
             variant="outline"
             className={cn(
-              'h-9 w-[160px] justify-start text-left font-normal',
+              'h-9 w-full sm:w-[160px] justify-start text-left font-normal',
               !date && 'text-muted-foreground'
             )}
           >
@@ -261,7 +261,7 @@ export default function LogsPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="space-y-4 p-6">
+      <div className="space-y-4 p-3 md:p-6">
         <PageHeader title="Server Logs" description={data?.filePath}>
           <Link to="/admin">
             <Button variant="ghost" size="sm">
@@ -272,8 +272,8 @@ export default function LogsPage() {
         </PageHeader>
 
         {/* Controls */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 max-w-sm min-w-[200px]">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full sm:min-w-[200px] sm:max-w-sm sm:flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search messages or components..."
@@ -283,7 +283,7 @@ export default function LogsPage() {
             />
           </div>
           <Select value={level} onValueChange={handleLevelChange}>
-            <SelectTrigger className="w-[130px]">
+            <SelectTrigger className="w-full sm:w-[130px]">
               <SelectValue placeholder="Level" />
             </SelectTrigger>
             <SelectContent>
@@ -295,7 +295,7 @@ export default function LogsPage() {
             </SelectContent>
           </Select>
           <Select value={timeRange} onValueChange={handleTimeRangeChange}>
-            <SelectTrigger className="w-[150px]">
+            <SelectTrigger className="w-full sm:w-[150px]">
               <SelectValue placeholder="Time range" />
             </SelectTrigger>
             <SelectContent>
@@ -308,7 +308,13 @@ export default function LogsPage() {
               <SelectItem value="custom">Custom Range</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={download} disabled={isDownloading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={download}
+            disabled={isDownloading}
+            className="w-full sm:w-auto"
+          >
             <Download className="w-4 h-4 mr-1" />
             {isDownloading ? 'Downloading...' : 'Download'}
           </Button>
@@ -316,30 +322,36 @@ export default function LogsPage() {
 
         {/* Custom date range pickers */}
         {timeRange === 'custom' && (
-          <div className="flex items-end gap-3 rounded-lg border border-dashed bg-muted/30 px-4 py-3">
-            <DatePicker
-              date={sinceDate}
-              onSelect={handleSinceDateChange}
-              label="From"
-              placeholder="Start date"
-            />
-            <div className="flex h-9 items-center">
-              <span className="text-muted-foreground text-sm">&ndash;</span>
-            </div>
-            <DatePicker
-              date={untilDate}
-              onSelect={handleUntilDateChange}
-              label="To"
-              placeholder="End date"
-            />
-            {(sinceDate || untilDate) && (
-              <div className="flex h-9 items-center">
-                <Button variant="ghost" size="sm" onClick={handleClearDates}>
-                  <X className="w-3.5 h-3.5 mr-1" />
-                  Clear
-                </Button>
+          <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-3 sm:px-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+              <div className="w-full sm:w-auto">
+                <DatePicker
+                  date={sinceDate}
+                  onSelect={handleSinceDateChange}
+                  label="From"
+                  placeholder="Start date"
+                />
               </div>
-            )}
+              <div className="hidden h-9 items-center sm:flex">
+                <span className="text-muted-foreground text-sm">&ndash;</span>
+              </div>
+              <div className="w-full sm:w-auto">
+                <DatePicker
+                  date={untilDate}
+                  onSelect={handleUntilDateChange}
+                  label="To"
+                  placeholder="End date"
+                />
+              </div>
+              {(sinceDate || untilDate) && (
+                <div className="flex h-9 items-center">
+                  <Button variant="ghost" size="sm" onClick={handleClearDates}>
+                    <X className="w-3.5 h-3.5 mr-1" />
+                    Clear
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -427,12 +439,13 @@ export default function LogsPage() {
 
         {/* Pagination */}
         {pagination.showPagination && (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <Button
               variant="outline"
               size="sm"
               disabled={!pagination.hasPreviousPage}
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+              className="w-full sm:w-auto"
             >
               Previous
             </Button>
@@ -444,6 +457,7 @@ export default function LogsPage() {
               size="sm"
               disabled={!pagination.hasNextPage}
               onClick={() => setOffset(offset + PAGE_SIZE)}
+              className="w-full sm:w-auto"
             >
               Next
             </Button>

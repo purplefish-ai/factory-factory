@@ -116,7 +116,8 @@ export function WorkspaceDetailContainer() {
   const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
     useWorkspaceData({ workspaceId: workspaceId });
 
-  const { rightPanelVisible, activeTabId, clearScrollState } = useWorkspacePanel();
+  const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState } =
+    useWorkspacePanel();
   const { data: userSettings } = trpc.userSettings.get.useQuery();
 
   const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
@@ -449,6 +450,7 @@ export function WorkspaceDetailContainer() {
       }}
       chat={chatViewModel}
       rightPanelVisible={rightPanelVisible}
+      setRightPanelVisible={setRightPanelVisible}
       archiveDialog={{
         open: archiveDialogOpen,
         setOpen: setArchiveDialogOpen,

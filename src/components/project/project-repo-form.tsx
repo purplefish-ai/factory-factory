@@ -57,7 +57,7 @@ export function ProjectRepoForm({
 
       <div className="space-y-2">
         <Label htmlFor="repoPath">Repository Path</Label>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             type="text"
             id="repoPath"
@@ -91,7 +91,7 @@ export function ProjectRepoForm({
       />
 
       {footerActions ? (
-        <div className="flex justify-end gap-4">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-4">
           {footerActions}
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting && <Spinner className="mr-2" />}

@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { z } from 'zod';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 import {
   getScrollStateFromRecord,
@@ -204,6 +205,7 @@ interface WorkspacePanelProviderProps {
 }
 
 export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanelProviderProps) {
+  const isMobile = useIsMobile();
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const scrollStatesRef = useRef<Record<string, ScrollState>>({});
@@ -231,8 +233,8 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     // Load bottom tab (workspace-scoped)
     setActiveBottomTabState(loadBottomTabFromStorage(workspaceId));
 
-    // Load right panel visibility (workspace-scoped)
-    setRightPanelVisibleState(loadRightPanelVisibility(workspaceId));
+    // Load right panel visibility (workspace-scoped). On mobile we start closed.
+    setRightPanelVisibleState(isMobile ? false : loadRightPanelVisibility(workspaceId));
 
     // Load scroll states (workspace-scoped)
     if (typeof window !== 'undefined') {
@@ -244,7 +246,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     // Mark as loaded at the end of this effect, so persist effect skips the
     // re-render triggered by the setState calls above
     loadedForWorkspaceRef.current = workspaceId;
-  }, [workspaceId]);
+  }, [workspaceId, isMobile]);
 
   // Persist tabs and active tab when they change (skip until load is complete)
   useEffect(() => {
@@ -274,7 +276,7 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   const setRightPanelVisible = useCallback(
     (visible: boolean) => {
       setRightPanelVisibleState(visible);
-      if (typeof window === 'undefined') {
+      if (typeof window === 'undefined' || isMobile) {
         return;
       }
       try {
@@ -283,12 +285,21 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         // Ignore storage errors
       }
     },
-    [workspaceId]
+    [workspaceId, isMobile]
   );
 
   const toggleRightPanel = useCallback(() => {
     setRightPanelVisible(!rightPanelVisible);
   }, [rightPanelVisible, setRightPanelVisible]);
+
+  const prevIsMobileRef = useRef(isMobile);
+  useEffect(() => {
+    const switchedToMobile = isMobile && !prevIsMobileRef.current;
+    if (switchedToMobile && rightPanelVisible) {
+      setRightPanelVisibleState(false);
+    }
+    prevIsMobileRef.current = isMobile;
+  }, [isMobile, rightPanelVisible]);
 
   const getScrollState = useCallback(
     (tabId: string, mode: ScrollMode) =>

@@ -226,7 +226,7 @@ function NotificationSettingsSection() {
         <CardDescription>Configure notification behavior</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-0.5">
             <Label htmlFor="sound-toggle">Play completion sound</Label>
             <p className="text-sm text-muted-foreground">Play a sound when a workspace finishes</p>
@@ -334,7 +334,7 @@ function IdeSettingsSection() {
         {preferredIde === 'custom' && (
           <div className="space-y-2">
             <Label htmlFor="custom-command">Custom Command</Label>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="custom-command"
                 value={customCommand}
@@ -494,7 +494,7 @@ function RatchetSettingsSection() {
         </div>
 
         {/* Default for new workspaces */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-0.5">
             <Label htmlFor="ratchet-enabled">Default for new workspaces</Label>
             <p className="text-sm text-muted-foreground">
@@ -513,7 +513,7 @@ function RatchetSettingsSection() {
 
         {/* Manual trigger button */}
         <div className="border-t pt-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-0.5">
               <Label>Manual Check</Label>
               <p className="text-sm text-muted-foreground">
@@ -583,12 +583,17 @@ function DataBackupSection() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-4">
-          <Button onClick={handleExport} disabled={isExporting} variant="outline">
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
+          <Button
+            onClick={handleExport}
+            disabled={isExporting}
+            variant="outline"
+            className="w-full sm:w-auto"
+          >
             <Download className="w-4 h-4 mr-2" />
             {isExporting ? 'Exporting...' : 'Export Data'}
           </Button>
-          <DataImportButton variant="outline" />
+          <DataImportButton variant="outline" className="w-full sm:w-auto" />
         </div>
         <p className="text-sm text-muted-foreground">
           Export includes projects, workspaces, session metadata, and user preferences. Caches will
@@ -611,11 +616,18 @@ function ServerLogsSection() {
         </CardTitle>
         <CardDescription>View and search structured server log entries</CardDescription>
       </CardHeader>
-      <CardContent className="flex gap-3">
+      <CardContent className="flex flex-col gap-2 sm:flex-row sm:gap-3">
         <Link to="/logs">
-          <Button variant="outline">View Logs</Button>
+          <Button variant="outline" className="w-full sm:w-auto">
+            View Logs
+          </Button>
         </Link>
-        <Button variant="outline" onClick={download} disabled={isDownloading}>
+        <Button
+          variant="outline"
+          onClick={download}
+          disabled={isDownloading}
+          className="w-full sm:w-auto"
+        >
           <Download className="w-4 h-4 mr-2" />
           {isDownloading ? 'Downloading...' : 'Download Log File'}
         </Button>
@@ -656,7 +668,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-3 md:p-6">
         <PageHeader title="Admin Dashboard" description="System monitoring and management" />
 
         <ApiUsageSection
@@ -674,11 +686,14 @@ export default function AdminDashboardPage() {
         {/* Environment Info */}
         <Card className="bg-muted/50">
           <CardContent className="py-4">
-            <span className="font-medium">Environment:</span>{' '}
-            <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
-            <span className="mx-2">|</span>
-            <span className="font-medium">Features:</span>{' '}
-            <span className="text-muted-foreground">{getEnabledFeatures(stats?.features)}</span>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <span className="font-medium">Environment:</span>
+              <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
+              <span className="font-medium sm:ml-2">Features:</span>
+              <span className="text-muted-foreground break-words">
+                {getEnabledFeatures(stats?.features)}
+              </span>
+            </div>
           </CardContent>
         </Card>
 

@@ -113,7 +113,7 @@ export function WorkspacesTableView({
     <div className="space-y-4 p-3 md:p-6">
       <PageHeader title="Workspaces">
         <Select value={statusFilter} onValueChange={onStatusFilterChange}>
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="w-full sm:w-[150px]">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>

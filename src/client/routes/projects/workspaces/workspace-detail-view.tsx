@@ -1,9 +1,17 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { Loading } from '@/frontend/components/loading';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
@@ -59,6 +67,7 @@ export interface WorkspaceDetailViewProps {
   sessionTabs: SessionTabsProps;
   chat: ChatContentProps;
   rightPanelVisible: boolean;
+  setRightPanelVisible: (visible: boolean) => void;
   archiveDialog: ArchiveDialogProps;
 }
 
@@ -90,8 +99,11 @@ export function WorkspaceDetailView({
   sessionTabs,
   chat,
   rightPanelVisible,
+  setRightPanelVisible,
   archiveDialog,
 }: WorkspaceDetailViewProps) {
+  const isMobile = useIsMobile();
+
   if (workspaceState.workspaceLoading) {
     return <Loading message="Loading workspace..." />;
   }
@@ -106,6 +118,41 @@ export function WorkspaceDetailView({
       </div>
     );
   }
+
+  const mainContent = (
+    <div className="h-full flex flex-col min-w-0">
+      <WorkspaceContentView
+        workspaceId={workspaceState.workspaceId}
+        sessions={sessionTabs.sessions}
+        selectedSessionId={sessionTabs.selectedDbSessionId}
+        sessionSummariesById={sessionTabs.sessionSummariesById}
+        isCreatingSession={header.isCreatingSession}
+        isDeletingSession={sessionTabs.isDeletingSession}
+        onSelectSession={sessionTabs.handleSelectSession}
+        onCreateSession={sessionTabs.handleNewChat}
+        onCloseSession={sessionTabs.handleCloseChatSession}
+        maxSessions={sessionTabs.maxSessions}
+        hasWorktreePath={sessionTabs.hasWorktreePath}
+        selectedProvider={sessionTabs.selectedProvider}
+        setSelectedProvider={sessionTabs.setSelectedProvider}
+      >
+        <ChatContent {...chat} />
+      </WorkspaceContentView>
+    </div>
+  );
+
+  const rightPanel = (
+    <RightPanel
+      workspaceId={workspaceState.workspaceId}
+      messages={chat.messages}
+      onTakeScreenshots={() =>
+        header.handleQuickAction(
+          'Take Screenshots',
+          'Take a screenshot of the workspace dev app using Playwright MCP tools. Read factory-factory.json for the scripts.run command, pick a free port, replace {port}, and start the dev server in the background. Once ready, determine the most relevant screen and save a screenshot to .factory-factory/screenshots/ with a descriptive filename.'
+        )
+      }
+    />
+  );
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
@@ -131,54 +178,42 @@ export function WorkspaceDetailView({
         workspaceInitStatus={workspaceState.workspaceInitStatus}
       />
 
-      <ResizablePanelGroup
-        direction="horizontal"
-        className="flex-1 overflow-hidden"
-        autoSaveId="workspace-main-panel"
-      >
-        {/* NOTE: react-resizable-panels v4+ changed its API to use percentage strings. */}
-        <ResizablePanel defaultSize="70%" minSize="30%">
-          <div className="h-full flex flex-col min-w-0">
-            <WorkspaceContentView
-              workspaceId={workspaceState.workspaceId}
-              sessions={sessionTabs.sessions}
-              selectedSessionId={sessionTabs.selectedDbSessionId}
-              sessionSummariesById={sessionTabs.sessionSummariesById}
-              isCreatingSession={header.isCreatingSession}
-              isDeletingSession={sessionTabs.isDeletingSession}
-              onSelectSession={sessionTabs.handleSelectSession}
-              onCreateSession={sessionTabs.handleNewChat}
-              onCloseSession={sessionTabs.handleCloseChatSession}
-              maxSessions={sessionTabs.maxSessions}
-              hasWorktreePath={sessionTabs.hasWorktreePath}
-              selectedProvider={sessionTabs.selectedProvider}
-              setSelectedProvider={sessionTabs.setSelectedProvider}
-            >
-              <ChatContent {...chat} />
-            </WorkspaceContentView>
-          </div>
-        </ResizablePanel>
+      {isMobile ? (
+        <>
+          <div className="flex-1 min-h-0">{mainContent}</div>
+          <Sheet open={rightPanelVisible} onOpenChange={setRightPanelVisible}>
+            <SheetContent side="bottom" className="h-[85dvh] w-full max-w-none p-0">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Workspace Side Panel</SheetTitle>
+                <SheetDescription>
+                  Browse files, diffs, tasks, logs, and terminals for this workspace.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="h-full">{rightPanel}</div>
+            </SheetContent>
+          </Sheet>
+        </>
+      ) : (
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="flex-1 overflow-hidden"
+          autoSaveId="workspace-main-panel"
+        >
+          {/* NOTE: react-resizable-panels v4+ changed its API to use percentage strings. */}
+          <ResizablePanel defaultSize="70%" minSize="30%">
+            {mainContent}
+          </ResizablePanel>
 
-        {rightPanelVisible && (
-          <>
-            <ResizableHandle />
-            <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
-              <div className="h-full border-l">
-                <RightPanel
-                  workspaceId={workspaceState.workspaceId}
-                  messages={chat.messages}
-                  onTakeScreenshots={() =>
-                    header.handleQuickAction(
-                      'Take Screenshots',
-                      'Take a screenshot of the workspace dev app using Playwright MCP tools. Read factory-factory.json for the scripts.run command, pick a free port, replace {port}, and start the dev server in the background. Once ready, determine the most relevant screen and save a screenshot to .factory-factory/screenshots/ with a descriptive filename.'
-                    )
-                  }
-                />
-              </div>
-            </ResizablePanel>
-          </>
-        )}
-      </ResizablePanelGroup>
+          {rightPanelVisible && (
+            <>
+              <ResizableHandle />
+              <ResizablePanel defaultSize="30%" minSize="15%" maxSize="50%">
+                <div className="h-full border-l">{rightPanel}</div>
+              </ResizablePanel>
+            </>
+          )}
+        </ResizablePanelGroup>
+      )}
 
       <ArchiveWorkspaceDialog
         open={archiveDialog.open}

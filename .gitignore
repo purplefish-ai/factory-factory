@@ -14,6 +14,8 @@ dist/
 
 # Playwright
 .playwright-mcp/
+playwright-report/
+test-results/
 
 # Production
 *.log

@@ -6,6 +6,7 @@ import AdminPage from './routes/admin-page';
 // Route components
 import HomePage from './routes/home';
 import LogsPage from './routes/logs';
+import MobileBaselinePage from './routes/mobile-baseline';
 import ProjectsListPage from './routes/projects/list';
 import NewProjectPage from './routes/projects/new';
 import ProjectRedirectPage from './routes/projects/redirect';
@@ -13,6 +14,10 @@ import WorkspaceDetailPage from './routes/projects/workspaces/detail';
 import WorkspacesListPage from './routes/projects/workspaces/list';
 import NewWorkspacePage from './routes/projects/workspaces/new';
 import ReviewsPage from './routes/reviews';
+
+const isDevelopmentMode = import.meta.env.MODE === 'development';
+const enableMobileBaselineRoute =
+  isDevelopmentMode || import.meta.env.VITE_ENABLE_MOBILE_BASELINE === '1';
 
 export const router = createBrowserRouter([
   {
@@ -79,6 +84,14 @@ export const router = createBrowserRouter([
         path: 'logs',
         element: <LogsPage />,
       },
+      ...(enableMobileBaselineRoute
+        ? [
+            {
+              path: '__mobile-baseline',
+              element: <MobileBaselinePage />,
+            },
+          ]
+        : []),
     ],
   },
 ]);

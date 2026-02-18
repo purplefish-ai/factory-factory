@@ -1,11 +1,33 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PRDetailPanel } from '@/frontend/components/pr-detail-panel';
 import { PRInboxItem } from '@/frontend/components/pr-inbox-item';
 import { trpc } from '@/frontend/lib/trpc';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { PRWithFullDetails } from '@/shared/github-types';
+
+type ReviewRequest = {
+  number: number;
+  title: string;
+  url: string;
+  author: { login: string };
+  repository: { nameWithOwner: string };
+  createdAt: string;
+  isDraft: boolean;
+  reviewDecision: PRWithFullDetails['reviewDecision'];
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+};
 
 export default function ReviewsPage() {
   return (
@@ -15,6 +37,75 @@ export default function ReviewsPage() {
   );
 }
 
+function toPRData(pr: ReviewRequest, details: PRWithFullDetails | undefined): PRWithFullDetails {
+  if (details) {
+    return details;
+  }
+  const repoName = pr.repository.nameWithOwner.split('/')[1] || pr.repository.nameWithOwner;
+  return {
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    author: pr.author,
+    repository: {
+      name: repoName,
+      nameWithOwner: pr.repository.nameWithOwner,
+    },
+    createdAt: pr.createdAt,
+    updatedAt: pr.createdAt,
+    isDraft: pr.isDraft,
+    state: 'OPEN',
+    reviewDecision: pr.reviewDecision,
+    statusCheckRollup: null,
+    reviews: [],
+    comments: [],
+    labels: [],
+    additions: pr.additions,
+    deletions: pr.deletions,
+    changedFiles: pr.changedFiles,
+    headRefName: '',
+    baseRefName: '',
+    mergeStateStatus: 'UNKNOWN',
+  };
+}
+
+function ReviewsListPanel({
+  prs,
+  prDetails,
+  selectedIndex,
+  itemRefs,
+  onSelect,
+}: {
+  prs: ReviewRequest[];
+  prDetails: Map<string, PRWithFullDetails>;
+  selectedIndex: number;
+  itemRefs: React.MutableRefObject<Map<number, HTMLButtonElement>>;
+  onSelect: (index: number) => void;
+}) {
+  return (
+    <div className="flex-1 overflow-auto p-2 space-y-2">
+      {prs.map((pr, index) => {
+        const key = `${pr.repository.nameWithOwner}#${pr.number}`;
+        const details = prDetails.get(key);
+        return (
+          <PRInboxItem
+            key={key}
+            ref={(el) => {
+              if (el) {
+                itemRefs.current.set(index, el);
+              }
+            }}
+            pr={toPRData(pr, details)}
+            isSelected={index === selectedIndex}
+            onSelect={() => onSelect(index)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: Page coordinates keyboard shortcuts, query caching, and responsive render paths.
 function ReviewsPageContent() {
   const [searchParams] = useSearchParams();
   const initialRepo = searchParams.get('repo');
@@ -24,7 +115,9 @@ function ReviewsPageContent() {
   const [prDetails, setPrDetails] = useState<Map<string, PRWithFullDetails>>(new Map());
   const [diffs, setDiffs] = useState<Map<string, string>>(new Map());
   const [diffLoading, setDiffLoading] = useState(false);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const itemRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const isMobile = useIsMobile();
 
   const utils = trpc.useUtils();
 
@@ -33,7 +126,7 @@ function ReviewsPageContent() {
     refetchInterval: 30_000,
   });
 
-  const prs = data?.prs ?? [];
+  const prs: ReviewRequest[] = data?.prs ?? [];
 
   // Get details for selected PR
   const selectedPR = prs[selectedIndex];
@@ -172,7 +265,7 @@ function ReviewsPageContent() {
   }, [selectedIndex]);
 
   if (isLoading) {
-    return <ReviewsDashboardSkeleton />;
+    return isMobile ? <ReviewsDashboardMobileSkeleton /> : <ReviewsDashboardSkeleton />;
   }
 
   if (prs.length === 0) {
@@ -182,6 +275,47 @@ function ReviewsPageContent() {
           <p className="text-sm font-medium">No review requests</p>
           <p className="text-xs">You have no pending PR reviews</p>
         </div>
+      </div>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="px-3 py-3 border-b bg-muted/30">
+          <h1 className="text-sm font-semibold">Review Requests</h1>
+          <p className="text-xs text-muted-foreground">
+            {prs.length} PR{prs.length !== 1 ? 's' : ''} awaiting your review
+          </p>
+        </div>
+        <ReviewsListPanel
+          prs={prs}
+          prDetails={prDetails}
+          selectedIndex={selectedIndex}
+          itemRefs={itemRefs}
+          onSelect={(index) => {
+            setSelectedIndex(index);
+            setMobileDetailsOpen(true);
+          }}
+        />
+
+        <Sheet open={mobileDetailsOpen && !!selectedPR} onOpenChange={setMobileDetailsOpen}>
+          <SheetContent side="bottom" className="h-[92dvh] w-full max-w-none p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Pull Request Details</SheetTitle>
+              <SheetDescription>Review request details and actions</SheetDescription>
+            </SheetHeader>
+            <PRDetailPanel
+              pr={selectedDetails ?? null}
+              diff={selectedDiff ?? null}
+              diffLoading={diffLoading}
+              onFetchDiff={fetchDiff}
+              onOpenGitHub={handleOpenGitHub}
+              onApprove={handleApprove}
+              approving={approveMutation.isPending}
+            />
+          </SheetContent>
+        </Sheet>
       </div>
     );
   }
@@ -196,56 +330,13 @@ function ReviewsPageContent() {
             {prs.length} PR{prs.length !== 1 ? 's' : ''} awaiting your review
           </p>
         </div>
-        <div className="flex-1 overflow-auto p-2 space-y-2">
-          {prs.map((pr, index) => {
-            const key = `${pr.repository.nameWithOwner}#${pr.number}`;
-            const details = prDetails.get(key);
-            // Extract repo name from nameWithOwner
-            const repoName =
-              pr.repository.nameWithOwner.split('/')[1] || pr.repository.nameWithOwner;
-            // Merge basic PR data with full details if available
-            // Use reviewDecision and stats from list data if no full details yet
-            const prData: PRWithFullDetails = details ?? {
-              number: pr.number,
-              title: pr.title,
-              url: pr.url,
-              author: pr.author,
-              repository: {
-                name: repoName,
-                nameWithOwner: pr.repository.nameWithOwner,
-              },
-              createdAt: pr.createdAt,
-              updatedAt: pr.createdAt,
-              isDraft: pr.isDraft,
-              state: 'OPEN',
-              reviewDecision: pr.reviewDecision,
-              statusCheckRollup: null,
-              reviews: [],
-              comments: [],
-              labels: [],
-              additions: pr.additions,
-              deletions: pr.deletions,
-              changedFiles: pr.changedFiles,
-              headRefName: '',
-              baseRefName: '',
-              mergeStateStatus: 'UNKNOWN',
-            };
-
-            return (
-              <PRInboxItem
-                key={key}
-                ref={(el) => {
-                  if (el) {
-                    itemRefs.current.set(index, el);
-                  }
-                }}
-                pr={prData}
-                isSelected={index === selectedIndex}
-                onSelect={() => setSelectedIndex(index)}
-              />
-            );
-          })}
-        </div>
+        <ReviewsListPanel
+          prs={prs}
+          prDetails={prDetails}
+          selectedIndex={selectedIndex}
+          itemRefs={itemRefs}
+          onSelect={setSelectedIndex}
+        />
       </div>
 
       {/* Right panel - Detail view */}
@@ -278,6 +369,16 @@ function ReviewsDashboardSkeleton() {
         <Skeleton className="h-8 w-full mb-2" />
         <Skeleton className="h-64 w-full" />
       </div>
+    </div>
+  );
+}
+
+function ReviewsDashboardMobileSkeleton() {
+  return (
+    <div className="h-full p-2 space-y-2">
+      {Array.from({ length: 8 }, (_, i) => `mobile-skeleton-${i}`).map((id) => (
+        <Skeleton key={id} className="h-16 w-full" />
+      ))}
     </div>
   );
 }

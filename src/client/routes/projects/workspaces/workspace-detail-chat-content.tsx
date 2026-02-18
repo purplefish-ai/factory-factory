@@ -247,7 +247,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
       </div>
 
       {!props.isNearBottom && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10">
+        <div className="absolute bottom-32 left-1/2 z-10 -translate-x-1/2 sm:bottom-28">
           <Button
             variant="secondary"
             size="sm"
@@ -260,7 +260,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         </div>
       )}
 
-      <div className="border-t">
+      <div className="sticky bottom-0 z-20 border-t bg-background pb-safe">
         <PermissionPrompt
           permission={
             props.pendingRequest.type === 'permission' ? props.pendingRequest.request : null
