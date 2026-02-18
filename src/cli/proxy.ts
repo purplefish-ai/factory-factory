@@ -6,7 +6,7 @@ import {
   request as httpRequest,
   type IncomingMessage,
 } from 'node:http';
-import { createConnection } from 'node:net';
+import { createConnection, type Socket } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -726,7 +726,7 @@ async function handleLoginSubmission(params: {
     submittedPassword = '';
   }
 
-  if (submittedPassword && submittedPassword === params.password) {
+  if (submittedPassword && matchesMagicToken(submittedPassword, params.password)) {
     setSessionCookie(params.res, params.cookieSecret);
     params.res.statusCode = 302;
     params.res.setHeader('Location', '/');
@@ -859,7 +859,7 @@ async function handleAuthHttpRequest(params: {
     setSessionCookie(params.res, params.cookieSecret);
     if (auth.sanitizedPath !== params.req.url) {
       params.res.statusCode = 302;
-      params.res.setHeader('Location', '/');
+      params.res.setHeader('Location', toSafeRedirectPath(auth.sanitizedPath || '/'));
       params.res.end();
       return;
     }
@@ -881,6 +881,7 @@ function createAuthProxy(params: {
 }): Promise<{ port: number; close: () => Promise<void> }> {
   const bruteForceGuard = new BruteForceGuard();
   const cookieSecret = randomBytes(32);
+  const activeSockets = new Set<Socket>();
 
   const server = createHttpServer((req, res) => {
     void handleAuthHttpRequest({
@@ -897,6 +898,13 @@ function createAuthProxy(params: {
         res.statusCode = 500;
         res.end('Proxy error');
       }
+    });
+  });
+
+  server.on('connection', (socket) => {
+    activeSockets.add(socket);
+    socket.once('close', () => {
+      activeSockets.delete(socket);
     });
   });
 
@@ -978,7 +986,19 @@ function createAuthProxy(params: {
         port: address.port,
         close: async () => {
           await new Promise<void>((closeResolve) => {
-            server.close(() => closeResolve());
+            const timeout = setTimeout(() => {
+              closeResolve();
+            }, 1000);
+            timeout.unref?.();
+
+            server.close(() => {
+              clearTimeout(timeout);
+              closeResolve();
+            });
+
+            for (const socket of activeSockets) {
+              socket.destroy();
+            }
           });
         },
       });
