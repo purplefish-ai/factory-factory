@@ -138,7 +138,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   return (
     <div
       className={cn(
-        'prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-loose',
+        'prose prose-sm dark:prose-invert max-w-none min-w-0 overflow-hidden break-words text-sm leading-loose [&_a]:break-all [&_li]:break-words [&_p]:break-words [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:block [&_table]:w-full [&_table]:overflow-x-auto',
         className
       )}
     >
