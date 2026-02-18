@@ -182,7 +182,10 @@ export function WorkspaceDetailView({
         <>
           <div className="flex-1 min-h-0">{mainContent}</div>
           <Sheet open={rightPanelVisible} onOpenChange={setRightPanelVisible}>
-            <SheetContent side="bottom" className="h-[85dvh] w-full max-w-none p-0">
+            <SheetContent
+              side="bottom"
+              className="h-[85dvh] w-full max-w-none p-0 pt-12 [&>button]:right-3 [&>button]:top-3 [&>button]:z-30"
+            >
               <SheetHeader className="sr-only">
                 <SheetTitle>Workspace Side Panel</SheetTitle>
                 <SheetDescription>
