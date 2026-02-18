@@ -382,9 +382,16 @@ PRAGMA defer_foreign_keys=OFF;`
   });
 
   it('handles interleaved FK PRAGMAs emitted by Prisma redefine-table migrations', () => {
-    createMigrationDir('001_interleaved_pragma_test');
+    createMigrationDir('001_enable_foreign_keys');
     setupMigration(
-      '001_interleaved_pragma_test',
+      '001_enable_foreign_keys',
+      `CREATE TABLE fk_setup (id INTEGER PRIMARY KEY);
+PRAGMA foreign_keys=ON;`
+    );
+
+    createMigrationDir('002_interleaved_pragma_test');
+    setupMigration(
+      '002_interleaved_pragma_test',
       `CREATE TABLE parent (id INTEGER PRIMARY KEY);
 CREATE TABLE child (
   id INTEGER PRIMARY KEY,
@@ -418,7 +425,7 @@ PRAGMA defer_foreign_keys=OFF;`
     const db = new Database(databasePath);
     try {
       const appliedMigrations = getAppliedMigrations(db);
-      expect(appliedMigrations).toEqual(['001_interleaved_pragma_test']);
+      expect(appliedMigrations).toEqual(['001_enable_foreign_keys', '002_interleaved_pragma_test']);
 
       const parentRows = db.prepare('SELECT COUNT(*) as count FROM parent').get() as {
         count: number;
