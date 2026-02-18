@@ -15,6 +15,7 @@ import treeKill from 'tree-kill';
 import { runCodexAppServerAcpAdapter } from '@/backend/domains/session';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { getLogFilePath } from '@/backend/services/logger.service';
+import { runProxyCommand } from './proxy';
 
 const execPromise = promisify(exec);
 
@@ -270,6 +271,10 @@ interface ServeOptions {
 
 interface MigrateOptions {
   databasePath?: string;
+}
+
+interface ProxyOptions {
+  private?: boolean;
 }
 
 const program = new Command();
@@ -785,6 +790,18 @@ program
 
     console.log(chalk.green('\n✅ Build completed successfully!'));
     console.log(chalk.gray('Run `ff serve` to start the production server'));
+  });
+
+// ============================================================================
+// proxy command
+// ============================================================================
+
+program
+  .command('proxy')
+  .description('Start a public tunnel to your local Factory Factory server')
+  .option('--private', 'Enable password authentication')
+  .action(async (options: ProxyOptions) => {
+    await runProxyCommand({ options, projectRoot: PROJECT_ROOT });
   });
 
 // ============================================================================
