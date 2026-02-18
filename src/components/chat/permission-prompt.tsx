@@ -187,6 +187,9 @@ function getPermissionOptionStyle(kind: PermissionOption['kind']) {
   }
 }
 
+const permissionOptionButtonClass =
+  'h-auto min-h-8 max-w-full gap-1.5 whitespace-normal text-left leading-snug';
+
 // =============================================================================
 // Plan View Toggle
 // =============================================================================
@@ -270,14 +273,14 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
 
   return (
     <div className="border-b bg-muted/50 p-3" role="alertdialog" aria-label="Plan approval request">
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 shrink-0 text-blue-500" aria-hidden="true" />
             <span className="text-sm font-medium">Review Plan</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {planContent && <PlanViewToggle value={viewMode} onChange={setViewMode} />}
             <button
               type="button"
@@ -291,14 +294,16 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
 
         {/* Plan Content */}
         {expanded && planContent && (
-          <div className="bg-background rounded-md border overflow-hidden">
-            <div className="max-h-[70vh] overflow-auto">
+          <div className="min-w-0 overflow-hidden rounded-md border bg-background">
+            <div className="max-h-[70vh] min-w-0 overflow-auto">
               {viewMode === 'rendered' ? (
-                <div className="p-3">
+                <div className="min-w-0 p-3">
                   <MarkdownRenderer content={planContent} />
                 </div>
               ) : (
-                <pre className="text-xs p-3 whitespace-pre-wrap font-mono">{planContent}</pre>
+                <pre className="overflow-x-auto whitespace-pre-wrap break-words p-3 text-xs font-mono">
+                  {planContent}
+                </pre>
               )}
             </div>
           </div>
@@ -313,7 +318,7 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
         </p>
 
         {/* Actions */}
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {options.map((option, index) => {
             const style = getPermissionOptionStyle(option.kind);
             const Icon = style.icon;
@@ -324,7 +329,7 @@ function PlanApprovalPrompt({ permission, onApprove }: PermissionPromptProps) {
                 variant={style.variant}
                 size="sm"
                 onClick={() => handleOptionClick(option)}
-                className="gap-1.5"
+                className={permissionOptionButtonClass}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                 {option.name}
@@ -390,7 +395,7 @@ function AcpPermissionPrompt({ permission, onApprove }: PermissionPromptProps) {
                 variant={style.variant}
                 size="sm"
                 onClick={() => handleOptionClick(option.optionId, option.kind)}
-                className="gap-1.5"
+                className={permissionOptionButtonClass}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                 {option.name}

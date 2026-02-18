@@ -82,7 +82,7 @@ export function ProjectSettingsDialog({
         </TooltipTrigger>
         <TooltipContent>Settings</TooltipContent>
       </Tooltip>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="px-3 py-4 sm:max-w-[500px] sm:p-4">
         <DialogHeader>
           <DialogTitle>Project Settings</DialogTitle>
           <DialogDescription>{projectName}</DialogDescription>

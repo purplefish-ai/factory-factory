@@ -24,7 +24,7 @@ const meta = {
   tags: ['autodocs'],
   decorators: [
     (Story) => (
-      <div className="max-w-2xl border rounded-lg overflow-hidden">
+      <div className="w-full max-w-2xl border rounded-lg overflow-hidden">
         <div className="p-4 bg-background min-h-[100px]">
           <p className="text-sm text-muted-foreground">Chat messages would appear above...</p>
         </div>
@@ -169,7 +169,7 @@ const expandedMeta = {
   tags: ['autodocs'],
   decorators: [
     (Story: React.ComponentType) => (
-      <div className="max-w-2xl border rounded-lg overflow-hidden">
+      <div className="w-full max-w-2xl border rounded-lg overflow-hidden">
         <div className="p-4 bg-background min-h-[100px]">
           <p className="text-sm text-muted-foreground">Chat messages would appear above...</p>
         </div>
