@@ -3,6 +3,7 @@ import {
   Archive,
   CheckCircle2,
   GitBranch,
+  Github,
   GitPullRequest,
   Loader2,
   PanelRight,
@@ -161,6 +162,44 @@ function WorkspaceCiStatus({
 
   return (
     <CiStatusChip ciState={workspace.sidebarStatus.ciState} prState={workspace.prState} size="md" />
+  );
+}
+
+function WorkspaceBranchLink({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  const { data: project } = trpc.project.getById.useQuery(
+    { id: workspace.projectId },
+    { enabled: Boolean(workspace.branchName) }
+  );
+
+  const branchUrl =
+    workspace.branchName && project?.githubOwner && project?.githubRepo
+      ? `https://github.com/${project.githubOwner}/${project.githubRepo}/tree/${encodeURIComponent(workspace.branchName)}`
+      : null;
+
+  if (!branchUrl) {
+    return null;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+          <a
+            href={branchUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open branch on GitHub"
+          >
+            <Github className="h-4 w-4" />
+          </a>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Open branch on GitHub</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -381,6 +420,8 @@ export function WorkspaceHeader({
       <div className="flex items-center justify-end gap-0.5 md:gap-1 shrink-0">
         <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
         <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
+        <WorkspaceBranchLink workspace={workspace} />
+        <RunScriptButton workspaceId={workspaceId} />
         <QuickActionsMenu
           onExecuteAgent={(action) => {
             if (action.content) {
@@ -389,7 +430,6 @@ export function WorkspaceHeader({
           }}
           disabled={running || isCreatingSession}
         />
-        <RunScriptButton workspaceId={workspaceId} />
         {availableIdes.length > 0 && (
           <Tooltip>
             <TooltipTrigger asChild>

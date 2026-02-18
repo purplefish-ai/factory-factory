@@ -1,4 +1,12 @@
-import { CheckCircle2, Download, FileJson, FileText, Pencil, RefreshCw } from 'lucide-react';
+import {
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  FileJson,
+  FileText,
+  Pencil,
+  RefreshCw,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
@@ -41,6 +49,10 @@ function getEnabledFeatures(features?: Record<string, boolean>): string {
     .filter(([, isEnabled]) => isEnabled)
     .map(([feature]) => feature);
   return enabled.length > 0 ? enabled.join(', ') : 'none';
+}
+
+function formatPortLabel(port: number | null | undefined): string {
+  return port ? String(port) : '(restart to detect)';
 }
 
 function ProjectFactoryConfigCard({
@@ -428,6 +440,64 @@ function ChatProviderDefaultsSection() {
   );
 }
 
+function AppInfoSection() {
+  const { data: serverInfo, isLoading } = trpc.admin.getServerInfo.useQuery();
+  const frontendPort = window.location.port ? Number.parseInt(window.location.port, 10) : null;
+  const backendPort = serverInfo?.backendPort ?? null;
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>App Info</CardTitle>
+          <CardDescription>Repository and runtime details</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-10 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>App Info</CardTitle>
+        <CardDescription>Repository and runtime details</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label>Repository</Label>
+          <a
+            href="https://github.com/purplefish-ai/factory-factory"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            GitHub
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+        <div className="space-y-2">
+          <Label>Ports</Label>
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <div className="flex items-center justify-between">
+              <span>Frontend</span>
+              <code className="rounded bg-muted px-1.5 py-0.5">
+                {formatPortLabel(frontendPort)}
+              </code>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Backend</span>
+              <code className="rounded bg-muted px-1.5 py-0.5">{formatPortLabel(backendPort)}</code>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function RatchetSettingsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
@@ -691,6 +761,7 @@ export default function AdminDashboardPage() {
         <NotificationSettingsSection />
         <IdeSettingsSection />
         <ChatProviderDefaultsSection />
+        <AppInfoSection />
 
         {/* Ratchet Settings (unified PR auto-progression system) */}
         <RatchetSettingsSection />
