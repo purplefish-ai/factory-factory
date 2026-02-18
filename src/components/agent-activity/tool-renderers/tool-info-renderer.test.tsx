@@ -3,7 +3,7 @@
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
 import { ToolSequenceGroup } from './tool-info-renderer';
 
@@ -110,6 +110,55 @@ describe('ToolSequenceGroup', () => {
 
     // Group header + one trigger for each paired tool row.
     expect(countTriggerButtons(container)).toBe(3);
+
+    root.unmount();
+  });
+
+  it('requests open when controlled sequence grows from one call to multiple', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onOpenChange = vi.fn();
+
+    const singleSequence: ToolSequence = {
+      type: 'tool_sequence',
+      id: 'seq-1',
+      pairedCalls: [createCall('read-1', 'Read')],
+    };
+
+    flushSync(() => {
+      root.render(
+        createElement(ToolSequenceGroup, {
+          sequence: singleSequence,
+          open: false,
+          onOpenChange,
+          defaultOpen: false,
+          summaryOrder: 'latest-first',
+        })
+      );
+    });
+
+    const multiSequence: ToolSequence = {
+      type: 'tool_sequence',
+      id: 'seq-1',
+      pairedCalls: [createCall('read-1', 'Read'), createCall('edit-1', 'Edit')],
+    };
+
+    flushSync(() => {
+      root.render(
+        createElement(ToolSequenceGroup, {
+          sequence: multiSequence,
+          open: false,
+          onOpenChange,
+          defaultOpen: true,
+          summaryOrder: 'latest-first',
+        })
+      );
+    });
+
+    await flushEffects();
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
 
     root.unmount();
   });

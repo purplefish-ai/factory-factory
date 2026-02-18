@@ -189,17 +189,21 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   const shouldAutoOpen = defaultOpen && pairedCalls.length > 1;
 
   React.useEffect(() => {
-    if (isControlled) {
-      previousShouldAutoOpenRef.current = shouldAutoOpen;
-      return;
+    const wasAutoOpen = previousShouldAutoOpenRef.current;
+    const transitionedToAutoOpen = shouldAutoOpen && !wasAutoOpen;
+
+    if (transitionedToAutoOpen) {
+      if (isControlled) {
+        if (!isOpen) {
+          onOpenChange?.(true);
+        }
+      } else {
+        setInternalOpen(true);
+      }
     }
 
-    const wasAutoOpen = previousShouldAutoOpenRef.current;
-    if (shouldAutoOpen && !wasAutoOpen) {
-      setInternalOpen(true);
-    }
     previousShouldAutoOpenRef.current = shouldAutoOpen;
-  }, [isControlled, shouldAutoOpen]);
+  }, [isControlled, isOpen, onOpenChange, shouldAutoOpen]);
 
   if (pairedCalls.length === 0) {
     return null;
