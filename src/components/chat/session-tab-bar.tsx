@@ -160,9 +160,10 @@ function SessionTab({
         onClick={handleClose}
         disabled={disabled}
         className={cn(
-          'ml-1 rounded p-0.5 opacity-0 transition-opacity',
-          'hover:bg-muted-foreground/20 focus-visible:opacity-100',
-          'group-hover:opacity-100',
+          'ml-1 rounded p-0.5 transition-opacity',
+          'opacity-100 md:opacity-0',
+          'hover:bg-muted-foreground/20 md:focus-visible:opacity-100',
+          'md:group-hover:opacity-100',
           disabled && 'pointer-events-none'
         )}
         aria-label={`Close ${displayName}`}
