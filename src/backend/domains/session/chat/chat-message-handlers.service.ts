@@ -75,8 +75,10 @@ function isThinkingBudgetClient(value: unknown): value is ThinkingBudgetClient {
 // ============================================================================
 
 class ChatMessageHandlerService {
-  /** Guard to prevent concurrent tryDispatchNextMessage calls per session */
-  private dispatchInProgress = new Map<string, boolean>();
+  /** Guard to prevent concurrent tryDispatchNextMessage calls per session. */
+  private dispatchInProgress = new Map<string, number>();
+  /** Monotonic token per session to invalidate stale dispatch completions. */
+  private dispatchTokenBySession = new Map<string, number>();
 
   /** Client creator function - injected to avoid circular dependencies */
   private clientCreator: ClientCreator | null = null;
@@ -106,6 +108,7 @@ class ChatMessageHandlerService {
     getClientCreator: () => this.clientCreator,
     tryDispatchNextMessage: this.tryDispatchNextMessage.bind(this),
     setManualDispatchResume: this.setManualDispatchResume.bind(this),
+    resetDispatchState: this.resetDispatchState.bind(this),
   });
 
   /**
@@ -123,14 +126,34 @@ class ChatMessageHandlerService {
     this.manualDispatchResumed.delete(sessionId);
   }
 
+  resetDispatchState(sessionId: string): void {
+    const nextToken = (this.dispatchTokenBySession.get(sessionId) ?? 0) + 1;
+    this.dispatchTokenBySession.set(sessionId, nextToken);
+    this.dispatchInProgress.delete(sessionId);
+  }
+
   private isDispatchInProgress(dbSessionId: string): boolean {
-    if (!this.dispatchInProgress.get(dbSessionId)) {
+    if (!this.dispatchInProgress.has(dbSessionId)) {
       return false;
     }
     if (DEBUG_CHAT_WS) {
       logger.info('[Chat WS] Dispatch already in progress, skipping', { dbSessionId });
     }
     return true;
+  }
+
+  private reserveDispatchToken(dbSessionId: string): number {
+    const token = (this.dispatchTokenBySession.get(dbSessionId) ?? 0) + 1;
+    this.dispatchTokenBySession.set(dbSessionId, token);
+    this.dispatchInProgress.set(dbSessionId, token);
+    return token;
+  }
+
+  private releaseDispatchToken(dbSessionId: string, token: number): void {
+    if (this.dispatchInProgress.get(dbSessionId) !== token) {
+      return;
+    }
+    this.dispatchInProgress.delete(dbSessionId);
   }
 
   /**
@@ -147,7 +170,7 @@ class ChatMessageHandlerService {
       return;
     }
 
-    this.dispatchInProgress.set(dbSessionId, true);
+    const dispatchToken = this.reserveDispatchToken(dbSessionId);
 
     try {
       // Peek first — message stays in queue (visible in snapshots during auto-start).
@@ -195,7 +218,7 @@ class ChatMessageHandlerService {
         sessionDomainService.requeueFront(dbSessionId, msg);
       }
     } finally {
-      this.dispatchInProgress.set(dbSessionId, false);
+      this.releaseDispatchToken(dbSessionId, dispatchToken);
     }
   }
 

@@ -305,4 +305,48 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     );
     expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
   });
+
+  it('allows dispatch to resume after stop resets a stale in-progress guard', async () => {
+    const secondQueuedMessage: QueuedMessage = {
+      ...queuedMessage,
+      id: 'm2',
+      text: 'after stop',
+      timestamp: '2026-02-01T00:00:01.000Z',
+    };
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockSessionDomainService.peekNextMessage
+      .mockReturnValueOnce(queuedMessage)
+      .mockReturnValueOnce(secondQueuedMessage);
+    mockSessionDomainService.dequeueNext
+      .mockReturnValueOnce(queuedMessage)
+      .mockReturnValueOnce(secondQueuedMessage);
+    mockSessionDomainService.allocateOrder.mockReturnValueOnce(0).mockReturnValueOnce(1);
+
+    let resolveFirstSend: (() => void) | undefined;
+    const firstSendPromise = new Promise<void>((resolve) => {
+      resolveFirstSend = resolve;
+    });
+    mockSessionService.sendSessionMessage
+      .mockReturnValueOnce(firstSendPromise)
+      .mockResolvedValueOnce(undefined);
+
+    const firstDispatch = chatMessageHandlerService.tryDispatchNextMessage('s1');
+    await vi.waitFor(() => {
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledWith('s1', 'hello');
+    });
+
+    chatMessageHandlerService.resetDispatchState('s1');
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).toHaveBeenNthCalledWith(2, 's1', 'after stop');
+
+    resolveFirstSend?.();
+    await firstDispatch;
+  });
 });

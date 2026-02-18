@@ -28,4 +28,5 @@ export interface HandlerRegistryDependencies {
   getClientCreator: () => ClientCreator | null;
   tryDispatchNextMessage: (sessionId: string) => Promise<void>;
   setManualDispatchResume: (sessionId: string, resumed: boolean) => void;
+  resetDispatchState?: (sessionId: string) => void;
 }
