@@ -126,7 +126,7 @@ function PRHeader({ pr }: PRHeaderProps) {
           {pr.labels.map((label) => (
             <span
               key={label.name}
-              className="text-xs px-1.5 py-0.5 rounded"
+              className="inline-flex items-center text-xs px-1.5 py-0.5 rounded"
               style={{
                 backgroundColor: `#${label.color}20`,
                 color: `#${label.color}`,
