@@ -80,4 +80,37 @@ describe('ToolSequenceGroup', () => {
 
     root.unmount();
   });
+
+  it('toggles when open is provided without onOpenChange', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    const sequence: ToolSequence = {
+      type: 'tool_sequence',
+      id: 'seq-1',
+      pairedCalls: [createCall('read-1', 'Read'), createCall('edit-1', 'Edit')],
+    };
+
+    flushSync(() => {
+      root.render(
+        createElement(ToolSequenceGroup, {
+          sequence,
+          open: false,
+          summaryOrder: 'latest-first',
+        })
+      );
+    });
+
+    expect(countTriggerButtons(container)).toBe(1);
+
+    const trigger = container.querySelector('button');
+    trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushEffects();
+
+    // Group header + one trigger for each paired tool row.
+    expect(countTriggerButtons(container)).toBe(3);
+
+    root.unmount();
+  });
 });
