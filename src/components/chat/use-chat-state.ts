@@ -259,7 +259,6 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       inputAttachments,
       setInputAttachments,
       handleMessage,
-      onClearInput,
     ]
   );
 }
