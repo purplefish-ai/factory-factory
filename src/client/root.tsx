@@ -7,12 +7,16 @@ import { AppSidebar } from '@/frontend/components/app-sidebar';
 import { CLIHealthBanner } from '@/frontend/components/cli-health-banner';
 import { ThemeProvider } from '@/frontend/components/theme-provider';
 import { TRPCProvider, useProjects } from '@/frontend/lib/providers';
+import { useVisualViewportHeight } from '@/hooks/use-visual-viewport-height';
 
 function RootLayout() {
   const { projects, isLoading } = useProjects();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const showSidebar = !isLoading && projects && projects.length > 0;
+  const { height: viewportHeight, offsetTop: viewportOffsetTop } = useVisualViewportHeight();
+  const viewportTransform =
+    viewportOffsetTop === '0px' ? undefined : `translateY(${viewportOffsetTop})`;
 
   // Redirect to onboarding when no projects exist
   // Only redirect from top-level paths, not from specific project routes
@@ -29,7 +33,10 @@ function RootLayout() {
   }, [isLoading, projects, pathname, navigate]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    <div
+      className="flex flex-col overflow-hidden"
+      style={{ height: viewportHeight, transform: viewportTransform }}
+    >
       <CLIHealthBanner />
       <ResizableLayout
         sidebar={showSidebar ? <AppSidebar /> : null}
