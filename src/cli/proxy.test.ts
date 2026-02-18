@@ -97,6 +97,7 @@ describe('proxy internals', () => {
     expect(proxyInternals.toSafeRedirectPath('/dashboard?tab=1')).toBe('/dashboard?tab=1');
     expect(proxyInternals.toSafeRedirectPath('//evil.example')).toBe('/');
     expect(proxyInternals.toSafeRedirectPath('/\\evil.example')).toBe('/');
+    expect(proxyInternals.toSafeRedirectPath('/safe\r\nx-injected: value')).toBe('/');
     expect(proxyInternals.toSafeRedirectPath('https://evil.example')).toBe('/');
   });
 

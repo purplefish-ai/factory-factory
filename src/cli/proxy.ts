@@ -154,10 +154,19 @@ function sanitizePathWithoutToken(rawUrl: string): string {
 }
 
 function toSafeRedirectPath(path: string): string {
-  if (!path.startsWith('/') || path.startsWith('//') || path.startsWith('/\\')) {
+  if (
+    !path.startsWith('/') ||
+    path.startsWith('//') ||
+    path.startsWith('/\\') ||
+    /[\r\n]/.test(path)
+  ) {
     return '/';
   }
   return path;
+}
+
+function matchesPassword(candidate: string, expected: string): boolean {
+  return matchesMagicToken(candidate, expected);
 }
 
 function getClientIp(req: IncomingMessage): string {
@@ -780,7 +789,7 @@ async function handleLoginSubmission(params: {
     submittedPassword = '';
   }
 
-  if (submittedPassword && matchesMagicToken(submittedPassword, params.password)) {
+  if (submittedPassword && matchesPassword(submittedPassword, params.password)) {
     setSessionCookie(params.res, params.cookieSecret);
     params.res.statusCode = 302;
     params.res.setHeader('Location', '/');
@@ -955,7 +964,8 @@ function createAuthProxy(params: {
       cookieSecret,
       guard: bruteForceGuard,
       onGlobalLockout: params.onGlobalLockout,
-    }).catch(() => {
+    }).catch((error) => {
+      process.stderr.write(chalk.red(`  [proxy] ${(error as Error).message}\n`));
       if (!res.headersSent) {
         res.statusCode = 500;
         res.end('Proxy error');
@@ -987,14 +997,18 @@ function createAuthProxy(params: {
     });
 
     if (!auth.authenticated) {
+      let shouldTriggerGlobalLockout = false;
       if (auth.invalidToken) {
         const failure = bruteForceGuard.registerFailure(ip);
         if (failure.globalLocked) {
-          params.onGlobalLockout();
+          shouldTriggerGlobalLockout = true;
         }
       }
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       socket.destroy();
+      if (shouldTriggerGlobalLockout) {
+        params.onGlobalLockout();
+      }
       return;
     }
 
@@ -1006,7 +1020,8 @@ function createAuthProxy(params: {
         upgrade: req.headers.upgrade,
       };
 
-      const requestLine = `${req.method || 'GET'} ${auth.sanitizedPath} HTTP/${req.httpVersion}`;
+      const requestPath = toSafeRedirectPath(auth.sanitizedPath || '/');
+      const requestLine = `${req.method || 'GET'} ${requestPath} HTTP/${req.httpVersion}`;
       const headerLines = Object.entries(headers)
         .flatMap(([key, value]) => {
           if (typeof value === 'undefined') {
@@ -1312,6 +1327,7 @@ export const proxyInternals = {
   generateMagicToken,
   mergeSetCookieValues,
   matchesMagicToken,
+  matchesPassword,
   toSafeRedirectPath,
   parseCookieHeader,
   signValue,
