@@ -7,19 +7,41 @@
  * Message queue persistence has been removed - queue is now managed on the backend.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatSettings } from '@/lib/chat-protocol';
+import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
 import {
   clearAllSessionData,
   clearDraft,
+  clearInputAttachments,
   clearSettings,
   loadAllSessionData,
   loadDraft,
+  loadInputAttachments,
   loadSettings,
   loadSettingsWithDefaults,
   persistDraft,
+  persistInputAttachments,
   persistSettings,
 } from './chat-persistence';
+
+const sampleAttachments: MessageAttachment[] = [
+  {
+    id: 'attach-1',
+    name: 'screenshot.png',
+    type: 'image/png',
+    size: 2048,
+    data: 'base64-image',
+    contentType: 'image',
+  },
+  {
+    id: 'attach-2',
+    name: 'Pasted text (1 lines)',
+    type: 'text/plain',
+    size: 14,
+    data: 'hello, world!\n',
+    contentType: 'text',
+  },
+];
 
 // =============================================================================
 // Mock sessionStorage
@@ -291,6 +313,78 @@ describe('settings persistence', () => {
 });
 
 // =============================================================================
+// Input Attachment Persistence Tests
+// =============================================================================
+
+describe('input attachment persistence', () => {
+  describe('loadInputAttachments', () => {
+    it('should return empty array for null sessionId', () => {
+      const result = loadInputAttachments(null);
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array when no attachments exist', () => {
+      const result = loadInputAttachments('session-123');
+      expect(result).toEqual([]);
+    });
+
+    it('should return stored attachments', () => {
+      mockStorage.set('chat-attachments-session-123', JSON.stringify(sampleAttachments));
+      const result = loadInputAttachments('session-123');
+      expect(result).toEqual(sampleAttachments);
+    });
+
+    it('should return empty array for invalid JSON', () => {
+      mockStorage.set('chat-attachments-session-123', '{invalid json');
+      const result = loadInputAttachments('session-123');
+      expect(result).toEqual([]);
+    });
+
+    it('should return empty array for invalid attachment shape', () => {
+      mockStorage.set(
+        'chat-attachments-session-123',
+        JSON.stringify([{ id: 'a1', name: 'bad.txt', size: '123' }])
+      );
+      const result = loadInputAttachments('session-123');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('persistInputAttachments', () => {
+    it('should not persist for null sessionId', () => {
+      persistInputAttachments(null, sampleAttachments);
+      expect(mockSessionStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('should persist attachments as JSON', () => {
+      persistInputAttachments('session-123', sampleAttachments);
+      const stored = mockStorage.get('chat-attachments-session-123');
+      expect(stored).toBeDefined();
+      expect(JSON.parse(stored ?? '')).toEqual(sampleAttachments);
+    });
+
+    it('should remove attachments when empty array is persisted', () => {
+      mockStorage.set('chat-attachments-session-123', JSON.stringify(sampleAttachments));
+      persistInputAttachments('session-123', []);
+      expect(mockStorage.has('chat-attachments-session-123')).toBe(false);
+    });
+  });
+
+  describe('clearInputAttachments', () => {
+    it('should not clear for null sessionId', () => {
+      clearInputAttachments(null);
+      expect(mockSessionStorage.removeItem).not.toHaveBeenCalled();
+    });
+
+    it('should remove attachments from storage', () => {
+      mockStorage.set('chat-attachments-session-123', JSON.stringify(sampleAttachments));
+      clearInputAttachments('session-123');
+      expect(mockStorage.has('chat-attachments-session-123')).toBe(false);
+    });
+  });
+});
+
+// =============================================================================
 // Session Cleanup Tests
 // =============================================================================
 
@@ -303,11 +397,13 @@ describe('session cleanup', () => {
 
     it('should clear draft and settings for session', () => {
       mockStorage.set('chat-draft-session-123', 'draft');
+      mockStorage.set('chat-attachments-session-123', JSON.stringify(sampleAttachments));
       mockStorage.set('chat-settings-session-123', JSON.stringify(DEFAULT_CHAT_SETTINGS));
 
       clearAllSessionData('session-123');
 
       expect(mockStorage.has('chat-draft-session-123')).toBe(false);
+      expect(mockStorage.has('chat-attachments-session-123')).toBe(false);
       expect(mockStorage.has('chat-settings-session-123')).toBe(false);
     });
   });
@@ -317,6 +413,7 @@ describe('session cleanup', () => {
       const result = loadAllSessionData(null);
       expect(result).toEqual({
         draft: '',
+        inputAttachments: [],
         settings: DEFAULT_CHAT_SETTINGS,
       });
     });
@@ -325,6 +422,7 @@ describe('session cleanup', () => {
       const result = loadAllSessionData('session-123');
       expect(result).toEqual({
         draft: '',
+        inputAttachments: [],
         settings: DEFAULT_CHAT_SETTINGS,
       });
     });
@@ -338,11 +436,13 @@ describe('session cleanup', () => {
       };
 
       mockStorage.set('chat-draft-session-123', 'My draft');
+      mockStorage.set('chat-attachments-session-123', JSON.stringify(sampleAttachments));
       mockStorage.set('chat-settings-session-123', JSON.stringify(settings));
 
       const result = loadAllSessionData('session-123');
 
       expect(result.draft).toBe('My draft');
+      expect(result.inputAttachments).toEqual(sampleAttachments);
       expect(result.settings).toEqual(settings);
     });
 
@@ -353,6 +453,7 @@ describe('session cleanup', () => {
       const result = loadAllSessionData('session-123');
 
       expect(result.draft).toBe('My draft');
+      expect(result.inputAttachments).toEqual([]);
       expect(result.settings).toEqual(DEFAULT_CHAT_SETTINGS); // Falls back to defaults
     });
   });
@@ -414,5 +515,10 @@ describe('storage key format', () => {
   it('should use chat-settings- prefix for settings', () => {
     persistSettings('session-abc', DEFAULT_CHAT_SETTINGS);
     expect(mockStorage.has('chat-settings-session-abc')).toBe(true);
+  });
+
+  it('should use chat-attachments- prefix for attachments', () => {
+    persistInputAttachments('session-abc', sampleAttachments);
+    expect(mockStorage.has('chat-attachments-session-abc')).toBe(true);
   });
 });

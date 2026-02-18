@@ -4,23 +4,25 @@
  * This module handles persisting and loading:
  * - Chat settings (model, thinking mode, plan mode)
  * - Input drafts (preserved across tab switches)
+ * - Input attachments (preserved across tab switches/reloads)
  *
  * Note: Message queue is now managed on the backend. Queue state is restored
  * via session_snapshot WebSocket event, not frontend persistence.
  *
  * Settings use sessionStorage (per-tab persistence).
- * Drafts use sessionStorage keyed by session ID.
+ * Drafts and input attachments use sessionStorage keyed by session ID.
  */
 
-import type { ChatSettings } from '@/lib/chat-protocol';
+import type { ChatSettings, MessageAttachment } from '@/lib/chat-protocol';
 import { DEFAULT_CHAT_SETTINGS, resolveSelectedModel } from '@/lib/chat-protocol';
-import { ChatSettingsSchema } from '@/shared/websocket';
+import { AttachmentSchema, ChatSettingsSchema } from '@/shared/websocket';
 
 // =============================================================================
 // Storage Keys
 // =============================================================================
 
 const DRAFT_KEY_PREFIX = 'chat-draft-';
+const ATTACHMENTS_KEY_PREFIX = 'chat-attachments-';
 const SETTINGS_KEY_PREFIX = 'chat-settings-';
 
 // =============================================================================
@@ -32,6 +34,13 @@ const SETTINGS_KEY_PREFIX = 'chat-settings-';
  */
 function getDraftKey(sessionId: string): string {
   return `${DRAFT_KEY_PREFIX}${sessionId}`;
+}
+
+/**
+ * Get the sessionStorage key for input attachments.
+ */
+function getAttachmentsKey(sessionId: string): string {
+  return `${ATTACHMENTS_KEY_PREFIX}${sessionId}`;
 }
 
 /**
@@ -76,6 +85,71 @@ export function clearDraft(sessionId: string | null): void {
   }
   try {
     sessionStorage.removeItem(getDraftKey(sessionId));
+  } catch {
+    // Silently ignore storage errors
+  }
+}
+
+// =============================================================================
+// Input Attachment Persistence
+// =============================================================================
+
+const PersistedAttachmentsSchema = AttachmentSchema.array();
+
+/**
+ * Load input attachments from sessionStorage for a specific session.
+ */
+export function loadInputAttachments(sessionId: string | null): MessageAttachment[] {
+  if (!sessionId || typeof window === 'undefined') {
+    return [];
+  }
+  try {
+    const stored = sessionStorage.getItem(getAttachmentsKey(sessionId));
+    if (!stored) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(stored);
+    const validated = PersistedAttachmentsSchema.safeParse(parsed);
+    if (!validated.success) {
+      return [];
+    }
+    return validated.data;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Persist input attachments to sessionStorage for a specific session.
+ * Clears persisted attachments if the list is empty.
+ */
+export function persistInputAttachments(
+  sessionId: string | null,
+  attachments: MessageAttachment[]
+): void {
+  if (!sessionId || typeof window === 'undefined') {
+    return;
+  }
+  try {
+    if (attachments.length > 0) {
+      sessionStorage.setItem(getAttachmentsKey(sessionId), JSON.stringify(attachments));
+    } else {
+      sessionStorage.removeItem(getAttachmentsKey(sessionId));
+    }
+  } catch {
+    // Silently ignore storage errors
+  }
+}
+
+/**
+ * Clear persisted input attachments for a specific session.
+ */
+export function clearInputAttachments(sessionId: string | null): void {
+  if (!sessionId || typeof window === 'undefined') {
+    return;
+  }
+  try {
+    sessionStorage.removeItem(getAttachmentsKey(sessionId));
   } catch {
     // Silently ignore storage errors
   }
@@ -163,6 +237,7 @@ export function loadSettingsWithDefaults(sessionId: string | null): ChatSettings
  */
 export function clearAllSessionData(sessionId: string | null): void {
   clearDraft(sessionId);
+  clearInputAttachments(sessionId);
   clearSettings(sessionId);
 }
 
@@ -174,12 +249,14 @@ export function clearAllSessionData(sessionId: string | null): void {
  */
 export interface PersistedSessionData {
   draft: string;
+  inputAttachments: MessageAttachment[];
   settings: ChatSettings;
 }
 
 export function loadAllSessionData(sessionId: string | null): PersistedSessionData {
   return {
     draft: loadDraft(sessionId),
+    inputAttachments: loadInputAttachments(sessionId),
     settings: loadSettingsWithDefaults(sessionId),
   };
 }

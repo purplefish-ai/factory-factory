@@ -3,7 +3,7 @@
  *
  * This hook manages:
  * - Chat state via useReducer (messages, running state, permissions, etc.)
- * - Session persistence (settings, drafts)
+ * - Session persistence (settings, drafts, input attachments)
  * - WebSocket message handling (converts to reducer actions)
  * - Action callbacks for UI (sendMessage, stopChat, etc.)
  * - Session switching effects
@@ -24,8 +24,13 @@
  * ```
  */
 
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ChatSettings, MessageAttachment, QueuedMessage } from '@/lib/chat-protocol';
+import {
+  clearInputAttachments as clearPersistedInputAttachments,
+  loadInputAttachments,
+  persistInputAttachments,
+} from './chat-persistence';
 import { type ChatAction, type ChatState, chatReducer, createInitialChatState } from './reducer';
 import { createToolInputAccumulatorState } from './streaming-utils';
 import { useChatActions } from './use-chat-actions';
@@ -97,7 +102,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   const [state, dispatch] = useReducer(chatReducer, undefined, createInitialChatState);
 
   // Local state for input attachments (for recovery on rejection)
-  const [inputAttachments, setInputAttachments] = useState<MessageAttachment[]>([]);
+  const [inputAttachments, setInputAttachmentsState] = useState<MessageAttachment[]>([]);
 
   // Refs
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -120,6 +125,23 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dbSessionIdRef.current = dbSessionId;
   }, [dbSessionId]);
 
+  // Load persisted attachments when switching sessions.
+  useEffect(() => {
+    setInputAttachmentsState(loadInputAttachments(dbSessionId));
+  }, [dbSessionId]);
+
+  // Update attachments and keep sessionStorage in sync.
+  const setInputAttachments = useCallback((attachments: MessageAttachment[]) => {
+    setInputAttachmentsState(attachments);
+    persistInputAttachments(dbSessionIdRef.current, attachments);
+  }, []);
+
+  // Clear attachments from both state and persistence.
+  const clearInputAttachments = useCallback(() => {
+    setInputAttachmentsState([]);
+    clearPersistedInputAttachments(dbSessionIdRef.current);
+  }, []);
+
   // =============================================================================
   // Session Switching Hook
   // =============================================================================
@@ -139,6 +161,13 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dbSessionId,
     initialDraft: loadedDraft,
   });
+
+  // Keep clear-input callback stable so action callbacks (for example sendMessage)
+  // are not recreated on each render.
+  const onClearInput = useCallback(() => {
+    clearInputDraft();
+    clearInputAttachments();
+  }, [clearInputDraft, clearInputAttachments]);
 
   // =============================================================================
   // Transport Hook
@@ -167,7 +196,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       // Clear the rejected message state after processing
       dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
     }
-  }, [state.lastRejectedMessage, setInputDraft]);
+  }, [state.lastRejectedMessage, setInputDraft, setInputAttachments]);
 
   // =============================================================================
   // Action Callbacks Hook
@@ -180,10 +209,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dbSessionIdRef,
     inputAttachmentsRef,
     rewindTimeoutRef,
-    onClearInput: () => {
-      clearInputDraft();
-      setInputAttachments([]);
-    },
+    onClearInput,
   });
 
   // Clean up rewind timeout on unmount
@@ -199,7 +225,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // Return Value
   // =============================================================================
 
-  // Callbacks are stable (use refs internally), so we only need state and connected in deps
+  // Keep return object stable between renders unless relevant state/actions change.
   return useMemo(
     () => ({
       // Spread all state from reducer
@@ -224,6 +250,15 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       inputRef,
       messagesEndRef,
     }),
-    [state, connected, actions, inputDraft, setInputDraft, inputAttachments, handleMessage]
+    [
+      state,
+      connected,
+      actions,
+      inputDraft,
+      setInputDraft,
+      inputAttachments,
+      setInputAttachments,
+      handleMessage,
+    ]
   );
 }
