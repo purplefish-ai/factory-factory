@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { GroupedMessageItemRenderer, LoadingIndicator } from '@/components/agent-activity';
 import { ThinkingCompletionProvider } from '@/components/agent-activity/message-renderers';
+import { useWorkspaceToolExpansionState } from '@/components/agent-activity/tool-renderers/tool-expansion-state';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { isStreamEventMessage, isToolSequence } from '@/lib/chat-protocol';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
@@ -13,6 +14,8 @@ import { CompactingIndicator } from './compacting-indicator';
 // =============================================================================
 
 interface VirtualizedMessageListProps {
+  /** Workspace ID (enables persisted tool expansion state per workspace) */
+  workspaceId?: string;
   messages: GroupedMessageItem[];
   running: boolean;
   startingSession: boolean;
@@ -72,6 +75,10 @@ interface VirtualRowProps {
   userMessageUuid?: string;
   /** Callback when user initiates rewind to this message */
   onRewindToMessage?: (uuid: string) => void;
+  /** Reads persisted expansion state for tool rows/groups */
+  getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
+  /** Persists expansion state for tool rows/groups */
+  setToolExpansionState?: (key: string, open: boolean) => void;
 }
 
 const VirtualRow = memo(function VirtualRow({
@@ -82,6 +89,8 @@ const VirtualRow = memo(function VirtualRow({
   onRemove,
   userMessageUuid,
   onRewindToMessage,
+  getToolExpansionState,
+  setToolExpansionState,
 }: VirtualRowProps) {
   return (
     <div ref={measureElement} data-index={index} className="pb-2">
@@ -91,6 +100,8 @@ const VirtualRow = memo(function VirtualRow({
         onRemove={onRemove}
         userMessageUuid={userMessageUuid}
         onRewindToMessage={onRewindToMessage}
+        getToolExpansionState={getToolExpansionState}
+        setToolExpansionState={setToolExpansionState}
       />
     </div>
   );
@@ -101,6 +112,7 @@ const VirtualRow = memo(function VirtualRow({
 // =============================================================================
 
 export const VirtualizedMessageList = memo(function VirtualizedMessageList({
+  workspaceId,
   messages,
   running,
   startingSession,
@@ -118,6 +130,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   onRewindToMessage,
   initBanner,
 }: VirtualizedMessageListProps) {
+  const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(workspaceId);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(messages.length);
   const prevLatestThinkingRef = useRef<string | null>(latestThinking);
@@ -131,6 +144,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   const showingInitSpinner = initBanner?.kind === 'info';
   const hasScrollableContent =
     messages.length > 0 || running || startingSession || showingInitSpinner;
+  const getToolExpansionState = workspaceId ? getExpansionState : undefined;
+  const setToolExpansionState = workspaceId ? setExpansionState : undefined;
 
   const lastThinkingMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -416,6 +431,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
                   }
                   userMessageUuid={userMessageUuid}
                   onRewindToMessage={onRewindToMessage}
+                  getToolExpansionState={getToolExpansionState}
+                  setToolExpansionState={setToolExpansionState}
                 />
               </div>
             );
