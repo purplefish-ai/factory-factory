@@ -77,8 +77,8 @@ function isThinkingBudgetClient(value: unknown): value is ThinkingBudgetClient {
 class ChatMessageHandlerService {
   /** Guard to prevent concurrent tryDispatchNextMessage calls per session. */
   private dispatchInProgress = new Map<string, number>();
-  /** Monotonic token per session to invalidate stale dispatch completions. */
-  private dispatchTokenBySession = new Map<string, number>();
+  /** Monotonic token to invalidate stale dispatch completions. */
+  private nextDispatchToken = 1;
 
   /** Client creator function - injected to avoid circular dependencies */
   private clientCreator: ClientCreator | null = null;
@@ -127,8 +127,6 @@ class ChatMessageHandlerService {
   }
 
   resetDispatchState(sessionId: string): void {
-    const nextToken = (this.dispatchTokenBySession.get(sessionId) ?? 0) + 1;
-    this.dispatchTokenBySession.set(sessionId, nextToken);
     this.dispatchInProgress.delete(sessionId);
   }
 
@@ -143,8 +141,8 @@ class ChatMessageHandlerService {
   }
 
   private reserveDispatchToken(dbSessionId: string): number {
-    const token = (this.dispatchTokenBySession.get(dbSessionId) ?? 0) + 1;
-    this.dispatchTokenBySession.set(dbSessionId, token);
+    const token = this.nextDispatchToken;
+    this.nextDispatchToken += 1;
     this.dispatchInProgress.set(dbSessionId, token);
     return token;
   }
