@@ -6,6 +6,7 @@ export {
 } from './ci-status.js';
 export {
   CIStatus,
+  IssueProvider,
   KanbanColumn,
   PRState,
   RatchetState,

@@ -7,12 +7,12 @@ import { describe, expect, it } from 'vitest';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
 describe('DataImportButton - File Validation', () => {
-  it('should accept valid v3 backup file', () => {
-    const validV3Data = {
+  it('should accept valid v4 backup file', () => {
+    const validV4Data = {
       meta: {
         exportedAt: '2024-01-01T00:00:00.000Z',
         version: '0.1.0',
-        schemaVersion: 3,
+        schemaVersion: 4,
       },
       data: {
         projects: [],
@@ -23,14 +23,14 @@ describe('DataImportButton - File Validation', () => {
       },
     };
 
-    const result = exportDataSchema.safeParse(validV3Data);
+    const result = exportDataSchema.safeParse(validV4Data);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.meta.schemaVersion).toBe(3);
+      expect(result.data.meta.schemaVersion).toBe(4);
     }
   });
 
-  it('should reject legacy v2 backup files', () => {
+  it('should reject legacy v2/v3 backup files', () => {
     const validV2Data = {
       meta: {
         exportedAt: '2024-01-01T00:00:00.000Z',
@@ -55,7 +55,7 @@ describe('DataImportButton - File Validation', () => {
       meta: {
         exportedAt: '2024-01-01T00:00:00.000Z',
         // missing version
-        schemaVersion: 3,
+        schemaVersion: 4,
       },
       data: {
         projects: [],
@@ -75,7 +75,7 @@ describe('DataImportButton - File Validation', () => {
       meta: {
         exportedAt: '2024-01-01T00:00:00.000Z',
         version: '0.1.0',
-        schemaVersion: 3,
+        schemaVersion: 4,
       },
       data: {
         projects: [],
@@ -115,7 +115,7 @@ describe('DataImportButton - File Validation', () => {
       meta: {
         exportedAt: '2024-01-01T00:00:00.000Z',
         version: '0.1.0',
-        schemaVersion: 3,
+        schemaVersion: 4,
       },
       data: {
         projects: 'not an array',

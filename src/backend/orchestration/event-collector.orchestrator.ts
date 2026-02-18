@@ -21,6 +21,7 @@ import {
   type PRSnapshotUpdatedEvent,
   prSnapshotService,
 } from '@/backend/domains/github';
+import { linearStateSyncService } from '@/backend/domains/linear';
 import {
   RATCHET_STATE_CHANGED,
   type RatchetStateChangedEvent,
@@ -54,6 +55,7 @@ import {
   workspaceSnapshotStore,
 } from '@/backend/services/workspace-snapshot-store.service';
 import type { CIStatus, PRState } from '@/shared/core';
+import { getWorkspaceLinearContext } from './linear-config.helper';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -256,6 +258,30 @@ async function refreshWorkspacePendingRequestType(
 }
 
 // ---------------------------------------------------------------------------
+// Linear state sync on PR merge
+// ---------------------------------------------------------------------------
+
+async function handleLinearIssueCompletedOnMerge(workspaceId: string): Promise<void> {
+  try {
+    const ctx = await getWorkspaceLinearContext(workspaceId);
+    if (!ctx) {
+      return;
+    }
+
+    await linearStateSyncService.markIssueCompleted(ctx.apiKey, ctx.linearIssueId);
+    logger.info('Marked Linear issue as completed on PR merge', {
+      workspaceId,
+      linearIssueId: ctx.linearIssueId,
+    });
+  } catch (error) {
+    logger.warn('Failed to mark Linear issue as completed on PR merge', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // configureEventCollector
 // ---------------------------------------------------------------------------
 
@@ -299,6 +325,11 @@ export function configureEventCollector(): void {
     };
 
     coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated');
+
+    // Transition linked Linear issue to completed when PR is merged
+    if (event.prState === 'MERGED') {
+      void handleLinearIssueCompletedOnMerge(event.workspaceId);
+    }
   });
 
   // 3. Ratchet state changes

@@ -208,7 +208,7 @@ module.exports = {
       from: {
         path: '^src/backend/orchestration/',
         pathNot:
-          '^src/backend/orchestration/(workspace-init\\.orchestrator|snapshot-reconciliation\\.orchestrator|scheduler\\.service|health\\.service|decision-log-query\\.service|data-backup\\.service|types)\\.ts$|^src/backend/orchestration/.*\\.test\\.ts$',
+          '^src/backend/orchestration/(workspace-init\\.orchestrator|snapshot-reconciliation\\.orchestrator|scheduler\\.service|health\\.service|decision-log-query\\.service|data-backup\\.service|linear-config\\.helper|types)\\.ts$|^src/backend/orchestration/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/resource_accessors/' },
     },
