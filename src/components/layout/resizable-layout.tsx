@@ -33,7 +33,7 @@ export function ResizableLayout({ sidebar, children, className }: ResizableLayou
       {sidebar ? (
         isMobile ? (
           <MobileSlotContext.Provider value={slotElement}>
-            <div className={cn('h-dvh w-full flex flex-col', className)}>
+            <div className={cn('h-full w-full flex flex-col', className)}>
               <header className="flex shrink-0 items-center gap-2 border-b px-2 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
                 <Link to="/projects" className="shrink-0">
                   <LogoIcon className="size-10" />
@@ -51,7 +51,7 @@ export function ResizableLayout({ sidebar, children, className }: ResizableLayou
         ) : (
           <ResizablePanelGroup
             direction="horizontal"
-            className={cn('h-dvh w-full', className)}
+            className={cn('h-full w-full', className)}
             autoSaveId="app-sidebar-layout"
           >
             {/* Left sidebar panel */}
@@ -72,7 +72,7 @@ export function ResizableLayout({ sidebar, children, className }: ResizableLayou
       ) : (
         <main
           className={cn(
-            'relative flex min-h-0 h-dvh w-full flex-1 flex-col overflow-hidden bg-background',
+            'relative flex min-h-0 h-full w-full flex-1 flex-col overflow-hidden bg-background',
             className
           )}
         >
