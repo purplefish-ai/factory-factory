@@ -260,7 +260,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         </div>
       )}
 
-      <div className="sticky bottom-0 z-20 border-t bg-background pb-safe">
+      <div className="z-20 border-t bg-background pb-safe">
         <PermissionPrompt
           permission={
             props.pendingRequest.type === 'permission' ? props.pendingRequest.request : null

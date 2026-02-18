@@ -250,10 +250,7 @@ export default function MobileBaselinePage() {
                 </div>
               ))}
             </div>
-            <div
-              data-testid="mobile-chat-composer"
-              className="sticky bottom-0 z-20 border-t bg-background pb-safe"
-            >
+            <div data-testid="mobile-chat-composer" className="z-20 border-t bg-background pb-safe">
               <ChatInput
                 onSend={noop}
                 disabled={false}
