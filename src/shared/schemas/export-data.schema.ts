@@ -11,6 +11,7 @@
 import { z } from 'zod';
 import {
   CIStatus as CoreCIStatus,
+  IssueProvider as CoreIssueProvider,
   KanbanColumn as CoreKanbanColumn,
   PRState as CorePRState,
   RatchetState as CoreRatchetState,
@@ -27,6 +28,7 @@ function enumValues<const T extends Record<string, string>>(enumObject: T) {
 // Use core as the single enum source-of-truth (browser-safe, no Prisma dependency).
 const WorkspaceStatus = z.enum(enumValues(CoreWorkspaceStatus));
 const WorkspaceCreationSource = z.enum(enumValues(CoreWorkspaceCreationSource));
+const IssueProvider = z.enum(enumValues(CoreIssueProvider));
 const RunScriptStatus = z.enum(enumValues(CoreRunScriptStatus));
 const PRState = z.enum(enumValues(CorePRState));
 const CIStatus = z.enum(enumValues(CoreCIStatus));
@@ -45,6 +47,8 @@ const exportedProjectSchema = z.object({
   defaultBranch: z.string(),
   githubOwner: z.string().nullable(),
   githubRepo: z.string().nullable(),
+  issueProvider: IssueProvider,
+  issueTrackerConfig: z.unknown().nullable(),
   isArchived: z.boolean(),
   startupScriptCommand: z.string().nullable(),
   startupScriptPath: z.string().nullable(),
@@ -78,6 +82,9 @@ const exportedWorkspaceSchema = z.object({
   prUrl: z.string().nullable(),
   githubIssueNumber: z.number().nullable(),
   githubIssueUrl: z.string().nullable(),
+  linearIssueId: z.string().nullable(),
+  linearIssueIdentifier: z.string().nullable(),
+  linearIssueUrl: z.string().nullable(),
   defaultSessionProvider: WorkspaceProviderSelection,
   ratchetSessionProvider: WorkspaceProviderSelection,
   prNumber: z.number().nullable(),
@@ -140,7 +147,7 @@ export const exportDataSchema = z.object({
   meta: z.object({
     exportedAt: z.string(),
     version: z.string(),
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
   }),
   data: z.object({
     projects: z.array(exportedProjectSchema),

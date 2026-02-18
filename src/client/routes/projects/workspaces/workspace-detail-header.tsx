@@ -2,6 +2,7 @@ import {
   AppWindow,
   Archive,
   CheckCircle2,
+  CircleDot,
   GitBranch,
   GitPullRequest,
   Loader2,
@@ -140,6 +141,41 @@ function WorkspacePrAction({
       >
         <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
         {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+      </a>
+    );
+  }
+
+  return null;
+}
+
+function WorkspaceIssueLink({
+  workspace,
+}: {
+  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+}) {
+  if (workspace.linearIssueIdentifier && workspace.linearIssueUrl) {
+    return (
+      <a
+        href={workspace.linearIssueUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
+      >
+        <CircleDot className="h-3 w-3 text-violet-500" />
+        {workspace.linearIssueIdentifier}
+      </a>
+    );
+  }
+
+  if (workspace.githubIssueNumber && workspace.githubIssueUrl) {
+    return (
+      <a
+        href={workspace.githubIssueUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-opacity hover:opacity-80"
+      >
+        <CircleDot className="h-3 w-3 text-green-500" />#{workspace.githubIssueNumber}
       </a>
     );
   }
@@ -368,6 +404,7 @@ export function WorkspaceHeader({
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-2 px-2 py-1.5 md:px-4 md:py-2 border-b">
       <div className="flex items-center gap-2 md:gap-3 min-w-0">
         <WorkspaceTitle workspace={workspace} />
+        <WorkspaceIssueLink workspace={workspace} />
         <RunScriptPortBadge workspaceId={workspaceId} />
         <WorkspacePrAction
           workspace={workspace}

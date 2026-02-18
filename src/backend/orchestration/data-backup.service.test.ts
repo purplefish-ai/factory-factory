@@ -187,12 +187,12 @@ const mockUserSettings: UserSettings = {
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
 
-function createV3ImportData(overrides?: Partial<ExportData['data']>): ExportData {
+function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
   return {
     meta: {
       exportedAt: '2025-01-01T00:00:00.000Z',
       version: '1.0.0',
-      schemaVersion: 3,
+      schemaVersion: 4,
     },
     data: {
       projects: [
@@ -205,6 +205,8 @@ function createV3ImportData(overrides?: Partial<ExportData['data']>): ExportData
           defaultBranch: 'main',
           githubOwner: null,
           githubRepo: null,
+          issueProvider: 'GITHUB',
+          issueTrackerConfig: null,
           isArchived: false,
           startupScriptCommand: null,
           startupScriptPath: null,
@@ -239,6 +241,9 @@ function createV3ImportData(overrides?: Partial<ExportData['data']>): ExportData
           prUrl: 'https://github.com/test/repo/pull/1',
           githubIssueNumber: 123,
           githubIssueUrl: 'https://github.com/test/repo/issues/123',
+          linearIssueId: null,
+          linearIssueIdentifier: null,
+          linearIssueUrl: null,
           defaultSessionProvider: WorkspaceProviderSelection.CLAUDE,
           ratchetSessionProvider: WorkspaceProviderSelection.WORKSPACE_DEFAULT,
           prNumber: 1,
@@ -309,7 +314,7 @@ describe('DataBackupService', () => {
   });
 
   describe('exportData', () => {
-    it('exports v3 format with all ACP session fields', async () => {
+    it('exports v4 format with all fields', async () => {
       vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
       vi.mocked(prisma.workspace.findMany).mockResolvedValue([mockWorkspace]);
       vi.mocked(prisma.agentSession.findMany).mockResolvedValue([mockAgentSession]);
@@ -318,7 +323,7 @@ describe('DataBackupService', () => {
 
       const result = await dataBackupService.exportData('1.0.0');
 
-      expect(result.meta.schemaVersion).toBe(3);
+      expect(result.meta.schemaVersion).toBe(4);
       expect(result.data.agentSessions).toHaveLength(1);
       expect(result.data.agentSessions[0]).toEqual(
         expect.objectContaining({
@@ -350,8 +355,8 @@ describe('DataBackupService', () => {
   });
 
   describe('importData', () => {
-    it('imports strict v3 data', async () => {
-      const exportedData = createV3ImportData();
+    it('imports strict v4 data', async () => {
+      const exportedData = createImportData();
 
       vi.mocked(mockTx.project.findUnique)
         .mockResolvedValueOnce(null)
@@ -401,7 +406,7 @@ describe('DataBackupService', () => {
     });
 
     it('skips existing projects', async () => {
-      const exportedData = createV3ImportData({
+      const exportedData = createImportData({
         workspaces: [],
         agentSessions: [],
         terminalSessions: [],
@@ -418,7 +423,7 @@ describe('DataBackupService', () => {
     });
 
     it('skips workspaces with missing projects', async () => {
-      const exportedData = createV3ImportData({
+      const exportedData = createImportData({
         projects: [],
         agentSessions: [],
         terminalSessions: [],
@@ -437,7 +442,7 @@ describe('DataBackupService', () => {
     });
 
     it('skips user settings when already present', async () => {
-      const exportedData = createV3ImportData({
+      const exportedData = createImportData({
         projects: [],
         workspaces: [],
         agentSessions: [],

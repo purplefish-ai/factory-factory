@@ -56,6 +56,19 @@ type ExportedUserSettings = z.infer<typeof exportedUserSettingsSchema>;
 const toISOString = (date: Date | null): string | null => (date ? date.toISOString() : null);
 const parseDate = (str: string | null): Date | null => (str ? new Date(str) : null);
 
+/** Strip the encrypted API key from issueTrackerConfig for safe export. */
+function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
+  if (!config || typeof config !== 'object') {
+    return null;
+  }
+  const obj = config as Record<string, unknown>;
+  if (obj.linear && typeof obj.linear === 'object') {
+    const { apiKey: _apiKey, ...rest } = obj.linear as Record<string, unknown>;
+    return { ...obj, linear: rest };
+  }
+  return config;
+}
+
 // ============================================================================
 // Import Functions
 // ============================================================================
@@ -90,6 +103,8 @@ async function importProjects(
         defaultBranch: p.defaultBranch,
         githubOwner: p.githubOwner,
         githubRepo: p.githubRepo,
+        issueProvider: p.issueProvider,
+        // issueTrackerConfig is NOT imported — it contains encrypted keys that are machine-specific
         isArchived: p.isArchived,
         startupScriptCommand: p.startupScriptCommand,
         startupScriptPath: p.startupScriptPath,
@@ -156,6 +171,9 @@ async function importWorkspaces(
         prUrl: workspace.prUrl,
         githubIssueNumber: workspace.githubIssueNumber,
         githubIssueUrl: workspace.githubIssueUrl,
+        linearIssueId: workspace.linearIssueId,
+        linearIssueIdentifier: workspace.linearIssueIdentifier,
+        linearIssueUrl: workspace.linearIssueUrl,
         defaultSessionProvider: workspace.defaultSessionProvider,
         ratchetSessionProvider: workspace.ratchetSessionProvider,
         prNumber: workspace.prNumber,
@@ -314,7 +332,7 @@ class DataBackupService {
    * Export all data for backup/migration.
    * Exports projects, workspaces, sessions, and user preferences.
    * Excludes cached data (workspaceOrder, cachedSlashCommands) which will rebuild.
-   * Exports in schema version 3 format.
+   * Exports in schema version 4 format.
    */
   async exportData(appVersion: string): Promise<ExportData> {
     logger.info('Exporting database data');
@@ -327,7 +345,7 @@ class DataBackupService {
       meta: {
         exportedAt: new Date().toISOString(),
         version: appVersion,
-        schemaVersion: 3,
+        schemaVersion: 4,
       },
       data: {
         projects: projects.map((p) => ({
@@ -339,6 +357,8 @@ class DataBackupService {
           defaultBranch: p.defaultBranch,
           githubOwner: p.githubOwner,
           githubRepo: p.githubRepo,
+          issueProvider: p.issueProvider,
+          issueTrackerConfig: sanitizeIssueTrackerConfigForExport(p.issueTrackerConfig),
           isArchived: p.isArchived,
           startupScriptCommand: p.startupScriptCommand,
           startupScriptPath: p.startupScriptPath,
@@ -371,6 +391,9 @@ class DataBackupService {
           prUrl: w.prUrl,
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,
+          linearIssueId: w.linearIssueId,
+          linearIssueIdentifier: w.linearIssueIdentifier,
+          linearIssueUrl: w.linearIssueUrl,
           defaultSessionProvider: w.defaultSessionProvider,
           ratchetSessionProvider: w.ratchetSessionProvider,
           prNumber: w.prNumber,
@@ -447,7 +470,7 @@ class DataBackupService {
 
   /**
    * Import data from a backup file.
-   * Accepts strict schema version 3 payloads only.
+   * Accepts strict schema version 4 payloads only.
    * Skips records that already exist (by ID).
    * Returns counts of imported/skipped records.
    * All imports are wrapped in a transaction for atomicity.
