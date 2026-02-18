@@ -162,6 +162,13 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     initialDraft: loadedDraft,
   });
 
+  // Keep clear-input callback stable so action callbacks (for example sendMessage)
+  // are not recreated on each render.
+  const onClearInput = useCallback(() => {
+    clearInputDraft();
+    clearInputAttachments();
+  }, [clearInputDraft, clearInputAttachments]);
+
   // =============================================================================
   // Transport Hook
   // =============================================================================
@@ -202,10 +209,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
     dbSessionIdRef,
     inputAttachmentsRef,
     rewindTimeoutRef,
-    onClearInput: () => {
-      clearInputDraft();
-      clearInputAttachments();
-    },
+    onClearInput,
   });
 
   // Clean up rewind timeout on unmount
@@ -255,6 +259,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
       inputAttachments,
       setInputAttachments,
       handleMessage,
+      onClearInput,
     ]
   );
 }
