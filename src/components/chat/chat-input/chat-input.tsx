@@ -1,4 +1,4 @@
-import { Brain, ImagePlus, Loader2, Send, Square } from 'lucide-react';
+import { Brain, ImagePlus, Loader2, Send, SlidersHorizontal, Square } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
@@ -13,7 +13,16 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from '@/components/ui/input-group';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
@@ -339,26 +348,147 @@ const AcpConfigControls = memo(function AcpConfigControls({
   );
 });
 
-const LeftControls = memo(function LeftControls({
-  settings,
-  capabilities,
-  onModelChange,
-  onReasoningChange,
-  onThinkingChange,
+const MobileSettingsSheet = memo(function MobileSettingsSheet({
   running,
-  modLabel,
-  modifierHeld,
-  fileInputRef,
-  onFileSelect,
-  supportedImageTypes,
-  disabled,
-  onQuickAction,
-  quickActionsOpen,
-  onQuickActionsOpenChange,
-  tokenStats,
+  showModelSelector,
+  selectedModel,
+  modelOptions,
+  onModelChange,
+  showReasoningSelector,
+  selectedReasoningEffort,
+  reasoningOptions,
+  onReasoningChange,
+  showThinkingToggle,
+  settings,
+  onThinkingChange,
+  hasAcpConfigOptions,
   acpConfigOptions,
   onSetConfigOption,
+  showUsageIndicator,
+  tokenStats,
 }: {
+  running: boolean;
+  showModelSelector: boolean;
+  selectedModel: string;
+  modelOptions: ChatBarCapabilities['model']['options'];
+  onModelChange: (model: string) => void;
+  showReasoningSelector: boolean;
+  selectedReasoningEffort: string;
+  reasoningOptions: ChatBarCapabilities['reasoning']['options'];
+  onReasoningChange: (effort: string) => void;
+  showThinkingToggle: boolean;
+  settings?: ChatSettings;
+  onThinkingChange: (enabled: boolean) => void;
+  hasAcpConfigOptions: boolean;
+  acpConfigOptions?: AcpConfigOption[] | null;
+  onSetConfigOption?: (configId: string, value: string) => void;
+  showUsageIndicator: boolean;
+  tokenStats?: TokenStats;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasAnyControls =
+    hasAcpConfigOptions ||
+    showModelSelector ||
+    showReasoningSelector ||
+    showThinkingToggle ||
+    showUsageIndicator;
+
+  if (!hasAnyControls) {
+    return null;
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 shrink-0 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+          aria-label="Open chat options"
+          data-testid="chat-options-trigger"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          <span className="max-[359px]:sr-only">Options</span>
+        </Button>
+      </SheetTrigger>
+      <SheetContent
+        side="bottom"
+        className="max-h-[80dvh] overflow-y-auto"
+        data-testid="chat-options-sheet"
+      >
+        <SheetHeader>
+          <SheetTitle>Chat Options</SheetTitle>
+          <SheetDescription>Adjust model and runtime settings for this message.</SheetDescription>
+        </SheetHeader>
+        <div className="space-y-3 py-4">
+          {hasAcpConfigOptions && onSetConfigOption ? (
+            acpConfigOptions?.map((option) => (
+              <div
+                key={option.id}
+                className="flex items-center justify-between gap-2 rounded-md border p-2"
+              >
+                <span className="text-sm text-muted-foreground">{option.name}</span>
+                <AcpConfigSelector
+                  configOption={option}
+                  onSelect={onSetConfigOption}
+                  disabled={running}
+                />
+              </div>
+            ))
+          ) : (
+            <>
+              {showModelSelector && (
+                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
+                  <span className="text-sm text-muted-foreground">Model</span>
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    options={modelOptions}
+                    onChange={onModelChange}
+                    disabled={running}
+                  />
+                </div>
+              )}
+              {showReasoningSelector && (
+                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
+                  <span className="text-sm text-muted-foreground">Reasoning</span>
+                  <ModelSelector
+                    selectedModel={selectedReasoningEffort}
+                    options={reasoningOptions.map((option) => ({
+                      value: option.value,
+                      label: option.label,
+                    }))}
+                    onChange={onReasoningChange}
+                    disabled={running}
+                  />
+                </div>
+              )}
+              {showThinkingToggle && (
+                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
+                  <span className="text-sm text-muted-foreground">Extended thinking</span>
+                  <SettingsToggle
+                    pressed={settings?.thinkingEnabled ?? false}
+                    onPressedChange={onThinkingChange}
+                    disabled={running}
+                    icon={Brain}
+                    label="Extended thinking mode"
+                    ariaLabel="Toggle thinking mode"
+                  />
+                </div>
+              )}
+            </>
+          )}
+          {showUsageIndicator && tokenStats && (
+            <div className="rounded-md border p-2">
+              <ContextWindowIndicator tokenStats={tokenStats} />
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+});
+
+interface LeftControlsProps {
   settings?: ChatSettings;
   capabilities?: ChatBarCapabilities;
   onModelChange: (model: string) => void;
@@ -377,25 +507,126 @@ const LeftControls = memo(function LeftControls({
   tokenStats?: TokenStats;
   acpConfigOptions?: AcpConfigOption[] | null;
   onSetConfigOption?: (configId: string, value: string) => void;
+}
+
+interface LeftControlsViewState {
+  provider: ChatBarCapabilities['provider'] | null;
+  selectedModel: string;
+  selectedReasoningEffort: string;
+  showModelSelector: boolean;
+  showReasoningSelector: boolean;
+  showThinkingToggle: boolean;
+  showAttachments: boolean;
+  showUsageIndicator: boolean;
+  hasModeToggles: boolean;
+  hasAcpConfigOptions: boolean;
+}
+
+const MobileLeftControls = memo(function MobileLeftControls({
+  props,
+  view,
+}: {
+  props: LeftControlsProps;
+  view: LeftControlsViewState;
 }) {
   const {
-    provider,
-    selectedModel,
-    selectedReasoningEffort,
-    showModelSelector,
-    showReasoningSelector,
-    showThinkingToggle,
-    showAttachments,
-    showUsageIndicator,
-  } = deriveLeftControlsVisibility(settings, capabilities, tokenStats);
-  const hasModeToggles = showThinkingToggle;
-  const hasAcpConfigOptions =
-    acpConfigOptions != null && acpConfigOptions.length > 0 && onSetConfigOption != null;
+    settings,
+    capabilities,
+    onModelChange,
+    onReasoningChange,
+    onThinkingChange,
+    running,
+    modLabel,
+    modifierHeld,
+    fileInputRef,
+    onFileSelect,
+    supportedImageTypes,
+    disabled,
+    onQuickAction,
+    quickActionsOpen,
+    onQuickActionsOpenChange,
+    tokenStats,
+    acpConfigOptions,
+    onSetConfigOption,
+  } = props;
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1 pr-1">
+      <ProviderIndicator provider={view.provider} />
+      <MobileSettingsSheet
+        running={running}
+        showModelSelector={view.showModelSelector}
+        selectedModel={view.selectedModel}
+        modelOptions={capabilities?.model.options ?? []}
+        onModelChange={onModelChange}
+        showReasoningSelector={view.showReasoningSelector}
+        selectedReasoningEffort={view.selectedReasoningEffort}
+        reasoningOptions={capabilities?.reasoning.options ?? []}
+        onReasoningChange={onReasoningChange}
+        showThinkingToggle={view.showThinkingToggle}
+        settings={settings}
+        onThinkingChange={onThinkingChange}
+        hasAcpConfigOptions={view.hasAcpConfigOptions}
+        acpConfigOptions={acpConfigOptions}
+        onSetConfigOption={onSetConfigOption}
+        showUsageIndicator={view.showUsageIndicator}
+        tokenStats={tokenStats}
+      />
+      {view.showAttachments && (
+        <FileUploadButton
+          fileInputRef={fileInputRef}
+          onFileSelect={onFileSelect}
+          supportedImageTypes={supportedImageTypes}
+          running={running}
+          disabled={disabled}
+          modLabel={modLabel}
+          modifierHeld={modifierHeld}
+        />
+      )}
+      <QuickActionsDropdown
+        onAction={onQuickAction}
+        disabled={disabled}
+        open={quickActionsOpen}
+        onOpenChange={onQuickActionsOpenChange}
+        shortcut={`${modLabel}+Shift+A`}
+        showShortcut={modifierHeld}
+      />
+    </div>
+  );
+});
+
+const DesktopLeftControls = memo(function DesktopLeftControls({
+  props,
+  view,
+}: {
+  props: LeftControlsProps;
+  view: LeftControlsViewState;
+}) {
+  const {
+    settings,
+    capabilities,
+    onModelChange,
+    onReasoningChange,
+    onThinkingChange,
+    running,
+    modLabel,
+    modifierHeld,
+    fileInputRef,
+    onFileSelect,
+    supportedImageTypes,
+    disabled,
+    onQuickAction,
+    quickActionsOpen,
+    onQuickActionsOpenChange,
+    tokenStats,
+    acpConfigOptions,
+    onSetConfigOption,
+  } = props;
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 scrollbar-hide">
-      <ProviderIndicator provider={provider} />
-      {hasAcpConfigOptions ? (
+      <ProviderIndicator provider={view.provider} />
+      {view.hasAcpConfigOptions && acpConfigOptions && onSetConfigOption ? (
         <>
           <div className="h-4 w-px bg-border" />
           <AcpConfigControls
@@ -406,21 +637,23 @@ const LeftControls = memo(function LeftControls({
         </>
       ) : (
         <>
-          {(showModelSelector || showReasoningSelector || hasModeToggles) && (
+          {(view.showModelSelector || view.showReasoningSelector || view.hasModeToggles) && (
             <div className="h-4 w-px bg-border" />
           )}
-          {showModelSelector && (
+          {view.showModelSelector && (
             <ModelSelector
-              selectedModel={selectedModel}
+              selectedModel={view.selectedModel}
               options={capabilities?.model.options ?? []}
               onChange={onModelChange}
               disabled={running}
             />
           )}
-          {showModelSelector && showReasoningSelector && <div className="h-4 w-px bg-border" />}
-          {showReasoningSelector && (
+          {view.showModelSelector && view.showReasoningSelector && (
+            <div className="h-4 w-px bg-border" />
+          )}
+          {view.showReasoningSelector && (
             <ModelSelector
-              selectedModel={selectedReasoningEffort}
+              selectedModel={view.selectedReasoningEffort}
               options={(capabilities?.reasoning.options ?? []).map((option) => ({
                 value: option.value,
                 label: option.label,
@@ -429,19 +662,19 @@ const LeftControls = memo(function LeftControls({
               disabled={running}
             />
           )}
-          {(showModelSelector || showReasoningSelector) && hasModeToggles && (
+          {(view.showModelSelector || view.showReasoningSelector) && view.hasModeToggles && (
             <div className="h-4 w-px bg-border" />
           )}
           <ModeToggles
-            showThinkingToggle={showThinkingToggle}
+            showThinkingToggle={view.showThinkingToggle}
             settings={settings}
             onThinkingChange={onThinkingChange}
             running={running}
             modLabel={modLabel}
             modifierHeld={modifierHeld}
           />
-          {hasModeToggles && showAttachments && <div className="h-4 w-px bg-border" />}
-          {showAttachments && (
+          {view.hasModeToggles && view.showAttachments && <div className="h-4 w-px bg-border" />}
+          {view.showAttachments && (
             <FileUploadButton
               fileInputRef={fileInputRef}
               onFileSelect={onFileSelect}
@@ -462,9 +695,28 @@ const LeftControls = memo(function LeftControls({
         shortcut={`${modLabel}+Shift+A`}
         showShortcut={modifierHeld}
       />
-      <UsageIndicatorSection showUsageIndicator={showUsageIndicator} tokenStats={tokenStats} />
+      <UsageIndicatorSection showUsageIndicator={view.showUsageIndicator} tokenStats={tokenStats} />
     </div>
   );
+});
+
+const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
+  const isMobile = useIsMobile();
+  const view = deriveLeftControlsVisibility(props.settings, props.capabilities, props.tokenStats);
+  const viewState: LeftControlsViewState = {
+    ...view,
+    hasModeToggles: view.showThinkingToggle,
+    hasAcpConfigOptions:
+      props.acpConfigOptions != null &&
+      props.acpConfigOptions.length > 0 &&
+      props.onSetConfigOption != null,
+  };
+
+  if (isMobile) {
+    return <MobileLeftControls props={props} view={viewState} />;
+  }
+
+  return <DesktopLeftControls props={props} view={viewState} />;
 });
 
 /**
@@ -740,7 +992,8 @@ export const ChatInput = memo(function ChatInput({
         {/* Controls row */}
         <InputGroupAddon
           align="block-end"
-          className="flex flex-wrap items-center gap-1 border-t !pt-1 !pb-1"
+          className="flex items-center gap-1 border-t !pt-1 !pb-1"
+          data-testid="chat-input-controls"
         >
           {/* Left side: Model selector and toggles */}
           <LeftControls

@@ -32,6 +32,18 @@ for (const viewport of mobileViewports) {
 
     const composer = page.getByTestId('mobile-chat-composer');
     await expect(composer).toBeVisible();
+    const controls = composer.getByTestId('chat-input-controls');
+    await expect(controls).toBeVisible();
+
+    const optionsTrigger = composer.getByTestId('chat-options-trigger');
+    await expect(optionsTrigger).toBeVisible();
+    await optionsTrigger.click();
+    const optionsSheet = page.getByTestId('chat-options-sheet');
+    await expect(optionsSheet).toBeVisible();
+    await expect(optionsSheet.getByRole('heading', { name: 'Chat Options' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(optionsSheet).toBeHidden();
+
     const composerBefore = await composer.boundingBox();
     expect(composerBefore).not.toBeNull();
 
@@ -41,6 +53,11 @@ for (const viewport of mobileViewports) {
 
     const composerAfter = await composer.boundingBox();
     expect(composerAfter).not.toBeNull();
+    const controlOverflow = await controls.evaluate(
+      (element) => element.scrollWidth - element.clientWidth
+    );
+    expect(controlOverflow).toBeLessThanOrEqual(1);
+
     if (composerBefore && composerAfter) {
       expect(composerAfter.y + composerAfter.height).toBeLessThanOrEqual(viewport.height);
       expect(Math.abs(composerAfter.y - composerBefore.y)).toBeLessThanOrEqual(1);
