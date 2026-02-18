@@ -48,6 +48,7 @@ import {
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
 
+import { encodeGitHubTreeRef } from './github-branch-url';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 
 function ToggleRightPanelButton() {
@@ -177,7 +178,7 @@ function WorkspaceBranchLink({
 
   const branchUrl =
     workspace.branchName && project?.githubOwner && project?.githubRepo
-      ? `https://github.com/${project.githubOwner}/${project.githubRepo}/tree/${encodeURIComponent(workspace.branchName)}`
+      ? `https://github.com/${project.githubOwner}/${project.githubRepo}/tree/${encodeGitHubTreeRef(workspace.branchName)}`
       : null;
 
   if (!branchUrl) {
