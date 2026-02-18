@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
   AgentMessage,
@@ -35,7 +36,7 @@ import {
 
 const logger = createLogger('session-domain-service');
 
-class SessionDomainService {
+class SessionDomainService extends EventEmitter {
   private readonly registry = new SessionStoreRegistry();
   private readonly publisher = new SessionPublisher();
   private readonly nowIso = () => new Date().toISOString();
@@ -276,6 +277,11 @@ class SessionDomainService {
     const store = this.registry.getOrCreate(sessionId);
     setPendingInteractiveRequest(store, request);
     this.publisher.forwardSnapshot(store, { reason: 'pending_request_set' });
+    this.emit('pending_request_changed', {
+      sessionId,
+      requestId: request.requestId,
+      hasPending: true,
+    });
   }
 
   getPendingInteractiveRequest(sessionId: string): PendingInteractiveRequest | null {
@@ -285,10 +291,12 @@ class SessionDomainService {
 
   clearPendingInteractiveRequest(sessionId: string): void {
     const store = this.registry.getOrCreate(sessionId);
+    const requestId = store.pendingInteractiveRequest?.requestId;
     if (!clearPendingInteractiveRequest(store)) {
       return;
     }
     this.publisher.forwardSnapshot(store, { reason: 'pending_request_cleared' });
+    this.emit('pending_request_changed', { sessionId, requestId, hasPending: false });
   }
 
   clearPendingInteractiveRequestIfMatches(sessionId: string, requestId: string): void {
@@ -297,6 +305,7 @@ class SessionDomainService {
       return;
     }
     this.publisher.forwardSnapshot(store, { reason: 'pending_request_cleared' });
+    this.emit('pending_request_changed', { sessionId, requestId, hasPending: false });
   }
 
   markProcessExit(sessionId: string, code: number | null): void {

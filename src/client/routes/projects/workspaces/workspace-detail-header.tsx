@@ -173,6 +173,57 @@ function RatchetingToggle({
 }) {
   const utils = trpc.useUtils();
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onMutate: ({ enabled }) => {
+      utils.workspace.get.setData({ id: workspaceId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return {
+          ...old,
+          ratchetEnabled: enabled,
+          ratchetState: enabled ? old.ratchetState : 'IDLE',
+          ratchetButtonAnimated: enabled ? old.ratchetButtonAnimated : false,
+        };
+      });
+      utils.workspace.listWithKanbanState.setData({ projectId: workspace.projectId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return old.map((item) =>
+          item.id === workspaceId
+            ? {
+                ...item,
+                ratchetEnabled: enabled,
+                ratchetState: enabled ? item.ratchetState : 'IDLE',
+                ratchetButtonAnimated: enabled ? item.ratchetButtonAnimated : false,
+              }
+            : item
+        );
+      });
+      utils.workspace.getProjectSummaryState.setData({ projectId: workspace.projectId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return {
+          ...old,
+          workspaces: old.workspaces.map((item) =>
+            item.id === workspaceId
+              ? {
+                  ...item,
+                  ratchetEnabled: enabled,
+                  ratchetState: enabled ? item.ratchetState : 'IDLE',
+                  ratchetButtonAnimated: enabled ? item.ratchetButtonAnimated : false,
+                }
+              : item
+          ),
+        };
+      });
+    },
+    onError: () => {
+      utils.workspace.get.invalidate({ id: workspaceId });
+      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
+    },
     onSuccess: () => {
       utils.workspace.get.invalidate({ id: workspaceId });
       utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });

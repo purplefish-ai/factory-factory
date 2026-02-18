@@ -82,13 +82,46 @@ export function ActiveWorkspaceItem({
   hideDragHandle,
 }: ActiveWorkspaceItemProps) {
   const utils = trpc.useUtils();
+  const workspaceId = workspace.id;
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onMutate: ({ enabled }) => {
+      if (selectedProjectId) {
+        utils.workspace.getProjectSummaryState.setData({ projectId: selectedProjectId }, (old) => {
+          if (!old) {
+            return old;
+          }
+          return {
+            ...old,
+            workspaces: updateWorkspaceRatchetState(old.workspaces, workspaceId, enabled),
+          };
+        });
+        utils.workspace.listWithKanbanState.setData({ projectId: selectedProjectId }, (old) => {
+          if (!old) {
+            return old;
+          }
+          return updateWorkspaceRatchetState(old, workspaceId, enabled);
+        });
+      }
+      utils.workspace.get.setData({ id: workspaceId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return applyRatchetToggleState(old, enabled);
+      });
+    },
+    onError: () => {
+      if (selectedProjectId) {
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+        utils.workspace.listWithKanbanState.invalidate({ projectId: selectedProjectId });
+      }
+      utils.workspace.get.invalidate({ id: workspaceId });
+    },
     onSuccess: () => {
       if (selectedProjectId) {
         utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
         utils.workspace.listWithKanbanState.invalidate({ projectId: selectedProjectId });
       }
-      utils.workspace.get.invalidate({ id: workspace.id });
+      utils.workspace.get.invalidate({ id: workspaceId });
     },
   });
 
@@ -169,7 +202,7 @@ export function ActiveWorkspaceItem({
                 disabled={toggleRatcheting.isPending}
                 stopPropagation
                 onToggle={(enabled) => {
-                  toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
+                  toggleRatcheting.mutate({ workspaceId, enabled });
                 }}
               />
               {workspace.runScriptStatus === 'RUNNING' && (
@@ -342,6 +375,35 @@ function getPrTooltipSuffix(workspace: WorkspaceListItem) {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+type RatchetToggleCacheShape = {
+  id: string;
+  ratchetEnabled?: boolean;
+  ratchetState?: string | null;
+  ratchetButtonAnimated?: boolean;
+};
+
+function applyRatchetToggleState<T extends Omit<RatchetToggleCacheShape, 'id'>>(
+  item: T,
+  enabled: boolean
+): T {
+  return {
+    ...item,
+    ratchetEnabled: enabled,
+    ratchetState: enabled ? item.ratchetState : 'IDLE',
+    ratchetButtonAnimated: enabled ? item.ratchetButtonAnimated : false,
+  };
+}
+
+function updateWorkspaceRatchetState<T extends RatchetToggleCacheShape>(
+  items: T[],
+  workspaceId: string,
+  enabled: boolean
+): T[] {
+  return items.map((item) =>
+    item.id === workspaceId ? applyRatchetToggleState(item, enabled) : item
+  );
+}
 
 function getWorkspaceSidebarStatus(workspace: WorkspaceListItem): WorkspaceSidebarStatus {
   return (

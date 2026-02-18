@@ -176,15 +176,25 @@ export const workspaceRouter = router({
         enabled: z.boolean(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
       await ratchetService.setWorkspaceRatcheting(input.workspaceId, input.enabled);
-      if (input.enabled) {
-        await ratchetService.checkWorkspaceById(input.workspaceId);
-      }
       const updatedWorkspace = await workspaceDataService.findById(input.workspaceId);
       if (!updatedWorkspace) {
         throw new Error(`Workspace not found: ${input.workspaceId}`);
       }
+
+      // Do not block the toggle response on external GitHub checks.
+      // Run an immediate ratchet check in the background.
+      if (input.enabled) {
+        void ratchetService.checkWorkspaceById(input.workspaceId).catch((error) => {
+          logger.warn('Background ratchet check failed after enabling workspace ratcheting', {
+            workspaceId: input.workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+
       return updatedWorkspace;
     }),
 

@@ -29,6 +29,7 @@ vi.mock('@/backend/domains/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn() },
   workspaceActivityService: { on: vi.fn() },
+  computePendingRequestType: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock('@/backend/domains/github', () => ({
@@ -48,7 +49,14 @@ vi.mock('@/backend/domains/run-script', () => ({
 
 vi.mock('@/backend/domains/session', () => ({
   sessionDataService: {
+    findAgentSessionById: vi.fn().mockResolvedValue({ id: 's-1', workspaceId: 'ws-1' }),
     findAgentSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
+  },
+  chatEventForwarderService: {
+    getAllPendingRequests: vi.fn().mockReturnValue(new Map()),
+  },
+  sessionDomainService: {
+    on: vi.fn(),
   },
   sessionService: {
     getRuntimeSnapshot: vi.fn().mockReturnValue({
@@ -81,8 +89,16 @@ vi.mock('@/backend/services/logger.service', () => ({
 import { prSnapshotService } from '@/backend/domains/github';
 import { ratchetService } from '@/backend/domains/ratchet';
 import { runScriptStateMachine } from '@/backend/domains/run-script';
-import { sessionDataService } from '@/backend/domains/session';
-import { workspaceActivityService, workspaceStateMachine } from '@/backend/domains/workspace';
+import {
+  chatEventForwarderService,
+  sessionDataService,
+  sessionDomainService,
+} from '@/backend/domains/session';
+import {
+  computePendingRequestType,
+  workspaceActivityService,
+  workspaceStateMachine,
+} from '@/backend/domains/workspace';
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 
 import {
@@ -378,7 +394,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 7 event listeners on domain singletons', () => {
+  it('registers 8 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -410,6 +426,12 @@ describe('configureEventCollector', () => {
     );
     expect(workspaceActivityService.on).toHaveBeenCalledWith(
       'session_activity_changed',
+      expect.any(Function)
+    );
+
+    // sessionDomainService: 1 listener (pending_request_changed)
+    expect(sessionDomainService.on).toHaveBeenCalledWith(
+      'pending_request_changed',
       expect.any(Function)
     );
   });
@@ -619,5 +641,49 @@ describe('configureEventCollector', () => {
       }),
       expect.stringContaining('event:session_activity_changed')
     );
+  });
+
+  it('pending_request_changed refreshes pendingRequestType', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
+      id: 's-1',
+      workspaceId: 'ws-1',
+    } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+      {
+        id: 's-1',
+        name: 'Chat 1',
+        workflow: 'followup',
+        model: 'claude-sonnet',
+        status: 'IDLE',
+      } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
+    ]);
+    vi.mocked(computePendingRequestType).mockReturnValue('permission_request');
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(sessionDomainService.on)
+      .mock.calls.find((call) => call[0] === 'pending_request_changed');
+    const handler = onCall![1] as (event: {
+      sessionId: string;
+      requestId: string;
+      hasPending: boolean;
+    }) => void;
+
+    handler({ sessionId: 's-1', requestId: 'req-1', hasPending: false });
+    await Promise.resolve();
+    await Promise.resolve();
+    vi.advanceTimersByTime(150);
+
+    expect(computePendingRequestType).toHaveBeenCalledWith(['s-1'], expect.any(Map));
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { pendingRequestType: 'permission_request' },
+      'event:pending_request_changed'
+    );
+    expect(chatEventForwarderService.getAllPendingRequests).toHaveBeenCalledTimes(1);
   });
 });

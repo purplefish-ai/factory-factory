@@ -31,8 +31,14 @@ import {
   type RunScriptStatusChangedEvent,
   runScriptStateMachine,
 } from '@/backend/domains/run-script';
-import { sessionDataService, sessionService } from '@/backend/domains/session';
 import {
+  chatEventForwarderService,
+  sessionDataService,
+  sessionDomainService,
+  sessionService,
+} from '@/backend/domains/session';
+import {
+  computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
@@ -210,6 +216,38 @@ async function refreshWorkspaceSessionSummaries(
   }
 }
 
+async function refreshWorkspacePendingRequestType(
+  coalescer: EventCoalescer,
+  sessionId: string,
+  source: string
+): Promise<void> {
+  try {
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+    const session = await sessionDataService.findAgentSessionById(sessionId);
+    if (!session || activeCoalescer !== coalescer) {
+      return;
+    }
+
+    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(session.workspaceId);
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+
+    const pendingRequestType = computePendingRequestType(
+      sessions.map((s) => s.id),
+      chatEventForwarderService.getAllPendingRequests()
+    );
+    coalescer.enqueue(session.workspaceId, { pendingRequestType }, source);
+  } catch (error) {
+    logger.warn('Failed to refresh workspace pending request type', {
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // configureEventCollector
 // ---------------------------------------------------------------------------
@@ -299,7 +337,19 @@ export function configureEventCollector(): void {
     });
   }
 
-  logger.info('Event collector configured with 7 event subscriptions');
+  // 9. Pending interactive request transitions (set/clear)
+  sessionDomainService.on(
+    'pending_request_changed',
+    ({ sessionId }: { sessionId: string; requestId: string; hasPending: boolean }) => {
+      void refreshWorkspacePendingRequestType(
+        coalescer,
+        sessionId,
+        'event:pending_request_changed'
+      );
+    }
+  );
+
+  logger.info('Event collector configured with 8 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------
