@@ -104,6 +104,8 @@ const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
 const DEFAULT_APPROVAL_POLICIES: ApprovalPolicy[] = ['on-failure', 'on-request', 'never'];
 const DEFAULT_SANDBOX_MODES: SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
 const SHAPE_DRIFT_DETAILS_LIMIT = 700;
+const COMMAND_EXECUTION_SESSION_HANDOFF_LINE_PATTERN =
+  /^process running with session id(?:\s*[:#-]?\s*[a-z0-9_-]+)?\.?$/i;
 
 type PendingTurnCompletion = {
   stopReason: StopReason;
@@ -131,6 +133,7 @@ type AdapterSession = {
   };
   activeTurn: ActiveTurnState | null;
   toolCallsByItemId: Map<string, ToolCallState>;
+  syntheticallyCompletedToolItemIds: Set<string>;
   reasoningDeltaItemIds: Set<string>;
   planTextByItemId: Map<string, string>;
   planApprovalRequestedByTurnId: Set<string>;
@@ -295,6 +298,14 @@ function extractToolCallIdFromUnknown(value: unknown): string | null {
 
 function resolveToolCallId(params: { itemId: string; source?: unknown }): string {
   return extractToolCallIdFromUnknown(params.source) ?? params.itemId;
+}
+
+function isCommandExecutionSessionHandoffOutput(output: string): boolean {
+  const trimmedOutput = output.trim();
+  if (trimmedOutput.length === 0 || /[\r\n]/.test(trimmedOutput)) {
+    return false;
+  }
+  return COMMAND_EXECUTION_SESSION_HANDOFF_LINE_PATTERN.test(trimmedOutput);
 }
 
 function isPlanLikeMode(mode: string): boolean {
@@ -1287,6 +1298,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       },
       activeTurn: null,
       toolCallsByItemId: new Map(),
+      syntheticallyCompletedToolItemIds: new Set(),
       reasoningDeltaItemIds: new Set(),
       planTextByItemId: new Map(),
       planApprovalRequestedByTurnId: new Set(),
@@ -1338,6 +1350,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       },
       activeTurn: null,
       toolCallsByItemId: new Map(),
+      syntheticallyCompletedToolItemIds: new Set(),
       reasoningDeltaItemIds: new Set(),
       planTextByItemId: new Map(),
       planApprovalRequestedByTurnId: new Set(),
@@ -2235,7 +2248,8 @@ export class CodexAppServerAcpAdapter implements Agent {
         session,
         notification.params.turnId,
         notification.params.itemId,
-        notification.params.delta
+        notification.params.delta,
+        'commandExecution'
       );
       return;
     }
@@ -2246,7 +2260,8 @@ export class CodexAppServerAcpAdapter implements Agent {
         session,
         notification.params.turnId,
         notification.params.itemId,
-        notification.params.delta
+        notification.params.delta,
+        'fileChange'
       );
       return;
     }
@@ -2257,7 +2272,8 @@ export class CodexAppServerAcpAdapter implements Agent {
         session,
         notification.params.turnId,
         notification.params.itemId,
-        notification.params.message
+        notification.params.message,
+        'mcpToolCall'
       );
       return;
     }
@@ -2388,7 +2404,8 @@ export class CodexAppServerAcpAdapter implements Agent {
     session: AdapterSession,
     turnId: string,
     itemId: string,
-    output: string
+    output: string,
+    source: 'commandExecution' | 'fileChange' | 'mcpToolCall'
   ): Promise<void> {
     if (this.isReplayedTurnItem(session, turnId, itemId)) {
       return;
@@ -2396,6 +2413,24 @@ export class CodexAppServerAcpAdapter implements Agent {
     const toolCall = session.toolCallsByItemId.get(itemId);
     if (!toolCall) {
       this.reportShapeDrift('tool_progress_without_tool_call', { turnId, itemId });
+      return;
+    }
+
+    if (session.syntheticallyCompletedToolItemIds.has(itemId)) {
+      return;
+    }
+
+    if (source === 'commandExecution' && isCommandExecutionSessionHandoffOutput(output)) {
+      session.syntheticallyCompletedToolItemIds.add(itemId);
+      await this.emitSessionUpdate(sessionId, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: toolCall.toolCallId,
+        status: 'completed',
+        kind: toolCall.kind,
+        title: toolCall.title,
+        ...(toolCall.locations.length > 0 ? { locations: toolCall.locations } : {}),
+        rawOutput: output,
+      });
       return;
     }
 
@@ -2497,6 +2532,7 @@ export class CodexAppServerAcpAdapter implements Agent {
           locations: [],
         } satisfies ToolCallState);
       if (!existing) {
+        session.syntheticallyCompletedToolItemIds.delete(item.id);
         session.toolCallsByItemId.set(item.id, toolInfo);
         await this.emitSessionUpdate(session.sessionId, {
           sessionUpdate: 'tool_call',
@@ -2527,6 +2563,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       return;
     }
 
+    session.syntheticallyCompletedToolItemIds.delete(item.id);
     session.toolCallsByItemId.set(item.id, toolInfo);
 
     await this.emitSessionUpdate(session.sessionId, {
@@ -2587,6 +2624,7 @@ export class CodexAppServerAcpAdapter implements Agent {
         });
       }
       session.toolCallsByItemId.delete(item.id);
+      session.syntheticallyCompletedToolItemIds.delete(item.id);
 
       const sawDelta = session.reasoningDeltaItemIds.has(item.id);
       session.reasoningDeltaItemIds.delete(item.id);
@@ -2631,6 +2669,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     });
 
     session.toolCallsByItemId.delete(item.id);
+    session.syntheticallyCompletedToolItemIds.delete(item.id);
 
     await this.maybeRequestPlanApproval(session, item, turnId, existing);
   }
@@ -3300,6 +3339,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     session.planApprovalRequestedByTurnId.clear();
     session.pendingPlanApprovalsByTurnId.clear();
     session.toolCallsByItemId.clear();
+    session.syntheticallyCompletedToolItemIds.clear();
     session.reasoningDeltaItemIds.clear();
     session.pendingTurnCompletionsByTurnId.clear();
   }

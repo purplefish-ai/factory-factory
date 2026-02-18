@@ -507,6 +507,10 @@ function applyToolResultToCall(
   if (!call) {
     return;
   }
+  applyToolResultToPairedCall(call, resultInfo);
+}
+
+function applyToolResultToPairedCall(call: PairedToolCall, resultInfo: ToolResultInfo): void {
   call.status = resultInfo.isError ? 'error' : 'success';
   call.result = {
     content: resultInfo.content,
@@ -547,6 +551,7 @@ function extractPairedToolCalls(toolMessages: ChatMessage[]): PairedToolCall[] {
 export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageItem[] {
   const result: GroupedMessageItem[] = [];
   let currentToolSequence: ChatMessage[] = [];
+  const openPairedCallsById = new Map<string, PairedToolCall>();
 
   const flushToolSequence = () => {
     if (currentToolSequence.length === 0) {
@@ -567,11 +572,31 @@ export function groupAdjacentToolCalls(messages: ChatMessage[]): GroupedMessageI
     };
     if (sequence.pairedCalls.length > 0) {
       result.push(sequence);
+      for (const call of sequence.pairedCalls) {
+        if (call.status === 'pending') {
+          openPairedCallsById.set(call.id, call);
+        } else {
+          openPairedCallsById.delete(call.id);
+        }
+      }
     }
     currentToolSequence = [];
   };
 
   for (const message of messages) {
+    const lateToolResultInfo =
+      message.message && isToolResultMessage(message.message)
+        ? extractToolResultInfo(message.message)
+        : null;
+    if (lateToolResultInfo) {
+      const pendingCall = openPairedCallsById.get(lateToolResultInfo.toolUseId);
+      if (pendingCall) {
+        applyToolResultToPairedCall(pendingCall, lateToolResultInfo);
+        openPairedCallsById.delete(lateToolResultInfo.toolUseId);
+        continue;
+      }
+    }
+
     const isToolMessage =
       message.message &&
       (isToolUseMessage(message.message) || isToolResultMessage(message.message));

@@ -113,6 +113,28 @@ describe('groupAdjacentToolCalls', () => {
     expect(grouped).toHaveLength(1);
     expect(isToolSequence(grouped[0]!)).toBe(false);
   });
+
+  it('reconciles delayed tool_result events for previously flushed sequences', () => {
+    const grouped = groupAdjacentToolCalls([
+      createToolUseMessage({
+        id: 'call-1',
+        name: 'exec_command',
+        input: { cmd: 'git commit -m "test"' },
+        order: 0,
+      }),
+      createAssistantTextMessage(1),
+      createToolResultMessage('call-1', 2),
+      createAssistantTextMessage(3),
+    ]);
+
+    expect(grouped).toHaveLength(3);
+    expect(isToolSequence(grouped[0]!)).toBe(true);
+    if (isToolSequence(grouped[0]!)) {
+      expect(grouped[0].pairedCalls).toHaveLength(1);
+      expect(grouped[0].pairedCalls[0]?.id).toBe('call-1');
+      expect(grouped[0].pairedCalls[0]?.status).toBe('success');
+    }
+  });
 });
 
 describe('isReasoningToolCall', () => {
