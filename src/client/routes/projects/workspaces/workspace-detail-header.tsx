@@ -596,7 +596,12 @@ function ArchiveActionButton({
   if (renderAsMenuItem) {
     return (
       <DropdownMenuItem
-        onSelect={onArchiveRequest}
+        onSelect={(event) => {
+          event.preventDefault();
+          requestAnimationFrame(() => {
+            onArchiveRequest();
+          });
+        }}
         disabled={archivePending}
         className={cn(
           workspace.prState === 'MERGED'
@@ -736,7 +741,14 @@ function WorkspaceHeaderOverflowMenu({
         </Tooltip>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
-          <DropdownMenuItem onSelect={() => setProviderSettingsOpen(true)}>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              requestAnimationFrame(() => {
+                setProviderSettingsOpen(true);
+              });
+            }}
+          >
             <Settings2 className="h-4 w-4" />
             Provider settings
           </DropdownMenuItem>
