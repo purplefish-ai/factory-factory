@@ -120,6 +120,7 @@ class RatchetService extends EventEmitter {
   private sleepTimeout: NodeJS.Timeout | null = null;
   private sleepResolve: (() => void) | null = null;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
+  private readonly inFlightWorkspaceChecks = new Map<string, Promise<WorkspaceRatchetResult>>();
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
   private readonly backoff = new RateLimitBackoff();
   private readonly reviewPollTrackers = new Map<string, ReviewPollTracker>();
@@ -259,7 +260,11 @@ class RatchetService extends EventEmitter {
     }
 
     const results = await Promise.all(
-      workspaces.map((workspace) => this.checkLimit(() => this.processWorkspace(workspace)))
+      workspaces.map((workspace) =>
+        this.checkLimit(() =>
+          this.runWorkspaceCheck(workspace.id, () => this.processWorkspace(workspace))
+        )
+      )
     );
 
     const stateChanges = results.filter((r) => r.previousState !== r.newState).length;
@@ -286,7 +291,25 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    return this.processWorkspace(workspace);
+    return this.runWorkspaceCheck(workspace.id, () => this.processWorkspace(workspace));
+  }
+
+  private runWorkspaceCheck(
+    workspaceId: string,
+    runner: () => Promise<WorkspaceRatchetResult>
+  ): Promise<WorkspaceRatchetResult> {
+    const existing = this.inFlightWorkspaceChecks.get(workspaceId);
+    if (existing) {
+      return existing;
+    }
+
+    const inFlight = runner().finally(() => {
+      if (this.inFlightWorkspaceChecks.get(workspaceId) === inFlight) {
+        this.inFlightWorkspaceChecks.delete(workspaceId);
+      }
+    });
+    this.inFlightWorkspaceChecks.set(workspaceId, inFlight);
+    return inFlight;
   }
 
   /**

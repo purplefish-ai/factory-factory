@@ -71,6 +71,12 @@ interface PendingUpdate {
   timer: NodeJS.Timeout;
 }
 
+interface PendingRequestChangedEvent {
+  sessionId: string;
+  requestId: string;
+  hasPending: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Logger
 // ---------------------------------------------------------------------------
@@ -180,6 +186,7 @@ export class EventCoalescer {
 // ---------------------------------------------------------------------------
 
 let activeCoalescer: EventCoalescer | null = null;
+let pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
 
 async function refreshWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
@@ -262,6 +269,12 @@ export function configureEventCollector(): void {
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   activeCoalescer = coalescer;
 
+  // Guard against duplicate listeners across repeated configure calls.
+  if (pendingRequestChangedHandler) {
+    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
+    pendingRequestChangedHandler = null;
+  }
+
   // 1. Workspace state changes
   workspaceStateMachine.on(WORKSPACE_STATE_CHANGED, (event: WorkspaceStateChangedEvent) => {
     if (event.toStatus === 'ARCHIVED') {
@@ -338,16 +351,10 @@ export function configureEventCollector(): void {
   }
 
   // 9. Pending interactive request transitions (set/clear)
-  sessionDomainService.on(
-    'pending_request_changed',
-    ({ sessionId }: { sessionId: string; requestId: string; hasPending: boolean }) => {
-      void refreshWorkspacePendingRequestType(
-        coalescer,
-        sessionId,
-        'event:pending_request_changed'
-      );
-    }
-  );
+  pendingRequestChangedHandler = ({ sessionId }) => {
+    void refreshWorkspacePendingRequestType(coalescer, sessionId, 'event:pending_request_changed');
+  };
+  sessionDomainService.on('pending_request_changed', pendingRequestChangedHandler);
 
   logger.info('Event collector configured with 8 event subscriptions');
 }
@@ -361,6 +368,11 @@ export function configureEventCollector(): void {
  * Called during server shutdown before domain services stop.
  */
 export function stopEventCollector(): void {
+  if (pendingRequestChangedHandler) {
+    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
+    pendingRequestChangedHandler = null;
+  }
+
   if (activeCoalescer) {
     activeCoalescer.flushAll();
     activeCoalescer = null;

@@ -57,6 +57,7 @@ vi.mock('@/backend/domains/session', () => ({
   },
   sessionDomainService: {
     on: vi.fn(),
+    off: vi.fn(),
   },
   sessionService: {
     getRuntimeSnapshot: vi.fn().mockReturnValue({
@@ -431,6 +432,17 @@ describe('configureEventCollector', () => {
 
     // sessionDomainService: 1 listener (pending_request_changed)
     expect(sessionDomainService.on).toHaveBeenCalledWith(
+      'pending_request_changed',
+      expect.any(Function)
+    );
+  });
+
+  it('removes pending_request_changed listener on stop', () => {
+    configureEventCollector();
+
+    stopEventCollector();
+
+    expect(sessionDomainService.off).toHaveBeenCalledWith(
       'pending_request_changed',
       expect.any(Function)
     );
