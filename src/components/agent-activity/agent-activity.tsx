@@ -7,6 +7,10 @@ import { cn } from '@/lib/utils';
 import { CopyMessageButton } from './copy-message-button';
 import { AssistantMessageRenderer, MessageWrapper } from './message-renderers';
 import { ToolSequenceGroup } from './tool-renderers';
+import {
+  createToolCallExpansionKey,
+  createToolSequenceExpansionKey,
+} from './tool-renderers/tool-expansion-state';
 
 // =============================================================================
 // Helper Functions
@@ -199,6 +203,12 @@ export interface GroupedMessageItemRendererProps {
   userMessageUuid?: string;
   /** Callback to initiate rewind to before this message */
   onRewindToMessage?: (uuid: string) => void;
+  /** Reads persisted expansion state by key */
+  getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
+  /** Persists expansion state by key */
+  setToolExpansionState?: (key: string, open: boolean) => void;
+  /** Per-row token used to force rerender when this row's expansion state changes */
+  toolExpansionToken?: string;
 }
 
 /**
@@ -210,13 +220,36 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRemove,
   userMessageUuid,
   onRewindToMessage,
+  getToolExpansionState,
+  setToolExpansionState,
+  toolExpansionToken: _toolExpansionToken,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
+    const sequenceDefaultOpen = item.pairedCalls.length > 1;
+    const sequenceExpansionKey = createToolSequenceExpansionKey(item.id);
+    const sequenceOpen = getToolExpansionState?.(sequenceExpansionKey, sequenceDefaultOpen);
+    const handleSequenceOpenChange =
+      sequenceOpen !== undefined && setToolExpansionState
+        ? (open: boolean) => setToolExpansionState(sequenceExpansionKey, open)
+        : undefined;
+    const getCallOpen = getToolExpansionState
+      ? (callId: string, defaultOpen: boolean) =>
+          getToolExpansionState(createToolCallExpansionKey(item.id, callId), defaultOpen)
+      : undefined;
+    const handleCallOpenChange = setToolExpansionState
+      ? (callId: string, open: boolean) =>
+          setToolExpansionState(createToolCallExpansionKey(item.id, callId), open)
+      : undefined;
+
     return (
       <ToolSequenceGroup
         sequence={item}
         summaryOrder="latest-first"
-        defaultOpen={item.pairedCalls.length > 1}
+        defaultOpen={sequenceDefaultOpen}
+        open={sequenceOpen}
+        onOpenChange={handleSequenceOpenChange}
+        getCallOpen={getCallOpen}
+        onCallOpenChange={handleCallOpenChange}
       />
     );
   }

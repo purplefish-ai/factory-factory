@@ -152,6 +152,8 @@ export interface ToolSequenceGroupProps {
   summaryOrder?: 'oldest-first' | 'latest-first';
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  getCallOpen?: (callId: string, defaultOpen: boolean) => boolean;
+  onCallOpenChange?: (callId: string, open: boolean) => void;
   toolDetailsClassName?: string;
   toolDetailsMaxHeight?: number;
 }
@@ -168,13 +170,15 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   summaryOrder = 'oldest-first',
   open,
   onOpenChange,
+  getCallOpen,
+  onCallOpenChange,
   toolDetailsClassName,
   toolDetailsMaxHeight,
 }: ToolSequenceGroupProps) {
-  const isControlled = open !== undefined;
-  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
-  const isOpen = open ?? internalOpen;
-  const setIsOpen = onOpenChange ?? setInternalOpen;
+  const isControlled = open !== undefined && onOpenChange !== undefined;
+  const [internalOpen, setInternalOpen] = React.useState(open ?? defaultOpen);
+  const isOpen = isControlled ? open : internalOpen;
+  const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
   const previousShouldAutoOpenRef = React.useRef(defaultOpen);
 
   const { pairedCalls } = sequence;
@@ -185,17 +189,21 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
   const shouldAutoOpen = defaultOpen && pairedCalls.length > 1;
 
   React.useEffect(() => {
-    if (isControlled) {
-      previousShouldAutoOpenRef.current = shouldAutoOpen;
-      return;
+    const wasAutoOpen = previousShouldAutoOpenRef.current;
+    const transitionedToAutoOpen = shouldAutoOpen && !wasAutoOpen;
+
+    if (transitionedToAutoOpen) {
+      if (isControlled) {
+        if (!isOpen) {
+          onOpenChange?.(true);
+        }
+      } else {
+        setInternalOpen(true);
+      }
     }
 
-    const wasAutoOpen = previousShouldAutoOpenRef.current;
-    if (shouldAutoOpen && !wasAutoOpen) {
-      setInternalOpen(true);
-    }
     previousShouldAutoOpenRef.current = shouldAutoOpen;
-  }, [isControlled, shouldAutoOpen]);
+  }, [isControlled, isOpen, onOpenChange, shouldAutoOpen]);
 
   if (pairedCalls.length === 0) {
     return null;
@@ -324,16 +332,27 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="border-t space-y-1 p-1.5 overflow-x-auto">
-            {expandedCalls.map((call) => (
-              <div key={call.id} className="pl-2">
-                <PairedToolCallRenderer
-                  call={call}
-                  defaultOpen={false}
-                  detailsClassName={toolDetailsClassName}
-                  detailsMaxHeight={toolDetailsMaxHeight}
-                />
-              </div>
-            ))}
+            {expandedCalls.map((call) => {
+              const persistedOpen = getCallOpen?.(call.id, false);
+              const isCallControlled =
+                persistedOpen !== undefined && onCallOpenChange !== undefined;
+              const handleOpenChange = isCallControlled
+                ? (nextOpen: boolean) => onCallOpenChange(call.id, nextOpen)
+                : undefined;
+
+              return (
+                <div key={call.id} className="pl-2">
+                  <PairedToolCallRenderer
+                    call={call}
+                    defaultOpen={false}
+                    open={isCallControlled ? persistedOpen : undefined}
+                    onOpenChange={handleOpenChange}
+                    detailsClassName={toolDetailsClassName}
+                    detailsMaxHeight={toolDetailsMaxHeight}
+                  />
+                </div>
+              );
+            })}
           </div>
         </CollapsibleContent>
       </div>
@@ -366,9 +385,10 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
   detailsClassName,
   detailsMaxHeight,
 }: PairedToolCallRendererProps) {
-  const [internalOpen, setInternalOpen] = React.useState(defaultOpen);
-  const isOpen = open ?? internalOpen;
-  const setIsOpen = onOpenChange ?? setInternalOpen;
+  const isControlled = open !== undefined && onOpenChange !== undefined;
+  const [internalOpen, setInternalOpen] = React.useState(open ?? defaultOpen);
+  const isOpen = isControlled ? open : internalOpen;
+  const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
 
   const isPending = call.status === 'pending';
   const isError = call.status === 'error';

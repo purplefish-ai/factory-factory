@@ -228,6 +228,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           />
         )}
         <VirtualizedMessageList
+          workspaceId={props.workspaceId}
           messages={groupedMessages}
           running={running}
           startingSession={displayStartingState}

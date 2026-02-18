@@ -4,11 +4,12 @@ import { type ComponentProps, createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createToolSequenceExpansionKey } from '@/components/agent-activity/tool-renderers/tool-expansion-state';
 import type { GroupedMessageItem } from '@/lib/chat-protocol';
 import { VirtualizedMessageList } from './virtualized-message-list';
 
 const virtualizerMocks = vi.hoisted(() => ({
-  getVirtualItems: vi.fn(() => []),
+  getVirtualItems: vi.fn<() => Array<{ index: number; key: string; start: number }>>(() => []),
   getTotalSize: vi.fn(() => 0),
   measureElement: vi.fn(),
   scrollToIndex: vi.fn(),
@@ -16,6 +17,10 @@ const virtualizerMocks = vi.hoisted(() => ({
 
 const resizeObserverMocks = vi.hoisted(() => ({
   callbacks: new Set<ResizeObserverCallback>(),
+}));
+
+const agentActivityMocks = vi.hoisted(() => ({
+  groupedMessageItemRenderer: vi.fn<(props: unknown) => ReactNode>(() => null),
 }));
 
 class ResizeObserverMock {
@@ -51,7 +56,8 @@ vi.mock('@tanstack/react-virtual', () => ({
 }));
 
 vi.mock('@/components/agent-activity', () => ({
-  GroupedMessageItemRenderer: () => null,
+  GroupedMessageItemRenderer: (props: unknown) =>
+    agentActivityMocks.groupedMessageItemRenderer(props),
   LoadingIndicator: () => null,
 }));
 
@@ -144,9 +150,33 @@ afterEach(() => {
   virtualizerMocks.getTotalSize.mockClear();
   virtualizerMocks.measureElement.mockClear();
   virtualizerMocks.scrollToIndex.mockClear();
+  agentActivityMocks.groupedMessageItemRenderer.mockReset();
   resizeObserverMocks.callbacks.clear();
   document.body.innerHTML = '';
 });
+
+function makeToolSequence(id: string): GroupedMessageItem {
+  return {
+    type: 'tool_sequence',
+    id,
+    pairedCalls: [
+      {
+        id: 'call-1',
+        name: 'Read',
+        input: { file_path: 'a.ts' },
+        status: 'success',
+        result: { content: 'ok', isError: false },
+      },
+      {
+        id: 'call-2',
+        name: 'Edit',
+        input: { file_path: 'a.ts' },
+        status: 'success',
+        result: { content: 'ok', isError: false },
+      },
+    ],
+  };
+}
 
 describe('VirtualizedMessageList auto-scroll behavior', () => {
   it('does not auto-scroll while session hydration is loading', async () => {
@@ -167,6 +197,55 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     await flushEffects();
 
     expect(virtualizerMocks.scrollToIndex).not.toHaveBeenCalled();
+
+    harness.cleanup();
+  });
+
+  it('re-renders affected tool row when expansion state changes', async () => {
+    virtualizerMocks.getVirtualItems.mockReturnValue([
+      {
+        index: 0,
+        key: 'row-0',
+        start: 0,
+      },
+    ]);
+    virtualizerMocks.getTotalSize.mockReturnValue(80);
+
+    const observedTokens: string[] = [];
+    agentActivityMocks.groupedMessageItemRenderer.mockImplementation((props: unknown) => {
+      const typed = props as {
+        item: GroupedMessageItem;
+        toolExpansionToken?: string;
+        setToolExpansionState?: (key: string, open: boolean) => void;
+      };
+      observedTokens.push(typed.toolExpansionToken ?? 'none');
+
+      return createElement(
+        'button',
+        {
+          type: 'button',
+          onClick: () =>
+            typed.setToolExpansionState?.(createToolSequenceExpansionKey(typed.item.id), false),
+        },
+        'toggle'
+      );
+    });
+
+    const harness = createHarness({
+      workspaceId: 'workspace-1',
+      messages: [makeToolSequence('tool-seq-msg-1')],
+    });
+    await flushEffects();
+
+    const firstToken = observedTokens.at(-1);
+    const button = document.querySelector('button');
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushEffects();
+    const secondToken = observedTokens.at(-1);
+
+    expect(firstToken).toBeDefined();
+    expect(secondToken).toBeDefined();
+    expect(secondToken).not.toBe(firstToken);
 
     harness.cleanup();
   });
