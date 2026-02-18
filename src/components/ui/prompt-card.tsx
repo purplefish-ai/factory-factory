@@ -17,6 +17,8 @@ interface PromptCardProps {
   label?: string;
   /** Additional class names */
   className?: string;
+  /** Hide the icon on mobile breakpoints while keeping it on sm+ */
+  hideIconOnMobile?: boolean;
 }
 
 // =============================================================================
@@ -35,13 +37,14 @@ export function PromptCard({
   role = 'alertdialog',
   label,
   className,
+  hideIconOnMobile = false,
 }: PromptCardProps) {
   return (
     <div className={cn('border-b bg-muted/50 p-3', className)} role={role}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         {label && <span className="sr-only">{label}</span>}
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <div className="mt-0.5 shrink-0">{icon}</div>
+          <div className={cn('mt-0.5 shrink-0', hideIconOnMobile && 'hidden sm:block')}>{icon}</div>
           <div className="min-w-0 flex-1">{children}</div>
         </div>
         {actions && (

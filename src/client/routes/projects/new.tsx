@@ -124,7 +124,7 @@ export default function NewProjectPage() {
           </div>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="pl-0 pr-3 sm:px-3">
               <CardTitle>Get Started</CardTitle>
               <CardDescription>
                 Add your first repository to begin using FactoryFactory.
@@ -179,7 +179,7 @@ export default function NewProjectPage() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="pl-0 pr-3 sm:px-3">
           <CardTitle>Repository Details</CardTitle>
           <CardDescription>
             Provide the path to a git repository on your local machine.

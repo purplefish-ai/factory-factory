@@ -129,7 +129,8 @@ function SingleQuestionLayout({
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Question from Claude"
-      className="px-3 sm:p-3 [&>div>div:nth-of-type(1)]:gap-0 sm:[&>div>div:nth-of-type(1)]:gap-3 [&>div>div:nth-of-type(1)>div:first-child]:hidden sm:[&>div>div:nth-of-type(1)>div:first-child]:block"
+      className="px-3 sm:p-3"
+      hideIconOnMobile
       actions={
         <div className="flex self-stretch justify-end sm:self-end">
           <Button size="sm" onClick={onSubmit} disabled={!isComplete}>
@@ -188,7 +189,8 @@ function MultiQuestionLayout({
       icon={<HelpCircle className="h-5 w-5 text-blue-500" aria-hidden="true" />}
       role="form"
       label="Questions from Claude"
-      className="px-3 sm:p-3 [&>div>div:nth-of-type(1)]:gap-0 sm:[&>div>div:nth-of-type(1)]:gap-3 [&>div>div:nth-of-type(1)>div:first-child]:hidden sm:[&>div>div:nth-of-type(1)>div:first-child]:block"
+      className="px-3 sm:p-3"
+      hideIconOnMobile
       actions={
         <div className="flex flex-wrap items-center justify-end gap-1 self-stretch sm:self-end">
           <Button
