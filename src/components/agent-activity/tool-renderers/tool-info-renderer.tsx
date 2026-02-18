@@ -430,6 +430,7 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
                 <ToolResultContentRenderer
                   content={call.result.content}
                   isError={call.result.isError}
+                  toolName={call.name}
                 />
               </div>
             )}
@@ -551,6 +552,7 @@ const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps)
             <ToolResultContentRenderer
               content={toolCall.result.content}
               isError={toolCall.result.isError}
+              toolName={toolCall.name}
             />
           )}
         </div>

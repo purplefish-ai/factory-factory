@@ -1,3 +1,5 @@
+import { isCodexFileChangeToolName } from './file-change-parser';
+
 const SUMMARY_TOOL_NAME_MAX = 24;
 const DETAIL_TOOL_NAME_MAX = 96;
 const RUN_COMMAND_PREVIEW_MAX = 84;
@@ -83,6 +85,10 @@ export function getDisplayToolName(
       return 'Run';
     }
     return truncateWithEllipsis(`Run ${commandPreview}`, RUN_COMMAND_PREVIEW_MAX);
+  }
+
+  if (isCodexFileChangeToolName(normalizedName)) {
+    return 'File changes';
   }
 
   return truncateWithEllipsis(
