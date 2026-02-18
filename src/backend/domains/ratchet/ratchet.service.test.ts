@@ -1179,6 +1179,61 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       const result = await ratchetService.checkWorkspaceById('ws-nonexistent');
       expect(result).toBeNull();
     });
+
+    it('deduplicates concurrent checks for the same workspace', async () => {
+      unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
+      const workspace = {
+        id: 'ws-1',
+        prUrl: 'https://github.com/example/repo/pull/1',
+        prNumber: 1,
+        prState: 'OPEN',
+        prCiStatus: CIStatus.UNKNOWN,
+        defaultSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+        ratchetEnabled: true,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+        prReviewLastCheckedAt: null,
+      };
+      vi.mocked(workspaceAccessor.findForRatchetById).mockResolvedValue(workspace as never);
+
+      let releaseCheck!: () => void;
+      const checkBarrier = new Promise<void>((resolve) => {
+        releaseCheck = () => resolve();
+      });
+      const result = {
+        workspaceId: 'ws-1',
+        previousState: RatchetState.IDLE,
+        newState: RatchetState.IDLE,
+        action: { type: 'WAITING' as const, reason: 'noop' },
+      };
+
+      const processWorkspaceSpy = vi
+        .spyOn(
+          unsafeCoerce<{
+            processWorkspace: (workspaceArg: typeof workspace) => Promise<typeof result>;
+          }>(ratchetService),
+          'processWorkspace'
+        )
+        .mockImplementation(async () => {
+          await checkBarrier;
+          return result;
+        });
+
+      const first = ratchetService.checkWorkspaceById('ws-1');
+      const second = ratchetService.checkWorkspaceById('ws-1');
+
+      await Promise.resolve();
+      expect(processWorkspaceSpy).toHaveBeenCalledTimes(1);
+
+      releaseCheck();
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+
+      expect(firstResult).toEqual(result);
+      expect(secondResult).toEqual(result);
+      expect(processWorkspaceSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('decideRatchetAction edge cases', () => {

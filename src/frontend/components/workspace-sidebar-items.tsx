@@ -15,6 +15,10 @@ import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { RatchetToggleButton } from '@/components/workspace';
+import {
+  applyRatchetToggleState,
+  updateWorkspaceRatchetState,
+} from '@/frontend/lib/ratchet-toggle-cache';
 import { trpc } from '@/frontend/lib/trpc';
 import { cn, formatRelativeTime } from '@/lib/utils';
 import {
@@ -82,13 +86,46 @@ export function ActiveWorkspaceItem({
   hideDragHandle,
 }: ActiveWorkspaceItemProps) {
   const utils = trpc.useUtils();
+  const workspaceId = workspace.id;
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onMutate: ({ enabled }) => {
+      if (selectedProjectId) {
+        utils.workspace.getProjectSummaryState.setData({ projectId: selectedProjectId }, (old) => {
+          if (!old) {
+            return old;
+          }
+          return {
+            ...old,
+            workspaces: updateWorkspaceRatchetState(old.workspaces, workspaceId, enabled),
+          };
+        });
+        utils.workspace.listWithKanbanState.setData({ projectId: selectedProjectId }, (old) => {
+          if (!old) {
+            return old;
+          }
+          return updateWorkspaceRatchetState(old, workspaceId, enabled);
+        });
+      }
+      utils.workspace.get.setData({ id: workspaceId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return applyRatchetToggleState(old, enabled);
+      });
+    },
+    onError: () => {
+      if (selectedProjectId) {
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
+        utils.workspace.listWithKanbanState.invalidate({ projectId: selectedProjectId });
+      }
+      utils.workspace.get.invalidate({ id: workspaceId });
+    },
     onSuccess: () => {
       if (selectedProjectId) {
         utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
         utils.workspace.listWithKanbanState.invalidate({ projectId: selectedProjectId });
       }
-      utils.workspace.get.invalidate({ id: workspace.id });
+      utils.workspace.get.invalidate({ id: workspaceId });
     },
   });
 
@@ -169,7 +206,7 @@ export function ActiveWorkspaceItem({
                 disabled={toggleRatcheting.isPending}
                 stopPropagation
                 onToggle={(enabled) => {
-                  toggleRatcheting.mutate({ workspaceId: workspace.id, enabled });
+                  toggleRatcheting.mutate({ workspaceId, enabled });
                 }}
               />
               {workspace.runScriptStatus === 'RUNNING' && (

@@ -31,8 +31,14 @@ import {
   type RunScriptStatusChangedEvent,
   runScriptStateMachine,
 } from '@/backend/domains/run-script';
-import { sessionDataService, sessionService } from '@/backend/domains/session';
 import {
+  chatEventForwarderService,
+  sessionDataService,
+  sessionDomainService,
+  sessionService,
+} from '@/backend/domains/session';
+import {
+  computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
@@ -63,6 +69,12 @@ interface PendingUpdate {
   fields: SnapshotUpdateInput;
   sources: Set<string>;
   timer: NodeJS.Timeout;
+}
+
+interface PendingRequestChangedEvent {
+  sessionId: string;
+  requestId: string;
+  hasPending: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +186,7 @@ export class EventCoalescer {
 // ---------------------------------------------------------------------------
 
 let activeCoalescer: EventCoalescer | null = null;
+let pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
 
 async function refreshWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
@@ -210,6 +223,38 @@ async function refreshWorkspaceSessionSummaries(
   }
 }
 
+async function refreshWorkspacePendingRequestType(
+  coalescer: EventCoalescer,
+  sessionId: string,
+  source: string
+): Promise<void> {
+  try {
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+    const session = await sessionDataService.findAgentSessionById(sessionId);
+    if (!session || activeCoalescer !== coalescer) {
+      return;
+    }
+
+    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(session.workspaceId);
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+
+    const pendingRequestType = computePendingRequestType(
+      sessions.map((s) => s.id),
+      chatEventForwarderService.getAllPendingRequests()
+    );
+    coalescer.enqueue(session.workspaceId, { pendingRequestType }, source);
+  } catch (error) {
+    logger.warn('Failed to refresh workspace pending request type', {
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // configureEventCollector
 // ---------------------------------------------------------------------------
@@ -223,6 +268,12 @@ async function refreshWorkspaceSessionSummaries(
 export function configureEventCollector(): void {
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   activeCoalescer = coalescer;
+
+  // Guard against duplicate listeners across repeated configure calls.
+  if (pendingRequestChangedHandler) {
+    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
+    pendingRequestChangedHandler = null;
+  }
 
   // 1. Workspace state changes
   workspaceStateMachine.on(WORKSPACE_STATE_CHANGED, (event: WorkspaceStateChangedEvent) => {
@@ -299,7 +350,13 @@ export function configureEventCollector(): void {
     });
   }
 
-  logger.info('Event collector configured with 7 event subscriptions');
+  // 9. Pending interactive request transitions (set/clear)
+  pendingRequestChangedHandler = ({ sessionId }) => {
+    void refreshWorkspacePendingRequestType(coalescer, sessionId, 'event:pending_request_changed');
+  };
+  sessionDomainService.on('pending_request_changed', pendingRequestChangedHandler);
+
+  logger.info('Event collector configured with 8 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +368,11 @@ export function configureEventCollector(): void {
  * Called during server shutdown before domain services stop.
  */
 export function stopEventCollector(): void {
+  if (pendingRequestChangedHandler) {
+    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
+    pendingRequestChangedHandler = null;
+  }
+
   if (activeCoalescer) {
     activeCoalescer.flushAll();
     activeCoalescer = null;

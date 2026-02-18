@@ -37,6 +37,10 @@ import {
   useWorkspacePanel,
 } from '@/components/workspace';
 import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
+import {
+  applyRatchetToggleState,
+  updateWorkspaceRatchetState,
+} from '@/frontend/lib/ratchet-toggle-cache';
 import { trpc } from '@/frontend/lib/trpc';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
@@ -173,6 +177,34 @@ function RatchetingToggle({
 }) {
   const utils = trpc.useUtils();
   const toggleRatcheting = trpc.workspace.toggleRatcheting.useMutation({
+    onMutate: ({ enabled }) => {
+      utils.workspace.get.setData({ id: workspaceId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return applyRatchetToggleState(old, enabled);
+      });
+      utils.workspace.listWithKanbanState.setData({ projectId: workspace.projectId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return updateWorkspaceRatchetState(old, workspaceId, enabled);
+      });
+      utils.workspace.getProjectSummaryState.setData({ projectId: workspace.projectId }, (old) => {
+        if (!old) {
+          return old;
+        }
+        return {
+          ...old,
+          workspaces: updateWorkspaceRatchetState(old.workspaces, workspaceId, enabled),
+        };
+      });
+    },
+    onError: () => {
+      utils.workspace.get.invalidate({ id: workspaceId });
+      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
+    },
     onSuccess: () => {
       utils.workspace.get.invalidate({ id: workspaceId });
       utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
