@@ -1,5 +1,61 @@
+import { createServer, request as httpRequest, type IncomingHttpHeaders } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { proxyInternals } from './proxy';
+
+interface HttpResponse {
+  body: string;
+  headers: IncomingHttpHeaders;
+  statusCode: number;
+}
+
+function sendHttpRequest(params: {
+  port: number;
+  path: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}): Promise<HttpResponse> {
+  return new Promise<HttpResponse>((resolve, reject) => {
+    const req = httpRequest(
+      {
+        host: '127.0.0.1',
+        port: params.port,
+        method: params.method ?? 'GET',
+        path: params.path,
+        headers: params.headers,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () => {
+          resolve({
+            body: Buffer.concat(chunks).toString('utf8'),
+            headers: res.headers,
+            statusCode: res.statusCode ?? 0,
+          });
+        });
+      }
+    );
+
+    req.on('error', reject);
+    if (params.body) {
+      req.write(params.body);
+    }
+    req.end();
+  });
+}
+
+function getCookieHeaderFromSetCookie(value: string | string[] | undefined): string {
+  if (!value) {
+    return '';
+  }
+  const first = Array.isArray(value) ? value[0] : value;
+  return first?.split(';')[0] ?? '';
+}
+
+async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+}
 
 describe('proxy internals', () => {
   it('generates a six-character alphanumeric password', () => {
@@ -44,13 +100,12 @@ describe('proxy internals', () => {
     );
   });
 
-  it('tracks per-IP lockout and global lockout thresholds', () => {
+  it('tracks and expires per-IP lockout', () => {
     const guard = new proxyInternals.BruteForceGuard();
     const ip = '203.0.113.10';
 
     const first = guard.registerFailure(ip, 0);
     expect(first.ipLocked).toBe(false);
-    expect(first.globalLocked).toBe(false);
 
     for (let i = 1; i < 4; i += 1) {
       const result = guard.registerFailure(ip, i);
@@ -65,31 +120,6 @@ describe('proxy internals', () => {
 
     const unlockedState = guard.isLocked(ip, 5 * 60 * 1000 + 10);
     expect(unlockedState.locked).toBe(false);
-
-    let globalLockReached = false;
-    for (let i = 0; i < 19; i += 1) {
-      const result = guard.registerFailure(`198.51.100.${i}`, i + 100);
-      if (result.globalLocked) {
-        globalLockReached = true;
-        break;
-      }
-    }
-
-    expect(globalLockReached).toBe(true);
-  });
-
-  it('expires global failure lockout window over time', () => {
-    const guard = new proxyInternals.BruteForceGuard();
-
-    let globalLocked = false;
-    for (let i = 0; i < 20; i += 1) {
-      const result = guard.registerFailure(`203.0.113.${i}`, i);
-      globalLocked = result.globalLocked;
-    }
-    expect(globalLocked).toBe(true);
-
-    const afterWindowResult = guard.registerFailure('203.0.113.200', 5 * 60 * 1000 + 21);
-    expect(afterWindowResult.globalLocked).toBe(false);
   });
 
   it('allows only safe relative redirect paths', () => {
@@ -164,5 +194,104 @@ describe('proxy internals', () => {
       'upstream=1',
       'upstream=2',
     ]);
+  });
+
+  it('auth proxy strips token from proxied path and reuses session cookie', async () => {
+    const seenPaths: string[] = [];
+    const upstream = createServer((req, res) => {
+      seenPaths.push(req.url || '/');
+      res.statusCode = 200;
+      res.end('ok');
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', () => resolve()));
+    const upstreamAddress = upstream.address();
+    if (!upstreamAddress || typeof upstreamAddress === 'string') {
+      throw new Error('Missing upstream address');
+    }
+
+    const authProxy = await proxyInternals.createAuthProxy({
+      upstreamPort: upstreamAddress.port,
+      password: 'ABC123',
+      magicToken: 'valid-token',
+    });
+
+    try {
+      const firstResponse = await sendHttpRequest({
+        port: authProxy.port,
+        path: '/dashboard?view=kanban&token=valid-token',
+      });
+      expect(firstResponse.statusCode).toBe(200);
+      expect(seenPaths[0]).toBe('/dashboard?view=kanban');
+
+      const cookie = getCookieHeaderFromSetCookie(firstResponse.headers['set-cookie']);
+      expect(cookie).toContain('ff_proxy_session=');
+
+      const secondResponse = await sendHttpRequest({
+        port: authProxy.port,
+        path: '/dashboard?view=timeline',
+        headers: { cookie },
+      });
+      expect(secondResponse.statusCode).toBe(200);
+      expect(seenPaths[1]).toBe('/dashboard?view=timeline');
+    } finally {
+      await authProxy.close();
+      await closeServer(upstream);
+    }
+  });
+
+  it('rate-limits a locked IP without shutting down access for other IPs', async () => {
+    const upstream = createServer((_req, res) => {
+      res.statusCode = 200;
+      res.end('ok');
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', () => resolve()));
+    const upstreamAddress = upstream.address();
+    if (!upstreamAddress || typeof upstreamAddress === 'string') {
+      throw new Error('Missing upstream address');
+    }
+
+    const authProxy = await proxyInternals.createAuthProxy({
+      upstreamPort: upstreamAddress.port,
+      password: 'ABC123',
+      magicToken: 'valid-token',
+    });
+
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        const response = await sendHttpRequest({
+          port: authProxy.port,
+          method: 'POST',
+          path: '/__proxy_auth/login',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            'cf-connecting-ip': '198.51.100.10',
+          },
+          body: 'password=BAD000',
+        });
+        expect(response.statusCode).toBe(401);
+      }
+
+      const lockoutResponse = await sendHttpRequest({
+        port: authProxy.port,
+        method: 'POST',
+        path: '/__proxy_auth/login',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          'cf-connecting-ip': '198.51.100.10',
+        },
+        body: 'password=BAD000',
+      });
+      expect(lockoutResponse.statusCode).toBe(429);
+
+      const otherIpResponse = await sendHttpRequest({
+        port: authProxy.port,
+        path: '/?token=valid-token',
+        headers: { 'cf-connecting-ip': '198.51.100.20' },
+      });
+      expect(otherIpResponse.statusCode).toBe(200);
+    } finally {
+      await authProxy.close();
+      await closeServer(upstream);
+    }
   });
 });

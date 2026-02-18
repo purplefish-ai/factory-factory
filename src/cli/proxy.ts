@@ -1,6 +1,6 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import {
   createServer as createHttpServer,
   request as httpRequest,
@@ -8,11 +8,11 @@ import {
 } from 'node:http';
 import { createConnection, type Socket } from 'node:net';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
-import treeKill from 'tree-kill';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,7 +23,6 @@ const LOGIN_PATH = '/__proxy_auth/login';
 const LOCAL_HOST = '127.0.0.1';
 const LOCKOUT_THRESHOLD_PER_IP = 5;
 const LOCKOUT_WINDOW_MS = 5 * 60 * 1000;
-const GLOBAL_FAILURE_THRESHOLD = 20;
 const MAX_BRUTE_FORCE_TRACKED_IPS = 5000;
 
 interface ProxyCommandOptions {
@@ -188,17 +187,6 @@ class BruteForceGuard {
     string,
     { failures: number; lockedUntilMs: number; lastSeenMs: number }
   >();
-  private readonly globalFailureTimestampsMs: number[] = [];
-
-  private evictExpiredGlobalFailures(nowMs: number): void {
-    const cutoffMs = nowMs - LOCKOUT_WINDOW_MS;
-    while (
-      this.globalFailureTimestampsMs.length > 0 &&
-      (this.globalFailureTimestampsMs[0] ?? 0) <= cutoffMs
-    ) {
-      this.globalFailureTimestampsMs.shift();
-    }
-  }
 
   private evictStaleEntries(nowMs: number): void {
     for (const [ip, state] of this.attemptsByIp.entries()) {
@@ -236,9 +224,8 @@ class BruteForceGuard {
     };
   }
 
-  registerFailure(ip: string, nowMs = Date.now()): { ipLocked: boolean; globalLocked: boolean } {
+  registerFailure(ip: string, nowMs = Date.now()): { ipLocked: boolean } {
     this.evictStaleEntries(nowMs);
-    this.evictExpiredGlobalFailures(nowMs);
     const current = this.attemptsByIp.get(ip) ?? { failures: 0, lockedUntilMs: 0, lastSeenMs: 0 };
     const normalized =
       current.lockedUntilMs > 0 && current.lockedUntilMs <= nowMs
@@ -256,23 +243,12 @@ class BruteForceGuard {
       lastSeenMs: nowMs,
     });
 
-    this.globalFailureTimestampsMs.push(nowMs);
-    return {
-      ipLocked,
-      globalLocked: this.globalFailureTimestampsMs.length >= GLOBAL_FAILURE_THRESHOLD,
-    };
+    return { ipLocked };
   }
 }
 
 function getDefaultDatabasePath(): string {
   return process.env.DATABASE_PATH || join(homedir(), 'factory-factory', 'data.db');
-}
-
-function ensureDataDir(databasePath: string): void {
-  const dir = dirname(databasePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
 }
 
 function runMigrations(projectRoot: string, databasePath: string): void {
@@ -283,69 +259,6 @@ function runMigrations(projectRoot: string, databasePath: string): void {
     log: () => {
       // silent for proxy command
     },
-  });
-}
-
-async function waitForPort(
-  port: number,
-  host = LOCAL_HOST,
-  timeoutMs = 30_000,
-  intervalMs = 250
-): Promise<void> {
-  const started = Date.now();
-
-  while (Date.now() - started < timeoutMs) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = createConnection({ port, host }, () => {
-          socket.destroy();
-          resolve();
-        });
-
-        socket.on('error', () => {
-          socket.destroy();
-          reject(new Error('not ready'));
-        });
-      });
-
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-  }
-
-  throw new Error(`Timed out waiting for port ${port}`);
-}
-
-async function findAvailablePort(startPort: number, attempts = 50): Promise<number> {
-  for (let offset = 0; offset < attempts; offset += 1) {
-    const port = startPort + offset;
-    const isAvailable = await new Promise<boolean>((resolve) => {
-      const probe = createHttpServer();
-      probe.once('error', () => resolve(false));
-      probe.once('listening', () => {
-        probe.close(() => resolve(true));
-      });
-      probe.listen(port, LOCAL_HOST);
-    });
-
-    if (isAvailable) {
-      return port;
-    }
-  }
-
-  throw new Error(`Could not find available port starting at ${startPort}`);
-}
-
-function treeKillAsync(pid: number, signal: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    treeKill(pid, signal, (error) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
   });
 }
 
@@ -400,9 +313,10 @@ async function startFactoryFactoryServer(params: {
       NODE_ENV: 'production',
       DATABASE_PATH: params.databasePath,
       BACKEND_PORT: params.requestedPort.toString(),
+      BACKEND_HOST: LOCAL_HOST,
       FRONTEND_STATIC_PATH: frontendDist,
     },
-    stdio: ['ignore', 'ignore', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   backend.stderr?.on('data', (chunk: Buffer) => {
@@ -413,14 +327,68 @@ async function startFactoryFactoryServer(params: {
     process.stderr.write(chalk.red(`  [server] ${message}\n`));
   });
 
+  let startupBuffer = '';
+  let actualPort = params.requestedPort;
   try {
-    await waitForPort(params.requestedPort);
+    actualPort = await new Promise<number>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Timed out waiting for server startup signal'));
+      }, 30_000);
+      timeout.unref?.();
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        backend.stdout?.off('data', onStdoutData);
+        backend.off('exit', onExit);
+        backend.off('error', onError);
+      };
+
+      const onStdoutData = (chunk: Buffer) => {
+        startupBuffer += chunk.toString();
+        const match = startupBuffer.match(/BACKEND_PORT:(\d+)/);
+        if (match?.[1]) {
+          const parsed = Number.parseInt(match[1], 10);
+          if (Number.isNaN(parsed)) {
+            cleanup();
+            reject(new Error('Received invalid backend port from server startup'));
+            return;
+          }
+          cleanup();
+          resolve(parsed);
+          return;
+        }
+
+        if (startupBuffer.length > 4096) {
+          startupBuffer = startupBuffer.slice(-2048);
+        }
+      };
+
+      const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+        cleanup();
+        reject(
+          new Error(
+            `Server exited before startup completed (code: ${code ?? 'null'}, signal: ${signal ?? 'null'})`
+          )
+        );
+      };
+
+      const onError = (error: Error) => {
+        cleanup();
+        reject(new Error(`Failed to start backend server: ${error.message}`));
+      };
+
+      backend.stdout?.on('data', onStdoutData);
+      backend.once('exit', onExit);
+      backend.once('error', onError);
+    });
+
+    await waitForPort(actualPort, LOCAL_HOST);
   } catch (error) {
     await killProcessTree(backend);
     throw error;
   }
 
-  return { process: backend, port: params.requestedPort };
+  return { process: backend, port: actualPort };
 }
 
 function createLoginPage(errorMessage?: string): string {
@@ -746,20 +714,9 @@ function registerFailureAndRespond(params: {
   guard: BruteForceGuard;
   ip: string;
   res: import('node:http').ServerResponse;
-  onGlobalLockout: () => void;
   message: string;
-}): 'handled' | 'global-lockout' {
+}): 'handled' {
   const failure = params.guard.registerFailure(params.ip);
-  if (failure.globalLocked) {
-    if (!params.res.writableEnded) {
-      params.res.statusCode = 503;
-      params.res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      params.res.end(createLoginPage('Too many failed login attempts. Tunnel is shutting down.'));
-    }
-    params.onGlobalLockout();
-    return 'global-lockout';
-  }
-
   if (failure.ipLocked) {
     const retry = params.guard.isLocked(params.ip);
     writeUnauthorizedResponse(
@@ -782,8 +739,7 @@ async function handleLoginSubmission(params: {
   ip: string;
   password: string;
   cookieSecret: Buffer;
-  onGlobalLockout: () => void;
-}): Promise<'handled' | 'global-lockout'> {
+}): Promise<'handled'> {
   if (params.lockState.locked) {
     writeRateLimitResponse(params.res, params.lockState.retryAfterSeconds);
     return 'handled';
@@ -810,7 +766,6 @@ async function handleLoginSubmission(params: {
     guard: params.guard,
     ip: params.ip,
     res: params.res,
-    onGlobalLockout: params.onGlobalLockout,
     message: 'Invalid password. Please try again.',
   });
 }
@@ -882,7 +837,6 @@ async function handleAuthHttpRequest(params: {
   magicToken: string;
   cookieSecret: Buffer;
   guard: BruteForceGuard;
-  onGlobalLockout: () => void;
 }): Promise<void> {
   const ip = getClientIp(params.req);
   const lockState = params.guard.isLocked(ip);
@@ -909,7 +863,6 @@ async function handleAuthHttpRequest(params: {
       ip,
       password: params.password,
       cookieSecret: params.cookieSecret,
-      onGlobalLockout: params.onGlobalLockout,
     });
     return;
   }
@@ -925,7 +878,6 @@ async function handleAuthHttpRequest(params: {
         guard: params.guard,
         ip,
         res: params.res,
-        onGlobalLockout: params.onGlobalLockout,
         message: 'Invalid token. Please use the shared link again.',
       });
       return;
@@ -951,7 +903,6 @@ function createAuthProxy(params: {
   upstreamPort: number;
   password: string;
   magicToken: string;
-  onGlobalLockout: () => void;
 }): Promise<{ port: number; close: () => Promise<void> }> {
   const bruteForceGuard = new BruteForceGuard();
   const cookieSecret = randomBytes(32);
@@ -966,7 +917,6 @@ function createAuthProxy(params: {
       magicToken: params.magicToken,
       cookieSecret,
       guard: bruteForceGuard,
-      onGlobalLockout: params.onGlobalLockout,
     }).catch((error) => {
       process.stderr.write(chalk.red(`  [proxy] ${(error as Error).message}\n`));
       if (!res.headersSent) {
@@ -1000,18 +950,11 @@ function createAuthProxy(params: {
     });
 
     if (!auth.authenticated) {
-      let shouldTriggerGlobalLockout = false;
       if (auth.invalidToken) {
-        const failure = bruteForceGuard.registerFailure(ip);
-        if (failure.globalLocked) {
-          shouldTriggerGlobalLockout = true;
-        }
+        bruteForceGuard.registerFailure(ip);
       }
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       socket.destroy();
-      if (shouldTriggerGlobalLockout) {
-        params.onGlobalLockout();
-      }
       return;
     }
 
@@ -1241,7 +1184,7 @@ export async function runProxyCommand({
     return;
   }
 
-  const requestedPort = await findAvailablePort(3001);
+  const requestedPort = await findAvailablePort(3001, { maxAttempts: 50 });
   console.log(chalk.blue(`Starting server on port ${requestedPort}...`));
 
   let backend: { process: ChildProcess; port: number };
@@ -1275,12 +1218,6 @@ export async function runProxyCommand({
         upstreamPort: backend.port,
         password,
         magicToken: directToken,
-        onGlobalLockout: () => {
-          void shutdown(
-            1,
-            '❌ Too many failed login attempts. Tunnel shut down for safety.\nRe-run the command to start a new tunnel with a new password.'
-          );
-        },
       });
     } catch (error) {
       await shutdown(1, `❌ ${(error as Error).message}`);
@@ -1338,6 +1275,7 @@ export const proxyInternals = {
   mergeSetCookieValues,
   matchesMagicToken,
   matchesPassword,
+  createAuthProxy,
   toSafeRedirectPath,
   parseCookieHeader,
   signValue,
