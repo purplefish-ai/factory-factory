@@ -101,12 +101,12 @@ function parseFileChangePayload(value: unknown): CodexFileChangePayload | null {
   const parsedChanges = Array.isArray(changes)
     ? changes.map(parseFileChangeEntry).filter(isCodexFileChangeEntry)
     : [];
+  const id = asNonEmptyString(value.id) ?? undefined;
+  const status = asNonEmptyString(value.status) ?? undefined;
 
   return {
-    ...(asNonEmptyString(value.id) ? { id: asNonEmptyString(value.id) ?? undefined } : {}),
-    ...(asNonEmptyString(value.status)
-      ? { status: asNonEmptyString(value.status) ?? undefined }
-      : {}),
+    ...(id ? { id } : {}),
+    ...(status ? { status } : {}),
     changes: parsedChanges,
   };
 }

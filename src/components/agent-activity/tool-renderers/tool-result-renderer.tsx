@@ -2,7 +2,11 @@ import { memo } from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
-import { isCodexFileChangeToolName, parseCodexFileChangeToolResult } from './file-change-parser';
+import {
+  type CodexFileChangePayload,
+  isCodexFileChangeToolName,
+  parseCodexFileChangeToolResult,
+} from './file-change-parser';
 import { CodexFileChangeRenderer } from './file-change-renderer';
 import { extractPlanToolResult } from './tool-result-plan';
 
@@ -12,6 +16,12 @@ import { extractPlanToolResult } from './tool-result-plan';
 
 const TOOL_RESULT_CONTENT_TRUNCATE = 20_000;
 const TOOL_RESULT_ITEM_TEXT_TRUNCATE = 20_000;
+
+function hasStandaloneFileChangeSignature(payload: CodexFileChangePayload): boolean {
+  const hasCallId = payload.id?.startsWith('call_') ?? false;
+  const hasStatus = typeof payload.status === 'string' && payload.status.length > 0;
+  return payload.changes.length > 0 && (hasCallId || hasStatus);
+}
 
 function truncateContent(content: string, maxLength: number): string {
   if (content.length <= maxLength) {
@@ -36,7 +46,12 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
   toolName,
 }: ToolResultContentRendererProps) {
   const fileChangeResult = isError ? null : parseCodexFileChangeToolResult(content);
-  if (fileChangeResult && (!toolName || isCodexFileChangeToolName(toolName))) {
+  const shouldRenderFileChange =
+    fileChangeResult !== null &&
+    ((toolName !== undefined && isCodexFileChangeToolName(toolName)) ||
+      (toolName === undefined && hasStandaloneFileChangeSignature(fileChangeResult)));
+
+  if (shouldRenderFileChange) {
     return <CodexFileChangeRenderer payload={fileChangeResult} />;
   }
 

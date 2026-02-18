@@ -381,6 +381,31 @@ export const ToolResultFileChange: Story = {
   },
 };
 
+export const ToolResultFileChangeLikeNestedJson: Story = {
+  args: {
+    message: createToolResultClaudeMessage(
+      'toolu_file_change_nested',
+      JSON.stringify(
+        {
+          type: 'analysis',
+          result: {
+            type: 'fileChange',
+            changes: [
+              {
+                path: '/Users/developer/project/src/components/workspace-panel-context.tsx',
+                kind: { type: 'update', move_path: null },
+              },
+            ],
+          },
+        },
+        null,
+        2
+      )
+    ),
+    defaultOpen: true,
+  },
+};
+
 // =============================================================================
 // Collapsed States
 // =============================================================================
