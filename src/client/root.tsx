@@ -14,7 +14,9 @@ function RootLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const showSidebar = !isLoading && projects && projects.length > 0;
-  const viewportHeight = useVisualViewportHeight();
+  const { height: viewportHeight, offsetTop: viewportOffsetTop } = useVisualViewportHeight();
+  const viewportTransform =
+    viewportOffsetTop === '0px' ? undefined : `translateY(${viewportOffsetTop})`;
 
   // Redirect to onboarding when no projects exist
   // Only redirect from top-level paths, not from specific project routes
@@ -31,7 +33,10 @@ function RootLayout() {
   }, [isLoading, projects, pathname, navigate]);
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: viewportHeight }}>
+    <div
+      className="flex flex-col overflow-hidden"
+      style={{ height: viewportHeight, transform: viewportTransform }}
+    >
       <CLIHealthBanner />
       <ResizableLayout
         sidebar={showSidebar ? <AppSidebar /> : null}

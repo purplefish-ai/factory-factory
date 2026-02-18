@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
 
 const DEFAULT_VIEWPORT_HEIGHT = '100dvh';
+const DEFAULT_VIEWPORT_OFFSET = '0px';
 
 function toPixels(value: number): string {
   return `${Math.round(value)}px`;
 }
 
-export function useVisualViewportHeight(): string {
-  const [viewportHeight, setViewportHeight] = useState<string>(DEFAULT_VIEWPORT_HEIGHT);
+interface VisualViewportLayout {
+  height: string;
+  offsetTop: string;
+}
+
+const DEFAULT_LAYOUT: VisualViewportLayout = {
+  height: DEFAULT_VIEWPORT_HEIGHT,
+  offsetTop: DEFAULT_VIEWPORT_OFFSET,
+};
+
+export function useVisualViewportHeight(): VisualViewportLayout {
+  const [layout, setLayout] = useState<VisualViewportLayout>(DEFAULT_LAYOUT);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -16,14 +27,20 @@ export function useVisualViewportHeight(): string {
 
     const visualViewport = window.visualViewport;
 
-    const updateHeight = (nextHeight: string) => {
-      setViewportHeight((previousHeight) =>
-        previousHeight === nextHeight ? previousHeight : nextHeight
+    const updateLayout = (nextLayout: VisualViewportLayout) => {
+      setLayout((previousLayout) =>
+        previousLayout.height === nextLayout.height &&
+        previousLayout.offsetTop === nextLayout.offsetTop
+          ? previousLayout
+          : nextLayout
       );
     };
 
     const updateFromWindow = () => {
-      updateHeight(toPixels(window.innerHeight));
+      updateLayout({
+        height: toPixels(window.innerHeight),
+        offsetTop: DEFAULT_VIEWPORT_OFFSET,
+      });
     };
 
     if (!visualViewport) {
@@ -35,7 +52,10 @@ export function useVisualViewportHeight(): string {
     }
 
     const updateFromVisualViewport = () => {
-      updateHeight(toPixels(visualViewport.height));
+      updateLayout({
+        height: toPixels(visualViewport.height),
+        offsetTop: toPixels(visualViewport.offsetTop),
+      });
     };
 
     updateFromVisualViewport();
@@ -48,5 +68,5 @@ export function useVisualViewportHeight(): string {
     };
   }, []);
 
-  return viewportHeight;
+  return layout;
 }
