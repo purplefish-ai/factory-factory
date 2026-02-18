@@ -207,6 +207,8 @@ export interface GroupedMessageItemRendererProps {
   getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
   /** Persists expansion state by key */
   setToolExpansionState?: (key: string, open: boolean) => void;
+  /** Per-row token used to force rerender when this row's expansion state changes */
+  toolExpansionToken?: string;
 }
 
 /**
@@ -220,6 +222,7 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRewindToMessage,
   getToolExpansionState,
   setToolExpansionState,
+  toolExpansionToken: _toolExpansionToken,
 }: GroupedMessageItemRendererProps) {
   if (isToolSequence(item)) {
     const sequenceDefaultOpen = item.pairedCalls.length > 1;
