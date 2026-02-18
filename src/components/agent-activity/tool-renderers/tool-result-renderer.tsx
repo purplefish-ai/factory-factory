@@ -2,6 +2,8 @@ import { memo } from 'react';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
+import { isCodexFileChangeToolName, parseCodexFileChangeToolResult } from './file-change-parser';
+import { CodexFileChangeRenderer } from './file-change-renderer';
 import { extractPlanToolResult } from './tool-result-plan';
 
 // =============================================================================
@@ -25,12 +27,19 @@ function truncateContent(content: string, maxLength: number): string {
 export interface ToolResultContentRendererProps {
   content: ToolResultContentValue;
   isError: boolean;
+  toolName?: string;
 }
 
 export const ToolResultContentRenderer = memo(function ToolResultContentRenderer({
   content,
   isError,
+  toolName,
 }: ToolResultContentRendererProps) {
+  const fileChangeResult = parseCodexFileChangeToolResult(content);
+  if (fileChangeResult && (!toolName || isCodexFileChangeToolName(toolName))) {
+    return <CodexFileChangeRenderer payload={fileChangeResult} />;
+  }
+
   const planResult = isError ? null : extractPlanToolResult(content);
   if (planResult) {
     const rendered = truncateContent(planResult.planText, TOOL_RESULT_CONTENT_TRUNCATE);

@@ -3,6 +3,12 @@ import { memo } from 'react';
 import type { Todo } from '@/components/chat/use-todo-tracker';
 import { TodoItem } from '@/components/shared';
 import { calculateTodoProgress } from '@/lib/todo-utils';
+import {
+  isCodexFileChangeToolName,
+  parseCodexFileChangeToolInput,
+  serializeUnknownPayload,
+} from './file-change-parser';
+import { CodexFileChangeRenderer } from './file-change-renderer';
 import { extractCommandPreviewFromInput, isRunLikeToolName } from './tool-display-utils';
 
 // =============================================================================
@@ -240,6 +246,16 @@ export const ToolInputRenderer = memo(function ToolInputRenderer({
   // Prefer rendering from structured input to keep headers concise.
   if (isRunLikeToolName(name)) {
     return <RunToolRenderer input={input} />;
+  }
+
+  const fileChangePayload = parseCodexFileChangeToolInput(input);
+  if (fileChangePayload && isCodexFileChangeToolName(name)) {
+    return (
+      <CodexFileChangeRenderer
+        payload={fileChangePayload}
+        rawPayload={serializeUnknownPayload(input)}
+      />
+    );
   }
 
   // Special rendering for common tools

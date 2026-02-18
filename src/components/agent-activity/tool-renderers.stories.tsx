@@ -55,6 +55,52 @@ function createToolResultClaudeMessage(
   };
 }
 
+const SAMPLE_CODEX_FILE_CHANGE_PAYLOAD = {
+  type: 'fileChange',
+  id: 'call_filechange_123',
+  status: 'completed',
+  changes: [
+    {
+      path: '/Users/developer/project/src/components/workspace-panel-context.tsx',
+      kind: {
+        type: 'update',
+        move_path: null,
+      },
+      diff: "@@ -10,2 +10,3 @@\n import { z } from 'zod';\n+import { useIsMobile } from '@/hooks/use-mobile';\n",
+    },
+    {
+      path: '/Users/developer/project/src/components/agent-activity/file-change-renderer.tsx',
+      kind: {
+        type: 'create',
+        move_path: null,
+      },
+    },
+    {
+      path: '/Users/developer/project/src/legacy/old-panel.tsx',
+      kind: {
+        type: 'delete',
+        move_path: null,
+      },
+    },
+  ],
+} as const;
+
+function createSampleCodexFileChangeInput(): Record<string, unknown> {
+  return {
+    type: SAMPLE_CODEX_FILE_CHANGE_PAYLOAD.type,
+    id: SAMPLE_CODEX_FILE_CHANGE_PAYLOAD.id,
+    status: SAMPLE_CODEX_FILE_CHANGE_PAYLOAD.status,
+    changes: SAMPLE_CODEX_FILE_CHANGE_PAYLOAD.changes.map((change) => ({
+      path: change.path,
+      kind: {
+        type: change.kind.type,
+        move_path: change.kind.move_path,
+      },
+      ...('diff' in change ? { diff: change.diff } : {}),
+    })),
+  };
+}
+
 // =============================================================================
 // ToolInfoRenderer Meta
 // =============================================================================
@@ -255,6 +301,13 @@ export const ToolUseUnknown: Story = {
   },
 };
 
+export const ToolUseFileChange: Story = {
+  args: {
+    message: createToolUseClaudeMessage('fileChange', createSampleCodexFileChangeInput()),
+    defaultOpen: true,
+  },
+};
+
 // =============================================================================
 // Tool Result Stories
 // =============================================================================
@@ -314,6 +367,16 @@ export const ToolResultJson: Story = {
 export const ToolResultBashSuccess: Story = {
   args: {
     message: createToolResultClaudeMessage('toolu_bash', SAMPLE_BASH_OUTPUTS.npmTest),
+    defaultOpen: true,
+  },
+};
+
+export const ToolResultFileChange: Story = {
+  args: {
+    message: createToolResultClaudeMessage(
+      'toolu_file_change',
+      JSON.stringify(SAMPLE_CODEX_FILE_CHANGE_PAYLOAD, null, 2)
+    ),
     defaultOpen: true,
   },
 };
@@ -716,6 +779,21 @@ export const ToolSequenceGroupManyTools: StoryObj<typeof ToolSequenceGroup> = {
         },
         { name: 'Bash', input: { command: 'npm test' }, result: 'pass' },
         { name: 'Bash', input: { command: 'npm build' }, result: 'done' },
+      ])}
+    />
+  ),
+};
+
+export const ToolSequenceGroupWithFileChange: StoryObj<typeof ToolSequenceGroup> = {
+  render: () => (
+    <ToolSequenceGroup
+      defaultOpen={true}
+      sequence={createToolSequence([
+        {
+          name: 'fileChange',
+          input: createSampleCodexFileChangeInput(),
+          result: JSON.stringify(SAMPLE_CODEX_FILE_CHANGE_PAYLOAD, null, 2),
+        },
       ])}
     />
   ),

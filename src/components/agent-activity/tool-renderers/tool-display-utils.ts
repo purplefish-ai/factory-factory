@@ -31,6 +31,13 @@ export function isRunLikeToolName(name: string): boolean {
   return /^run(?:\s|$)/i.test(normalized);
 }
 
+function isFileChangeToolName(name: string): boolean {
+  const normalized = normalizeWhitespace(name)
+    .replace(/[\s_-]+/g, '')
+    .toLowerCase();
+  return normalized === 'filechange' || normalized === 'filechanges';
+}
+
 export function extractCommandPreviewFromInput(input: Record<string, unknown>): string | null {
   const command = input.command;
 
@@ -83,6 +90,10 @@ export function getDisplayToolName(
       return 'Run';
     }
     return truncateWithEllipsis(`Run ${commandPreview}`, RUN_COMMAND_PREVIEW_MAX);
+  }
+
+  if (isFileChangeToolName(normalizedName)) {
+    return 'File changes';
   }
 
   return truncateWithEllipsis(
