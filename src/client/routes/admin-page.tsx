@@ -51,8 +51,30 @@ function getEnabledFeatures(features?: Record<string, boolean>): string {
   return enabled.length > 0 ? enabled.join(', ') : 'none';
 }
 
-function formatPortLabel(port: number | null | undefined): string {
-  return port ? String(port) : '(restart to detect)';
+function formatPortLabel(
+  port: number | null | undefined,
+  missingLabel = '(restart to detect)'
+): string {
+  return port != null ? String(port) : missingLabel;
+}
+
+function getFrontendPortLabel(location: Location): string {
+  if (location.port) {
+    const parsedPort = Number.parseInt(location.port, 10);
+    if (!Number.isNaN(parsedPort)) {
+      return String(parsedPort);
+    }
+  }
+
+  if (location.protocol === 'http:') {
+    return '80';
+  }
+
+  if (location.protocol === 'https:') {
+    return '443';
+  }
+
+  return '(not available)';
 }
 
 function ProjectFactoryConfigCard({
@@ -441,8 +463,12 @@ function ChatProviderDefaultsSection() {
 }
 
 function AppInfoSection() {
-  const { data: serverInfo, isLoading } = trpc.admin.getServerInfo.useQuery();
-  const frontendPort = window.location.port ? Number.parseInt(window.location.port, 10) : null;
+  const { data: serverInfo, isLoading } = trpc.admin.getServerInfo.useQuery(undefined, {
+    retry: 1,
+    retryDelay: 1000,
+    meta: { suppressErrors: true },
+  });
+  const frontendPort = getFrontendPortLabel(window.location);
   const backendPort = serverInfo?.backendPort ?? null;
 
   if (isLoading) {
@@ -483,9 +509,7 @@ function AppInfoSection() {
           <div className="space-y-1 text-sm text-muted-foreground">
             <div className="flex items-center justify-between">
               <span>Frontend</span>
-              <code className="rounded bg-muted px-1.5 py-0.5">
-                {formatPortLabel(frontendPort)}
-              </code>
+              <code className="rounded bg-muted px-1.5 py-0.5">{frontendPort}</code>
             </div>
             <div className="flex items-center justify-between">
               <span>Backend</span>
