@@ -37,6 +37,8 @@ interface KanbanColumnProps {
   projectSlug: string;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   togglingWorkspaceId?: string | null;
+  onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  archivingWorkspaceId?: string | null;
 }
 
 export function KanbanColumn({
@@ -45,6 +47,8 @@ export function KanbanColumn({
   projectSlug,
   onToggleRatcheting,
   togglingWorkspaceId,
+  onArchive,
+  archivingWorkspaceId,
 }: KanbanColumnProps) {
   const isEmpty = workspaces.length === 0;
 
@@ -74,6 +78,8 @@ export function KanbanColumn({
                 projectSlug={projectSlug}
                 onToggleRatcheting={onToggleRatcheting}
                 isTogglePending={togglingWorkspaceId === workspace.id}
+                onArchive={onArchive}
+                isArchivePending={archivingWorkspaceId === workspace.id}
               />
             </div>
           ))
