@@ -9,6 +9,7 @@ import {
   Loader2,
   MoreHorizontal,
   PanelRight,
+  Server,
   Settings2,
   Zap,
 } from 'lucide-react';
@@ -569,6 +570,42 @@ function OpenInIdeAction({
   );
 }
 
+function OpenDevAppAction({
+  workspaceId,
+  renderAsMenuItem = false,
+}: {
+  workspaceId: string;
+  renderAsMenuItem?: boolean;
+}) {
+  const { data: status } = trpc.workspace.getRunScriptStatus.useQuery(
+    { workspaceId },
+    {
+      refetchInterval: (query) => {
+        return query.state.data?.status === 'RUNNING' ? 2000 : 5000;
+      },
+    }
+  );
+
+  if (!status?.port || status.status !== 'RUNNING') {
+    return null;
+  }
+
+  const href = status.proxyUrl ?? `http://localhost:${status.port}`;
+
+  if (renderAsMenuItem) {
+    return (
+      <DropdownMenuItem asChild>
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          <Server className="h-4 w-4" />
+          Open dev app
+        </a>
+      </DropdownMenuItem>
+    );
+  }
+
+  return null;
+}
+
 function ArchiveActionButton({
   workspace,
   archivePending,
@@ -747,6 +784,7 @@ function WorkspaceHeaderOverflowMenu({
             openInIde={openInIde}
             renderAsMenuItem
           />
+          <OpenDevAppAction workspaceId={workspaceId} renderAsMenuItem />
           <WorkspaceQuickActionsSubmenu
             handleQuickAction={handleQuickAction}
             disabled={isCreatingSession}
