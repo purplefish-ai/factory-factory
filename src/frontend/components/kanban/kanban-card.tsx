@@ -36,18 +36,12 @@ interface KanbanCardProps {
 }
 
 function CardStatusIndicator({
-  isWorking,
   status,
   errorMessage,
 }: {
-  isWorking: boolean;
   status: WorkspaceStatus;
   errorMessage: string | null;
 }) {
-  if (isWorking) {
-    return <span className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" />;
-  }
-
   // NEW/PROVISIONING are shown as a label in the card body instead
   if (status === 'NEW' || status === 'PROVISIONING') {
     return null;
@@ -186,11 +180,7 @@ function CardTitleIcons({
           <TooltipContent>Dev server running</TooltipContent>
         </Tooltip>
       )}
-      <CardStatusIndicator
-        isWorking={workspace.isWorking}
-        status={workspace.status}
-        errorMessage={workspace.initErrorMessage}
-      />
+      <CardStatusIndicator status={workspace.status} errorMessage={workspace.initErrorMessage} />
       {!isArchived && onArchive && (
         <CardArchiveButton
           workspaceId={workspace.id}
