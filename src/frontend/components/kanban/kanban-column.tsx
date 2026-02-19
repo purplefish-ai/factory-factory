@@ -1,5 +1,4 @@
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
@@ -35,22 +34,6 @@ export function getKanbanColumns(issueProvider: string): ColumnConfig[] {
   ];
 }
 
-/** Returns a top-border accent class for each column to aid visual distinction */
-export function getColumnAccentClass(columnId: UIKanbanColumnId): string {
-  switch (columnId) {
-    case 'ISSUES':
-      return 'border-t-2 border-t-info';
-    case 'WORKING':
-      return 'border-t-2 border-t-brand';
-    case 'WAITING':
-      return 'border-t-2 border-t-warning';
-    case 'DONE':
-      return 'border-t-2 border-t-success';
-    default:
-      return '';
-  }
-}
-
 interface KanbanColumnProps {
   column: ColumnConfig;
   workspaces: WorkspaceWithKanban[];
@@ -75,12 +58,7 @@ export function KanbanColumn({
   return (
     <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
       {/* Column Header — hidden on mobile where pills handle this */}
-      <div
-        className={cn(
-          'hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg',
-          getColumnAccentClass(column.id)
-        )}
-      >
+      <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/50 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
           <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
@@ -90,7 +68,7 @@ export function KanbanColumn({
       </div>
 
       {/* Column Content */}
-      <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/30">
+      <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/50">
         {isEmpty ? (
           <div className="flex items-center justify-center h-[60px] md:h-[150px] text-muted-foreground text-sm">
             {column.description}
