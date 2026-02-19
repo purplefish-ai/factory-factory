@@ -87,7 +87,11 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
           <Link
             to={`/projects/${navData.selectedProjectSlug}/workspaces`}
             onClick={onClose}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+            className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+              pathname?.startsWith(`/projects/${navData.selectedProjectSlug}/workspaces`)
+                ? 'bg-accent'
+                : 'hover:bg-accent'
+            }`}
           >
             <Kanban className="h-4 w-4" />
             <span>Workspaces Board</span>
