@@ -222,8 +222,11 @@ export function useWebSocketTransport(
       return;
     }
 
-    // If already connected, no recovery needed.
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // If already connected or connecting, no recovery needed.
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) {
       return;
     }
 
@@ -274,8 +277,10 @@ export function useWebSocketTransport(
         recoverConnection();
       }
     };
-    const handlePageShow = () => {
-      recoverConnection();
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        recoverConnection();
+      }
     };
     const handleOnline = () => {
       recoverConnection();
