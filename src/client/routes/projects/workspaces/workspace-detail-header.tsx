@@ -73,7 +73,7 @@ import {
   resolveProviderSelection,
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
-
+import { NewWorkspaceButton } from './components/new-workspace-button';
 import { encodeGitHubTreeRef } from './github-branch-url';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 
@@ -776,6 +776,8 @@ interface WorkspaceHeaderProps {
   running: boolean;
   isCreatingSession: boolean;
   hasChanges?: boolean;
+  onCreateWorkspace: () => void;
+  isCreatingWorkspace: boolean;
 }
 
 /**
@@ -794,6 +796,8 @@ export function WorkspaceDetailHeaderSlot({
   running,
   isCreatingSession,
   hasChanges,
+  onCreateWorkspace,
+  isCreatingWorkspace,
 }: WorkspaceHeaderProps) {
   const isMobile = useIsMobile();
   const { slug = '' } = useParams<{ slug: string }>();
@@ -831,6 +835,7 @@ export function WorkspaceDetailHeaderSlot({
             !isMobile && 'flex-wrap gap-0.5 md:gap-1'
           )}
         >
+          <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
           <RunScriptButton workspaceId={workspaceId} />
           {isMobile ? (
             <>

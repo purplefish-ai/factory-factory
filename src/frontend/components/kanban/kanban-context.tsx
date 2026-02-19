@@ -83,6 +83,8 @@ interface KanbanContextValue {
   isSyncing: boolean;
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
   togglingWorkspaceId: string | null;
+  archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
+  archivingWorkspaceId: string | null;
 }
 
 const KanbanContext = createContext<KanbanContextValue | null>(null);
@@ -146,7 +148,9 @@ export function KanbanProvider({
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
+  const archiveMutation = trpc.workspace.archive.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
+  const [archivingWorkspaceId, setArchivingWorkspaceId] = useState<string | null>(null);
 
   const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
 
@@ -167,6 +171,16 @@ export function KanbanProvider({
       ]);
     } finally {
       setTogglingWorkspaceId(null);
+    }
+  };
+
+  const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
+    setArchivingWorkspaceId(workspaceId);
+    try {
+      await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
+      await refetchWorkspaces();
+    } finally {
+      setArchivingWorkspaceId(null);
     }
   };
 
@@ -225,6 +239,8 @@ export function KanbanProvider({
         isSyncing: syncMutation.isPending,
         toggleWorkspaceRatcheting,
         togglingWorkspaceId,
+        archiveWorkspace,
+        archivingWorkspaceId,
       }}
     >
       {children}
