@@ -97,7 +97,7 @@ export const FileChangeItem = memo(function FileChangeItem({
         'hover:bg-muted/50 rounded-md transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
-      title={`${getStatusLabel(kind)}: ${path}${showIndicatorDot ? ' (staged or not pushed)' : ''}`}
+      title={`${getStatusLabel(kind)}: ${path}${showIndicatorDot ? ' (staged or not pushed to remote)' : ''}`}
     >
       <span className={statusColor}>{getStatusIcon(kind)}</span>
       <span className="flex-1 truncate">
@@ -107,7 +107,7 @@ export const FileChangeItem = memo(function FileChangeItem({
       {showIndicatorDot && (
         <span
           className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0"
-          title="Staged or not pushed"
+          title="Staged or not pushed to remote"
         />
       )}
       {statusCode && (
