@@ -1,11 +1,21 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   createServer as createHttpServer,
   request as httpRequest,
   type IncomingMessage,
 } from 'node:http';
 import { createConnection, type Socket } from 'node:net';
+import {
+  appendBoundedOutputBuffer,
+  authenticateRequest,
+  createAuthCookie,
+  createSessionValue,
+  extractTryCloudflareUrl,
+  mergeSetCookieValues,
+  removeHopByHopHeaders,
+  toSafeRedirectPath,
+} from '@/shared/proxy-utils';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('run-script-proxy-service');
@@ -17,208 +27,12 @@ const MAX_TUNNEL_OUTPUT_BUFFER_CHARS = 8192;
 const TUNNEL_START_TIMEOUT_MS = 30_000;
 const PROCESS_KILL_TIMEOUT_MS = 3000;
 
-interface ProxySession {
-  id: string;
-  signature: string;
-}
-
-interface AuthenticationCheck {
-  authenticated: boolean;
-  viaToken: boolean;
-  invalidToken: boolean;
-  sanitizedPath: string;
-}
-
 interface ActiveTunnel {
   upstreamPort: number;
   publicUrl: string;
   authenticatedUrl: string;
   cloudflaredProcess: ChildProcess;
   closeAuthProxy: () => Promise<void>;
-}
-
-function signValue(value: string, secret: Buffer): string {
-  return createHmac('sha256', secret).update(value).digest('hex');
-}
-
-function createSessionValue(secret: Buffer): ProxySession {
-  const id = randomBytes(16).toString('hex');
-  return { id, signature: signValue(id, secret) };
-}
-
-function verifySessionValue(value: string | undefined, secret: Buffer): boolean {
-  if (!value) {
-    return false;
-  }
-
-  const separator = value.indexOf('.');
-  if (separator <= 0 || separator === value.length - 1) {
-    return false;
-  }
-
-  const id = value.slice(0, separator);
-  const providedSignature = value.slice(separator + 1);
-  const expectedSignature = signValue(id, secret);
-
-  const expectedBuffer = Buffer.from(expectedSignature);
-  const providedBuffer = Buffer.from(providedSignature);
-
-  if (expectedBuffer.length !== providedBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(expectedBuffer, providedBuffer);
-}
-
-function parseCookieHeader(cookieHeader: string | undefined): Record<string, string> {
-  if (!cookieHeader) {
-    return {};
-  }
-
-  return cookieHeader
-    .split(';')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce<Record<string, string>>((acc, part) => {
-      const separator = part.indexOf('=');
-      if (separator <= 0) {
-        return acc;
-      }
-      const key = part.slice(0, separator).trim();
-      const value = part.slice(separator + 1).trim();
-      if (key) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {});
-}
-
-function mergeSetCookieValues(
-  existing: string | string[] | number | undefined,
-  incoming: string | string[]
-): string[] {
-  const existingValues =
-    typeof existing === 'undefined' ? [] : Array.isArray(existing) ? existing : [String(existing)];
-  const incomingValues = Array.isArray(incoming) ? incoming : [incoming];
-  return [...existingValues, ...incomingValues];
-}
-
-function matchesToken(candidate: string, expected: string): boolean {
-  const candidateBuffer = Buffer.from(candidate, 'utf8');
-  const expectedBuffer = Buffer.from(expected, 'utf8');
-
-  if (candidateBuffer.length !== expectedBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(candidateBuffer, expectedBuffer);
-}
-
-function sanitizePathWithoutToken(rawUrl: string): string {
-  const parsed = new URL(rawUrl, 'http://proxy.local');
-  parsed.searchParams.delete(TOKEN_QUERY_PARAM);
-  const search = parsed.searchParams.toString();
-  return `${parsed.pathname}${search ? `?${search}` : ''}`;
-}
-
-function toSafeRedirectPath(path: string): string {
-  if (
-    !path.startsWith('/') ||
-    path.startsWith('//') ||
-    path.startsWith('/\\') ||
-    /[\r\n]/.test(path)
-  ) {
-    return '/';
-  }
-  return path;
-}
-
-function createAuthCookie(session: ProxySession): string {
-  return `${SESSION_COOKIE_NAME}=${session.id}.${session.signature}; HttpOnly; Secure; SameSite=Lax; Path=/`;
-}
-
-function authenticateRequest(params: {
-  req: IncomingMessage;
-  cookieSecret: Buffer;
-  authToken: string;
-}): AuthenticationCheck {
-  const rawUrl = params.req.url || '/';
-  const parsed = new URL(rawUrl, 'http://proxy.local');
-  const sanitizedPath = sanitizePathWithoutToken(rawUrl);
-  const cookies = parseCookieHeader(params.req.headers.cookie);
-  const session = cookies[SESSION_COOKIE_NAME];
-  const hasValidSession = verifySessionValue(session, params.cookieSecret);
-
-  const token = parsed.searchParams.get(TOKEN_QUERY_PARAM);
-  if (token && matchesToken(token, params.authToken)) {
-    return {
-      authenticated: true,
-      viaToken: true,
-      invalidToken: false,
-      sanitizedPath,
-    };
-  }
-
-  if (token) {
-    if (hasValidSession) {
-      return {
-        authenticated: true,
-        viaToken: false,
-        invalidToken: false,
-        sanitizedPath,
-      };
-    }
-    return {
-      authenticated: false,
-      viaToken: false,
-      invalidToken: true,
-      sanitizedPath,
-    };
-  }
-
-  return {
-    authenticated: hasValidSession,
-    viaToken: false,
-    invalidToken: false,
-    sanitizedPath: rawUrl,
-  };
-}
-
-function removeHopByHopHeaders(
-  headers: IncomingMessage['headers']
-): Record<string, string | string[] | undefined> {
-  const disallowed = new Set([
-    'connection',
-    'keep-alive',
-    'proxy-authenticate',
-    'proxy-authorization',
-    'te',
-    'trailer',
-    'transfer-encoding',
-    'upgrade',
-  ]);
-
-  const cleaned: Record<string, string | string[] | undefined> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (disallowed.has(key.toLowerCase())) {
-      continue;
-    }
-
-    if (key.toLowerCase() === 'cookie' && typeof value === 'string') {
-      const cookies = parseCookieHeader(value);
-      delete cookies[SESSION_COOKIE_NAME];
-      const cookieValue = Object.entries(cookies)
-        .map(([cookieKey, cookieVal]) => `${cookieKey}=${cookieVal}`)
-        .join('; ');
-      if (cookieValue) {
-        cleaned[key] = cookieValue;
-      }
-      continue;
-    }
-
-    cleaned[key] = value;
-  }
-  return cleaned;
 }
 
 function proxyAuthenticatedHttpRequest(params: {
@@ -245,7 +59,7 @@ function proxyAuthenticatedHttpRequest(params: {
     );
   }
 
-  const upstreamHeaders = removeHopByHopHeaders(params.req.headers);
+  const upstreamHeaders = removeHopByHopHeaders(params.req.headers, SESSION_COOKIE_NAME);
 
   const upstreamRequest = httpRequest(
     {
@@ -301,26 +115,6 @@ function writeUnauthorizedResponse(
   res.end(invalidToken ? 'Invalid auth token' : 'Authentication required');
 }
 
-function appendBoundedOutputBuffer(
-  existing: string,
-  chunk: string,
-  maxChars = MAX_TUNNEL_OUTPUT_BUFFER_CHARS
-): string {
-  const combined = `${existing}${chunk}`;
-  if (combined.length <= maxChars) {
-    return combined;
-  }
-  return combined.slice(-maxChars);
-}
-
-function extractTryCloudflareUrl(input: string): string | null {
-  const match = input.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/gi);
-  if (!match || match.length === 0) {
-    return null;
-  }
-  return match[0] ?? null;
-}
-
 function isCommandNotFoundError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
@@ -372,7 +166,11 @@ async function startCloudflaredTunnel(
     timeout.unref?.();
 
     const onData = (data: Buffer) => {
-      outputBuffer = appendBoundedOutputBuffer(outputBuffer, data.toString());
+      outputBuffer = appendBoundedOutputBuffer(
+        outputBuffer,
+        data.toString(),
+        MAX_TUNNEL_OUTPUT_BUFFER_CHARS
+      );
       const extracted = extractTryCloudflareUrl(outputBuffer);
       if (extracted && !resolvedUrl) {
         resolvedUrl = extracted;
@@ -430,6 +228,8 @@ function createTokenAuthProxy(params: {
       req,
       cookieSecret,
       authToken: params.authToken,
+      sessionCookieName: SESSION_COOKIE_NAME,
+      tokenQueryParam: TOKEN_QUERY_PARAM,
     });
 
     if (!auth.authenticated) {
@@ -438,7 +238,7 @@ function createTokenAuthProxy(params: {
     }
 
     const authCookie = auth.viaToken
-      ? createAuthCookie(createSessionValue(cookieSecret))
+      ? createAuthCookie(createSessionValue(cookieSecret), SESSION_COOKIE_NAME)
       : undefined;
     proxyAuthenticatedHttpRequest({
       req,
@@ -461,6 +261,8 @@ function createTokenAuthProxy(params: {
       req,
       cookieSecret,
       authToken: params.authToken,
+      sessionCookieName: SESSION_COOKIE_NAME,
+      tokenQueryParam: TOKEN_QUERY_PARAM,
     });
 
     if (!auth.authenticated) {
@@ -471,7 +273,7 @@ function createTokenAuthProxy(params: {
 
     const upstreamSocket = createConnection(params.upstreamPort, LOCAL_HOST, () => {
       const headers: Record<string, string | string[] | undefined> = {
-        ...removeHopByHopHeaders(req.headers),
+        ...removeHopByHopHeaders(req.headers, SESSION_COOKIE_NAME),
         host: `localhost:${params.upstreamPort}`,
         connection: 'Upgrade',
         upgrade: req.headers.upgrade,

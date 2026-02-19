@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process';
-import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import {
   createServer as createHttpServer,
@@ -12,6 +12,21 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
+import {
+  type AuthenticationCheck,
+  appendBoundedOutputBuffer,
+  authenticateRequest as authenticateProxyRequest,
+  createSessionValue,
+  createAuthCookie as createSharedAuthCookie,
+  extractTryCloudflareUrl,
+  matchesToken,
+  mergeSetCookieValues,
+  parseCookieHeader,
+  removeHopByHopHeaders,
+  signValue,
+  toSafeRedirectPath,
+  verifySessionValue,
+} from '../shared/proxy-utils';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 
 const execFileAsync = promisify(execFile);
@@ -37,18 +52,6 @@ interface RunProxyCommandParams {
 
 type ProcessRecord = { name: string; proc: ChildProcess };
 
-interface ProxySession {
-  id: string;
-  signature: string;
-}
-
-interface AuthenticationCheck {
-  authenticated: boolean;
-  viaToken: boolean;
-  invalidToken: boolean;
-  sanitizedPath: string;
-}
-
 function generatePassword(length = PASSWORD_LENGTH): string {
   let output = '';
   for (let i = 0; i < length; i += 1) {
@@ -62,10 +65,6 @@ function generateMagicToken(): string {
   return randomBytes(16).toString('hex');
 }
 
-function signValue(value: string, secret: Buffer): string {
-  return createHmac('sha256', secret).update(value).digest('hex');
-}
-
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -76,105 +75,7 @@ function escapeHtml(value: string): string {
 }
 
 function matchesMagicToken(candidate: string, expected: string): boolean {
-  const candidateBuffer = Buffer.from(candidate, 'utf8');
-  const expectedBuffer = Buffer.from(expected, 'utf8');
-
-  if (candidateBuffer.length !== expectedBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(candidateBuffer, expectedBuffer);
-}
-
-function createSessionValue(secret: Buffer): ProxySession {
-  const id = randomBytes(16).toString('hex');
-  return { id, signature: signValue(id, secret) };
-}
-
-function verifySessionValue(value: string | undefined, secret: Buffer): boolean {
-  if (!value) {
-    return false;
-  }
-
-  const separator = value.indexOf('.');
-  if (separator <= 0 || separator === value.length - 1) {
-    return false;
-  }
-
-  const id = value.slice(0, separator);
-  const providedSignature = value.slice(separator + 1);
-  const expectedSignature = signValue(id, secret);
-
-  const expectedBuffer = Buffer.from(expectedSignature);
-  const providedBuffer = Buffer.from(providedSignature);
-
-  if (expectedBuffer.length !== providedBuffer.length) {
-    return false;
-  }
-
-  return timingSafeEqual(expectedBuffer, providedBuffer);
-}
-
-function parseCookieHeader(cookieHeader: string | undefined): Record<string, string> {
-  if (!cookieHeader) {
-    return {};
-  }
-
-  return cookieHeader
-    .split(';')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .reduce<Record<string, string>>((acc, part) => {
-      const separator = part.indexOf('=');
-      if (separator <= 0) {
-        return acc;
-      }
-      const key = part.slice(0, separator).trim();
-      const value = part.slice(separator + 1).trim();
-      if (key) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {});
-}
-
-function extractTryCloudflareUrl(input: string): string | null {
-  const match = input.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/gi);
-  if (!match || match.length === 0) {
-    return null;
-  }
-  return match[0] ?? null;
-}
-
-function appendBoundedOutputBuffer(
-  existing: string,
-  chunk: string,
-  maxChars = MAX_TUNNEL_OUTPUT_BUFFER_CHARS
-): string {
-  const combined = `${existing}${chunk}`;
-  if (combined.length <= maxChars) {
-    return combined;
-  }
-  return combined.slice(-maxChars);
-}
-
-function sanitizePathWithoutToken(rawUrl: string): string {
-  const parsed = new URL(rawUrl, 'http://proxy.local');
-  parsed.searchParams.delete('token');
-  const search = parsed.searchParams.toString();
-  return `${parsed.pathname}${search ? `?${search}` : ''}`;
-}
-
-function toSafeRedirectPath(path: string): string {
-  if (
-    !path.startsWith('/') ||
-    path.startsWith('//') ||
-    path.startsWith('/\\') ||
-    /[\r\n]/.test(path)
-  ) {
-    return '/';
-  }
-  return path;
+  return matchesToken(candidate, expected);
 }
 
 function matchesPassword(candidate: string, expected: string): boolean {
@@ -579,17 +480,6 @@ function parseFormBody(rawBody: string): Record<string, string> {
   return output;
 }
 
-function mergeSetCookieValues(
-  existing: string | string[] | number | undefined,
-  incoming: string | string[]
-): string[] {
-  const existingValues =
-    typeof existing === 'undefined' ? [] : Array.isArray(existing) ? existing : [String(existing)];
-
-  const incomingValues = Array.isArray(incoming) ? incoming : [incoming];
-  return [...existingValues, ...incomingValues];
-}
-
 function writeRateLimitResponse(
   res: import('node:http').ServerResponse,
   retryAfterSeconds: number
@@ -609,8 +499,8 @@ function writeUnauthorizedResponse(
   res.end(createLoginPage(message));
 }
 
-function createAuthCookie(session: ProxySession): string {
-  return `${SESSION_COOKIE_NAME}=${session.id}.${session.signature}; HttpOnly; Secure; SameSite=Lax; Path=/`;
+function createAuthCookie(session: ReturnType<typeof createSessionValue>): string {
+  return createSharedAuthCookie(session, SESSION_COOKIE_NAME);
 }
 
 function authenticateRequest(params: {
@@ -618,83 +508,12 @@ function authenticateRequest(params: {
   cookieSecret: Buffer;
   magicToken: string;
 }): AuthenticationCheck {
-  const rawUrl = params.req.url || '/';
-  const parsed = new URL(rawUrl, 'http://proxy.local');
-  const sanitizedPath = sanitizePathWithoutToken(rawUrl);
-  const cookies = parseCookieHeader(params.req.headers.cookie);
-  const session = cookies[SESSION_COOKIE_NAME];
-  const hasValidSession = verifySessionValue(session, params.cookieSecret);
-
-  const token = parsed.searchParams.get('token');
-  if (token && matchesMagicToken(token, params.magicToken)) {
-    return {
-      authenticated: true,
-      viaToken: true,
-      invalidToken: false,
-      sanitizedPath,
-    };
-  }
-
-  if (token) {
-    if (hasValidSession) {
-      return {
-        authenticated: true,
-        viaToken: false,
-        invalidToken: false,
-        sanitizedPath,
-      };
-    }
-    return {
-      authenticated: false,
-      viaToken: false,
-      invalidToken: true,
-      sanitizedPath,
-    };
-  }
-
-  return {
-    authenticated: hasValidSession,
-    viaToken: false,
-    invalidToken: false,
-    sanitizedPath: rawUrl,
-  };
-}
-
-function removeHopByHopHeaders(
-  headers: IncomingMessage['headers']
-): Record<string, string | string[] | undefined> {
-  const disallowed = new Set([
-    'connection',
-    'keep-alive',
-    'proxy-authenticate',
-    'proxy-authorization',
-    'te',
-    'trailer',
-    'transfer-encoding',
-    'upgrade',
-  ]);
-
-  const cleaned: Record<string, string | string[] | undefined> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (disallowed.has(key.toLowerCase())) {
-      continue;
-    }
-
-    if (key.toLowerCase() === 'cookie' && typeof value === 'string') {
-      const cookies = parseCookieHeader(value);
-      delete cookies[SESSION_COOKIE_NAME];
-      const cookieValue = Object.entries(cookies)
-        .map(([cookieKey, cookieVal]) => `${cookieKey}=${cookieVal}`)
-        .join('; ');
-      if (cookieValue) {
-        cleaned[key] = cookieValue;
-      }
-      continue;
-    }
-
-    cleaned[key] = value;
-  }
-  return cleaned;
+  return authenticateProxyRequest({
+    req: params.req,
+    cookieSecret: params.cookieSecret,
+    authToken: params.magicToken,
+    sessionCookieName: SESSION_COOKIE_NAME,
+  });
 }
 
 async function readRequestBody(req: IncomingMessage): Promise<string> {
@@ -799,7 +618,7 @@ function proxyAuthenticatedHttpRequest(params: {
     }
   };
 
-  const upstreamHeaders = removeHopByHopHeaders(params.req.headers);
+  const upstreamHeaders = removeHopByHopHeaders(params.req.headers, SESSION_COOKIE_NAME);
 
   const upstreamRequest = httpRequest(
     {
@@ -972,7 +791,7 @@ function createAuthProxy(params: {
 
     const upstreamSocket = createConnection(params.upstreamPort, LOCAL_HOST, () => {
       const headers: Record<string, string | string[] | undefined> = {
-        ...removeHopByHopHeaders(req.headers),
+        ...removeHopByHopHeaders(req.headers, SESSION_COOKIE_NAME),
         host: `localhost:${params.upstreamPort}`,
         connection: 'Upgrade',
         upgrade: req.headers.upgrade,
@@ -1059,7 +878,11 @@ async function startCloudflaredTunnel(
     timeout.unref?.();
 
     const onData = (data: Buffer) => {
-      outputBuffer = appendBoundedOutputBuffer(outputBuffer, data.toString());
+      outputBuffer = appendBoundedOutputBuffer(
+        outputBuffer,
+        data.toString(),
+        MAX_TUNNEL_OUTPUT_BUFFER_CHARS
+      );
       const extracted = extractTryCloudflareUrl(outputBuffer);
       if (extracted && !resolvedUrl) {
         resolvedUrl = extracted;
