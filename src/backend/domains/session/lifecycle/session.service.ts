@@ -833,7 +833,7 @@ class SessionService {
       { permissionMode: startupPermissionMode },
       session
     );
-    await this.applyStartupModePreset(sessionId, handle, startupModePreset);
+    await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
@@ -847,64 +847,144 @@ class SessionService {
   private async applyStartupModePreset(
     sessionId: string,
     handle: AcpProcessHandle,
-    startupModePreset: SessionStartupModePreset | undefined
+    startupModePreset: SessionStartupModePreset | undefined,
+    workflow: string
   ): Promise<void> {
     if (!startupModePreset) {
       return;
     }
 
-    const modeOption = handle.configOptions.find((option) => option.category === 'mode');
-    if (!modeOption) {
+    const modeResult = await this.applyStartupCollaborationModePreset({
+      sessionId,
+      handle,
+      startupModePreset,
+      workflow,
+      configOptions: handle.configOptions,
+    });
+    const executionResult = await this.applyStartupExecutionModePreset({
+      sessionId,
+      handle,
+      startupModePreset,
+      workflow,
+      configOptions: modeResult.configOptions,
+    });
+    const didUpdate = modeResult.didUpdate || executionResult.didUpdate;
+
+    if (!didUpdate) {
       return;
+    }
+
+    handle.configOptions = executionResult.configOptions;
+    await this.persistAcpConfigSnapshot(sessionId, {
+      provider: handle.provider as SessionProvider,
+      providerSessionId: handle.providerSessionId,
+      configOptions: executionResult.configOptions,
+    });
+
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'config_options_update',
+      configOptions: executionResult.configOptions,
+    } as SessionDeltaEvent);
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'chat_capabilities',
+      capabilities: this.buildAcpChatBarCapabilities(handle),
+    });
+  }
+
+  private async applyStartupCollaborationModePreset(params: {
+    sessionId: string;
+    handle: AcpProcessHandle;
+    startupModePreset: SessionStartupModePreset;
+    workflow: string;
+    configOptions: SessionConfigOption[];
+  }): Promise<{ configOptions: SessionConfigOption[]; didUpdate: boolean }> {
+    const modeOption = params.configOptions.find((option) => option.category === 'mode');
+    if (!modeOption) {
+      return { configOptions: params.configOptions, didUpdate: false };
     }
 
     const availableModeValues = this.getConfigOptionValues(modeOption);
     const targetMode = this.resolveStartupModeTarget(
-      handle.provider as SessionProvider,
-      startupModePreset,
+      params.handle.provider as SessionProvider,
+      params.startupModePreset,
       availableModeValues
     );
     if (!targetMode) {
       logger.debug('Startup mode preset not available in ACP mode options', {
-        sessionId,
-        provider: handle.provider,
-        startupModePreset,
+        sessionId: params.sessionId,
+        provider: params.handle.provider,
+        workflow: params.workflow,
+        startupModePreset: params.startupModePreset,
         availableModeValues,
       });
-      return;
+      return { configOptions: params.configOptions, didUpdate: false };
     }
 
     const currentMode = modeOption.currentValue ? String(modeOption.currentValue) : null;
     if (currentMode === targetMode) {
-      return;
+      return { configOptions: params.configOptions, didUpdate: false };
     }
 
     try {
-      const configOptions = await acpRuntimeManager.setSessionMode(sessionId, targetMode);
-      handle.configOptions = configOptions;
-
-      await this.persistAcpConfigSnapshot(sessionId, {
-        provider: handle.provider as SessionProvider,
-        providerSessionId: handle.providerSessionId,
-        configOptions,
-      });
-
-      sessionDomainService.emitDelta(sessionId, {
-        type: 'config_options_update',
-        configOptions,
-      } as SessionDeltaEvent);
-      sessionDomainService.emitDelta(sessionId, {
-        type: 'chat_capabilities',
-        capabilities: this.buildAcpChatBarCapabilities(handle),
-      });
+      const configOptions = await acpRuntimeManager.setSessionMode(params.sessionId, targetMode);
+      return { configOptions, didUpdate: true };
     } catch (error) {
       logger.warn('Failed applying startup mode preset', {
-        sessionId,
-        provider: handle.provider,
-        startupModePreset,
+        sessionId: params.sessionId,
+        provider: params.handle.provider,
+        workflow: params.workflow,
+        startupModePreset: params.startupModePreset,
         targetMode,
         error: error instanceof Error ? error.message : String(error),
       });
+      return { configOptions: params.configOptions, didUpdate: false };
+    }
+  }
+
+  private async applyStartupExecutionModePreset(params: {
+    sessionId: string;
+    handle: AcpProcessHandle;
+    startupModePreset: SessionStartupModePreset;
+    workflow: string;
+    configOptions: SessionConfigOption[];
+  }): Promise<{ configOptions: SessionConfigOption[]; didUpdate: boolean }> {
+    const executionModeOption = params.configOptions.find(
+      (option) => option.id === 'execution_mode' || option.category === 'permission'
+    );
+    const targetExecutionMode = this.resolveStartupExecutionModeTarget(
+      params.handle.provider as SessionProvider,
+      params.workflow,
+      params.startupModePreset,
+      executionModeOption
+    );
+    if (!(executionModeOption && targetExecutionMode)) {
+      return { configOptions: params.configOptions, didUpdate: false };
+    }
+
+    const currentExecutionMode = executionModeOption.currentValue
+      ? String(executionModeOption.currentValue)
+      : null;
+    if (currentExecutionMode === targetExecutionMode) {
+      return { configOptions: params.configOptions, didUpdate: false };
+    }
+
+    try {
+      const configOptions = await acpRuntimeManager.setConfigOption(
+        params.sessionId,
+        executionModeOption.id,
+        targetExecutionMode
+      );
+      return { configOptions, didUpdate: true };
+    } catch (error) {
+      logger.warn('Failed applying startup execution-mode preset', {
+        sessionId: params.sessionId,
+        provider: params.handle.provider,
+        workflow: params.workflow,
+        startupModePreset: params.startupModePreset,
+        targetExecutionMode,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { configOptions: params.configOptions, didUpdate: false };
     }
   }
 
@@ -936,6 +1016,33 @@ class SessionService {
       'full-access',
       'code',
     ]);
+  }
+
+  private resolveStartupExecutionModeTarget(
+    provider: SessionProvider,
+    workflow: string,
+    startupModePreset: SessionStartupModePreset,
+    executionModeOption: SessionConfigOption | undefined
+  ): string | null {
+    if (
+      provider !== 'CODEX' ||
+      workflow !== 'ratchet' ||
+      startupModePreset !== 'non_interactive' ||
+      !executionModeOption
+    ) {
+      return null;
+    }
+
+    const availableValues = this.getConfigOptionValues(executionModeOption);
+    const yoloByValue = this.findModeValue(availableValues, ['["never","danger-full-access"]']);
+    if (yoloByValue) {
+      return yoloByValue;
+    }
+
+    const yoloByName = this.getSelectOptions(executionModeOption).find((option) =>
+      /yolo/i.test(option.name ?? '')
+    );
+    return yoloByName?.value ?? null;
   }
 
   private findModeValue(
