@@ -98,7 +98,7 @@ export const fullPRDetailsSchema = z.object({
         id: z.string(),
         author: z.object({ login: z.string() }),
         state: z.string(),
-        submittedAt: z.string(),
+        submittedAt: z.string().nullable(),
         body: z.string().optional(),
       })
       .passthrough()

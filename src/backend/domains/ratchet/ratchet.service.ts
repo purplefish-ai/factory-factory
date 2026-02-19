@@ -1321,7 +1321,7 @@ class RatchetService extends EventEmitter {
 
   private computeLatestReviewActivityAtMs(
     prDetails: {
-      reviews: Array<{ submittedAt: string; author: { login: string } }>;
+      reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
       comments: Array<{ updatedAt: string; author: { login: string } }>;
     },
     reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
@@ -1343,7 +1343,11 @@ class RatchetService extends EventEmitter {
     ];
 
     const timestamps = entries
-      .filter((entry) => !this.isIgnoredReviewAuthor(entry.authorLogin, authenticatedUsername))
+      .filter(
+        (entry): entry is { authorLogin: string; timestamp: string } =>
+          entry.timestamp !== null &&
+          !this.isIgnoredReviewAuthor(entry.authorLogin, authenticatedUsername)
+      )
       .map((entry) => Date.parse(entry.timestamp))
       .filter((timestamp) => Number.isFinite(timestamp));
 

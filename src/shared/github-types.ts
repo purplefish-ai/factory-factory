@@ -34,7 +34,7 @@ export interface GitHubReview {
   id: string;
   author: { login: string };
   state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'PENDING' | 'DISMISSED';
-  submittedAt: string;
+  submittedAt: string | null;
   body?: string;
 }
 

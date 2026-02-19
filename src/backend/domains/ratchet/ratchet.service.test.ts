@@ -798,7 +798,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     const latestActivity = unsafeCoerce<{
       computeLatestReviewActivityAtMs: (
         prDetails: {
-          reviews: Array<{ submittedAt: string; author: { login: string } }>;
+          reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
           comments: Array<{ updatedAt: string; author: { login: string } }>;
         },
         reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
@@ -983,7 +983,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
   describe('computeLatestReviewActivityAtMs edge cases', () => {
     type PRDetails = {
-      reviews: Array<{ submittedAt: string; author: { login: string } }>;
+      reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
       comments: Array<{ updatedAt: string; author: { login: string } }>;
     };
     type ReviewComment = { updatedAt: string; author: { login: string } };
@@ -1032,6 +1032,18 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         null
       );
       expect(result).toBe(new Date('2026-01-01T00:00:00Z').getTime());
+    });
+
+    it('ignores reviews that have null submittedAt', () => {
+      const result = callCompute(
+        {
+          reviews: [{ submittedAt: null, author: { login: 'reviewer' } }],
+          comments: [{ updatedAt: '2026-01-02T00:00:00Z', author: { login: 'commenter' } }],
+        },
+        [],
+        null
+      );
+      expect(result).toBe(new Date('2026-01-02T00:00:00Z').getTime());
     });
 
     it('returns the latest timestamp across all sources', () => {
