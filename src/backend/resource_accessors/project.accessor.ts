@@ -101,6 +101,8 @@ function deriveSlugFromPath(repoPath: string): string {
  * - git@github.com:owner/repo.git
  * - https://github.com/owner/repo.git
  * - https://github.com/owner/repo
+ * - https://token@github.com/owner/repo.git (authenticated)
+ * - https://x-access-token:TOKEN@github.com/owner/repo.git (GitHub token)
  * Returns null if the URL is not a GitHub URL or cannot be parsed.
  */
 export function parseGitHubRemoteUrl(remoteUrl: string): { owner: string; repo: string } | null {
@@ -112,8 +114,11 @@ export function parseGitHubRemoteUrl(remoteUrl: string): { owner: string; repo: 
   }
 
   // HTTPS format: https://github.com/owner/repo.git or https://github.com/owner/repo
+  // Also handles authenticated URLs: https://[user[:pass]@]github.com/owner/repo.git
   // Repo name: alphanumeric, hyphens, underscores, dots (no slashes)
-  const httpsMatch = remoteUrl.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/);
+  const httpsMatch = remoteUrl.match(
+    /^https?:\/\/(?:[^@]+@)?github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/
+  );
   if (httpsMatch) {
     return { owner: httpsMatch[1] as string, repo: httpsMatch[2] as string };
   }
