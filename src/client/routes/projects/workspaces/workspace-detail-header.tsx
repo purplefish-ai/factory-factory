@@ -854,6 +854,7 @@ export function WorkspaceDetailHeaderSlot({
             </>
           ) : (
             <>
+              <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
               <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
               <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
               <WorkspaceBranchLink workspace={workspace} />
@@ -877,7 +878,6 @@ export function WorkspaceDetailHeaderSlot({
                 archivePending={archivePending}
                 onArchiveRequest={onArchiveRequest}
               />
-              <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
               <ToggleRightPanelButton />
             </>
           )}
