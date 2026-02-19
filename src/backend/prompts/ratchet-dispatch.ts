@@ -28,6 +28,7 @@ Execute autonomously in this order:
 5. Push your changes.
 6. Comment briefly on addressed review comments and resolve them.
 7. Request re-review from reviewers whose comments you addressed using \`gh pr edit {{PR_NUMBER}} --add-reviewer <login>\`.
+8. If you addressed any review comments and pushed changes, post a single PR comment tagging each reviewer whose comments you addressed asking them to re-review. Use \`gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"\`.
 
 If review feedback is non-actionable, explain why in session output and exit without code changes.
 

@@ -28,6 +28,7 @@ Required Sequence:
 5. Push your changes.
 6. Comment briefly on addressed review comments and resolve them. IMPORTANT: When responding to a comment, explicitly @ mention the person who made the comment (e.g., "@username - fixed as suggested").
 7. Request re-review from reviewers whose comments you addressed using `gh pr edit {{PR_NUMBER}} --add-reviewer <login>`.
+8. If you addressed any review comments and pushed changes, post a single PR comment tagging each reviewer whose comments you addressed asking them to re-review. Use `gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"`. Include all addressed reviewers in one comment.
 
 Completion Criteria:
 - Branch includes latest `main`.
@@ -35,3 +36,4 @@ Completion Criteria:
 - CI and local verification are healthy, or best effort is documented in session output.
 - Addressed review comments are replied to and resolved.
 - Re-review has been requested from reviewers whose comments were addressed.
+- If review comments were addressed, a PR comment has been posted tagging reviewers to re-review.

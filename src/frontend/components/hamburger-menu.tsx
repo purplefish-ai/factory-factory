@@ -130,7 +130,7 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
                 }`}
               >
                 <Settings className="h-4 w-4" />
-                <span>Admin</span>
+                <span>Admin Dashboard</span>
               </Link>
             </SheetClose>
             <ThemeToggle />
