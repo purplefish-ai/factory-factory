@@ -33,6 +33,8 @@ interface KanbanCardProps {
   isTogglePending?: boolean;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   isArchivePending?: boolean;
+  onCreatePr?: (workspaceId: string) => void;
+  isCreatingPr?: boolean;
 }
 
 function CardStatusIndicator({
@@ -216,6 +218,10 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const hasGitContext = showPR || Boolean(workspace.branchName);
   const hasPendingRequest = Boolean(workspace.pendingRequestType);
   const isSettingUp = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
+  const showCreatePr =
+    !(isArchived || workspace.isWorking) &&
+    workspace.hasHadSessions === true &&
+    (workspace.prState === 'NONE' || workspace.prState === 'CLOSED');
   return {
     showPR,
     isArchived,
@@ -224,6 +230,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     hasGitContext,
     hasPendingRequest,
     isSettingUp,
+    showCreatePr,
   };
 }
 
@@ -234,6 +241,8 @@ export function KanbanCard({
   isTogglePending = false,
   onArchive,
   isArchivePending = false,
+  onCreatePr,
+  isCreatingPr = false,
 }: KanbanCardProps) {
   const {
     showPR,
@@ -243,9 +252,10 @@ export function KanbanCard({
     hasGitContext,
     hasPendingRequest,
     isSettingUp,
+    showCreatePr,
   } = deriveCardState(workspace);
 
-  const hasBody = hasGitContext || hasPendingRequest || isSettingUp;
+  const hasBody = hasGitContext || hasPendingRequest || isSettingUp || showCreatePr;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -281,6 +291,33 @@ export function KanbanCard({
             {workspace.pendingRequestType && (
               <div className="flex items-center gap-2">
                 <PendingRequestBadge type={workspace.pendingRequestType} />
+              </div>
+            )}
+            {showCreatePr && onCreatePr && (
+              <div className="flex items-center">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 gap-1 text-xs px-2"
+                      disabled={isCreatingPr}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onCreatePr(workspace.id);
+                      }}
+                    >
+                      {isCreatingPr ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <GitPullRequest className="h-3 w-3" />
+                      )}
+                      Create PR
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Create a pull request for this branch</TooltipContent>
+                </Tooltip>
               </div>
             )}
           </CardContent>

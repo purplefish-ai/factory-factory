@@ -41,6 +41,7 @@ export function mapSnapshotEntryToKanbanWorkspace(
     runScriptStatus: entry.runScriptStatus,
     kanbanColumn: entry.kanbanColumn,
     isWorking: entry.isWorking,
+    hasHadSessions: entry.hasHadSessions,
     ratchetButtonAnimated: entry.ratchetButtonAnimated,
     flowPhase: entry.flowPhase,
     pendingRequestType: entry.pendingRequestType,

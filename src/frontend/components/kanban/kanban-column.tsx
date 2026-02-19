@@ -42,6 +42,8 @@ interface KanbanColumnProps {
   togglingWorkspaceId?: string | null;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   archivingWorkspaceId?: string | null;
+  onCreatePr?: (workspaceId: string) => void;
+  creatingPrWorkspaceId?: string | null;
 }
 
 export function KanbanColumn({
@@ -52,6 +54,8 @@ export function KanbanColumn({
   togglingWorkspaceId,
   onArchive,
   archivingWorkspaceId,
+  onCreatePr,
+  creatingPrWorkspaceId,
 }: KanbanColumnProps) {
   const isEmpty = workspaces.length === 0;
 
@@ -83,6 +87,8 @@ export function KanbanColumn({
                 isTogglePending={togglingWorkspaceId === workspace.id}
                 onArchive={onArchive}
                 isArchivePending={archivingWorkspaceId === workspace.id}
+                onCreatePr={onCreatePr}
+                isCreatingPr={creatingPrWorkspaceId === workspace.id}
               />
             </div>
           ))

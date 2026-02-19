@@ -62,6 +62,8 @@ export function KanbanBoard() {
     togglingWorkspaceId,
     archiveWorkspace,
     archivingWorkspaceId,
+    createWorkspacePr,
+    creatingPrWorkspaceId,
     showInlineForm,
   } = useKanban();
 
@@ -202,6 +204,8 @@ export function KanbanBoard() {
               togglingWorkspaceId={togglingWorkspaceId}
               onArchive={archiveWorkspace}
               archivingWorkspaceId={archivingWorkspaceId}
+              onCreatePr={createWorkspacePr}
+              creatingPrWorkspaceId={creatingPrWorkspaceId}
             />
           )}
         </div>
@@ -236,6 +240,8 @@ export function KanbanBoard() {
             togglingWorkspaceId={togglingWorkspaceId}
             onArchive={archiveWorkspace}
             archivingWorkspaceId={archivingWorkspaceId}
+            onCreatePr={createWorkspacePr}
+            creatingPrWorkspaceId={creatingPrWorkspaceId}
           />
         );
       })}

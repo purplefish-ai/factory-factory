@@ -137,7 +137,11 @@ export function WorkspaceDetailContainer() {
 
   const { data: hasChanges } = trpc.workspace.hasChanges.useQuery(
     { workspaceId },
-    { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
+    {
+      enabled:
+        workspace?.hasHadSessions === true &&
+        (workspace?.prState === 'NONE' || workspace?.prState === 'CLOSED'),
+    }
   );
 
   const { workspaceInitStatus, isScriptFailed } = useWorkspaceInitStatus(

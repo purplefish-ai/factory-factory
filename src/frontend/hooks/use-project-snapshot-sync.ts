@@ -117,6 +117,7 @@ function mergeWorkspaceDetailFromSnapshot(
     ratchetState: entry.ratchetState,
     runScriptStatus: entry.runScriptStatus,
     isWorking: entry.isWorking,
+    hasHadSessions: entry.hasHadSessions,
     pendingRequestType: entry.pendingRequestType,
     sessionSummaries: entry.sessionSummaries,
     sidebarStatus: entry.sidebarStatus,

@@ -1,6 +1,10 @@
 import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
+
+const CREATE_PR_PROMPT =
+  'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.';
 
 /** Normalized issue type that works for both GitHub and Linear providers. */
 export interface KanbanIssue {
@@ -85,6 +89,8 @@ interface KanbanContextValue {
   togglingWorkspaceId: string | null;
   archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
   archivingWorkspaceId: string | null;
+  createWorkspacePr: (workspaceId: string) => Promise<void>;
+  creatingPrWorkspaceId: string | null;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
 }
@@ -113,6 +119,7 @@ export function KanbanProvider({
   children,
 }: KanbanProviderProps) {
   const utils = trpc.useUtils();
+  const navigate = useNavigate();
   const isLinear = issueProvider === 'LINEAR';
 
   const {
@@ -151,8 +158,11 @@ export function KanbanProvider({
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
   const archiveMutation = trpc.workspace.archive.useMutation();
+  const createSessionMutation = trpc.session.createSession.useMutation();
+  const startSessionMutation = trpc.session.startSession.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
   const [archivingWorkspaceId, setArchivingWorkspaceId] = useState<string | null>(null);
+  const [creatingPrWorkspaceId, setCreatingPrWorkspaceId] = useState<string | null>(null);
   const [showInlineForm, setShowInlineForm] = useState(false);
 
   const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
@@ -184,6 +194,22 @@ export function KanbanProvider({
       await refetchWorkspaces();
     } finally {
       setArchivingWorkspaceId(null);
+    }
+  };
+
+  const createWorkspacePr = async (workspaceId: string) => {
+    setCreatingPrWorkspaceId(workspaceId);
+    try {
+      const session = await createSessionMutation.mutateAsync({
+        workspaceId,
+        workflow: 'followup',
+        name: 'Create Pull Request',
+        initialMessage: CREATE_PR_PROMPT,
+      });
+      await startSessionMutation.mutateAsync({ id: session.id, initialPrompt: '' });
+      await navigate(`/projects/${projectSlug}/workspaces/${workspaceId}`);
+    } finally {
+      setCreatingPrWorkspaceId(null);
     }
   };
 
@@ -244,6 +270,8 @@ export function KanbanProvider({
         togglingWorkspaceId,
         archiveWorkspace,
         archivingWorkspaceId,
+        createWorkspacePr,
+        creatingPrWorkspaceId,
         showInlineForm,
         setShowInlineForm,
       }}
