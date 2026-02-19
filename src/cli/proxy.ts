@@ -26,7 +26,7 @@ import {
   signValue,
   toSafeRedirectPath,
   verifySessionValue,
-} from '../shared/proxy-utils';
+} from '@/shared/proxy-utils';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 
 const execFileAsync = promisify(execFile);
