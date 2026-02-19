@@ -18,6 +18,7 @@ import {
   SERVICE_CONCURRENCY,
   SERVICE_INTERVAL_MS,
   SERVICE_THRESHOLDS,
+  SERVICE_TIMEOUT_MS,
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
@@ -119,6 +120,7 @@ class RatchetService extends EventEmitter {
   private monitorLoop: Promise<void> | null = null;
   private sleepTimeout: NodeJS.Timeout | null = null;
   private sleepResolve: (() => void) | null = null;
+  private workspaceCheckTimeoutMs = SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private readonly inFlightWorkspaceChecks = new Map<string, Promise<WorkspaceRatchetResult>>();
   private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
@@ -260,11 +262,7 @@ class RatchetService extends EventEmitter {
     }
 
     const results = await Promise.all(
-      workspaces.map((workspace) =>
-        this.checkLimit(() =>
-          this.runWorkspaceCheck(workspace.id, () => this.processWorkspace(workspace))
-        )
-      )
+      workspaces.map((workspace) => this.checkLimit(() => this.runWorkspaceCheckSafely(workspace)))
     );
 
     const stateChanges = results.filter((r) => r.previousState !== r.newState).length;
@@ -291,7 +289,50 @@ class RatchetService extends EventEmitter {
       return null;
     }
 
-    return this.runWorkspaceCheck(workspace.id, () => this.processWorkspace(workspace));
+    return this.runWorkspaceCheckSafely(workspace);
+  }
+
+  private async runWorkspaceCheckSafely(
+    workspace: WorkspaceWithPR
+  ): Promise<WorkspaceRatchetResult> {
+    const checkPromise = this.runWorkspaceCheck(workspace.id, () =>
+      this.processWorkspace(workspace)
+    );
+
+    try {
+      return await this.withWorkspaceCheckTimeout(workspace, checkPromise);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Ratchet workspace check failed', error as Error, {
+        workspaceId: workspace.id,
+        prUrl: workspace.prUrl,
+      });
+      return {
+        workspaceId: workspace.id,
+        previousState: workspace.ratchetState,
+        newState: workspace.ratchetState,
+        action: { type: 'ERROR', error: errorMessage },
+      };
+    }
+  }
+
+  private withWorkspaceCheckTimeout(
+    workspace: WorkspaceWithPR,
+    checkPromise: Promise<WorkspaceRatchetResult>
+  ): Promise<WorkspaceRatchetResult> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (this.inFlightWorkspaceChecks.get(workspace.id) === checkPromise) {
+          this.inFlightWorkspaceChecks.delete(workspace.id);
+        }
+        reject(new Error(`Workspace check timed out after ${this.workspaceCheckTimeoutMs}ms`));
+      }, this.workspaceCheckTimeoutMs);
+      timeout.unref?.();
+
+      checkPromise.then(resolve, reject).finally(() => {
+        clearTimeout(timeout);
+      });
+    });
   }
 
   private runWorkspaceCheck(
