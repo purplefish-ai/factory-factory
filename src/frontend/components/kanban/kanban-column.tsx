@@ -8,6 +8,8 @@ export type UIKanbanColumnId = 'ISSUES' | KanbanColumnType;
 export interface ColumnConfig {
   id: UIKanbanColumnId;
   label: string;
+  /** Shorter label used in mobile column pills */
+  shortLabel?: string;
   description: string;
 }
 
@@ -23,6 +25,7 @@ export function getKanbanColumns(issueProvider: string): ColumnConfig[] {
     {
       id: 'ISSUES',
       label: issueProvider === 'LINEAR' ? 'Todo · Linear' : 'Todo · GitHub',
+      shortLabel: 'Todo',
       description: 'Issues assigned to you',
     },
     { id: 'WORKING', label: 'Working', description: 'Agent is working' },

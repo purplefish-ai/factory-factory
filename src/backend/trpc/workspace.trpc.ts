@@ -1,4 +1,4 @@
-import { WorkspaceProviderSelection } from '@prisma-gen/client';
+import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { z } from 'zod';
 import { ratchetService } from '@/backend/domains/ratchet';
 import { sessionService } from '@/backend/domains/session';
@@ -36,6 +36,8 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     description: z.string().optional(),
     branchName: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
+    initialPrompt: z.string().optional(),
+    provider: z.nativeEnum(SessionProvider).optional(),
   }),
   z.object({
     type: z.literal('RESUME_BRANCH'),
