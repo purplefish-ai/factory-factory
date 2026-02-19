@@ -1,11 +1,17 @@
 import type { Workspace } from '@prisma-gen/browser';
-import { Archive, GitBranch, GitPullRequest, Play } from 'lucide-react';
+import { Archive, GitBranch, GitPullRequest, Loader2, Play } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { RatchetToggleButton, WorkspaceStatusBadge } from '@/components/workspace';
+import {
+  ArchiveWorkspaceDialog,
+  RatchetToggleButton,
+  WorkspaceStatusBadge,
+} from '@/components/workspace';
 import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn, WorkspaceStatus } from '@/shared/core';
@@ -25,6 +31,8 @@ interface KanbanCardProps {
   projectSlug: string;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   isTogglePending?: boolean;
+  onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  isArchivePending?: boolean;
 }
 
 function CardStatusIndicator({
@@ -111,11 +119,60 @@ function CardMetadataRow({
   );
 }
 
+function CardArchiveButton({
+  workspaceId,
+  isPending,
+  onArchive,
+}: {
+  workspaceId: string;
+  isPending: boolean;
+  onArchive: (workspaceId: string, commitUncommitted: boolean) => void;
+}) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDialogOpen(true);
+  };
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive shrink-0"
+            onClick={handleClick}
+            disabled={isPending}
+          >
+            {isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Archive className="h-3 w-3" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Archive workspace</TooltipContent>
+      </Tooltip>
+      <ArchiveWorkspaceDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        hasUncommitted={false}
+        onConfirm={(commitUncommitted) => onArchive(workspaceId, commitUncommitted)}
+      />
+    </>
+  );
+}
+
 export function KanbanCard({
   workspace,
   projectSlug,
   onToggleRatcheting,
   isTogglePending = false,
+  onArchive,
+  isArchivePending = false,
 }: KanbanCardProps) {
   const showPR = Boolean(workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl);
   const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
@@ -133,7 +190,7 @@ export function KanbanCard({
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
         className={cn(
-          'cursor-pointer hover:border-primary/50 transition-colors overflow-hidden',
+          'group cursor-pointer hover:border-primary/50 transition-colors overflow-hidden relative',
           workspace.isWorking && 'border-brand/50 bg-brand/5',
           workspace.pendingRequestType &&
             'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
@@ -162,6 +219,13 @@ export function KanbanCard({
                 status={workspace.status}
                 errorMessage={workspace.initErrorMessage}
               />
+              {!isArchived && onArchive && (
+                <CardArchiveButton
+                  workspaceId={workspace.id}
+                  isPending={isArchivePending}
+                  onArchive={onArchive}
+                />
+              )}
             </div>
           </div>
         </CardHeader>

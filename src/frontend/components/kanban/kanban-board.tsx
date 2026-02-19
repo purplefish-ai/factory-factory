@@ -48,6 +48,8 @@ export function KanbanBoard() {
     refetch,
     toggleWorkspaceRatcheting,
     togglingWorkspaceId,
+    archiveWorkspace,
+    archivingWorkspaceId,
   } = useKanban();
 
   const isMobile = useIsMobile();
@@ -178,6 +180,8 @@ export function KanbanBoard() {
               projectSlug={projectSlug}
               onToggleRatcheting={toggleWorkspaceRatcheting}
               togglingWorkspaceId={togglingWorkspaceId}
+              onArchive={archiveWorkspace}
+              archivingWorkspaceId={archivingWorkspaceId}
             />
           )}
         </div>
@@ -210,6 +214,8 @@ export function KanbanBoard() {
             projectSlug={projectSlug}
             onToggleRatcheting={toggleWorkspaceRatcheting}
             togglingWorkspaceId={togglingWorkspaceId}
+            onArchive={archiveWorkspace}
+            archivingWorkspaceId={archivingWorkspaceId}
           />
         );
       })}
