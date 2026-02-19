@@ -74,6 +74,8 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
   const logger = createLogger('server');
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
+  const REQUESTED_HOST = process.env.BACKEND_HOST?.trim() || undefined;
+  const ENDPOINT_HOST = REQUESTED_HOST ?? 'localhost';
   let actualPort: number = REQUESTED_PORT;
 
   const app = express();
@@ -285,7 +287,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       }
 
       return new Promise((resolve, reject) => {
-        server.listen(actualPort, async () => {
+        server.listen(actualPort, REQUESTED_HOST, async () => {
           logger.info('Backend server started', {
             port: actualPort,
             environment: configService.getEnvironment(),
@@ -318,16 +320,16 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           ratchetService.start();
 
           logger.info('Server endpoints available', {
-            server: `http://localhost:${actualPort}`,
-            health: `http://localhost:${actualPort}/health`,
-            healthAll: `http://localhost:${actualPort}/health/all`,
-            trpc: `http://localhost:${actualPort}/api/trpc`,
-            wsChat: `ws://localhost:${actualPort}/chat`,
-            wsTerminal: `ws://localhost:${actualPort}/terminal`,
-            wsSnapshots: `ws://localhost:${actualPort}/snapshots`,
+            server: `http://${ENDPOINT_HOST}:${actualPort}`,
+            health: `http://${ENDPOINT_HOST}:${actualPort}/health`,
+            healthAll: `http://${ENDPOINT_HOST}:${actualPort}/health/all`,
+            trpc: `http://${ENDPOINT_HOST}:${actualPort}/api/trpc`,
+            wsChat: `ws://${ENDPOINT_HOST}:${actualPort}/chat`,
+            wsTerminal: `ws://${ENDPOINT_HOST}:${actualPort}/terminal`,
+            wsSnapshots: `ws://${ENDPOINT_HOST}:${actualPort}/snapshots`,
           });
 
-          resolve(`http://localhost:${actualPort}`);
+          resolve(`http://${ENDPOINT_HOST}:${actualPort}`);
         });
 
         server.on('error', (error) => {

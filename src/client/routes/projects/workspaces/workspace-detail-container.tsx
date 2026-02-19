@@ -116,6 +116,19 @@ export function WorkspaceDetailContainer() {
   const { workspace, workspaceLoading, sessions, initialDbSessionId, maxSessions } =
     useWorkspaceData({ workspaceId: workspaceId });
 
+  useEffect(() => {
+    if (workspace?.status !== 'ARCHIVED') {
+      return;
+    }
+
+    if (slug) {
+      void navigate(`/projects/${slug}`, { replace: true });
+      return;
+    }
+
+    void navigate('/projects', { replace: true });
+  }, [workspace?.status, slug, navigate]);
+
   const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState } =
     useWorkspacePanel();
   const { data: userSettings } = trpc.userSettings.get.useQuery();
