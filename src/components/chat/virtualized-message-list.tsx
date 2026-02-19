@@ -254,7 +254,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       // Pin to real bottom after measurement/layout settles.
       newMessagePinRafRef.current = requestAnimationFrame(() => {
         newMessagePinRafRef.current = null;
-        if (!(shouldPinAfterAppend && isNearBottomRef.current) || loadingSessionRef.current) {
+        if (!isNearBottomRef.current || loadingSessionRef.current) {
           return;
         }
         stickToBottom();
