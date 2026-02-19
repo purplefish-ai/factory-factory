@@ -75,6 +75,7 @@ interface FileChangeItemProps {
   onClick: () => void;
   statusCode?: string;
   showIndicatorDot?: boolean;
+  indicatorLabel?: string;
 }
 
 export const FileChangeItem = memo(function FileChangeItem({
@@ -83,6 +84,7 @@ export const FileChangeItem = memo(function FileChangeItem({
   onClick,
   statusCode,
   showIndicatorDot = false,
+  indicatorLabel = 'Staged or not pushed to remote',
 }: FileChangeItemProps) {
   const statusColor = getStatusColorClass(kind);
   const fileName = path.split('/').pop() ?? path;
@@ -97,7 +99,7 @@ export const FileChangeItem = memo(function FileChangeItem({
         'hover:bg-muted/50 rounded-md transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
-      title={`${getStatusLabel(kind)}: ${path}${showIndicatorDot ? ' (staged or not pushed)' : ''}`}
+      title={`${getStatusLabel(kind)}: ${path}${showIndicatorDot ? ` (${indicatorLabel})` : ''}`}
     >
       <span className={statusColor}>{getStatusIcon(kind)}</span>
       <span className="flex-1 truncate">
@@ -105,10 +107,7 @@ export const FileChangeItem = memo(function FileChangeItem({
         {dirPath && <span className="text-muted-foreground ml-1 text-xs">{dirPath}</span>}
       </span>
       {showIndicatorDot && (
-        <span
-          className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0"
-          title="Staged or not pushed"
-        />
+        <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" title={indicatorLabel} />
       )}
       {statusCode && (
         <span className={cn('text-xs font-mono uppercase', statusColor)}>{statusCode}</span>

@@ -34,8 +34,54 @@ interface CombinedChangesPanelProps {
 interface CombinedChangesContentProps {
   entries: ChangeListEntry[];
   noMergeBase: boolean;
+  indicatorLabel: string;
   partialDataWarning?: string;
   onFileClick: (path: string) => void;
+}
+
+const EMPTY_DIFF_SNAPSHOT = {
+  added: [] as DiffFile[],
+  modified: [] as DiffFile[],
+  deleted: [] as DiffFile[],
+  noMergeBase: false,
+};
+
+function getDiffSnapshot(
+  diffData:
+    | { added: DiffFile[]; modified: DiffFile[]; deleted: DiffFile[]; noMergeBase: boolean }
+    | undefined,
+  diffError: unknown
+) {
+  if (diffError) {
+    return EMPTY_DIFF_SNAPSHOT;
+  }
+  return diffData ?? EMPTY_DIFF_SNAPSHOT;
+}
+
+export function getPartialDataWarning(params: {
+  gitError: unknown;
+  diffError: unknown;
+  unpushedError: unknown;
+}): string | undefined {
+  if (params.gitError && params.diffError) {
+    return 'Git status and diff vs main unavailable.';
+  }
+  if (params.gitError && params.unpushedError) {
+    return 'Git status and not-pushed detection unavailable; showing diff vs main only.';
+  }
+  if (params.diffError && params.unpushedError) {
+    return 'Diff vs main and not-pushed detection unavailable; showing working tree changes only.';
+  }
+  if (params.gitError) {
+    return 'Git status unavailable; showing diff vs main only.';
+  }
+  if (params.diffError) {
+    return 'Diff vs main unavailable; showing working tree changes only.';
+  }
+  if (params.unpushedError) {
+    return 'Not-pushed detection unavailable; showing staged markers only.';
+  }
+  return undefined;
 }
 
 function NoMergeBaseState() {
@@ -50,12 +96,18 @@ function NoMergeBaseState() {
   );
 }
 
+export function getIndicatorLabel(hasUpstream: boolean): string {
+  return hasUpstream ? 'Staged or not pushed to remote' : 'Staged';
+}
+
 function ChangesDecorators({
   noMergeBase,
+  indicatorLabel,
   hasIndicatorEntries,
   partialDataWarning,
 }: {
   noMergeBase: boolean;
+  indicatorLabel: string;
   hasIndicatorEntries: boolean;
   partialDataWarning?: string;
 }) {
@@ -80,14 +132,18 @@ function ChangesDecorators({
       {hasIndicatorEntries && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />
-          <span>Staged or not pushed</span>
+          <span>{indicatorLabel}</span>
         </div>
       )}
     </div>
   );
 }
 
-function buildCombinedEntries(gitFiles: GitStatusFile[], diffFiles: DiffFile[]): ChangeListEntry[] {
+export function buildCombinedEntries(
+  gitFiles: GitStatusFile[],
+  diffFiles: DiffFile[],
+  unpushedFiles: Set<string>
+): ChangeListEntry[] {
   const gitByPath = new Map(gitFiles.map((file) => [file.path, file]));
   const diffByPath = new Map(diffFiles.map((file) => [file.path, file]));
   const allPaths = new Set([...gitByPath.keys(), ...diffByPath.keys()]);
@@ -102,7 +158,7 @@ function buildCombinedEntries(gitFiles: GitStatusFile[], diffFiles: DiffFile[]):
         path,
         kind: fileChangeKindFromGitStatus(gitFile.status),
         statusCode: gitFile.status,
-        showIndicatorDot: gitFile.staged || Boolean(diffFile),
+        showIndicatorDot: gitFile.staged || unpushedFiles.has(path),
       });
       continue;
     }
@@ -112,7 +168,7 @@ function buildCombinedEntries(gitFiles: GitStatusFile[], diffFiles: DiffFile[]):
         path,
         kind: fileChangeKindFromDiffStatus(diffFile.status),
         statusCode: diffFile.status[0],
-        showIndicatorDot: true,
+        showIndicatorDot: unpushedFiles.has(path),
       });
     }
   }
@@ -123,6 +179,7 @@ function buildCombinedEntries(gitFiles: GitStatusFile[], diffFiles: DiffFile[]):
 function CombinedChangesContent({
   entries,
   noMergeBase,
+  indicatorLabel,
   partialDataWarning,
   onFileClick,
 }: CombinedChangesContentProps) {
@@ -142,6 +199,7 @@ function CombinedChangesContent({
   const decorators = (
     <ChangesDecorators
       noMergeBase={noMergeBase}
+      indicatorLabel={indicatorLabel}
       hasIndicatorEntries={hasIndicatorEntries}
       partialDataWarning={partialDataWarning}
     />
@@ -153,7 +211,12 @@ function CombinedChangesContent({
         {(noMergeBase || hasIndicatorEntries || partialDataWarning) && (
           <div className="p-2 border-b">{decorators}</div>
         )}
-        <VirtualizedChangeList entries={entries} onFileClick={onFileClick} className="flex-1" />
+        <VirtualizedChangeList
+          entries={entries}
+          onFileClick={onFileClick}
+          className="flex-1"
+          indicatorLabel={indicatorLabel}
+        />
       </div>
     );
   }
@@ -162,7 +225,7 @@ function CombinedChangesContent({
     <ScrollArea className="h-full">
       <div className="p-2 space-y-2">
         {decorators}
-        <ChangeList entries={entries} onFileClick={onFileClick} />
+        <ChangeList entries={entries} onFileClick={onFileClick} indicatorLabel={indicatorLabel} />
       </div>
     </ScrollArea>
   );
@@ -187,8 +250,16 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     { workspaceId },
     { refetchInterval: 15_000, staleTime: 10_000 }
   );
+  const {
+    data: unpushedData,
+    isLoading: isUnpushedLoading,
+    error: unpushedError,
+  } = trpc.workspace.getUnpushedFiles.useQuery(
+    { workspaceId },
+    { refetchInterval: 15_000, staleTime: 10_000 }
+  );
 
-  if (isGitLoading || isDiffLoading) {
+  if (isGitLoading || isDiffLoading || isUnpushedLoading) {
     return <PanelLoadingState />;
   }
 
@@ -202,34 +273,21 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
   }
 
   const gitFiles: GitStatusFile[] = gitError ? [] : (gitData?.files ?? []);
-  const snapshot = diffError
-    ? {
-        added: [] as DiffFile[],
-        modified: [] as DiffFile[],
-        deleted: [] as DiffFile[],
-        noMergeBase: false,
-      }
-    : (diffData ?? {
-        added: [] as DiffFile[],
-        modified: [] as DiffFile[],
-        deleted: [] as DiffFile[],
-        noMergeBase: false,
-      });
-  const partialDataWarning = gitError
-    ? 'Git status unavailable; showing diff vs main only.'
-    : diffError
-      ? 'Diff vs main unavailable; showing working tree changes only.'
-      : undefined;
-  const entries = buildCombinedEntries(gitFiles, [
-    ...snapshot.added,
-    ...snapshot.modified,
-    ...snapshot.deleted,
-  ]);
+  const snapshot = getDiffSnapshot(diffData, diffError);
+  const partialDataWarning = getPartialDataWarning({ gitError, diffError, unpushedError });
+  const indicatorLabel = getIndicatorLabel(unpushedData?.hasUpstream ?? false);
+  const unpushedFiles = new Set(unpushedError ? [] : (unpushedData?.files ?? []));
+  const entries = buildCombinedEntries(
+    gitFiles,
+    [...snapshot.added, ...snapshot.modified, ...snapshot.deleted],
+    unpushedFiles
+  );
 
   return (
     <CombinedChangesContent
       entries={entries}
       noMergeBase={snapshot.noMergeBase}
+      indicatorLabel={indicatorLabel}
       partialDataWarning={partialDataWarning}
       onFileClick={openDiffTab}
     />

@@ -25,12 +25,14 @@ interface ChangeListProps {
   entries: ChangeListEntry[];
   onFileClick: (path: string) => void;
   className?: string;
+  indicatorLabel?: string;
 }
 
 export const ChangeList = memo(function ChangeList({
   entries,
   onFileClick,
   className = 'space-y-0.5',
+  indicatorLabel,
 }: ChangeListProps) {
   return (
     <div className={className}>
@@ -41,6 +43,7 @@ export const ChangeList = memo(function ChangeList({
           kind={entry.kind}
           statusCode={entry.statusCode}
           showIndicatorDot={entry.showIndicatorDot}
+          indicatorLabel={indicatorLabel}
           onClick={() => onFileClick(entry.path)}
         />
       ))}
@@ -82,6 +85,7 @@ interface VirtualizedChangeListProps {
   onFileClick: (path: string) => void;
   className?: string;
   contentClassName?: string;
+  indicatorLabel?: string;
 }
 
 export const VirtualizedChangeList = memo(function VirtualizedChangeList({
@@ -89,6 +93,7 @@ export const VirtualizedChangeList = memo(function VirtualizedChangeList({
   onFileClick,
   className,
   contentClassName,
+  indicatorLabel,
 }: VirtualizedChangeListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +134,7 @@ export const VirtualizedChangeList = memo(function VirtualizedChangeList({
                 kind={entry.kind}
                 statusCode={entry.statusCode}
                 showIndicatorDot={entry.showIndicatorDot}
+                indicatorLabel={indicatorLabel}
                 onClick={() => onFileClick(entry.path)}
               />
             </div>

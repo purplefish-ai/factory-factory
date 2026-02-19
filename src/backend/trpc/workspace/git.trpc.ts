@@ -114,6 +114,47 @@ export const workspaceGitRouter = router({
       return { added, modified, deleted, noMergeBase: false };
     }),
 
+  // Get files changed in commits not yet pushed to upstream
+  getUnpushedFiles: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(async ({ input }) => {
+      const result = await getWorkspaceWithWorktree(input.workspaceId);
+      if (!result) {
+        return { files: [], hasUpstream: false };
+      }
+
+      const upstreamResult = await gitCommand(
+        ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+        result.worktreePath
+      );
+      if (upstreamResult.code !== 0) {
+        // No upstream configured (or detached HEAD); treat as unknown rather than throwing.
+        return { files: [], hasUpstream: false };
+      }
+
+      const upstreamRef = upstreamResult.stdout.trim();
+      if (!upstreamRef) {
+        return { files: [], hasUpstream: false };
+      }
+
+      const diffResult = await gitCommand(
+        // Use three-dot to capture only changes introduced by local commits
+        // since divergence from upstream (exclude remote-only changes).
+        ['diff', '--name-only', `${upstreamRef}...HEAD`],
+        result.worktreePath
+      );
+      if (diffResult.code !== 0) {
+        throw new Error(`Git diff failed: ${diffResult.stderr}`);
+      }
+
+      const files = diffResult.stdout
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      return { files, hasUpstream: true };
+    }),
+
   // Get file diff for workspace (relative to project's default branch)
   getFileDiff: publicProcedure
     .input(
