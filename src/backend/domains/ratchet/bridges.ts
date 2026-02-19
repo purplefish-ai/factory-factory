@@ -28,7 +28,7 @@ export interface RatchetPRFullDetails {
   state: string;
   number: number;
   reviewDecision: string | null;
-  reviews: Array<{ submittedAt: string; author: { login: string } }>;
+  reviews: Array<{ submittedAt: string | null; author: { login: string } }>;
   comments: Array<{ updatedAt: string; author: { login: string } }>;
   statusCheckRollup: Array<{
     name?: string;

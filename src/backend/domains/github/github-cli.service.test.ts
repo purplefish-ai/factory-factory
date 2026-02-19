@@ -609,6 +609,54 @@ describe('GitHubCLIService', () => {
         ]);
       });
 
+      it('should accept reviews with null submittedAt', async () => {
+        const fullPRData = {
+          number: 123,
+          title: 'Test PR',
+          url: 'https://github.com/owner/repo/pull/123',
+          author: { login: 'octocat' },
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-02T00:00:00Z',
+          isDraft: false,
+          state: 'OPEN',
+          reviewDecision: null,
+          statusCheckRollup: null,
+          reviews: [
+            {
+              id: 'review-1',
+              author: { login: 'reviewer' },
+              state: 'PENDING',
+              submittedAt: null,
+            },
+          ],
+          comments: [],
+          labels: [],
+          additions: 10,
+          deletions: 2,
+          changedFiles: 1,
+          headRefName: 'feature-branch',
+          baseRefName: 'main',
+          mergeStateStatus: 'CLEAN',
+        };
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(fullPRData),
+          stderr: '',
+        });
+
+        const result = await githubCLIService.getPRFullDetails('owner/repo', 123);
+
+        expect(result.reviews).toEqual([
+          {
+            id: 'review-1',
+            author: { login: 'reviewer' },
+            state: 'PENDING',
+            submittedAt: null,
+            body: undefined,
+          },
+        ]);
+      });
+
       it('should throw error when full PR details are incomplete', async () => {
         const malformedData = {
           number: 123,
