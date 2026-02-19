@@ -3,7 +3,7 @@
 
 services:
   factoryfactory:
-    image: ghcr.io/purplefish-ai/factory-factory:latest
+    image: ghcr.io/purplefish-ai/factory-factory:adeeshaek-pixel-1
     build:
       context: .
       dockerfile: Dockerfile
