@@ -58,11 +58,20 @@ function getDiffSnapshot(
   return diffData ?? EMPTY_DIFF_SNAPSHOT;
 }
 
-function getPartialDataWarning(params: {
+export function getPartialDataWarning(params: {
   gitError: unknown;
   diffError: unknown;
   unpushedError: unknown;
 }): string | undefined {
+  if (params.gitError && params.diffError) {
+    return 'Git status and diff vs main unavailable.';
+  }
+  if (params.gitError && params.unpushedError) {
+    return 'Git status and not-pushed detection unavailable; showing diff vs main only.';
+  }
+  if (params.diffError && params.unpushedError) {
+    return 'Diff vs main and not-pushed detection unavailable; showing working tree changes only.';
+  }
   if (params.gitError) {
     return 'Git status unavailable; showing diff vs main only.';
   }
@@ -245,11 +254,11 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     return <PanelLoadingState />;
   }
 
-  if (gitError && diffError && unpushedError) {
+  if (gitError && diffError) {
     return (
       <PanelErrorState
         title="Failed to load changes"
-        errorMessage={gitError?.message ?? diffError?.message ?? unpushedError?.message}
+        errorMessage={gitError?.message ?? diffError?.message}
       />
     );
   }
