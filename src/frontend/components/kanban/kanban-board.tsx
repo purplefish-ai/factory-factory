@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { Loader2, Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,6 +50,8 @@ export function KanbanBoard() {
     togglingWorkspaceId,
     archiveWorkspace,
     archivingWorkspaceId,
+    onCreateWorkspace,
+    isCreatingWorkspace,
   } = useKanban();
 
   const isMobile = useIsMobile();
@@ -172,7 +174,13 @@ export function KanbanBoard() {
         {/* Active column content */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {activeColumn.id === 'ISSUES' ? (
-            <IssuesColumn column={activeColumn} issues={issues ?? []} projectId={projectId} />
+            <IssuesColumn
+              column={activeColumn}
+              issues={issues ?? []}
+              projectId={projectId}
+              onCreateWorkspace={onCreateWorkspace}
+              isCreatingWorkspace={isCreatingWorkspace}
+            />
           ) : (
             <KanbanColumn
               column={activeColumn}
@@ -200,6 +208,8 @@ export function KanbanBoard() {
               column={column}
               issues={issues ?? []}
               projectId={projectId}
+              onCreateWorkspace={onCreateWorkspace}
+              isCreatingWorkspace={isCreatingWorkspace}
             />
           );
         }
@@ -228,9 +238,17 @@ interface IssuesColumnProps {
   column: ColumnConfig;
   issues: KanbanIssue[];
   projectId: string;
+  onCreateWorkspace?: () => void;
+  isCreatingWorkspace?: boolean;
 }
 
-function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
+function IssuesColumn({
+  column,
+  issues,
+  projectId,
+  onCreateWorkspace,
+  isCreatingWorkspace,
+}: IssuesColumnProps) {
   const isEmpty = issues.length === 0;
   const [selectedIssue, setSelectedIssue] = useState<KanbanIssue | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -263,6 +281,21 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
 
         {/* Column Content */}
         <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/30">
+          {onCreateWorkspace && (
+            <button
+              type="button"
+              onClick={onCreateWorkspace}
+              disabled={isCreatingWorkspace}
+              className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-white/40 px-3 py-5 text-sm text-white hover:border-white/70 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              {isCreatingWorkspace ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              New Workspace
+            </button>
+          )}
           {isEmpty ? (
             <div className="flex items-center justify-center h-[60px] md:h-[150px] text-muted-foreground text-sm">
               {column.description}

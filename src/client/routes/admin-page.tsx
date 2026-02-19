@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -28,9 +29,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { RatchetWrenchIcon } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
-import { useAppHeader } from '@/frontend/components/app-header-context';
+import { HeaderLeftExtraSlot, useAppHeader } from '@/frontend/components/app-header-context';
 import { Loading } from '@/frontend/components/loading';
-import { PageHeader } from '@/frontend/components/page-header';
 import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
 import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
 import { downloadFile } from '@/frontend/lib/download-file';
@@ -732,7 +732,7 @@ function ServerLogsSection() {
 }
 
 export default function AdminDashboardPage() {
-  useAppHeader({ title: 'Admin' });
+  useAppHeader({ title: 'Admin Dashboard' });
 
   const {
     data: stats,
@@ -758,6 +758,8 @@ export default function AdminDashboardPage() {
     },
   });
 
+  const projectSlug = projects?.[0]?.slug;
+
   // Show full loading only when stats are loading (first load)
   if (isLoadingStats) {
     return <Loading message="Loading admin dashboard..." />;
@@ -765,9 +767,18 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="h-full overflow-y-auto">
+      {projectSlug && (
+        <HeaderLeftExtraSlot>
+          <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
+            <Link to={`/projects/${projectSlug}/workspaces`}>
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Back to Workspaces Board</span>
+              <span className="sm:hidden">Board</span>
+            </Link>
+          </Button>
+        </HeaderLeftExtraSlot>
+      )}
       <div className="space-y-6 p-3 md:p-6">
-        <PageHeader title="Admin Dashboard" description="System monitoring and management" />
-
         <ApiUsageSection
           apiUsage={stats?.apiUsage}
           onReset={() => resetApiStats.mutate()}

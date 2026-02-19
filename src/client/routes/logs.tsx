@@ -269,7 +269,7 @@ export default function LogsPage() {
           <Link to="/admin">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-1" />
-              Admin
+              Admin Dashboard
             </Button>
           </Link>
         </PageHeader>

@@ -3,7 +3,6 @@ import { Archive, GitBranch, GitPullRequest, Loader2, Play } from 'lucide-react'
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -14,7 +13,7 @@ import {
 } from '@/components/workspace';
 import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { cn } from '@/lib/utils';
-import type { KanbanColumn, WorkspaceStatus } from '@/shared/core';
+import type { KanbanColumn, WorkspaceSidebarCiState, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export interface WorkspaceWithKanban extends Workspace {
@@ -36,72 +35,33 @@ interface KanbanCardProps {
 }
 
 function CardStatusIndicator({
-  isArchived,
   isWorking,
   status,
   errorMessage,
 }: {
-  isArchived: boolean;
   isWorking: boolean;
   status: WorkspaceStatus;
   errorMessage: string | null;
 }) {
-  if (isArchived) {
-    return (
-      <Badge variant="outline" className="shrink-0 text-[10px] gap-1">
-        <Archive className="h-2.5 w-2.5" />
-        Archived
-      </Badge>
-    );
-  }
-
   if (isWorking) {
-    return (
-      <span className="flex items-center gap-1 text-xs text-brand shrink-0">
-        <span className="h-2 w-2 rounded-full bg-brand animate-pulse" />
-        Working
-      </span>
-    );
+    return <span className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" />;
   }
 
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
 }
 
-function CardMetadataRow({
+function GitContextRow({
   workspace,
-  ratchetEnabled,
-  isTogglePending,
-  isArchived,
-  onToggleRatcheting,
   showPR,
+  ciState,
 }: {
   workspace: WorkspaceWithKanban;
-  ratchetEnabled: boolean;
-  isTogglePending: boolean;
-  isArchived: boolean;
-  onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   showPR: boolean;
+  ciState: WorkspaceSidebarCiState;
 }) {
-  return (
-    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-      <RatchetToggleButton
-        enabled={ratchetEnabled}
-        state={workspace.ratchetState}
-        animated={workspace.ratchetButtonAnimated ?? false}
-        className="h-5 w-5 shrink-0"
-        disabled={isTogglePending || isArchived || !onToggleRatcheting}
-        stopPropagation
-        onToggle={(enabled) => {
-          onToggleRatcheting?.(workspace.id, enabled);
-        }}
-      />
-      {workspace.branchName && (
-        <>
-          <GitBranch className="h-3 w-3 shrink-0" />
-          <span className="font-mono truncate">{workspace.branchName}</span>
-        </>
-      )}
-      {showPR && (
+  if (showPR) {
+    return (
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
         <button
           type="button"
           onClick={(e) => {
@@ -109,14 +69,28 @@ function CardMetadataRow({
             e.stopPropagation();
             window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
           }}
-          className="ml-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
         >
-          <GitPullRequest className="h-3 w-3" />
+          <GitPullRequest className="h-3 w-3 shrink-0" />
           <span>#{workspace.prNumber}</span>
         </button>
-      )}
-    </div>
-  );
+        {ciState !== 'NONE' && (
+          <CiStatusChip ciState={ciState} prState={workspace.prState} size="sm" />
+        )}
+      </div>
+    );
+  }
+
+  if (workspace.branchName) {
+    return (
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+        <GitBranch className="h-3 w-3 shrink-0" />
+        <span className="font-mono truncate">{workspace.branchName}</span>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function CardArchiveButton({
@@ -166,6 +140,78 @@ function CardArchiveButton({
   );
 }
 
+function CardTitleIcons({
+  workspace,
+  ratchetEnabled,
+  isTogglePending,
+  isArchived,
+  onToggleRatcheting,
+  onArchive,
+  isArchivePending,
+}: {
+  workspace: WorkspaceWithKanban;
+  ratchetEnabled: boolean;
+  isTogglePending: boolean;
+  isArchived: boolean;
+  onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
+  onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  isArchivePending: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <RatchetToggleButton
+        enabled={ratchetEnabled}
+        state={workspace.ratchetState}
+        animated={workspace.ratchetButtonAnimated ?? false}
+        className="h-5 w-5 shrink-0"
+        disabled={isTogglePending || isArchived || !onToggleRatcheting}
+        stopPropagation
+        onToggle={(enabled) => {
+          onToggleRatcheting?.(workspace.id, enabled);
+        }}
+      />
+      {workspace.runScriptStatus === 'RUNNING' && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <Play className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Dev server running</TooltipContent>
+        </Tooltip>
+      )}
+      <CardStatusIndicator
+        isWorking={workspace.isWorking}
+        status={workspace.status}
+        errorMessage={workspace.initErrorMessage}
+      />
+      {!isArchived && onArchive && (
+        <CardArchiveButton
+          workspaceId={workspace.id}
+          isPending={isArchivePending}
+          onArchive={onArchive}
+        />
+      )}
+    </div>
+  );
+}
+
+function deriveCardState(workspace: WorkspaceWithKanban) {
+  const showPR = Boolean(workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl);
+  const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
+  const ratchetEnabled = workspace.ratchetEnabled ?? true;
+  const sidebarStatus = deriveWorkspaceSidebarStatus({
+    isWorking: workspace.isWorking,
+    prUrl: workspace.prUrl ?? null,
+    prState: workspace.prState ?? null,
+    prCiStatus: workspace.prCiStatus ?? null,
+    ratchetState: workspace.ratchetState ?? null,
+  });
+  const hasGitContext = showPR || Boolean(workspace.branchName);
+  const hasPendingRequest = Boolean(workspace.pendingRequestType);
+  return { showPR, isArchived, ratchetEnabled, sidebarStatus, hasGitContext, hasPendingRequest };
+}
+
 export function KanbanCard({
   workspace,
   projectSlug,
@@ -174,17 +220,10 @@ export function KanbanCard({
   onArchive,
   isArchivePending = false,
 }: KanbanCardProps) {
-  const showPR = Boolean(workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl);
-  const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
-  const ratchetEnabled = workspace.ratchetEnabled ?? true;
+  const { showPR, isArchived, ratchetEnabled, sidebarStatus, hasGitContext, hasPendingRequest } =
+    deriveCardState(workspace);
 
-  const sidebarStatus = deriveWorkspaceSidebarStatus({
-    isWorking: workspace.isWorking,
-    prUrl: workspace.prUrl ?? null,
-    prState: workspace.prState ?? null,
-    prCiStatus: workspace.prCiStatus ?? null,
-    ratchetState: workspace.ratchetState ?? null,
-  });
+  const hasBody = hasGitContext || hasPendingRequest;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -197,64 +236,32 @@ export function KanbanCard({
           isArchived && 'opacity-60 border-dashed'
         )}
       >
-        <CardHeader className="pb-3">
+        <CardHeader className={hasBody ? 'pb-2' : 'pb-4'}>
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
               {workspace.name}
             </CardTitle>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {workspace.runScriptStatus === 'RUNNING' && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Play className="h-3 w-3 text-green-500 fill-green-500 animate-pulse" />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>Dev server running</TooltipContent>
-                </Tooltip>
-              )}
-              <CardStatusIndicator
-                isArchived={isArchived}
-                isWorking={workspace.isWorking}
-                status={workspace.status}
-                errorMessage={workspace.initErrorMessage}
-              />
-              {!isArchived && onArchive && (
-                <CardArchiveButton
-                  workspaceId={workspace.id}
-                  isPending={isArchivePending}
-                  onArchive={onArchive}
-                />
-              )}
-            </div>
+            <CardTitleIcons
+              workspace={workspace}
+              ratchetEnabled={ratchetEnabled}
+              isTogglePending={isTogglePending}
+              isArchived={isArchived}
+              onToggleRatcheting={onToggleRatcheting}
+              onArchive={onArchive}
+              isArchivePending={isArchivePending}
+            />
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <CardMetadataRow
-            workspace={workspace}
-            ratchetEnabled={ratchetEnabled}
-            isTogglePending={isTogglePending}
-            isArchived={isArchived}
-            onToggleRatcheting={onToggleRatcheting}
-            showPR={showPR}
-          />
-
-          {sidebarStatus.ciState !== 'NONE' && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <CiStatusChip ciState={sidebarStatus.ciState} prState={workspace.prState} size="sm" />
-            </div>
-          )}
-
-          {workspace.pendingRequestType && (
-            <div className="flex items-center gap-2">
-              <PendingRequestBadge type={workspace.pendingRequestType} />
-            </div>
-          )}
-
-          {workspace.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2">{workspace.description}</p>
-          )}
-        </CardContent>
+        {hasBody && (
+          <CardContent className="space-y-2">
+            <GitContextRow workspace={workspace} showPR={showPR} ciState={sidebarStatus.ciState} />
+            {workspace.pendingRequestType && (
+              <div className="flex items-center gap-2">
+                <PendingRequestBadge type={workspace.pendingRequestType} />
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
     </Link>
   );

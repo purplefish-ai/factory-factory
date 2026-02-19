@@ -85,6 +85,8 @@ interface KanbanContextValue {
   togglingWorkspaceId: string | null;
   archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
   archivingWorkspaceId: string | null;
+  onCreateWorkspace?: () => void;
+  isCreatingWorkspace?: boolean;
 }
 
 const KanbanContext = createContext<KanbanContextValue | null>(null);
@@ -101,6 +103,8 @@ interface KanbanProviderProps {
   projectId: string;
   projectSlug: string;
   issueProvider: string;
+  onCreateWorkspace?: () => void;
+  isCreatingWorkspace?: boolean;
   children: ReactNode;
 }
 
@@ -108,6 +112,8 @@ export function KanbanProvider({
   projectId,
   projectSlug,
   issueProvider,
+  onCreateWorkspace,
+  isCreatingWorkspace,
   children,
 }: KanbanProviderProps) {
   const utils = trpc.useUtils();
@@ -241,6 +247,8 @@ export function KanbanProvider({
         togglingWorkspaceId,
         archiveWorkspace,
         archivingWorkspaceId,
+        onCreateWorkspace,
+        isCreatingWorkspace,
       }}
     >
       {children}
