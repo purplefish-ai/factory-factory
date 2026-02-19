@@ -826,6 +826,9 @@ function proxyAuthenticatedHttpRequest(params: {
           }
         }
       }
+
+      upstreamResponse.on('error', endProxyErrorResponse);
+      upstreamResponse.on('aborted', endProxyErrorResponse);
       upstreamResponse.pipe(params.res);
     }
   );
