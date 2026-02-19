@@ -131,8 +131,19 @@ Options:
   -v, --verbose               Enable verbose logging
 ```
 
+```bash
+# Start a public Cloudflare tunnel (starts server + tunnel)
+ff proxy [options]
+# or
+npx factory-factory@latest proxy [options]
+
+Options:
+  --private                   Enable generated-password auth
+```
+
 **Other CLI commands:**
 ```bash
+ff proxy        # Start a public tunnel to your local FF server
 ff build        # Build for production
 ff db:migrate   # Run database migrations
 ff db:studio    # Open Prisma Studio
@@ -151,7 +162,13 @@ ff serve --no-open
 
 # Custom database location
 ff serve --database-path /path/to/data.db
+
+# Public tunnel with password auth
+ff proxy --private
 ```
+
+**Tunnel prerequisite (`ff proxy`):**
+`cloudflared` must be installed and available in your `PATH`.
 
 ## Quick Start
 

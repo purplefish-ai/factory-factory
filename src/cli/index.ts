@@ -1,34 +1,19 @@
 #!/usr/bin/env node
 
-import { type ChildProcess, exec, spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { createConnection, createServer } from 'node:net';
+import { type ChildProcess, spawn } from 'node:child_process';
+import { cpSync, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
-import treeKill from 'tree-kill';
 import { runCodexAppServerAcpAdapter } from '@/backend/domains/session';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { getLogFilePath } from '@/backend/services/logger.service';
-
-const execPromise = promisify(exec);
-
-function treeKillAsync(pid: number, signal: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    treeKill(pid, signal, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
+import { runProxyCommand } from './proxy';
+import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -141,109 +126,6 @@ function getVersion(): string {
   }
 }
 
-// Wait for a port to be available
-async function waitForPort(
-  port: number,
-  host = 'localhost',
-  timeout = 30_000,
-  interval = 500
-): Promise<void> {
-  const startTime = Date.now();
-
-  while (Date.now() - startTime < timeout) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const socket = createConnection({ port, host }, () => {
-          socket.destroy();
-          resolve();
-        });
-        socket.on('error', () => {
-          socket.destroy();
-          reject();
-        });
-      });
-      return; // Port is available
-    } catch {
-      // Port not ready, wait and retry
-      await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-  }
-
-  throw new Error(`Timed out waiting for port ${port} after ${timeout}ms`);
-}
-
-/**
- * Check if a port is in use by checking actual listening processes.
- * Uses lsof on Unix systems for more reliable detection that avoids TOCTOU race conditions.
- * Falls back to bind attempt if lsof is unavailable.
- */
-async function isPortInUse(port: number): Promise<boolean> {
-  // Try lsof first (more reliable, checks actual listening processes)
-  if (process.platform !== 'win32') {
-    try {
-      // lsof -i :PORT -sTCP:LISTEN checks for processes listening on the port
-      // -t returns just PIDs (suppresses errors if no process found)
-      const { stdout } = await execPromise(`lsof -i :${port} -sTCP:LISTEN -t`, {
-        timeout: 2000,
-      });
-      // If we get output, port is in use
-      return stdout.trim().length > 0;
-    } catch (error) {
-      // lsof exits with code 1 if no process found (port is free)
-      if ((error as { code?: number }).code === 1) {
-        return false;
-      }
-      // lsof not available or other error - fall back to bind attempt
-    }
-  }
-
-  // Fallback: try to bind to the port
-  return new Promise((resolve) => {
-    const server = createServer();
-    server.once('error', () => {
-      resolve(true); // Error means port is in use
-    });
-    server.once('listening', () => {
-      server.close(() => resolve(false)); // Successfully bound means port is free
-    });
-    server.listen(port);
-  });
-}
-
-/**
- * Check if a port is available (inverse of isPortInUse).
- */
-function isPortAvailable(port: number, _host: string): Promise<boolean> {
-  return isPortInUse(port).then((inUse) => !inUse);
-}
-
-// Find an available port starting from the given port, excluding specific ports
-async function findAvailablePort(
-  startPort: number,
-  host: string,
-  maxAttempts = 10,
-  excludePorts: number[] = []
-): Promise<number> {
-  for (let i = 0; i < maxAttempts; i++) {
-    const port = startPort + i;
-    if (excludePorts.includes(port)) {
-      continue;
-    }
-    if (await isPortAvailable(port, host)) {
-      return port;
-    }
-  }
-  throw new Error(`Could not find an available port starting from ${startPort}`);
-}
-
-// Ensure data directory exists
-function ensureDataDir(databasePath: string): void {
-  const dir = dirname(databasePath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-}
-
 // Run database migrations using better-sqlite3 directly (no Prisma CLI needed)
 function runMigrations(databasePath: string, verbose: boolean): Promise<void> {
   const migrationsPath = join(PROJECT_ROOT, 'prisma', 'migrations');
@@ -272,6 +154,10 @@ interface MigrateOptions {
   databasePath?: string;
 }
 
+interface ProxyOptions {
+  private?: boolean;
+}
+
 const program = new Command();
 
 function resolveDatabasePath(options: ServeOptions): string {
@@ -292,10 +178,11 @@ async function resolvePortsOrExit(
     }
 
     if (options.dev) {
-      const backendPort = await findAvailablePort(requestedBackendPort, options.host);
-      const frontendPort = await findAvailablePort(requestedFrontendPort, options.host, 20, [
-        backendPort,
-      ]);
+      const backendPort = await findAvailablePort(requestedBackendPort);
+      const frontendPort = await findAvailablePort(requestedFrontendPort, {
+        maxAttempts: 20,
+        excludePorts: [backendPort],
+      });
 
       if (frontendPort !== requestedFrontendPort || backendPort !== requestedBackendPort) {
         console.log(
@@ -308,7 +195,7 @@ async function resolvePortsOrExit(
       return { frontendPort, backendPort };
     }
 
-    const frontendPort = await findAvailablePort(requestedFrontendPort, options.host);
+    const frontendPort = await findAvailablePort(requestedFrontendPort);
     const backendPort = frontendPort;
 
     if (frontendPort !== requestedFrontendPort) {
@@ -785,6 +672,18 @@ program
 
     console.log(chalk.green('\n✅ Build completed successfully!'));
     console.log(chalk.gray('Run `ff serve` to start the production server'));
+  });
+
+// ============================================================================
+// proxy command
+// ============================================================================
+
+program
+  .command('proxy')
+  .description('Start a public tunnel to your local Factory Factory server')
+  .option('--private', 'Enable password authentication')
+  .action(async (options: ProxyOptions) => {
+    await runProxyCommand({ options, projectRoot: PROJECT_ROOT });
   });
 
 // ============================================================================
