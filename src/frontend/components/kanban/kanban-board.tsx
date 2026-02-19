@@ -296,7 +296,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
             <button
               type="button"
               onClick={() => setShowInlineForm(true)}
-              className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-muted-foreground/40 px-3 py-5 text-sm text-muted-foreground hover:border-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+              className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-primary/40 px-3 py-5 text-sm text-primary hover:border-primary/70 hover:text-primary transition-colors cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               New Workspace
