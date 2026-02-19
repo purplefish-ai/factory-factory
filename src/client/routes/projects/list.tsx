@@ -15,6 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAppHeader } from '@/frontend/components/app-header-context';
 import { trpc } from '@/frontend/lib/trpc';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -60,6 +61,8 @@ function ProjectActions({
 }
 
 export default function ProjectsListPage() {
+  useAppHeader({ title: 'Projects' });
+
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [projectToArchive, setProjectToArchive] = useState<string | null>(null);
   const isMobile = useIsMobile();

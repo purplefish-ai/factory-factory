@@ -9,6 +9,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAppHeader } from '@/frontend/components/app-header-context';
 import { PRDetailPanel } from '@/frontend/components/pr-detail-panel';
 import { PRInboxItem } from '@/frontend/components/pr-inbox-item';
 import { trpc } from '@/frontend/lib/trpc';
@@ -427,6 +428,8 @@ function useReviewActions({
 }
 
 function ReviewsPageContent() {
+  useAppHeader({ title: 'Reviews' });
+
   const [searchParams] = useSearchParams();
   const initialRepo = searchParams.get('repo');
   const initialPR = searchParams.get('pr');

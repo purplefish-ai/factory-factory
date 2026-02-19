@@ -19,6 +19,7 @@ import {
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
 import type { ChatContentProps } from './workspace-detail-chat-content';
+import { WorkspaceDetailHeaderSlot } from './workspace-detail-header';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
 function areRuntimeStatesEqual(
@@ -428,48 +429,65 @@ export function WorkspaceDetailContainer() {
   };
 
   return (
-    <WorkspaceDetailView
-      workspaceState={{
-        workspaceLoading,
-        workspace,
-        workspaceId,
-        handleBackToWorkspaces,
-        isScriptFailed,
-        workspaceInitStatus,
-      }}
-      header={{
-        archivePending: archiveWorkspace.isPending,
-        availableIdes,
-        preferredIde,
-        openInIde,
-        handleArchiveRequest,
-        handleQuickAction,
-        running: workspaceRunning,
-        isCreatingSession: createSession.isPending,
-        hasChanges,
-      }}
-      sessionTabs={{
-        sessions,
-        selectedDbSessionId,
-        sessionSummariesById,
-        isDeletingSession: deleteSession.isPending,
-        handleSelectSession,
-        handleNewChat,
-        handleCloseChatSession,
-        maxSessions,
-        hasWorktreePath: !!workspace?.worktreePath,
-        selectedProvider,
-        setSelectedProvider,
-      }}
-      chat={chatViewModel}
-      rightPanelVisible={rightPanelVisible}
-      setRightPanelVisible={setRightPanelVisible}
-      archiveDialog={{
-        open: archiveDialogOpen,
-        setOpen: setArchiveDialogOpen,
-        hasUncommitted,
-        onConfirm: handleArchive,
-      }}
-    />
+    <>
+      {workspace && (
+        <WorkspaceDetailHeaderSlot
+          workspace={workspace}
+          workspaceId={workspaceId}
+          availableIdes={availableIdes}
+          preferredIde={preferredIde}
+          openInIde={openInIde}
+          archivePending={archiveWorkspace.isPending}
+          onArchiveRequest={handleArchiveRequest}
+          handleQuickAction={handleQuickAction}
+          running={workspaceRunning}
+          isCreatingSession={createSession.isPending}
+          hasChanges={hasChanges}
+        />
+      )}
+      <WorkspaceDetailView
+        workspaceState={{
+          workspaceLoading,
+          workspace,
+          workspaceId,
+          handleBackToWorkspaces,
+          isScriptFailed,
+          workspaceInitStatus,
+        }}
+        header={{
+          archivePending: archiveWorkspace.isPending,
+          availableIdes,
+          preferredIde,
+          openInIde,
+          handleArchiveRequest,
+          handleQuickAction,
+          running: workspaceRunning,
+          isCreatingSession: createSession.isPending,
+          hasChanges,
+        }}
+        sessionTabs={{
+          sessions,
+          selectedDbSessionId,
+          sessionSummariesById,
+          isDeletingSession: deleteSession.isPending,
+          handleSelectSession,
+          handleNewChat,
+          handleCloseChatSession,
+          maxSessions,
+          hasWorktreePath: !!workspace?.worktreePath,
+          selectedProvider,
+          setSelectedProvider,
+        }}
+        chat={chatViewModel}
+        rightPanelVisible={rightPanelVisible}
+        setRightPanelVisible={setRightPanelVisible}
+        archiveDialog={{
+          open: archiveDialogOpen,
+          setOpen: setArchiveDialogOpen,
+          hasUncommitted,
+          onConfirm: handleArchive,
+        }}
+      />
+    </>
   );
 }

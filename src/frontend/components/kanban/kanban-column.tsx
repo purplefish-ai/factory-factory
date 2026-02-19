@@ -49,9 +49,9 @@ export function KanbanColumn({
   const isEmpty = workspaces.length === 0;
 
   return (
-    <div className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
-      {/* Column Header */}
-      <div className="flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
+    <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
+      {/* Column Header — hidden on mobile where pills handle this */}
+      <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-sm">{column.label}</h3>
           <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
@@ -61,7 +61,7 @@ export function KanbanColumn({
       </div>
 
       {/* Column Content */}
-      <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-b-lg bg-muted/30">
+      <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/30">
         {isEmpty ? (
           <div className="flex items-center justify-center h-[60px] md:h-[150px] text-muted-foreground text-sm">
             {column.description}

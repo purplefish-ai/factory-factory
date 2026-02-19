@@ -1,9 +1,9 @@
 import {
   AppWindow,
   Archive,
+  ArrowLeft,
   CheckCircle2,
   CircleDot,
-  GitBranch,
   Github,
   GitPullRequest,
   Loader2,
@@ -13,6 +13,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,6 +53,11 @@ import {
   RunScriptPortBadge,
   useWorkspacePanel,
 } from '@/components/workspace';
+import {
+  HeaderLeftExtraSlot,
+  HeaderRightSlot,
+  useAppHeader,
+} from '@/frontend/components/app-header-context';
 import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
 import {
   applyRatchetToggleState,
@@ -89,25 +95,6 @@ function ToggleRightPanelButton() {
       <TooltipContent>{rightPanelVisible ? 'Hide right panel' : 'Show right panel'}</TooltipContent>
     </Tooltip>
   );
-}
-
-function WorkspaceTitle({
-  workspace,
-}: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
-}) {
-  if (workspace.branchName) {
-    return (
-      <div className="flex min-w-0 items-center gap-1.5">
-        <GitBranch className="h-3.5 w-3.5 md:h-4 md:w-4 text-muted-foreground shrink-0" />
-        <h1 className="text-sm md:text-lg font-semibold font-mono truncate">
-          {workspace.branchName}
-        </h1>
-      </div>
-    );
-  }
-
-  return <h1 className="text-sm md:text-lg font-semibold truncate">{workspace.name}</h1>;
 }
 
 function WorkspacePrAction({
@@ -791,7 +778,11 @@ interface WorkspaceHeaderProps {
   hasChanges?: boolean;
 }
 
-export function WorkspaceHeader({
+/**
+ * Component that injects workspace header content into the app-level header
+ * via portal slots. Rendered inside WorkspaceDetailContainer.
+ */
+export function WorkspaceDetailHeaderSlot({
   workspace,
   workspaceId,
   availableIdes,
@@ -805,73 +796,87 @@ export function WorkspaceHeader({
   hasChanges,
 }: WorkspaceHeaderProps) {
   const isMobile = useIsMobile();
+  const { slug = '' } = useParams<{ slug: string }>();
+
+  const title = workspace.branchName || workspace.name;
+  useAppHeader({ title });
 
   return (
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-2 px-2 py-1.5 md:px-4 md:py-2 border-b">
-      <div className="flex flex-wrap items-center gap-2 md:gap-3 min-w-0">
-        <WorkspaceTitle workspace={workspace} />
-        <WorkspaceIssueLink workspace={workspace} />
-        <RunScriptPortBadge workspaceId={workspaceId} />
-        <WorkspacePrAction
-          workspace={workspace}
-          hasChanges={hasChanges}
-          running={running}
-          isCreatingSession={isCreatingSession}
-          handleQuickAction={handleQuickAction}
-        />
-        <WorkspaceCiStatus workspace={workspace} />
-      </div>
-      <div
-        className={cn(
-          'flex items-center gap-1 shrink-0 md:justify-end',
-          !isMobile && 'flex-wrap gap-0.5 md:gap-1'
-        )}
-      >
-        <RunScriptButton workspaceId={workspaceId} />
-        {isMobile ? (
-          <>
-            <ToggleRightPanelButton />
-            <WorkspaceHeaderOverflowMenu
-              workspace={workspace}
-              workspaceId={workspaceId}
-              availableIdes={availableIdes}
-              preferredIde={preferredIde}
-              openInIde={openInIde}
-              archivePending={archivePending}
-              onArchiveRequest={onArchiveRequest}
-              handleQuickAction={handleQuickAction}
-              isCreatingSession={isCreatingSession}
-            />
-          </>
-        ) : (
-          <>
-            <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
-            <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
-            <WorkspaceBranchLink workspace={workspace} />
-            <QuickActionsMenu
-              onExecuteAgent={(action) => {
-                if (action.content) {
-                  handleQuickAction(action.name, action.content);
-                }
-              }}
-              disabled={isCreatingSession}
-            />
-            <OpenInIdeAction
-              workspaceId={workspaceId}
-              hasWorktreePath={Boolean(workspace.worktreePath)}
-              availableIdes={availableIdes}
-              preferredIde={preferredIde}
-              openInIde={openInIde}
-            />
-            <ArchiveActionButton
-              workspace={workspace}
-              archivePending={archivePending}
-              onArchiveRequest={onArchiveRequest}
-            />
-            <ToggleRightPanelButton />
-          </>
-        )}
-      </div>
-    </div>
+    <>
+      <HeaderLeftExtraSlot>
+        <div className="hidden md:flex items-center gap-2 min-w-0">
+          <WorkspaceIssueLink workspace={workspace} />
+          <RunScriptPortBadge workspaceId={workspaceId} />
+          <WorkspacePrAction
+            workspace={workspace}
+            hasChanges={hasChanges}
+            running={running}
+            isCreatingSession={isCreatingSession}
+            handleQuickAction={handleQuickAction}
+          />
+          <WorkspaceCiStatus workspace={workspace} />
+        </div>
+        <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
+          <Link to={`/projects/${slug}/workspaces`}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Back to Workspaces Board</span>
+            <span className="sm:hidden">Board</span>
+          </Link>
+        </Button>
+      </HeaderLeftExtraSlot>
+      <HeaderRightSlot>
+        <div
+          className={cn(
+            'flex items-center gap-1 shrink-0',
+            !isMobile && 'flex-wrap gap-0.5 md:gap-1'
+          )}
+        >
+          <RunScriptButton workspaceId={workspaceId} />
+          {isMobile ? (
+            <>
+              <ToggleRightPanelButton />
+              <WorkspaceHeaderOverflowMenu
+                workspace={workspace}
+                workspaceId={workspaceId}
+                availableIdes={availableIdes}
+                preferredIde={preferredIde}
+                openInIde={openInIde}
+                archivePending={archivePending}
+                onArchiveRequest={onArchiveRequest}
+                handleQuickAction={handleQuickAction}
+                isCreatingSession={isCreatingSession}
+              />
+            </>
+          ) : (
+            <>
+              <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
+              <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
+              <WorkspaceBranchLink workspace={workspace} />
+              <QuickActionsMenu
+                onExecuteAgent={(action) => {
+                  if (action.content) {
+                    handleQuickAction(action.name, action.content);
+                  }
+                }}
+                disabled={isCreatingSession}
+              />
+              <OpenInIdeAction
+                workspaceId={workspaceId}
+                hasWorktreePath={Boolean(workspace.worktreePath)}
+                availableIdes={availableIdes}
+                preferredIde={preferredIde}
+                openInIde={openInIde}
+              />
+              <ArchiveActionButton
+                workspace={workspace}
+                archivePending={archivePending}
+                onArchiveRequest={onArchiveRequest}
+              />
+              <ToggleRightPanelButton />
+            </>
+          )}
+        </div>
+      </HeaderRightSlot>
+    </>
   );
 }

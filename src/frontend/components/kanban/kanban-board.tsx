@@ -1,8 +1,9 @@
 import { RefreshCw } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { IssueCard } from './issue-card';
@@ -17,12 +18,13 @@ export function KanbanControls() {
   return (
     <Button
       variant="outline"
-      size="icon"
-      className="h-8 w-8"
+      size="sm"
+      className="h-8"
       onClick={() => syncAndRefetch()}
       disabled={isSyncing}
     >
       <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
+      Refresh
     </Button>
   );
 }
@@ -48,7 +50,10 @@ export function KanbanBoard() {
     togglingWorkspaceId,
   } = useKanban();
 
+  const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
+  const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
+  const hasPickedInitialTab = useRef(false);
 
   // Group workspaces by kanban column (only the 3 database columns)
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
@@ -70,11 +75,37 @@ export function KanbanBoard() {
     return grouped;
   }, [workspaces]);
 
+  // Pick the initial mobile tab once data loads
+  useEffect(() => {
+    if (hasPickedInitialTab.current || !workspaces) {
+      return;
+    }
+    hasPickedInitialTab.current = true;
+
+    if (workspacesByColumn.WAITING.length > 0) {
+      setActiveColumnId('WAITING');
+    } else if (workspacesByColumn.WORKING.length > 0) {
+      setActiveColumnId('WORKING');
+    } else {
+      setActiveColumnId('ISSUES');
+    }
+  }, [workspaces, workspacesByColumn]);
+
+  const getColumnCount = (columnId: string) => {
+    if (columnId === 'ISSUES') {
+      return issues?.length ?? 0;
+    }
+    return workspacesByColumn[columnId as KanbanColumnType]?.length ?? 0;
+  };
+
   if (isLoading) {
     return (
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto mx-auto w-full max-w-[1800px]">
         {columns.map((column) => (
-          <div key={column.id} className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
+          <div
+            key={column.id}
+            className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full"
+          >
             <Skeleton className="h-10 w-full rounded-t-lg rounded-b-none" />
             <Skeleton className="flex-1 w-full rounded-b-lg rounded-t-none" />
           </div>
@@ -97,8 +128,65 @@ export function KanbanBoard() {
     );
   }
 
+  if (isMobile) {
+    const activeColumn = columns.find((c) => c.id === activeColumnId) ?? columns[0];
+    if (!activeColumn) {
+      return null;
+    }
+
+    return (
+      <div className="flex flex-col h-full gap-3">
+        {/* Column pills */}
+        <div className="flex gap-1.5 shrink-0">
+          {columns.map((column) => {
+            const count = getColumnCount(column.id);
+            const isActive = column.id === activeColumnId;
+            return (
+              <button
+                key={column.id}
+                type="button"
+                onClick={() => setActiveColumnId(column.id)}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                {column.label}
+                <span
+                  className={cn(
+                    'inline-flex items-center justify-center rounded-full min-w-4 h-4 px-1 text-[10px] font-semibold',
+                    isActive ? 'bg-primary-foreground/20' : 'bg-background/50'
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active column content */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {activeColumn.id === 'ISSUES' ? (
+            <IssuesColumn column={activeColumn} issues={issues ?? []} projectId={projectId} />
+          ) : (
+            <KanbanColumn
+              column={activeColumn}
+              workspaces={workspacesByColumn[activeColumn.id as KanbanColumnType] ?? []}
+              projectSlug={projectSlug}
+              onToggleRatcheting={toggleWorkspaceRatcheting}
+              togglingWorkspaceId={togglingWorkspaceId}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto">
+    <div className="flex flex-row gap-4 pb-4 h-full overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
       {columns.map((column) => {
         // Special handling for the ISSUES column (UI-only, not from database)
         if (column.id === 'ISSUES') {
@@ -156,9 +244,9 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
 
   return (
     <>
-      <div className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
-        {/* Column Header */}
-        <div className="flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
+      <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
+        {/* Column Header — hidden on mobile where pills handle this */}
+        <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-sm">{column.label}</h3>
             <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
@@ -168,7 +256,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
         </div>
 
         {/* Column Content */}
-        <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-b-lg bg-muted/30">
+        <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/30">
           {isEmpty ? (
             <div className="flex items-center justify-center h-[60px] md:h-[150px] text-muted-foreground text-sm">
               {column.description}

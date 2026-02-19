@@ -6,10 +6,13 @@ import { ProjectRepoForm, type ProjectRepoFormProps } from '@/components/project
 import type { ScriptType } from '@/components/project/startup-script-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAppHeader } from '@/frontend/components/app-header-context';
 import { Logo } from '@/frontend/components/logo';
 import { trpc } from '@/frontend/lib/trpc';
 
 export default function NewProjectPage() {
+  useAppHeader({ title: 'New Project' });
+
   const navigate = useNavigate();
   const [repoPath, setRepoPath] = useState('');
   const [error, setError] = useState('');
