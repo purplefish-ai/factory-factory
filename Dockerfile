@@ -1,100 +1,98 @@
 # FactoryFactory Dockerfile
-# Multi-stage build for production deployment
+# Multi-stage build for cloud deployment
 
-# pnpm version used throughout the build
+ARG NODE_VERSION=20
 ARG PNPM_VERSION=10.28.1
 
 # ============================================================================
-# Stage 1: Dependencies
+# Stage 1: Install dependencies
 # ============================================================================
-FROM node:20-alpine AS deps
+FROM node:${NODE_VERSION}-alpine AS deps
 ARG PNPM_VERSION
 WORKDIR /app
 
-# Install dependencies for native modules and pnpm
-RUN apk add --no-cache libc6-compat
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
-
-# Copy package files
-COPY package.json pnpm-lock.yaml ./
-COPY prisma ./prisma/
-
-# Install dependencies with pnpm
-RUN pnpm install --frozen-lockfile
-
-# Generate Prisma client
-RUN pnpm db:generate
-
-# ============================================================================
-# Stage 2: Builder
-# ============================================================================
-FROM node:20-alpine AS builder
-ARG PNPM_VERSION
-WORKDIR /app
+# Build tools for native modules (better-sqlite3, node-pty)
+RUN apk add --no-cache python3 make g++ git libc6-compat
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+# Copy package manifests (workspace + root + sub-packages)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/core/package.json packages/core/
 
-# Set environment for build
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
+# Copy files needed by postinstall script (runs prisma generate + node-pty fixup)
+COPY scripts/postinstall.mjs scripts/
+COPY prisma/schema.prisma prisma/
 
-# Build Next.js frontend and backend
-RUN pnpm build:all
+# Install all dependencies (dev deps needed for build stage)
+RUN pnpm install --frozen-lockfile
 
 # ============================================================================
-# Stage 3: Runner
+# Stage 2: Build application
 # ============================================================================
-FROM node:20-alpine AS runner
+FROM node:${NODE_VERSION}-alpine AS builder
 ARG PNPM_VERSION
 WORKDIR /app
 
-# Install runtime dependencies and pnpm
-RUN apk add --no-cache \
-    libc6-compat \
-    git \
-    tmux \
-    bash \
-    curl
+RUN apk add --no-cache git libc6-compat
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 factoryfactory
+# Copy dependencies from stage 1
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=deps /app/prisma/generated ./prisma/generated
 
-# Copy built assets
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
+# Copy source
+COPY . .
 
-# Set ownership
-RUN chown -R factoryfactory:nodejs /app
-
-# Switch to non-root user
-USER factoryfactory
-
-# Environment variables
+# Build everything: core workspace, backend TS, frontend Vite SPA, prompts
 ENV NODE_ENV=production
-ENV PORT=3000
-ENV BACKEND_PORT=3001
-ENV HOSTNAME="0.0.0.0"
+RUN pnpm build
 
-# Expose ports
-EXPOSE 3000 3001
+# ============================================================================
+# Stage 3: Production runner
+# ============================================================================
+FROM node:${NODE_VERSION}-alpine AS runner
+ARG PNPM_VERSION
+WORKDIR /app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3001/health || exit 1
+# Runtime system dependencies
+RUN apk add --no-cache \
+    git \
+    bash \
+    tmux \
+    curl \
+    libc6-compat \
+    libstdc++
 
-# Create startup script that runs migrations then starts the app
-# Note: For production, run migrations separately before deploying
-# This is a convenience for local Docker usage
-ENTRYPOINT ["sh", "-c", "pnpm db:migrate:deploy && node server.js"]
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/packages/core/dist ./packages/core/dist
+COPY --from=builder /app/packages/core/package.json ./packages/core/
+
+# Copy Prisma artifacts (migrations for runtime runner + generated client)
+COPY --from=builder /app/prisma/migrations ./prisma/migrations
+COPY --from=builder /app/prisma/schema.prisma ./prisma/
+COPY --from=builder /app/prisma/generated ./prisma/generated
+
+# Create data directory
+RUN mkdir -p /data
+
+ENV NODE_ENV=production
+ENV BACKEND_PORT=3000
+ENV DATABASE_PATH=/data/data.db
+ENV BASE_DIR=/data
+ENV WORKTREE_BASE_DIR=/data/worktrees
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+ENTRYPOINT ["node", "dist/src/cli/index.js", "serve", "--host", "0.0.0.0", "--no-open"]

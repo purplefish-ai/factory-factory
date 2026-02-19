@@ -1,0 +1,36 @@
+node_modules
+dist
+.git
+.gitignore
+
+# Electron (not needed for cloud)
+electron
+tsconfig.electron.json
+
+# Development / tooling
+.storybook
+.husky
+.vscode
+.idea
+*.md
+!pnpm-workspace.yaml
+
+# Environment / secrets
+.env
+.env.*
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+coverage
+playwright-report
+playwright.*.config.ts
+
+# Build artifacts
+*.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
