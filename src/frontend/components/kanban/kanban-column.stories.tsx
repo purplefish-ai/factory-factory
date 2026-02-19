@@ -95,10 +95,18 @@ const mockWorkspaces: WorkspaceWithKanban[] = [
   },
 ];
 
-// Use KANBAN_COLUMNS to avoid duplicating column config
-const workingColumn = KANBAN_COLUMNS.find((c) => c.id === 'WORKING')!;
-const waitingColumn = KANBAN_COLUMNS.find((c) => c.id === 'WAITING')!;
-const doneColumn = KANBAN_COLUMNS.find((c) => c.id === 'DONE')!;
+// Define columns directly to avoid non-null assertions
+const workingColumn = {
+  id: 'WORKING' as const,
+  label: 'Working',
+  description: 'Agent is working',
+};
+const waitingColumn = {
+  id: 'WAITING' as const,
+  label: 'Waiting',
+  description: 'Waiting for input',
+};
+const doneColumn = { id: 'DONE' as const, label: 'Done', description: 'PR merged' };
 
 export const Empty: Story = {
   args: {

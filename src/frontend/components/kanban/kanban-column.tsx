@@ -57,7 +57,7 @@ export const KANBAN_COLUMNS: ColumnConfig[] = [
 export function getKanbanColumns(issueProvider: string): ColumnConfig[] {
   return [
     {
-      ...KANBAN_COLUMNS[0],
+      id: 'ISSUES',
       label: issueProvider === 'LINEAR' ? 'Todo · Linear' : 'Todo · GitHub',
       shortLabel: 'Todo',
       description: 'Issues assigned to you',
