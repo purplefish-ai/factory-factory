@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
+import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
 import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import {
@@ -299,6 +300,9 @@ export function WorkspaceDetailContainer() {
     selectedProvider,
   });
 
+  const { handleCreate: handleCreateWorkspace, isCreating: isCreatingWorkspace } =
+    useCreateWorkspace(workspace?.projectId, slug);
+
   const handleArchiveError = useCallback((error: unknown) => {
     const typedError = error as { data?: { code?: string }; message?: string };
     if (typedError.data?.code === 'PRECONDITION_FAILED') {
@@ -443,6 +447,8 @@ export function WorkspaceDetailContainer() {
           running={workspaceRunning}
           isCreatingSession={createSession.isPending}
           hasChanges={hasChanges}
+          onCreateWorkspace={handleCreateWorkspace}
+          isCreatingWorkspace={isCreatingWorkspace}
         />
       )}
       <WorkspaceDetailView
