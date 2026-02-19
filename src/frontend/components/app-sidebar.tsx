@@ -444,11 +444,19 @@ export function AppSidebar({ mockData }: { mockData?: AppSidebarMockData }) {
   const archiveWorkspace = trpc.workspace.archive.useMutation({
     onSuccess: (_data, variables) => {
       utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-      // If we archived the currently viewed workspace, navigate to the workspaces list
+      // If we archived the currently viewed workspace, leave the detail route.
       const currentId = pathname.match(/\/workspaces\/([^/]+)/)?.[1];
-      if (variables.id === currentId) {
-        void navigate(`/projects/${selectedProjectSlug}/workspaces`);
+      if (variables.id !== currentId) {
+        return;
       }
+
+      const projectSlug = getProjectSlugFromPath(pathname) ?? selectedProjectSlug;
+      if (projectSlug) {
+        void navigate(`/projects/${projectSlug}`, { replace: true });
+        return;
+      }
+
+      void navigate('/projects', { replace: true });
     },
     onError: (error, variables) => {
       cancelArchiving(variables.id);
