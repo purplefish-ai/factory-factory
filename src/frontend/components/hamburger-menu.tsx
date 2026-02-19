@@ -169,7 +169,7 @@ export function HamburgerMenu({ navData }: HamburgerMenuProps) {
       </Button>
       <SheetContent
         side="left"
-        className="w-full sm:w-96 sm:max-w-96 p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] overflow-y-auto [&>button:first-child]:top-[calc(env(safe-area-inset-top)+1.15rem)]"
+        className="w-full sm:w-[28rem] sm:max-w-[28rem] p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] overflow-y-auto [&>button:first-child]:top-[calc(env(safe-area-inset-top)+1.15rem)]"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation Menu</SheetTitle>

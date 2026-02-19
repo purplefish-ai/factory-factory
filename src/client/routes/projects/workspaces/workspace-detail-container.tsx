@@ -363,7 +363,7 @@ export function WorkspaceDetailContainer() {
     enabled: activeTabId === 'chat' && !!chatTabId,
     restoreDeps: [messages.length, activeTabId, chatTabId],
     autoStickToBottom: true,
-    stickToBottomThreshold: 150,
+    stickToBottomThreshold: 48,
     onRestore: onScroll,
   });
 

@@ -19,7 +19,7 @@ export function NewWorkspaceButton({
         size="icon"
         variant="ghost"
         className="h-9 w-9"
-        onClick={onClick}
+        onClick={() => onClick()}
         disabled={isCreating}
       >
         {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -28,11 +28,11 @@ export function NewWorkspaceButton({
   }
 
   return (
-    <Button size="sm" variant="ghost" onClick={onClick} disabled={isCreating}>
+    <Button size="sm" variant="ghost" onClick={() => onClick()} disabled={isCreating}>
       {isCreating ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
       ) : (
-        <Plus className="h-4 w-4 mr-2" />
+        <Plus className="h-4 w-4 mr-1" />
       )}
       {children}
     </Button>

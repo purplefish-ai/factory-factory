@@ -846,9 +846,13 @@ export function WorkspaceDetailHeaderSlot({
   return (
     <>
       <HeaderLeftExtraSlot>
+        <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
+          <Link to={`/projects/${slug}/workspaces`}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Workspaces Board</span>
+          </Link>
+        </Button>
         <div className="hidden md:flex items-center gap-2 min-w-0">
-          <WorkspaceIssueLink workspace={workspace} />
-          <RunScriptPortBadge workspaceId={workspaceId} />
           <WorkspacePrAction
             workspace={workspace}
             hasChanges={hasChanges}
@@ -856,15 +860,10 @@ export function WorkspaceDetailHeaderSlot({
             isCreatingSession={isCreatingSession}
             handleQuickAction={handleQuickAction}
           />
+          <WorkspaceIssueLink workspace={workspace} />
           <WorkspaceCiStatus workspace={workspace} />
+          <RunScriptPortBadge workspaceId={workspaceId} />
         </div>
-        <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
-          <Link to={`/projects/${slug}/workspaces`}>
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Back to Workspaces Board</span>
-            <span className="sm:hidden">Board</span>
-          </Link>
-        </Button>
       </HeaderLeftExtraSlot>
       <HeaderRightSlot>
         <div
