@@ -1,6 +1,14 @@
 import type { RefObject } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
+const NEAR_BOTTOM_ENTER_THRESHOLD = 24;
+const NEAR_BOTTOM_EXIT_THRESHOLD = 48;
+
+function isWithinFollowThreshold(distanceFromBottom: number, wasNearBottom: boolean): boolean {
+  const threshold = wasNearBottom ? NEAR_BOTTOM_EXIT_THRESHOLD : NEAR_BOTTOM_ENTER_THRESHOLD;
+  return distanceFromBottom <= threshold;
+}
+
 /**
  * Hook for managing auto-scroll behavior with RAF throttling.
  * Optimized for virtualized lists - doesn't require contentRef.
@@ -8,18 +16,11 @@ import { useCallback, useRef, useState } from 'react';
 export function useAutoScroll(viewportRef: RefObject<HTMLDivElement | null>) {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const isNearBottomRef = useRef(true);
-  // Track if we're currently animating a scroll-to-bottom to prevent flicker
-  const isScrollingToBottomRef = useRef(false);
   // RAF throttle flag
   const rafPendingRef = useRef(false);
 
   // Throttled scroll handler using requestAnimationFrame
   const onScroll = useCallback(() => {
-    // Don't update state while animating scroll-to-bottom (prevents flicker)
-    if (isScrollingToBottomRef.current) {
-      return;
-    }
-
     // Skip if we already have a pending RAF
     if (rafPendingRef.current) {
       return;
@@ -34,10 +35,8 @@ export function useAutoScroll(viewportRef: RefObject<HTMLDivElement | null>) {
         return;
       }
 
-      // Increased threshold for better UX - don't hide scroll button too early
-      const scrollThreshold = 150;
       const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-      const nearBottom = distanceFromBottom < scrollThreshold;
+      const nearBottom = isWithinFollowThreshold(distanceFromBottom, isNearBottomRef.current);
 
       // Only update state if it changed
       if (nearBottom !== isNearBottomRef.current) {
@@ -53,20 +52,14 @@ export function useAutoScroll(viewportRef: RefObject<HTMLDivElement | null>) {
       return;
     }
 
-    // Set flag to prevent onScroll from causing flicker during animation
-    isScrollingToBottomRef.current = true;
-    setIsNearBottom(true);
-    isNearBottomRef.current = true;
-
     viewport.scrollTo({
       top: viewport.scrollHeight,
-      behavior: 'smooth',
+      behavior: 'auto',
     });
 
-    // Clear the flag after animation completes (smooth scroll typically ~300-500ms)
-    setTimeout(() => {
-      isScrollingToBottomRef.current = false;
-    }, 500);
+    // Keep follow mode active and hide the CTA after manual jump.
+    setIsNearBottom(true);
+    isNearBottomRef.current = true;
   }, [viewportRef]);
 
   return { onScroll, isNearBottom, scrollToBottom };
