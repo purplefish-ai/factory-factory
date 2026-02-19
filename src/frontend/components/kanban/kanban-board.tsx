@@ -1,4 +1,4 @@
-import { Loader2, Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
+import { InlineWorkspaceForm } from './inline-workspace-form';
 import { IssueCard } from './issue-card';
 import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';
@@ -25,6 +26,17 @@ export function KanbanControls() {
     >
       <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
       Refresh
+    </Button>
+  );
+}
+
+export function NewWorkspaceHeaderButton() {
+  const { setShowInlineForm } = useKanban();
+
+  return (
+    <Button variant="outline" size="sm" className="h-8" onClick={() => setShowInlineForm(true)}>
+      <Plus className="h-4 w-4" />
+      New
     </Button>
   );
 }
@@ -50,8 +62,7 @@ export function KanbanBoard() {
     togglingWorkspaceId,
     archiveWorkspace,
     archivingWorkspaceId,
-    onCreateWorkspace,
-    isCreatingWorkspace,
+    showInlineForm,
   } = useKanban();
 
   const isMobile = useIsMobile();
@@ -78,6 +89,13 @@ export function KanbanBoard() {
 
     return grouped;
   }, [workspaces]);
+
+  // Switch to ISSUES tab when inline form is opened (mobile header button)
+  useEffect(() => {
+    if (showInlineForm && isMobile) {
+      setActiveColumnId('ISSUES');
+    }
+  }, [showInlineForm, isMobile]);
 
   // Pick the initial mobile tab once data loads
   useEffect(() => {
@@ -157,7 +175,7 @@ export function KanbanBoard() {
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 )}
               >
-                {column.label}
+                {column.shortLabel ?? column.label}
                 <span
                   className={cn(
                     'inline-flex items-center justify-center rounded-full min-w-4 h-4 px-1 text-[10px] font-semibold',
@@ -174,13 +192,7 @@ export function KanbanBoard() {
         {/* Active column content */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {activeColumn.id === 'ISSUES' ? (
-            <IssuesColumn
-              column={activeColumn}
-              issues={issues ?? []}
-              projectId={projectId}
-              onCreateWorkspace={onCreateWorkspace}
-              isCreatingWorkspace={isCreatingWorkspace}
-            />
+            <IssuesColumn column={activeColumn} issues={issues ?? []} projectId={projectId} />
           ) : (
             <KanbanColumn
               column={activeColumn}
@@ -208,8 +220,6 @@ export function KanbanBoard() {
               column={column}
               issues={issues ?? []}
               projectId={projectId}
-              onCreateWorkspace={onCreateWorkspace}
-              isCreatingWorkspace={isCreatingWorkspace}
             />
           );
         }
@@ -238,17 +248,11 @@ interface IssuesColumnProps {
   column: ColumnConfig;
   issues: KanbanIssue[];
   projectId: string;
-  onCreateWorkspace?: () => void;
-  isCreatingWorkspace?: boolean;
 }
 
-function IssuesColumn({
-  column,
-  issues,
-  projectId,
-  onCreateWorkspace,
-  isCreatingWorkspace,
-}: IssuesColumnProps) {
+function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
+  const { workspaces, showInlineForm, setShowInlineForm } = useKanban();
+  const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
   const isEmpty = issues.length === 0;
   const [selectedIssue, setSelectedIssue] = useState<KanbanIssue | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -281,26 +285,24 @@ function IssuesColumn({
 
         {/* Column Content */}
         <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/30">
-          {onCreateWorkspace && (
+          {showInlineForm ? (
+            <InlineWorkspaceForm
+              projectId={projectId}
+              existingNames={existingNames}
+              onCancel={() => setShowInlineForm(false)}
+              onCreated={() => setShowInlineForm(false)}
+            />
+          ) : (
             <button
               type="button"
-              onClick={onCreateWorkspace}
-              disabled={isCreatingWorkspace}
-              className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-white/40 px-3 py-5 text-sm text-white hover:border-white/70 transition-colors disabled:opacity-50 cursor-pointer"
+              onClick={() => setShowInlineForm(true)}
+              className="shrink-0 flex items-center gap-2 rounded-lg border border-dashed border-muted-foreground/40 px-3 py-5 text-sm text-muted-foreground hover:border-muted-foreground/70 hover:text-foreground transition-colors cursor-pointer"
             >
-              {isCreatingWorkspace ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
+              <Plus className="h-4 w-4" />
               New Workspace
             </button>
           )}
-          {isEmpty ? (
-            <div className="flex items-center justify-center h-[60px] md:h-[150px] text-muted-foreground text-sm">
-              {column.description}
-            </div>
-          ) : (
+          {!isEmpty &&
             issues.map((issue) => (
               <div key={issue.id} className="shrink-0">
                 <IssueCard
@@ -309,8 +311,7 @@ function IssuesColumn({
                   onClick={() => handleIssueClick(issue)}
                 />
               </div>
-            ))
-          )}
+            ))}
         </div>
       </div>
 
