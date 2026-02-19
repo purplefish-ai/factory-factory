@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { RatchetWrenchIcon } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
+import { useAppHeader } from '@/frontend/components/app-header-context';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
@@ -731,6 +732,8 @@ function ServerLogsSection() {
 }
 
 export default function AdminDashboardPage() {
+  useAppHeader({ title: 'Admin' });
+
   const {
     data: stats,
     isLoading: isLoadingStats,

@@ -1,6 +1,7 @@
 import {
   AppWindow,
   Archive,
+  ArrowLeft,
   CheckCircle2,
   CircleDot,
   GitBranch,
@@ -13,6 +14,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,6 +54,11 @@ import {
   RunScriptPortBadge,
   useWorkspacePanel,
 } from '@/components/workspace';
+import {
+  HeaderLeftExtraSlot,
+  HeaderRightSlot,
+  useAppHeader,
+} from '@/frontend/components/app-header-context';
 import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
 import {
   applyRatchetToggleState,
@@ -873,5 +880,108 @@ export function WorkspaceHeader({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Component that injects workspace header content into the app-level header
+ * via portal slots. Rendered inside WorkspaceDetailContainer.
+ */
+export function WorkspaceDetailHeaderSlot({
+  workspace,
+  workspaceId,
+  availableIdes,
+  preferredIde,
+  openInIde,
+  archivePending,
+  onArchiveRequest,
+  handleQuickAction,
+  running,
+  isCreatingSession,
+  hasChanges,
+}: WorkspaceHeaderProps) {
+  const isMobile = useIsMobile();
+  const { slug = '' } = useParams<{ slug: string }>();
+
+  const title = workspace.branchName || workspace.name;
+  useAppHeader({ title });
+
+  return (
+    <>
+      <HeaderLeftExtraSlot>
+        <div className="hidden md:flex items-center gap-2 min-w-0">
+          <WorkspaceIssueLink workspace={workspace} />
+          <RunScriptPortBadge workspaceId={workspaceId} />
+          <WorkspacePrAction
+            workspace={workspace}
+            hasChanges={hasChanges}
+            running={running}
+            isCreatingSession={isCreatingSession}
+            handleQuickAction={handleQuickAction}
+          />
+          <WorkspaceCiStatus workspace={workspace} />
+        </div>
+        <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
+          <Link to={`/projects/${slug}/workspaces`}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Back to Workspaces Board</span>
+            <span className="sm:hidden">Board</span>
+          </Link>
+        </Button>
+      </HeaderLeftExtraSlot>
+      <HeaderRightSlot>
+        <div
+          className={cn(
+            'flex items-center gap-1 shrink-0',
+            !isMobile && 'flex-wrap gap-0.5 md:gap-1'
+          )}
+        >
+          <RunScriptButton workspaceId={workspaceId} />
+          {isMobile ? (
+            <>
+              <ToggleRightPanelButton />
+              <WorkspaceHeaderOverflowMenu
+                workspace={workspace}
+                workspaceId={workspaceId}
+                availableIdes={availableIdes}
+                preferredIde={preferredIde}
+                openInIde={openInIde}
+                archivePending={archivePending}
+                onArchiveRequest={onArchiveRequest}
+                handleQuickAction={handleQuickAction}
+                isCreatingSession={isCreatingSession}
+              />
+            </>
+          ) : (
+            <>
+              <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
+              <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
+              <WorkspaceBranchLink workspace={workspace} />
+              <QuickActionsMenu
+                onExecuteAgent={(action) => {
+                  if (action.content) {
+                    handleQuickAction(action.name, action.content);
+                  }
+                }}
+                disabled={isCreatingSession}
+              />
+              <OpenInIdeAction
+                workspaceId={workspaceId}
+                hasWorktreePath={Boolean(workspace.worktreePath)}
+                availableIdes={availableIdes}
+                preferredIde={preferredIde}
+                openInIde={openInIde}
+              />
+              <ArchiveActionButton
+                workspace={workspace}
+                archivePending={archivePending}
+                onArchiveRequest={onArchiveRequest}
+              />
+              <ToggleRightPanelButton />
+            </>
+          )}
+        </div>
+      </HeaderRightSlot>
+    </>
   );
 }

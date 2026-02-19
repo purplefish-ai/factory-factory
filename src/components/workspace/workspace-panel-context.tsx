@@ -158,13 +158,17 @@ function loadBottomTabFromStorage(workspaceId: string): BottomPanelTab {
 
 function loadRightPanelVisibility(workspaceId: string): boolean {
   if (typeof window === 'undefined') {
-    return false;
+    return true;
   }
   try {
     const stored = localStorage.getItem(`${STORAGE_KEY_RIGHT_PANEL_PREFIX}${workspaceId}`);
+    // Default to expanded if no preference stored
+    if (stored === null) {
+      return true;
+    }
     return stored === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 

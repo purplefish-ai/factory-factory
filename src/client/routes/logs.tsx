@@ -31,6 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useAppHeader } from '@/frontend/components/app-header-context';
 import { Loading } from '@/frontend/components/loading';
 import { PageHeader } from '@/frontend/components/page-header';
 import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
@@ -172,6 +173,8 @@ function formatPageLabel(currentPage: number, totalPages: number | null): string
 }
 
 export default function LogsPage() {
+  useAppHeader({ title: 'Logs' });
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [level, setLevel] = useState<LogLevel | 'all'>('all');

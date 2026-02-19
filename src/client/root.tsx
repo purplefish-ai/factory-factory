@@ -1,9 +1,8 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
-import { ResizableLayout } from '@/components/layout/resizable-layout';
+import { AppLayout } from '@/components/layout/resizable-layout';
 import { Toaster } from '@/components/ui/sonner';
 import { WorkspaceNotificationManager } from '@/components/workspace/WorkspaceNotificationManager';
-import { AppSidebar } from '@/frontend/components/app-sidebar';
 import { CLIHealthBanner } from '@/frontend/components/cli-health-banner';
 import { ThemeProvider } from '@/frontend/components/theme-provider';
 import { TRPCProvider, useProjects } from '@/frontend/lib/providers';
@@ -13,7 +12,6 @@ function RootLayout() {
   const { projects, isLoading } = useProjects();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const showSidebar = !isLoading && projects && projects.length > 0;
   const { height: viewportHeight, offsetTop: viewportOffsetTop } = useVisualViewportHeight();
   const viewportTransform =
     viewportOffsetTop === '0px' ? undefined : `translateY(${viewportOffsetTop})`;
@@ -38,12 +36,9 @@ function RootLayout() {
       style={{ height: viewportHeight, transform: viewportTransform }}
     >
       <CLIHealthBanner />
-      <ResizableLayout
-        sidebar={showSidebar ? <AppSidebar /> : null}
-        className="flex-1 overflow-hidden"
-      >
+      <AppLayout className="flex-1 overflow-hidden">
         <Outlet />
-      </ResizableLayout>
+      </AppLayout>
     </div>
   );
 }

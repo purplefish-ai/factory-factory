@@ -20,17 +20,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { WorkspaceStatusBadge } from '@/components/workspace/workspace-status-badge';
+import { HeaderRightSlot, useAppHeader } from '@/frontend/components/app-header-context';
 import { CIFailureWarning } from '@/frontend/components/ci-failure-warning';
 import { Loading } from '@/frontend/components/loading';
-import { PageHeader } from '@/frontend/components/page-header';
 import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatStatusLabel } from '@/lib/formatters';
 import type { CIStatus, WorkspaceStatus } from '@/shared/core';
 import { NewWorkspaceButton } from './new-workspace-button';
-import { ResumeBranchButton } from './resume-branch-button';
-import type { ViewMode } from './types';
-import { ViewModeToggle } from './view-mode-toggle';
 
 const workspaceStatuses: WorkspaceStatus[] = ['NEW', 'PROVISIONING', 'READY', 'FAILED', 'ARCHIVED'];
 
@@ -88,9 +85,6 @@ export function WorkspacesTableView({
   slug,
   statusFilter,
   onStatusFilterChange,
-  viewMode,
-  onViewModeChange,
-  onResumeOpen,
   onCreateWorkspace,
   isCreatingWorkspace,
   resumeDialog,
@@ -100,18 +94,17 @@ export function WorkspacesTableView({
   slug: string;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
-  viewMode: ViewMode;
-  onViewModeChange: (value: ViewMode) => void;
-  onResumeOpen: () => void;
   onCreateWorkspace: () => void;
   isCreatingWorkspace: boolean;
   resumeDialog: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
 
+  useAppHeader({ title: 'Workspaces List' });
+
   return (
     <div className="space-y-4 p-3 md:p-6">
-      <PageHeader title="Workspaces">
+      <HeaderRightSlot>
         <Select value={statusFilter} onValueChange={onStatusFilterChange}>
           <SelectTrigger className="w-full sm:w-[150px]">
             <SelectValue placeholder="All Statuses" />
@@ -125,11 +118,8 @@ export function WorkspacesTableView({
             ))}
           </SelectContent>
         </Select>
-        <ViewModeToggle viewMode={viewMode} onViewModeChange={onViewModeChange} />
-        <ResumeBranchButton onClick={onResumeOpen} />
         <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
-      </PageHeader>
-
+      </HeaderRightSlot>
       {isLoading ? (
         <Card>
           <Loading message="Loading workspaces..." />

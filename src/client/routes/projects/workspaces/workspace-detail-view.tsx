@@ -16,7 +16,6 @@ import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
-import { WorkspaceHeader } from './workspace-detail-header';
 import { ArchivingOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 interface WorkspaceStateProps {
@@ -157,20 +156,6 @@ export function WorkspaceDetailView({
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {header.archivePending && <ArchivingOverlay />}
-
-      <WorkspaceHeader
-        workspace={workspaceState.workspace}
-        workspaceId={workspaceState.workspaceId}
-        availableIdes={header.availableIdes}
-        preferredIde={header.preferredIde}
-        openInIde={header.openInIde}
-        archivePending={header.archivePending}
-        onArchiveRequest={header.handleArchiveRequest}
-        handleQuickAction={header.handleQuickAction}
-        running={header.running}
-        isCreatingSession={header.isCreatingSession}
-        hasChanges={header.hasChanges}
-      />
 
       <ScriptBanner
         workspaceId={workspaceState.workspaceId}
