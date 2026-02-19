@@ -13,6 +13,7 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
   codexCliAuthCheck: 5000,
   startupScriptForceKillGrace: 5000,
   portLsof: 2000,
+  ratchetWorkspaceCheck: 90_000,
 } as const);
 
 export const SERVICE_INTERVAL_MS = Object.freeze({
