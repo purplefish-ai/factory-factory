@@ -835,10 +835,10 @@ export function WorkspaceDetailHeaderSlot({
             !isMobile && 'flex-wrap gap-0.5 md:gap-1'
           )}
         >
+          <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
           <RunScriptButton workspaceId={workspaceId} />
           {isMobile ? (
             <>
-              <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
               <ToggleRightPanelButton />
               <WorkspaceHeaderOverflowMenu
                 workspace={workspace}
@@ -854,7 +854,6 @@ export function WorkspaceDetailHeaderSlot({
             </>
           ) : (
             <>
-              <NewWorkspaceButton onClick={onCreateWorkspace} isCreating={isCreatingWorkspace} />
               <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
               <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
               <WorkspaceBranchLink workspace={workspace} />
