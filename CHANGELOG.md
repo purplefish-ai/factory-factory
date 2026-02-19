@@ -5,6 +5,51 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.6] - 2026-02-19
+
+### Added
+
+- Add Linear domain, crypto service, and schema migration (#1067)
+- Add Linear admin configuration UI (Deliverable 2) (#1069)
+- Add Linear issues to Kanban board (Deliverable 3) (#1072)
+- Persist chat input attachments across navigation/refresh (#1073)
+- Persist workspace tool-call expansion across navigation (#1074)
+- Add Linear issue prompt, state sync, header link, and export schema (D4-D6) (#1079)
+- Add ff proxy command with private cloudflared auth mode (#1088)
+
+### Changed
+
+- Improve sidebar pending-request UI and stories (#1062)
+- Normalize new-session control height in tab bar (#1063)
+- Temporarily hide issue tracking UI from admin panel (#1070)
+- Render Codex fileChange calls as first-class cards (#1075)
+- Upgrade dependencies to latest versions (#1076)
+- Improve mobile layout reliability and add Playwright baseline tests (#1077)
+- Speed up pending and ratchet UI feedback (#1080)
+- Simplify sidebar footer and add workspace branch GitHub link (#1081)
+- Simplify mobile workspace header actions (#1085)
+- Enable quick actions while agent is running (#1093)
+
+### Fixed
+
+- Skip Codex reasoning blocks in history hydration (#1064)
+- Fix interleaved FK PRAGMAs in migration runner (#1071)
+- Fix queued messages stuck after stopping and restarting agent (#1083)
+- Fix mobile keyboard causing full-page scroll in chat (#1084)
+- Fix mobile overflow in prompts and startup forms (#1086)
+- Avoid redundant chat auto-scroll writes (#1087)
+- Fix knip entrypoints for CLI and backend (#1089)
+- Fix stuck pending tool calls after command handoff (#1090)
+- Fix mobile chat layout when keyboard opens (#1091)
+- Patch Dependabot transitive vulnerabilities (#1092)
+- Redirect away from archived workspace detail (#1094)
+- Fix false not-pushed indicators in workspace changes (#1095)
+
+### Documentation
+
+- Add Linear Integration Design Doc (#1065)
+- Improve Linear integration design doc (#1066)
+
 ## [0.3.5] - 2026-02-16
 
 ### Added
