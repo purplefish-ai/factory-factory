@@ -50,6 +50,14 @@ COPY . .
 ENV NODE_ENV=production
 RUN pnpm build
 
+# Prisma 7.x generates .ts imports in client.js (e.g. "./internal/class.ts").
+# TypeScript with moduleResolution:"bundler" doesn't rewrite these to .js,
+# so Node.js can't resolve them. Copy the raw .ts source files into dist/
+# alongside the compiled .js so the imports resolve at runtime.
+RUN cp -r prisma/generated/*.ts dist/prisma/generated/ \
+ && cp -r prisma/generated/internal/*.ts dist/prisma/generated/internal/ \
+ && cp -r prisma/generated/models/*.ts dist/prisma/generated/models/
+
 # ============================================================================
 # Stage 3: Production runner
 # ============================================================================
