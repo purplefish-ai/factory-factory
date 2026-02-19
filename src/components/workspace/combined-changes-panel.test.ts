@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildCombinedEntries, getPartialDataWarning } from './combined-changes-panel';
+import {
+  buildCombinedEntries,
+  getIndicatorLabel,
+  getPartialDataWarning,
+} from './combined-changes-panel';
 
 describe('buildCombinedEntries', () => {
   it('does not mark main-relative files as not pushed when upstream is in sync', () => {
@@ -59,5 +63,15 @@ describe('getPartialDataWarning', () => {
     expect(warning).toBe(
       'Diff vs main and not-pushed detection unavailable; showing working tree changes only.'
     );
+  });
+});
+
+describe('getIndicatorLabel', () => {
+  it('returns staged-only label when no upstream is configured', () => {
+    expect(getIndicatorLabel(false)).toBe('Staged');
+  });
+
+  it('returns staged-or-unpushed label when upstream is configured', () => {
+    expect(getIndicatorLabel(true)).toBe('Staged or not pushed to remote');
   });
 });

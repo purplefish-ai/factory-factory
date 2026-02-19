@@ -34,7 +34,7 @@ interface CombinedChangesPanelProps {
 interface CombinedChangesContentProps {
   entries: ChangeListEntry[];
   noMergeBase: boolean;
-  hasUpstream: boolean;
+  indicatorLabel: string;
   partialDataWarning?: string;
   onFileClick: (path: string) => void;
 }
@@ -96,14 +96,18 @@ function NoMergeBaseState() {
   );
 }
 
+export function getIndicatorLabel(hasUpstream: boolean): string {
+  return hasUpstream ? 'Staged or not pushed to remote' : 'Staged';
+}
+
 function ChangesDecorators({
   noMergeBase,
-  hasUpstream,
+  indicatorLabel,
   hasIndicatorEntries,
   partialDataWarning,
 }: {
   noMergeBase: boolean;
-  hasUpstream: boolean;
+  indicatorLabel: string;
   hasIndicatorEntries: boolean;
   partialDataWarning?: string;
 }) {
@@ -128,7 +132,7 @@ function ChangesDecorators({
       {hasIndicatorEntries && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />
-          <span>{hasUpstream ? 'Staged or not pushed to remote' : 'Staged'}</span>
+          <span>{indicatorLabel}</span>
         </div>
       )}
     </div>
@@ -175,7 +179,7 @@ export function buildCombinedEntries(
 function CombinedChangesContent({
   entries,
   noMergeBase,
-  hasUpstream,
+  indicatorLabel,
   partialDataWarning,
   onFileClick,
 }: CombinedChangesContentProps) {
@@ -195,7 +199,7 @@ function CombinedChangesContent({
   const decorators = (
     <ChangesDecorators
       noMergeBase={noMergeBase}
-      hasUpstream={hasUpstream}
+      indicatorLabel={indicatorLabel}
       hasIndicatorEntries={hasIndicatorEntries}
       partialDataWarning={partialDataWarning}
     />
@@ -207,7 +211,12 @@ function CombinedChangesContent({
         {(noMergeBase || hasIndicatorEntries || partialDataWarning) && (
           <div className="p-2 border-b">{decorators}</div>
         )}
-        <VirtualizedChangeList entries={entries} onFileClick={onFileClick} className="flex-1" />
+        <VirtualizedChangeList
+          entries={entries}
+          onFileClick={onFileClick}
+          className="flex-1"
+          indicatorLabel={indicatorLabel}
+        />
       </div>
     );
   }
@@ -216,7 +225,7 @@ function CombinedChangesContent({
     <ScrollArea className="h-full">
       <div className="p-2 space-y-2">
         {decorators}
-        <ChangeList entries={entries} onFileClick={onFileClick} />
+        <ChangeList entries={entries} onFileClick={onFileClick} indicatorLabel={indicatorLabel} />
       </div>
     </ScrollArea>
   );
@@ -266,6 +275,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
   const gitFiles: GitStatusFile[] = gitError ? [] : (gitData?.files ?? []);
   const snapshot = getDiffSnapshot(diffData, diffError);
   const partialDataWarning = getPartialDataWarning({ gitError, diffError, unpushedError });
+  const indicatorLabel = getIndicatorLabel(unpushedData?.hasUpstream ?? false);
   const unpushedFiles = new Set(unpushedError ? [] : (unpushedData?.files ?? []));
   const entries = buildCombinedEntries(
     gitFiles,
@@ -277,7 +287,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
     <CombinedChangesContent
       entries={entries}
       noMergeBase={snapshot.noMergeBase}
-      hasUpstream={unpushedData?.hasUpstream ?? false}
+      indicatorLabel={indicatorLabel}
       partialDataWarning={partialDataWarning}
       onFileClick={openDiffTab}
     />

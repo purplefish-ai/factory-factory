@@ -138,7 +138,9 @@ export const workspaceGitRouter = router({
       }
 
       const diffResult = await gitCommand(
-        ['diff', '--name-only', `${upstreamRef}..HEAD`],
+        // Use three-dot to capture only changes introduced by local commits
+        // since divergence from upstream (exclude remote-only changes).
+        ['diff', '--name-only', `${upstreamRef}...HEAD`],
         result.worktreePath
       );
       if (diffResult.code !== 0) {
