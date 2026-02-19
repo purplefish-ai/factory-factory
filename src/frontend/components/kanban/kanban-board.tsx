@@ -171,7 +171,7 @@ export function KanbanBoard() {
                 className={cn(
                   'flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
                   isActive
-                    ? 'bg-primary text-primary-foreground'
+                    ? column.pillActiveClass
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 )}
               >
@@ -179,7 +179,7 @@ export function KanbanBoard() {
                 <span
                   className={cn(
                     'inline-flex items-center justify-center rounded-full min-w-4 h-4 px-1 text-[10px] font-semibold',
-                    isActive ? 'bg-primary-foreground/20' : 'bg-background/50'
+                    isActive ? 'bg-white/20' : 'bg-background/50'
                   )}
                 >
                   {count}
@@ -274,7 +274,9 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
     <>
       <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
         {/* Column Header — hidden on mobile where pills handle this */}
-        <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
+        <div
+          className={`hidden md:flex items-center justify-between px-2 py-3 rounded-t-lg ${column.headerClass}`}
+        >
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-sm">{column.label}</h3>
             <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
@@ -284,7 +286,9 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
         </div>
 
         {/* Column Content */}
-        <div className="flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none bg-muted/30">
+        <div
+          className={`flex flex-col gap-3 flex-1 overflow-y-auto p-3 min-h-0 rounded-lg md:rounded-t-none ${column.bodyClass}`}
+        >
           {showInlineForm ? (
             <InlineWorkspaceForm
               projectId={projectId}
