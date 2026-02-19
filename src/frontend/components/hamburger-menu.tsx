@@ -39,9 +39,7 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
     <div className="flex flex-col h-full gap-1">
       {/* Logo + Project Selector */}
       <div className="px-2 py-1">
-        <Link to="/projects" onClick={onClose}>
-          <LogoText className="text-xl" />
-        </Link>
+        <LogoText className="text-xl" />
         <div className="mt-1">
           <ProjectSelectorDropdown
             selectedProjectSlug={navData.selectedProjectSlug}
