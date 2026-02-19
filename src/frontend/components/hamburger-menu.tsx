@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -62,19 +63,19 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
           </p>
           <div className="flex flex-col gap-0.5">
             {activeWorkspaces.map((workspace) => (
-              <Link
-                key={workspace.id}
-                to={`/projects/${navData.selectedProjectSlug}/workspaces/${workspace.id}`}
-                onClick={onClose}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-                data-active={workspace.id === navData.currentWorkspaceId || undefined}
-              >
-                <WorkspaceStatusIcon
-                  pendingRequestType={workspace.pendingRequestType}
-                  isWorking={workspace.isWorking}
-                />
-                <span className="truncate">{workspace.name}</span>
-              </Link>
+              <SheetClose key={workspace.id} asChild>
+                <Link
+                  to={`/projects/${navData.selectedProjectSlug}/workspaces/${workspace.id}`}
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+                  data-active={workspace.id === navData.currentWorkspaceId || undefined}
+                >
+                  <WorkspaceStatusIcon
+                    pendingRequestType={workspace.pendingRequestType}
+                    isWorking={workspace.isWorking}
+                  />
+                  <span className="truncate">{workspace.name}</span>
+                </Link>
+              </SheetClose>
             ))}
           </div>
         </div>
@@ -84,51 +85,54 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
       <div className="mt-auto flex flex-col gap-1">
         <Separator />
         <div className="flex flex-col gap-0.5">
-          <Link
-            to={`/projects/${navData.selectedProjectSlug}/workspaces`}
-            onClick={onClose}
-            className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-              pathname?.startsWith(`/projects/${navData.selectedProjectSlug}/workspaces`)
-                ? 'bg-accent'
-                : 'hover:bg-accent'
-            }`}
-          >
-            <Kanban className="h-4 w-4" />
-            <span>Workspaces Board</span>
-          </Link>
-          <Link
-            to="/reviews"
-            onClick={onClose}
-            className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-              pathname === '/reviews' || pathname?.startsWith('/reviews/')
-                ? 'bg-accent'
-                : 'hover:bg-accent'
-            }`}
-          >
-            <GitPullRequest className="h-4 w-4" />
-            <span>Reviews</span>
-            {navData.reviewCount > 0 && (
-              <Badge
-                variant="secondary"
-                className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
-              >
-                {navData.reviewCount}
-              </Badge>
-            )}
-          </Link>
-          <div className="flex items-center gap-1">
+          <SheetClose asChild>
             <Link
-              to="/admin"
-              onClick={onClose}
-              className={`flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                pathname === '/admin' || pathname?.startsWith('/admin/')
+              to={`/projects/${navData.selectedProjectSlug}/workspaces`}
+              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                pathname?.startsWith(`/projects/${navData.selectedProjectSlug}/workspaces`)
                   ? 'bg-accent'
                   : 'hover:bg-accent'
               }`}
             >
-              <Settings className="h-4 w-4" />
-              <span>Admin</span>
+              <Kanban className="h-4 w-4" />
+              <span>Workspaces Board</span>
             </Link>
+          </SheetClose>
+          <SheetClose asChild>
+            <Link
+              to="/reviews"
+              className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                pathname === '/reviews' || pathname?.startsWith('/reviews/')
+                  ? 'bg-accent'
+                  : 'hover:bg-accent'
+              }`}
+            >
+              <GitPullRequest className="h-4 w-4" />
+              <span>Reviews</span>
+              {navData.reviewCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-auto h-5 min-w-5 px-1.5 text-xs bg-orange-500/20 text-orange-600 border-orange-500/30"
+                >
+                  {navData.reviewCount}
+                </Badge>
+              )}
+            </Link>
+          </SheetClose>
+          <div className="flex items-center gap-1">
+            <SheetClose asChild>
+              <Link
+                to="/admin"
+                className={`flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                  pathname === '/admin' || pathname?.startsWith('/admin/')
+                    ? 'bg-accent'
+                    : 'hover:bg-accent'
+                }`}
+              >
+                <Settings className="h-4 w-4" />
+                <span>Admin</span>
+              </Link>
+            </SheetClose>
             <ThemeToggle />
           </div>
         </div>
