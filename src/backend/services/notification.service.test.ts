@@ -102,17 +102,37 @@ describe('notificationService', () => {
   });
 
   it('supports force-send and helper notification methods', async () => {
+    const isMac = process.platform === 'darwin';
+    const isLinux = process.platform === 'linux';
+    const isWindows = process.platform === 'win32';
+
     const hour = new Date().getHours();
     notificationService.updateConfig({
       quietHoursStart: hour,
       quietHoursEnd: (hour + 1) % 24,
     });
-    mockSendMacNotification.mockResolvedValue(undefined);
+
+    if (isMac) {
+      mockSendMacNotification.mockResolvedValue(undefined);
+    } else if (isLinux) {
+      mockSendLinuxNotification.mockResolvedValue(undefined);
+    } else if (isWindows) {
+      mockExecCommand.mockResolvedValue(undefined);
+    }
+
     await expect(
       notificationService.notify('Forced', 'Send', { forceSend: true })
     ).resolves.toEqual({
       sent: true,
     });
+
+    if (isMac) {
+      expect(mockSendMacNotification).toHaveBeenCalledWith('Forced', 'Send', 'Glass');
+    } else if (isLinux) {
+      expect(mockSendLinuxNotification).toHaveBeenCalledWith('Forced', 'Send');
+    } else if (isWindows) {
+      expect(mockExecCommand).toHaveBeenCalled();
+    }
 
     const notifySpy = vi.spyOn(notificationService, 'notify').mockResolvedValue({ sent: true });
 
