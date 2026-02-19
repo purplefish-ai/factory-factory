@@ -12,6 +12,7 @@ services:
       - "${PORT:-3000}:3000"
     volumes:
       - data:/data
+      - ./tunnel-url:/app/tunnel-url
     environment:
       - NODE_ENV=production
       - DATABASE_PATH=/data/data.db

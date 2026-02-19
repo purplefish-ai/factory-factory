@@ -63,6 +63,7 @@ RUN apk add --no-cache \
     bash \
     tmux \
     curl \
+    lsof \
     libc6-compat \
     libstdc++ \
   && ARCH="$(uname -m)" \
