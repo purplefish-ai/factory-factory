@@ -3,6 +3,7 @@
 
 services:
   factoryfactory:
+    image: ghcr.io/purplefish-ai/factory-factory:latest
     build:
       context: .
       dockerfile: Dockerfile
