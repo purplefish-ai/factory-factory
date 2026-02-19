@@ -211,6 +211,28 @@ export function useWebSocketTransport(
     };
   }, [queuePolicy, url]);
 
+  // Attempt immediate recovery when the app returns to the foreground or network.
+  const recoverConnection = useCallback(() => {
+    if (!url) {
+      return;
+    }
+
+    // Avoid connection churn while offline.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return;
+    }
+
+    // If already connected, no recovery needed.
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    // Treat lifecycle recovery as a fresh retry window.
+    reconnectAttemptsRef.current = 0;
+    intentionalCloseRef.current = false;
+    connect();
+  }, [connect, url]);
+
   // Connect when URL becomes available, disconnect when it becomes null
   useEffect(() => {
     if (url) {
@@ -239,6 +261,36 @@ export function useWebSocketTransport(
       }
     };
   }, [url, connect]);
+
+  // Mobile browsers often suspend tabs and delay close events while backgrounded.
+  // Recover immediately when the tab is foregrounded or network comes back.
+  useEffect(() => {
+    if (!url || typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        recoverConnection();
+      }
+    };
+    const handlePageShow = () => {
+      recoverConnection();
+    };
+    const handleOnline = () => {
+      recoverConnection();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [url, recoverConnection]);
 
   // Send a message (JSON stringified), queuing if disconnected
   const send = useCallback(

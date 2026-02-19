@@ -465,6 +465,62 @@ describe('WebSocket transport patterns', () => {
       expect(reconnectAttempts).toBe(MAX_RECONNECT_ATTEMPTS);
       expect(attemptReconnect()).toBe(false);
     });
+
+    it('should allow lifecycle recovery after max reconnect attempts', () => {
+      let reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
+      let connectCalls = 0;
+      const online = true;
+      const readyState: number = WS_CLOSED;
+      const url = 'ws://localhost:3000/chat';
+
+      const connect = () => {
+        connectCalls += 1;
+      };
+
+      const recoverConnection = () => {
+        if (!(url && online)) {
+          return;
+        }
+        if (readyState === WS_OPEN) {
+          return;
+        }
+        reconnectAttempts = 0;
+        connect();
+      };
+
+      recoverConnection();
+
+      expect(reconnectAttempts).toBe(0);
+      expect(connectCalls).toBe(1);
+    });
+
+    it('should skip lifecycle recovery while offline', () => {
+      let reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
+      let connectCalls = 0;
+      const online = false;
+      const readyState: number = WS_CLOSED;
+      const url = 'ws://localhost:3000/chat';
+
+      const connect = () => {
+        connectCalls += 1;
+      };
+
+      const recoverConnection = () => {
+        if (!(url && online)) {
+          return;
+        }
+        if (readyState === WS_OPEN) {
+          return;
+        }
+        reconnectAttempts = 0;
+        connect();
+      };
+
+      recoverConnection();
+
+      expect(reconnectAttempts).toBe(MAX_RECONNECT_ATTEMPTS);
+      expect(connectCalls).toBe(0);
+    });
   });
 
   describe('cleanup on unmount', () => {
