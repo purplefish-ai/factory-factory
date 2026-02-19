@@ -327,6 +327,7 @@ async function startFactoryFactoryServer(params: {
       DATABASE_PATH: params.databasePath,
       BACKEND_PORT: params.requestedPort.toString(),
       BACKEND_HOST: LOCAL_HOST,
+      FF_RUN_SCRIPT_PROXY_ENABLED: '1',
       FRONTEND_STATIC_PATH: frontendDist,
     },
     stdio: ['ignore', 'pipe', 'pipe'],

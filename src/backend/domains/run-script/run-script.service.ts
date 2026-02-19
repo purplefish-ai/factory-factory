@@ -4,6 +4,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { PortAllocationService } from '@/backend/services/port-allocation.service';
+import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
 import { runScriptStateMachine } from './run-script-state-machine.service';
 
 const logger = createLogger('run-script-service');
@@ -39,6 +40,7 @@ export class RunScriptService {
     success: boolean;
     port?: number;
     pid?: number;
+    proxyUrl?: string;
     error?: string;
   }> {
     try {
@@ -175,6 +177,7 @@ export class RunScriptService {
 
     this.runningProcesses.delete(workspaceId);
     this.outputListeners.delete(workspaceId);
+    await runScriptProxyService.stopTunnel(workspaceId);
 
     // Check current state:
     // - STOPPING: best-effort STOPPING -> IDLE completion (stop flow may have failed mid-cleanup)
@@ -244,14 +247,18 @@ export class RunScriptService {
     childProcess: ChildProcess,
     pid: number,
     port: number | undefined
-  ): Promise<{ success: boolean; port?: number; pid?: number; error?: string }> {
+  ): Promise<{ success: boolean; port?: number; pid?: number; proxyUrl?: string; error?: string }> {
     // If the process exits very fast, the exit handler may have already transitioned
     // STARTING -> COMPLETED/FAILED before we get here. In that case, markRunning will
     // fail because the CAS expects STARTING but finds COMPLETED/FAILED. That's fine --
     // the process lifecycle completed correctly.
     try {
       await runScriptStateMachine.markRunning(workspaceId, { pid, port });
-      return { success: true, port, pid };
+      let proxyUrl: string | null = null;
+      if (port) {
+        proxyUrl = await runScriptProxyService.ensureTunnel(workspaceId, port);
+      }
+      return { success: true, port, pid, proxyUrl: proxyUrl ?? undefined };
     } catch (markRunningError) {
       return this.handleMarkRunningRace(workspaceId, childProcess, pid, port, markRunningError);
     }
@@ -263,7 +270,7 @@ export class RunScriptService {
     pid: number,
     port: number | undefined,
     markRunningError: unknown
-  ): Promise<{ success: boolean; port?: number; pid?: number; error?: string }> {
+  ): Promise<{ success: boolean; port?: number; pid?: number; proxyUrl?: string; error?: string }> {
     // Check if the process already exited and the exit handler transitioned the state
     const ws = await workspaceAccessor.findById(workspaceId);
     const currentStatus = ws?.runScriptStatus;
@@ -339,6 +346,7 @@ export class RunScriptService {
 
       // Already idle -- nothing to do
       if (status === 'IDLE') {
+        await runScriptProxyService.stopTunnel(workspaceId);
         return { success: true };
       }
 
@@ -346,12 +354,15 @@ export class RunScriptService {
       // Try to complete it opportunistically.
       if (status === 'STOPPING') {
         await this.completeStoppingAfterStop(workspaceId);
+        await runScriptProxyService.stopTunnel(workspaceId);
         return { success: true };
       }
 
       // Terminal states: kill any orphaned process, then reset to IDLE
       if (status === 'COMPLETED' || status === 'FAILED') {
-        return this.handleTerminalStateStop(workspaceId, childProcess);
+        const result = await this.handleTerminalStateStop(workspaceId, childProcess);
+        await runScriptProxyService.stopTunnel(workspaceId);
+        return result;
       }
 
       // STARTING or RUNNING -- attempt STOPPING transition
@@ -362,6 +373,7 @@ export class RunScriptService {
       // Transition to STOPPING (works from both STARTING and RUNNING)
       const raced = await this.attemptBeginStopping(workspaceId);
       if (raced) {
+        await runScriptProxyService.stopTunnel(workspaceId);
         return { success: true };
       }
 
@@ -379,6 +391,7 @@ export class RunScriptService {
 
       // Transition to IDLE state via state machine (completes stopping)
       await this.completeStoppingAfterStop(workspaceId);
+      await runScriptProxyService.stopTunnel(workspaceId);
 
       return { success: true };
     } catch (error) {
@@ -569,6 +582,7 @@ export class RunScriptService {
       status,
       pid: freshWorkspace.runScriptPid,
       port: freshWorkspace.runScriptPort,
+      proxyUrl: runScriptProxyService.getTunnelUrl(workspaceId),
       startedAt: freshWorkspace.runScriptStartedAt,
       hasRunScript: !!freshWorkspace.runScriptCommand,
       runScriptCommand: freshWorkspace.runScriptCommand,
@@ -631,6 +645,7 @@ export class RunScriptService {
     );
 
     this.runningProcesses.clear();
+    await runScriptProxyService.cleanup();
   }
 
   /**
