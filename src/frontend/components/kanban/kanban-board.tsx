@@ -10,7 +10,12 @@ import { InlineWorkspaceForm } from './inline-workspace-form';
 import { IssueCard } from './issue-card';
 import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';
-import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-column';
+import {
+  type ColumnConfig,
+  getColumnAccentClass,
+  getKanbanColumns,
+  KanbanColumn,
+} from './kanban-column';
 import { type KanbanIssue, useKanban } from './kanban-context';
 
 export function KanbanControls() {
@@ -274,7 +279,12 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
     <>
       <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
         {/* Column Header — hidden on mobile where pills handle this */}
-        <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
+        <div
+          className={cn(
+            'hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg',
+            getColumnAccentClass(column.id)
+          )}
+        >
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-sm">{column.label}</h3>
             <Badge variant="secondary" className="h-5 min-w-5 justify-center text-xs">
