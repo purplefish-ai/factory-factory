@@ -7,11 +7,13 @@ export function AppHeader() {
   const navData = useAppNavigationData();
 
   return (
-    <header className="flex shrink-0 items-center gap-2 border-b bg-background px-2 h-12 pt-[env(safe-area-inset-top)]">
+    <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)]">
       <HamburgerMenu navData={navData} />
-      <span className="text-sm font-semibold truncate">{title}</span>
-      <div ref={setLeftExtraSlot} className="flex items-center gap-1" />
-      <div ref={setRightSlot} className="ml-auto flex items-center gap-1 shrink-0" />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+        <div ref={setLeftExtraSlot} className="flex shrink-0 items-center gap-1" />
+      </div>
+      <div ref={setRightSlot} className="ml-auto flex shrink-0 items-center gap-1" />
     </header>
   );
 }
