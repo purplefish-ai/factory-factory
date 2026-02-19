@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
@@ -78,6 +79,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     unsafeCoerce<{ isShuttingDown: boolean }>(ratchetService).isShuttingDown = false;
+    unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs =
+      SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
     unsafeCoerce<{ reviewPollTrackers: Map<string, unknown> }>(
       ratchetService
     ).reviewPollTrackers.clear();
@@ -1140,6 +1143,80 @@ describe('ratchet service (state-change + idle dispatch)', () => {
 
       const result = await ratchetService.checkAllWorkspaces();
       expect(result).toEqual({ checked: 0, stateChanges: 0, actionsTriggered: 0, results: [] });
+    });
+
+    it('returns an error result when one workspace check times out', async () => {
+      unsafeCoerce<{ workspaceCheckTimeoutMs: number }>(ratchetService).workspaceCheckTimeoutMs = 5;
+
+      vi.mocked(workspaceAccessor.findWithPRsForRatchet).mockResolvedValue([
+        {
+          id: 'ws-timeout',
+          prUrl: 'https://github.com/example/repo/pull/1',
+          prNumber: 1,
+          prState: 'OPEN',
+          prCiStatus: CIStatus.FAILURE,
+          defaultSessionProvider: 'WORKSPACE_DEFAULT',
+          ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+          ratchetEnabled: true,
+          ratchetState: RatchetState.IDLE,
+          ratchetActiveSessionId: null,
+          ratchetLastCiRunId: null,
+          prReviewLastCheckedAt: null,
+        },
+        {
+          id: 'ws-fast',
+          prUrl: 'https://github.com/example/repo/pull/2',
+          prNumber: 2,
+          prState: 'OPEN',
+          prCiStatus: CIStatus.SUCCESS,
+          defaultSessionProvider: 'WORKSPACE_DEFAULT',
+          ratchetSessionProvider: 'WORKSPACE_DEFAULT',
+          ratchetEnabled: true,
+          ratchetState: RatchetState.CI_RUNNING,
+          ratchetActiveSessionId: null,
+          ratchetLastCiRunId: null,
+          prReviewLastCheckedAt: null,
+        },
+      ] as never);
+
+      vi.spyOn(
+        unsafeCoerce<{ processWorkspace: (workspaceArg: { id: string }) => Promise<unknown> }>(
+          ratchetService
+        ),
+        'processWorkspace'
+      ).mockImplementation((workspace) => {
+        if (workspace.id === 'ws-timeout') {
+          return new Promise<never>(() => {
+            // Intentionally unresolved to simulate a hung workspace check.
+          });
+        }
+
+        return Promise.resolve({
+          workspaceId: workspace.id,
+          previousState: RatchetState.CI_RUNNING,
+          newState: RatchetState.CI_RUNNING,
+          action: { type: 'WAITING', reason: 'noop' },
+        });
+      });
+
+      const result = await ratchetService.checkAllWorkspaces();
+
+      expect(result.checked).toBe(2);
+      expect(result.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            workspaceId: 'ws-timeout',
+            action: expect.objectContaining({
+              type: 'ERROR',
+              error: expect.stringContaining('timed out'),
+            }),
+          }),
+          expect.objectContaining({
+            workspaceId: 'ws-fast',
+            action: { type: 'WAITING', reason: 'noop' },
+          }),
+        ])
+      );
     });
   });
 
