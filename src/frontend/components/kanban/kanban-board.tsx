@@ -100,9 +100,12 @@ export function KanbanBoard() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 pb-4 h-full overflow-y-auto md:overflow-y-hidden md:overflow-x-auto mx-auto w-full max-w-[1800px]">
         {columns.map((column) => (
-          <div key={column.id} className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
+          <div
+            key={column.id}
+            className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full"
+          >
             <Skeleton className="h-10 w-full rounded-t-lg rounded-b-none" />
             <Skeleton className="flex-1 w-full rounded-b-lg rounded-t-none" />
           </div>
@@ -183,7 +186,7 @@ export function KanbanBoard() {
   }
 
   return (
-    <div className="flex flex-row gap-4 pb-4 h-full overflow-y-hidden overflow-x-auto">
+    <div className="flex flex-row gap-4 pb-4 h-full overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
       {columns.map((column) => {
         // Special handling for the ISSUES column (UI-only, not from database)
         if (column.id === 'ISSUES') {
@@ -241,7 +244,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
 
   return (
     <>
-      <div className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
+      <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
         {/* Column Header — hidden on mobile where pills handle this */}
         <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
           <div className="flex items-center gap-2">

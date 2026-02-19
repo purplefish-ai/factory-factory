@@ -49,6 +49,7 @@
     "recharts",
     "tailwindcss-animate",
     "vaul",
+    "@radix-ui/react-toggle-group",
     "@hookform/resolvers",
     "geist",
     "@zed-industries/claude-code-acp"

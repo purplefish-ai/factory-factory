@@ -49,7 +49,7 @@ export function KanbanColumn({
   const isEmpty = workspaces.length === 0;
 
   return (
-    <div className="flex flex-col w-full md:w-[380px] md:shrink-0 md:h-full">
+    <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
       {/* Column Header — hidden on mobile where pills handle this */}
       <div className="hidden md:flex items-center justify-between px-2 py-3 bg-muted/30 rounded-t-lg">
         <div className="flex items-center gap-2">

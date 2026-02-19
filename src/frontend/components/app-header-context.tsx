@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -27,13 +28,12 @@ export function AppHeaderProvider({ children }: { children: ReactNode }) {
   const [rightSlot, setRightSlot] = useState<HTMLElement | null>(null);
   const [leftExtraSlot, setLeftExtraSlot] = useState<HTMLElement | null>(null);
 
-  return (
-    <AppHeaderContext.Provider
-      value={{ title, setTitle, rightSlot, setRightSlot, leftExtraSlot, setLeftExtraSlot }}
-    >
-      {children}
-    </AppHeaderContext.Provider>
+  const value = useMemo(
+    () => ({ title, setTitle, rightSlot, setRightSlot, leftExtraSlot, setLeftExtraSlot }),
+    [title, rightSlot, leftExtraSlot]
   );
+
+  return <AppHeaderContext.Provider value={value}>{children}</AppHeaderContext.Provider>;
 }
 
 export function useAppHeaderContext(): AppHeaderContextValue {
