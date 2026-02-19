@@ -3,6 +3,7 @@ import { Archive, GitBranch, GitPullRequest, Loader2, Play } from 'lucide-react'
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
+import { SetupStatusChip } from '@/components/shared/setup-status-chip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -45,6 +46,11 @@ function CardStatusIndicator({
 }) {
   if (isWorking) {
     return <span className="h-2 w-2 rounded-full bg-brand animate-pulse shrink-0" />;
+  }
+
+  // NEW/PROVISIONING are shown as a label in the card body instead
+  if (status === 'NEW' || status === 'PROVISIONING') {
+    return null;
   }
 
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
@@ -209,7 +215,16 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   });
   const hasGitContext = showPR || Boolean(workspace.branchName);
   const hasPendingRequest = Boolean(workspace.pendingRequestType);
-  return { showPR, isArchived, ratchetEnabled, sidebarStatus, hasGitContext, hasPendingRequest };
+  const isSettingUp = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
+  return {
+    showPR,
+    isArchived,
+    ratchetEnabled,
+    sidebarStatus,
+    hasGitContext,
+    hasPendingRequest,
+    isSettingUp,
+  };
 }
 
 export function KanbanCard({
@@ -220,10 +235,17 @@ export function KanbanCard({
   onArchive,
   isArchivePending = false,
 }: KanbanCardProps) {
-  const { showPR, isArchived, ratchetEnabled, sidebarStatus, hasGitContext, hasPendingRequest } =
-    deriveCardState(workspace);
+  const {
+    showPR,
+    isArchived,
+    ratchetEnabled,
+    sidebarStatus,
+    hasGitContext,
+    hasPendingRequest,
+    isSettingUp,
+  } = deriveCardState(workspace);
 
-  const hasBody = hasGitContext || hasPendingRequest;
+  const hasBody = hasGitContext || hasPendingRequest || isSettingUp;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -254,6 +276,7 @@ export function KanbanCard({
         </CardHeader>
         {hasBody && (
           <CardContent className="space-y-2">
+            <SetupStatusChip status={workspace.status} />
             <GitContextRow workspace={workspace} showPR={showPR} ciState={sidebarStatus.ciState} />
             {workspace.pendingRequestType && (
               <div className="flex items-center gap-2">

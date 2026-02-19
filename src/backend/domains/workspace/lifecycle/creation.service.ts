@@ -25,6 +25,8 @@ export type WorkspaceCreationSource =
       description?: string;
       branchName?: string;
       ratchetEnabled?: boolean;
+      initialPrompt?: string;
+      provider?: SessionProvider;
     }
   | {
       type: 'RESUME_BRANCH';
@@ -95,8 +97,10 @@ export class WorkspaceCreationService {
     const { preparedInput, initMode } = await this.prepareCreation(source);
 
     // Apply workspace creation defaults from user settings where needed.
+    const explicitProvider = source.type === 'MANUAL' ? source.provider : undefined;
     const { ratchetEnabled, defaultSessionProvider } = await this.resolveWorkspaceCreationDefaults(
-      source.ratchetEnabled
+      source.ratchetEnabled,
+      explicitProvider
     );
 
     // Create workspace record
@@ -152,6 +156,10 @@ export class WorkspaceCreationService {
   }> {
     switch (source.type) {
       case 'MANUAL': {
+        const metadata: Record<string, unknown> = {};
+        if (source.initialPrompt) {
+          metadata.initialPrompt = source.initialPrompt;
+        }
         return {
           preparedInput: {
             projectId: source.projectId,
@@ -159,6 +167,9 @@ export class WorkspaceCreationService {
             description: source.description,
             branchName: source.branchName,
             creationSource: 'MANUAL',
+            ...(Object.keys(metadata).length > 0
+              ? { creationMetadata: metadata as Prisma.InputJsonValue }
+              : {}),
           },
         };
       }
@@ -237,21 +248,17 @@ export class WorkspaceCreationService {
     }
   }
 
-  private async resolveWorkspaceCreationDefaults(explicitRatchetEnabled?: boolean): Promise<{
+  private async resolveWorkspaceCreationDefaults(
+    explicitRatchetEnabled?: boolean,
+    explicitProvider?: SessionProvider
+  ): Promise<{
     ratchetEnabled: boolean;
     defaultSessionProvider: SessionProvider;
   }> {
-    if (explicitRatchetEnabled !== undefined) {
-      return {
-        ratchetEnabled: explicitRatchetEnabled,
-        defaultSessionProvider: await userSettingsAccessor.getDefaultSessionProvider(),
-      };
-    }
-
     const settings = await userSettingsAccessor.get();
     return {
-      ratchetEnabled: settings.ratchetEnabled,
-      defaultSessionProvider: settings.defaultSessionProvider,
+      ratchetEnabled: explicitRatchetEnabled ?? settings.ratchetEnabled,
+      defaultSessionProvider: explicitProvider ?? settings.defaultSessionProvider,
     };
   }
 

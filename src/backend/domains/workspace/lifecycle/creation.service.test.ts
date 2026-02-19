@@ -204,10 +204,9 @@ describe('WorkspaceCreationService', () => {
             ratchetEnabled: false,
           })
         );
-        expect(userSettingsAccessorModule.userSettingsAccessor.get).not.toHaveBeenCalled();
-        expect(
-          userSettingsAccessorModule.userSettingsAccessor.getDefaultSessionProvider
-        ).toHaveBeenCalled();
+        // resolveWorkspaceCreationDefaults always reads user settings for the
+        // default session provider, using the explicit ratchetEnabled override.
+        expect(userSettingsAccessorModule.userSettingsAccessor.get).toHaveBeenCalled();
       });
 
       it('should default to user settings ratchetEnabled when not provided', async () => {

@@ -621,6 +621,54 @@ async function markLinearIssueStartedIfApplicable(workspaceId: string): Promise<
   }
 }
 
+/**
+ * Enqueue an auto-generated message through the session queue pipeline.
+ * Used for rename instructions and initial prompts during workspace init.
+ */
+function enqueueAutoMessage(
+  sessionId: string,
+  workspaceId: string,
+  text: string,
+  model: string
+): void {
+  const messageId = `auto-init-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const queued = {
+    id: messageId,
+    text,
+    timestamp: new Date().toISOString(),
+    settings: {
+      selectedModel: model,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+  };
+  const enqueueResult = sessionDomainService.enqueue(sessionId, queued);
+  if ('error' in enqueueResult) {
+    logger.warn('Failed to enqueue auto message for session', {
+      workspaceId,
+      sessionId,
+      error: enqueueResult.error,
+    });
+  } else {
+    sessionDomainService.emitDelta(sessionId, {
+      type: 'message_state_changed',
+      id: messageId,
+      newState: MessageState.ACCEPTED,
+      queuePosition: enqueueResult.position,
+      userMessage: {
+        text: queued.text,
+        timestamp: queued.timestamp,
+        settings: {
+          ...queued.settings,
+          selectedModel: resolveSelectedModel(queued.settings.selectedModel),
+          reasoningEffort: queued.settings.reasoningEffort,
+        },
+      },
+    });
+  }
+}
+
 async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
   try {
     const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId, {
@@ -632,10 +680,19 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       return null;
     }
 
-    // Build the initial prompt from the linked issue (GitHub or Linear)
-    const issuePrompt =
+    // Build the initial prompt from the linked issue (GitHub or Linear),
+    // falling back to the user-provided initial prompt in creationMetadata.
+    let initialPromptText =
       (await buildInitialPromptFromGitHubIssue(workspaceId)) ||
       (await buildInitialPromptFromLinearIssue(workspaceId));
+
+    if (!initialPromptText) {
+      const workspace = await workspaceAccessor.findById(workspaceId);
+      const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
+      if (metadata?.initialPrompt && typeof metadata.initialPrompt === 'string') {
+        initialPromptText = metadata.initialPrompt;
+      }
+    }
 
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')
@@ -644,44 +701,9 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       startupModePreset: 'non_interactive',
     });
 
-    // Route the issue prompt through the queue pipeline so runtime and replay remain consistent.
-    if (issuePrompt) {
-      const messageId = `auto-issue-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const queued = {
-        id: messageId,
-        text: issuePrompt,
-        timestamp: new Date().toISOString(),
-        settings: {
-          selectedModel: session.model,
-          reasoningEffort: null,
-          thinkingEnabled: false,
-          planModeEnabled: false,
-        },
-      };
-      const enqueueResult = sessionDomainService.enqueue(session.id, queued);
-      if ('error' in enqueueResult) {
-        logger.warn('Failed to enqueue issue prompt for auto-started session', {
-          workspaceId,
-          sessionId: session.id,
-          error: enqueueResult.error,
-        });
-      } else {
-        sessionDomainService.emitDelta(session.id, {
-          type: 'message_state_changed',
-          id: messageId,
-          newState: MessageState.ACCEPTED,
-          queuePosition: enqueueResult.position,
-          userMessage: {
-            text: queued.text,
-            timestamp: queued.timestamp,
-            settings: {
-              ...queued.settings,
-              selectedModel: resolveSelectedModel(queued.settings.selectedModel),
-              reasoningEffort: queued.settings.reasoningEffort,
-            },
-          },
-        });
-      }
+    // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
+    if (initialPromptText) {
+      enqueueAutoMessage(session.id, workspaceId, initialPromptText, session.model);
     }
 
     // Trigger queue dispatch after init/session start so messages queued during
@@ -691,7 +713,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
       sessionId: session.id,
-      hasIssuePrompt: !!issuePrompt,
+      hasInitialPrompt: !!initialPromptText,
     });
     return session.id;
   } catch (error) {
