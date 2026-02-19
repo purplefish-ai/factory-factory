@@ -1,7 +1,19 @@
+import { type ChildProcess, spawn } from 'node:child_process';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
+import {
+  request as httpRequest,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
+import { createConnection } from 'node:net';
+import type { Duplex } from 'node:stream';
 
 const DEFAULT_TOKEN_QUERY_PARAM = 'token';
+const DEFAULT_LOCAL_HOST = '127.0.0.1';
+const DEFAULT_PROCESS_KILL_TIMEOUT_MS = 3000;
+const DEFAULT_TUNNEL_START_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_TUNNEL_OUTPUT_BUFFER_CHARS = 8192;
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -225,4 +237,230 @@ export function extractTryCloudflareUrl(input: string): string | null {
     return null;
   }
   return match[0] ?? null;
+}
+
+export function proxyAuthenticatedHttpRequest(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  upstreamPort: number;
+  path: string;
+  sessionCookieName: string;
+  authCookie?: string;
+  localHost?: string;
+}): void {
+  const localHost = params.localHost ?? DEFAULT_LOCAL_HOST;
+
+  const endProxyErrorResponse = () => {
+    if (!params.res.headersSent) {
+      params.res.statusCode = 502;
+    }
+    if (!params.res.writableEnded) {
+      params.res.end('Proxy error');
+    }
+  };
+
+  if (params.authCookie) {
+    const existingCookieHeader = params.res.getHeader('set-cookie');
+    params.res.setHeader(
+      'set-cookie',
+      mergeSetCookieValues(existingCookieHeader, params.authCookie)
+    );
+  }
+
+  const upstreamHeaders = removeHopByHopHeaders(params.req.headers, params.sessionCookieName);
+
+  const upstreamRequest = httpRequest(
+    {
+      host: localHost,
+      port: params.upstreamPort,
+      method: params.req.method,
+      path: params.path,
+      headers: {
+        ...upstreamHeaders,
+        host: `localhost:${params.upstreamPort}`,
+      },
+    },
+    (upstreamResponse) => {
+      if (upstreamResponse.statusCode) {
+        params.res.statusCode = upstreamResponse.statusCode;
+      }
+      for (const [header, value] of Object.entries(upstreamResponse.headers)) {
+        if (typeof value === 'undefined') {
+          continue;
+        }
+
+        if (header.toLowerCase() === 'set-cookie') {
+          const existingCookieHeader = params.res.getHeader('set-cookie');
+          const mergedCookieHeader = mergeSetCookieValues(existingCookieHeader, value);
+          params.res.setHeader('set-cookie', mergedCookieHeader);
+          continue;
+        }
+
+        params.res.setHeader(header, value);
+      }
+
+      upstreamResponse.on('error', endProxyErrorResponse);
+      upstreamResponse.on('aborted', endProxyErrorResponse);
+      upstreamResponse.pipe(params.res);
+    }
+  );
+
+  upstreamRequest.on('error', endProxyErrorResponse);
+
+  params.req.on('error', () => {
+    if (!(upstreamRequest.destroyed || upstreamRequest.writableEnded)) {
+      upstreamRequest.destroy();
+    }
+    endProxyErrorResponse();
+  });
+
+  params.req.pipe(upstreamRequest);
+}
+
+export function proxyAuthenticatedWebSocketUpgrade(params: {
+  req: IncomingMessage;
+  socket: Duplex;
+  head: Buffer;
+  upstreamPort: number;
+  sanitizedPath: string;
+  sessionCookieName: string;
+  localHost?: string;
+}): void {
+  const localHost = params.localHost ?? DEFAULT_LOCAL_HOST;
+
+  const upstreamSocket = createConnection(params.upstreamPort, localHost, () => {
+    const headers: Record<string, string | string[] | undefined> = {
+      ...removeHopByHopHeaders(params.req.headers, params.sessionCookieName),
+      host: `localhost:${params.upstreamPort}`,
+      connection: 'Upgrade',
+      upgrade: params.req.headers.upgrade,
+    };
+
+    const requestPath = toSafeRedirectPath(params.sanitizedPath || '/');
+    const requestLine = `${params.req.method || 'GET'} ${requestPath} HTTP/${params.req.httpVersion}`;
+    const headerLines = Object.entries(headers)
+      .flatMap(([key, value]) => {
+        if (typeof value === 'undefined') {
+          return [];
+        }
+        if (Array.isArray(value)) {
+          return value.map((item) => `${key}: ${item}`);
+        }
+        return [`${key}: ${value}`];
+      })
+      .join('\r\n');
+
+    upstreamSocket.write(`${requestLine}\r\n${headerLines}\r\n\r\n`);
+    if (params.head.length > 0) {
+      upstreamSocket.write(params.head);
+    }
+    params.socket.pipe(upstreamSocket).pipe(params.socket);
+  });
+
+  upstreamSocket.on('error', () => {
+    params.socket.destroy();
+  });
+
+  params.socket.on('error', () => {
+    upstreamSocket.destroy();
+  });
+}
+
+export async function killProcessWithTimeout(
+  proc: ChildProcess,
+  timeoutMs = DEFAULT_PROCESS_KILL_TIMEOUT_MS
+): Promise<void> {
+  if (!proc.pid || proc.exitCode !== null) {
+    return;
+  }
+
+  const waitForExit = new Promise<void>((resolve) => {
+    proc.once('exit', () => resolve());
+    proc.once('error', () => resolve());
+  });
+
+  const waitForTimeout = () =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, timeoutMs);
+      timer.unref?.();
+    });
+
+  proc.kill('SIGTERM');
+  await Promise.race([waitForExit, waitForTimeout()]);
+
+  if (proc.exitCode === null) {
+    proc.kill('SIGKILL');
+    await Promise.race([waitForExit, waitForTimeout()]);
+  }
+}
+
+export async function startCloudflaredTunnel(params: {
+  targetUrl: string;
+  startTimeoutMs?: number;
+  maxOutputBufferChars?: number;
+  killProcess?: (proc: ChildProcess) => Promise<void>;
+}): Promise<{ proc: ChildProcess; publicUrl: string }> {
+  const startTimeoutMs = params.startTimeoutMs ?? DEFAULT_TUNNEL_START_TIMEOUT_MS;
+  const maxOutputBufferChars =
+    params.maxOutputBufferChars ?? DEFAULT_MAX_TUNNEL_OUTPUT_BUFFER_CHARS;
+  const killProcess = params.killProcess ?? ((proc) => killProcessWithTimeout(proc));
+  const cloudflared = spawn('cloudflared', ['tunnel', '--url', params.targetUrl], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let resolvedUrl: string | null = null;
+  let outputBuffer = '';
+
+  const waitForUrl = new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timed out waiting for cloudflared tunnel URL'));
+    }, startTimeoutMs);
+    timeout.unref?.();
+
+    const onData = (data: Buffer) => {
+      outputBuffer = appendBoundedOutputBuffer(outputBuffer, data.toString(), maxOutputBufferChars);
+      const extracted = extractTryCloudflareUrl(outputBuffer);
+      if (extracted && !resolvedUrl) {
+        resolvedUrl = extracted;
+        cleanup();
+        resolve(extracted);
+      }
+    };
+
+    const onExit = (code: number | null) => {
+      if (!resolvedUrl) {
+        cleanup();
+        reject(
+          new Error(`cloudflared exited before URL was available (code ${code ?? 'unknown'})`)
+        );
+      }
+    };
+
+    const onError = (error: Error) => {
+      cleanup();
+      reject(new Error(`Failed to start cloudflared: ${error.message}`));
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      cloudflared.stdout?.off('data', onData);
+      cloudflared.stderr?.off('data', onData);
+      cloudflared.off('exit', onExit);
+      cloudflared.off('error', onError);
+    };
+
+    cloudflared.stdout?.on('data', onData);
+    cloudflared.stderr?.on('data', onData);
+    cloudflared.once('exit', onExit);
+    cloudflared.once('error', onError);
+  });
+
+  try {
+    const publicUrl = await waitForUrl;
+    return { proc: cloudflared, publicUrl };
+  } catch (error) {
+    await killProcess(cloudflared);
+    throw error;
+  }
 }
