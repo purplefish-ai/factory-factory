@@ -67,18 +67,38 @@ describe('notificationService', () => {
   });
 
   it('sends notifications and handles provider failures', async () => {
-    mockSendMacNotification.mockResolvedValue(undefined);
+    const isMac = process.platform === 'darwin';
+    const isLinux = process.platform === 'linux';
+
+    if (isMac) {
+      mockSendMacNotification.mockResolvedValue(undefined);
+    } else if (isLinux) {
+      mockSendLinuxNotification.mockResolvedValue(undefined);
+    }
 
     await expect(notificationService.notify('Task done', 'Review now')).resolves.toEqual({
       sent: true,
     });
-    expect(mockSendMacNotification).toHaveBeenCalledWith('Task done', 'Review now', 'Glass');
 
-    mockSendMacNotification.mockRejectedValueOnce(new Error('osascript failed'));
-    await expect(notificationService.notify('Task failed', 'Need attention')).resolves.toEqual({
-      sent: false,
-      reason: 'error',
-    });
+    if (isMac) {
+      expect(mockSendMacNotification).toHaveBeenCalledWith('Task done', 'Review now', 'Glass');
+      mockSendMacNotification.mockRejectedValueOnce(new Error('osascript failed'));
+      await expect(notificationService.notify('Task failed', 'Need attention')).resolves.toEqual({
+        sent: false,
+        reason: 'error',
+      });
+      return;
+    }
+
+    if (isLinux) {
+      expect(mockSendLinuxNotification).toHaveBeenCalledWith('Task done', 'Review now');
+      mockSendLinuxNotification.mockRejectedValueOnce(new Error('notify-send failed'));
+      mockExecCommand.mockRejectedValueOnce(new Error('zenity failed'));
+      await expect(notificationService.notify('Task failed', 'Need attention')).resolves.toEqual({
+        sent: false,
+        reason: 'error',
+      });
+    }
   });
 
   it('supports force-send and helper notification methods', async () => {
