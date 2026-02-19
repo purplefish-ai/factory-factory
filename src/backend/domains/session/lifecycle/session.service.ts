@@ -875,20 +875,30 @@ class SessionService {
     }
 
     handle.configOptions = executionResult.configOptions;
-    await this.persistAcpConfigSnapshot(sessionId, {
-      provider: handle.provider as SessionProvider,
-      providerSessionId: handle.providerSessionId,
-      configOptions: executionResult.configOptions,
-    });
+    try {
+      await this.persistAcpConfigSnapshot(sessionId, {
+        provider: handle.provider as SessionProvider,
+        providerSessionId: handle.providerSessionId,
+        configOptions: executionResult.configOptions,
+      });
 
-    sessionDomainService.emitDelta(sessionId, {
-      type: 'config_options_update',
-      configOptions: executionResult.configOptions,
-    } as SessionDeltaEvent);
-    sessionDomainService.emitDelta(sessionId, {
-      type: 'chat_capabilities',
-      capabilities: this.buildAcpChatBarCapabilities(handle),
-    });
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions: executionResult.configOptions,
+      } as SessionDeltaEvent);
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'chat_capabilities',
+        capabilities: this.buildAcpChatBarCapabilities(handle),
+      });
+    } catch (error) {
+      logger.warn('Failed persisting startup mode preset configuration snapshot', {
+        sessionId,
+        provider: handle.provider,
+        workflow,
+        startupModePreset,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private async applyStartupCollaborationModePreset(params: {
