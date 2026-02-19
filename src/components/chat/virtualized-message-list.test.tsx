@@ -272,7 +272,7 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
-  it('keeps append pin scheduled even if isNearBottom prop flips before RAF', async () => {
+  it('cancels append pin when isNearBottom flips before RAF', async () => {
     const harness = createHarness({
       loadingSession: false,
       messages: [],
@@ -299,7 +299,7 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
 
     await flushAnimationFrame();
 
-    expect(harness.viewport.scrollTop).toBe(640);
+    expect(harness.viewport.scrollTop).toBe(120);
 
     harness.cleanup();
   });

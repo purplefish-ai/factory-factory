@@ -87,6 +87,7 @@ const MainViewTabSchema = z
 
 const MainViewTabsSchema = z.array(MainViewTabSchema);
 const MOBILE_MAX_WIDTH_MEDIA_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
+const SCROLL_STATE_PERSIST_DEBOUNCE_MS = 120;
 
 // =============================================================================
 // Helper Functions
@@ -221,6 +222,12 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
   // Track which workspaceId has completed loading (enables persistence)
   const loadedForWorkspaceRef = useRef<string | null>(null);
   const scrollStatesRef = useRef<Record<string, ScrollState>>({});
+  const scrollPersistTimeoutRef = useRef<number | null>(null);
+  const pendingScrollPersistRef = useRef<{
+    workspaceId: string;
+    record: Record<string, ScrollState>;
+  } | null>(null);
+  const previousWorkspaceIdRef = useRef(workspaceId);
 
   const [tabs, setTabs] = useState<MainViewTab[]>([CHAT_TAB]);
   const [activeTabId, setActiveTabId] = useState<string>('chat');
@@ -317,6 +324,62 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
     prevIsMobileRef.current = isMobile;
   }, [isMobile, rightPanelVisible, workspaceId]);
 
+  const flushPendingScrollPersist = useCallback(() => {
+    const pending = pendingScrollPersistRef.current;
+    if (!(typeof window !== 'undefined' && pending)) {
+      return;
+    }
+    try {
+      saveScrollStateRecord(window.localStorage, pending.workspaceId, pending.record);
+    } catch {
+      // Ignore storage errors
+    }
+    pendingScrollPersistRef.current = null;
+  }, []);
+
+  const scheduleScrollPersist = useCallback(
+    (record: Record<string, ScrollState>) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+      pendingScrollPersistRef.current = {
+        workspaceId,
+        record,
+      };
+      if (scrollPersistTimeoutRef.current !== null) {
+        clearTimeout(scrollPersistTimeoutRef.current);
+      }
+      scrollPersistTimeoutRef.current = window.setTimeout(() => {
+        scrollPersistTimeoutRef.current = null;
+        flushPendingScrollPersist();
+      }, SCROLL_STATE_PERSIST_DEBOUNCE_MS);
+    },
+    [flushPendingScrollPersist, workspaceId]
+  );
+
+  useEffect(() => {
+    if (previousWorkspaceIdRef.current === workspaceId) {
+      return;
+    }
+    previousWorkspaceIdRef.current = workspaceId;
+    if (scrollPersistTimeoutRef.current !== null) {
+      clearTimeout(scrollPersistTimeoutRef.current);
+      scrollPersistTimeoutRef.current = null;
+    }
+    flushPendingScrollPersist();
+  }, [flushPendingScrollPersist, workspaceId]);
+
+  useEffect(
+    () => () => {
+      if (scrollPersistTimeoutRef.current !== null) {
+        clearTimeout(scrollPersistTimeoutRef.current);
+        scrollPersistTimeoutRef.current = null;
+      }
+      flushPendingScrollPersist();
+    },
+    [flushPendingScrollPersist]
+  );
+
   const getScrollState = useCallback(
     (tabId: string, mode: ScrollMode) =>
       getScrollStateFromRecord(scrollStatesRef.current, tabId, mode),
@@ -329,13 +392,9 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         return;
       }
       scrollStatesRef.current = upsertScrollState(scrollStatesRef.current, tabId, mode, state);
-      try {
-        saveScrollStateRecord(window.localStorage, workspaceId, scrollStatesRef.current);
-      } catch {
-        // Ignore storage errors
-      }
+      scheduleScrollPersist(scrollStatesRef.current);
     },
-    [workspaceId]
+    [scheduleScrollPersist]
   );
 
   const clearScrollState = useCallback(
@@ -344,13 +403,9 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
         return;
       }
       scrollStatesRef.current = removeScrollStatesForTab(scrollStatesRef.current, tabId);
-      try {
-        saveScrollStateRecord(window.localStorage, workspaceId, scrollStatesRef.current);
-      } catch {
-        // Ignore storage errors
-      }
+      scheduleScrollPersist(scrollStatesRef.current);
     },
-    [workspaceId]
+    [scheduleScrollPersist]
   );
 
   const openTab = useCallback(

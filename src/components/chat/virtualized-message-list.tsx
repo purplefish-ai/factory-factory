@@ -48,7 +48,7 @@ interface VirtualizedMessageListProps {
   initBanner?: WorkspaceInitBanner | null;
 }
 
-const STICK_TO_BOTTOM_THRESHOLD = 150;
+const STICK_TO_BOTTOM_THRESHOLD = 48;
 
 // =============================================================================
 // Empty State Component
@@ -254,9 +254,10 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       // Pin to real bottom after measurement/layout settles.
       newMessagePinRafRef.current = requestAnimationFrame(() => {
         newMessagePinRafRef.current = null;
-        if (shouldPinAfterAppend) {
-          stickToBottom();
+        if (!(shouldPinAfterAppend && isNearBottomRef.current) || loadingSessionRef.current) {
+          return;
         }
+        stickToBottom();
       });
     }
   }, [loadingSession, messages.length, scrollContainerRef, stickToBottom, virtualizer]);
