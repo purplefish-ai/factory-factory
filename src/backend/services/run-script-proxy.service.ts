@@ -440,6 +440,26 @@ export class RunScriptProxyService {
     const workspaceIds = Array.from(this.tunnels.keys());
     await Promise.all(workspaceIds.map((workspaceId) => this.stopTunnel(workspaceId)));
   }
+
+  cleanupSync(): void {
+    for (const [workspaceId, tunnel] of this.tunnels.entries()) {
+      this.tunnels.delete(workspaceId);
+
+      try {
+        if (tunnel.cloudflaredProcess.pid && tunnel.cloudflaredProcess.exitCode === null) {
+          tunnel.cloudflaredProcess.kill('SIGKILL');
+        }
+      } catch {
+        // Ignore errors during forced shutdown
+      }
+
+      try {
+        void tunnel.closeAuthProxy();
+      } catch {
+        // Ignore errors during forced shutdown
+      }
+    }
+  }
 }
 
 export const runScriptProxyService = new RunScriptProxyService();

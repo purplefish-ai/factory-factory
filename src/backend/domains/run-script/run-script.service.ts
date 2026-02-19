@@ -256,12 +256,38 @@ export class RunScriptService {
       await runScriptStateMachine.markRunning(workspaceId, { pid, port });
       let proxyUrl: string | null = null;
       if (port) {
-        proxyUrl = await runScriptProxyService.ensureTunnel(workspaceId, port);
+        proxyUrl = await this.ensureTunnelForActiveProcess(workspaceId, childProcess, pid, port);
       }
       return { success: true, port, pid, proxyUrl: proxyUrl ?? undefined };
     } catch (markRunningError) {
       return this.handleMarkRunningRace(workspaceId, childProcess, pid, port, markRunningError);
     }
+  }
+
+  private async ensureTunnelForActiveProcess(
+    workspaceId: string,
+    childProcess: ChildProcess,
+    pid: number,
+    port: number
+  ): Promise<string | null> {
+    const proxyUrl = await runScriptProxyService.ensureTunnel(workspaceId, port);
+    if (!proxyUrl) {
+      return null;
+    }
+
+    const isStillActive =
+      this.runningProcesses.get(workspaceId) === childProcess && childProcess.exitCode === null;
+    if (isStillActive) {
+      return proxyUrl;
+    }
+
+    logger.info('Run script exited while tunnel was starting; cleaning up tunnel', {
+      workspaceId,
+      pid,
+      port,
+    });
+    await runScriptProxyService.stopTunnel(workspaceId);
+    return null;
   }
 
   private async handleMarkRunningRace(
@@ -673,6 +699,7 @@ export class RunScriptService {
       }
     }
     this.runningProcesses.clear();
+    runScriptProxyService.cleanupSync();
     this.outputBuffers.clear();
     this.outputListeners.clear();
   }
