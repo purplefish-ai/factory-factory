@@ -90,7 +90,7 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
             to={`/projects/${navData.selectedProjectSlug}/workspaces`}
             onClick={onClose}
             className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
-              pathname === `/projects/${navData.selectedProjectSlug}/workspaces`
+              pathname?.startsWith(`/projects/${navData.selectedProjectSlug}/workspaces`)
                 ? 'bg-accent'
                 : 'hover:bg-accent'
             }`}
