@@ -57,14 +57,24 @@ FROM node:${NODE_VERSION}-alpine AS runner
 ARG PNPM_VERSION
 WORKDIR /app
 
-# Runtime system dependencies
+# Runtime system dependencies + cloudflared for tunnel
 RUN apk add --no-cache \
     git \
     bash \
     tmux \
     curl \
     libc6-compat \
-    libstdc++
+    libstdc++ \
+  && ARCH="$(uname -m)" \
+  && case "$ARCH" in \
+       x86_64)  CF_ARCH="amd64" ;; \
+       aarch64) CF_ARCH="arm64" ;; \
+       armv7l)  CF_ARCH="arm"   ;; \
+       *)       echo "Unsupported arch: $ARCH" && exit 1 ;; \
+     esac \
+  && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" \
+       -o /usr/local/bin/cloudflared \
+  && chmod +x /usr/local/bin/cloudflared
 
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
@@ -95,4 +105,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
-ENTRYPOINT ["node", "dist/src/cli/index.js", "serve", "--host", "0.0.0.0", "--no-open"]
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["docker-entrypoint.sh"]

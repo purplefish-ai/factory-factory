@@ -20,6 +20,7 @@ services:
       - BACKEND_PORT=3000
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ENABLE_TUNNEL=${ENABLE_TUNNEL:-true}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
