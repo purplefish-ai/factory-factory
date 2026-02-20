@@ -8,63 +8,155 @@
 
 import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
 import { gitCommand } from '@/backend/lib/shell';
-import { extractInputValue, isString } from '@/backend/schemas/tool-inputs.schema';
 import { createLogger } from '@/backend/services/logger.service';
+import { extractMatchingCommand, generateBranchName } from './branch-rename.utils';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('pre-pr-rename');
 const GH_PR_CREATE_REGEX = /\bgh\s+pr\s+create\b/;
+const MAX_REMOTE_CLEANUP_CANDIDATES = 1000;
 
 // Track workspaces that have already been renamed to avoid duplicate renames
 const renamedWorkspaces = new Set<string>();
+type RemoteCleanupCandidate = {
+  oldBranchName: string;
+  newBranchName: string;
+  workspaceId: string;
+  workingDir: string;
+};
+const remoteCleanupCandidates = new Map<string, RemoteCleanupCandidate>();
 
-/**
- * Generate a branch name from workspace context.
- *
- * Kebab-cases the workspace name and optionally prepends a prefix.
- * Result is capped at 60 characters (prefix + slash + name).
- */
-export function generateBranchName(context: {
-  branchPrefix: string;
-  workspaceName: string;
-}): string {
-  const slug = context.workspaceName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 30);
+export { generateBranchName };
 
-  if (!slug) {
-    return '';
+function setRemoteCleanupCandidate(toolUseId: string, candidate: RemoteCleanupCandidate): void {
+  if (remoteCleanupCandidates.has(toolUseId)) {
+    remoteCleanupCandidates.delete(toolUseId);
   }
 
-  if (context.branchPrefix) {
-    return `${context.branchPrefix}/${slug}`;
+  while (remoteCleanupCandidates.size >= MAX_REMOTE_CLEANUP_CANDIDATES) {
+    const oldestToolUseId = remoteCleanupCandidates.keys().next().value;
+    if (!oldestToolUseId) {
+      break;
+    }
+    remoteCleanupCandidates.delete(oldestToolUseId);
   }
-  return slug;
+
+  remoteCleanupCandidates.set(toolUseId, candidate);
 }
 
-function extractCommand(event: ToolEvent): string | undefined {
-  const command = extractInputValue(event.input, 'command', isString, event.toolName, logger);
-  if (command && GH_PR_CREATE_REGEX.test(command)) {
-    return command;
+function parseRemoteName(upstreamRef: string): string | undefined {
+  const slashIndex = upstreamRef.indexOf('/');
+  if (slashIndex <= 0) {
+    return undefined;
+  }
+  return upstreamRef.slice(0, slashIndex);
+}
+
+function normalizeRemoteBranchName(branchName: string, remoteName: string): string {
+  const remotePrefix = `${remoteName}/`;
+  if (branchName.startsWith(remotePrefix)) {
+    return branchName.slice(remotePrefix.length);
   }
 
-  const cmd = extractInputValue(event.input, 'cmd', isString, event.toolName, logger);
-  if (cmd && GH_PR_CREATE_REGEX.test(cmd)) {
-    return cmd;
+  const fullRefPrefix = `refs/remotes/${remoteName}/`;
+  if (branchName.startsWith(fullRefPrefix)) {
+    return branchName.slice(fullRefPrefix.length);
   }
 
-  const title = extractInputValue(event.input, 'title', isString, event.toolName, logger);
-  if (title && GH_PR_CREATE_REGEX.test(title)) {
-    return title;
+  return branchName;
+}
+
+async function getRefCommit(ref: string, workingDir: string): Promise<string | undefined> {
+  const result = await gitCommand(['rev-parse', '--verify', '--quiet', ref], workingDir);
+  if (result.code !== 0) {
+    return undefined;
+  }
+  const commit = result.stdout.trim();
+  return commit || undefined;
+}
+
+async function cleanupSupersededRemoteBranch(context: {
+  workspaceId: string;
+  workingDir: string;
+  oldBranchName: string;
+  newBranchName: string;
+}): Promise<void> {
+  if (context.oldBranchName === context.newBranchName) {
+    return;
   }
 
-  if (GH_PR_CREATE_REGEX.test(event.toolName)) {
-    return event.toolName;
+  const headResult = await gitCommand(['rev-parse', 'HEAD'], context.workingDir);
+  if (headResult.code !== 0) {
+    logger.warn('Skipping remote branch cleanup; failed to resolve HEAD', {
+      workspaceId: context.workspaceId,
+      stderr: headResult.stderr,
+    });
+    return;
+  }
+  const headCommit = headResult.stdout.trim();
+  if (!headCommit) {
+    return;
   }
 
-  return undefined;
+  const upstreamResult = await gitCommand(
+    ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+    context.workingDir
+  );
+  if (upstreamResult.code !== 0) {
+    return;
+  }
+
+  const upstreamRef = upstreamResult.stdout.trim();
+  const remoteName = parseRemoteName(upstreamRef);
+  if (!remoteName) {
+    return;
+  }
+
+  const oldRemoteBranchName = normalizeRemoteBranchName(context.oldBranchName, remoteName);
+  const newRemoteBranchName = normalizeRemoteBranchName(context.newBranchName, remoteName);
+  if (!(oldRemoteBranchName && newRemoteBranchName)) {
+    return;
+  }
+
+  if (oldRemoteBranchName === newRemoteBranchName) {
+    return;
+  }
+
+  const oldRemoteRef = `refs/remotes/${remoteName}/${oldRemoteBranchName}`;
+  const newRemoteRef = `refs/remotes/${remoteName}/${newRemoteBranchName}`;
+
+  const oldRemoteCommit = await getRefCommit(oldRemoteRef, context.workingDir);
+  const newRemoteCommit = await getRefCommit(newRemoteRef, context.workingDir);
+  if (!(oldRemoteCommit && newRemoteCommit)) {
+    return;
+  }
+
+  // Delete the old remote branch only when both remote refs still point to HEAD.
+  // This avoids deleting unexpected branch history if refs diverged.
+  if (oldRemoteCommit !== headCommit || newRemoteCommit !== headCommit) {
+    return;
+  }
+
+  const deleteResult = await gitCommand(
+    ['push', remoteName, '--delete', oldRemoteBranchName],
+    context.workingDir
+  );
+  if (deleteResult.code !== 0) {
+    logger.warn('Failed to delete superseded remote branch', {
+      workspaceId: context.workspaceId,
+      oldBranchName: context.oldBranchName,
+      remoteName,
+      stderr: deleteResult.stderr,
+    });
+    return;
+  }
+
+  logger.info('Deleted superseded remote branch after pre-PR rename', {
+    workspaceId: context.workspaceId,
+    oldBranchName: context.oldBranchName,
+    newBranchName: context.newBranchName,
+    remoteName,
+  });
 }
 
 export const prePrRenameInterceptor: ToolInterceptor = {
@@ -72,9 +164,10 @@ export const prePrRenameInterceptor: ToolInterceptor = {
   tools: '*',
 
   async onToolStart(event: ToolEvent, context: InterceptorContext): Promise<void> {
+    let renameCompleted = false;
     try {
       // Check if this is a `gh pr create` command
-      const command = extractCommand(event);
+      const command = extractMatchingCommand(event, GH_PR_CREATE_REGEX, logger);
       if (!command) {
         return;
       }
@@ -92,10 +185,11 @@ export const prePrRenameInterceptor: ToolInterceptor = {
       if (!workspace.isAutoGeneratedBranch) {
         return;
       }
+      const oldBranchName = workspace.branchName ?? '';
 
       logger.info('Detected gh pr create with auto-generated branch, renaming', {
         workspaceId: context.workspaceId,
-        currentBranch: workspace.branchName,
+        currentBranch: oldBranchName,
       });
 
       // Mark immediately to prevent races from parallel tool calls
@@ -112,6 +206,12 @@ export const prePrRenameInterceptor: ToolInterceptor = {
           workspaceId: context.workspaceId,
           workspaceName: workspace.name,
         });
+        renamedWorkspaces.delete(context.workspaceId);
+        return;
+      }
+
+      if (newBranchName === oldBranchName) {
+        await workspaceDataService.clearAutoGeneratedBranch(context.workspaceId);
         return;
       }
 
@@ -131,15 +231,49 @@ export const prePrRenameInterceptor: ToolInterceptor = {
       // Persist the new name and clear the auto-generated flag
       await workspaceDataService.setBranchName(context.workspaceId, newBranchName);
       await workspaceDataService.clearAutoGeneratedBranch(context.workspaceId);
+      renameCompleted = true;
+      if (oldBranchName) {
+        setRemoteCleanupCandidate(event.toolUseId, {
+          oldBranchName,
+          newBranchName,
+          workspaceId: context.workspaceId,
+          workingDir: context.workingDir,
+        });
+      }
 
       logger.info('Renamed branch before PR creation', {
         workspaceId: context.workspaceId,
-        oldBranch: workspace.branchName,
+        oldBranch: oldBranchName,
         newBranch: newBranchName,
       });
     } catch (error) {
+      if (!renameCompleted) {
+        renamedWorkspaces.delete(context.workspaceId);
+      }
       logger.error('Error in pre-PR rename interceptor', {
         workspaceId: context.workspaceId,
+        error,
+      });
+    }
+  },
+
+  async onToolComplete(event: ToolEvent): Promise<void> {
+    const candidate = remoteCleanupCandidates.get(event.toolUseId);
+    if (!candidate) {
+      return;
+    }
+    remoteCleanupCandidates.delete(event.toolUseId);
+
+    if (event.output?.isError) {
+      return;
+    }
+
+    try {
+      await cleanupSupersededRemoteBranch(candidate);
+    } catch (error) {
+      logger.error('Error cleaning up superseded remote branch', {
+        workspaceId: candidate.workspaceId,
+        toolUseId: event.toolUseId,
         error,
       });
     }

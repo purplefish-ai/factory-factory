@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { generateUniqueWorkspaceName, pickRandomWord, WORKSPACE_WORDS } from './workspace-words';
+import {
+  generateUniqueWorkspaceName,
+  generateWorkspaceNameFromPrompt,
+  pickRandomWord,
+  WORKSPACE_WORDS,
+} from './workspace-words';
 
 describe('workspace-words', () => {
   describe('WORKSPACE_WORDS', () => {
@@ -81,6 +86,41 @@ describe('workspace-words', () => {
         const name = generateUniqueWorkspaceName(existing);
         expect(existing).not.toContain(name);
       }
+    });
+  });
+
+  describe('generateWorkspaceNameFromPrompt', () => {
+    it('builds a workspace name from prompt content', () => {
+      const name = generateWorkspaceNameFromPrompt('Fix duplicate branch name before push', []);
+      expect(name).toBe('fix-duplicate-branch-name-before-push');
+    });
+
+    it('drops generic stop words from prompts', () => {
+      const name = generateWorkspaceNameFromPrompt('Please help me fix auth bug in login flow', []);
+      expect(name).toBe('fix-auth-bug-login-flow');
+    });
+
+    it('adds numeric suffix when generated prompt name already exists', () => {
+      const name = generateWorkspaceNameFromPrompt('Fix auth bug in login flow', [
+        'fix-auth-bug-login-flow',
+      ]);
+      expect(name).toBe('fix-auth-bug-login-flow-2');
+    });
+
+    it('falls back to random name when prompt has no usable text', () => {
+      const name = generateWorkspaceNameFromPrompt('   ', []);
+      const isValidName = WORKSPACE_WORDS.includes(name) || /^[a-z]+-\d+$/.test(name);
+      expect(isValidName).toBe(true);
+    });
+
+    it('keeps incrementing suffix after 1000 collisions', () => {
+      const baseName = 'fix-auth-bug-login-flow';
+      const existing = [
+        baseName,
+        ...Array.from({ length: 999 }, (_, index) => `${baseName}-${index + 2}`),
+      ];
+      const name = generateWorkspaceNameFromPrompt('Fix auth bug in login flow', existing);
+      expect(name).toBe(`${baseName}-1001`);
     });
   });
 });

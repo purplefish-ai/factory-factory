@@ -13,7 +13,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { RatchetToggleButton } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
-import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
+import {
+  generateUniqueWorkspaceName,
+  generateWorkspaceNameFromPrompt,
+} from '@/shared/workspace-words';
 
 interface InlineWorkspaceFormProps {
   projectId: string;
@@ -68,8 +71,10 @@ export function InlineWorkspaceForm({
   const isCreating = createWorkspaceMutation.isPending;
 
   const handleLaunch = () => {
-    const name = generateUniqueWorkspaceName(existingNames);
     const trimmedPrompt = initialPrompt.trim();
+    const name = trimmedPrompt
+      ? generateWorkspaceNameFromPrompt(trimmedPrompt, existingNames)
+      : generateUniqueWorkspaceName(existingNames);
     createWorkspaceMutation.mutate({
       type: 'MANUAL',
       projectId,
