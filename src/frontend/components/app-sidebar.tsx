@@ -29,7 +29,6 @@ import type { NormalizedIssue } from '@/frontend/lib/issue-normalization';
 import { cn } from '@/lib/utils';
 import { Logo } from './logo';
 import { PendingRequestBadge } from './pending-request-badge';
-import { ProjectSelectorDropdown } from './project-selector';
 import { ThemeToggle } from './theme-toggle';
 import { WorkspaceStatusIcon } from './workspace-status-icon';
 
@@ -283,19 +282,6 @@ function SidebarInner({
       <SidebarSeparator />
 
       <SidebarFooter>
-        <div className="px-2 py-1">
-          <ProjectSelectorDropdown
-            selectedProjectSlug={navData.selectedProjectSlug}
-            onProjectChange={(value) => {
-              navData.handleProjectChange(value);
-              onNavigate?.();
-            }}
-            projects={navData.projects}
-          />
-        </div>
-
-        <div className="pt-2" />
-
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton

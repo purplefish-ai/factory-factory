@@ -5,19 +5,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 export function ProjectSelectorDropdown({
   selectedProjectSlug,
   onProjectChange,
   projects,
+  triggerClassName,
+  triggerId = 'project-select',
 }: {
   selectedProjectSlug: string;
   onProjectChange: (value: string) => void;
   projects: Array<{ id: string; slug: string; name: string }> | undefined;
+  triggerClassName?: string;
+  triggerId?: string;
 }) {
   return (
     <Select value={selectedProjectSlug} onValueChange={onProjectChange}>
-      <SelectTrigger id="project-select" className="w-full max-w-full gap-3 px-4">
+      <SelectTrigger
+        id={triggerId}
+        className={cn('w-full max-w-full gap-3 px-4', triggerClassName)}
+      >
         <SelectValue placeholder="Select a project" />
       </SelectTrigger>
       <SelectContent>
