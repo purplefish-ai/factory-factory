@@ -1,8 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CIStatus, PRState, RatchetState } from '@/shared/core';
 import { deriveWorkspaceFlowState, deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 
 describe('deriveWorkspaceFlowState', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-20T00:05:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns CI_WAIT and working when PR CI is pending (ratchet off)', () => {
     const result = deriveWorkspaceFlowState({
       prUrl: 'https://github.com/acme/repo/pull/1',
@@ -112,13 +121,28 @@ describe('deriveWorkspaceFlowState', () => {
       prUrl: 'https://github.com/acme/repo/pull/1',
       prState: PRState.OPEN,
       prCiStatus: CIStatus.UNKNOWN,
-      prUpdatedAt: new Date('2026-01-01T00:00:00Z'),
+      prUpdatedAt: new Date('2026-02-20T00:00:00Z'),
       ratchetEnabled: true,
       ratchetState: RatchetState.IDLE,
     });
 
     expect(result.ciObservation).toBe('NO_CHECKS');
     expect(result.phase).toBe('RATCHET_VERIFY');
+  });
+
+  it('treats recently synced unknown CI as checks pending', () => {
+    const result = deriveWorkspaceFlowState({
+      prUrl: 'https://github.com/acme/repo/pull/1',
+      prState: PRState.OPEN,
+      prCiStatus: CIStatus.UNKNOWN,
+      prUpdatedAt: new Date('2026-02-20T00:04:30Z'),
+      ratchetEnabled: true,
+      ratchetState: RatchetState.IDLE,
+    });
+
+    expect(result.ciObservation).toBe('CHECKS_PENDING');
+    expect(result.phase).toBe('CI_WAIT');
+    expect(result.isWorking).toBe(true);
   });
 
   it('derives flow state directly from a workspace-like object', () => {
