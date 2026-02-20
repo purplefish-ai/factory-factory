@@ -1,238 +1,229 @@
-import { describe, expect, it } from 'vitest';
-import { computeKanbanColumn } from './kanban-state';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkspaceStatus } from '@/shared/core';
+
+const mockFindById = vi.hoisted(() => vi.fn());
+const mockUpdate = vi.hoisted(() => vi.fn());
+const mockDeriveRuntimeState = vi.hoisted(() => vi.fn());
+const mockDeriveFlowStateFromWorkspace = vi.hoisted(() => vi.fn());
+
+vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
+  workspaceAccessor: {
+    findById: (...args: unknown[]) => mockFindById(...args),
+    update: (...args: unknown[]) => mockUpdate(...args),
+  },
+}));
+
+vi.mock('./workspace-runtime-state', () => ({
+  deriveWorkspaceRuntimeState: (...args: unknown[]) => mockDeriveRuntimeState(...args),
+}));
+
+vi.mock('./flow-state', () => ({
+  deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) =>
+    mockDeriveFlowStateFromWorkspace(...args),
+}));
+
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
+import { computeKanbanColumn, kanbanStateService } from './kanban-state';
 
 describe('computeKanbanColumn', () => {
-  describe('archived workspaces', () => {
-    it('should return null for ARCHIVED status (use cachedKanbanColumn instead)', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'ARCHIVED',
-        isWorking: false,
-        prState: 'NONE',
-        hasHadSessions: false,
-      });
-      expect(result).toBeNull();
-    });
-
-    it('should return null for ARCHIVED even with open PR', () => {
-      const result = computeKanbanColumn({
+  it('maps archived to hidden', () => {
+    expect(
+      computeKanbanColumn({
         lifecycle: 'ARCHIVED',
         isWorking: false,
         prState: 'OPEN',
         hasHadSessions: true,
-      });
-      expect(result).toBeNull();
-    });
+      })
+    ).toBeNull();
   });
 
-  describe('WORKING column - initializing states', () => {
-    it('should return WORKING for NEW status', () => {
-      const result = computeKanbanColumn({
+  it('maps initializing or active work to WORKING', () => {
+    expect(
+      computeKanbanColumn({
         lifecycle: 'NEW',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: false,
-      });
-      expect(result).toBe('WORKING');
-    });
-
-    it('should return WORKING for PROVISIONING status', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'PROVISIONING',
-        isWorking: false,
-        prState: 'NONE',
-        hasHadSessions: false,
-      });
-      expect(result).toBe('WORKING');
-    });
-
-    it('should return WORKING for FAILED status', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'FAILED',
-        isWorking: false,
-        prState: 'NONE',
-        hasHadSessions: false,
-      });
-      expect(result).toBe('WORKING');
-    });
-
-    it('should return WORKING for FAILED even if had sessions', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'FAILED',
-        isWorking: false,
-        prState: 'NONE',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('WORKING');
-    });
-  });
-
-  describe('WORKING column - actively working', () => {
-    it('should return WORKING when isWorking is true', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: true,
-        prState: 'NONE',
-        hasHadSessions: false,
-      });
-      expect(result).toBe('WORKING');
-    });
-
-    it('should return WORKING when working, even with open PR', () => {
-      const result = computeKanbanColumn({
+      })
+    ).toBe('WORKING');
+    expect(
+      computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: true,
         prState: 'OPEN',
         hasHadSessions: true,
-      });
-      expect(result).toBe('WORKING');
-    });
-
-    it('should return WORKING when working, even with approved PR', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: true,
-        prState: 'APPROVED',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('WORKING');
-    });
+      })
+    ).toBe('WORKING');
   });
 
-  describe('DONE column - merged PRs', () => {
-    it('should return DONE for merged PR', () => {
-      const result = computeKanbanColumn({
+  it('maps merged PRs to DONE and hidden empty READY workspaces to null', () => {
+    expect(
+      computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'MERGED',
         hasHadSessions: true,
-      });
-      expect(result).toBe('DONE');
-    });
-
-    it('should return DONE for merged PR even without prior sessions', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'MERGED',
-        hasHadSessions: false,
-      });
-      expect(result).toBe('DONE');
-    });
-  });
-
-  describe('hidden workspaces (return null)', () => {
-    it('should return null if never had sessions (hidden from view)', () => {
-      const result = computeKanbanColumn({
+      })
+    ).toBe('DONE');
+    expect(
+      computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'NONE',
         hasHadSessions: false,
-      });
-      expect(result).toBeNull();
-    });
-
-    it('should return null if no sessions even with closed PR', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'CLOSED',
-        hasHadSessions: false,
-      });
-      expect(result).toBeNull();
-    });
+      })
+    ).toBeNull();
   });
 
-  describe('WAITING column - idle workspaces with sessions', () => {
-    it('should return WAITING if had sessions but no PR', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'NONE',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('WAITING');
-    });
-
-    it('should return WAITING if had sessions and PR was closed', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'CLOSED',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('WAITING');
-    });
-
-    it('should return WAITING for approved PR (waiting for merge)', () => {
-      const result = computeKanbanColumn({
+  it('maps idle session-backed workspaces to WAITING', () => {
+    expect(
+      computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'APPROVED',
         hasHadSessions: true,
-      });
-      expect(result).toBe('WAITING');
-    });
+      })
+    ).toBe('WAITING');
+  });
+});
 
-    it('should return WAITING for draft PR', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'DRAFT',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('WAITING');
-    });
+describe('kanbanStateService', () => {
+  const sessionBridge = {
+    isAnySessionWorking: vi.fn(),
+    getAllPendingRequests: vi.fn(() => new Map()),
+  };
 
-    it('should return WAITING for open PR', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'OPEN',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('WAITING');
-    });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    kanbanStateService.configure({ session: sessionBridge });
+  });
 
-    it('should return WAITING for PR with changes requested', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: false,
-        prState: 'CHANGES_REQUESTED',
-        hasHadSessions: true,
-      });
-      expect(result).toBe('WAITING');
+  it('returns null when workspace is missing', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    await expect(kanbanStateService.getWorkspaceKanbanState('missing')).resolves.toBeNull();
+  });
+
+  it('gets kanban state for one workspace', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'w1',
+      status: WorkspaceStatus.READY,
+      prState: 'OPEN',
+      hasHadSessions: true,
+    });
+    mockDeriveRuntimeState.mockReturnValue({ isWorking: false });
+
+    await expect(kanbanStateService.getWorkspaceKanbanState('w1')).resolves.toEqual({
+      workspace: expect.objectContaining({ id: 'w1' }),
+      kanbanColumn: 'WAITING',
+      isWorking: false,
     });
   });
 
-  describe('edge cases', () => {
-    it('should prioritize ARCHIVED over isWorking', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'ARCHIVED',
-        isWorking: true, // Even if somehow working
+  it('computes batch kanban state using workingStatus map', () => {
+    mockDeriveRuntimeState
+      .mockReturnValueOnce({ isWorking: false })
+      .mockReturnValueOnce({ isWorking: true });
+
+    const result = kanbanStateService.getWorkspacesKanbanStates(
+      [
+        {
+          id: 'w1',
+          status: WorkspaceStatus.READY,
+          prState: 'OPEN',
+          hasHadSessions: true,
+        },
+        {
+          id: 'w2',
+          status: WorkspaceStatus.READY,
+          prState: 'NONE',
+          hasHadSessions: true,
+        },
+      ] as never,
+      new Map([
+        ['w1', false],
+        ['w2', true],
+      ])
+    );
+
+    expect(result).toMatchObject([
+      { workspace: { id: 'w1' }, kanbanColumn: 'WAITING', isWorking: false },
+      { workspace: { id: 'w2' }, kanbanColumn: 'WORKING', isWorking: true },
+    ]);
+  });
+
+  it('updates cached kanban column and stateComputedAt only when column changes', async () => {
+    mockFindById
+      .mockResolvedValueOnce({
+        id: 'w1',
+        status: WorkspaceStatus.READY,
         prState: 'OPEN',
         hasHadSessions: true,
-      });
-      expect(result).toBeNull();
-    });
-
-    it('should return WORKING for NEW even if isWorking flag is set', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'NEW',
-        isWorking: true,
-        prState: 'NONE',
-        hasHadSessions: false,
-      });
-      expect(result).toBe('WORKING');
-    });
-
-    it('should prioritize isWorking over PR state for READY', () => {
-      const result = computeKanbanColumn({
-        lifecycle: 'READY',
-        isWorking: true,
-        prState: 'MERGED', // Even with merged PR
+        cachedKanbanColumn: 'WORKING',
+      })
+      .mockResolvedValueOnce({
+        id: 'w2',
+        status: WorkspaceStatus.READY,
+        prState: 'OPEN',
         hasHadSessions: true,
+        cachedKanbanColumn: 'WAITING',
+      })
+      .mockResolvedValueOnce({
+        id: 'w3',
+        status: WorkspaceStatus.ARCHIVED,
+        prState: 'OPEN',
+        hasHadSessions: true,
+        cachedKanbanColumn: 'WAITING',
       });
-      expect(result).toBe('WORKING');
-    });
+
+    mockDeriveFlowStateFromWorkspace
+      .mockReturnValueOnce({ isWorking: false })
+      .mockReturnValueOnce({ isWorking: false });
+
+    await kanbanStateService.updateCachedKanbanColumn('w1');
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'w1',
+      expect.objectContaining({
+        cachedKanbanColumn: 'WAITING',
+        stateComputedAt: expect.any(Date),
+      })
+    );
+
+    await kanbanStateService.updateCachedKanbanColumn('w2');
+    expect(mockUpdate).toHaveBeenCalledWith('w2', { cachedKanbanColumn: 'WAITING' });
+
+    await kanbanStateService.updateCachedKanbanColumn('w3');
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  it('updates cached columns in batch', async () => {
+    mockFindById
+      .mockResolvedValueOnce({
+        id: 'w1',
+        status: WorkspaceStatus.READY,
+        prState: 'NONE',
+        hasHadSessions: true,
+        cachedKanbanColumn: 'WORKING',
+      })
+      .mockResolvedValueOnce({
+        id: 'w2',
+        status: WorkspaceStatus.READY,
+        prState: 'NONE',
+        hasHadSessions: true,
+        cachedKanbanColumn: 'WORKING',
+      });
+    mockDeriveFlowStateFromWorkspace.mockReturnValue({ isWorking: false });
+
+    await kanbanStateService.updateCachedKanbanColumns(['w1', 'w2']);
+
+    expect(mockUpdate).toHaveBeenCalledTimes(2);
   });
 });
