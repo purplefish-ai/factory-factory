@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { GithubUrlForm } from '@/components/project/github-url-form';
+import { OnboardingCliHealth } from '@/components/project/onboarding-cli-health';
 import { ProjectRepoForm, type ProjectRepoFormProps } from '@/components/project/project-repo-form';
 import { SetupTerminalModal } from '@/components/project/setup-terminal-modal';
 import type { ScriptType } from '@/components/project/startup-script-form';
@@ -160,7 +161,8 @@ export default function NewProjectPage() {
     setTerminalOpen(false);
     // Re-check auth after terminal closes
     refetchAuth();
-  }, [refetchAuth]);
+    utils.admin.checkCLIHealth.invalidate();
+  }, [refetchAuth, utils.admin.checkCLIHealth]);
 
   const localFormProps = {
     error,
@@ -244,6 +246,10 @@ export default function NewProjectPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <OnboardingCliHealth onOpenTerminal={() => setTerminalOpen(true)} />
+
+              <div className="my-4 border-t" />
+
               {sourceSelector}
 
               <div className="relative my-4">
