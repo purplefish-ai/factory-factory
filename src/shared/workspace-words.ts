@@ -115,19 +115,30 @@ function uniqueNameWithSuffix(baseName: string, existingNames: string[]): string
     return baseName;
   }
 
-  let counter = 2;
-  const maxIterations = 1000;
-  while (counter < maxIterations) {
+  const getCandidate = (counter: number): string => {
     const suffix = `-${counter}`;
     const truncatedBase = baseName.slice(0, WORKSPACE_NAME_MAX_LENGTH - suffix.length);
-    const candidate = `${truncatedBase}${suffix}`;
+    return `${truncatedBase}${suffix}`;
+  };
+
+  let counter = 2;
+  const maxIterations = 1000;
+  while (counter <= maxIterations) {
+    const candidate = getCandidate(counter);
     if (!normalizedExisting.has(normalizeWorkspaceName(candidate))) {
       return candidate;
     }
     counter++;
   }
 
-  return `${baseName.slice(0, WORKSPACE_NAME_MAX_LENGTH - 4)}-999`;
+  // Keep incrementing so we don't return a suffix already known to collide.
+  while (true) {
+    const candidate = getCandidate(counter);
+    if (!normalizedExisting.has(normalizeWorkspaceName(candidate))) {
+      return candidate;
+    }
+    counter++;
+  }
 }
 
 /**

@@ -112,5 +112,15 @@ describe('workspace-words', () => {
       const isValidName = WORKSPACE_WORDS.includes(name) || /^[a-z]+-\d+$/.test(name);
       expect(isValidName).toBe(true);
     });
+
+    it('keeps incrementing suffix after 1000 collisions', () => {
+      const baseName = 'fix-auth-bug-login-flow';
+      const existing = [
+        baseName,
+        ...Array.from({ length: 999 }, (_, index) => `${baseName}-${index + 2}`),
+      ];
+      const name = generateWorkspaceNameFromPrompt('Fix auth bug in login flow', existing);
+      expect(name).toBe(`${baseName}-1001`);
+    });
   });
 });
