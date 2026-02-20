@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
+import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
@@ -7,6 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
+import * as QRCode from 'qrcode';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import {
   type AuthenticationCheck,
@@ -61,27 +62,30 @@ function supportsTerminalQrRendering(
   return term !== '' && term !== 'dumb';
 }
 
-function tryRenderTerminalQrCode(
+async function tryRenderTerminalQrCode(
   url: string,
-  runCommand: typeof execFileSync = execFileSync
-): string | null {
+  renderQrCode: (
+    text: string,
+    options?: QRCode.QRCodeToStringOptionsTerminal
+  ) => Promise<string> = (text, options) => QRCode.toString(text, options)
+): Promise<string | null> {
   try {
-    const output = runCommand('qrencode', ['-t', 'UTF8', '-m', '1', url], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: 1024 * 1024,
-    }) as string;
+    const output = await renderQrCode(url, {
+      type: 'terminal',
+      margin: 1,
+      small: true,
+    });
     return output.trim() ? output : null;
   } catch {
     return null;
   }
 }
 
-function printDirectLinkQrCode(url: string): void {
+async function printDirectLinkQrCode(url: string): Promise<void> {
   if (!supportsTerminalQrRendering()) {
     return;
   }
-  const qr = tryRenderTerminalQrCode(url);
+  const qr = await tryRenderTerminalQrCode(url);
   if (!qr) {
     return;
   }
@@ -979,7 +983,7 @@ export async function runProxyCommand({
     console.log(chalk.green(`🌍 Public URL:  ${tunnel.publicUrl}`));
     console.log(chalk.green(`🔑 Password:   ${password}`));
     console.log(chalk.green(`🔗 Direct link: ${directLink}\n`));
-    printDirectLinkQrCode(directLink);
+    await printDirectLinkQrCode(directLink);
     console.log('Share the password or direct link with people you want to grant access.');
     console.log('Press Ctrl+C to stop.');
   } else {
