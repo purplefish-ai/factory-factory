@@ -81,6 +81,9 @@ RUN apk add --no-cache \
 
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
+# Install Claude CLI and Codex CLI globally
+RUN npm install -g @anthropic-ai/claude-code @openai/codex
+
 # Copy built application
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
@@ -98,6 +101,7 @@ COPY --from=builder /app/prisma/generated ./prisma/generated
 RUN mkdir -p /data
 
 ENV NODE_ENV=production
+ENV PATH="/app/node_modules/.bin:${PATH}"
 ENV BACKEND_PORT=3000
 ENV DATABASE_PATH=/data/data.db
 ENV BASE_DIR=/data
