@@ -385,7 +385,7 @@ function IdeSettingsSection() {
               <Button
                 variant="outline"
                 onClick={handleTestCommand}
-                disabled={testCommand.isPending || !settings.customIdeCommand}
+                disabled={testCommand.isPending || !settings?.customIdeCommand}
               >
                 {testCommand.isPending ? 'Testing...' : 'Test'}
               </Button>
