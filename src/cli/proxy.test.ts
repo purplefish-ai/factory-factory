@@ -94,21 +94,26 @@ describe('proxy internals', () => {
   });
 
   it('renders terminal QR code output with qrencode', () => {
+    let invokedFile: string | undefined;
+    let invokedArgs: readonly string[] | undefined;
+
     const rendered = proxyInternals.tryRenderTerminalQrCode(
       'https://example.trycloudflare.com?token=abc123',
       ((file: string, args: readonly string[]) => {
-        expect(file).toBe('qrencode');
-        expect(args).toEqual([
-          '-t',
-          'UTF8',
-          '-m',
-          '1',
-          'https://example.trycloudflare.com?token=abc123',
-        ]);
+        invokedFile = file;
+        invokedArgs = args;
         return '██\n██\n';
       }) as unknown as typeof import('node:child_process').execFileSync
     );
 
+    expect(invokedFile).toBe('qrencode');
+    expect(invokedArgs).toEqual([
+      '-t',
+      'UTF8',
+      '-m',
+      '1',
+      'https://example.trycloudflare.com?token=abc123',
+    ]);
     expect(rendered).toBe('██\n██\n');
   });
 
