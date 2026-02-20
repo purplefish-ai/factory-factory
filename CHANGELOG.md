@@ -5,6 +5,59 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] - 2026-02-20
+
+### Added
+
+- Add pre-PR branch rename interceptor (#1097)
+- Add archive controls and bulk archive actions in Kanban and workspace views (#1101, #1107, #1138, #1159)
+- Add New Workspace actions in workspace detail and Kanban Issues column (#1106, #1111)
+- Add Docker build-and-push workflow for GHCR branch testing (#1108)
+- Add PR re-review tagging comment after ratchet fixes (#1116)
+- Add inline workspace creation form on Kanban board (#1123)
+- Add terminal QR code and proxy script for private tunnel direct links (#1146, #1155)
+- Add empty-state messaging for no active workspaces in side panel (#1137, #1152)
+- Add default permission presets for ratchet and workspace sessions (#1160)
+- Surface session startup failures across workspace surfaces (#1167)
+- Add GitHub URL clone flow for project creation (#1169)
+- Add CLI auth readiness checks to onboarding (#1185)
+- Install GitHub CLI, Claude CLI, and Codex CLI in Docker image (#1172, #1177)
+
+### Changed
+
+- Refresh app UI/UX and iterate on Kanban and workspace information density (#1099, #1110, #1125, #1131, #1133, #1136, #1143, #1144, #1150, #1157, #1165, #1173, #1182, #1188)
+- Rewrite Dockerfile/docker-compose for cloud deployment and proxy workflows (#1098, #1124, #1156)
+- Rename auto-generated branches before push and PR (#1176)
+- Improve workspace and sidebar navigation patterns across desktop/mobile (#1102, #1105, #1113, #1115, #1171, #1174, #1178, #1181, #1192)
+- Improve mobile layout behavior and menu/header ergonomics (#1118, #1147, #1148, #1149)
+- Improve chat follow-mode near-bottom scrolling behavior (#1121, #1122)
+- Make Kanban transitions and archive interactions feel immediate (#1154, #1170, #1187)
+- Improve ratchet reliability by gating dispatch on actionable PR signals and persisting toggle state snapshots (#1145, #1184, #1189)
+- Move workspace quick actions into the session bar and auto-save IDE settings on change (#1183, #1194)
+- Enforce provider CLI readiness checks and update ratchet Codex startup defaults (#1117, #1162)
+
+### Fixed
+
+- Fix active navigation highlighting and board labeling inconsistencies (#1104, #1128)
+- Fix mobile chat reconnect getting stuck on "Connecting" (#1112)
+- Fix circular JSON crash in NewWorkspaceButton onClick (#1127, #1129)
+- Fix Docker runtime crashes from Prisma 7 `.ts` imports in compiled output (#1119, #1151)
+- Fix Docker publish workflow trigger on pushes to `main` (#1135)
+- Fix null `submittedAt` handling in PR review details (#1141)
+- Fix Kanban archive cancel navigation and done-column UX (#1142)
+- Fix admin refresh button overflow on mobile (#1153)
+- Fix Launch button overlap in New Workspace form (#1179, #1180)
+- Fix terminal-instance mixed-import chunk warning (#1186)
+- Fix CLI health banner layout and light-mode colors (#1175, #1191)
+
+### Security
+
+- Bump dependency security overrides and refresh lockfile (#1193)
+
+### Testing
+
+- Increase backend coverage and tighten critical coverage gates (#1114, #1166)
+
 ## [0.3.6] - 2026-02-19
 
 ### Added
