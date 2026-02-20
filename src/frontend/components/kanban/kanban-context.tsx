@@ -85,6 +85,8 @@ interface KanbanContextValue {
   togglingWorkspaceId: string | null;
   archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
   archivingWorkspaceId: string | null;
+  bulkArchiveColumn: (kanbanColumn: string, commitUncommitted: boolean) => Promise<void>;
+  isBulkArchiving: boolean;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
 }
@@ -151,6 +153,7 @@ export function KanbanProvider({
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
   const archiveMutation = trpc.workspace.archive.useMutation();
+  const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
   const [archivingWorkspaceId, setArchivingWorkspaceId] = useState<string | null>(null);
   const [showInlineForm, setShowInlineForm] = useState(false);
@@ -185,6 +188,15 @@ export function KanbanProvider({
     } finally {
       setArchivingWorkspaceId(null);
     }
+  };
+
+  const bulkArchiveColumn = async (kanbanColumn: string, commitUncommitted: boolean) => {
+    await bulkArchiveMutation.mutateAsync({
+      projectId,
+      kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
+      commitUncommitted,
+    });
+    await refetchWorkspaces();
   };
 
   const refetch = () => {
@@ -244,6 +256,8 @@ export function KanbanProvider({
         togglingWorkspaceId,
         archiveWorkspace,
         archivingWorkspaceId,
+        bulkArchiveColumn,
+        isBulkArchiving: bulkArchiveMutation.isPending,
         showInlineForm,
         setShowInlineForm,
       }}
