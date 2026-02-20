@@ -28,11 +28,12 @@ function SidebarToggleButton() {
 }
 
 export function AppHeader() {
-  const { title, setRightSlot, setLeftExtraSlot } = useAppHeaderContext();
+  const { title, setRightSlot, setLeftStartSlot, setLeftExtraSlot } = useAppHeaderContext();
 
   return (
     <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)]">
       <SidebarToggleButton />
+      <div ref={setLeftStartSlot} className="contents" />
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
         <div ref={setLeftExtraSlot} className="flex shrink-0 items-center gap-1" />

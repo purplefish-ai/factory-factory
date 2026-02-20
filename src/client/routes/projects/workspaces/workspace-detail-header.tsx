@@ -57,6 +57,7 @@ import {
 } from '@/components/workspace';
 import {
   HeaderLeftExtraSlot,
+  HeaderLeftStartSlot,
   HeaderRightSlot,
   useAppHeader,
 } from '@/frontend/components/app-header-context';
@@ -836,6 +837,9 @@ export function WorkspaceDetailHeaderSlot({
 
   return (
     <>
+      <HeaderLeftStartSlot>
+        <WorkspacesBackLink projectSlug={slug} />
+      </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
         <div className="hidden md:flex items-center gap-2 min-w-0">
           <WorkspacePrAction
@@ -849,7 +853,6 @@ export function WorkspaceDetailHeaderSlot({
           <WorkspaceCiStatus workspace={workspace} />
           <RunScriptPortBadge workspaceId={workspaceId} />
         </div>
-        <WorkspacesBackLink projectSlug={slug} />
       </HeaderLeftExtraSlot>
       <HeaderRightSlot>
         <div
