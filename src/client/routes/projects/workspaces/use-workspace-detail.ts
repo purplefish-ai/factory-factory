@@ -190,14 +190,19 @@ export function useSessionManagement({
   });
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
-    onMutate: ({ id }) => {
+    onMutate: async ({ id }) => {
       const workspace = utils.workspace.get.getData({ id });
       const projectId = workspace?.projectId;
+
+      if (projectId) {
+        await utils.workspace.listWithKanbanState.cancel({ projectId });
+      }
+
       const previousWorkspaceList = projectId
         ? utils.workspace.listWithKanbanState.getData({ projectId })
         : undefined;
 
-      if (projectId && previousWorkspaceList) {
+      if (projectId) {
         utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
           old?.filter((workspaceItem) => workspaceItem.id !== id)
         );
@@ -225,8 +230,6 @@ export function useSessionManagement({
             context.previousWorkspaceList
           );
         }
-        void utils.workspace.listWithKanbanState.invalidate({ projectId: context.projectId });
-        void utils.workspace.getProjectSummaryState.invalidate({ projectId: context.projectId });
       }
     },
     onSettled: (_data, _error, variables, context) => {
