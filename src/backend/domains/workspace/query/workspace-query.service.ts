@@ -181,6 +181,8 @@ class WorkspaceQueryService {
           lastActivityAt,
           ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
+          githubIssueNumber: w.githubIssueNumber,
+          linearIssueId: w.linearIssueId,
           sidebarStatus: deriveWorkspaceSidebarStatus({
             isWorking: workingStatusByWorkspace.get(w.id) ?? false,
             prUrl: w.prUrl,

@@ -1,44 +1,14 @@
 import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
+import {
+  type NormalizedIssue,
+  normalizeGitHubIssue,
+  normalizeLinearIssue,
+} from '@/frontend/lib/issue-normalization';
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
-/** Normalized issue type that works for both GitHub and Linear providers. */
-export interface KanbanIssue {
-  id: string;
-  displayId: string;
-  title: string;
-  body: string;
-  url: string;
-  createdAt: string;
-  author: string;
-  provider: 'github' | 'linear';
-  githubIssueNumber?: number;
-  linearIssueId?: string;
-  linearIssueIdentifier?: string;
-}
-
-/** Raw GitHub issue shape from the tRPC response. */
-interface GitHubIssueRaw {
-  number: number;
-  title: string;
-  body: string;
-  url: string;
-  state: 'OPEN' | 'CLOSED';
-  createdAt: string;
-  author: { login: string };
-}
-
-/** Raw Linear issue shape from the tRPC response. */
-interface LinearIssueRaw {
-  id: string;
-  identifier: string;
-  title: string;
-  description: string;
-  url: string;
-  state: string;
-  createdAt: string;
-  assigneeName: string | null;
-}
+/** @deprecated Use `NormalizedIssue` from `@/frontend/lib/issue-normalization` instead. */
+export type KanbanIssue = NormalizedIssue;
 
 interface ArchivingWorkspaceIssueLink {
   githubIssueNumber: number | null;
@@ -77,35 +47,6 @@ function collectGitHubIssueNumbers(
     }
   }
   return issueNumbers;
-}
-
-function normalizeGitHubIssue(issue: GitHubIssueRaw): KanbanIssue {
-  return {
-    id: String(issue.number),
-    displayId: `#${issue.number}`,
-    title: issue.title,
-    body: issue.body,
-    url: issue.url,
-    createdAt: issue.createdAt,
-    author: issue.author.login,
-    provider: 'github',
-    githubIssueNumber: issue.number,
-  };
-}
-
-function normalizeLinearIssue(issue: LinearIssueRaw): KanbanIssue {
-  return {
-    id: issue.id,
-    displayId: issue.identifier,
-    title: issue.title,
-    body: issue.description,
-    url: issue.url,
-    createdAt: issue.createdAt,
-    author: issue.assigneeName ?? 'Unassigned',
-    provider: 'linear',
-    linearIssueId: issue.id,
-    linearIssueIdentifier: issue.identifier,
-  };
 }
 
 interface KanbanContextValue {

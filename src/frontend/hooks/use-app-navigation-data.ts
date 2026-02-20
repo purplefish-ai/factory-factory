@@ -82,7 +82,7 @@ function useProjectSlugSync(
 
 /**
  * Central hook providing all navigation-level data previously owned by AppSidebar.
- * Used by AppHeader and HamburgerMenu.
+ * Used by AppLayout, AppSidebar, and AppHeader.
  */
 export function useAppNavigationData() {
   const { pathname } = useLocation();
@@ -92,7 +92,9 @@ export function useAppNavigationData() {
 
   const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
 
-  const selectedProjectId = projects?.find((p) => p.slug === selectedProjectSlug)?.id;
+  const selectedProject = projects?.find((p) => p.slug === selectedProjectSlug);
+  const selectedProjectId = selectedProject?.id;
+  const issueProvider = selectedProject?.issueProvider ?? 'GITHUB';
 
   const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
@@ -155,6 +157,7 @@ export function useAppNavigationData() {
     projects,
     selectedProjectSlug,
     selectedProjectId,
+    issueProvider,
     serverWorkspaces,
     reviewCount,
     handleProjectChange,
