@@ -203,6 +203,15 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 3,
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please update this',
+          path: 'src/test.ts',
+          line: 3,
+          url: 'https://github.com/example/repo/pull/3#discussion_r1',
+        },
+      ],
     });
 
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
@@ -406,6 +415,15 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 55,
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please revise this',
+          path: 'src/example.ts',
+          line: 9,
+          url: 'https://github.com/example/repo/pull/55#discussion_r1',
+        },
+      ],
     });
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
     vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
@@ -426,6 +444,55 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       },
     });
     expect(agentSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
+  });
+
+  it('does not dispatch for CHANGES_REQUESTED when there are no PR review comments', async () => {
+    const workspace = {
+      id: 'ws-review-no-comments',
+      prUrl: 'https://github.com/example/repo/pull/56',
+      prNumber: 56,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.REVIEW_PENDING,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'ci:SUCCESS|changes-requested:old',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'ci:SUCCESS|changes-requested:new',
+      hasChangesRequested: true,
+      latestReviewActivityAtMs: new Date('2026-01-03T00:00:00Z').getTime(),
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 56,
+      reviewComments: [],
+    });
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    const triggerSpy = vi.spyOn(
+      unsafeCoerce<{ triggerFixer: (...args: unknown[]) => Promise<unknown> }>(ratchetService),
+      'triggerFixer'
+    );
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      action: {
+        type: 'WAITING',
+        reason: 'No CI failures or PR review comments to address',
+      },
+    });
   });
 
   it('treats closed PR as IDLE and does not dispatch', () => {
@@ -468,6 +535,15 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 7,
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please fix this',
+          path: 'src/example.ts',
+          line: 12,
+          url: 'https://github.com/example/repo/pull/7#discussion_r1',
+        },
+      ],
     });
 
     vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
@@ -1380,6 +1456,22 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       }) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe('Workspace is not idle (active session)');
     });
+
+    it('returns WAITING when there are no CI failures or PR review comments', () => {
+      const result = callDecide({
+        workspace: { ratchetEnabled: true },
+        prStateInfo: {
+          prState: 'OPEN',
+          ciStatus: CIStatus.SUCCESS,
+          reviewComments: [],
+        },
+        isCleanPrWithNoNewReviewActivity: false,
+        activeRatchetSession: null,
+        hasStateChangedSinceLastDispatch: true,
+        hasOtherActiveSession: false,
+      }) as { type: string; action?: { reason: string } };
+      expect(result.action?.reason).toBe('No CI failures or PR review comments to address');
+    });
   });
 
   describe('getActiveRatchetSession edge cases', () => {
@@ -1459,6 +1551,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       statusCheckRollup: null,
       prState: 'OPEN',
       prNumber: 100,
+      reviewComments: [],
     };
 
     const prStateWithComments = {
@@ -1466,6 +1559,15 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       snapshotKey: 'snapshot-with-comments',
       hasChangesRequested: true,
       latestReviewActivityAtMs: new Date('2026-01-03T00:00:00Z').getTime(),
+      reviewComments: [
+        {
+          author: 'reviewer',
+          body: 'Please update this line',
+          path: 'src/file.ts',
+          line: 21,
+          url: 'https://github.com/example/repo/pull/100#discussion_r2',
+        },
+      ],
     };
 
     const getTrackers = () =>
