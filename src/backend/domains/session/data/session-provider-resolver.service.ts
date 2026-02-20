@@ -4,6 +4,16 @@ import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 
 class SessionProviderResolverService {
+  async resolveProviderForWorkspaceCreation(
+    explicitProvider?: SessionProvider
+  ): Promise<SessionProvider> {
+    if (explicitProvider) {
+      return explicitProvider;
+    }
+
+    return await userSettingsAccessor.getDefaultSessionProvider();
+  }
+
   async resolveSessionProvider(params: {
     workspaceId: string;
     explicitProvider?: SessionProvider;

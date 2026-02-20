@@ -1,5 +1,6 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 
 const mockSessionDataService = vi.hoisted(() => ({
   findAgentSessionsByWorkspaceId: vi.fn(),
@@ -47,6 +48,16 @@ function createCaller() {
   const sessionDomainService = {
     clearSession: vi.fn(),
   };
+  const cliHealthService = {
+    checkHealth: vi.fn(
+      async (): Promise<CLIHealthStatus> => ({
+        claude: { isInstalled: true },
+        codex: { isInstalled: true, isAuthenticated: true },
+        github: { isInstalled: true, isAuthenticated: true },
+        allHealthy: true,
+      })
+    ),
+  };
 
   return {
     caller: sessionRouter.createCaller({
@@ -57,11 +68,13 @@ function createCaller() {
           },
           sessionService,
           sessionDomainService,
+          cliHealthService,
         },
       },
     } as never),
     sessionService,
     sessionDomainService,
+    cliHealthService,
   };
 }
 
@@ -92,7 +105,7 @@ describe('sessionRouter', () => {
   });
 
   it('enforces workspace session limits and creates a session with provider resolution', async () => {
-    const { caller } = createCaller();
+    const { caller, cliHealthService } = createCaller();
 
     mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([
       { id: 's1' },
@@ -123,7 +136,30 @@ describe('sessionRouter', () => {
       workspaceId: 'w1',
       explicitProvider: undefined,
     });
+    expect(cliHealthService.checkHealth).toHaveBeenCalledWith();
     expect(mockSessionDomainService.storeInitialMessage).toHaveBeenCalledWith('s3', 'Start here');
+  });
+
+  it('blocks creating a session when the selected provider is unavailable', async () => {
+    const { caller, cliHealthService } = createCaller();
+    mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([{ id: 's1' }]);
+    mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
+      SessionProvider.CODEX
+    );
+    cliHealthService.checkHealth.mockResolvedValue({
+      claude: { isInstalled: true },
+      codex: { isInstalled: false, isAuthenticated: false, error: 'Codex CLI is not installed.' },
+      github: { isInstalled: true, isAuthenticated: true },
+      allHealthy: true,
+    });
+
+    await expect(
+      caller.createSession({
+        workspaceId: 'w1',
+        workflow: 'user',
+      })
+    ).rejects.toThrow('Codex provider is unavailable');
+    expect(mockSessionDataService.createAgentSession).not.toHaveBeenCalled();
   });
 
   it('handles start/stop/delete flows and terminal session procedures', async () => {

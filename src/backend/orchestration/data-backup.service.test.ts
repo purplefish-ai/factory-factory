@@ -183,6 +183,8 @@ const mockUserSettings: UserSettings = {
   cachedSlashCommands: { commands: [] },
   ratchetEnabled: true,
   defaultSessionProvider: SessionProvider.CLAUDE,
+  defaultWorkspacePermissions: 'STRICT',
+  ratchetPermissions: 'YOLO',
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
@@ -302,6 +304,8 @@ function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
         notificationSoundPath: '/path/to/sound.mp3',
         ratchetEnabled: true,
         defaultSessionProvider: SessionProvider.CLAUDE,
+        defaultWorkspacePermissions: 'STRICT',
+        ratchetPermissions: 'YOLO',
       },
       ...overrides,
     },
@@ -336,6 +340,8 @@ describe('DataBackupService', () => {
         expect.objectContaining({
           ratchetEnabled: true,
           defaultSessionProvider: SessionProvider.CLAUDE,
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetPermissions: 'YOLO',
         })
       );
       expect(exportDataSchema.safeParse(result).success).toBe(true);

@@ -2,7 +2,7 @@ import { HeaderRightSlot, useAppHeader } from '@/frontend/components/app-header-
 import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 
 function BoardHeaderSlot() {
-  useAppHeader({ title: 'Workspaces Board' });
+  useAppHeader({ title: 'Workspaces' });
 
   return (
     <HeaderRightSlot>

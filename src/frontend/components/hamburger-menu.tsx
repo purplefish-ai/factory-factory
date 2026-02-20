@@ -117,7 +117,7 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
               }`}
             >
               <Kanban className="h-4 w-4" />
-              <span>Workspaces Board</span>
+              <span>Workspaces</span>
             </Link>
           </SheetClose>
           <SheetClose asChild>
@@ -152,7 +152,7 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
                 }`}
               >
                 <Settings className="h-4 w-4" />
-                <span>Admin Dashboard</span>
+                <span>Settings</span>
               </Link>
             </SheetClose>
             <ThemeToggle />

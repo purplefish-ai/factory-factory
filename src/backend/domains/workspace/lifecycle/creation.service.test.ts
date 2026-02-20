@@ -129,6 +129,8 @@ describe('WorkspaceCreationService', () => {
       cachedSlashCommands: null,
       ratchetEnabled: true,
       defaultSessionProvider: 'CLAUDE',
+      defaultWorkspacePermissions: 'STRICT',
+      ratchetPermissions: 'YOLO',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -221,6 +223,8 @@ describe('WorkspaceCreationService', () => {
           cachedSlashCommands: null,
           ratchetEnabled: false,
           defaultSessionProvider: 'CLAUDE',
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetPermissions: 'YOLO',
           createdAt: new Date(),
           updatedAt: new Date(),
         };
@@ -493,6 +497,8 @@ describe('WorkspaceCreationService', () => {
           cachedSlashCommands: null,
           ratchetEnabled: true,
           defaultSessionProvider: 'CODEX',
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetPermissions: 'YOLO',
           createdAt: new Date(),
           updatedAt: new Date(),
         });
