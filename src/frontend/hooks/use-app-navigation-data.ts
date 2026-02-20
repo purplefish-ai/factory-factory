@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router';
 import { useProjectSnapshotSync } from '@/frontend/hooks/use-project-snapshot-sync';
 import { useWorkspaceAttention } from '@/frontend/hooks/use-workspace-attention';
 import { useProjectContext } from '@/frontend/lib/providers';
@@ -86,7 +86,6 @@ function useProjectSlugSync(
  */
 export function useAppNavigationData() {
   const { pathname } = useLocation();
-  const navigate = useNavigate();
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(getInitialProjectSlug);
   const { setProjectContext } = useProjectContext();
 
@@ -122,23 +121,6 @@ export function useAppNavigationData() {
     }
   }, [selectedProjectId, setProjectContext]);
 
-  const handleProjectChange = useCallback(
-    (value: string) => {
-      if (value === '__manage__') {
-        void navigate('/projects');
-        return;
-      }
-      if (value === '__create__') {
-        void navigate('/projects/new');
-        return;
-      }
-      setSelectedProjectSlug(value);
-      localStorage.setItem(SELECTED_PROJECT_KEY, value);
-      void navigate(`/projects/${value}/workspaces`);
-    },
-    [navigate]
-  );
-
   const serverWorkspaces = projectState?.workspaces;
   const reviewCount = projectState?.reviewCount ?? 0;
 
@@ -160,7 +142,6 @@ export function useAppNavigationData() {
     issueProvider,
     serverWorkspaces,
     reviewCount,
-    handleProjectChange,
     needsAttention,
     clearAttention,
     currentWorkspaceId,
