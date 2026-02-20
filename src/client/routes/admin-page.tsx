@@ -128,9 +128,9 @@ function ProjectFactoryConfigCard({
         error={saveConfig.error}
       />
       <div className="border-b bg-muted/50 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-sm">{projectName}</h3>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="min-w-0 truncate font-semibold text-sm">{projectName}</h3>
             {factoryConfig ? (
               <Badge variant="default" className="bg-green-600 hover:bg-green-700">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -156,7 +156,7 @@ function ProjectFactoryConfigCard({
             size="sm"
             onClick={handleRefresh}
             disabled={refreshConfigs.isPending}
-            className="gap-2"
+            className="w-full gap-2 sm:w-auto"
           >
             <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
             Refresh Workspaces
@@ -732,7 +732,7 @@ function ServerLogsSection() {
 }
 
 export default function AdminDashboardPage() {
-  useAppHeader({ title: 'Admin Dashboard' });
+  useAppHeader({ title: 'Settings' });
 
   const {
     data: stats,
@@ -762,7 +762,7 @@ export default function AdminDashboardPage() {
 
   // Show full loading only when stats are loading (first load)
   if (isLoadingStats) {
-    return <Loading message="Loading admin dashboard..." />;
+    return <Loading message="Loading settings..." />;
   }
 
   return (
@@ -772,8 +772,8 @@ export default function AdminDashboardPage() {
           <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
             <Link to={`/projects/${projectSlug}/workspaces`}>
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Back to Workspaces Board</span>
-              <span className="sm:hidden">Board</span>
+              <span className="hidden sm:inline">Back to Workspaces</span>
+              <span className="sm:hidden">Workspaces</span>
             </Link>
           </Button>
         </HeaderLeftExtraSlot>
