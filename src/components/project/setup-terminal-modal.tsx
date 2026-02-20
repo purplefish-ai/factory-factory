@@ -104,9 +104,18 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
         <DialogHeader>
           <DialogTitle>Terminal</DialogTitle>
           <DialogDescription>
-            Run{' '}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">gh auth login</code> to
-            authenticate with GitHub, then close this dialog.
+            Run authentication commands for your CLIs, then close this dialog.
+            <span className="mt-1.5 flex flex-col gap-0.5">
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
+                claude login
+              </code>
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
+                codex login
+              </code>
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm w-fit">
+                gh auth login
+              </code>
+            </span>
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 rounded-md overflow-hidden border bg-[#18181b]">
