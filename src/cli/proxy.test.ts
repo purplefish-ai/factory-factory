@@ -72,6 +72,62 @@ describe('proxy internals', () => {
     expect(token).toMatch(/^[a-f0-9]{32}$/);
   });
 
+  it('detects terminal support for QR rendering', () => {
+    expect(
+      proxyInternals.supportsTerminalQrRendering(
+        { isTTY: true } as Pick<NodeJS.WriteStream, 'isTTY'>,
+        { TERM: 'xterm-256color' }
+      )
+    ).toBe(true);
+    expect(
+      proxyInternals.supportsTerminalQrRendering(
+        { isTTY: false } as Pick<NodeJS.WriteStream, 'isTTY'>,
+        { TERM: 'xterm-256color' }
+      )
+    ).toBe(false);
+    expect(
+      proxyInternals.supportsTerminalQrRendering(
+        { isTTY: true } as Pick<NodeJS.WriteStream, 'isTTY'>,
+        { TERM: 'dumb' }
+      )
+    ).toBe(false);
+  });
+
+  it('renders terminal QR code output with qrencode', () => {
+    let invokedFile: string | undefined;
+    let invokedArgs: readonly string[] | undefined;
+
+    const rendered = proxyInternals.tryRenderTerminalQrCode(
+      'https://example.trycloudflare.com?token=abc123',
+      ((file: string, args: readonly string[]) => {
+        invokedFile = file;
+        invokedArgs = args;
+        return '██\n██\n';
+      }) as unknown as typeof import('node:child_process').execFileSync
+    );
+
+    expect(invokedFile).toBe('qrencode');
+    expect(invokedArgs).toEqual([
+      '-t',
+      'UTF8',
+      '-m',
+      '1',
+      'https://example.trycloudflare.com?token=abc123',
+    ]);
+    expect(rendered).toBe('██\n██\n');
+  });
+
+  it('returns null when qrencode is unavailable', () => {
+    const rendered = proxyInternals.tryRenderTerminalQrCode(
+      'https://example.trycloudflare.com?token=abc123',
+      ((_file: string, _args: readonly string[]) => {
+        throw new Error('missing');
+      }) as unknown as typeof import('node:child_process').execFileSync
+    );
+
+    expect(rendered).toBeNull();
+  });
+
   it('signs and verifies session values', () => {
     const secret = Buffer.from('super-secret-key');
     const session = proxyInternals.createSessionValue(secret);

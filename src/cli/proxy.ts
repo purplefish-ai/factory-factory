@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from 'node:child_process';
+import { type ChildProcess, execFile, execFileSync, spawn } from 'node:child_process';
 import { randomBytes, randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
@@ -48,6 +48,47 @@ interface RunProxyCommandParams {
 }
 
 type ProcessRecord = { name: string; proc: ChildProcess };
+
+function supportsTerminalQrRendering(
+  stream: Pick<NodeJS.WriteStream, 'isTTY'> = process.stdout,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  if (!stream.isTTY) {
+    return false;
+  }
+
+  const term = (env.TERM || '').toLowerCase();
+  return term !== '' && term !== 'dumb';
+}
+
+function tryRenderTerminalQrCode(
+  url: string,
+  runCommand: typeof execFileSync = execFileSync
+): string | null {
+  try {
+    const output = runCommand('qrencode', ['-t', 'UTF8', '-m', '1', url], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 1024 * 1024,
+    }) as string;
+    return output.trim() ? output : null;
+  } catch {
+    return null;
+  }
+}
+
+function printDirectLinkQrCode(url: string): void {
+  if (!supportsTerminalQrRendering()) {
+    return;
+  }
+  const qr = tryRenderTerminalQrCode(url);
+  if (!qr) {
+    return;
+  }
+
+  console.log(chalk.green('📱 Scan direct link:'));
+  process.stdout.write(`${qr}\n`);
+}
 
 function generatePassword(length = PASSWORD_LENGTH): string {
   let output = '';
@@ -934,9 +975,11 @@ export async function runProxyCommand({
   processes.push({ name: 'cloudflared', proc: tunnel.proc });
 
   if (usePrivateMode && password && directToken) {
+    const directLink = `${tunnel.publicUrl}?token=${directToken}`;
     console.log(chalk.green(`🌍 Public URL:  ${tunnel.publicUrl}`));
     console.log(chalk.green(`🔑 Password:   ${password}`));
-    console.log(chalk.green(`🔗 Direct link: ${tunnel.publicUrl}?token=${directToken}\n`));
+    console.log(chalk.green(`🔗 Direct link: ${directLink}\n`));
+    printDirectLinkQrCode(directLink);
     console.log('Share the password or direct link with people you want to grant access.');
     console.log('Press Ctrl+C to stop.');
   } else {
@@ -971,6 +1014,8 @@ export const proxyInternals = {
   matchesPassword,
   createAuthProxy,
   toSafeRedirectPath,
+  supportsTerminalQrRendering,
+  tryRenderTerminalQrCode,
   parseCookieHeader,
   signValue,
   verifySessionValue,
