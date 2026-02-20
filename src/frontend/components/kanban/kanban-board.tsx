@@ -30,17 +30,6 @@ export function KanbanControls() {
   );
 }
 
-export function NewWorkspaceHeaderButton() {
-  const { setShowInlineForm } = useKanban();
-
-  return (
-    <Button variant="outline" size="sm" className="h-8" onClick={() => setShowInlineForm(true)}>
-      <Plus className="h-4 w-4" />
-      New
-    </Button>
-  );
-}
-
 interface WorkspacesByColumn {
   WORKING: WorkspaceWithKanban[];
   WAITING: WorkspaceWithKanban[];
@@ -63,12 +52,18 @@ export function KanbanBoard() {
     archiveWorkspace,
     archivingWorkspaceId,
     showInlineForm,
+    setShowInlineForm,
   } = useKanban();
 
   const isMobile = useIsMobile();
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
+
+  const handleMobileNewTaskClick = () => {
+    setActiveColumnId('ISSUES');
+    setShowInlineForm(true);
+  };
 
   // Group workspaces by kanban column (only the 3 database columns)
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
@@ -90,7 +85,7 @@ export function KanbanBoard() {
     return grouped;
   }, [workspaces]);
 
-  // Switch to ISSUES tab when inline form is opened (mobile header button)
+  // Switch to ISSUES tab when inline form is opened from mobile.
   useEffect(() => {
     if (showInlineForm && isMobile) {
       setActiveColumnId('ISSUES');
@@ -189,6 +184,17 @@ export function KanbanBoard() {
           })}
         </div>
 
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 shrink-0 w-full"
+          onClick={handleMobileNewTaskClick}
+        >
+          <Plus className="h-4 w-4" />
+          New Task
+        </Button>
+
         {/* Active column content */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {activeColumn.id === 'ISSUES' ? (
@@ -252,6 +258,7 @@ interface IssuesColumnProps {
 
 function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
   const { workspaces, showInlineForm, setShowInlineForm } = useKanban();
+  const isMobile = useIsMobile();
   const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
   const isEmpty = issues.length === 0;
   const [selectedIssue, setSelectedIssue] = useState<KanbanIssue | null>(null);
@@ -292,7 +299,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
               onCancel={() => setShowInlineForm(false)}
               onCreated={() => setShowInlineForm(false)}
             />
-          ) : (
+          ) : !isMobile ? (
             <button
               type="button"
               onClick={() => setShowInlineForm(true)}
@@ -301,7 +308,7 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
               <Plus className="h-4 w-4" />
               New Workspace
             </button>
-          )}
+          ) : null}
           {!isEmpty &&
             issues.map((issue) => (
               <div key={issue.id} className="shrink-0">

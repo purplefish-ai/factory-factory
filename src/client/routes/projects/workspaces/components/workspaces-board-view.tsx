@@ -1,19 +1,11 @@
 import { HeaderRightSlot, useAppHeader } from '@/frontend/components/app-header-context';
-import {
-  KanbanBoard,
-  KanbanControls,
-  KanbanProvider,
-  NewWorkspaceHeaderButton,
-} from '@/frontend/components/kanban';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
 
 function BoardHeaderSlot() {
   useAppHeader({ title: 'Workspaces Board' });
-  const isMobile = useIsMobile();
 
   return (
     <HeaderRightSlot>
-      {isMobile && <NewWorkspaceHeaderButton />}
       <KanbanControls />
     </HeaderRightSlot>
   );
