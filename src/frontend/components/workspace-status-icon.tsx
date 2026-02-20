@@ -11,10 +11,6 @@ export function WorkspaceStatusIcon({
   isWorking,
   sessionRuntimeErrorMessage,
 }: WorkspaceStatusIconProps) {
-  if (sessionRuntimeErrorMessage) {
-    return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
-  }
-
   if (pendingRequestType) {
     switch (pendingRequestType) {
       case 'permission_request':
@@ -24,6 +20,10 @@ export function WorkspaceStatusIcon({
       case 'user_question':
         return <MessageCircleQuestion className="h-3.5 w-3.5 shrink-0 text-blue-500" />;
     }
+  }
+
+  if (sessionRuntimeErrorMessage) {
+    return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
   }
 
   if (isWorking) {

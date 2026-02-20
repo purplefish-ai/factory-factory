@@ -55,48 +55,44 @@ function formatUnexpectedExitMessage(lastExit: SessionRuntimeLastExit): string {
   return `Exited unexpectedly${lastExit.code !== null ? ` (code ${lastExit.code})` : ''}`;
 }
 
-export function getSessionSummaryErrorMessage(
-  summary: Pick<SessionSummary, 'runtimePhase' | 'errorMessage' | 'lastExit'>
+function resolveSessionRuntimeErrorMessage(
+  phase: SessionRuntimePhase,
+  errorMessage: string | null | undefined,
+  lastExit: SessionRuntimeLastExit | null | undefined
 ): string | null {
-  const trimmedError = summary.errorMessage?.trim();
+  const trimmedError = errorMessage?.trim();
 
-  if (summary.runtimePhase === 'error') {
+  if (phase === 'error') {
     if (trimmedError) {
       return trimmedError;
     }
-    if (summary.lastExit?.unexpected) {
-      return formatUnexpectedExitMessage(summary.lastExit);
+    if (lastExit?.unexpected) {
+      return formatUnexpectedExitMessage(lastExit);
     }
     return 'Session entered an error state';
   }
 
-  if (summary.lastExit?.unexpected) {
-    return trimmedError || formatUnexpectedExitMessage(summary.lastExit);
+  if (lastExit?.unexpected) {
+    return trimmedError || formatUnexpectedExitMessage(lastExit);
   }
 
   return null;
 }
 
+export function getSessionSummaryErrorMessage(
+  summary: Pick<SessionSummary, 'runtimePhase' | 'errorMessage' | 'lastExit'>
+): string | null {
+  return resolveSessionRuntimeErrorMessage(
+    summary.runtimePhase,
+    summary.errorMessage,
+    summary.lastExit
+  );
+}
+
 export function getSessionRuntimeErrorMessage(
   runtime: Pick<SessionRuntimeState, 'phase' | 'errorMessage' | 'lastExit'>
 ): string | null {
-  const trimmedError = runtime.errorMessage?.trim();
-
-  if (runtime.phase === 'error') {
-    if (trimmedError) {
-      return trimmedError;
-    }
-    if (runtime.lastExit?.unexpected) {
-      return formatUnexpectedExitMessage(runtime.lastExit);
-    }
-    return 'Session entered an error state';
-  }
-
-  if (runtime.lastExit?.unexpected) {
-    return trimmedError || formatUnexpectedExitMessage(runtime.lastExit);
-  }
-
-  return null;
+  return resolveSessionRuntimeErrorMessage(runtime.phase, runtime.errorMessage, runtime.lastExit);
 }
 
 export function findWorkspaceSessionRuntimeError(
