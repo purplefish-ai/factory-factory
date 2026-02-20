@@ -128,9 +128,9 @@ function ProjectFactoryConfigCard({
         error={saveConfig.error}
       />
       <div className="border-b bg-muted/50 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-sm">{projectName}</h3>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="min-w-0 truncate font-semibold text-sm">{projectName}</h3>
             {factoryConfig ? (
               <Badge variant="default" className="bg-green-600 hover:bg-green-700">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -156,7 +156,7 @@ function ProjectFactoryConfigCard({
             size="sm"
             onClick={handleRefresh}
             disabled={refreshConfigs.isPending}
-            className="gap-2"
+            className="w-full gap-2 sm:w-auto"
           >
             <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
             Refresh Workspaces
