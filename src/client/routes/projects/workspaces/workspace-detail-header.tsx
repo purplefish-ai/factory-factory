@@ -840,7 +840,7 @@ export function WorkspaceDetailHeaderSlot({
         <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
           <Link to={`/projects/${slug}/workspaces`}>
             <ArrowLeft className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Workspaces Board</span>
+            <span className="hidden sm:inline">Workspaces</span>
           </Link>
         </Button>
         <div className="hidden md:flex items-center gap-2 min-w-0">
