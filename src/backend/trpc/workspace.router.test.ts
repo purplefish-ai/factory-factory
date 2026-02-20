@@ -1,5 +1,6 @@
 import { PRState, RatchetState, WorkspaceStatus } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service';
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
   findByProjectId: vi.fn(),
@@ -29,6 +30,9 @@ const mockDeriveWorkspaceSidebarStatus = vi.hoisted(() => vi.fn());
 const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
+const mockResolveProviderForWorkspaceCreation = vi.hoisted(() =>
+  vi.fn(async (_explicitProvider?: unknown) => 'CLAUDE')
+);
 
 vi.mock('@/backend/domains/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
@@ -42,6 +46,10 @@ vi.mock('@/backend/domains/workspace', () => ({
 vi.mock('@/backend/domains/session', () => ({
   sessionService: {
     getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
+  },
+  sessionProviderResolverService: {
+    resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
+      mockResolveProviderForWorkspaceCreation(explicitProvider),
   },
 }));
 
@@ -104,13 +112,25 @@ function createCaller() {
   const terminalService = {
     destroyWorkspaceTerminals: vi.fn(),
   };
+  const cliHealthService = {
+    checkHealth: vi.fn(
+      async (): Promise<CLIHealthStatus> => ({
+        claude: { isInstalled: true },
+        codex: { isInstalled: true, isAuthenticated: true },
+        github: { isInstalled: true, isAuthenticated: true },
+        allHealthy: true,
+      })
+    ),
+  };
 
   const caller = workspaceRouter.createCaller({
     appContext: {
       services: {
         configService: {
           getWorktreeBaseDir: () => '/tmp/worktrees',
+          getMaxSessionsPerWorkspace: () => 2,
         },
+        cliHealthService,
         createLogger: () => ({
           debug: vi.fn(),
           info: vi.fn(),
@@ -124,12 +144,13 @@ function createCaller() {
     },
   } as never);
 
-  return { caller, sessionService, runScriptService, terminalService };
+  return { caller, sessionService, runScriptService, terminalService, cliHealthService };
 }
 
 describe('workspaceRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveProviderForWorkspaceCreation.mockResolvedValue('CLAUDE');
     mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
     mockCheckWorkspaceById.mockResolvedValue(undefined);
     mockDeriveFlowState.mockReturnValue({
@@ -201,6 +222,25 @@ describe('workspaceRouter', () => {
     expect(mockCheckWorkspaceById).toHaveBeenCalledWith('w-created');
 
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });
+  });
+
+  it('blocks workspace creation when default provider is unavailable', async () => {
+    const { caller, cliHealthService } = createCaller();
+    cliHealthService.checkHealth.mockResolvedValue({
+      claude: { isInstalled: false, error: 'Claude CLI is not installed.' },
+      codex: { isInstalled: true, isAuthenticated: true },
+      github: { isInstalled: true, isAuthenticated: true },
+      allHealthy: false,
+    });
+
+    await expect(
+      caller.create({
+        type: 'MANUAL',
+        projectId: 'p1',
+        name: 'New Workspace',
+      })
+    ).rejects.toThrow('Cannot create workspace: Claude provider is unavailable');
+    expect(mockWorkspaceCreationCreate).not.toHaveBeenCalled();
   });
 
   it('cleans up on delete and delegates summary procedures', async () => {

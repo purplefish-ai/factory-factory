@@ -1,4 +1,9 @@
-import type { Prisma, SessionProvider, UserSettings } from '@prisma-gen/client';
+import type {
+  Prisma,
+  SessionPermissionPreset,
+  SessionProvider,
+  UserSettings,
+} from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
 
@@ -11,6 +16,8 @@ interface UpdateUserSettingsInput {
   // Ratchet settings
   ratchetEnabled?: boolean;
   defaultSessionProvider?: SessionProvider;
+  defaultWorkspacePermissions?: SessionPermissionPreset;
+  ratchetPermissions?: SessionPermissionPreset;
 }
 
 // Type for workspace order storage: { [projectId]: workspaceId[] }
@@ -42,6 +49,8 @@ class UserSettingsAccessor {
           customIdeCommand: null,
           playSoundOnComplete: true,
           defaultSessionProvider: 'CLAUDE',
+          defaultWorkspacePermissions: 'STRICT',
+          ratchetPermissions: 'YOLO',
         },
       });
     }
@@ -71,6 +80,8 @@ class UserSettingsAccessor {
         playSoundOnComplete: data.playSoundOnComplete ?? true,
         cachedSlashCommands: data.cachedSlashCommands ?? undefined,
         defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
+        defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
+        ratchetPermissions: data.ratchetPermissions ?? 'YOLO',
       },
     });
   }

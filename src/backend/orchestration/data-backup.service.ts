@@ -315,6 +315,8 @@ async function importUserSettings(
       // Ratchet settings
       ratchetEnabled: settings.ratchetEnabled,
       defaultSessionProvider: settings.defaultSessionProvider,
+      defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
+      ratchetPermissions: settings.ratchetPermissions,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
       // as they are rebuild-able cache data
     },
@@ -451,6 +453,8 @@ class DataBackupService {
               // Ratchet settings
               ratchetEnabled: userSettings.ratchetEnabled,
               defaultSessionProvider: userSettings.defaultSessionProvider,
+              defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
+              ratchetPermissions: userSettings.ratchetPermissions,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded
               // as they are rebuild-able cache data (per design doc)
             }

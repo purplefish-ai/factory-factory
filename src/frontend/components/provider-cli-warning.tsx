@@ -1,4 +1,5 @@
 import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/frontend/lib/trpc';
 
@@ -16,10 +17,27 @@ const PROVIDER_INFO = {
 function getWarning(
   provider: 'CLAUDE' | 'CODEX',
   health: {
-    claude: { isInstalled: boolean };
-    codex: { isInstalled: boolean; isAuthenticated?: boolean };
+    claude: {
+      isInstalled: boolean;
+      version?: string;
+      latestVersion?: string;
+      isOutdated?: boolean;
+    };
+    codex: {
+      isInstalled: boolean;
+      isAuthenticated?: boolean;
+      version?: string;
+      latestVersion?: string;
+      isOutdated?: boolean;
+    };
   }
-): { title: string; description: string; linkLabel?: string; linkUrl?: string } | null {
+): {
+  title: string;
+  description: string;
+  linkLabel?: string;
+  linkUrl?: string;
+  canUpgrade?: boolean;
+} | null {
   const info = PROVIDER_INFO[provider];
 
   if (provider === 'CLAUDE') {
@@ -29,6 +47,17 @@ function getWarning(
         description: `Install the ${info.label} CLI to use this provider.`,
         linkLabel: 'Install',
         linkUrl: info.installUrl,
+      };
+    }
+    if (health.claude.isOutdated) {
+      const installed = health.claude.version ?? 'unknown';
+      const latest = health.claude.latestVersion ?? 'latest';
+      return {
+        title: `${info.label} CLI is out of date`,
+        description: `Installed ${installed}; latest is ${latest}. Upgrade to avoid compatibility issues.`,
+        linkLabel: 'Upgrade',
+        linkUrl: info.installUrl,
+        canUpgrade: true,
       };
     }
     return null;
@@ -49,6 +78,17 @@ function getWarning(
       description: 'Run `codex login` in your terminal to authenticate.',
     };
   }
+  if (health.codex.isOutdated) {
+    const installed = health.codex.version ?? 'unknown';
+    const latest = health.codex.latestVersion ?? 'latest';
+    return {
+      title: `${info.label} CLI is out of date`,
+      description: `Installed ${installed}; latest is ${latest}. Upgrade to avoid compatibility issues.`,
+      linkLabel: 'Upgrade',
+      linkUrl: info.installUrl,
+      canUpgrade: true,
+    };
+  }
   return null;
 }
 
@@ -59,6 +99,16 @@ function getWarning(
  */
 export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' }) {
   const utils = trpc.useUtils();
+  const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.message);
+      utils.admin.checkCLIHealth.setData({ forceRefresh: false }, result.health);
+      void utils.admin.checkCLIHealth.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
   const { data: health, isRefetching } = trpc.admin.checkCLIHealth.useQuery(
     { forceRefresh: false },
     {
@@ -100,12 +150,23 @@ export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' 
           )}
         </p>
       </div>
+      {warning.canUpgrade && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 border-amber-500/60 px-2 text-xs text-amber-800 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900/40"
+          onClick={() => upgradeProviderCli.mutate({ provider })}
+          disabled={isRefetching || upgradeProviderCli.isPending}
+        >
+          {upgradeProviderCli.isPending ? 'Upgrading...' : 'Upgrade'}
+        </Button>
+      )}
       <Button
         variant="ghost"
         size="icon"
         className="h-7 w-7 text-amber-600 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/40"
         onClick={() => utils.admin.checkCLIHealth.invalidate()}
-        disabled={isRefetching}
+        disabled={isRefetching || upgradeProviderCli.isPending}
       >
         <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
         <span className="sr-only">Recheck</span>

@@ -11,6 +11,8 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
   claudeCliVersionCheck: 5000,
   codexCliVersionCheck: 5000,
   codexCliAuthCheck: 5000,
+  cliLatestVersionCheck: 3000,
+  cliUpgrade: 120_000,
   startupScriptForceKillGrace: 5000,
   portLsof: 2000,
   ratchetWorkspaceCheck: 90_000,
