@@ -173,12 +173,15 @@ export class RunScriptProxyService {
 
     const authToken = randomBytes(16).toString('hex');
 
-    let authProxy: { port: number; close: () => Promise<void> } | null = null;
+    let authProxyClose: (() => Promise<void>) | null = null;
     let cloudflaredProcess: ChildProcess | null = null;
     try {
-      authProxy = await createTokenAuthProxy({ upstreamPort, authToken });
+      const authProxy = await createTokenAuthProxy({ upstreamPort, authToken });
+      const closeAuthProxy = authProxy.close;
+      const authProxyPort = authProxy.port;
+      authProxyClose = closeAuthProxy;
       const tunnel = await startCloudflaredTunnel({
-        targetUrl: `http://${LOCAL_HOST}:${authProxy.port}`,
+        targetUrl: `http://${LOCAL_HOST}:${authProxyPort}`,
       });
       cloudflaredProcess = tunnel.proc;
 
@@ -188,7 +191,7 @@ export class RunScriptProxyService {
         publicUrl: tunnel.publicUrl,
         authenticatedUrl,
         cloudflaredProcess,
-        closeAuthProxy: authProxy.close,
+        closeAuthProxy,
       });
 
       logger.info('Started run-script proxy tunnel', {
@@ -212,8 +215,8 @@ export class RunScriptProxyService {
       if (cloudflaredProcess) {
         await killProcessWithTimeout(cloudflaredProcess);
       }
-      if (authProxy) {
-        await authProxy.close().catch(() => undefined);
+      if (authProxyClose) {
+        await authProxyClose().catch(() => undefined);
       }
 
       return null;
