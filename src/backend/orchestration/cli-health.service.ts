@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { z } from 'zod';
 import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/domains/github';
 import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
@@ -11,6 +12,7 @@ const CODEX_CLI_NPM_PACKAGE = '@openai/codex';
 
 export interface ClaudeCLIHealthStatus {
   isInstalled: boolean;
+  isAuthenticated?: boolean;
   version?: string;
   latestVersion?: string;
   isOutdated?: boolean;
@@ -141,7 +143,8 @@ class CLIHealthService {
   }
 
   /**
-   * Check if Claude CLI is installed.
+   * Check if Claude CLI is installed and authenticated.
+   * Uses `claude --version` for installation and `claude auth status --json` for auth.
    */
   async checkClaudeCLI(): Promise<ClaudeCLIHealthStatus> {
     try {
@@ -150,18 +153,33 @@ class CLIHealthService {
       });
       const versionMatch = stdout.match(/claude[- ]?(?:code[- ]?)?(?:v?(\d+\.\d+\.\d+))?/i);
       const version = versionMatch?.[1] || stdout.trim().split('\n')[0];
-      const versionFreshness = await this.buildVersionFreshness({
+      const versionFreshnessPromise = this.buildVersionFreshness({
         installedVersion: version,
         packageName: CLAUDE_CLI_NPM_PACKAGE,
       });
 
-      return { isInstalled: true, version, ...versionFreshness };
+      let isAuthenticated = false;
+      try {
+        const { stdout: authStdout } = await execFileAsync('claude', ['auth', 'status', '--json'], {
+          timeout: SERVICE_TIMEOUT_MS.claudeCliAuthCheck,
+        });
+        const parsed = z
+          .object({ loggedIn: z.boolean().optional() })
+          .safeParse(JSON.parse(authStdout));
+        isAuthenticated = parsed.success && parsed.data.loggedIn === true;
+      } catch {
+        // Auth check failed — treat as unauthenticated
+      }
+
+      const versionFreshness = await versionFreshnessPromise;
+      return { isInstalled: true, isAuthenticated, version, ...versionFreshness };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isNotFound = message.toLowerCase().includes('enoent') || message.includes('not found');
 
       return {
         isInstalled: false,
+        isAuthenticated: false,
         error: isNotFound
           ? 'Claude CLI is not installed. Install from https://claude.ai/download'
           : `Failed to check Claude CLI: ${message}`,

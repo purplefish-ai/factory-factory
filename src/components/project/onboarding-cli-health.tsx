@@ -32,7 +32,7 @@ function StatusIcon({ status }: { status: ItemStatus }) {
 }
 
 function buildItems(health: {
-  claude: { isInstalled: boolean };
+  claude: { isInstalled: boolean; isAuthenticated?: boolean };
   codex: { isInstalled: boolean; isAuthenticated?: boolean };
   github: { isInstalled: boolean; isAuthenticated: boolean };
 }): StatusItem[] {
@@ -41,12 +41,14 @@ function buildItems(health: {
   // Claude
   if (!health.claude.isInstalled) {
     items.push({ label: 'Claude', status: 'missing', detail: 'Not installed' });
-  } else {
+  } else if (health.claude.isAuthenticated === false) {
     items.push({
       label: 'Claude',
       status: 'warning',
       detail: 'Installed — run claude login to authenticate',
     });
+  } else {
+    items.push({ label: 'Claude', status: 'ok', detail: 'Ready' });
   }
 
   // Codex

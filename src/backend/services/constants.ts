@@ -9,6 +9,7 @@ export const SERVICE_LIMITS = Object.freeze({
 
 export const SERVICE_TIMEOUT_MS = Object.freeze({
   claudeCliVersionCheck: 5000,
+  claudeCliAuthCheck: 5000,
   codexCliVersionCheck: 5000,
   codexCliAuthCheck: 5000,
   cliLatestVersionCheck: 3000,
