@@ -112,7 +112,7 @@ export function InlineWorkspaceForm({
           autoFocus
           disabled={isCreating}
         />
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
               <RatchetToggleButton
@@ -138,7 +138,7 @@ export function InlineWorkspaceForm({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 ml-auto">
             <Button
               variant="ghost"
               size="sm"

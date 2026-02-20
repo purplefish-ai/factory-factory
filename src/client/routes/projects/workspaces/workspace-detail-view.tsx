@@ -112,7 +112,7 @@ export function WorkspaceDetailView({
       <div className="flex flex-col items-center justify-center h-full gap-4">
         <p className="text-destructive">Workspace not found</p>
         <Button variant="outline" onClick={workspaceState.handleBackToWorkspaces}>
-          Back to workspaces
+          Workspaces
         </Button>
       </div>
     );
