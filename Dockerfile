@@ -101,6 +101,7 @@ COPY --from=builder /app/prisma/generated ./prisma/generated
 RUN mkdir -p /data
 
 ENV NODE_ENV=production
+ENV PATH="/app/node_modules/.bin:${PATH}"
 ENV BACKEND_PORT=3000
 ENV DATABASE_PATH=/data/data.db
 ENV BASE_DIR=/data
