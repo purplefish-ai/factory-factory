@@ -131,7 +131,10 @@ function CardArchiveButton({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive shrink-0"
+            className={cn(
+              'h-6 w-6 hover:bg-destructive/10 hover:text-destructive shrink-0',
+              requiresConfirmation && 'opacity-0 group-hover:opacity-100 transition-opacity'
+            )}
             onClick={handleClick}
             disabled={isPending}
           >
