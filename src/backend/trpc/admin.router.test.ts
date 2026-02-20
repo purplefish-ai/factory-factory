@@ -86,6 +86,20 @@ function createCaller() {
             forceRefresh,
             allHealthy: true,
           })),
+          upgradeProviderCLI: vi.fn(async (provider: 'CLAUDE' | 'CODEX') => ({
+            provider,
+            packageName: provider === 'CLAUDE' ? '@anthropic-ai/claude-code' : '@openai/codex',
+            command: `npm install -g ${
+              provider === 'CLAUDE' ? '@anthropic-ai/claude-code' : '@openai/codex'
+            }`,
+            output: 'ok',
+            health: {
+              claude: { isInstalled: true },
+              codex: { isInstalled: true, isAuthenticated: true },
+              github: { isInstalled: true, isAuthenticated: true },
+              allHealthy: true,
+            },
+          })),
         },
         terminalService: {
           getAllTerminals: vi.fn(() => []),
@@ -195,6 +209,13 @@ describe('adminRouter', () => {
       forceRefresh: true,
       allHealthy: true,
     });
+    await expect(caller.upgradeProviderCLI({ provider: 'CODEX' })).resolves.toEqual(
+      expect.objectContaining({
+        provider: 'CODEX',
+        packageName: '@openai/codex',
+        message: 'Codex CLI upgraded successfully.',
+      })
+    );
 
     await expect(
       caller.exportDecisionLogs({

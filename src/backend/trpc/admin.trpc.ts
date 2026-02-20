@@ -6,6 +6,7 @@
 
 import { open, stat } from 'node:fs/promises';
 import type { DecisionLog } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { acpRuntimeManager, sessionDataService } from '@/backend/domains/session';
 import { workspaceDataService } from '@/backend/domains/workspace';
@@ -144,6 +145,28 @@ export const adminRouter = router({
     .query(({ ctx, input }) => {
       const { cliHealthService } = ctx.appContext.services;
       return cliHealthService.checkHealth(input?.forceRefresh ?? false);
+    }),
+
+  /**
+   * Upgrade a provider CLI via npm global install and return refreshed health.
+   */
+  upgradeProviderCLI: publicProcedure
+    .input(z.object({ provider: z.enum(['CLAUDE', 'CODEX']) }))
+    .mutation(async ({ ctx, input }) => {
+      try {
+        const result = await ctx.appContext.services.cliHealthService.upgradeProviderCLI(
+          input.provider
+        );
+        return {
+          ...result,
+          message: `${input.provider === 'CLAUDE' ? 'Claude' : 'Codex'} CLI upgraded successfully.`,
+        };
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
     }),
 
   /**
