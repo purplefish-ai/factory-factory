@@ -122,13 +122,18 @@ function uniqueNameWithSuffix(baseName: string, existingNames: string[]): string
   };
 
   let counter = 2;
-  while (true) {
+  const maxAttempts = normalizedExisting.size;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const candidate = getCandidate(counter);
     if (!normalizedExisting.has(normalizeWorkspaceName(candidate))) {
       return candidate;
     }
     counter++;
   }
+
+  // With a finite set of existing names and baseName already taken,
+  // one of the next N numeric suffixes (N = set size) must be available.
+  return getCandidate(counter);
 }
 
 /**
