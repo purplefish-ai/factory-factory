@@ -45,6 +45,7 @@ const WorkspaceSessionSummarySchema = z.object({
   activity: z.enum(['WORKING', 'IDLE']),
   updatedAt: z.string(),
   lastExit: SessionRuntimeLastExitSchema.nullable(),
+  errorMessage: z.string().nullable().optional(),
 });
 export type WorkspaceSessionSummary = z.infer<typeof WorkspaceSessionSummarySchema>;
 

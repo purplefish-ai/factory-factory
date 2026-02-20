@@ -43,6 +43,7 @@ function areRuntimeStatesEqual(
     left.phase === right.phase &&
     left.processState === right.processState &&
     left.activity === right.activity &&
+    left.errorMessage === right.errorMessage &&
     left.updatedAt === right.updatedAt &&
     sameLastExit
   );
@@ -104,6 +105,7 @@ function mergeSessionSummariesWithLiveRuntime(
       activity: liveRuntime.activity,
       updatedAt: liveRuntime.updatedAt,
       lastExit: liveRuntime.lastExit ?? existingSummary?.lastExit ?? null,
+      errorMessage: liveRuntime.errorMessage ?? existingSummary?.errorMessage ?? null,
     });
   }
 
@@ -393,6 +395,7 @@ export function WorkspaceDetailContainer() {
     workspaceId,
     messages,
     sessionStatus,
+    sessionRuntime,
     messagesEndRef,
     viewportRef,
     isNearBottom,

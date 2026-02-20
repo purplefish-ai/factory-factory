@@ -66,4 +66,20 @@ describe('SessionRuntimeMachine', () => {
     expect(store.runtime.updatedAt).toBe('2026-02-09T00:00:00.000Z');
     expect(emitRuntimeDelta).toHaveBeenCalledTimes(1);
   });
+
+  it('clears stale errorMessage when transitioning without explicit errorMessage', () => {
+    const emitRuntimeDelta = vi.fn();
+    const machine = new SessionRuntimeMachine(emitRuntimeDelta, () => '2026-02-09T00:00:00.000Z');
+    const store = createStore();
+    store.runtime.errorMessage = 'Failed to start agent';
+
+    machine.markRuntime(store, {
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+    });
+
+    expect(store.runtime.errorMessage).toBeUndefined();
+    expect(Object.hasOwn(store.runtime, 'errorMessage')).toBe(false);
+  });
 });

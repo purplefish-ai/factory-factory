@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import type { useAppNavigationData } from '@/frontend/hooks/use-app-navigation-data';
+import { findWorkspaceSessionRuntimeError, type SessionSummary } from '@/shared/session-runtime';
 import { LogoIcon } from './logo';
 import { ProjectSelectorDropdown } from './project-selector';
 import { ThemeToggle } from './theme-toggle';
@@ -28,13 +29,18 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
   const { pathname } = useLocation();
 
   // Filter to working/waiting workspaces
-  const activeWorkspaces = (navData.serverWorkspaces ?? []).filter(
-    (w) =>
+  const activeWorkspaces = (navData.serverWorkspaces ?? []).filter((w) => {
+    const sessionRuntimeError = findWorkspaceSessionRuntimeError(
+      (w as { sessionSummaries?: SessionSummary[] }).sessionSummaries
+    );
+    return (
       w.cachedKanbanColumn === 'WORKING' ||
       w.cachedKanbanColumn === 'WAITING' ||
       w.isWorking ||
-      w.pendingRequestType
-  );
+      w.pendingRequestType ||
+      Boolean(sessionRuntimeError)
+    );
+  });
 
   return (
     <div className="flex flex-col h-full gap-1">
@@ -67,21 +73,28 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
         </p>
         {activeWorkspaces.length > 0 ? (
           <div className="flex flex-col gap-0.5">
-            {activeWorkspaces.map((workspace) => (
-              <SheetClose key={workspace.id} asChild>
-                <Link
-                  to={`/projects/${navData.selectedProjectSlug}/workspaces/${workspace.id}`}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-                  data-active={workspace.id === navData.currentWorkspaceId || undefined}
-                >
-                  <WorkspaceStatusIcon
-                    pendingRequestType={workspace.pendingRequestType}
-                    isWorking={workspace.isWorking}
-                  />
-                  <span className="truncate">{workspace.name}</span>
-                </Link>
-              </SheetClose>
-            ))}
+            {activeWorkspaces.map((workspace) => {
+              const sessionRuntimeError = findWorkspaceSessionRuntimeError(
+                (workspace as { sessionSummaries?: SessionSummary[] }).sessionSummaries
+              );
+              return (
+                <SheetClose key={workspace.id} asChild>
+                  <Link
+                    to={`/projects/${navData.selectedProjectSlug}/workspaces/${workspace.id}`}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+                    data-active={workspace.id === navData.currentWorkspaceId || undefined}
+                    title={sessionRuntimeError?.message}
+                  >
+                    <WorkspaceStatusIcon
+                      pendingRequestType={workspace.pendingRequestType}
+                      isWorking={workspace.isWorking}
+                      sessionRuntimeErrorMessage={sessionRuntimeError?.message}
+                    />
+                    <span className="truncate">{workspace.name}</span>
+                  </Link>
+                </SheetClose>
+              );
+            })}
           </div>
         ) : (
           <div className="flex items-center justify-center h-[60px] text-muted-foreground text-sm">

@@ -299,7 +299,12 @@ class ChatMessageHandlerService {
   private async autoStartClientForQueue(dbSessionId: string, msg: QueuedMessage): Promise<boolean> {
     if (!this.clientCreator) {
       logger.error('[Chat WS] Client creator not set');
-      sessionDomainService.markError(dbSessionId);
+      const errorMessage = 'Failed to start agent: client creator not configured';
+      sessionDomainService.markError(dbSessionId, errorMessage);
+      sessionDomainService.emitDelta(dbSessionId, {
+        type: 'error',
+        message: errorMessage,
+      });
       return false;
     }
 
@@ -316,9 +321,15 @@ class ChatMessageHandlerService {
       });
       return true;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[Chat WS] Failed to auto-start client for queue dispatch', {
         dbSessionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+      });
+      sessionDomainService.markError(dbSessionId, `Failed to start agent: ${errorMessage}`);
+      sessionDomainService.emitDelta(dbSessionId, {
+        type: 'error',
+        message: `Failed to start agent: ${errorMessage}`,
       });
       return false;
     }

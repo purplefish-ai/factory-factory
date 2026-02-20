@@ -395,7 +395,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 8 event listeners on domain singletons', () => {
+  it('registers 9 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -430,14 +430,15 @@ describe('configureEventCollector', () => {
       expect.any(Function)
     );
 
-    // sessionDomainService: 1 listener (pending_request_changed)
+    // sessionDomainService: 2 listeners (pending_request_changed, runtime_changed)
     expect(sessionDomainService.on).toHaveBeenCalledWith(
       'pending_request_changed',
       expect.any(Function)
     );
+    expect(sessionDomainService.on).toHaveBeenCalledWith('runtime_changed', expect.any(Function));
   });
 
-  it('removes pending_request_changed listener on stop', () => {
+  it('removes sessionDomain listeners on stop', () => {
     configureEventCollector();
 
     stopEventCollector();
@@ -446,6 +447,7 @@ describe('configureEventCollector', () => {
       'pending_request_changed',
       expect.any(Function)
     );
+    expect(sessionDomainService.off).toHaveBeenCalledWith('runtime_changed', expect.any(Function));
   });
 
   it('ARCHIVED workspace event calls store.remove() immediately', () => {
@@ -652,6 +654,51 @@ describe('configureEventCollector', () => {
         ]),
       }),
       expect.stringContaining('event:session_activity_changed')
+    );
+  });
+
+  it('runtime_changed refreshes session summaries for the session workspace', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
+      id: 's-1',
+      workspaceId: 'ws-1',
+    } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+      {
+        id: 's-1',
+        name: 'Chat 1',
+        workflow: 'followup',
+        model: 'claude-sonnet',
+        status: 'IDLE',
+      } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
+    ]);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(sessionDomainService.on)
+      .mock.calls.find((call) => call[0] === 'runtime_changed');
+    const handler = onCall![1] as (event: { sessionId: string }) => void;
+
+    handler({ sessionId: 's-1' });
+    await Promise.resolve();
+    await Promise.resolve();
+    vi.advanceTimersByTime(150);
+
+    expect(sessionDataService.findAgentSessionById).toHaveBeenCalledWith('s-1');
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      expect.objectContaining({
+        sessionSummaries: expect.arrayContaining([
+          expect.objectContaining({
+            sessionId: 's-1',
+          }),
+        ]),
+      }),
+      expect.stringContaining('event:session_runtime_changed')
     );
   });
 

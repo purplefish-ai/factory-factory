@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import type { CommandInfo, TokenStats } from '@/lib/chat-protocol';
 import { groupAdjacentToolCalls } from '@/lib/chat-protocol';
+import { getSessionRuntimeErrorMessage, type SessionRuntimeState } from '@/shared/session-runtime';
 import type { WorkspaceInitBanner } from '@/shared/workspace-init';
 import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
@@ -18,6 +19,7 @@ export interface ChatContentProps {
   workspaceId: string;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
+  sessionRuntime: SessionRuntimeState;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   viewportRef: React.RefObject<HTMLDivElement | null>;
   isNearBottom: boolean;
@@ -78,6 +80,7 @@ function getInputPlaceholder({
   running,
   pendingRequest,
   sessionPhase,
+  sessionRuntime,
   messageCount,
 }: {
   loadingSession: boolean;
@@ -86,6 +89,7 @@ function getInputPlaceholder({
   running: boolean;
   pendingRequest: ReturnType<typeof useChatWebSocket>['pendingRequest'];
   sessionPhase: ReturnType<typeof useChatWebSocket>['sessionStatus']['phase'];
+  sessionRuntime: SessionRuntimeState;
   messageCount: number;
 }): string {
   if (loadingSession) {
@@ -96,6 +100,9 @@ function getInputPlaceholder({
   }
   if (displayStartingState && !running) {
     return 'Agent is starting...';
+  }
+  if (sessionRuntime.phase === 'error') {
+    return 'Agent failed to start. Type a message to retry...';
   }
   if (pendingRequest.type === 'permission' && pendingRequest.request.toolName === 'ExitPlanMode') {
     return 'Approve the plan or keep planning...';
@@ -213,12 +220,31 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
     running,
     pendingRequest: props.pendingRequest,
     sessionPhase: props.sessionStatus.phase,
+    sessionRuntime: props.sessionRuntime,
     messageCount: props.messages.length,
   });
+  const sessionRuntimeError = getSessionRuntimeErrorMessage(props.sessionRuntime);
+  const sessionRuntimeBanner: WorkspaceInitBanner | null =
+    props.sessionRuntime.phase === 'error' && sessionRuntimeError
+      ? {
+          kind: 'error',
+          message: sessionRuntimeError,
+          showRetry: false,
+          showPlay: false,
+        }
+      : null;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       <div ref={props.viewportRef} className="flex-1 min-h-0 overflow-y-auto">
+        {sessionRuntimeBanner && (
+          <InitStatusBanner
+            banner={sessionRuntimeBanner}
+            retryPending={false}
+            onRetry={() => undefined}
+            onPlay={() => undefined}
+          />
+        )}
         {props.initBanner && props.initBanner.kind !== 'info' && (
           <InitStatusBanner
             banner={props.initBanner}

@@ -8,7 +8,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
-import type { SessionSummary } from '@/shared/session-runtime';
+import { getSessionSummaryErrorMessage, type SessionSummary } from '@/shared/session-runtime';
 
 export type WorkspaceSessionRuntimeSummary = SessionSummary;
 
@@ -110,7 +110,7 @@ export function deriveSessionTabRuntime(
       pulse: false,
       spin: true,
       label: 'Starting',
-      description: 'Launching Claude...',
+      description: 'Launching agent...',
       icon: Loader2,
       isRunning: false,
     };
@@ -129,12 +129,13 @@ export function deriveSessionTabRuntime(
   }
 
   if (summary.runtimePhase === 'error') {
+    const runtimeError = getSessionSummaryErrorMessage(summary);
     return {
       color: 'text-destructive',
       pulse: false,
       spin: false,
       label: 'Error',
-      description: 'Session entered an error state',
+      description: runtimeError ?? 'Session entered an error state',
       icon: XCircle,
       isRunning: false,
     };
@@ -142,12 +143,15 @@ export function deriveSessionTabRuntime(
 
   if (summary.processState === 'stopped') {
     if (summary.lastExit?.unexpected) {
+      const runtimeError = getSessionSummaryErrorMessage(summary);
       return {
         color: 'text-destructive',
         pulse: false,
         spin: false,
         label: 'Error',
-        description: `Exited unexpectedly${summary.lastExit.code !== null ? ` (code ${summary.lastExit.code})` : ''}`,
+        description:
+          runtimeError ??
+          `Exited unexpectedly${summary.lastExit.code !== null ? ` (code ${summary.lastExit.code})` : ''}`,
         icon: XCircle,
         isRunning: false,
       };

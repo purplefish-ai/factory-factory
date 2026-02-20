@@ -58,6 +58,16 @@ type PendingAcpToolCall = {
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object') {
+    return JSON.stringify(error);
+  }
+  return String(error);
+}
+
 class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
@@ -207,6 +217,7 @@ class SessionService {
           message: error.message,
           stack: error.stack,
         });
+        sessionDomainService.markError(sid, error.message);
         logger.error('ACP client error', {
           sessionId: sid,
           error: error.message,
@@ -1631,12 +1642,7 @@ class SessionService {
         (error) => {
           logger.error('ACP prompt failed', {
             sessionId,
-            error:
-              error instanceof Error
-                ? error.message
-                : typeof error === 'object'
-                  ? JSON.stringify(error)
-                  : String(error),
+            error: toErrorMessage(error),
           });
         }
       );
@@ -1714,6 +1720,7 @@ class SessionService {
         phase: 'error',
         processState: 'alive',
         activity: 'IDLE',
+        errorMessage: toErrorMessage(error),
         updatedAt: new Date().toISOString(),
       });
       throw error;
@@ -1889,7 +1896,19 @@ class SessionService {
       updatedAt: new Date().toISOString(),
     });
 
-    const handle = await this.createAcpClient(sessionId, options, session);
+    let handle: AcpProcessHandle;
+    try {
+      handle = await this.createAcpClient(sessionId, options, session);
+    } catch (error) {
+      sessionDomainService.setRuntimeSnapshot(sessionId, {
+        phase: 'error',
+        processState: 'stopped',
+        activity: 'IDLE',
+        errorMessage: `Failed to start agent: ${toErrorMessage(error)}`,
+        updatedAt: new Date().toISOString(),
+      });
+      throw error;
+    }
 
     await this.repository.updateSession(sessionId, {
       status: SessionStatus.RUNNING,

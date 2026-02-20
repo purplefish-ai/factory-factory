@@ -84,6 +84,7 @@ describe('mapSnapshotEntryToKanbanWorkspace', () => {
     expect(result.ratchetButtonAnimated).toBe(false);
     expect(result.flowPhase).toBe('CI_WAIT');
     expect(result.pendingRequestType).toBe('plan_approval');
+    expect(result.sessionSummaries).toEqual([]);
   });
 
   it('maps generic permission_request pending state', () => {

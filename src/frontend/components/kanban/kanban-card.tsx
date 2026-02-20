@@ -1,5 +1,5 @@
 import type { Workspace } from '@prisma-gen/browser';
-import { Archive, GitBranch, GitPullRequest, Loader2, Play } from 'lucide-react';
+import { AlertTriangle, Archive, GitBranch, GitPullRequest, Loader2, Play } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
@@ -15,11 +15,13 @@ import {
 import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn, WorkspaceSidebarCiState, WorkspaceStatus } from '@/shared/core';
+import { findWorkspaceSessionRuntimeError, type SessionSummary } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 export interface WorkspaceWithKanban extends Workspace {
   kanbanColumn: KanbanColumn | null;
   isWorking: boolean;
+  sessionSummaries?: SessionSummary[];
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   isArchived?: boolean;
@@ -164,6 +166,7 @@ function CardTitleIcons({
   ratchetEnabled,
   isTogglePending,
   isArchived,
+  sessionRuntimeError,
   onToggleRatcheting,
   onArchive,
   isArchivePending,
@@ -172,6 +175,7 @@ function CardTitleIcons({
   ratchetEnabled: boolean;
   isTogglePending: boolean;
   isArchived: boolean;
+  sessionRuntimeError: string | null;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   isArchivePending: boolean;
@@ -199,6 +203,16 @@ function CardTitleIcons({
           <TooltipContent>Dev server running</TooltipContent>
         </Tooltip>
       )}
+      {sessionRuntimeError && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span>
+              <AlertTriangle className="h-3 w-3 text-amber-500" />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{sessionRuntimeError}</TooltipContent>
+        </Tooltip>
+      )}
       <CardStatusIndicator status={workspace.status} errorMessage={workspace.initErrorMessage} />
       {!isArchived && onArchive && (
         <CardArchiveButton
@@ -222,11 +236,13 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     prCiStatus: workspace.prCiStatus ?? null,
     ratchetState: workspace.ratchetState ?? null,
   });
+  const sessionRuntimeError = findWorkspaceSessionRuntimeError(workspace.sessionSummaries)?.message;
   return {
     showPR,
     isArchived,
     ratchetEnabled,
     sidebarStatus,
+    sessionRuntimeError: sessionRuntimeError ?? null,
   };
 }
 
@@ -238,18 +254,21 @@ export function KanbanCard({
   onArchive,
   isArchivePending = false,
 }: KanbanCardProps) {
-  const { showPR, isArchived, ratchetEnabled, sidebarStatus } = deriveCardState(workspace);
+  const { showPR, isArchived, ratchetEnabled, sidebarStatus, sessionRuntimeError } =
+    deriveCardState(workspace);
   const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
   const showCi = sidebarStatus.ciState !== 'NONE';
   const showBranch = Boolean(workspace.branchName);
   const showPendingRequest = workspace.pendingRequestType;
-  const hasMetadata = showSetup || showCi || showBranch || showPR || showPendingRequest;
+  const hasMetadata =
+    showSetup || showCi || showBranch || showPR || showPendingRequest || !!sessionRuntimeError;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
       <Card
         className={cn(
           'group cursor-pointer hover:border-primary/50 transition-colors overflow-hidden relative',
+          sessionRuntimeError && 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
           workspace.isWorking && 'border-brand/50 bg-brand/5',
           workspace.pendingRequestType &&
             'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60',
@@ -266,6 +285,7 @@ export function KanbanCard({
               ratchetEnabled={ratchetEnabled}
               isTogglePending={isTogglePending}
               isArchived={isArchived}
+              sessionRuntimeError={sessionRuntimeError}
               onToggleRatcheting={onToggleRatcheting}
               onArchive={onArchive}
               isArchivePending={isArchivePending}
@@ -297,6 +317,12 @@ export function KanbanCard({
             {showPendingRequest && (
               <div className="flex items-center gap-2">
                 <PendingRequestBadge type={showPendingRequest} />
+              </div>
+            )}
+            {sessionRuntimeError && (
+              <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
+                <AlertTriangle className="h-3 w-3 shrink-0" />
+                <span className="truncate">{sessionRuntimeError}</span>
               </div>
             )}
           </CardContent>

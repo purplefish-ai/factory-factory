@@ -63,11 +63,18 @@ class SessionDomainService extends EventEmitter {
       type: 'session_runtime_updated',
       sessionRuntime: runtime,
     });
+    this.emit('runtime_changed', {
+      sessionId,
+      runtime,
+    });
   }, this.nowIso);
 
   private transitionRuntime(
     sessionId: string,
-    updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'>
+    updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'> & {
+      lastExit?: SessionRuntimeState['lastExit'];
+      errorMessage?: SessionRuntimeState['errorMessage'];
+    }
   ): void {
     const store = this.registry.getOrCreate(sessionId);
     this.runtimeMachine.markRuntime(store, updates);
@@ -91,6 +98,9 @@ class SessionDomainService extends EventEmitter {
         processState: sessionRuntime.processState,
         activity: sessionRuntime.activity,
         ...(Object.hasOwn(sessionRuntime, 'lastExit') ? { lastExit: sessionRuntime.lastExit } : {}),
+        ...(Object.hasOwn(sessionRuntime, 'errorMessage')
+          ? { errorMessage: sessionRuntime.errorMessage }
+          : {}),
         updatedAt: sessionRuntime.updatedAt,
       },
       { emitDelta: false, replace: true }
@@ -139,6 +149,7 @@ class SessionDomainService extends EventEmitter {
         processState: runtime.processState,
         activity: runtime.activity,
         ...(Object.hasOwn(runtime, 'lastExit') ? { lastExit: runtime.lastExit } : {}),
+        ...(Object.hasOwn(runtime, 'errorMessage') ? { errorMessage: runtime.errorMessage } : {}),
         updatedAt: runtime.updatedAt,
       },
       { emitDelta, replace: true }
@@ -373,12 +384,13 @@ class SessionDomainService extends EventEmitter {
     });
   }
 
-  markError(sessionId: string): void {
+  markError(sessionId: string, errorMessage?: string): void {
     const store = this.registry.getOrCreate(sessionId);
     this.transitionRuntime(sessionId, {
       phase: 'error',
       processState: store.runtime.processState,
       activity: store.runtime.activity,
+      ...(errorMessage ? { errorMessage } : {}),
     });
   }
 
