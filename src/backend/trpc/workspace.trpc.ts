@@ -1,13 +1,15 @@
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { ratchetService } from '@/backend/domains/ratchet';
-import { sessionService } from '@/backend/domains/session';
+import { sessionProviderResolverService, sessionService } from '@/backend/domains/session';
 import {
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
   workspaceDataService,
   workspaceQueryService,
 } from '@/backend/domains/workspace';
+import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
@@ -150,6 +152,23 @@ export const workspaceRouter = router({
   create: publicProcedure.input(workspaceCreationSourceSchema).mutation(async ({ ctx, input }) => {
     const logger = getLogger(ctx);
     const { configService } = ctx.appContext.services;
+    const maxSessionsPerWorkspace = configService.getMaxSessionsPerWorkspace();
+
+    // Workspace creation provisions a default session when session capacity is enabled.
+    // Block creation if the effective provider cannot be used on this machine.
+    if (maxSessionsPerWorkspace > 0) {
+      const explicitProvider = input.type === 'MANUAL' ? input.provider : undefined;
+      const provider =
+        await sessionProviderResolverService.resolveProviderForWorkspaceCreation(explicitProvider);
+      const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
+      const providerUnavailableMessage = getProviderUnavailableMessage(provider, cliHealth);
+      if (providerUnavailableMessage) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: `Cannot create workspace: ${providerUnavailableMessage}`,
+        });
+      }
+    }
 
     // Use the canonical workspace creation service
     const workspaceCreationService = new WorkspaceCreationService({
