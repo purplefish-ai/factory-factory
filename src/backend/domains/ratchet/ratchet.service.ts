@@ -826,6 +826,13 @@ class RatchetService extends EventEmitter {
       };
     }
 
+    if (!this.hasActionableFixTrigger(context.prStateInfo)) {
+      return {
+        type: 'RETURN_ACTION',
+        action: { type: 'WAITING', reason: 'No CI failures or PR review comments to address' },
+      };
+    }
+
     if (context.activeRatchetSession) {
       return { type: 'RETURN_ACTION', action: context.activeRatchetSession };
     }
@@ -859,6 +866,14 @@ class RatchetService extends EventEmitter {
     }
 
     return await this.triggerFixer(context.workspace, context.prStateInfo);
+  }
+
+  private hasActionableFixTrigger(prStateInfo: PRStateInfo): boolean {
+    if (prStateInfo.ciStatus === CIStatus.FAILURE) {
+      return true;
+    }
+
+    return (prStateInfo.reviewComments?.length ?? 0) > 0;
   }
 
   private shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {
