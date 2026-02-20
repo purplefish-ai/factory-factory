@@ -17,7 +17,7 @@ export function ProjectSelectorDropdown({
 }) {
   return (
     <Select value={selectedProjectSlug} onValueChange={onProjectChange}>
-      <SelectTrigger id="project-select" className="w-fit max-w-full px-4 gap-3">
+      <SelectTrigger id="project-select" className="w-full max-w-full gap-3 px-4">
         <SelectValue placeholder="Select a project" />
       </SelectTrigger>
       <SelectContent>
