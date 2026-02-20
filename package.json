@@ -47,6 +47,7 @@
     "build": "pnpm --filter @factory-factory/core build && node scripts/check-ambiguous-relative-imports.mjs && rm -rf dist && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && cp -r prompts dist/ && vite build",
     "build:storybook": "storybook build",
     "start": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve",
+    "proxy": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts proxy --private",
     "test": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && vitest run",
     "test:watch": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && vitest",
     "test:coverage": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && vitest run --coverage",
