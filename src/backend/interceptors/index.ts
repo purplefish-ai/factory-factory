@@ -9,6 +9,7 @@ import { branchRenameInterceptor } from './branch-rename.interceptor';
 import { conversationRenameInterceptor } from './conversation-rename.interceptor';
 import { prDetectionInterceptor } from './pr-detection.interceptor';
 import { prePrRenameInterceptor } from './pre-pr-rename.interceptor';
+import { prePushRenameInterceptor } from './pre-push-rename.interceptor';
 import { interceptorRegistry } from './registry';
 
 /**
@@ -17,6 +18,7 @@ import { interceptorRegistry } from './registry';
 export function registerInterceptors(): void {
   interceptorRegistry.register(branchRenameInterceptor);
   interceptorRegistry.register(conversationRenameInterceptor);
+  interceptorRegistry.register(prePushRenameInterceptor);
   interceptorRegistry.register(prePrRenameInterceptor);
   interceptorRegistry.register(prDetectionInterceptor);
 }

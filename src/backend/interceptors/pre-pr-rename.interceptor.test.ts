@@ -205,6 +205,73 @@ describe('prePrRenameInterceptor', () => {
 
     expect(mockGitCommand).toHaveBeenCalled();
   });
+
+  it('deletes old remote branch after successful gh pr create when refs match', async () => {
+    const event = createEvent({
+      toolUseId: 'tool-cleanup',
+      input: { command: 'gh pr create --title "test"' },
+    });
+
+    mockGitCommand
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' }) // branch -m
+      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' }) // rev-parse HEAD
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: 'origin/adeeshaek/fix-authentication-bug\n',
+        stderr: '',
+      }) // upstream
+      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' }) // old remote ref
+      .mockResolvedValueOnce({ code: 0, stdout: 'abc123\n', stderr: '' }) // new remote ref
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' }); // push --delete
+
+    await prePrRenameInterceptor.onToolStart!(event, {
+      ...context,
+      workspaceId: 'ws-cleanup-1',
+    });
+
+    await prePrRenameInterceptor.onToolComplete!(
+      {
+        ...event,
+        output: { content: 'created', isError: false },
+      },
+      {
+        ...context,
+        workspaceId: 'ws-cleanup-1',
+      }
+    );
+
+    expect(mockGitCommand).toHaveBeenCalledWith(
+      ['push', 'origin', '--delete', 'adeeshaek/dolphin-1'],
+      '/tmp/workspace'
+    );
+  });
+
+  it('does not delete old remote branch when gh pr create fails', async () => {
+    const event = createEvent({
+      toolUseId: 'tool-cleanup-fail',
+      input: { command: 'gh pr create --title "test"' },
+    });
+
+    mockGitCommand.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' }); // branch -m
+
+    await prePrRenameInterceptor.onToolStart!(event, {
+      ...context,
+      workspaceId: 'ws-cleanup-2',
+    });
+
+    await prePrRenameInterceptor.onToolComplete!(
+      {
+        ...event,
+        output: { content: 'failed', isError: true },
+      },
+      {
+        ...context,
+        workspaceId: 'ws-cleanup-2',
+      }
+    );
+
+    expect(mockGitCommand).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('generateBranchName', () => {
