@@ -70,6 +70,7 @@ export const ConfigEnvSchema = z.object({
   CORS_ALLOWED_ORIGINS: z.preprocess(toTrimmedString, z.string()).optional(),
   BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional(),
   WORKTREE_BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional(),
+  REPOS_DIR: z.preprocess(toTrimmedString, z.string()).optional(),
   NODE_ENV: z.preprocess(toLowerString, NodeEnvSchema).catch('development'),
   WS_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional(),
   FRONTEND_STATIC_PATH: z.preprocess(toTrimmedString, z.string()).optional(),

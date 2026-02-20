@@ -42,6 +42,7 @@ import { createHealthRouter } from './routers/health.router';
 import {
   createChatUpgradeHandler,
   createDevLogsUpgradeHandler,
+  createSetupTerminalUpgradeHandler,
   createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
@@ -85,6 +86,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const wss = new WebSocketServer({ noServer: true });
   const chatUpgradeHandler = createChatUpgradeHandler(context);
   const terminalUpgradeHandler = createTerminalUpgradeHandler(context);
+  const setupTerminalUpgradeHandler = createSetupTerminalUpgradeHandler(context);
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
   const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(context);
 
@@ -172,6 +174,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         req.path.startsWith('/health') ||
         req.path === '/chat' ||
         req.path === '/terminal' ||
+        req.path === '/setup-terminal' ||
         req.path === '/dev-logs' ||
         req.path === '/snapshots'
       ) {
@@ -225,6 +228,11 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
     if (url.pathname === '/terminal') {
       terminalUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
+      return;
+    }
+
+    if (url.pathname === '/setup-terminal') {
+      setupTerminalUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 

@@ -10,6 +10,7 @@ export {
   devLogsConnections,
   handleDevLogsUpgrade,
 } from './dev-logs.handler';
+export { createSetupTerminalUpgradeHandler } from './setup-terminal.handler';
 export {
   createSnapshotsUpgradeHandler,
   handleSnapshotsUpgrade,
