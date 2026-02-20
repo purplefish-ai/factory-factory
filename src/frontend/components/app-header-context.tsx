@@ -16,6 +16,9 @@ interface AppHeaderContextValue {
   /** Portal target element for right-side header content */
   rightSlot: HTMLElement | null;
   setRightSlot: (el: HTMLElement | null) => void;
+  /** Portal target element for left-start header content (right of sidebar toggle) */
+  leftStartSlot: HTMLElement | null;
+  setLeftStartSlot: (el: HTMLElement | null) => void;
   /** Portal target element for left-side extra content (e.g. info chips) */
   leftExtraSlot: HTMLElement | null;
   setLeftExtraSlot: (el: HTMLElement | null) => void;
@@ -26,11 +29,21 @@ const AppHeaderContext = createContext<AppHeaderContextValue | null>(null);
 export function AppHeaderProvider({ children }: { children: ReactNode }) {
   const [title, setTitle] = useState<ReactNode>('');
   const [rightSlot, setRightSlot] = useState<HTMLElement | null>(null);
+  const [leftStartSlot, setLeftStartSlot] = useState<HTMLElement | null>(null);
   const [leftExtraSlot, setLeftExtraSlot] = useState<HTMLElement | null>(null);
 
   const value = useMemo(
-    () => ({ title, setTitle, rightSlot, setRightSlot, leftExtraSlot, setLeftExtraSlot }),
-    [title, rightSlot, leftExtraSlot]
+    () => ({
+      title,
+      setTitle,
+      rightSlot,
+      setRightSlot,
+      leftStartSlot,
+      setLeftStartSlot,
+      leftExtraSlot,
+      setLeftExtraSlot,
+    }),
+    [title, rightSlot, leftStartSlot, leftExtraSlot]
   );
 
   return <AppHeaderContext.Provider value={value}>{children}</AppHeaderContext.Provider>;
@@ -80,6 +93,17 @@ export function HeaderRightSlot({ children }: { children: ReactNode }) {
     return null;
   }
   return createPortal(children, rightSlot);
+}
+
+/**
+ * Portal component that renders children into the header's left-start slot.
+ */
+export function HeaderLeftStartSlot({ children }: { children: ReactNode }) {
+  const { leftStartSlot } = useAppHeaderContext();
+  if (!leftStartSlot) {
+    return null;
+  }
+  return createPortal(children, leftStartSlot);
 }
 
 /**
