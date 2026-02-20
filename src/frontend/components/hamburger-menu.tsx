@@ -61,11 +61,11 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
       <Separator />
 
       {/* Active Workspaces */}
-      {activeWorkspaces.length > 0 && (
-        <div>
-          <p className="px-2 pt-3 pb-1.5 text-xs font-medium text-muted-foreground">
-            Active Workspaces
-          </p>
+      <div>
+        <p className="px-2 pt-3 pb-1.5 text-xs font-medium text-muted-foreground">
+          Active Workspaces
+        </p>
+        {activeWorkspaces.length > 0 ? (
           <div className="flex flex-col gap-0.5">
             {activeWorkspaces.map((workspace) => (
               <SheetClose key={workspace.id} asChild>
@@ -83,8 +83,12 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
               </SheetClose>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex items-center justify-center h-[60px] text-muted-foreground text-sm">
+            No active workspaces
+          </div>
+        )}
+      </div>
 
       {/* Bottom section: Reviews, Admin */}
       <div className="mt-auto flex flex-col gap-1">
