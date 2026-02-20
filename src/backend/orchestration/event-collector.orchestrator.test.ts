@@ -34,7 +34,10 @@ vi.mock('@/backend/domains/workspace', () => ({
 
 vi.mock('@/backend/domains/github', () => ({
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
-  prSnapshotService: { on: vi.fn() },
+  prSnapshotService: {
+    on: vi.fn(),
+    refreshWorkspace: vi.fn().mockResolvedValue({ success: false, reason: 'no_pr_url' }),
+  },
 }));
 
 vi.mock('@/backend/domains/ratchet', () => ({
@@ -275,6 +278,21 @@ describe('EventCoalescer', () => {
     coalescer.flushAll();
 
     expect(mockStore.upsert).not.toHaveBeenCalled();
+    expect(coalescer.pendingCount).toBe(0);
+  });
+
+  it('flushes immediately when enqueue is called with immediate option', () => {
+    const coalescer = new EventCoalescer(mockStore, 150);
+
+    coalescer.enqueue('ws-1', { isWorking: true }, 'event:workspace_active', {
+      immediate: true,
+    });
+
+    expect(mockStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { isWorking: true },
+      'event:workspace_active'
+    );
     expect(coalescer.pendingCount).toBe(0);
   });
 });
@@ -521,8 +539,6 @@ describe('configureEventCollector', () => {
       prReviewState: null,
     });
 
-    vi.advanceTimersByTime(150);
-
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       {
@@ -543,11 +559,19 @@ describe('configureEventCollector', () => {
 
     // Trigger an event
     const onCall = vi
-      .mocked(workspaceActivityService.on)
-      .mock.calls.find((call) => call[0] === 'workspace_active');
-    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+      .mocked(workspaceStateMachine.on)
+      .mock.calls.find((call) => call[0] === 'workspace_state_changed');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      fromStatus: string;
+      toStatus: string;
+    }) => void;
 
-    handler({ workspaceId: 'ws-1' });
+    handler({
+      workspaceId: 'ws-1',
+      fromStatus: 'NEW',
+      toStatus: 'READY',
+    });
 
     // Not flushed yet
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
@@ -558,12 +582,15 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
-      { isWorking: true },
-      'event:workspace_active'
+      { status: 'READY' },
+      'event:workspace_state_changed'
     );
   });
 
-  it('workspace_active only enqueues isWorking and does not refresh session summaries', () => {
+  it('workspace_active enqueues immediate working state and does not refresh session summaries', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     configureEventCollector();
 
     const onCall = vi
@@ -573,10 +600,18 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-1' });
 
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { isWorking: true, hasHadSessions: true },
+      'event:workspace_active'
+    );
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
-  it('workspace_idle only enqueues isWorking and does not refresh session summaries', () => {
+  it('workspace_idle enqueues immediate idle state and triggers throttled PR refresh', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     configureEventCollector();
 
     const onCall = vi
@@ -586,6 +621,12 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-1' });
 
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { isWorking: false, hasHadSessions: true },
+      'event:workspace_idle'
+    );
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws-1');
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
@@ -645,6 +686,7 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.objectContaining({
+        hasHadSessions: true,
         sessionSummaries: expect.arrayContaining([
           expect.objectContaining({
             sessionId: 's-1',
