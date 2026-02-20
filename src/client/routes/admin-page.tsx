@@ -8,7 +8,7 @@ import {
   Pencil,
   RefreshCw,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/components/data-import/data-import-button';
@@ -284,6 +284,7 @@ function IdeSettingsSection() {
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
       toast.success('IDE settings updated');
+      utils.userSettings.get.invalidate();
       utils.workspace.getAvailableIdes.invalidate();
     },
     onError: (error) => {
@@ -300,30 +301,27 @@ function IdeSettingsSection() {
     },
   });
 
-  const [preferredIde, setPreferredIde] = useState<string>('cursor');
-  const [customCommand, setCustomCommand] = useState<string>('');
-
-  // Update local state when settings load
-  useEffect(() => {
-    if (settings) {
-      setPreferredIde(settings.preferredIde);
-      setCustomCommand(settings.customIdeCommand || '');
-    }
-  }, [settings]);
-
-  const handleSave = () => {
+  const handleIdeChange = (value: string) => {
     updateSettings.mutate({
-      preferredIde: preferredIde as 'cursor' | 'vscode' | 'custom',
-      customIdeCommand: preferredIde === 'custom' ? customCommand : null,
+      preferredIde: value as 'cursor' | 'vscode' | 'custom',
+      customIdeCommand: value === 'custom' ? settings?.customIdeCommand || null : null,
+    });
+  };
+
+  const handleCustomCommandChange = (value: string) => {
+    updateSettings.mutate({
+      preferredIde: 'custom',
+      customIdeCommand: value || null,
     });
   };
 
   const handleTestCommand = () => {
-    if (!customCommand) {
+    const command = settings?.customIdeCommand;
+    if (!command) {
       toast.error('Please enter a custom command first');
       return;
     }
-    testCommand.mutate({ customCommand });
+    testCommand.mutate({ customCommand: command });
   };
 
   if (isLoading) {
@@ -350,10 +348,9 @@ function IdeSettingsSection() {
         <div className="space-y-2">
           <Label htmlFor="ide-select">Preferred IDE</Label>
           <Select
-            value={preferredIde}
-            onValueChange={(value) => {
-              setPreferredIde(value);
-            }}
+            value={settings?.preferredIde ?? 'cursor'}
+            onValueChange={handleIdeChange}
+            disabled={updateSettings.isPending}
           >
             <SelectTrigger id="ide-select">
               <SelectValue placeholder="Select an IDE" />
@@ -366,21 +363,22 @@ function IdeSettingsSection() {
           </Select>
         </div>
 
-        {preferredIde === 'custom' && (
+        {settings?.preferredIde === 'custom' && (
           <div className="space-y-2">
             <Label htmlFor="custom-command">Custom Command</Label>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="custom-command"
-                value={customCommand}
-                onChange={(e) => setCustomCommand(e.target.value)}
+                value={settings.customIdeCommand || ''}
+                onChange={(e) => handleCustomCommandChange(e.target.value)}
                 placeholder="code-insiders {workspace}"
                 className="font-mono text-sm flex-1"
+                disabled={updateSettings.isPending}
               />
               <Button
                 variant="outline"
                 onClick={handleTestCommand}
-                disabled={testCommand.isPending || !customCommand}
+                disabled={testCommand.isPending || !settings.customIdeCommand}
               >
                 {testCommand.isPending ? 'Testing...' : 'Test'}
               </Button>
@@ -392,10 +390,6 @@ function IdeSettingsSection() {
             </p>
           </div>
         )}
-
-        <Button onClick={handleSave} disabled={updateSettings.isPending}>
-          {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
-        </Button>
       </CardContent>
     </Card>
   );
