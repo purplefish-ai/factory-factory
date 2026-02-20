@@ -35,10 +35,11 @@ git add -A && git commit -m "Address review comments" && git push
 \`\`\`
 
 ### 5. Request Re-review
-Post a comment mentioning the reviewers. Use `gh pr list --head $(git branch --show-current)` to find the PR number if not already known:
+CRITICAL: You MUST post a comment mentioning ALL reviewers whose comments you addressed, asking them to re-review. This is MANDATORY whenever you make code changes in response to review comments, even if you've already responded to their comments in previous sessions. Use `gh pr list --head $(git branch --show-current)` to find the PR number if not already known:
 \`\`\`bash
 gh pr comment $(gh pr list --head $(git branch --show-current) --json number --jq '.[0].number') --body "@reviewer1 @reviewer2 I've addressed the review comments. Please re-review when you have a chance."
 \`\`\`
+Do NOT skip this step based on whether you've previously commented. New code changes always require a new re-review request.
 
 ## Guidelines
 

@@ -29,7 +29,7 @@ Required Sequence:
 5. Push only when you made actionable CI or review fixes (not merge-only updates).
 6. Comment briefly on addressed review comments and resolve them. IMPORTANT: When responding to a comment, explicitly @ mention the person who made the comment (e.g., "@username - fixed as suggested").
 7. Request re-review from reviewers whose comments you addressed using `gh pr edit {{PR_NUMBER}} --add-reviewer <login>`.
-8. If you addressed any review comments and pushed changes, post a single PR comment tagging each reviewer whose comments you addressed asking them to re-review. Use `gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"`. Include all addressed reviewers in one comment.
+8. CRITICAL: If you made ANY code changes in response to review comments (regardless of whether you already commented on them in a previous session), you MUST post a PR comment tagging the reviewers to request re-review. Use `gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"`. This is MANDATORY even if you previously commented on the review - the act of pushing new changes requires a new re-review request. Include all addressed reviewers in one comment.
 
 Completion Criteria:
 - Branch includes latest `main`.
@@ -37,4 +37,4 @@ Completion Criteria:
 - CI and local verification are healthy, or best effort is documented in session output.
 - Addressed review comments are replied to and resolved.
 - Re-review has been requested from reviewers whose comments were addressed.
-- If review comments were addressed, a PR comment has been posted tagging reviewers to re-review.
+- MANDATORY: If you made code changes addressing review comments, a PR comment MUST be posted tagging ALL reviewers whose comments triggered these changes, asking them to re-review. This is required even if you previously responded to their comments - new code changes always require a new re-review request.
