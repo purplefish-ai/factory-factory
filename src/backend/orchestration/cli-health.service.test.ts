@@ -72,6 +72,28 @@ describe('cliHealthService', () => {
     expect(status.allHealthy).toBe(true); // Codex auth is optional for allHealthy
   });
 
+  it('reports unhealthy when Claude CLI is not authenticated', async () => {
+    vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: false,
+      version: 'claude 1.2.3',
+    });
+    vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: true,
+      version: 'codex-cli 0.99.0',
+    });
+    vi.mocked(githubCLIService.checkHealth).mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: true,
+      version: '2.0.0',
+    });
+
+    const status = await cliHealthService.checkHealth(true);
+
+    expect(status.allHealthy).toBe(false);
+  });
+
   it('reports unhealthy when required GitHub auth is missing', async () => {
     vi.spyOn(cliHealthService, 'checkClaudeCLI').mockResolvedValue({
       isInstalled: true,

@@ -261,7 +261,11 @@ class CLIHealthService {
       claude,
       codex,
       github,
-      allHealthy: claude.isInstalled && github.isInstalled && github.isAuthenticated,
+      allHealthy:
+        claude.isInstalled &&
+        claude.isAuthenticated === true &&
+        github.isInstalled &&
+        github.isAuthenticated,
     };
 
     // Cache the result
