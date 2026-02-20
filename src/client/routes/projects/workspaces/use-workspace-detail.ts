@@ -212,9 +212,9 @@ export function useSessionManagement({
     },
     onSuccess: () => {
       if (slug) {
-        void navigate(`/projects/${slug}/workspaces`);
+        void navigate(`/projects/${slug}/workspaces`, { replace: true });
       } else {
-        void navigate('/projects');
+        void navigate('/projects', { replace: true });
       }
     },
     onError: (error, _variables, context) => {
