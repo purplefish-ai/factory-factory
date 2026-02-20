@@ -125,10 +125,10 @@ export function CLIHealthBanner() {
 
   return (
     <div className="border-b border-warning/20 bg-warning/10 px-4 py-3">
-      <div className="mx-auto max-w-7xl">
+      <div>
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-warning" />
             <div className="space-y-2">
               <p className="text-sm font-medium text-warning-foreground dark:text-warning">
                 Some features require additional setup
