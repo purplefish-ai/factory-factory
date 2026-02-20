@@ -276,7 +276,7 @@ export function KanbanBoard() {
       <ArchiveWorkspaceDialog
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
-        hasUncommitted={false}
+        hasUncommitted={true}
         onConfirm={handleBulkArchiveConfirm}
         description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Archiving will remove the workspace worktrees from disk.`}
         warningText="Warning: Some workspaces may have uncommitted changes and they will be committed before archiving."
