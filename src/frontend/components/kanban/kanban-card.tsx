@@ -50,10 +50,6 @@ function CardStatusIndicator({
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
 }
 
-function CardBodySlot({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-5 flex items-center">{children}</div>;
-}
-
 function PullRequestRow({
   workspace,
   showPR,
@@ -240,6 +236,11 @@ export function KanbanCard({
   isArchivePending = false,
 }: KanbanCardProps) {
   const { showPR, isArchived, ratchetEnabled, sidebarStatus } = deriveCardState(workspace);
+  const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
+  const showCi = sidebarStatus.ciState !== 'NONE';
+  const showBranch = Boolean(workspace.branchName);
+  const showPendingRequest = Boolean(workspace.pendingRequestType);
+  const hasMetadata = showSetup || showCi || showBranch || showPR || showPendingRequest;
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -268,27 +269,37 @@ export function KanbanCard({
             />
           </div>
         </CardHeader>
-        <CardContent className="space-y-1">
-          <CardBodySlot>
-            <SetupStatusChip status={workspace.status} />
-          </CardBodySlot>
-          <CardBodySlot>
-            <CiRow ciState={sidebarStatus.ciState} prState={workspace.prState} />
-          </CardBodySlot>
-          <CardBodySlot>
-            <BranchRow branchName={workspace.branchName} />
-          </CardBodySlot>
-          <CardBodySlot>
-            <PullRequestRow workspace={workspace} showPR={showPR} />
-          </CardBodySlot>
-          <CardBodySlot>
-            {workspace.pendingRequestType ? (
-              <div className="flex items-center gap-2">
-                <PendingRequestBadge type={workspace.pendingRequestType} />
+        {hasMetadata && (
+          <CardContent className="space-y-1">
+            {showSetup && (
+              <div className="flex items-center">
+                <SetupStatusChip status={workspace.status} />
               </div>
-            ) : null}
-          </CardBodySlot>
-        </CardContent>
+            )}
+            {showCi && (
+              <div className="flex items-center">
+                <CiRow ciState={sidebarStatus.ciState} prState={workspace.prState} />
+              </div>
+            )}
+            {showBranch && (
+              <div className="flex items-center">
+                <BranchRow branchName={workspace.branchName} />
+              </div>
+            )}
+            {showPR && (
+              <div className="flex items-center">
+                <PullRequestRow workspace={workspace} showPR={showPR} />
+              </div>
+            )}
+            {showPendingRequest && (
+              <div className="flex items-center gap-2">
+                {workspace.pendingRequestType ? (
+                  <PendingRequestBadge type={workspace.pendingRequestType} />
+                ) : null}
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
     </Link>
   );
