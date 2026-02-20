@@ -7,7 +7,7 @@ import {
   Pencil,
   RefreshCw,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { DataImportButton } from '@/components/data-import/data-import-button';
@@ -307,7 +307,14 @@ function IdeSettingsSection() {
     });
   };
 
-  const handleCustomCommandChange = (value: string) => {
+  const [localCustomCommand, setLocalCustomCommand] = useState(settings?.customIdeCommand || '');
+
+  // Sync local state when settings change externally
+  useEffect(() => {
+    setLocalCustomCommand(settings?.customIdeCommand || '');
+  }, [settings?.customIdeCommand]);
+
+  const saveCustomCommand = (value: string) => {
     updateSettings.mutate({
       preferredIde: 'custom',
       customIdeCommand: value || null,
@@ -368,8 +375,9 @@ function IdeSettingsSection() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 id="custom-command"
-                value={settings.customIdeCommand || ''}
-                onChange={(e) => handleCustomCommandChange(e.target.value)}
+                value={localCustomCommand}
+                onChange={(e) => setLocalCustomCommand(e.target.value)}
+                onBlur={() => saveCustomCommand(localCustomCommand)}
                 placeholder="code-insiders {workspace}"
                 className="font-mono text-sm flex-1"
                 disabled={updateSettings.isPending}
