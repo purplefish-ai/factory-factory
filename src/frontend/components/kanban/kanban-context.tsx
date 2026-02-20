@@ -84,7 +84,7 @@ interface KanbanContextValue {
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
   togglingWorkspaceId: string | null;
   archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
-  archivingWorkspaceId: string | null;
+  archivingWorkspaceIds: ReadonlySet<string>;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
 }
@@ -152,7 +152,7 @@ export function KanbanProvider({
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
   const archiveMutation = trpc.workspace.archive.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
-  const [archivingWorkspaceId, setArchivingWorkspaceId] = useState<string | null>(null);
+  const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
   const [showInlineForm, setShowInlineForm] = useState(false);
 
   const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
@@ -178,12 +178,27 @@ export function KanbanProvider({
   };
 
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
-    setArchivingWorkspaceId(workspaceId);
+    setArchivingWorkspaceIds((prev) => {
+      const next = new Set(prev);
+      next.add(workspaceId);
+      return next;
+    });
     try {
       await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
-      await refetchWorkspaces();
+      await Promise.all([
+        refetchWorkspaces(),
+        utils.workspace.getProjectSummaryState.invalidate({ projectId }),
+        utils.workspace.get.invalidate({ id: workspaceId }),
+      ]);
     } finally {
-      setArchivingWorkspaceId(null);
+      setArchivingWorkspaceIds((prev) => {
+        if (!prev.has(workspaceId)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(workspaceId);
+        return next;
+      });
     }
   };
 
@@ -191,6 +206,11 @@ export function KanbanProvider({
     refetchWorkspaces();
     refetchIssues();
   };
+
+  const visibleWorkspaces = useMemo(
+    () => workspaces?.filter((workspace) => !archivingWorkspaceIds.has(workspace.id)),
+    [workspaces, archivingWorkspaceIds]
+  );
 
   // Normalize issues from the active provider
   const normalizedIssues = useMemo(() => {
@@ -232,7 +252,7 @@ export function KanbanProvider({
         projectId,
         projectSlug,
         issueProvider,
-        workspaces: workspaces as WorkspaceWithKanban[] | undefined,
+        workspaces: visibleWorkspaces as WorkspaceWithKanban[] | undefined,
         issues: filteredIssues,
         isLoading: isLoadingWorkspaces || isLoadingIssues,
         isError: isErrorWorkspaces,
@@ -243,7 +263,7 @@ export function KanbanProvider({
         toggleWorkspaceRatcheting,
         togglingWorkspaceId,
         archiveWorkspace,
-        archivingWorkspaceId,
+        archivingWorkspaceIds,
         showInlineForm,
         setShowInlineForm,
       }}

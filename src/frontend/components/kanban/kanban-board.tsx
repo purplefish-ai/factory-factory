@@ -50,7 +50,7 @@ export function KanbanBoard() {
     toggleWorkspaceRatcheting,
     togglingWorkspaceId,
     archiveWorkspace,
-    archivingWorkspaceId,
+    archivingWorkspaceIds,
     showInlineForm,
     setShowInlineForm,
   } = useKanban();
@@ -207,7 +207,7 @@ export function KanbanBoard() {
               onToggleRatcheting={toggleWorkspaceRatcheting}
               togglingWorkspaceId={togglingWorkspaceId}
               onArchive={archiveWorkspace}
-              archivingWorkspaceId={archivingWorkspaceId}
+              archivingWorkspaceIds={archivingWorkspaceIds}
             />
           )}
         </div>
@@ -241,7 +241,7 @@ export function KanbanBoard() {
             onToggleRatcheting={toggleWorkspaceRatcheting}
             togglingWorkspaceId={togglingWorkspaceId}
             onArchive={archiveWorkspace}
-            archivingWorkspaceId={archivingWorkspaceId}
+            archivingWorkspaceIds={archivingWorkspaceIds}
           />
         );
       })}

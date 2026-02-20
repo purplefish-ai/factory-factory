@@ -3,7 +3,11 @@ import { githubCLIService } from '@/backend/domains/github';
 import { runScriptService } from '@/backend/domains/run-script';
 import { sessionService } from '@/backend/domains/session';
 import { terminalService } from '@/backend/domains/terminal';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
+import {
+  workspaceArchiveTrackerService,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/domains/workspace';
 import { createLogger } from '@/backend/services/logger.service';
 import type { WorkspaceWithProject } from './types';
 
@@ -69,50 +73,55 @@ export async function archiveWorkspace(
     });
   }
 
-  const cleanupResults = await Promise.allSettled([
-    sessionService.stopWorkspaceSessions(workspace.id),
-    (async () => {
-      const result = await runScriptService.stopRunScript(workspace.id);
-      if (!result.success) {
-        throw new Error(result.error ?? 'Unknown run script stop failure');
-      }
-    })(),
-    Promise.resolve().then(() => {
-      terminalService.destroyWorkspaceTerminals(workspace.id);
-    }),
-  ]);
-
-  const cleanupErrors = cleanupResults.flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : []
-  );
-
-  if (cleanupErrors.length > 0) {
-    logger.error('Failed to cleanup workspace resources before archive', {
-      workspaceId: workspace.id,
-      errors: cleanupErrors.map((error) =>
-        error instanceof Error ? error.message : String(error)
-      ),
-    });
-    throw new TRPCError({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: 'Failed to cleanup workspace resources before archive',
-    });
-  }
-
+  workspaceArchiveTrackerService.markArchiving(workspace.id);
   try {
-    await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, options);
-  } catch (error) {
-    logger.error('Failed to cleanup workspace worktree before archive', {
-      workspaceId: workspace.id,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
+    const cleanupResults = await Promise.allSettled([
+      sessionService.stopWorkspaceSessions(workspace.id),
+      (async () => {
+        const result = await runScriptService.stopRunScript(workspace.id);
+        if (!result.success) {
+          throw new Error(result.error ?? 'Unknown run script stop failure');
+        }
+      })(),
+      Promise.resolve().then(() => {
+        terminalService.destroyWorkspaceTerminals(workspace.id);
+      }),
+    ]);
+
+    const cleanupErrors = cleanupResults.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : []
+    );
+
+    if (cleanupErrors.length > 0) {
+      logger.error('Failed to cleanup workspace resources before archive', {
+        workspaceId: workspace.id,
+        errors: cleanupErrors.map((error) =>
+          error instanceof Error ? error.message : String(error)
+        ),
+      });
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to cleanup workspace resources before archive',
+      });
+    }
+
+    try {
+      await worktreeLifecycleService.cleanupWorkspaceWorktree(workspace, options);
+    } catch (error) {
+      logger.error('Failed to cleanup workspace worktree before archive', {
+        workspaceId: workspace.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    const archivedWorkspace = await workspaceStateMachine.archive(workspace.id);
+
+    // Handle associated GitHub issue after successful archive
+    await handleGitHubIssueOnArchive(workspace);
+
+    return archivedWorkspace;
+  } finally {
+    workspaceArchiveTrackerService.clearArchiving(workspace.id);
   }
-
-  const archivedWorkspace = await workspaceStateMachine.archive(workspace.id);
-
-  // Handle associated GitHub issue after successful archive
-  await handleGitHubIssueOnArchive(workspace);
-
-  return archivedWorkspace;
 }
