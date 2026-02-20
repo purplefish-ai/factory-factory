@@ -732,7 +732,7 @@ function ServerLogsSection() {
 }
 
 export default function AdminDashboardPage() {
-  useAppHeader({ title: 'Admin Dashboard' });
+  useAppHeader({ title: 'Settings' });
 
   const {
     data: stats,
@@ -762,7 +762,7 @@ export default function AdminDashboardPage() {
 
   // Show full loading only when stats are loading (first load)
   if (isLoadingStats) {
-    return <Loading message="Loading admin dashboard..." />;
+    return <Loading message="Loading settings..." />;
   }
 
   return (
@@ -772,8 +772,8 @@ export default function AdminDashboardPage() {
           <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
             <Link to={`/projects/${projectSlug}/workspaces`}>
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Back to Workspaces Board</span>
-              <span className="sm:hidden">Board</span>
+              <span className="hidden sm:inline">Back to Workspaces</span>
+              <span className="sm:hidden">Workspaces</span>
             </Link>
           </Button>
         </HeaderLeftExtraSlot>
