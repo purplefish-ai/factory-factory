@@ -6,7 +6,8 @@ function BoardHeaderSlot({ projectName }: { projectName: string }) {
   const title = useMemo(
     () => (
       <>
-        Workspaces <span className="font-normal text-muted-foreground">· {projectName}</span>
+        Workspaces{' '}
+        <span className="font-normal text-muted-foreground text-xs">· {projectName}</span>
       </>
     ),
     [projectName]
