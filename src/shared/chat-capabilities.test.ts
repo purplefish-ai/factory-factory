@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   createClaudeChatBarCapabilities,
   createCodexChatBarCapabilities,
+  EMPTY_CHAT_BAR_CAPABILITIES,
+  hasResolvedChatBarCapabilities,
 } from './chat-capabilities';
 
 describe('chat capabilities', () => {
@@ -41,5 +43,14 @@ describe('chat capabilities', () => {
       'medium',
       'high',
     ]);
+  });
+
+  it('marks placeholder capabilities as unresolved', () => {
+    expect(hasResolvedChatBarCapabilities(EMPTY_CHAT_BAR_CAPABILITIES)).toBe(false);
+  });
+
+  it('marks real provider capabilities as resolved', () => {
+    expect(hasResolvedChatBarCapabilities(createClaudeChatBarCapabilities('sonnet'))).toBe(true);
+    expect(hasResolvedChatBarCapabilities(createCodexChatBarCapabilities())).toBe(true);
   });
 });

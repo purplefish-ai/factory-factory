@@ -76,6 +76,16 @@ export const EMPTY_CHAT_BAR_CAPABILITIES: ChatBarCapabilities = {
   rewind: { enabled: false },
 };
 
+export function hasResolvedChatBarCapabilities(
+  capabilities: ChatBarCapabilities | null | undefined
+): capabilities is ChatBarCapabilities {
+  return (
+    capabilities !== undefined &&
+    capabilities !== null &&
+    capabilities !== EMPTY_CHAT_BAR_CAPABILITIES
+  );
+}
+
 export function createClaudeChatBarCapabilities(selectedModel?: string): ChatBarCapabilities {
   return {
     provider: 'CLAUDE',
