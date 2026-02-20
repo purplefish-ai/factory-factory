@@ -5,6 +5,7 @@ import { projectManagementService } from '@/backend/domains/workspace';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { gitCloneService, parseGithubUrl } from '@/backend/services/git-clone.service';
 import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import {
@@ -294,5 +295,72 @@ export const projectRouter = router({
       await writeFile(join(project.repoPath, 'factory-factory.json'), configContent, 'utf-8');
 
       return { success: true };
+    }),
+
+  // Check if GitHub CLI is authenticated
+  checkGithubAuth: publicProcedure.query(() => {
+    return gitCloneService.checkGithubAuth();
+  }),
+
+  // Clone a GitHub repo and create a project
+  createFromGithub: publicProcedure
+    .input(
+      z.object({
+        githubUrl: z.string().url('Must be a valid URL'),
+        startupScriptCommand: z.string().optional(),
+        startupScriptPath: z.string().optional(),
+        startupScriptTimeout: z.number().min(1).max(3600).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { configService } = ctx.appContext.services;
+      const { startupScriptCommand, startupScriptPath, startupScriptTimeout } = input;
+
+      if (startupScriptCommand && startupScriptPath) {
+        throw new Error('Cannot specify both startupScriptCommand and startupScriptPath');
+      }
+
+      // Parse the GitHub URL
+      const parsed = parseGithubUrl(input.githubUrl);
+      if (!parsed) {
+        throw new Error('Invalid GitHub URL. Expected format: https://github.com/owner/repo');
+      }
+
+      // Compute clone destination
+      const reposDir = configService.getReposDir();
+      const clonePath = gitCloneService.getClonePath(reposDir, parsed.owner, parsed.repo);
+
+      // Check if already cloned
+      const existingStatus = await gitCloneService.checkExistingClone(clonePath);
+
+      if (existingStatus === 'not_repo') {
+        throw new Error(`Directory already exists at ${clonePath} but is not a git repository`);
+      }
+
+      if (existingStatus === 'not_exists') {
+        // Clone the repo
+        const cloneResult = await gitCloneService.clone(input.githubUrl, clonePath);
+        if (!cloneResult.success) {
+          throw new Error(`Failed to clone repository: ${cloneResult.error}`);
+        }
+      }
+
+      // Now create the project using the cloned path (same as local path flow)
+      const repoValidation = await projectManagementService.validateRepoPath(clonePath);
+      if (!repoValidation.valid) {
+        throw new Error(`Invalid repository after clone: ${repoValidation.error}`);
+      }
+
+      return projectManagementService.create(
+        {
+          repoPath: clonePath,
+          startupScriptCommand,
+          startupScriptPath,
+          startupScriptTimeout,
+        },
+        {
+          worktreeBaseDir: configService.getWorktreeBaseDir(),
+        }
+      );
     }),
 });
