@@ -208,13 +208,14 @@ export function useSessionManagement({
         );
       }
 
+      return { projectId, previousWorkspaceList };
+    },
+    onSuccess: () => {
       if (slug) {
         void navigate(`/projects/${slug}/workspaces`);
       } else {
         void navigate('/projects');
       }
-
-      return { projectId, previousWorkspaceList };
     },
     onError: (error, _variables, context) => {
       if (error.data?.code === 'PRECONDITION_FAILED') {
