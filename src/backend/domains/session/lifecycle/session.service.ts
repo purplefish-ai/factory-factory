@@ -1,4 +1,5 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
+import type { SessionPermissionPreset } from '@prisma-gen/client';
 import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
 import {
   AcpEventTranslator,
@@ -13,6 +14,7 @@ import { sessionDomainService } from '@/backend/domains/session/session-domain.s
 import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
   AgentContentItem,
@@ -834,6 +836,9 @@ class SessionService {
       session
     );
     await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
+    if (!session.providerSessionId) {
+      await this.applyConfiguredPermissionPreset(sessionId, session, handle);
+    }
 
     // Send initial prompt - defaults to 'Continue with the task.' if not provided
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
@@ -1053,6 +1058,125 @@ class SessionService {
       /yolo/i.test(option.name ?? '')
     );
     return yoloByName?.value ?? null;
+  }
+
+  private async applyConfiguredPermissionPreset(
+    sessionId: string,
+    session: AgentSessionRecord,
+    handle: AcpProcessHandle
+  ): Promise<void> {
+    if (handle.provider !== 'CODEX') {
+      return;
+    }
+
+    const executionModeOption = handle.configOptions.find(
+      (option) => option.id === 'execution_mode' || option.category === 'permission'
+    );
+    if (!executionModeOption) {
+      return;
+    }
+
+    let permissionPreset: SessionPermissionPreset =
+      session.workflow === 'ratchet' ? 'YOLO' : 'STRICT';
+    try {
+      const settings = await userSettingsAccessor.get();
+      permissionPreset =
+        session.workflow === 'ratchet'
+          ? settings.ratchetPermissions
+          : settings.defaultWorkspacePermissions;
+    } catch (error) {
+      logger.warn('Failed loading user permission presets; using defaults', {
+        sessionId,
+        workflow: session.workflow,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const targetExecutionMode = this.resolveConfiguredExecutionModeTarget(
+      executionModeOption,
+      permissionPreset
+    );
+    if (!targetExecutionMode) {
+      return;
+    }
+
+    const currentExecutionMode = executionModeOption.currentValue
+      ? String(executionModeOption.currentValue)
+      : null;
+    if (currentExecutionMode === targetExecutionMode) {
+      return;
+    }
+
+    try {
+      const configOptions = await acpRuntimeManager.setConfigOption(
+        sessionId,
+        executionModeOption.id,
+        targetExecutionMode
+      );
+      handle.configOptions = configOptions;
+      await this.persistAcpConfigSnapshot(sessionId, {
+        provider: handle.provider as SessionProvider,
+        providerSessionId: handle.providerSessionId,
+        configOptions,
+      });
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'config_options_update',
+        configOptions,
+      } as SessionDeltaEvent);
+      sessionDomainService.emitDelta(sessionId, {
+        type: 'chat_capabilities',
+        capabilities: this.buildAcpChatBarCapabilities(handle),
+      });
+    } catch (error) {
+      logger.warn('Failed applying configured session permission preset', {
+        sessionId,
+        workflow: session.workflow,
+        permissionPreset,
+        targetExecutionMode,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private resolveConfiguredExecutionModeTarget(
+    executionModeOption: SessionConfigOption,
+    permissionPreset: SessionPermissionPreset
+  ): string | null {
+    const availableValues = this.getConfigOptionValues(executionModeOption);
+    const preferredValuesByPreset: Record<SessionPermissionPreset, string[]> = {
+      STRICT: [
+        '["on-request","workspace-write"]',
+        '["on-request","read-only"]',
+        '["on-request","danger-full-access"]',
+      ],
+      RELAXED: [
+        '["on-failure","workspace-write"]',
+        '["on-failure","read-only"]',
+        '["on-failure","danger-full-access"]',
+      ],
+      YOLO: [
+        '["never","danger-full-access"]',
+        '["never","workspace-write"]',
+        '["never","read-only"]',
+      ],
+    };
+    const preferredValues = preferredValuesByPreset[permissionPreset];
+    const byValue = this.findModeValue(availableValues, preferredValues);
+    if (byValue) {
+      return byValue;
+    }
+
+    const byName = this.getSelectOptions(executionModeOption).find((option) => {
+      const name = option.name ?? '';
+      if (permissionPreset === 'STRICT') {
+        return /on request/i.test(name);
+      }
+      if (permissionPreset === 'RELAXED') {
+        return /on failure/i.test(name);
+      }
+      return /yolo|never ask/i.test(name);
+    });
+    return byName?.value ?? null;
   }
 
   private findModeValue(
@@ -1297,7 +1421,13 @@ class SessionService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    return await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
+    const hadClient = !!acpRuntimeManager.getClient(sessionId);
+    const handle = await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
+    if (!(hadClient || session.providerSessionId)) {
+      await this.applyConfiguredPermissionPreset(sessionId, session, handle);
+    }
+
+    return handle;
   }
 
   /**
@@ -1313,7 +1443,13 @@ class SessionService {
       reasoningEffort?: string;
     }
   ): Promise<unknown> {
-    return await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
+    const hadClient = !!acpRuntimeManager.getClient(session.id);
+    const handle = await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
+    if (!(hadClient || session.providerSessionId)) {
+      await this.applyConfiguredPermissionPreset(session.id, session, handle);
+    }
+
+    return handle;
   }
 
   getSessionClient(sessionId: string): unknown | undefined {

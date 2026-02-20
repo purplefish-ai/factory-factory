@@ -36,6 +36,7 @@ const KanbanColumn = z.enum(enumValues(CoreKanbanColumn));
 const RatchetState = z.enum(enumValues(CoreRatchetState));
 const SessionStatus = z.enum(enumValues(CoreSessionStatus));
 const SessionProvider = z.enum(['CLAUDE', 'CODEX']);
+const SessionPermissionPreset = z.enum(['STRICT', 'RELAXED', 'YOLO']);
 const WorkspaceProviderSelection = z.enum(['WORKSPACE_DEFAULT', 'CLAUDE', 'CODEX']);
 
 const exportedProjectSchema = z.object({
@@ -141,6 +142,8 @@ const exportedUserSettingsSchema = z.object({
   notificationSoundPath: z.string().nullable(),
   ratchetEnabled: z.boolean(),
   defaultSessionProvider: SessionProvider,
+  defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
+  ratchetPermissions: SessionPermissionPreset.optional().default('YOLO'),
 });
 
 export const exportDataSchema = z.object({

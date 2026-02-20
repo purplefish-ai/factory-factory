@@ -429,6 +429,7 @@ function ChatProviderDefaultsSection() {
   }
 
   const currentProvider = settings?.defaultSessionProvider ?? 'CLAUDE';
+  const currentWorkspacePermissions = settings?.defaultWorkspacePermissions ?? 'STRICT';
 
   return (
     <Card>
@@ -438,7 +439,7 @@ function ChatProviderDefaultsSection() {
           Default provider used when a workspace defers provider selection
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-3">
         <Label htmlFor="chat-default-provider">Default chat provider</Label>
         <Select
           value={currentProvider}
@@ -458,6 +459,27 @@ function ChatProviderDefaultsSection() {
           </SelectContent>
         </Select>
         <ProviderCliWarning provider={currentProvider} />
+        <div className="space-y-2 pt-1">
+          <Label htmlFor="workspace-permissions">Default permissions for new workspaces</Label>
+          <Select
+            value={currentWorkspacePermissions}
+            onValueChange={(value) => {
+              if (value === 'STRICT' || value === 'RELAXED' || value === 'YOLO') {
+                updateSettings.mutate({ defaultWorkspacePermissions: value });
+              }
+            }}
+            disabled={updateSettings.isPending}
+          >
+            <SelectTrigger id="workspace-permissions">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="STRICT">Strict</SelectItem>
+              <SelectItem value="RELAXED">Relaxed</SelectItem>
+              <SelectItem value="YOLO">YOLO</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardContent>
     </Card>
   );
@@ -566,6 +588,8 @@ function RatchetSettingsSection() {
     );
   }
 
+  const currentRatchetPermissions = settings?.ratchetPermissions ?? 'YOLO';
+
   return (
     <Card>
       <CardHeader>
@@ -604,6 +628,31 @@ function RatchetSettingsSection() {
             }}
             disabled={updateSettings.isPending}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ratchet-permissions">Ratchet permission defaults</Label>
+          <Select
+            value={currentRatchetPermissions}
+            onValueChange={(value) => {
+              if (value === 'STRICT' || value === 'RELAXED' || value === 'YOLO') {
+                updateSettings.mutate({ ratchetPermissions: value });
+              }
+            }}
+            disabled={updateSettings.isPending}
+          >
+            <SelectTrigger id="ratchet-permissions">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="STRICT">Strict</SelectItem>
+              <SelectItem value="RELAXED">Relaxed</SelectItem>
+              <SelectItem value="YOLO">YOLO</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Controls the default execution mode used when Ratchet starts a fixer session.
+          </p>
         </div>
 
         {/* Manual trigger button */}
