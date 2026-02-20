@@ -21,6 +21,7 @@ export * from './terminal-panel';
 export * from './terminal-tab-bar';
 export * from './todo-panel-container';
 export * from './use-persistent-scroll';
+export * from './use-run-script-launch';
 export * from './use-terminal-websocket';
 export * from './workspace-content-view';
 export * from './workspace-panel-context';

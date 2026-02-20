@@ -9,6 +9,7 @@ import {
   Loader2,
   MoreHorizontal,
   PanelRight,
+  Server,
   Settings2,
   Zap,
 } from 'lucide-react';
@@ -51,6 +52,7 @@ import {
   RatchetToggleButton,
   RunScriptButton,
   RunScriptPortBadge,
+  useRunScriptLaunch,
   useWorkspacePanel,
 } from '@/components/workspace';
 import {
@@ -569,6 +571,32 @@ function OpenInIdeAction({
   );
 }
 
+function OpenDevAppAction({
+  workspaceId,
+  renderAsMenuItem = false,
+}: {
+  workspaceId: string;
+  renderAsMenuItem?: boolean;
+}) {
+  const launchInfo = useRunScriptLaunch(workspaceId);
+  if (!launchInfo) {
+    return null;
+  }
+
+  if (renderAsMenuItem) {
+    return (
+      <DropdownMenuItem asChild>
+        <a href={launchInfo.href} target="_blank" rel="noopener noreferrer">
+          <Server className="h-4 w-4" />
+          Open dev app
+        </a>
+      </DropdownMenuItem>
+    );
+  }
+
+  return null;
+}
+
 function ArchiveActionButton({
   workspace,
   archivePending,
@@ -747,6 +775,7 @@ function WorkspaceHeaderOverflowMenu({
             openInIde={openInIde}
             renderAsMenuItem
           />
+          <OpenDevAppAction workspaceId={workspaceId} renderAsMenuItem />
           <WorkspaceQuickActionsSubmenu
             handleQuickAction={handleQuickAction}
             disabled={isCreatingSession}
