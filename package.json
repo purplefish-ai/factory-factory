@@ -44,7 +44,7 @@
   ],
   "scripts": {
     "dev": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve --dev",
-    "build": "pnpm --filter @factory-factory/core build && node scripts/check-ambiguous-relative-imports.mjs && rm -rf dist && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && cp -r prompts dist/ && vite build",
+    "build": "pnpm --filter @factory-factory/core build && node scripts/check-ambiguous-relative-imports.mjs && rm -rf dist && tsc -p tsconfig.backend.json && tsc-alias -p tsconfig.backend.json --resolve-full-paths && node scripts/fix-prisma-imports.mjs && cp -r prompts dist/ && vite build",
     "build:storybook": "storybook build",
     "start": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && tsx src/cli/index.ts serve",
     "test": "pnpm --filter @factory-factory/core build && node scripts/ensure-native-modules.mjs node && vitest run",
