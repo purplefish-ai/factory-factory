@@ -93,36 +93,41 @@ describe('proxy internals', () => {
     ).toBe(false);
   });
 
-  it('renders terminal QR code output with qrencode', () => {
-    let invokedFile: string | undefined;
-    let invokedArgs: readonly string[] | undefined;
+  it('renders terminal QR code output with qrcode', async () => {
+    let invokedText: string | undefined;
+    let invokedOptions: import('qrcode').QRCodeToStringOptionsTerminal | undefined;
+    const renderQrCode = (
+      text: string,
+      options?: import('qrcode').QRCodeToStringOptionsTerminal
+    ): Promise<string> => {
+      invokedText = text;
+      invokedOptions = options;
+      return Promise.resolve('██\n██\n');
+    };
 
-    const rendered = proxyInternals.tryRenderTerminalQrCode(
+    const rendered = await proxyInternals.tryRenderTerminalQrCode(
       'https://example.trycloudflare.com?token=abc123',
-      ((file: string, args: readonly string[]) => {
-        invokedFile = file;
-        invokedArgs = args;
-        return '██\n██\n';
-      }) as unknown as typeof import('node:child_process').execFileSync
+      renderQrCode
     );
 
-    expect(invokedFile).toBe('qrencode');
-    expect(invokedArgs).toEqual([
-      '-t',
-      'UTF8',
-      '-m',
-      '1',
-      'https://example.trycloudflare.com?token=abc123',
-    ]);
+    expect(invokedText).toBe('https://example.trycloudflare.com?token=abc123');
+    expect(invokedOptions).toEqual({
+      type: 'terminal',
+      margin: 1,
+      small: true,
+    });
     expect(rendered).toBe('██\n██\n');
   });
 
-  it('returns null when qrencode is unavailable', () => {
-    const rendered = proxyInternals.tryRenderTerminalQrCode(
+  it('returns null when qrcode rendering fails', async () => {
+    const rejectRenderer = (
+      _text: string,
+      _options?: import('qrcode').QRCodeToStringOptionsTerminal
+    ): Promise<string> => Promise.reject(new Error('missing'));
+
+    const rendered = await proxyInternals.tryRenderTerminalQrCode(
       'https://example.trycloudflare.com?token=abc123',
-      ((_file: string, _args: readonly string[]) => {
-        throw new Error('missing');
-      }) as unknown as typeof import('node:child_process').execFileSync
+      rejectRenderer
     );
 
     expect(rendered).toBeNull();
