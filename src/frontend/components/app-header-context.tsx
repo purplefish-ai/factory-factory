@@ -11,8 +11,8 @@ import {
 import { createPortal } from 'react-dom';
 
 interface AppHeaderContextValue {
-  title: string;
-  setTitle: (title: string) => void;
+  title: ReactNode;
+  setTitle: (title: ReactNode) => void;
   /** Portal target element for right-side header content */
   rightSlot: HTMLElement | null;
   setRightSlot: (el: HTMLElement | null) => void;
@@ -24,7 +24,7 @@ interface AppHeaderContextValue {
 const AppHeaderContext = createContext<AppHeaderContextValue | null>(null);
 
 export function AppHeaderProvider({ children }: { children: ReactNode }) {
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState<ReactNode>('');
   const [rightSlot, setRightSlot] = useState<HTMLElement | null>(null);
   const [leftExtraSlot, setLeftExtraSlot] = useState<HTMLElement | null>(null);
 
@@ -49,7 +49,7 @@ export function useAppHeaderContext(): AppHeaderContextValue {
  * Returns portal target elements for rightContent and leftExtra
  * so routes can use createPortal to render into the header slots.
  */
-export function useAppHeaderTitle(title: string) {
+export function useAppHeaderTitle(title: ReactNode) {
   const ctx = useAppHeaderContext();
 
   useLayoutEffect(() => {
@@ -97,6 +97,6 @@ export function HeaderLeftExtraSlot({ children }: { children: ReactNode }) {
  * Simple convenience hook that just sets the header title.
  * Use HeaderRightSlot/HeaderLeftExtraSlot components for slot content.
  */
-export function useAppHeader({ title }: { title: string }) {
+export function useAppHeader({ title }: { title: ReactNode }) {
   useAppHeaderTitle(title);
 }

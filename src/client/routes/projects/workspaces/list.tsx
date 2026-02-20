@@ -13,6 +13,11 @@ export default function WorkspacesListPage() {
   }
 
   return (
-    <WorkspacesBoardView projectId={project.id} slug={slug} issueProvider={project.issueProvider} />
+    <WorkspacesBoardView
+      projectId={project.id}
+      projectName={project.name}
+      slug={slug}
+      issueProvider={project.issueProvider}
+    />
   );
 }
