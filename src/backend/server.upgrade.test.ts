@@ -5,6 +5,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 const handlers = vi.hoisted(() => ({
   chat: vi.fn(),
   terminal: vi.fn(),
+  setupTerminal: vi.fn(),
   devLogs: vi.fn(),
   snapshots: vi.fn(),
 }));
@@ -12,6 +13,7 @@ const handlers = vi.hoisted(() => ({
 vi.mock('@/backend/routers/websocket', () => ({
   createChatUpgradeHandler: vi.fn(() => handlers.chat),
   createTerminalUpgradeHandler: vi.fn(() => handlers.terminal),
+  createSetupTerminalUpgradeHandler: vi.fn(() => handlers.setupTerminal),
   createDevLogsUpgradeHandler: vi.fn(() => handlers.devLogs),
   createSnapshotsUpgradeHandler: vi.fn(() => handlers.snapshots),
 }));

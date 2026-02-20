@@ -58,7 +58,7 @@ FROM node:${NODE_VERSION}-alpine AS runner
 ARG PNPM_VERSION
 WORKDIR /app
 
-# Runtime system dependencies + cloudflared for tunnel
+# Runtime system dependencies + cloudflared for tunnel + GitHub CLI
 RUN apk add --no-cache \
     git \
     bash \
@@ -67,6 +67,7 @@ RUN apk add --no-cache \
     lsof \
     libc6-compat \
     libstdc++ \
+    github-cli \
   && ARCH="$(uname -m)" \
   && case "$ARCH" in \
        x86_64)  CF_ARCH="amd64" ;; \
