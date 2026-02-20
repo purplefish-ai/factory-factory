@@ -81,6 +81,9 @@ RUN apk add --no-cache \
 
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
+# Install Claude CLI and Codex CLI globally
+RUN npm install -g @anthropic-ai/claude-code @openai/codex
+
 # Copy built application
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
