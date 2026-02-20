@@ -25,16 +25,23 @@ export function createStartHandler(
     const sessionOpts = await sessionService.getSessionOptions(sessionId);
     if (!sessionOpts) {
       logger.error('[Chat WS] Failed to get session options', { sessionId });
-      sessionDomainService.markError(sessionId);
+      sessionDomainService.markError(sessionId, 'Session not found');
       ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
       return;
     }
 
-    await clientCreator.getOrCreate(sessionId, {
-      thinkingEnabled: message.thinkingEnabled,
-      planModeEnabled: message.planModeEnabled,
-      model: getValidModel(message),
-      reasoningEffort: getValidReasoningEffort(message),
-    });
+    try {
+      await clientCreator.getOrCreate(sessionId, {
+        thinkingEnabled: message.thinkingEnabled,
+        planModeEnabled: message.planModeEnabled,
+        model: getValidModel(message),
+        reasoningEffort: getValidReasoningEffort(message),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[Chat WS] Failed to start session client', { sessionId, error: errorMessage });
+      sessionDomainService.markError(sessionId, `Failed to start agent: ${errorMessage}`);
+      ws.send(JSON.stringify({ type: 'error', message: `Failed to start agent: ${errorMessage}` }));
+    }
   };
 }

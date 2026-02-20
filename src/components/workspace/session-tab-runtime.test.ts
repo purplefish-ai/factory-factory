@@ -39,4 +39,16 @@ describe('session-tab-runtime', () => {
     expect(result.label).toBe('Idle');
     expect(result.isRunning).toBe(false);
   });
+
+  it('shows runtime error details when available', () => {
+    const summary = createSummary({
+      runtimePhase: 'error',
+      errorMessage: 'Failed to start agent: spawn failed',
+    });
+
+    const result = deriveSessionTabRuntime(summary);
+
+    expect(result.label).toBe('Error');
+    expect(result.description).toBe('Failed to start agent: spawn failed');
+  });
 });

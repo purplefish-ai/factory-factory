@@ -1,11 +1,20 @@
-import { FileCheck, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, FileCheck, MessageCircleQuestion, ShieldAlert } from 'lucide-react';
 
 interface WorkspaceStatusIconProps {
   pendingRequestType?: 'permission_request' | 'plan_approval' | 'user_question' | null;
   isWorking?: boolean;
+  sessionRuntimeErrorMessage?: string | null;
 }
 
-export function WorkspaceStatusIcon({ pendingRequestType, isWorking }: WorkspaceStatusIconProps) {
+export function WorkspaceStatusIcon({
+  pendingRequestType,
+  isWorking,
+  sessionRuntimeErrorMessage,
+}: WorkspaceStatusIconProps) {
+  if (sessionRuntimeErrorMessage) {
+    return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
+  }
+
   if (pendingRequestType) {
     switch (pendingRequestType) {
       case 'permission_request':

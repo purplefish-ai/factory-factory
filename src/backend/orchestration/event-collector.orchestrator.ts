@@ -189,6 +189,7 @@ export class EventCoalescer {
 
 let activeCoalescer: EventCoalescer | null = null;
 let pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
+let runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
 
 async function refreshWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
@@ -257,6 +258,30 @@ async function refreshWorkspacePendingRequestType(
   }
 }
 
+async function refreshWorkspaceSessionSummariesForSession(
+  coalescer: EventCoalescer,
+  sessionId: string,
+  source: string
+): Promise<void> {
+  try {
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+    const session = await sessionDataService.findAgentSessionById(sessionId);
+    if (!session || activeCoalescer !== coalescer) {
+      return;
+    }
+    await refreshWorkspaceSessionSummaries(coalescer, session.workspaceId, source, {
+      includeWorking: true,
+    });
+  } catch (error) {
+    logger.warn('Failed to refresh workspace session summaries from runtime change', {
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Linear state sync on PR merge
 // ---------------------------------------------------------------------------
@@ -299,6 +324,10 @@ export function configureEventCollector(): void {
   if (pendingRequestChangedHandler) {
     sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
     pendingRequestChangedHandler = null;
+  }
+  if (runtimeChangedHandler) {
+    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
+    runtimeChangedHandler = null;
   }
 
   // 1. Workspace state changes
@@ -386,8 +415,16 @@ export function configureEventCollector(): void {
     void refreshWorkspacePendingRequestType(coalescer, sessionId, 'event:pending_request_changed');
   };
   sessionDomainService.on('pending_request_changed', pendingRequestChangedHandler);
+  runtimeChangedHandler = ({ sessionId }) => {
+    void refreshWorkspaceSessionSummariesForSession(
+      coalescer,
+      sessionId,
+      'event:session_runtime_changed'
+    );
+  };
+  sessionDomainService.on('runtime_changed', runtimeChangedHandler);
 
-  logger.info('Event collector configured with 8 event subscriptions');
+  logger.info('Event collector configured with 9 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------
@@ -402,6 +439,10 @@ export function stopEventCollector(): void {
   if (pendingRequestChangedHandler) {
     sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
     pendingRequestChangedHandler = null;
+  }
+  if (runtimeChangedHandler) {
+    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
+    runtimeChangedHandler = null;
   }
 
   if (activeCoalescer) {

@@ -44,7 +44,7 @@ describe('createStartHandler', () => {
       } as never,
     });
 
-    expect(mocks.markError).toHaveBeenCalledWith('session-1');
+    expect(mocks.markError).toHaveBeenCalledWith('session-1', 'Session not found');
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({ type: 'error', message: 'Session not found' })
     );

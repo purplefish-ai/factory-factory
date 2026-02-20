@@ -11,6 +11,7 @@ export class SessionRuntimeMachine {
     store: SessionStore,
     updates: Pick<SessionRuntimeState, 'phase' | 'processState' | 'activity'> & {
       lastExit?: SessionRuntimeState['lastExit'];
+      errorMessage?: SessionRuntimeState['errorMessage'];
       updatedAt?: string;
     },
     options?: { emitDelta?: boolean; replace?: boolean }
@@ -21,6 +22,7 @@ export class SessionRuntimeMachine {
         processState: updates.processState,
         activity: updates.activity,
         ...(Object.hasOwn(updates, 'lastExit') ? { lastExit: updates.lastExit } : {}),
+        ...(Object.hasOwn(updates, 'errorMessage') ? { errorMessage: updates.errorMessage } : {}),
         updatedAt: updates.updatedAt ?? this.nowIso(),
       };
 
@@ -31,13 +33,19 @@ export class SessionRuntimeMachine {
     }
 
     const hasExplicitLastExit = Object.hasOwn(updates, 'lastExit');
-    const { lastExit: _lastExit, ...runtimeWithoutLastExit } = store.runtime;
+    const hasExplicitErrorMessage = Object.hasOwn(updates, 'errorMessage');
+    const {
+      lastExit: _lastExit,
+      errorMessage: _errorMessage,
+      ...runtimeWithoutTransientFields
+    } = store.runtime;
     store.runtime = {
-      ...runtimeWithoutLastExit,
+      ...runtimeWithoutTransientFields,
       phase: updates.phase,
       processState: updates.processState,
       activity: updates.activity,
       ...(hasExplicitLastExit ? { lastExit: updates.lastExit } : {}),
+      ...(hasExplicitErrorMessage ? { errorMessage: updates.errorMessage } : {}),
       updatedAt: updates.updatedAt ?? this.nowIso(),
     };
 

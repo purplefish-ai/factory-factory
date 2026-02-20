@@ -1206,12 +1206,23 @@ describe('SessionService', () => {
       'spawn failed'
     );
 
-    expect(setRuntimeSnapshotSpy).toHaveBeenCalledWith(
+    expect(setRuntimeSnapshotSpy).toHaveBeenNthCalledWith(
+      1,
       'session-1',
       expect.objectContaining({
         phase: 'starting',
         processState: 'alive',
         activity: 'IDLE',
+      })
+    );
+    expect(setRuntimeSnapshotSpy).toHaveBeenNthCalledWith(
+      2,
+      'session-1',
+      expect.objectContaining({
+        phase: 'error',
+        processState: 'stopped',
+        activity: 'IDLE',
+        errorMessage: 'Failed to start agent: spawn failed',
       })
     );
   });

@@ -144,7 +144,10 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
     await chatMessageHandlerService.tryDispatchNextMessage('s1');
 
-    expect(mockSessionDomainService.markError).toHaveBeenCalledWith('s1');
+    expect(mockSessionDomainService.markError).toHaveBeenCalledWith(
+      's1',
+      'Failed to start agent: client creator not configured'
+    );
     // Message was never dequeued — stays in queue
     expect(mockSessionDomainService.dequeueNext).not.toHaveBeenCalled();
   });
