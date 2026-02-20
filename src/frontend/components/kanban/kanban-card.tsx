@@ -107,19 +107,24 @@ function CiRow({
 }
 
 function CardArchiveButton({
-  workspaceId,
+  workspace,
   isPending,
   onArchive,
 }: {
-  workspaceId: string;
+  workspace: WorkspaceWithKanban;
   isPending: boolean;
   onArchive: (workspaceId: string, commitUncommitted: boolean) => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const requiresConfirmation = workspace.kanbanColumn !== 'DONE';
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!requiresConfirmation) {
+      onArchive(workspace.id, true);
+      return;
+    }
     setDialogOpen(true);
   };
 
@@ -130,7 +135,7 @@ function CardArchiveButton({
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive shrink-0"
+            className="h-6 w-6 hover:bg-destructive/10 hover:text-destructive shrink-0"
             onClick={handleClick}
             disabled={isPending}
           >
@@ -143,12 +148,14 @@ function CardArchiveButton({
         </TooltipTrigger>
         <TooltipContent>Archive workspace</TooltipContent>
       </Tooltip>
-      <ArchiveWorkspaceDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        hasUncommitted={false}
-        onConfirm={(commitUncommitted) => onArchive(workspaceId, commitUncommitted)}
-      />
+      {requiresConfirmation && (
+        <ArchiveWorkspaceDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          hasUncommitted={false}
+          onConfirm={(commitUncommitted) => onArchive(workspace.id, commitUncommitted)}
+        />
+      )}
     </>
   );
 }
@@ -196,7 +203,7 @@ function CardTitleIcons({
       <CardStatusIndicator status={workspace.status} errorMessage={workspace.initErrorMessage} />
       {!isArchived && onArchive && (
         <CardArchiveButton
-          workspaceId={workspace.id}
+          workspace={workspace}
           isPending={isArchivePending}
           onArchive={onArchive}
         />
