@@ -1,7 +1,6 @@
 import {
   AppWindow,
   Archive,
-  ArrowLeft,
   CheckCircle2,
   CircleDot,
   Github,
@@ -14,7 +13,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,6 +53,7 @@ import {
   RunScriptPortBadge,
   useRunScriptLaunch,
   useWorkspacePanel,
+  WorkspacesBackLink,
 } from '@/components/workspace';
 import {
   HeaderLeftExtraSlot,
@@ -837,12 +837,6 @@ export function WorkspaceDetailHeaderSlot({
   return (
     <>
       <HeaderLeftExtraSlot>
-        <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
-          <Link to={`/projects/${slug}/workspaces`}>
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Workspaces</span>
-          </Link>
-        </Button>
         <div className="hidden md:flex items-center gap-2 min-w-0">
           <WorkspacePrAction
             workspace={workspace}
@@ -855,6 +849,7 @@ export function WorkspaceDetailHeaderSlot({
           <WorkspaceCiStatus workspace={workspace} />
           <RunScriptPortBadge workspaceId={workspaceId} />
         </div>
+        <WorkspacesBackLink projectSlug={slug} />
       </HeaderLeftExtraSlot>
       <HeaderRightSlot>
         <div

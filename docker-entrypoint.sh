@@ -71,7 +71,8 @@ if [ "${ENABLE_TUNNEL:-true}" = "true" ]; then
     echo "========================================"
     echo ""
     # Write tunnel URL to file (bind-mounted to host via docker-compose)
-    echo "$TUNNEL_URL" > /app/tunnel-url
+    mkdir -p /app/tunnel-info
+    echo "$TUNNEL_URL" > /app/tunnel-info/url
   else
     echo "Warning: Could not detect tunnel URL. Check cloudflared logs above."
   fi

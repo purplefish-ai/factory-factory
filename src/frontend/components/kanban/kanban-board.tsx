@@ -80,7 +80,8 @@ export function KanbanBoard() {
     }
   };
 
-  // Group workspaces by kanban column (only the 3 database columns)
+  // Group workspaces by kanban column (only the 3 database columns),
+  // sorted by createdAt descending (newest first) within each column.
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
     const grouped: WorkspacesByColumn = {
       WORKING: [],
@@ -95,6 +96,12 @@ export function KanbanBoard() {
           grouped[column].push(workspace);
         }
       }
+    }
+
+    const byNewest = (a: WorkspaceWithKanban, b: WorkspaceWithKanban) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    for (const col of Object.values(grouped)) {
+      col.sort(byNewest);
     }
 
     return grouped;

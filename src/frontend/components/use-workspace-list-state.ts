@@ -37,6 +37,8 @@ export interface ServerWorkspace {
   stateComputedAt?: string | null;
   sidebarStatus?: WorkspaceSidebarStatus;
   pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
+  githubIssueNumber?: number | null;
+  linearIssueId?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {
