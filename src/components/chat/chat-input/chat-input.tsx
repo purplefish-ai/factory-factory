@@ -25,7 +25,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { ChatSettings, CommandInfo, MessageAttachment, TokenStats } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
-import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import {
+  type ChatBarCapabilities,
+  hasResolvedChatBarCapabilities,
+} from '@/shared/chat-capabilities';
 
 import { AcpConfigSelector } from './components/acp-config-selector';
 import { ModelSelector } from './components/model-selector';
@@ -198,7 +201,7 @@ function deriveLeftControlsVisibility(
     capabilities?.reasoning.selected ??
     capabilities?.reasoning.options[0]?.value ??
     '';
-  const provider = capabilities?.provider ?? null;
+  const provider = hasResolvedChatBarCapabilities(capabilities) ? capabilities.provider : null;
 
   return {
     provider,

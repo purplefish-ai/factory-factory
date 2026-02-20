@@ -13,6 +13,8 @@ class UserSettingsQueryService {
     notificationSoundPath?: string | null;
     ratchetEnabled?: boolean;
     defaultSessionProvider?: 'CLAUDE' | 'CODEX';
+    defaultWorkspacePermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
+    ratchetPermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
   }): Promise<UserSettings> {
     return userSettingsAccessor.update(data);
   }

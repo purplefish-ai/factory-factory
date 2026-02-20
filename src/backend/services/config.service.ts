@@ -92,6 +92,7 @@ interface SystemConfig {
   // Directory paths
   baseDir: string;
   worktreeBaseDir: string;
+  reposDir: string;
   debugLogDir: string;
   wsLogsPath: string;
   frontendStaticPath?: string;
@@ -266,6 +267,7 @@ function loadSystemConfig(): SystemConfig {
     // Directory paths
     baseDir,
     worktreeBaseDir,
+    reposDir: env.REPOS_DIR ? expandEnvVars(env.REPOS_DIR) : join(baseDir, 'repos'),
     debugLogDir: join(baseDir, 'debug'),
     wsLogsPath: env.WS_LOGS_PATH ?? join(process.cwd(), '.context', 'ws-logs'),
     frontendStaticPath: env.FRONTEND_STATIC_PATH,
@@ -418,6 +420,13 @@ class ConfigService {
    */
   getWorktreeBaseDir(): string {
     return this.config.worktreeBaseDir;
+  }
+
+  /**
+   * Get repos directory for cloned GitHub repositories
+   */
+  getReposDir(): string {
+    return this.config.reposDir;
   }
 
   /**

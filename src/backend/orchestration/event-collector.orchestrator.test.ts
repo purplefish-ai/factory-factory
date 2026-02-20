@@ -34,7 +34,10 @@ vi.mock('@/backend/domains/workspace', () => ({
 
 vi.mock('@/backend/domains/github', () => ({
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
-  prSnapshotService: { on: vi.fn() },
+  prSnapshotService: {
+    on: vi.fn(),
+    refreshWorkspace: vi.fn().mockResolvedValue({ success: false, reason: 'no_pr_url' }),
+  },
 }));
 
 vi.mock('@/backend/domains/ratchet', () => ({
@@ -277,6 +280,21 @@ describe('EventCoalescer', () => {
     expect(mockStore.upsert).not.toHaveBeenCalled();
     expect(coalescer.pendingCount).toBe(0);
   });
+
+  it('flushes immediately when enqueue is called with immediate option', () => {
+    const coalescer = new EventCoalescer(mockStore, 150);
+
+    coalescer.enqueue('ws-1', { isWorking: true }, 'event:workspace_active', {
+      immediate: true,
+    });
+
+    expect(mockStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { isWorking: true },
+      'event:workspace_active'
+    );
+    expect(coalescer.pendingCount).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -395,7 +413,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 8 event listeners on domain singletons', () => {
+  it('registers 9 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -430,14 +448,15 @@ describe('configureEventCollector', () => {
       expect.any(Function)
     );
 
-    // sessionDomainService: 1 listener (pending_request_changed)
+    // sessionDomainService: 2 listeners (pending_request_changed, runtime_changed)
     expect(sessionDomainService.on).toHaveBeenCalledWith(
       'pending_request_changed',
       expect.any(Function)
     );
+    expect(sessionDomainService.on).toHaveBeenCalledWith('runtime_changed', expect.any(Function));
   });
 
-  it('removes pending_request_changed listener on stop', () => {
+  it('removes sessionDomain listeners on stop', () => {
     configureEventCollector();
 
     stopEventCollector();
@@ -446,6 +465,7 @@ describe('configureEventCollector', () => {
       'pending_request_changed',
       expect.any(Function)
     );
+    expect(sessionDomainService.off).toHaveBeenCalledWith('runtime_changed', expect.any(Function));
   });
 
   it('ARCHIVED workspace event calls store.remove() immediately', () => {
@@ -521,8 +541,6 @@ describe('configureEventCollector', () => {
       prReviewState: null,
     });
 
-    vi.advanceTimersByTime(150);
-
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       {
@@ -543,11 +561,19 @@ describe('configureEventCollector', () => {
 
     // Trigger an event
     const onCall = vi
-      .mocked(workspaceActivityService.on)
-      .mock.calls.find((call) => call[0] === 'workspace_active');
-    const handler = onCall![1] as (event: { workspaceId: string }) => void;
+      .mocked(workspaceStateMachine.on)
+      .mock.calls.find((call) => call[0] === 'workspace_state_changed');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      fromStatus: string;
+      toStatus: string;
+    }) => void;
 
-    handler({ workspaceId: 'ws-1' });
+    handler({
+      workspaceId: 'ws-1',
+      fromStatus: 'NEW',
+      toStatus: 'READY',
+    });
 
     // Not flushed yet
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
@@ -558,12 +584,15 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
-      { isWorking: true },
-      'event:workspace_active'
+      { status: 'READY' },
+      'event:workspace_state_changed'
     );
   });
 
-  it('workspace_active only enqueues isWorking and does not refresh session summaries', () => {
+  it('workspace_active enqueues immediate working state and does not refresh session summaries', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     configureEventCollector();
 
     const onCall = vi
@@ -573,10 +602,18 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-1' });
 
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { isWorking: true, hasHadSessions: true },
+      'event:workspace_active'
+    );
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
-  it('workspace_idle only enqueues isWorking and does not refresh session summaries', () => {
+  it('workspace_idle enqueues immediate idle state and triggers throttled PR refresh', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
     configureEventCollector();
 
     const onCall = vi
@@ -586,6 +623,12 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-1' });
 
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { isWorking: false, hasHadSessions: true },
+      'event:workspace_idle'
+    );
+    expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws-1');
     expect(sessionDataService.findAgentSessionsByWorkspaceId).not.toHaveBeenCalled();
   });
 
@@ -645,6 +688,7 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
       'ws-1',
       expect.objectContaining({
+        hasHadSessions: true,
         sessionSummaries: expect.arrayContaining([
           expect.objectContaining({
             sessionId: 's-1',
@@ -652,6 +696,51 @@ describe('configureEventCollector', () => {
         ]),
       }),
       expect.stringContaining('event:session_activity_changed')
+    );
+  });
+
+  it('runtime_changed refreshes session summaries for the session workspace', async () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    vi.mocked(sessionDataService.findAgentSessionById).mockResolvedValue({
+      id: 's-1',
+      workspaceId: 'ws-1',
+    } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionById>>);
+    vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+      {
+        id: 's-1',
+        name: 'Chat 1',
+        workflow: 'followup',
+        model: 'claude-sonnet',
+        status: 'IDLE',
+      } as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>[number],
+    ]);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(sessionDomainService.on)
+      .mock.calls.find((call) => call[0] === 'runtime_changed');
+    const handler = onCall![1] as (event: { sessionId: string }) => void;
+
+    handler({ sessionId: 's-1' });
+    await Promise.resolve();
+    await Promise.resolve();
+    vi.advanceTimersByTime(150);
+
+    expect(sessionDataService.findAgentSessionById).toHaveBeenCalledWith('s-1');
+    expect(sessionDataService.findAgentSessionsByWorkspaceId).toHaveBeenCalledWith('ws-1');
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      expect.objectContaining({
+        sessionSummaries: expect.arrayContaining([
+          expect.objectContaining({
+            sessionId: 's-1',
+          }),
+        ]),
+      }),
+      expect.stringContaining('event:session_runtime_changed')
     );
   });
 

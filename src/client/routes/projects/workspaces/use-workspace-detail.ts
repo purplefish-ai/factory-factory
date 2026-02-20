@@ -159,6 +159,9 @@ export function useSessionManagement({
       // With staleTime: 0, invalidate will trigger an immediate refetch
       utils.session.listSessions.invalidate({ workspaceId });
     },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to create session');
+    },
   });
   const startSession = trpc.session.startSession.useMutation();
 

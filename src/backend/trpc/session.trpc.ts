@@ -6,6 +6,7 @@ import {
   sessionDomainService,
   sessionProviderResolverService,
 } from '@/backend/domains/session';
+import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { SessionStatus } from '@/shared/core';
 import { publicProcedure, router } from './trpc';
@@ -93,6 +94,16 @@ export const sessionRouter = router({
         workspaceId: input.workspaceId,
         explicitProvider: input.provider,
       });
+
+      const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
+      const providerUnavailableMessage = getProviderUnavailableMessage(provider, cliHealth);
+      if (providerUnavailableMessage) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: providerUnavailableMessage,
+        });
+      }
+
       const session = await sessionDataService.createAgentSession({
         workspaceId: input.workspaceId,
         name: input.name,

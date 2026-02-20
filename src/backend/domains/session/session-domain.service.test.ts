@@ -216,3 +216,155 @@ describe('SessionDomainService', () => {
     );
   });
 });
+
+describe('SessionDomainService additional behavior', () => {
+  const queuedMessage = (id: string, text: string, timestamp = '2026-02-14T00:00:00.000Z') => ({
+    id,
+    text,
+    timestamp,
+    settings: {
+      selectedModel: null,
+      reasoningEffort: null,
+      thinkingEnabled: false,
+      planModeEnabled: false,
+    },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionDomainService.clearAllSessions();
+  });
+
+  it('stores and consumes initial messages once', () => {
+    sessionDomainService.storeInitialMessage('s1', 'hello');
+
+    expect(sessionDomainService.consumeInitialMessage('s1')).toBe('hello');
+    expect(sessionDomainService.consumeInitialMessage('s1')).toBeNull();
+  });
+
+  it('supports queue operations and manual snapshots', () => {
+    sessionDomainService.enqueue('s1', queuedMessage('q1', 'first'));
+    sessionDomainService.enqueue('s1', queuedMessage('q2', 'second'));
+
+    expect(sessionDomainService.getQueueLength('s1')).toBe(2);
+    expect(sessionDomainService.peekNextMessage('s1')).toMatchObject({ id: 'q1' });
+
+    const dequeued = sessionDomainService.dequeueNext('s1');
+    expect(dequeued).toMatchObject({ id: 'q1' });
+
+    sessionDomainService.requeueFront('s1', queuedMessage('q3', 'third'));
+    expect(sessionDomainService.peekNextMessage('s1')).toMatchObject({ id: 'q3' });
+
+    expect(sessionDomainService.removeQueuedMessage('s1', 'q2')).toBe(true);
+    expect(sessionDomainService.removeQueuedMessage('s1', 'missing')).toBe(false);
+
+    sessionDomainService.emitSessionSnapshot('s1', 'load-2');
+    expect(mockedConnectionService.forwardToSession).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        type: 'session_snapshot',
+        loadRequestId: 'load-2',
+      })
+    );
+
+    sessionDomainService.clearQueuedWork('s1');
+    expect(sessionDomainService.getQueueLength('s1')).toBe(0);
+  });
+
+  it('tracks and clears pending interactive requests with event emission', () => {
+    const listener = vi.fn();
+    sessionDomainService.on('pending_request_changed', listener);
+
+    sessionDomainService.setPendingInteractiveRequest('s1', {
+      requestId: 'r1',
+      toolName: 'AskUserQuestion',
+      toolUseId: 'tu1',
+      input: { question: 'continue?' },
+      planContent: null,
+      timestamp: '2026-02-14T00:00:00.000Z',
+    });
+    expect(sessionDomainService.getPendingInteractiveRequest('s1')).toMatchObject({
+      requestId: 'r1',
+    });
+
+    sessionDomainService.clearPendingInteractiveRequestIfMatches('s1', 'wrong-id');
+    expect(sessionDomainService.getPendingInteractiveRequest('s1')).toMatchObject({
+      requestId: 'r1',
+    });
+
+    sessionDomainService.clearPendingInteractiveRequestIfMatches('s1', 'r1');
+    expect(sessionDomainService.getPendingInteractiveRequest('s1')).toBeNull();
+
+    sessionDomainService.setPendingInteractiveRequest('s1', {
+      requestId: 'r2',
+      toolName: 'ExitPlanMode',
+      toolUseId: 'tu2',
+      input: { plan: 'abc' },
+      planContent: 'abc',
+      timestamp: '2026-02-14T00:00:01.000Z',
+    });
+    sessionDomainService.clearPendingInteractiveRequest('s1');
+
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 's1', hasPending: true })
+    );
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 's1', hasPending: false })
+    );
+  });
+
+  it('updates runtime state transitions and transcript hydration markers', () => {
+    sessionDomainService.markStarting('s1');
+    expect(sessionDomainService.getRuntimeSnapshot('s1')).toMatchObject({
+      phase: 'starting',
+      processState: 'alive',
+      activity: 'IDLE',
+    });
+
+    sessionDomainService.markRunning('s1');
+    sessionDomainService.markIdle('s1', 'alive');
+    sessionDomainService.markStopping('s1');
+    sessionDomainService.markError('s1');
+    expect(sessionDomainService.getRuntimeSnapshot('s1').phase).toBe('error');
+
+    expect(sessionDomainService.isHistoryHydrated('s1')).toBe(false);
+    sessionDomainService.markHistoryHydrated('s1', 'jsonl');
+    expect(sessionDomainService.isHistoryHydrated('s1')).toBe(true);
+
+    sessionDomainService.replaceTranscript(
+      's1',
+      [
+        {
+          id: 'm2',
+          source: 'user',
+          text: 'second',
+          timestamp: '2026-02-14T00:00:02.000Z',
+          order: 2,
+        },
+        {
+          id: 'm1',
+          source: 'user',
+          text: 'first',
+          timestamp: '2026-02-14T00:00:01.000Z',
+          order: 1,
+        },
+      ] as never,
+      { historySource: 'acp_fallback' }
+    );
+
+    expect(sessionDomainService.getTranscriptSnapshot('s1').map((m) => m.id)).toEqual(['m1', 'm2']);
+
+    const order = sessionDomainService.allocateOrder('s1');
+    sessionDomainService.upsertClaudeEvent(
+      's1',
+      {
+        type: 'assistant_message',
+        text: 'agent message',
+        timestamp: '2026-02-14T00:00:03.000Z',
+      } as never,
+      order
+    );
+
+    expect(sessionDomainService.getTranscriptSnapshot('s1').length).toBe(3);
+  });
+});

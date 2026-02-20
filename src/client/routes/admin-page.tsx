@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -27,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { RatchetWrenchIcon } from '@/components/workspace';
+import { RatchetWrenchIcon, WorkspacesBackLink } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/frontend/components/app-header-context';
 import { Loading } from '@/frontend/components/loading';
@@ -128,9 +127,9 @@ function ProjectFactoryConfigCard({
         error={saveConfig.error}
       />
       <div className="border-b bg-muted/50 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-sm">{projectName}</h3>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h3 className="min-w-0 truncate font-semibold text-sm">{projectName}</h3>
             {factoryConfig ? (
               <Badge variant="default" className="bg-green-600 hover:bg-green-700">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -156,7 +155,7 @@ function ProjectFactoryConfigCard({
             size="sm"
             onClick={handleRefresh}
             disabled={refreshConfigs.isPending}
-            className="gap-2"
+            className="w-full gap-2 sm:w-auto"
           >
             <RefreshCw className={`w-4 h-4 ${refreshConfigs.isPending ? 'animate-spin' : ''}`} />
             Refresh Workspaces
@@ -423,6 +422,7 @@ function ChatProviderDefaultsSection() {
   }
 
   const currentProvider = settings?.defaultSessionProvider ?? 'CLAUDE';
+  const currentWorkspacePermissions = settings?.defaultWorkspacePermissions ?? 'STRICT';
 
   return (
     <Card>
@@ -432,7 +432,7 @@ function ChatProviderDefaultsSection() {
           Default provider used when a workspace defers provider selection
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-3">
         <Label htmlFor="chat-default-provider">Default chat provider</Label>
         <Select
           value={currentProvider}
@@ -452,6 +452,27 @@ function ChatProviderDefaultsSection() {
           </SelectContent>
         </Select>
         <ProviderCliWarning provider={currentProvider} />
+        <div className="space-y-2 pt-1">
+          <Label htmlFor="workspace-permissions">Default permissions for new workspaces</Label>
+          <Select
+            value={currentWorkspacePermissions}
+            onValueChange={(value) => {
+              if (value === 'STRICT' || value === 'RELAXED' || value === 'YOLO') {
+                updateSettings.mutate({ defaultWorkspacePermissions: value });
+              }
+            }}
+            disabled={updateSettings.isPending}
+          >
+            <SelectTrigger id="workspace-permissions">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="STRICT">Strict</SelectItem>
+              <SelectItem value="RELAXED">Relaxed</SelectItem>
+              <SelectItem value="YOLO">YOLO</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardContent>
     </Card>
   );
@@ -560,6 +581,8 @@ function RatchetSettingsSection() {
     );
   }
 
+  const currentRatchetPermissions = settings?.ratchetPermissions ?? 'YOLO';
+
   return (
     <Card>
       <CardHeader>
@@ -598,6 +621,31 @@ function RatchetSettingsSection() {
             }}
             disabled={updateSettings.isPending}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ratchet-permissions">Ratchet permission defaults</Label>
+          <Select
+            value={currentRatchetPermissions}
+            onValueChange={(value) => {
+              if (value === 'STRICT' || value === 'RELAXED' || value === 'YOLO') {
+                updateSettings.mutate({ ratchetPermissions: value });
+              }
+            }}
+            disabled={updateSettings.isPending}
+          >
+            <SelectTrigger id="ratchet-permissions">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="STRICT">Strict</SelectItem>
+              <SelectItem value="RELAXED">Relaxed</SelectItem>
+              <SelectItem value="YOLO">YOLO</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Controls the default execution mode used when Ratchet starts a fixer session.
+          </p>
         </div>
 
         {/* Manual trigger button */}
@@ -726,7 +774,7 @@ function ServerLogsSection() {
 }
 
 export default function AdminDashboardPage() {
-  useAppHeader({ title: 'Admin Dashboard' });
+  useAppHeader({ title: 'Settings' });
 
   const {
     data: stats,
@@ -756,20 +804,14 @@ export default function AdminDashboardPage() {
 
   // Show full loading only when stats are loading (first load)
   if (isLoadingStats) {
-    return <Loading message="Loading admin dashboard..." />;
+    return <Loading message="Loading settings..." />;
   }
 
   return (
     <div className="h-full overflow-y-auto">
       {projectSlug && (
         <HeaderLeftExtraSlot>
-          <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
-            <Link to={`/projects/${projectSlug}/workspaces`}>
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Back to Workspaces Board</span>
-              <span className="sm:hidden">Board</span>
-            </Link>
-          </Button>
+          <WorkspacesBackLink projectSlug={projectSlug} />
         </HeaderLeftExtraSlot>
       )}
       <div className="space-y-6 p-3 md:p-6">

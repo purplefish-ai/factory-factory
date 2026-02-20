@@ -1,5 +1,7 @@
 import { CIStatus, PRState, RatchetState } from '@/shared/core';
 
+const CI_UNKNOWN_GRACE_MS = 90_000;
+
 export type WorkspaceFlowPhase =
   | 'NO_PR'
   | 'CI_WAIT'
@@ -68,7 +70,16 @@ function deriveWorkspaceCiObservation(input: WorkspaceFlowStateInput): Workspace
     return 'CHECKS_PASSED';
   }
   if (input.prCiStatus === CIStatus.UNKNOWN) {
-    return input.prUpdatedAt ? 'NO_CHECKS' : 'NOT_FETCHED';
+    if (!input.prUpdatedAt) {
+      return 'NOT_FETCHED';
+    }
+
+    const unknownAgeMs = Date.now() - input.prUpdatedAt.getTime();
+    if (unknownAgeMs < CI_UNKNOWN_GRACE_MS) {
+      return 'CHECKS_PENDING';
+    }
+
+    return 'NO_CHECKS';
   }
   return 'CHECKS_UNKNOWN';
 }

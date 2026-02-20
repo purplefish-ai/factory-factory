@@ -28,6 +28,10 @@ vi.mock('@/backend/domains/terminal', () => ({
 }));
 
 vi.mock('@/backend/domains/workspace', () => ({
+  workspaceArchiveTrackerService: {
+    markArchiving: vi.fn(),
+    clearArchiving: vi.fn(),
+  },
   workspaceStateMachine: {
     isValidTransition: vi.fn(),
     archive: vi.fn(),
@@ -50,7 +54,11 @@ import { githubCLIService } from '@/backend/domains/github';
 import { runScriptService } from '@/backend/domains/run-script';
 import { sessionService } from '@/backend/domains/session';
 import { terminalService } from '@/backend/domains/terminal';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
+import {
+  workspaceArchiveTrackerService,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/domains/workspace';
 import { archiveWorkspace } from './workspace-archive.orchestrator';
 
 function makeWorkspace(overrides: Partial<WorkspaceWithProject> = {}): WorkspaceWithProject {
@@ -78,6 +86,8 @@ describe('archiveWorkspace', () => {
     vi.mocked(workspaceStateMachine.archive).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'ARCHIVED' })
     );
+    vi.mocked(workspaceArchiveTrackerService.markArchiving).mockReturnValue(undefined);
+    vi.mocked(workspaceArchiveTrackerService.clearArchiving).mockReturnValue(undefined);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
     vi.mocked(runScriptService.stopRunScript).mockResolvedValue(
@@ -115,6 +125,14 @@ describe('archiveWorkspace', () => {
   });
 
   describe('happy path', () => {
+    it('marks workspace as archiving during archive and clears it when finished', async () => {
+      const workspace = makeWorkspace();
+      await archiveWorkspace(workspace, defaultOptions);
+
+      expect(workspaceArchiveTrackerService.markArchiving).toHaveBeenCalledWith('ws-1');
+      expect(workspaceArchiveTrackerService.clearArchiving).toHaveBeenCalledWith('ws-1');
+    });
+
     it('stops sessions, run scripts, and terminals then cleans up worktree', async () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, defaultOptions);
@@ -227,6 +245,16 @@ describe('archiveWorkspace', () => {
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(workspaceStateMachine.archive).not.toHaveBeenCalled();
+    });
+
+    it('clears archiving marker when archive fails', async () => {
+      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
+        new Error('cleanup failed')
+      );
+      const workspace = makeWorkspace();
+
+      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
+      expect(workspaceArchiveTrackerService.clearArchiving).toHaveBeenCalledWith('ws-1');
     });
   });
 

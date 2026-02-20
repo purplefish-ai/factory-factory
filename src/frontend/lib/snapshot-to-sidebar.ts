@@ -45,6 +45,7 @@ const WorkspaceSessionSummarySchema = z.object({
   activity: z.enum(['WORKING', 'IDLE']),
   updatedAt: z.string(),
   lastExit: SessionRuntimeLastExitSchema.nullable(),
+  errorMessage: z.string().nullable().optional(),
 });
 export type WorkspaceSessionSummary = z.infer<typeof WorkspaceSessionSummarySchema>;
 
@@ -147,7 +148,10 @@ export type SnapshotServerMessage = z.infer<typeof SnapshotServerMessageSchema>;
  * fields (version, projectId, status, prUpdatedAt, hasHadSessions, source,
  * fieldTimestamps).
  */
-export function mapSnapshotEntryToServerWorkspace(entry: WorkspaceSnapshotEntry): ServerWorkspace {
+export function mapSnapshotEntryToServerWorkspace(
+  entry: WorkspaceSnapshotEntry,
+  existing?: Record<string, unknown>
+): ServerWorkspace {
   return {
     id: entry.workspaceId,
     name: entry.name,
@@ -171,5 +175,8 @@ export function mapSnapshotEntryToServerWorkspace(entry: WorkspaceSnapshotEntry)
     pendingRequestType: entry.pendingRequestType,
     cachedKanbanColumn: entry.kanbanColumn,
     stateComputedAt: entry.computedAt,
+    // Preserved from cache (not in snapshot data)
+    githubIssueNumber: (existing?.githubIssueNumber as number | null) ?? null,
+    linearIssueId: (existing?.linearIssueId as string | null) ?? null,
   };
 }

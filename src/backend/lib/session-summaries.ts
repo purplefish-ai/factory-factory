@@ -29,6 +29,7 @@ export function buildWorkspaceSessionSummaries(
       activity: runtime.activity,
       updatedAt: runtime.updatedAt,
       lastExit: runtime.lastExit ?? null,
+      errorMessage: runtime.errorMessage ?? null,
     };
   });
 }

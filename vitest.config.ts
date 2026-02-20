@@ -11,7 +11,17 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html'],
       include: ['src/backend/**/*.ts'],
-      exclude: ['src/backend/**/*.test.ts', 'src/backend/index.ts', 'src/backend/testing/**'],
+      exclude: [
+        'src/backend/**/*.test.ts',
+        'src/backend/index.ts',
+        'src/backend/testing/**',
+        // Keep coverage focused on behavior-bearing modules.
+        'src/backend/**/index.ts',
+        'src/backend/**/types.ts',
+        'src/backend/**/*.types.ts',
+        'src/backend/**/bridges.ts',
+        'src/backend/**/constants.ts',
+      ],
       // Thresholds disabled for now since unit tests use mocks
       // Enable as integration tests are added and coverage grows
     },

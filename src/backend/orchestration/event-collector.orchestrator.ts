@@ -73,6 +73,10 @@ interface PendingUpdate {
   timer: NodeJS.Timeout;
 }
 
+interface EnqueueOptions {
+  immediate?: boolean;
+}
+
 interface PendingRequestChangedEvent {
   sessionId: string;
   requestId: string;
@@ -90,6 +94,7 @@ const logger = createLogger('event-collector');
 // ---------------------------------------------------------------------------
 
 const DEFAULT_WINDOW_MS = 150;
+const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
 
 /**
  * Per-workspace coalescing buffer that accumulates SnapshotUpdateInput fields
@@ -108,7 +113,12 @@ export class EventCoalescer {
   /**
    * Accumulate fields for a workspace. Resets the debounce timer on each call.
    */
-  enqueue(workspaceId: string, fields: SnapshotUpdateInput, source: string): void {
+  enqueue(
+    workspaceId: string,
+    fields: SnapshotUpdateInput,
+    source: string,
+    options?: EnqueueOptions
+  ): void {
     let pending = this.pending.get(workspaceId);
 
     if (pending) {
@@ -122,6 +132,11 @@ export class EventCoalescer {
         timer: null as unknown as NodeJS.Timeout,
       };
       this.pending.set(workspaceId, pending);
+    }
+
+    if (options?.immediate) {
+      this.flush(workspaceId);
+      return;
     }
 
     pending.timer = setTimeout(() => this.flush(workspaceId), this.windowMs);
@@ -189,6 +204,7 @@ export class EventCoalescer {
 
 let activeCoalescer: EventCoalescer | null = null;
 let pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
+let runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
 
 async function refreshWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
@@ -211,6 +227,7 @@ async function refreshWorkspaceSessionSummaries(
       workspaceId,
       {
         sessionSummaries,
+        ...(sessionSummaries.length > 0 ? { hasHadSessions: true } : {}),
         ...(options?.includeWorking
           ? { isWorking: hasWorkingSessionSummary(sessionSummaries) }
           : {}),
@@ -257,6 +274,30 @@ async function refreshWorkspacePendingRequestType(
   }
 }
 
+async function refreshWorkspaceSessionSummariesForSession(
+  coalescer: EventCoalescer,
+  sessionId: string,
+  source: string
+): Promise<void> {
+  try {
+    if (activeCoalescer !== coalescer) {
+      return;
+    }
+    const session = await sessionDataService.findAgentSessionById(sessionId);
+    if (!session || activeCoalescer !== coalescer) {
+      return;
+    }
+    await refreshWorkspaceSessionSummaries(coalescer, session.workspaceId, source, {
+      includeWorking: true,
+    });
+  } catch (error) {
+    logger.warn('Failed to refresh workspace session summaries from runtime change', {
+      sessionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Linear state sync on PR merge
 // ---------------------------------------------------------------------------
@@ -294,11 +335,43 @@ async function handleLinearIssueCompletedOnMerge(workspaceId: string): Promise<v
 export function configureEventCollector(): void {
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   activeCoalescer = coalescer;
+  const lastIdlePrRefreshByWorkspace = new Map<string, number>();
+
+  const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
+    const now = Date.now();
+    const lastRefresh = lastIdlePrRefreshByWorkspace.get(workspaceId) ?? 0;
+    if (now - lastRefresh < IDLE_PR_REFRESH_COOLDOWN_MS) {
+      return;
+    }
+    lastIdlePrRefreshByWorkspace.set(workspaceId, now);
+
+    void prSnapshotService
+      .refreshWorkspace(workspaceId)
+      .then((result) => {
+        if (result.success || result.reason === 'no_pr_url') {
+          return;
+        }
+        logger.debug('Idle PR snapshot refresh did not return fresh data', {
+          workspaceId,
+          reason: result.reason,
+        });
+      })
+      .catch((error) => {
+        logger.debug('Idle PR snapshot refresh failed', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+  };
 
   // Guard against duplicate listeners across repeated configure calls.
   if (pendingRequestChangedHandler) {
     sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
     pendingRequestChangedHandler = null;
+  }
+  if (runtimeChangedHandler) {
+    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
+    runtimeChangedHandler = null;
   }
 
   // 1. Workspace state changes
@@ -324,7 +397,9 @@ export function configureEventCollector(): void {
       prCiStatus: event.prCiStatus as CIStatus,
     };
 
-    coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated');
+    coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
+      immediate: true,
+    });
 
     // Transition linked Linear issue to completed when PR is merged
     if (event.prState === 'MERGED') {
@@ -352,12 +427,23 @@ export function configureEventCollector(): void {
 
   // 5. Workspace activity (active)
   workspaceActivityService.on('workspace_active', ({ workspaceId }: { workspaceId: string }) => {
-    coalescer.enqueue(workspaceId, { isWorking: true }, 'event:workspace_active');
+    coalescer.enqueue(
+      workspaceId,
+      { isWorking: true, hasHadSessions: true },
+      'event:workspace_active',
+      { immediate: true }
+    );
   });
 
   // 6. Workspace activity (idle)
   workspaceActivityService.on('workspace_idle', ({ workspaceId }: { workspaceId: string }) => {
-    coalescer.enqueue(workspaceId, { isWorking: false }, 'event:workspace_idle');
+    coalescer.enqueue(
+      workspaceId,
+      { isWorking: false, hasHadSessions: true },
+      'event:workspace_idle',
+      { immediate: true }
+    );
+    refreshPrSnapshotOnIdle(workspaceId);
   });
 
   // 7. Session-level activity changes (running/idle transitions)
@@ -386,8 +472,16 @@ export function configureEventCollector(): void {
     void refreshWorkspacePendingRequestType(coalescer, sessionId, 'event:pending_request_changed');
   };
   sessionDomainService.on('pending_request_changed', pendingRequestChangedHandler);
+  runtimeChangedHandler = ({ sessionId }) => {
+    void refreshWorkspaceSessionSummariesForSession(
+      coalescer,
+      sessionId,
+      'event:session_runtime_changed'
+    );
+  };
+  sessionDomainService.on('runtime_changed', runtimeChangedHandler);
 
-  logger.info('Event collector configured with 8 event subscriptions');
+  logger.info('Event collector configured with 9 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------
@@ -402,6 +496,10 @@ export function stopEventCollector(): void {
   if (pendingRequestChangedHandler) {
     sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
     pendingRequestChangedHandler = null;
+  }
+  if (runtimeChangedHandler) {
+    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
+    runtimeChangedHandler = null;
   }
 
   if (activeCoalescer) {

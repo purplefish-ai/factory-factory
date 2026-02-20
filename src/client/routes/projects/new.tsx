@@ -1,39 +1,78 @@
 import { ArrowLeftIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { DataImportButton } from '@/components/data-import/data-import-button';
+import { GithubUrlForm } from '@/components/project/github-url-form';
 import { ProjectRepoForm, type ProjectRepoFormProps } from '@/components/project/project-repo-form';
+import { SetupTerminalModal } from '@/components/project/setup-terminal-modal';
 import type { ScriptType } from '@/components/project/startup-script-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAppHeader } from '@/frontend/components/app-header-context';
 import { Logo } from '@/frontend/components/logo';
 import { trpc } from '@/frontend/lib/trpc';
+
+type ProjectSource = 'local' | 'github';
+
+function parseGithubUrl(url: string): { owner: string; repo: string } | null {
+  const match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  if (!match) {
+    return null;
+  }
+  return { owner: match[1] as string, repo: match[2] as string };
+}
 
 export default function NewProjectPage() {
   useAppHeader({ title: 'New Project' });
 
   const navigate = useNavigate();
+  const [source, setSource] = useState<ProjectSource>('local');
+
+  // Local path state
   const [repoPath, setRepoPath] = useState('');
   const [error, setError] = useState('');
   const [startupScript, setStartupScript] = useState('');
   const [scriptType, setScriptType] = useState<ScriptType>('command');
   const [debouncedRepoPath, setDebouncedRepoPath] = useState('');
 
+  // GitHub URL state
+  const [githubUrl, setGithubUrl] = useState('');
+  const [githubError, setGithubError] = useState('');
+  const [githubStartupScript, setGithubStartupScript] = useState('');
+  const [githubScriptType, setGithubScriptType] = useState<ScriptType>('command');
+  const [terminalOpen, setTerminalOpen] = useState(false);
+
   const isElectron = Boolean(window.electronAPI?.isElectron);
 
-  // Check for factory-factory.json
+  const parsedRepo = useMemo(() => {
+    const trimmed = githubUrl.trim();
+    if (!trimmed) {
+      return null;
+    }
+    return parseGithubUrl(trimmed);
+  }, [githubUrl]);
+
+  // Check for factory-factory.json (local path)
   const { data: factoryConfig } = trpc.project.checkFactoryConfig.useQuery(
     { repoPath: debouncedRepoPath },
     { enabled: debouncedRepoPath.length > 0 }
   );
+
+  // Check GitHub auth status
+  const {
+    data: authStatus,
+    isLoading: isCheckingAuth,
+    refetch: refetchAuth,
+  } = trpc.project.checkGithubAuth.useQuery(undefined, {
+    enabled: source === 'github',
+  });
 
   // Debounce repo path changes for API calls
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedRepoPath(repoPath);
     }, 500);
-
     return () => clearTimeout(timer);
   }, [repoPath]);
 
@@ -41,18 +80,16 @@ export default function NewProjectPage() {
     if (!window.electronAPI?.showOpenDialog) {
       return;
     }
-
     try {
       const result = await window.electronAPI.showOpenDialog({
         title: 'Select Repository',
         properties: ['openDirectory', 'showHiddenFiles'],
       });
-
       if (!result.canceled && result.filePaths.length > 0) {
         setRepoPath(result.filePaths[0] as string);
       }
     } catch {
-      // Silently handle dialog failure - nothing actionable for user
+      // Silently handle dialog failure
     }
   };
 
@@ -61,25 +98,31 @@ export default function NewProjectPage() {
 
   const utils = trpc.useUtils();
 
+  // Local path creation
   const createProject = trpc.project.create.useMutation({
     onSuccess: (project) => {
       utils.project.list.invalidate();
       void navigate(`/projects/${project.slug}`);
     },
-    onError: (err) => {
-      setError(err.message);
-    },
+    onError: (err) => setError(err.message),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // GitHub URL creation
+  const createFromGithub = trpc.project.createFromGithub.useMutation({
+    onSuccess: (project) => {
+      utils.project.list.invalidate();
+      void navigate(`/projects/${project.slug}`);
+    },
+    onError: (err) => setGithubError(err.message),
+  });
+
+  const handleLocalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     if (!repoPath.trim()) {
       setError('Repository path is required');
       return;
     }
-
     const trimmedScript = startupScript.trim();
     createProject.mutate({
       repoPath,
@@ -88,13 +131,38 @@ export default function NewProjectPage() {
     });
   };
 
+  const handleGithubSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setGithubError('');
+    if (!githubUrl.trim()) {
+      setGithubError('GitHub URL is required');
+      return;
+    }
+    if (!parsedRepo) {
+      setGithubError('Invalid GitHub URL. Expected format: https://github.com/owner/repo');
+      return;
+    }
+    const trimmedScript = githubStartupScript.trim();
+    createFromGithub.mutate({
+      githubUrl: githubUrl.trim(),
+      startupScriptCommand:
+        githubScriptType === 'command' && trimmedScript ? trimmedScript : undefined,
+      startupScriptPath: githubScriptType === 'path' && trimmedScript ? trimmedScript : undefined,
+    });
+  };
+
   const handleImportSuccess = async () => {
-    // Invalidate projects list and wait for refetch before navigating
     await utils.project.list.invalidate();
     await navigate('/projects');
   };
 
-  const sharedFormProps = {
+  const handleTerminalClose = useCallback(() => {
+    setTerminalOpen(false);
+    // Re-check auth after terminal closes
+    refetchAuth();
+  }, [refetchAuth]);
+
+  const localFormProps = {
     error,
     repoPath,
     setRepoPath,
@@ -105,7 +173,7 @@ export default function NewProjectPage() {
     setScriptType,
     startupScript,
     setStartupScript,
-    onSubmit: handleSubmit,
+    onSubmit: handleLocalSubmit,
     isSubmitting: createProject.isPending,
     submitLabel: 'Add Project',
     submittingLabel: 'Adding...',
@@ -113,6 +181,48 @@ export default function NewProjectPage() {
     ProjectRepoFormProps,
     'helperText' | 'idPrefix' | 'footerActions' | 'submitFullWidth'
   >;
+
+  const githubFormProps = {
+    error: githubError,
+    githubUrl,
+    setGithubUrl,
+    parsedRepo,
+    authStatus,
+    isCheckingAuth,
+    onOpenTerminal: () => setTerminalOpen(true),
+    scriptType: githubScriptType,
+    setScriptType: setGithubScriptType,
+    startupScript: githubStartupScript,
+    setStartupScript: setGithubStartupScript,
+    onSubmit: handleGithubSubmit,
+    isSubmitting: createFromGithub.isPending,
+    submitLabel: 'Clone & Add Project',
+    submittingLabel: 'Cloning...',
+  };
+
+  const sourceSelector = (
+    <Tabs value={source} onValueChange={(v) => setSource(v as ProjectSource)}>
+      <TabsList className="w-full">
+        <TabsTrigger value="local" className="flex-1">
+          Local Path
+        </TabsTrigger>
+        <TabsTrigger value="github" className="flex-1">
+          GitHub URL
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="local">
+        <ProjectRepoForm
+          {...localFormProps}
+          helperText="Path to a git repository on your local machine."
+          idPrefix="onboard"
+          submitFullWidth
+        />
+      </TabsContent>
+      <TabsContent value="github">
+        <GithubUrlForm {...githubFormProps} idPrefix="onboard-gh" submitFullWidth />
+      </TabsContent>
+    </Tabs>
+  );
 
   // Onboarding view when no projects exist
   if (!hasExistingProjects) {
@@ -134,12 +244,7 @@ export default function NewProjectPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ProjectRepoForm
-                {...sharedFormProps}
-                helperText="Path to a git repository on your local machine."
-                idPrefix="onboard"
-                submitFullWidth
-              />
+              {sourceSelector}
 
               <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
@@ -160,6 +265,8 @@ export default function NewProjectPage() {
             </CardContent>
           </Card>
         </div>
+
+        <SetupTerminalModal open={terminalOpen} onClose={handleTerminalClose} />
       </div>
     );
   }
@@ -184,23 +291,46 @@ export default function NewProjectPage() {
       <Card>
         <CardHeader>
           <CardTitle>Repository Details</CardTitle>
-          <CardDescription>
-            Provide the path to a git repository on your local machine.
-          </CardDescription>
+          <CardDescription>Provide a local path or clone from GitHub.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ProjectRepoForm
-            {...sharedFormProps}
-            helperText="Path to a git repository on your local machine. The project name will be derived from the directory name."
-            idPrefix="new"
-            footerActions={
-              <Button variant="secondary" asChild>
-                <Link to="/projects">Cancel</Link>
-              </Button>
-            }
-          />
+          <Tabs value={source} onValueChange={(v) => setSource(v as ProjectSource)}>
+            <TabsList className="w-full">
+              <TabsTrigger value="local" className="flex-1">
+                Local Path
+              </TabsTrigger>
+              <TabsTrigger value="github" className="flex-1">
+                GitHub URL
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="local">
+              <ProjectRepoForm
+                {...localFormProps}
+                helperText="Path to a git repository on your local machine. The project name will be derived from the directory name."
+                idPrefix="new"
+                footerActions={
+                  <Button variant="secondary" asChild>
+                    <Link to="/projects">Cancel</Link>
+                  </Button>
+                }
+              />
+            </TabsContent>
+            <TabsContent value="github">
+              <GithubUrlForm
+                {...githubFormProps}
+                idPrefix="new-gh"
+                footerActions={
+                  <Button variant="secondary" asChild>
+                    <Link to="/projects">Cancel</Link>
+                  </Button>
+                }
+              />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
+
+      <SetupTerminalModal open={terminalOpen} onClose={handleTerminalClose} />
     </div>
   );
 }

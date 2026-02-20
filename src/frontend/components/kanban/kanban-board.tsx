@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
@@ -50,7 +51,8 @@ export function KanbanBoard() {
     toggleWorkspaceRatcheting,
     togglingWorkspaceId,
     archiveWorkspace,
-    archivingWorkspaceId,
+    bulkArchiveColumn,
+    isBulkArchiving,
     showInlineForm,
     setShowInlineForm,
   } = useKanban();
@@ -59,13 +61,27 @@ export function KanbanBoard() {
   const columns = useMemo(() => getKanbanColumns(issueProvider), [issueProvider]);
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
+  const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
+  const [bulkArchiveColumnId, setBulkArchiveColumnId] = useState<string | null>(null);
 
   const handleMobileNewTaskClick = () => {
     setActiveColumnId('ISSUES');
     setShowInlineForm(true);
   };
 
-  // Group workspaces by kanban column (only the 3 database columns)
+  const handleBulkArchive = (columnId: string) => {
+    setBulkArchiveColumnId(columnId);
+    setBulkArchiveDialogOpen(true);
+  };
+
+  const handleBulkArchiveConfirm = async (commitUncommitted: boolean) => {
+    if (bulkArchiveColumnId) {
+      await bulkArchiveColumn(bulkArchiveColumnId, commitUncommitted);
+    }
+  };
+
+  // Group workspaces by kanban column (only the 3 database columns),
+  // sorted by createdAt descending (newest first) within each column.
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
     const grouped: WorkspacesByColumn = {
       WORKING: [],
@@ -80,6 +96,12 @@ export function KanbanBoard() {
           grouped[column].push(workspace);
         }
       }
+    }
+
+    const byNewest = (a: WorkspaceWithKanban, b: WorkspaceWithKanban) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    for (const col of Object.values(grouped)) {
+      col.sort(byNewest);
     }
 
     return grouped;
@@ -207,7 +229,8 @@ export function KanbanBoard() {
               onToggleRatcheting={toggleWorkspaceRatcheting}
               togglingWorkspaceId={togglingWorkspaceId}
               onArchive={archiveWorkspace}
-              archivingWorkspaceId={archivingWorkspaceId}
+              onBulkArchive={() => handleBulkArchive(activeColumn.id)}
+              isBulkArchiving={isBulkArchiving}
             />
           )}
         </div>
@@ -215,37 +238,55 @@ export function KanbanBoard() {
     );
   }
 
+  const workspacesInBulkArchiveColumn =
+    bulkArchiveColumnId && bulkArchiveColumnId !== 'ISSUES'
+      ? (workspacesByColumn[bulkArchiveColumnId as KanbanColumnType] ?? [])
+      : [];
+
   return (
-    <div className="flex flex-row gap-4 pb-4 h-full overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
-      {columns.map((column) => {
-        // Special handling for the ISSUES column (UI-only, not from database)
-        if (column.id === 'ISSUES') {
+    <>
+      <div className="flex flex-row gap-4 pb-4 h-full overflow-y-hidden overflow-x-auto mx-auto w-full max-w-[1800px]">
+        {columns.map((column) => {
+          // Special handling for the ISSUES column (UI-only, not from database)
+          if (column.id === 'ISSUES') {
+            return (
+              <IssuesColumn
+                key={column.id}
+                column={column}
+                issues={issues ?? []}
+                projectId={projectId}
+              />
+            );
+          }
+
+          // Regular workspace columns
+          const columnWorkspaces = workspacesByColumn[column.id as KanbanColumnType] ?? [];
           return (
-            <IssuesColumn
+            <KanbanColumn
               key={column.id}
               column={column}
-              issues={issues ?? []}
-              projectId={projectId}
+              workspaces={columnWorkspaces}
+              projectSlug={projectSlug}
+              onToggleRatcheting={toggleWorkspaceRatcheting}
+              togglingWorkspaceId={togglingWorkspaceId}
+              onArchive={archiveWorkspace}
+              onBulkArchive={() => handleBulkArchive(column.id)}
+              isBulkArchiving={isBulkArchiving}
             />
           );
-        }
+        })}
+      </div>
 
-        // Regular workspace columns
-        const columnWorkspaces = workspacesByColumn[column.id as KanbanColumnType] ?? [];
-        return (
-          <KanbanColumn
-            key={column.id}
-            column={column}
-            workspaces={columnWorkspaces}
-            projectSlug={projectSlug}
-            onToggleRatcheting={toggleWorkspaceRatcheting}
-            togglingWorkspaceId={togglingWorkspaceId}
-            onArchive={archiveWorkspace}
-            archivingWorkspaceId={archivingWorkspaceId}
-          />
-        );
-      })}
-    </div>
+      <ArchiveWorkspaceDialog
+        open={bulkArchiveDialogOpen}
+        onOpenChange={setBulkArchiveDialogOpen}
+        hasUncommitted={true}
+        onConfirm={handleBulkArchiveConfirm}
+        description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Archiving will remove the workspace worktrees from disk.`}
+        warningText="Warning: Some workspaces may have uncommitted changes and they will be committed before archiving."
+        checkboxLabel="Commit uncommitted changes before archiving"
+      />
+    </>
   );
 }
 

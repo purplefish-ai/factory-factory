@@ -33,6 +33,12 @@ enum SessionProvider {
   CODEX
 }
 
+enum SessionPermissionPreset {
+  STRICT
+  RELAXED
+  YOLO
+}
+
 enum WorkspaceProviderSelection {
   WORKSPACE_DEFAULT
   CLAUDE
@@ -273,6 +279,8 @@ model UserSettings {
   // Ratchet Settings (unified PR progression)
   ratchetEnabled            Boolean  @default(false)  // Default for new GitHub-issue-created workspaces
   defaultSessionProvider    SessionProvider @default(CLAUDE)
+  defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
+  ratchetPermissions        SessionPermissionPreset @default(YOLO) // Default execution-mode preset for ratchet sessions
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

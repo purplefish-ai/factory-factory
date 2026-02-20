@@ -1,7 +1,75 @@
 import { AlertTriangle, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/frontend/lib/trpc';
+
+interface HealthIssue {
+  title: string;
+  description: string;
+  link?: string;
+  linkLabel?: string;
+  upgradeProvider?: 'CLAUDE' | 'CODEX';
+}
+
+interface CliHealthForBanner {
+  claude: { isInstalled: boolean; isOutdated?: boolean; version?: string; latestVersion?: string };
+  codex: {
+    isInstalled: boolean;
+    isAuthenticated?: boolean;
+    isOutdated?: boolean;
+    version?: string;
+    latestVersion?: string;
+  };
+  github: { isInstalled: boolean; isAuthenticated: boolean };
+}
+
+function collectIssues(health: CliHealthForBanner): HealthIssue[] {
+  const issues: HealthIssue[] = [];
+
+  if (!health.claude.isInstalled) {
+    issues.push({
+      title: 'Claude CLI not installed',
+      description: 'Install the Claude CLI to enable AI-powered coding sessions.',
+      link: 'https://claude.ai/download',
+      linkLabel: 'Install',
+    });
+  } else if (health.claude.isOutdated) {
+    issues.push({
+      title: 'Claude CLI out of date',
+      description: `Installed ${health.claude.version ?? 'unknown'}; latest is ${health.claude.latestVersion ?? 'latest'}.`,
+      link: 'https://claude.ai/download',
+      linkLabel: 'Upgrade',
+      upgradeProvider: 'CLAUDE',
+    });
+  }
+
+  if (!health.github.isInstalled) {
+    issues.push({
+      title: 'GitHub CLI not installed',
+      description: 'Install the GitHub CLI (gh) to enable PR management features.',
+      link: 'https://cli.github.com/',
+      linkLabel: 'Install',
+    });
+  } else if (!health.github.isAuthenticated) {
+    issues.push({
+      title: 'GitHub CLI not authenticated',
+      description: 'Run "gh auth login" in your terminal to authenticate with GitHub.',
+    });
+  }
+
+  if (health.codex.isInstalled && health.codex.isAuthenticated && health.codex.isOutdated) {
+    issues.push({
+      title: 'Codex CLI out of date',
+      description: `Installed ${health.codex.version ?? 'unknown'}; latest is ${health.codex.latestVersion ?? 'latest'}.`,
+      link: 'https://developers.openai.com/codex/app-server/',
+      linkLabel: 'Upgrade',
+      upgradeProvider: 'CODEX',
+    });
+  }
+
+  return issues;
+}
 
 /**
  * Banner that displays warnings when CLI dependencies are not properly installed.
@@ -9,6 +77,17 @@ import { trpc } from '@/frontend/lib/trpc';
  */
 export function CLIHealthBanner() {
   const [dismissed, setDismissed] = useState(false);
+  const utils = trpc.useUtils();
+  const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
+    onSuccess: (result) => {
+      toast.success(result.message);
+      utils.admin.checkCLIHealth.setData({ forceRefresh: false }, result.health);
+      void refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
 
   const {
     data: health,
@@ -25,41 +104,20 @@ export function CLIHealthBanner() {
     }
   );
 
-  // Reset dismissed state when health status changes to show new issues
-  const allHealthy = health?.allHealthy;
+  const issueCount = health ? collectIssues(health).length : 0;
+
+  // Reset dismissed state when health issues appear (or change).
   useEffect(() => {
-    if (allHealthy === false) {
-      // Only reset if there are issues
+    if (issueCount > 0) {
       setDismissed(false);
     }
-  }, [allHealthy]);
+  }, [issueCount]);
 
-  if (isLoading || dismissed || !health || health.allHealthy) {
+  if (isLoading || dismissed || !health) {
     return null;
   }
 
-  const issues: Array<{ title: string; description: string; link?: string }> = [];
-
-  if (!health.claude.isInstalled) {
-    issues.push({
-      title: 'Claude CLI not installed',
-      description: 'Install the Claude CLI to enable AI-powered coding sessions.',
-      link: 'https://claude.ai/download',
-    });
-  }
-
-  if (!health.github.isInstalled) {
-    issues.push({
-      title: 'GitHub CLI not installed',
-      description: 'Install the GitHub CLI (gh) to enable PR management features.',
-      link: 'https://cli.github.com/',
-    });
-  } else if (!health.github.isAuthenticated) {
-    issues.push({
-      title: 'GitHub CLI not authenticated',
-      description: 'Run "gh auth login" in your terminal to authenticate with GitHub.',
-    });
-  }
+  const issues = collectIssues(health);
 
   if (issues.length === 0) {
     return null;
@@ -67,10 +125,10 @@ export function CLIHealthBanner() {
 
   return (
     <div className="border-b border-warning/20 bg-warning/10 px-4 py-3">
-      <div className="mx-auto max-w-7xl">
+      <div>
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-warning" />
             <div className="space-y-2">
               <p className="text-sm font-medium text-warning-foreground dark:text-warning">
                 Some features require additional setup
@@ -86,9 +144,24 @@ export function CLIHealthBanner() {
                         rel="noopener noreferrer"
                         className="ml-1.5 inline-flex items-center gap-1 text-warning underline hover:text-warning/80"
                       >
-                        Install
+                        {issue.linkLabel ?? 'Install'}
                         <ExternalLink className="h-3 w-3" />
                       </a>
+                    )}
+                    {issue.upgradeProvider && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-2 h-6 border-warning/40 px-2 text-xs text-warning hover:bg-warning/10"
+                        onClick={() =>
+                          upgradeProviderCli.mutate({
+                            provider: issue.upgradeProvider as 'CLAUDE' | 'CODEX',
+                          })
+                        }
+                        disabled={upgradeProviderCli.isPending}
+                      >
+                        {upgradeProviderCli.isPending ? 'Upgrading...' : 'Upgrade now'}
+                      </Button>
                     )}
                   </li>
                 ))}
@@ -100,7 +173,7 @@ export function CLIHealthBanner() {
               variant="ghost"
               size="sm"
               onClick={() => refetch()}
-              disabled={isRefetching}
+              disabled={isRefetching || upgradeProviderCli.isPending}
               className="h-8 text-warning hover:bg-warning/20"
             >
               <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
