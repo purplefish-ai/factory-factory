@@ -18,14 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add terminal QR code and proxy script for private tunnel direct links (#1146, #1155)
 - Add empty-state messaging for no active workspaces in side panel (#1137, #1152)
 - Add default permission presets for ratchet and workspace sessions (#1160)
+- Surface session startup failures across workspace surfaces (#1167)
 - Add GitHub URL clone flow for project creation (#1169)
 - Add CLI auth readiness checks to onboarding (#1185)
 - Install GitHub CLI, Claude CLI, and Codex CLI in Docker image (#1172, #1177)
 
 ### Changed
 
-- Refresh app UI/UX and iterate on Kanban and workspace information density (#1099, #1110, #1125, #1131, #1133, #1136, #1143, #1144, #1150, #1157, #1182, #1188)
+- Refresh app UI/UX and iterate on Kanban and workspace information density (#1099, #1110, #1125, #1131, #1133, #1136, #1143, #1144, #1150, #1157, #1165, #1173, #1182, #1188)
 - Rewrite Dockerfile/docker-compose for cloud deployment and proxy workflows (#1098, #1124, #1156)
+- Rename auto-generated branches before push and PR (#1176)
 - Improve workspace and sidebar navigation patterns across desktop/mobile (#1102, #1105, #1113, #1115, #1171, #1174, #1178, #1181, #1192)
 - Improve mobile layout behavior and menu/header ergonomics (#1118, #1147, #1148, #1149)
 - Improve chat follow-mode near-bottom scrolling behavior (#1121, #1122)
