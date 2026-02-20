@@ -205,12 +205,56 @@ export function KanbanProvider({
   };
 
   const bulkArchiveColumn = async (kanbanColumn: string, commitUncommitted: boolean) => {
-    await bulkArchiveMutation.mutateAsync({
-      projectId,
-      kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
-      commitUncommitted,
+    const workspacesToArchive = (workspaces ?? []).filter(
+      (workspace) => workspace.kanbanColumn === kanbanColumn
+    );
+
+    setArchivingWorkspaceIds((prev) => {
+      const next = new Set(prev);
+      for (const workspace of workspacesToArchive) {
+        next.add(workspace.id);
+      }
+      return next;
     });
-    await refetchWorkspaces();
+
+    setArchivingWorkspaceIssueLinks((prev) => {
+      const next = new Map(prev);
+      for (const workspace of workspacesToArchive) {
+        next.set(workspace.id, {
+          githubIssueNumber: workspace.githubIssueNumber ?? null,
+          linearIssueId: workspace.linearIssueId ?? null,
+        });
+      }
+      return next;
+    });
+
+    try {
+      await bulkArchiveMutation.mutateAsync({
+        projectId,
+        kanbanColumn: kanbanColumn as 'WORKING' | 'WAITING' | 'DONE',
+        commitUncommitted,
+      });
+      await Promise.all([
+        refetchWorkspaces(),
+        utils.workspace.getProjectSummaryState.invalidate({ projectId }),
+      ]);
+    } finally {
+      setArchivingWorkspaceIds((prev) => {
+        const next = new Set(prev);
+        for (const workspace of workspacesToArchive) {
+          next.delete(workspace.id);
+        }
+        return next;
+      });
+
+      setArchivingWorkspaceIssueLinks((prev) => {
+        const next = new Map(prev);
+        for (const workspace of workspacesToArchive) {
+          next.delete(workspace.id);
+        }
+        return next;
+      });
+    }
   };
 
   const refetch = () => {
