@@ -24,10 +24,11 @@ export type {
   RatchetAction,
   RatchetCheckResult,
   RatchetStateChangedEvent,
+  RatchetToggledEvent,
   WorkspaceRatchetResult,
 } from './ratchet.service';
 // Core ratchet polling and dispatch
-export { RATCHET_STATE_CHANGED, ratchetService } from './ratchet.service';
+export { RATCHET_STATE_CHANGED, RATCHET_TOGGLED, ratchetService } from './ratchet.service';
 
 // Reconciliation (workspace/session cleanup)
 export { reconciliationService } from './reconciliation.service';

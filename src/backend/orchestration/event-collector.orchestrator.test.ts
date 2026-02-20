@@ -42,6 +42,7 @@ vi.mock('@/backend/domains/github', () => ({
 
 vi.mock('@/backend/domains/ratchet', () => ({
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
+  RATCHET_TOGGLED: 'ratchet_toggled',
   ratchetService: { on: vi.fn() },
 }));
 
@@ -357,6 +358,22 @@ describe('Event-to-field mapping', () => {
     );
   });
 
+  it('maps ratchet toggle change to { ratchetEnabled, ratchetState }', () => {
+    const coalescer = new EventCoalescer(mockStore, 150);
+    coalescer.enqueue(
+      'ws-1',
+      { ratchetEnabled: true, ratchetState: 'CI_RUNNING' as const },
+      'event:ratchet_toggled'
+    );
+    vi.advanceTimersByTime(150);
+
+    expect(mockStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
+      'event:ratchet_toggled'
+    );
+  });
+
   it('maps run-script status change to { runScriptStatus }', () => {
     const coalescer = new EventCoalescer(mockStore, 150);
     coalescer.enqueue(
@@ -413,7 +430,7 @@ describe('configureEventCollector', () => {
     stopEventCollector();
   });
 
-  it('registers 9 event listeners on domain singletons', () => {
+  it('registers 10 event listeners on domain singletons', () => {
     configureEventCollector();
 
     // workspaceStateMachine: 1 listener (WORKSPACE_STATE_CHANGED)
@@ -425,8 +442,9 @@ describe('configureEventCollector', () => {
     // prSnapshotService: 1 listener (PR_SNAPSHOT_UPDATED)
     expect(prSnapshotService.on).toHaveBeenCalledWith('pr_snapshot_updated', expect.any(Function));
 
-    // ratchetService: 1 listener (RATCHET_STATE_CHANGED)
+    // ratchetService: 2 listeners (RATCHET_STATE_CHANGED + RATCHET_TOGGLED)
     expect(ratchetService.on).toHaveBeenCalledWith('ratchet_state_changed', expect.any(Function));
+    expect(ratchetService.on).toHaveBeenCalledWith('ratchet_toggled', expect.any(Function));
 
     // runScriptStateMachine: 1 listener (RUN_SCRIPT_STATUS_CHANGED)
     expect(runScriptStateMachine.on).toHaveBeenCalledWith(
@@ -549,6 +567,34 @@ describe('configureEventCollector', () => {
         prCiStatus: 'SUCCESS',
       },
       'event:pr_snapshot_updated'
+    );
+  });
+
+  it('ratchet_toggled updates ratchetEnabled and ratchetState immediately', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_toggled');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      enabled: boolean;
+      ratchetState: string;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      enabled: true,
+      ratchetState: 'CI_RUNNING',
+    });
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { ratchetEnabled: true, ratchetState: 'CI_RUNNING' },
+      'event:ratchet_toggled'
     );
   });
 

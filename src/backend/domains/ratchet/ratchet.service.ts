@@ -108,11 +108,18 @@ type WorkspaceWithPR = NonNullable<
 >;
 
 export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
+export const RATCHET_TOGGLED = 'ratchet_toggled' as const;
 
 export interface RatchetStateChangedEvent {
   workspaceId: string;
   fromState: RatchetState;
   toState: RatchetState;
+}
+
+export interface RatchetToggledEvent {
+  workspaceId: string;
+  enabled: boolean;
+  ratchetState: RatchetState;
 }
 
 class RatchetService extends EventEmitter {
@@ -367,6 +374,11 @@ class RatchetService extends EventEmitter {
       await workspaceAccessor.update(workspaceId, {
         ratchetEnabled: true,
       });
+      this.emit(RATCHET_TOGGLED, {
+        workspaceId,
+        enabled: true,
+        ratchetState: workspace.ratchetState,
+      } satisfies RatchetToggledEvent);
       return;
     }
 
@@ -388,6 +400,20 @@ class RatchetService extends EventEmitter {
       ratchetActiveSessionId: null,
       ratchetLastCiRunId: null,
     });
+
+    if (workspace.ratchetState !== RatchetState.IDLE) {
+      this.emit(RATCHET_STATE_CHANGED, {
+        workspaceId,
+        fromState: workspace.ratchetState,
+        toState: RatchetState.IDLE,
+      } satisfies RatchetStateChangedEvent);
+    }
+
+    this.emit(RATCHET_TOGGLED, {
+      workspaceId,
+      enabled: false,
+      ratchetState: RatchetState.IDLE,
+    } satisfies RatchetToggledEvent);
   }
 
   private async processWorkspace(workspace: WorkspaceWithPR): Promise<WorkspaceRatchetResult> {

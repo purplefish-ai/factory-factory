@@ -24,7 +24,9 @@ import {
 import { linearStateSyncService } from '@/backend/domains/linear';
 import {
   RATCHET_STATE_CHANGED,
+  RATCHET_TOGGLED,
   type RatchetStateChangedEvent,
+  type RatchetToggledEvent,
   ratchetService,
 } from '@/backend/domains/ratchet';
 import {
@@ -416,7 +418,17 @@ export function configureEventCollector(): void {
     );
   });
 
-  // 4. Run-script status changes
+  // 4. Ratchet enabled/disabled toggles
+  ratchetService.on(RATCHET_TOGGLED, (event: RatchetToggledEvent) => {
+    coalescer.enqueue(
+      event.workspaceId,
+      { ratchetEnabled: event.enabled, ratchetState: event.ratchetState },
+      'event:ratchet_toggled',
+      { immediate: true }
+    );
+  });
+
+  // 5. Run-script status changes
   runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (event: RunScriptStatusChangedEvent) => {
     coalescer.enqueue(
       event.workspaceId,
@@ -425,7 +437,7 @@ export function configureEventCollector(): void {
     );
   });
 
-  // 5. Workspace activity (active)
+  // 6. Workspace activity (active)
   workspaceActivityService.on('workspace_active', ({ workspaceId }: { workspaceId: string }) => {
     coalescer.enqueue(
       workspaceId,
@@ -435,7 +447,7 @@ export function configureEventCollector(): void {
     );
   });
 
-  // 6. Workspace activity (idle)
+  // 7. Workspace activity (idle)
   workspaceActivityService.on('workspace_idle', ({ workspaceId }: { workspaceId: string }) => {
     coalescer.enqueue(
       workspaceId,
@@ -446,7 +458,7 @@ export function configureEventCollector(): void {
     refreshPrSnapshotOnIdle(workspaceId);
   });
 
-  // 7. Session-level activity changes (running/idle transitions)
+  // 8. Session-level activity changes (running/idle transitions)
   workspaceActivityService.on(
     'session_activity_changed',
     ({ workspaceId }: { workspaceId: string; sessionId: string; isWorking: boolean }) => {
@@ -459,7 +471,7 @@ export function configureEventCollector(): void {
     }
   );
 
-  // 8. Prime session summaries on startup so fresh clients have tab runtime
+  // 9. Prime session summaries on startup so fresh clients have tab runtime
   // state before the first activity transition or reconciliation tick.
   for (const workspaceId of workspaceSnapshotStore.getAllWorkspaceIds()) {
     void refreshWorkspaceSessionSummaries(coalescer, workspaceId, 'event:collector_startup', {
@@ -467,7 +479,7 @@ export function configureEventCollector(): void {
     });
   }
 
-  // 9. Pending interactive request transitions (set/clear)
+  // 10. Pending interactive request transitions (set/clear)
   pendingRequestChangedHandler = ({ sessionId }) => {
     void refreshWorkspacePendingRequestType(coalescer, sessionId, 'event:pending_request_changed');
   };
@@ -481,7 +493,7 @@ export function configureEventCollector(): void {
   };
   sessionDomainService.on('runtime_changed', runtimeChangedHandler);
 
-  logger.info('Event collector configured with 9 event subscriptions');
+  logger.info('Event collector configured with 10 event subscriptions');
 }
 
 // ---------------------------------------------------------------------------

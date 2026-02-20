@@ -6,6 +6,7 @@ import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge
 
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
+    findById: vi.fn(),
     findWithPRsForRatchet: vi.fn(),
     findForRatchetById: vi.fn(),
     update: vi.fn(),
@@ -47,7 +48,9 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { fixerSessionService } from './fixer-session.service';
 import {
   RATCHET_STATE_CHANGED,
+  RATCHET_TOGGLED,
   type RatchetStateChangedEvent,
+  type RatchetToggledEvent,
   ratchetService,
 } from './ratchet.service';
 
@@ -1923,6 +1926,83 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         type: 'ERROR',
         error: 'No worktree path',
       });
+    });
+  });
+
+  describe('workspace ratchet toggle events', () => {
+    afterEach(() => {
+      ratchetService.removeAllListeners();
+    });
+
+    it('emits ratchet_toggled when enabling workspace ratcheting', async () => {
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        id: 'ws-enable',
+        ratchetState: RatchetState.CI_FAILED,
+        ratchetActiveSessionId: null,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const toggledEvents: RatchetToggledEvent[] = [];
+      const stateEvents: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_TOGGLED, (event: RatchetToggledEvent) => {
+        toggledEvents.push(event);
+      });
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        stateEvents.push(event);
+      });
+
+      await ratchetService.setWorkspaceRatcheting('ws-enable', true);
+
+      expect(workspaceAccessor.update).toHaveBeenCalledWith('ws-enable', { ratchetEnabled: true });
+      expect(toggledEvents).toEqual([
+        {
+          workspaceId: 'ws-enable',
+          enabled: true,
+          ratchetState: RatchetState.CI_FAILED,
+        },
+      ]);
+      expect(stateEvents).toHaveLength(0);
+    });
+
+    it('emits ratchet_toggled and ratchet_state_changed when disabling non-idle workspace', async () => {
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue({
+        id: 'ws-disable',
+        ratchetState: RatchetState.CI_RUNNING,
+        ratchetActiveSessionId: null,
+      } as never);
+      vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+      const toggledEvents: RatchetToggledEvent[] = [];
+      const stateEvents: RatchetStateChangedEvent[] = [];
+      ratchetService.on(RATCHET_TOGGLED, (event: RatchetToggledEvent) => {
+        toggledEvents.push(event);
+      });
+      ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
+        stateEvents.push(event);
+      });
+
+      await ratchetService.setWorkspaceRatcheting('ws-disable', false);
+
+      expect(workspaceAccessor.update).toHaveBeenCalledWith('ws-disable', {
+        ratchetEnabled: false,
+        ratchetState: RatchetState.IDLE,
+        ratchetActiveSessionId: null,
+        ratchetLastCiRunId: null,
+      });
+      expect(stateEvents).toEqual([
+        {
+          workspaceId: 'ws-disable',
+          fromState: RatchetState.CI_RUNNING,
+          toState: RatchetState.IDLE,
+        },
+      ]);
+      expect(toggledEvents).toEqual([
+        {
+          workspaceId: 'ws-disable',
+          enabled: false,
+          ratchetState: RatchetState.IDLE,
+        },
+      ]);
     });
   });
 
