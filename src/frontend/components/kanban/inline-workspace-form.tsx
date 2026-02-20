@@ -117,7 +117,7 @@ export function InlineWorkspaceForm({
                 onToggle={setRatchetEnabled}
                 disabled={isLoadingSettings || isCreating}
               />
-              <span className="text-xs text-muted-foreground">Auto-fix</span>
+              <span className="text-xs text-muted-foreground max-[420px]:hidden">Auto-fix</span>
             </div>
             <Select
               value={provider}

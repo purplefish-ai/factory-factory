@@ -1,4 +1,4 @@
-import { GitPullRequest, Kanban, Menu, Settings } from 'lucide-react';
+import { GitPullRequest, Kanban, Menu, Settings, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import type { useAppNavigationData } from '@/frontend/hooks/use-app-navigation-data';
-import { LogoText } from './logo';
+import { LogoIcon } from './logo';
 import { ProjectSelectorDropdown } from './project-selector';
 import { ThemeToggle } from './theme-toggle';
 import { WorkspaceStatusIcon } from './workspace-status-icon';
@@ -38,10 +38,10 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
 
   return (
     <div className="flex flex-col h-full gap-1">
-      {/* Logo + Project Selector */}
-      <div className="px-2 py-1">
-        <LogoText className="text-xl" />
-        <div className="mt-1">
+      {/* Compact header row */}
+      <div className="flex items-center gap-2 px-1 pb-1 pr-0.5">
+        <LogoIcon className="h-7 w-7 shrink-0" />
+        <div className="min-w-0 flex-1">
           <ProjectSelectorDropdown
             selectedProjectSlug={navData.selectedProjectSlug}
             onProjectChange={(value) => {
@@ -51,6 +51,11 @@ function MenuContent({ navData, onClose }: HamburgerMenuProps & { onClose: () =>
             projects={navData.projects}
           />
         </div>
+        <SheetClose asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Close menu">
+            <X className="h-4 w-4" />
+          </Button>
+        </SheetClose>
       </div>
 
       <Separator />
@@ -169,7 +174,7 @@ export function HamburgerMenu({ navData }: HamburgerMenuProps) {
       </Button>
       <SheetContent
         side="left"
-        className="w-full sm:w-[28rem] sm:max-w-[28rem] p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] overflow-y-auto [&>button:first-child]:top-[calc(env(safe-area-inset-top)+1.15rem)]"
+        className="w-full sm:w-[24rem] sm:max-w-[24rem] p-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] overflow-y-auto [&>button:first-child]:hidden"
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation Menu</SheetTitle>
