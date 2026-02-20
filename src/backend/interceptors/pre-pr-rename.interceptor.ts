@@ -52,6 +52,20 @@ function parseRemoteName(upstreamRef: string): string | undefined {
   return upstreamRef.slice(0, slashIndex);
 }
 
+function normalizeRemoteBranchName(branchName: string, remoteName: string): string {
+  const remotePrefix = `${remoteName}/`;
+  if (branchName.startsWith(remotePrefix)) {
+    return branchName.slice(remotePrefix.length);
+  }
+
+  const fullRefPrefix = `refs/remotes/${remoteName}/`;
+  if (branchName.startsWith(fullRefPrefix)) {
+    return branchName.slice(fullRefPrefix.length);
+  }
+
+  return branchName;
+}
+
 async function getRefCommit(ref: string, workingDir: string): Promise<string | undefined> {
   const result = await gitCommand(['rev-parse', '--verify', '--quiet', ref], workingDir);
   if (result.code !== 0) {
@@ -98,8 +112,18 @@ async function cleanupSupersededRemoteBranch(context: {
     return;
   }
 
-  const oldRemoteRef = `refs/remotes/${remoteName}/${context.oldBranchName}`;
-  const newRemoteRef = `refs/remotes/${remoteName}/${context.newBranchName}`;
+  const oldRemoteBranchName = normalizeRemoteBranchName(context.oldBranchName, remoteName);
+  const newRemoteBranchName = normalizeRemoteBranchName(context.newBranchName, remoteName);
+  if (!(oldRemoteBranchName && newRemoteBranchName)) {
+    return;
+  }
+
+  if (oldRemoteBranchName === newRemoteBranchName) {
+    return;
+  }
+
+  const oldRemoteRef = `refs/remotes/${remoteName}/${oldRemoteBranchName}`;
+  const newRemoteRef = `refs/remotes/${remoteName}/${newRemoteBranchName}`;
 
   const oldRemoteCommit = await getRefCommit(oldRemoteRef, context.workingDir);
   const newRemoteCommit = await getRefCommit(newRemoteRef, context.workingDir);
@@ -114,7 +138,7 @@ async function cleanupSupersededRemoteBranch(context: {
   }
 
   const deleteResult = await gitCommand(
-    ['push', remoteName, '--delete', context.oldBranchName],
+    ['push', remoteName, '--delete', oldRemoteBranchName],
     context.workingDir
   );
   if (deleteResult.code !== 0) {
