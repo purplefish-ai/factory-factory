@@ -47,7 +47,11 @@ export function ArchiveWorkspaceDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>Archive Workspace</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
@@ -67,10 +71,19 @@ export function ArchiveWorkspaceDialog({
           </label>
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onOpenChange(false);
+            }}
+          >
+            Cancel
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {
               event.preventDefault();
+              event.stopPropagation();
               onConfirm(commitChangesChecked);
               onOpenChange(false);
             }}
