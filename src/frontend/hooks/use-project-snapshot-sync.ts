@@ -180,10 +180,20 @@ function applySnapshotFullMessage(
   const { setData: setKanbanData } = utils.workspace.listWithKanbanState;
   const { setData: setWorkspaceDetailData } = utils.workspace.get;
 
-  setData({ projectId: message.projectId }, ((prev: CacheData | undefined) => ({
-    workspaces: message.entries.map(mapSnapshotEntryToServerWorkspace),
-    reviewCount: prev?.reviewCount ?? 0,
-  })) as never);
+  setData({ projectId: message.projectId }, ((prev: CacheData | undefined) => {
+    const existingById = new Map<string, Record<string, unknown>>();
+    if (prev) {
+      for (const w of prev.workspaces) {
+        existingById.set((w as { id: string }).id, w);
+      }
+    }
+    return {
+      workspaces: message.entries.map((e) =>
+        mapSnapshotEntryToServerWorkspace(e, existingById.get(e.workspaceId))
+      ),
+      reviewCount: prev?.reviewCount ?? 0,
+    };
+  }) as never);
 
   setKanbanData({ projectId: message.projectId }, ((prev: KanbanCacheData) =>
     buildKanbanCacheFromFull(message.entries, prev)) as never);
@@ -216,7 +226,10 @@ function applySnapshotChangedMessage(
       };
     }
 
-    const mapped = mapSnapshotEntryToServerWorkspace(message.entry);
+    const existingEntry = prev.workspaces.find(
+      (w) => (w as { id: string }).id === message.entry.workspaceId
+    );
+    const mapped = mapSnapshotEntryToServerWorkspace(message.entry, existingEntry);
     const existingIndex = prev.workspaces.findIndex((w) => (w as { id: string }).id === mapped.id);
     const workspaces = [...prev.workspaces];
 
