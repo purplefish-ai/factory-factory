@@ -37,8 +37,8 @@
   --ring: oklch(0.62 0.17 55);
   --success: oklch(0.627 0.194 145.8);
   --success-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.62 0.17 55);
-  --warning-foreground: oklch(0.98 0 0);
+  --warning: oklch(0.55 0.18 55);
+  --warning-foreground: oklch(0.3 0.05 55);
   --info: oklch(0.623 0.214 259.1);
   --info-foreground: oklch(0.98 0 0);
   --chart-1: oklch(0.62 0.17 55);
