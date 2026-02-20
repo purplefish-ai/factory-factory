@@ -29,6 +29,7 @@ export function RatchetWrenchIcon({
           enabled ? 'text-foreground' : 'text-muted-foreground',
           iconClassName
         )}
+        fill={enabled ? 'currentColor' : 'none'}
       />
     </span>
   );

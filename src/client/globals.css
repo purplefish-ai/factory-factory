@@ -225,14 +225,9 @@
   }
 }
 
-.ratchet-toggle[data-ratchet-state='idle'],
-.ratchet-toggle[data-ratchet-state='processing'] {
-  border: 1px dashed color-mix(in oklab, var(--brand) 70%, var(--foreground) 30%);
-}
-
 .ratchet-toggle[data-ratchet-state='processing'] {
   position: relative;
-  border-color: transparent;
+  border: 1px solid transparent;
   background: var(--background);
 }
 
