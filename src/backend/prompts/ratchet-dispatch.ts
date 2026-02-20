@@ -28,7 +28,7 @@ Execute autonomously in this order:
 5. Push only when you made actionable CI or review fixes (not merge-only updates).
 6. Comment briefly on addressed review comments and resolve them.
 7. Request re-review from reviewers whose comments you addressed using \`gh pr edit {{PR_NUMBER}} --add-reviewer <login>\`.
-8. If you addressed any review comments and pushed changes, post a single PR comment tagging each reviewer whose comments you addressed asking them to re-review. Use \`gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"\`.
+8. CRITICAL: If you made ANY code changes in response to review comments (regardless of whether you already commented on them in a previous session), you MUST post a PR comment tagging the reviewers to request re-review. Use \`gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"\`. This is MANDATORY even if you previously commented - new code changes always require a new re-review request.
 
 If review feedback is non-actionable, explain why in session output and exit without code changes.
 Do not push merge-only updates. If you only merged main and did not fix CI or review feedback, stop without pushing.
