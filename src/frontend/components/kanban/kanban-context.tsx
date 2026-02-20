@@ -208,11 +208,12 @@ export function KanbanProvider({
     const workspacesToArchive = (workspaces ?? []).filter(
       (workspace) => workspace.kanbanColumn === kanbanColumn
     );
+    const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
 
     setArchivingWorkspaceIds((prev) => {
       const next = new Set(prev);
-      for (const workspace of workspacesToArchive) {
-        next.add(workspace.id);
+      for (const workspaceId of workspaceIdsToArchive) {
+        next.add(workspaceId);
       }
       return next;
     });
@@ -241,16 +242,16 @@ export function KanbanProvider({
     } finally {
       setArchivingWorkspaceIds((prev) => {
         const next = new Set(prev);
-        for (const workspace of workspacesToArchive) {
-          next.delete(workspace.id);
+        for (const workspaceId of workspaceIdsToArchive) {
+          next.delete(workspaceId);
         }
         return next;
       });
 
       setArchivingWorkspaceIssueLinks((prev) => {
         const next = new Map(prev);
-        for (const workspace of workspacesToArchive) {
-          next.delete(workspace.id);
+        for (const workspaceId of workspaceIdsToArchive) {
+          next.delete(workspaceId);
         }
         return next;
       });
