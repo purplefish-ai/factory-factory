@@ -126,7 +126,7 @@ export function WorkspaceDetailContainer() {
     }
 
     if (slug) {
-      void navigate(`/projects/${slug}`, { replace: true });
+      void navigate(`/projects/${slug}/workspaces`, { replace: true });
       return;
     }
 
@@ -322,8 +322,15 @@ export function WorkspaceDetailContainer() {
           onError: handleArchiveError,
         }
       );
+
+      if (slug) {
+        void navigate(`/projects/${slug}/workspaces`, { replace: true });
+        return;
+      }
+
+      void navigate('/projects', { replace: true });
     },
-    [archiveWorkspace, handleArchiveError, workspaceId]
+    [archiveWorkspace, handleArchiveError, workspaceId, navigate, slug]
   );
 
   const handleArchiveRequest = useCallback(() => {
