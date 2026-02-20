@@ -190,8 +190,55 @@ export function useSessionManagement({
   });
 
   const archiveWorkspace = trpc.workspace.archive.useMutation({
+    onMutate: async ({ id }) => {
+      const workspace = utils.workspace.get.getData({ id });
+      const projectId = workspace?.projectId;
+
+      if (projectId) {
+        await utils.workspace.listWithKanbanState.cancel({ projectId });
+      }
+
+      const previousWorkspaceList = projectId
+        ? utils.workspace.listWithKanbanState.getData({ projectId })
+        : undefined;
+
+      if (projectId) {
+        utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
+          old?.filter((workspaceItem) => workspaceItem.id !== id)
+        );
+      }
+
+      return { projectId, previousWorkspaceList };
+    },
     onSuccess: () => {
-      void navigate(`/projects/${slug}`, { replace: true });
+      if (slug) {
+        void navigate(`/projects/${slug}/workspaces`, { replace: true });
+      } else {
+        void navigate('/projects', { replace: true });
+      }
+    },
+    onError: (error, _variables, context) => {
+      if (error.data?.code === 'PRECONDITION_FAILED') {
+        toast.error('Archiving blocked: enable commit before archiving to proceed.');
+      } else {
+        toast.error(error.message || 'Failed to archive workspace');
+      }
+
+      if (context?.projectId) {
+        if (context.previousWorkspaceList) {
+          utils.workspace.listWithKanbanState.setData(
+            { projectId: context.projectId },
+            context.previousWorkspaceList
+          );
+        }
+      }
+    },
+    onSettled: (_data, _error, variables, context) => {
+      void utils.workspace.get.invalidate({ id: variables.id });
+      if (context?.projectId) {
+        void utils.workspace.listWithKanbanState.invalidate({ projectId: context.projectId });
+        void utils.workspace.getProjectSummaryState.invalidate({ projectId: context.projectId });
+      }
     },
   });
 

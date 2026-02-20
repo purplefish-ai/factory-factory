@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { toast } from 'sonner';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
@@ -126,7 +125,7 @@ export function WorkspaceDetailContainer() {
     }
 
     if (slug) {
-      void navigate(`/projects/${slug}`, { replace: true });
+      void navigate(`/projects/${slug}/workspaces`, { replace: true });
       return;
     }
 
@@ -305,25 +304,11 @@ export function WorkspaceDetailContainer() {
   const { handleCreate: handleCreateWorkspace, isCreating: isCreatingWorkspace } =
     useCreateWorkspace(workspace?.projectId, slug);
 
-  const handleArchiveError = useCallback((error: unknown) => {
-    const typedError = error as { data?: { code?: string }; message?: string };
-    if (typedError.data?.code === 'PRECONDITION_FAILED') {
-      toast.error('Archiving blocked: enable commit before archiving to proceed.');
-      return;
-    }
-    toast.error(typedError.message ?? 'Failed to archive workspace');
-  }, []);
-
   const handleArchive = useCallback(
     (commitUncommitted: boolean) => {
-      archiveWorkspace.mutate(
-        { id: workspaceId, commitUncommitted },
-        {
-          onError: handleArchiveError,
-        }
-      );
+      archiveWorkspace.mutate({ id: workspaceId, commitUncommitted });
     },
-    [archiveWorkspace, handleArchiveError, workspaceId]
+    [archiveWorkspace, workspaceId]
   );
 
   const handleArchiveRequest = useCallback(() => {
