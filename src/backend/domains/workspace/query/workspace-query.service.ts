@@ -4,6 +4,7 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceSessionBridge,
 } from '@/backend/domains/workspace/bridges';
+import { workspaceArchiveTrackerService } from '@/backend/domains/workspace/lifecycle/archive-tracker.service';
 import { computeKanbanColumn } from '@/backend/domains/workspace/state/kanban-state';
 import { computePendingRequestType } from '@/backend/domains/workspace/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/domains/workspace/state/workspace-runtime-state';
@@ -213,11 +214,14 @@ class WorkspaceQueryService {
       ...filters,
       excludeStatuses: [WorkspaceStatus.ARCHIVED],
     });
+    const nonArchivingWorkspaces = workspaces.filter(
+      (workspace) => !workspaceArchiveTrackerService.isArchiving(workspace.id)
+    );
 
     // Get all pending requests from active sessions
     const allPendingRequests = this.session.getAllPendingRequests();
 
-    return workspaces
+    return nonArchivingWorkspaces
       .map((workspace) => {
         const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
           this.session.isAnySessionWorking(sessionIds)

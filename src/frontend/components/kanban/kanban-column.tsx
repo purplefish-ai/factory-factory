@@ -44,7 +44,7 @@ interface KanbanColumnProps {
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   togglingWorkspaceId?: string | null;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
-  archivingWorkspaceId?: string | null;
+  archivingWorkspaceIds?: ReadonlySet<string>;
   onBulkArchive?: () => void;
   isBulkArchiving?: boolean;
 }
@@ -56,7 +56,7 @@ export function KanbanColumn({
   onToggleRatcheting,
   togglingWorkspaceId,
   onArchive,
-  archivingWorkspaceId,
+  archivingWorkspaceIds,
   onBulkArchive,
   isBulkArchiving,
 }: KanbanColumnProps) {
@@ -107,7 +107,7 @@ export function KanbanColumn({
                 onToggleRatcheting={onToggleRatcheting}
                 isTogglePending={togglingWorkspaceId === workspace.id}
                 onArchive={onArchive}
-                isArchivePending={archivingWorkspaceId === workspace.id}
+                isArchivePending={archivingWorkspaceIds?.has(workspace.id) ?? false}
               />
             </div>
           ))

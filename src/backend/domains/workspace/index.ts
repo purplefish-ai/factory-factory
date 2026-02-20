@@ -9,6 +9,7 @@ export type {
   WorkspaceSessionBridge,
 } from './bridges';
 export { workspaceActivityService } from './lifecycle/activity.service';
+export { workspaceArchiveTrackerService } from './lifecycle/archive-tracker.service';
 export {
   type WorkspaceCreationDependencies,
   type WorkspaceCreationResult,

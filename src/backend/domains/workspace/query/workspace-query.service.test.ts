@@ -4,6 +4,7 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceSessionBridge,
 } from '@/backend/domains/workspace/bridges';
+import { workspaceArchiveTrackerService } from '@/backend/domains/workspace/lifecycle/archive-tracker.service';
 import { WorkspaceStatus } from '@/shared/core';
 import { workspaceQueryService } from './workspace-query.service';
 
@@ -80,6 +81,7 @@ describe('WorkspaceQueryService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    workspaceArchiveTrackerService.reset();
 
     workspaceQueryService.configure({
       session: mockSessionBridge,
@@ -384,5 +386,42 @@ describe('WorkspaceQueryService', () => {
     });
     mockGetWorkspaceGitStats.mockRejectedValueOnce(new Error('git failed'));
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
+  });
+
+  it('filters out workspaces currently archiving from kanban list results', async () => {
+    workspaceArchiveTrackerService.markArchiving('ws-2');
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'ws-1',
+        name: 'Workspace 1',
+        status: 'READY',
+        prState: 'NONE',
+        hasHadSessions: true,
+        createdAt: new Date('2026-02-01T00:00:00.000Z'),
+      },
+      {
+        id: 'ws-2',
+        name: 'Workspace 2',
+        status: 'READY',
+        prState: 'NONE',
+        hasHadSessions: true,
+        createdAt: new Date('2026-02-02T00:00:00.000Z'),
+      },
+    ]);
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: [],
+      isWorking: false,
+      flowState: {
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'CHECKS_UNKNOWN',
+      },
+    });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+
+    const result = await workspaceQueryService.listWithKanbanState({ projectId: 'proj-1' });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe('ws-1');
   });
 });
