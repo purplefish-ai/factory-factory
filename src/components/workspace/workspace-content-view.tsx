@@ -24,6 +24,7 @@ interface WorkspaceContentViewProps {
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
+  onQuickAction?: (name: string, prompt: string) => void;
   children: ReactNode;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
@@ -54,6 +55,7 @@ export function WorkspaceContentView({
   onSelectSession,
   onCreateSession,
   onCloseSession,
+  onQuickAction,
   children,
   maxSessions,
   hasWorktreePath,
@@ -74,6 +76,7 @@ export function WorkspaceContentView({
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
+          onQuickAction={onQuickAction}
           disabled={isCreatingSession || isDeletingSession || !hasWorktreePath}
           maxSessions={maxSessions}
           selectedProvider={selectedProvider}

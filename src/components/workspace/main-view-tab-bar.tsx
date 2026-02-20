@@ -10,7 +10,7 @@ import {
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
-
+import { QuickActionsMenu } from './quick-actions-menu';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 import {
   deriveSessionTabRuntime,
@@ -186,6 +186,7 @@ interface MainViewTabBarProps {
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: () => void;
   onCloseSession?: (sessionId: string) => void;
+  onQuickAction?: (name: string, prompt: string) => void;
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
@@ -201,6 +202,7 @@ export function MainViewTabBar({
   onSelectSession,
   onCreateSession,
   onCloseSession,
+  onQuickAction,
   disabled,
   maxSessions,
   selectedProvider,
@@ -291,6 +293,19 @@ export function MainViewTabBar({
                 : `New ${providerTriggerLabel} session`}
             </TooltipContent>
           </Tooltip>
+        </div>
+      )}
+
+      {onQuickAction && (
+        <div className="ml-0.5 shrink-0">
+          <QuickActionsMenu
+            onExecuteAgent={(action) => {
+              if (action.content) {
+                onQuickAction(action.name, action.content);
+              }
+            }}
+            disabled={isButtonDisabled}
+          />
         </div>
       )}
 

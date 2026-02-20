@@ -30,11 +30,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuPortal,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
@@ -47,7 +43,6 @@ import {
 } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  QuickActionsMenu,
   RatchetToggleButton,
   RunScriptButton,
   RunScriptPortBadge,
@@ -660,56 +655,6 @@ function ArchiveActionButton({
   );
 }
 
-function WorkspaceQuickActionsSubmenu({
-  handleQuickAction,
-  disabled,
-}: {
-  handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
-  disabled: boolean;
-}) {
-  const { data: quickActions, isLoading } = trpc.session.listQuickActions.useQuery();
-  const agentActions = quickActions?.filter((action) => action.type === 'agent') ?? [];
-
-  if (isLoading) {
-    return (
-      <DropdownMenuItem disabled>
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading quick actions...
-      </DropdownMenuItem>
-    );
-  }
-
-  if (agentActions.length === 0) {
-    return null;
-  }
-
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger disabled={disabled}>
-        <Zap className="h-4 w-4" />
-        Quick actions
-      </DropdownMenuSubTrigger>
-      <DropdownMenuPortal>
-        <DropdownMenuSubContent className="w-56">
-          {agentActions.map((action) => (
-            <DropdownMenuItem
-              key={action.id}
-              onSelect={() => {
-                if (action.content) {
-                  handleQuickAction(action.name, action.content);
-                }
-              }}
-              disabled={disabled || !action.content}
-            >
-              {action.name}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuSubContent>
-      </DropdownMenuPortal>
-    </DropdownMenuSub>
-  );
-}
-
 function WorkspaceHeaderOverflowMenu({
   workspace,
   workspaceId,
@@ -718,8 +663,6 @@ function WorkspaceHeaderOverflowMenu({
   openInIde,
   archivePending,
   onArchiveRequest,
-  handleQuickAction,
-  isCreatingSession,
 }: {
   workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
   workspaceId: string;
@@ -728,8 +671,6 @@ function WorkspaceHeaderOverflowMenu({
   openInIde: ReturnType<typeof useSessionManagement>['openInIde'];
   archivePending: boolean;
   onArchiveRequest: () => void;
-  handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
-  isCreatingSession: boolean;
 }) {
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
 
@@ -777,10 +718,6 @@ function WorkspaceHeaderOverflowMenu({
             renderAsMenuItem
           />
           <OpenDevAppAction workspaceId={workspaceId} renderAsMenuItem />
-          <WorkspaceQuickActionsSubmenu
-            handleQuickAction={handleQuickAction}
-            disabled={isCreatingSession}
-          />
           <DropdownMenuSeparator />
           <ArchiveActionButton
             workspace={workspace}
@@ -874,8 +811,6 @@ export function WorkspaceDetailHeaderSlot({
                 openInIde={openInIde}
                 archivePending={archivePending}
                 onArchiveRequest={onArchiveRequest}
-                handleQuickAction={handleQuickAction}
-                isCreatingSession={isCreatingSession}
               />
             </>
           ) : (
@@ -883,14 +818,6 @@ export function WorkspaceDetailHeaderSlot({
               <WorkspaceProviderSettings workspace={workspace} workspaceId={workspaceId} />
               <RatchetingToggle workspace={workspace} workspaceId={workspaceId} />
               <WorkspaceBranchLink workspace={workspace} />
-              <QuickActionsMenu
-                onExecuteAgent={(action) => {
-                  if (action.content) {
-                    handleQuickAction(action.name, action.content);
-                  }
-                }}
-                disabled={isCreatingSession}
-              />
               <OpenInIdeAction
                 workspaceId={workspaceId}
                 hasWorktreePath={Boolean(workspace.worktreePath)}

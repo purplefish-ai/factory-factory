@@ -467,6 +467,7 @@ export function WorkspaceDetailContainer() {
           handleSelectSession,
           handleNewChat,
           handleCloseChatSession,
+          handleQuickAction,
           maxSessions,
           hasWorktreePath: !!workspace?.worktreePath,
           selectedProvider,
