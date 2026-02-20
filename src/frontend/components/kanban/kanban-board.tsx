@@ -60,6 +60,11 @@ export function KanbanBoard() {
   const [activeColumnId, setActiveColumnId] = useState<string>('WAITING');
   const hasPickedInitialTab = useRef(false);
 
+  const handleMobileNewTaskClick = () => {
+    setActiveColumnId('ISSUES');
+    setShowInlineForm(true);
+  };
+
   // Group workspaces by kanban column (only the 3 database columns)
   const workspacesByColumn = useMemo<WorkspacesByColumn>(() => {
     const grouped: WorkspacesByColumn = {
@@ -184,7 +189,7 @@ export function KanbanBoard() {
           variant="outline"
           size="sm"
           className="h-8 shrink-0 w-full"
-          onClick={() => setShowInlineForm(true)}
+          onClick={handleMobileNewTaskClick}
         >
           <Plus className="h-4 w-4" />
           New Task
