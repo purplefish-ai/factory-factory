@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import {
   Dialog,
@@ -7,8 +7,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { TerminalInstance } from '@/components/workspace/terminal-instance';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
+
+const TerminalInstance = lazy(() =>
+  import('@/components/workspace/terminal-instance').then((m) => ({ default: m.TerminalInstance }))
+);
 
 const SetupTerminalMessageSchema = z.object({
   type: z.string(),
@@ -108,12 +111,14 @@ export function SetupTerminalModal({ open, onClose }: SetupTerminalModalProps) {
         </DialogHeader>
         <div className="flex-1 min-h-0 rounded-md overflow-hidden border bg-[#18181b]">
           {connected && (
-            <TerminalInstance
-              onData={handleData}
-              onResize={handleResize}
-              output={output}
-              isActive={open}
-            />
+            <Suspense fallback={null}>
+              <TerminalInstance
+                onData={handleData}
+                onResize={handleResize}
+                output={output}
+                isActive={open}
+              />
+            </Suspense>
           )}
         </div>
       </DialogContent>
