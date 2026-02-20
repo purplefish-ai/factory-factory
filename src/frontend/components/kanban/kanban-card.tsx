@@ -113,7 +113,6 @@ function CardArchiveButton({
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const requiresConfirmation = workspace.kanbanColumn !== 'DONE';
-  const isDone = workspace.kanbanColumn === 'DONE';
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -134,7 +133,7 @@ function CardArchiveButton({
             size="icon"
             className={cn(
               'h-6 w-6 hover:bg-destructive/10 hover:text-destructive shrink-0',
-              !isDone && 'opacity-0 group-hover:opacity-100 transition-opacity'
+              requiresConfirmation && 'opacity-0 group-hover:opacity-100 transition-opacity'
             )}
             onClick={handleClick}
             disabled={isPending}
