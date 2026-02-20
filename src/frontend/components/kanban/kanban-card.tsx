@@ -239,7 +239,7 @@ export function KanbanCard({
   const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
   const showCi = sidebarStatus.ciState !== 'NONE';
   const showBranch = Boolean(workspace.branchName);
-  const showPendingRequest = Boolean(workspace.pendingRequestType);
+  const showPendingRequest = workspace.pendingRequestType;
   const hasMetadata = showSetup || showCi || showBranch || showPR || showPendingRequest;
 
   return (
@@ -293,9 +293,7 @@ export function KanbanCard({
             )}
             {showPendingRequest && (
               <div className="flex items-center gap-2">
-                {workspace.pendingRequestType ? (
-                  <PendingRequestBadge type={workspace.pendingRequestType} />
-                ) : null}
+                <PendingRequestBadge type={showPendingRequest} />
               </div>
             )}
           </CardContent>
