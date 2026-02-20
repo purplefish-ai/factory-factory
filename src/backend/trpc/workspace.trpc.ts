@@ -237,6 +237,54 @@ export const workspaceRouter = router({
       });
     }),
 
+  // Bulk archive workspaces in a specific kanban column
+  bulkArchive: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        kanbanColumn: z.nativeEnum(KanbanColumn),
+        commitUncommitted: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const logger = getLogger(ctx);
+      const { projectId, kanbanColumn, commitUncommitted = true } = input;
+
+      // Get all workspaces in the specified kanban column
+      const workspacesWithState = await workspaceQueryService.listWithKanbanState({
+        projectId,
+        kanbanColumn,
+      });
+
+      logger.info('Bulk archiving workspaces', {
+        projectId,
+        kanbanColumn,
+        count: workspacesWithState.length,
+      });
+
+      // Archive each workspace sequentially
+      const results = [];
+      for (const workspaceWithState of workspacesWithState) {
+        try {
+          const workspace = await getWorkspaceWithProjectOrThrow(workspaceWithState.id);
+          await archiveWorkspace(workspace, { commitUncommitted });
+          results.push({ id: workspace.id, success: true });
+        } catch (error) {
+          logger.error('Failed to archive workspace during bulk operation', {
+            workspaceId: workspaceWithState.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          results.push({
+            id: workspaceWithState.id,
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      return { results, total: workspacesWithState.length };
+    }),
+
   // Delete a workspace
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const { runScriptService, sessionService, terminalService } = ctx.appContext.services;

@@ -1,4 +1,7 @@
+import { Archive } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
 import { KanbanCard, type WorkspaceWithKanban } from './kanban-card';
 
@@ -42,6 +45,8 @@ interface KanbanColumnProps {
   togglingWorkspaceId?: string | null;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   archivingWorkspaceId?: string | null;
+  onBulkArchive?: () => void;
+  isBulkArchiving?: boolean;
 }
 
 export function KanbanColumn({
@@ -52,8 +57,11 @@ export function KanbanColumn({
   togglingWorkspaceId,
   onArchive,
   archivingWorkspaceId,
+  onBulkArchive,
+  isBulkArchiving,
 }: KanbanColumnProps) {
   const isEmpty = workspaces.length === 0;
+  const showBulkArchiveButton = column.id === 'DONE' && !isEmpty;
 
   return (
     <div className="flex flex-col w-full md:flex-1 md:min-w-[280px] md:max-w-[440px] md:h-full">
@@ -65,6 +73,23 @@ export function KanbanColumn({
             {workspaces.length}
           </Badge>
         </div>
+        {showBulkArchiveButton && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onBulkArchive}
+                disabled={isBulkArchiving}
+                className="h-7 px-2"
+              >
+                <Archive className="h-4 w-4" />
+                <span className="ml-1 text-xs">Archive All</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Archive all workspaces in this column</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* Column Content */}
