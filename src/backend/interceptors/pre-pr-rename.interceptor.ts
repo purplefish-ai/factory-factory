@@ -268,6 +268,14 @@ export const prePrRenameInterceptor: ToolInterceptor = {
       return;
     }
 
-    await cleanupSupersededRemoteBranch(candidate);
+    try {
+      await cleanupSupersededRemoteBranch(candidate);
+    } catch (error) {
+      logger.error('Error cleaning up superseded remote branch', {
+        workspaceId: candidate.workspaceId,
+        toolUseId: event.toolUseId,
+        error,
+      });
+    }
   },
 };

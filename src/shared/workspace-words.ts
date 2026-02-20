@@ -122,16 +122,6 @@ function uniqueNameWithSuffix(baseName: string, existingNames: string[]): string
   };
 
   let counter = 2;
-  const maxIterations = 1000;
-  while (counter <= maxIterations) {
-    const candidate = getCandidate(counter);
-    if (!normalizedExisting.has(normalizeWorkspaceName(candidate))) {
-      return candidate;
-    }
-    counter++;
-  }
-
-  // Keep incrementing so we don't return a suffix already known to collide.
   while (true) {
     const candidate = getCandidate(counter);
     if (!normalizedExisting.has(normalizeWorkspaceName(candidate))) {

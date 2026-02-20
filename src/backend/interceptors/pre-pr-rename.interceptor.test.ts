@@ -326,6 +326,35 @@ describe('prePrRenameInterceptor', () => {
 
     expect(mockGitCommand).toHaveBeenCalledTimes(1);
   });
+
+  it('does not throw when remote cleanup fails on tool completion', async () => {
+    const event = createEvent({
+      toolUseId: 'tool-cleanup-error',
+      input: { command: 'gh pr create --title "test"' },
+    });
+
+    mockGitCommand.mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' }); // branch -m
+
+    await prePrRenameInterceptor.onToolStart!(event, {
+      ...context,
+      workspaceId: 'ws-cleanup-error',
+    });
+
+    mockGitCommand.mockRejectedValueOnce(new Error('spawn ENOENT'));
+
+    await expect(
+      prePrRenameInterceptor.onToolComplete!(
+        {
+          ...event,
+          output: { content: 'created', isError: false },
+        },
+        {
+          ...context,
+          workspaceId: 'ws-cleanup-error',
+        }
+      )
+    ).resolves.toBeUndefined();
+  });
 });
 
 describe('generateBranchName', () => {
