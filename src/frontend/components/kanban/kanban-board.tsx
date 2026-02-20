@@ -51,7 +51,6 @@ export function KanbanBoard() {
     toggleWorkspaceRatcheting,
     togglingWorkspaceId,
     archiveWorkspace,
-    archivingWorkspaceId,
     bulkArchiveColumn,
     isBulkArchiving,
     showInlineForm,
@@ -223,7 +222,6 @@ export function KanbanBoard() {
               onToggleRatcheting={toggleWorkspaceRatcheting}
               togglingWorkspaceId={togglingWorkspaceId}
               onArchive={archiveWorkspace}
-              archivingWorkspaceId={archivingWorkspaceId}
               onBulkArchive={() => handleBulkArchive(activeColumn.id)}
               isBulkArchiving={isBulkArchiving}
             />
@@ -265,7 +263,6 @@ export function KanbanBoard() {
               onToggleRatcheting={toggleWorkspaceRatcheting}
               togglingWorkspaceId={togglingWorkspaceId}
               onArchive={archiveWorkspace}
-              archivingWorkspaceId={archivingWorkspaceId}
               onBulkArchive={() => handleBulkArchive(column.id)}
               isBulkArchiving={isBulkArchiving}
             />

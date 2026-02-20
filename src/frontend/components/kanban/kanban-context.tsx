@@ -40,6 +40,45 @@ interface LinearIssueRaw {
   assigneeName: string | null;
 }
 
+interface ArchivingWorkspaceIssueLink {
+  githubIssueNumber: number | null;
+  linearIssueId: string | null;
+}
+
+function collectLinearIssueIds(
+  workspaces: WorkspaceWithKanban[] | undefined,
+  archivingWorkspaceIssueLinks: Map<string, ArchivingWorkspaceIssueLink>
+): Set<string> {
+  const issueIds = new Set(
+    (workspaces ?? [])
+      .map((workspace) => workspace.linearIssueId)
+      .filter((id): id is string => id !== null)
+  );
+  for (const link of archivingWorkspaceIssueLinks.values()) {
+    if (link.linearIssueId) {
+      issueIds.add(link.linearIssueId);
+    }
+  }
+  return issueIds;
+}
+
+function collectGitHubIssueNumbers(
+  workspaces: WorkspaceWithKanban[] | undefined,
+  archivingWorkspaceIssueLinks: Map<string, ArchivingWorkspaceIssueLink>
+): Set<number> {
+  const issueNumbers = new Set(
+    (workspaces ?? [])
+      .map((workspace) => workspace.githubIssueNumber)
+      .filter((issueNumber): issueNumber is number => issueNumber !== null)
+  );
+  for (const link of archivingWorkspaceIssueLinks.values()) {
+    if (link.githubIssueNumber) {
+      issueNumbers.add(link.githubIssueNumber);
+    }
+  }
+  return issueNumbers;
+}
+
 function normalizeGitHubIssue(issue: GitHubIssueRaw): KanbanIssue {
   return {
     id: String(issue.number),
@@ -84,7 +123,6 @@ interface KanbanContextValue {
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
   togglingWorkspaceId: string | null;
   archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
-  archivingWorkspaceId: string | null;
   bulkArchiveColumn: (kanbanColumn: string, commitUncommitted: boolean) => Promise<void>;
   isBulkArchiving: boolean;
   showInlineForm: boolean;
@@ -155,7 +193,10 @@ export function KanbanProvider({
   const archiveMutation = trpc.workspace.archive.useMutation();
   const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
-  const [archivingWorkspaceId, setArchivingWorkspaceId] = useState<string | null>(null);
+  const [archivingWorkspaceIds, setArchivingWorkspaceIds] = useState<Set<string>>(new Set());
+  const [archivingWorkspaceIssueLinks, setArchivingWorkspaceIssueLinks] = useState<
+    Map<string, ArchivingWorkspaceIssueLink>
+  >(new Map());
   const [showInlineForm, setShowInlineForm] = useState(false);
 
   const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
@@ -181,12 +222,44 @@ export function KanbanProvider({
   };
 
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
-    setArchivingWorkspaceId(workspaceId);
+    const workspace = workspaces?.find((item) => item.id === workspaceId);
+    setArchivingWorkspaceIds((prev) => {
+      const next = new Set(prev);
+      next.add(workspaceId);
+      return next;
+    });
+    setArchivingWorkspaceIssueLinks((prev) => {
+      const next = new Map(prev);
+      next.set(workspaceId, {
+        githubIssueNumber: workspace?.githubIssueNumber ?? null,
+        linearIssueId: workspace?.linearIssueId ?? null,
+      });
+      return next;
+    });
     try {
       await archiveMutation.mutateAsync({ id: workspaceId, commitUncommitted });
-      await refetchWorkspaces();
+      await Promise.all([
+        refetchWorkspaces(),
+        utils.workspace.getProjectSummaryState.invalidate({ projectId }),
+        utils.workspace.get.invalidate({ id: workspaceId }),
+      ]);
     } finally {
-      setArchivingWorkspaceId(null);
+      setArchivingWorkspaceIds((prev) => {
+        if (!prev.has(workspaceId)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(workspaceId);
+        return next;
+      });
+      setArchivingWorkspaceIssueLinks((prev) => {
+        if (!prev.has(workspaceId)) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.delete(workspaceId);
+        return next;
+      });
     }
   };
 
@@ -204,6 +277,11 @@ export function KanbanProvider({
     refetchIssues();
   };
 
+  const visibleWorkspaces = useMemo(
+    () => workspaces?.filter((workspace) => !archivingWorkspaceIds.has(workspace.id)),
+    [workspaces, archivingWorkspaceIds]
+  );
+
   // Normalize issues from the active provider
   const normalizedIssues = useMemo(() => {
     if (isLinear) {
@@ -217,26 +295,22 @@ export function KanbanProvider({
     if (!normalizedIssues) {
       return undefined;
     }
-    if (!workspaces) {
-      return normalizedIssues;
-    }
 
     if (isLinear) {
-      const workspaceLinearIds = new Set(
-        workspaces.map((w) => w.linearIssueId).filter((id): id is string => id !== null)
-      );
+      const workspaceLinearIds = collectLinearIssueIds(workspaces, archivingWorkspaceIssueLinks);
       return normalizedIssues.filter(
         (issue) => !(issue.linearIssueId && workspaceLinearIds.has(issue.linearIssueId))
       );
     }
 
-    const workspaceIssueNumbers = new Set(
-      workspaces.map((w) => w.githubIssueNumber).filter((n): n is number => n !== null)
+    const workspaceIssueNumbers = collectGitHubIssueNumbers(
+      workspaces,
+      archivingWorkspaceIssueLinks
     );
     return normalizedIssues.filter(
       (issue) => !(issue.githubIssueNumber && workspaceIssueNumbers.has(issue.githubIssueNumber))
     );
-  }, [normalizedIssues, workspaces, isLinear]);
+  }, [normalizedIssues, workspaces, isLinear, archivingWorkspaceIssueLinks]);
 
   return (
     <KanbanContext.Provider
@@ -244,7 +318,7 @@ export function KanbanProvider({
         projectId,
         projectSlug,
         issueProvider,
-        workspaces: workspaces as WorkspaceWithKanban[] | undefined,
+        workspaces: visibleWorkspaces as WorkspaceWithKanban[] | undefined,
         issues: filteredIssues,
         isLoading: isLoadingWorkspaces || isLoadingIssues,
         isError: isErrorWorkspaces,
@@ -255,7 +329,6 @@ export function KanbanProvider({
         toggleWorkspaceRatcheting,
         togglingWorkspaceId,
         archiveWorkspace,
-        archivingWorkspaceId,
         bulkArchiveColumn,
         isBulkArchiving: bulkArchiveMutation.isPending,
         showInlineForm,
