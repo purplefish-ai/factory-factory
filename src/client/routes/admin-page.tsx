@@ -1,5 +1,4 @@
 import {
-  ArrowLeft,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -27,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import { RatchetWrenchIcon } from '@/components/workspace';
+import { RatchetWrenchIcon, WorkspacesBackLink } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
 import { HeaderLeftExtraSlot, useAppHeader } from '@/frontend/components/app-header-context';
 import { Loading } from '@/frontend/components/loading';
@@ -818,13 +817,7 @@ export default function AdminDashboardPage() {
     <div className="h-full overflow-y-auto">
       {projectSlug && (
         <HeaderLeftExtraSlot>
-          <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
-            <Link to={`/projects/${projectSlug}/workspaces`}>
-              <ArrowLeft className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Back to Workspaces</span>
-              <span className="sm:hidden">Workspaces</span>
-            </Link>
-          </Button>
+          <WorkspacesBackLink projectSlug={projectSlug} />
         </HeaderLeftExtraSlot>
       )}
       <div className="space-y-6 p-3 md:p-6">

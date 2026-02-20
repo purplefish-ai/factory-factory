@@ -26,3 +26,4 @@ export * from './use-terminal-websocket';
 export * from './workspace-content-view';
 export * from './workspace-panel-context';
 export * from './workspace-status-badge';
+export * from './workspaces-back-link';
