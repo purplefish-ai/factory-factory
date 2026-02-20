@@ -1,5 +1,5 @@
 import type { Workspace } from '@prisma-gen/browser';
-import { AlertTriangle, Archive, GitBranch, GitPullRequest, Loader2, Play } from 'lucide-react';
+import { AlertTriangle, Archive, GitBranch, GitPullRequest, Play } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
@@ -34,7 +34,6 @@ interface KanbanCardProps {
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   isTogglePending?: boolean;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
-  isArchivePending?: boolean;
 }
 
 function CardStatusIndicator({
@@ -106,11 +105,9 @@ function CiRow({
 
 function CardArchiveButton({
   workspace,
-  isPending,
   onArchive,
 }: {
   workspace: WorkspaceWithKanban;
-  isPending: boolean;
   onArchive: (workspaceId: string, commitUncommitted: boolean) => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -138,13 +135,8 @@ function CardArchiveButton({
               requiresConfirmation && 'opacity-0 group-hover:opacity-100 transition-opacity'
             )}
             onClick={handleClick}
-            disabled={isPending}
           >
-            {isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Archive className="h-3 w-3" />
-            )}
+            <Archive className="h-3 w-3" />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Archive workspace</TooltipContent>
@@ -169,7 +161,6 @@ function CardTitleIcons({
   sessionRuntimeError,
   onToggleRatcheting,
   onArchive,
-  isArchivePending,
 }: {
   workspace: WorkspaceWithKanban;
   ratchetEnabled: boolean;
@@ -178,7 +169,6 @@ function CardTitleIcons({
   sessionRuntimeError: string | null;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
-  isArchivePending: boolean;
 }) {
   return (
     <div className="flex items-center gap-1.5 shrink-0">
@@ -215,11 +205,7 @@ function CardTitleIcons({
       )}
       <CardStatusIndicator status={workspace.status} errorMessage={workspace.initErrorMessage} />
       {!isArchived && onArchive && (
-        <CardArchiveButton
-          workspace={workspace}
-          isPending={isArchivePending}
-          onArchive={onArchive}
-        />
+        <CardArchiveButton workspace={workspace} onArchive={onArchive} />
       )}
     </div>
   );
@@ -252,7 +238,6 @@ export function KanbanCard({
   onToggleRatcheting,
   isTogglePending = false,
   onArchive,
-  isArchivePending = false,
 }: KanbanCardProps) {
   const { showPR, isArchived, ratchetEnabled, sidebarStatus, sessionRuntimeError } =
     deriveCardState(workspace);
@@ -288,7 +273,6 @@ export function KanbanCard({
               sessionRuntimeError={sessionRuntimeError}
               onToggleRatcheting={onToggleRatcheting}
               onArchive={onArchive}
-              isArchivePending={isArchivePending}
             />
           </div>
         </CardHeader>

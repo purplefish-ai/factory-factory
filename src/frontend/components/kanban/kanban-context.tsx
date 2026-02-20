@@ -123,7 +123,6 @@ interface KanbanContextValue {
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
   togglingWorkspaceId: string | null;
   archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
-  archivingWorkspaceIds: ReadonlySet<string>;
   bulkArchiveColumn: (kanbanColumn: string, commitUncommitted: boolean) => Promise<void>;
   isBulkArchiving: boolean;
   showInlineForm: boolean;
@@ -330,7 +329,6 @@ export function KanbanProvider({
         toggleWorkspaceRatcheting,
         togglingWorkspaceId,
         archiveWorkspace,
-        archivingWorkspaceIds,
         bulkArchiveColumn,
         isBulkArchiving: bulkArchiveMutation.isPending,
         showInlineForm,
