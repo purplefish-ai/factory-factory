@@ -204,9 +204,9 @@ export function useSessionManagement({
       }
 
       if (slug) {
-        void navigate(`/projects/${slug}/workspaces`, { replace: true });
+        void navigate(`/projects/${slug}/workspaces`);
       } else {
-        void navigate('/projects', { replace: true });
+        void navigate('/projects');
       }
 
       return { projectId, previousWorkspaceList };
