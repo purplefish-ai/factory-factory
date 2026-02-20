@@ -189,10 +189,12 @@
     "overrides": {
       "@isaacs/brace-expansion": ">=5.0.1",
       "@modelcontextprotocol/sdk>ajv": ">=8.18.0",
+      "app-builder-lib>minimatch": ">=10.2.1",
       "braces": ">=3.0.3",
+      "filelist>minimatch": ">=10.2.1",
       "micromatch": ">=4.0.8",
       "tar": ">=7.5.8",
-      "hono": ">=4.11.7",
+      "hono": ">=4.11.10",
       "lodash": ">=4.17.23",
       "lodash-es": ">=4.17.23",
       "qs": ">=6.14.2",
