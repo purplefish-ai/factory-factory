@@ -50,47 +50,60 @@ function CardStatusIndicator({
   return <WorkspaceStatusBadge status={status} errorMessage={errorMessage} />;
 }
 
-function GitContextRow({
+function CardBodySlot({ children }: { children: React.ReactNode }) {
+  return <div className="min-h-5 flex items-center">{children}</div>;
+}
+
+function PullRequestRow({
   workspace,
   showPR,
-  ciState,
 }: {
   workspace: WorkspaceWithKanban;
   showPR: boolean;
-  ciState: WorkspaceSidebarCiState;
 }) {
-  if (showPR) {
-    return (
-      <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-          }}
-          className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-        >
-          <GitPullRequest className="h-3 w-3 shrink-0" />
-          <span>#{workspace.prNumber}</span>
-        </button>
-        {ciState !== 'NONE' && (
-          <CiStatusChip ciState={ciState} prState={workspace.prState} size="sm" />
-        )}
-      </div>
-    );
+  if (!showPR) {
+    return null;
   }
 
-  if (workspace.branchName) {
-    return (
-      <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
-        <GitBranch className="h-3 w-3 shrink-0" />
-        <span className="font-mono truncate">{workspace.branchName}</span>
-      </div>
-    );
+  return (
+    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+        }}
+        className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+      >
+        <GitPullRequest className="h-3 w-3 shrink-0" />
+        <span>#{workspace.prNumber}</span>
+      </button>
+    </div>
+  );
+}
+
+function BranchRow({ branchName }: { branchName: string | null }) {
+  if (!branchName) {
+    return null;
   }
 
-  return null;
+  return (
+    <div className="flex items-center gap-2 text-[11px] text-muted-foreground min-w-0">
+      <GitBranch className="h-3 w-3 shrink-0" />
+      <span className="font-mono truncate">{branchName}</span>
+    </div>
+  );
+}
+
+function CiRow({
+  ciState,
+  prState,
+}: {
+  ciState: WorkspaceSidebarCiState;
+  prState: Workspace['prState'];
+}) {
+  return <CiStatusChip ciState={ciState} prState={prState} size="sm" />;
 }
 
 function CardArchiveButton({
@@ -203,17 +216,11 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     prCiStatus: workspace.prCiStatus ?? null,
     ratchetState: workspace.ratchetState ?? null,
   });
-  const hasGitContext = showPR || Boolean(workspace.branchName);
-  const hasPendingRequest = Boolean(workspace.pendingRequestType);
-  const isSettingUp = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
   return {
     showPR,
     isArchived,
     ratchetEnabled,
     sidebarStatus,
-    hasGitContext,
-    hasPendingRequest,
-    isSettingUp,
   };
 }
 
@@ -225,17 +232,7 @@ export function KanbanCard({
   onArchive,
   isArchivePending = false,
 }: KanbanCardProps) {
-  const {
-    showPR,
-    isArchived,
-    ratchetEnabled,
-    sidebarStatus,
-    hasGitContext,
-    hasPendingRequest,
-    isSettingUp,
-  } = deriveCardState(workspace);
-
-  const hasBody = hasGitContext || hasPendingRequest || isSettingUp;
+  const { showPR, isArchived, ratchetEnabled, sidebarStatus } = deriveCardState(workspace);
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -248,7 +245,7 @@ export function KanbanCard({
           isArchived && 'opacity-60 border-dashed'
         )}
       >
-        <CardHeader className={hasBody ? 'pb-2' : 'pb-4'}>
+        <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
               {workspace.name}
@@ -264,17 +261,27 @@ export function KanbanCard({
             />
           </div>
         </CardHeader>
-        {hasBody && (
-          <CardContent className="space-y-2">
+        <CardContent className="space-y-1">
+          <CardBodySlot>
             <SetupStatusChip status={workspace.status} />
-            <GitContextRow workspace={workspace} showPR={showPR} ciState={sidebarStatus.ciState} />
-            {workspace.pendingRequestType && (
+          </CardBodySlot>
+          <CardBodySlot>
+            <CiRow ciState={sidebarStatus.ciState} prState={workspace.prState} />
+          </CardBodySlot>
+          <CardBodySlot>
+            <BranchRow branchName={workspace.branchName} />
+          </CardBodySlot>
+          <CardBodySlot>
+            <PullRequestRow workspace={workspace} showPR={showPR} />
+          </CardBodySlot>
+          <CardBodySlot>
+            {workspace.pendingRequestType ? (
               <div className="flex items-center gap-2">
                 <PendingRequestBadge type={workspace.pendingRequestType} />
               </div>
-            )}
-          </CardContent>
-        )}
+            ) : null}
+          </CardBodySlot>
+        </CardContent>
       </Card>
     </Link>
   );
