@@ -6,7 +6,13 @@ const mockBeginStopping = vi.fn();
 const mockCompleteStopping = vi.fn();
 const mockMarkCompleted = vi.fn();
 const mockMarkFailed = vi.fn();
+const mockMarkRunning = vi.fn();
 const mockReset = vi.fn();
+const mockEnsureTunnel = vi.fn();
+const mockStopTunnel = vi.fn();
+const mockGetTunnelUrl = vi.fn();
+const mockCleanupTunnels = vi.fn();
+const mockCleanupTunnelsSync = vi.fn();
 
 vi.mock('tree-kill', () => ({
   default: (...args: unknown[]) => mockTreeKill(...args),
@@ -24,7 +30,18 @@ vi.mock('./run-script-state-machine.service', () => ({
     completeStopping: (...args: unknown[]) => mockCompleteStopping(...args),
     markCompleted: (...args: unknown[]) => mockMarkCompleted(...args),
     markFailed: (...args: unknown[]) => mockMarkFailed(...args),
+    markRunning: (...args: unknown[]) => mockMarkRunning(...args),
     reset: (...args: unknown[]) => mockReset(...args),
+  },
+}));
+
+vi.mock('@/backend/services/run-script-proxy.service', () => ({
+  runScriptProxyService: {
+    ensureTunnel: (...args: unknown[]) => mockEnsureTunnel(...args),
+    stopTunnel: (...args: unknown[]) => mockStopTunnel(...args),
+    getTunnelUrl: (...args: unknown[]) => mockGetTunnelUrl(...args),
+    cleanup: (...args: unknown[]) => mockCleanupTunnels(...args),
+    cleanupSync: (...args: unknown[]) => mockCleanupTunnelsSync(...args),
   },
 }));
 
@@ -50,6 +67,21 @@ type ExitHandlerCapable = {
 
 type StopHandlerCapable = {
   runningProcesses: Map<string, { pid: number }>;
+};
+
+type TransitionToRunningCapable = StopHandlerCapable & {
+  transitionToRunning: (
+    workspaceId: string,
+    childProcess: { pid: number; exitCode: number | null },
+    pid: number,
+    port: number | undefined
+  ) => Promise<{
+    success: boolean;
+    port?: number;
+    pid?: number;
+    proxyUrl?: string;
+    error?: string;
+  }>;
 };
 
 describe('RunScriptService.handleProcessExit', () => {
@@ -322,6 +354,41 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
   });
 });
 
+describe('RunScriptService.transitionToRunning', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('cleans up proxy tunnel when process exits during tunnel startup', async () => {
+    let resolveTunnel: ((value: string | null) => void) | undefined;
+    mockMarkRunning.mockResolvedValue(undefined);
+    mockEnsureTunnel.mockImplementation(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolveTunnel = resolve;
+        })
+    );
+
+    const service = new RunScriptService() as unknown as TransitionToRunningCapable;
+    const childProcess = { pid: 12_345, exitCode: null };
+    service.runningProcesses.set('ws-1', childProcess);
+
+    const transitionPromise = service.transitionToRunning('ws-1', childProcess, 12_345, 5173);
+
+    await Promise.resolve();
+    service.runningProcesses.delete('ws-1');
+    resolveTunnel?.('https://example.trycloudflare.com?token=abc123');
+
+    const result = await transitionPromise;
+
+    expect(mockMarkRunning).toHaveBeenCalledWith('ws-1', { pid: 12_345, port: 5173 });
+    expect(mockEnsureTunnel).toHaveBeenCalledWith('ws-1', 5173);
+    expect(mockStopTunnel).toHaveBeenCalledWith('ws-1');
+    expect(result).toMatchObject({ success: true, port: 5173, pid: 12_345 });
+    expect(result.proxyUrl).toBeUndefined();
+  });
+});
+
 describe('RunScriptService.appendOutput', () => {
   it('truncates output buffer when exceeding MAX_OUTPUT_BUFFER_SIZE', () => {
     const service = new RunScriptService();
@@ -401,6 +468,7 @@ describe('RunScriptService.cleanupSync', () => {
 
     expect(mockProcess.kill).toHaveBeenCalledWith('SIGKILL');
     expect((service as unknown as StopHandlerCapable).runningProcesses.size).toBe(0);
+    expect(mockCleanupTunnelsSync).toHaveBeenCalledTimes(1);
   });
 
   it('skips already-killed processes', () => {

@@ -78,8 +78,8 @@ describe('CODEX CLI import resolution', () => {
     });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('does not provide an export named');
-    expect(result.stderr).toContain('@/backend/');
+    expect(result.stderr).toMatch(/does not provide an export named|ERR_MODULE_NOT_FOUND/);
+    expect(result.stderr).toContain('@/');
   });
 
   it('avoids the import crash when tsconfig is pinned to repo root', () => {

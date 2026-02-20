@@ -85,6 +85,7 @@ export const workspaceRunScriptRouter = router({
         success: true,
         port: result.port,
         pid: result.pid,
+        proxyUrl: result.proxyUrl ?? null,
       };
     }),
 
