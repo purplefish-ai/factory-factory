@@ -41,7 +41,7 @@ function buildItems(health: {
   // Claude
   if (!health.claude.isInstalled) {
     items.push({ label: 'Claude', status: 'missing', detail: 'Not installed' });
-  } else if (health.claude.isAuthenticated === false) {
+  } else if (health.claude.isAuthenticated !== true) {
     items.push({
       label: 'Claude',
       status: 'warning',
@@ -54,7 +54,7 @@ function buildItems(health: {
   // Codex
   if (!health.codex.isInstalled) {
     items.push({ label: 'Codex', status: 'missing', detail: 'Not installed (optional)' });
-  } else if (health.codex.isAuthenticated === false) {
+  } else if (health.codex.isAuthenticated !== true) {
     items.push({
       label: 'Codex',
       status: 'warning',
