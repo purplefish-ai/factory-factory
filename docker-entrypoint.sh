@@ -41,7 +41,7 @@ if [ "${ENABLE_TUNNEL:-true}" = "true" ]; then
   echo "Starting Cloudflare tunnel..."
 
   TUNNEL_LOG=$(mktemp)
-  cloudflared tunnel --url "http://localhost:${PORT}" > "$TUNNEL_LOG" 2>&1 &
+  cloudflared tunnel --protocol http2 --url "http://localhost:${PORT}" > "$TUNNEL_LOG" 2>&1 &
   TUNNEL_PID=$!
 
   # Wait for the tunnel URL to appear in cloudflared output
