@@ -84,10 +84,11 @@ type WorkspacePrChipProps = {
 };
 
 function hasVisiblePullRequest(
-  workspace: WorkspaceHeaderWorkspace
-): workspace is WorkspaceHeaderWorkspace & {
+  workspace: Pick<WorkspaceHeaderWorkspace, 'prUrl' | 'prNumber' | 'prState'>
+): workspace is {
   prUrl: NonNullable<WorkspaceHeaderWorkspace['prUrl']>;
   prNumber: NonNullable<WorkspaceHeaderWorkspace['prNumber']>;
+  prState: WorkspaceHeaderWorkspace['prState'];
 } {
   return Boolean(
     workspace.prUrl &&
@@ -789,10 +790,13 @@ export function WorkspaceDetailHeaderSlot({
   const { slug = '' } = useParams<{ slug: string }>();
   const { branchName, name, prNumber, prState, prUrl } = workspace;
   const mobileTitlePrChipProps = useMemo<WorkspacePrChipProps | null>(() => {
-    if (!(prUrl && prNumber) || prState === 'NONE' || prState === 'CLOSED') {
+    const pullRequest = { prUrl, prNumber, prState };
+
+    if (!hasVisiblePullRequest(pullRequest)) {
       return null;
     }
-    return { prUrl, prNumber, prState };
+
+    return pullRequest;
   }, [prNumber, prState, prUrl]);
 
   const title = useMemo(() => {
