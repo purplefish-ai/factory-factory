@@ -12,7 +12,7 @@ import {
   Settings2,
   Zap,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
@@ -76,8 +76,19 @@ import { encodeGitHubTreeRef } from './github-branch-url';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 
 type WorkspaceHeaderWorkspace = NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+type WorkspacePrChipProps = {
+  prUrl: NonNullable<WorkspaceHeaderWorkspace['prUrl']>;
+  prNumber: NonNullable<WorkspaceHeaderWorkspace['prNumber']>;
+  prState: WorkspaceHeaderWorkspace['prState'];
+  className?: string;
+};
 
-function hasVisiblePullRequest(workspace: WorkspaceHeaderWorkspace): boolean {
+function hasVisiblePullRequest(
+  workspace: WorkspaceHeaderWorkspace
+): workspace is WorkspaceHeaderWorkspace & {
+  prUrl: NonNullable<WorkspaceHeaderWorkspace['prUrl']>;
+  prNumber: NonNullable<WorkspaceHeaderWorkspace['prNumber']>;
+} {
   return Boolean(
     workspace.prUrl &&
       workspace.prNumber &&
@@ -86,22 +97,7 @@ function hasVisiblePullRequest(workspace: WorkspaceHeaderWorkspace): boolean {
   );
 }
 
-function WorkspacePrChip({
-  workspace,
-  className,
-}: {
-  workspace: WorkspaceHeaderWorkspace;
-  className?: string;
-}) {
-  if (!hasVisiblePullRequest(workspace)) {
-    return null;
-  }
-  const prUrl = workspace.prUrl;
-  const prNumber = workspace.prNumber;
-  if (!(prUrl && prNumber)) {
-    return null;
-  }
-
+function WorkspacePrChip({ prUrl, prNumber, prState, className }: WorkspacePrChipProps) {
   return (
     <a
       href={prUrl}
@@ -109,14 +105,12 @@ function WorkspacePrChip({
       rel="noopener noreferrer"
       className={cn(
         'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity',
-        workspace.prState === 'MERGED'
-          ? 'text-green-500'
-          : 'text-muted-foreground hover:text-foreground',
+        prState === 'MERGED' ? 'text-green-500' : 'text-muted-foreground hover:text-foreground',
         className
       )}
     >
       <GitPullRequest className="h-3 w-3" />#{prNumber}
-      {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+      {prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
     </a>
   );
 }
@@ -180,7 +174,13 @@ function WorkspacePrAction({
   }
 
   if (hasVisiblePullRequest(workspace)) {
-    return <WorkspacePrChip workspace={workspace} />;
+    return (
+      <WorkspacePrChip
+        prUrl={workspace.prUrl}
+        prNumber={workspace.prNumber}
+        prState={workspace.prState}
+      />
+    );
   }
 
   return null;
@@ -787,13 +787,27 @@ export function WorkspaceDetailHeaderSlot({
 }: WorkspaceHeaderProps) {
   const isMobile = useIsMobile();
   const { slug = '' } = useParams<{ slug: string }>();
+  const { branchName, name, prNumber, prState, prUrl } = workspace;
+  const mobileTitlePrChipProps = useMemo<WorkspacePrChipProps | null>(() => {
+    if (!(prUrl && prNumber) || prState === 'NONE' || prState === 'CLOSED') {
+      return null;
+    }
+    return { prUrl, prNumber, prState };
+  }, [prNumber, prState, prUrl]);
 
-  const title =
-    isMobile && hasVisiblePullRequest(workspace) ? (
-      <WorkspacePrChip workspace={workspace} className="inline-flex max-w-full align-middle" />
-    ) : (
-      workspace.branchName || workspace.name
-    );
+  const title = useMemo(() => {
+    if (isMobile && mobileTitlePrChipProps) {
+      return (
+        <WorkspacePrChip
+          prUrl={mobileTitlePrChipProps.prUrl}
+          prNumber={mobileTitlePrChipProps.prNumber}
+          prState={mobileTitlePrChipProps.prState}
+          className="inline-flex max-w-full align-middle"
+        />
+      );
+    }
+    return branchName || name;
+  }, [branchName, isMobile, mobileTitlePrChipProps, name]);
   useAppHeader({ title });
 
   return (
