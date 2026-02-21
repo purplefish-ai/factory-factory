@@ -12,8 +12,7 @@ import {
   Settings2,
   Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import {
@@ -74,6 +73,7 @@ import { cn } from '@/lib/utils';
 import { NewWorkspaceButton } from './components/new-workspace-button';
 import { encodeGitHubTreeRef } from './github-branch-url';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
+import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 
 function ToggleRightPanelButton() {
   const { rightPanelVisible, toggleRightPanel } = useWorkspacePanel();
@@ -767,31 +767,8 @@ export function WorkspaceDetailHeaderSlot({
   isCreatingWorkspace,
 }: WorkspaceHeaderProps) {
   const isMobile = useIsMobile();
-  const { slug = '' } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
-
-  const handleProjectChange = useCallback(
-    (value: string) => {
-      if (value === '__manage__') {
-        void navigate('/projects');
-        return;
-      }
-      if (value === '__create__') {
-        void navigate('/projects/new');
-        return;
-      }
-      void navigate(`/projects/${value}/workspaces`);
-    },
-    [navigate]
-  );
-
-  const handleCurrentProjectSelect = useCallback(() => {
-    if (!slug) {
-      return;
-    }
-    void navigate(`/projects/${slug}/workspaces`);
-  }, [navigate, slug]);
+  const { slug, projects, handleProjectChange, handleCurrentProjectSelect } =
+    useWorkspaceProjectNavigation();
 
   const title = workspace.branchName || workspace.name;
   useAppHeader({ title });
