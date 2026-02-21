@@ -12,8 +12,8 @@ import {
   Settings2,
   Zap,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useParams } from 'react-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,7 +48,6 @@ import {
   RunScriptPortBadge,
   useRunScriptLaunch,
   useWorkspacePanel,
-  WorkspacesBackLink,
 } from '@/components/workspace';
 import {
   HeaderLeftExtraSlot,
@@ -56,6 +55,7 @@ import {
   HeaderRightSlot,
   useAppHeader,
 } from '@/frontend/components/app-header-context';
+import { ProjectSelectorDropdown } from '@/frontend/components/project-selector';
 import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
 import {
   applyRatchetToggleState,
@@ -768,6 +768,30 @@ export function WorkspaceDetailHeaderSlot({
 }: WorkspaceHeaderProps) {
   const isMobile = useIsMobile();
   const { slug = '' } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
+
+  const handleProjectChange = useCallback(
+    (value: string) => {
+      if (value === '__manage__') {
+        void navigate('/projects');
+        return;
+      }
+      if (value === '__create__') {
+        void navigate('/projects/new');
+        return;
+      }
+      void navigate(`/projects/${value}/workspaces`);
+    },
+    [navigate]
+  );
+
+  const handleCurrentProjectSelect = useCallback(() => {
+    if (!slug) {
+      return;
+    }
+    void navigate(`/projects/${slug}/workspaces`);
+  }, [navigate, slug]);
 
   const title = workspace.branchName || workspace.name;
   useAppHeader({ title });
@@ -775,7 +799,14 @@ export function WorkspaceDetailHeaderSlot({
   return (
     <>
       <HeaderLeftStartSlot>
-        <WorkspacesBackLink projectSlug={slug} />
+        <ProjectSelectorDropdown
+          selectedProjectSlug={slug}
+          onProjectChange={handleProjectChange}
+          onCurrentProjectSelect={handleCurrentProjectSelect}
+          projects={projects}
+          triggerId="workspace-detail-project-select"
+          triggerClassName="h-7 w-auto max-w-[10rem] gap-1 border-0 bg-transparent px-1 text-xs font-normal text-muted-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:text-sm"
+        />
       </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
         <div className="hidden md:flex items-center gap-2 min-w-0">

@@ -26,6 +26,13 @@ export default function WorkspacesListPage() {
     [navigate]
   );
 
+  const handleCurrentProjectSelect = useCallback(() => {
+    if (!slug) {
+      return;
+    }
+    void navigate(`/projects/${slug}/workspaces`);
+  }, [navigate, slug]);
+
   if (!project) {
     return <Loading message="Loading project..." />;
   }
@@ -35,6 +42,7 @@ export default function WorkspacesListPage() {
       projectId={project.id}
       selectedProjectSlug={slug}
       onProjectChange={handleProjectChange}
+      onCurrentProjectSelect={handleCurrentProjectSelect}
       projects={projects}
       slug={slug}
       issueProvider={project.issueProvider}
