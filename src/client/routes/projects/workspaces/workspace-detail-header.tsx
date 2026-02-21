@@ -806,7 +806,7 @@ export function WorkspaceDetailHeaderSlot({
           prUrl={mobileTitlePrChipProps.prUrl}
           prNumber={mobileTitlePrChipProps.prNumber}
           prState={mobileTitlePrChipProps.prState}
-          className="inline-flex max-w-full align-middle"
+          className="max-w-full align-middle"
         />
       );
     }
