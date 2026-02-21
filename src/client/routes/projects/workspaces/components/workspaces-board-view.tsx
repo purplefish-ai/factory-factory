@@ -15,12 +15,11 @@ function BoardHeaderSlot({
   onProjectChange: (value: string) => void;
   projects: Array<{ id: string; slug: string; name: string }> | undefined;
 }) {
-  useAppHeader({ title: 'Workspaces' });
+  useAppHeader({ title: '' });
 
   return (
     <>
       <HeaderLeftExtraSlot>
-        <span className="text-xs text-muted-foreground">·</span>
         <ProjectSelectorDropdown
           selectedProjectSlug={selectedProjectSlug}
           onProjectChange={onProjectChange}
