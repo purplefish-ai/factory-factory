@@ -35,10 +35,15 @@ if ! curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; then
   exit 1
 fi
 
-# Start cloudflared tunnel if enabled (default: true)
+# Start cloudflared tunnel based on CLOUD_MODE (cloudflare, native, none)
+# - cloudflare: Start cloudflared tunnel (default for backwards compatibility)
+# - native: No tunnel, server accessible directly on exposed port
+# - none: No tunnel, server accessible directly on exposed port
+CLOUD_MODE="${CLOUD_MODE:-cloudflare}"
 TUNNEL_PID=""
-if [ "${ENABLE_TUNNEL:-true}" = "true" ]; then
-  echo "Starting Cloudflare tunnel..."
+
+if [ "$CLOUD_MODE" = "cloudflare" ]; then
+  echo "Starting Cloudflare tunnel (CLOUD_MODE=cloudflare)..."
 
   TUNNEL_LOG=$(mktemp)
   cloudflared tunnel --protocol http2 --url "http://localhost:${PORT}" > "$TUNNEL_LOG" 2>&1 &
@@ -76,6 +81,10 @@ if [ "${ENABLE_TUNNEL:-true}" = "true" ]; then
   else
     echo "Warning: Could not detect tunnel URL. Check cloudflared logs above."
   fi
+elif [ "$CLOUD_MODE" = "native" ] || [ "$CLOUD_MODE" = "none" ]; then
+  echo "Skipping tunnel setup (CLOUD_MODE=${CLOUD_MODE}). Server accessible on port ${PORT}."
+else
+  echo "Warning: Unknown CLOUD_MODE='${CLOUD_MODE}'. Valid values: cloudflare, native, none. Defaulting to no tunnel."
 fi
 
 # Wait for the server process — this keeps the container alive
