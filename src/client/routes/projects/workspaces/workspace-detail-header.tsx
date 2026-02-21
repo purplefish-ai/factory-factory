@@ -75,6 +75,52 @@ import { NewWorkspaceButton } from './components/new-workspace-button';
 import { encodeGitHubTreeRef } from './github-branch-url';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 
+type WorkspaceHeaderWorkspace = NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+
+function hasVisiblePullRequest(workspace: WorkspaceHeaderWorkspace): boolean {
+  return Boolean(
+    workspace.prUrl &&
+      workspace.prNumber &&
+      workspace.prState !== 'NONE' &&
+      workspace.prState !== 'CLOSED'
+  );
+}
+
+function WorkspacePrChip({
+  workspace,
+  className,
+}: {
+  workspace: WorkspaceHeaderWorkspace;
+  className?: string;
+}) {
+  if (!hasVisiblePullRequest(workspace)) {
+    return null;
+  }
+  const prUrl = workspace.prUrl;
+  const prNumber = workspace.prNumber;
+  if (!(prUrl && prNumber)) {
+    return null;
+  }
+
+  return (
+    <a
+      href={prUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity',
+        workspace.prState === 'MERGED'
+          ? 'text-green-500'
+          : 'text-muted-foreground hover:text-foreground',
+        className
+      )}
+    >
+      <GitPullRequest className="h-3 w-3" />#{prNumber}
+      {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+    </a>
+  );
+}
+
 function ToggleRightPanelButton() {
   const { rightPanelVisible, toggleRightPanel } = useWorkspacePanel();
 
@@ -102,7 +148,7 @@ function WorkspacePrAction({
   isCreatingSession,
   handleQuickAction,
 }: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspace: WorkspaceHeaderWorkspace;
   hasChanges?: boolean;
   running: boolean;
   isCreatingSession: boolean;
@@ -133,37 +179,14 @@ function WorkspacePrAction({
     );
   }
 
-  if (
-    workspace.prUrl &&
-    workspace.prNumber &&
-    workspace.prState !== 'NONE' &&
-    workspace.prState !== 'CLOSED'
-  ) {
-    return (
-      <a
-        href={workspace.prUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`flex items-center gap-1 text-xs hover:opacity-80 transition-opacity ${
-          workspace.prState === 'MERGED'
-            ? 'text-green-500'
-            : 'text-muted-foreground hover:text-foreground'
-        }`}
-      >
-        <GitPullRequest className="h-3 w-3" />#{workspace.prNumber}
-        {workspace.prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-      </a>
-    );
+  if (hasVisiblePullRequest(workspace)) {
+    return <WorkspacePrChip workspace={workspace} />;
   }
 
   return null;
 }
 
-function WorkspaceIssueLink({
-  workspace,
-}: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
-}) {
+function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWorkspace }) {
   if (workspace.linearIssueIdentifier && workspace.linearIssueUrl) {
     return (
       <a
@@ -194,11 +217,7 @@ function WorkspaceIssueLink({
   return null;
 }
 
-function WorkspaceCiStatus({
-  workspace,
-}: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
-}) {
+function WorkspaceCiStatus({ workspace }: { workspace: WorkspaceHeaderWorkspace }) {
   if (!workspace.prUrl) {
     return null;
   }
@@ -215,7 +234,7 @@ function WorkspaceBranchLink({
   workspace,
   renderAsMenuItem = false,
 }: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspace: WorkspaceHeaderWorkspace;
   renderAsMenuItem?: boolean;
 }) {
   const { data: project } = trpc.project.getById.useQuery(
@@ -267,7 +286,7 @@ function RatchetingToggle({
   workspaceId,
   renderAsMenuItem = false,
 }: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
   renderAsMenuItem?: boolean;
 }) {
@@ -348,7 +367,7 @@ function WorkspaceProviderSettings({
   onOpenChange,
   showTrigger = true,
 }: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -599,7 +618,7 @@ function ArchiveActionButton({
   onArchiveRequest,
   renderAsMenuItem = false,
 }: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspace: WorkspaceHeaderWorkspace;
   archivePending: boolean;
   onArchiveRequest: () => void;
   renderAsMenuItem?: boolean;
@@ -664,7 +683,7 @@ function WorkspaceHeaderOverflowMenu({
   archivePending,
   onArchiveRequest,
 }: {
-  workspace: NonNullable<ReturnType<typeof useWorkspaceData>['workspace']>;
+  workspace: WorkspaceHeaderWorkspace;
   workspaceId: string;
   availableIdes: ReturnType<typeof useSessionManagement>['availableIdes'];
   preferredIde: ReturnType<typeof useSessionManagement>['preferredIde'];
@@ -769,7 +788,12 @@ export function WorkspaceDetailHeaderSlot({
   const isMobile = useIsMobile();
   const { slug = '' } = useParams<{ slug: string }>();
 
-  const title = workspace.branchName || workspace.name;
+  const title =
+    isMobile && hasVisiblePullRequest(workspace) ? (
+      <WorkspacePrChip workspace={workspace} className="inline-flex max-w-full align-middle" />
+    ) : (
+      workspace.branchName || workspace.name
+    );
   useAppHeader({ title });
 
   return (
