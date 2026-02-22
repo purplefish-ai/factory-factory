@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "setup": "docker compose build",
-    "run": "docker compose up --watch"
+    "setup": "pnpm install",
+    "run": "pnpm dev"
   }
 }
