@@ -59,6 +59,8 @@ ARG PNPM_VERSION
 WORKDIR /app
 
 # Runtime system dependencies + cloudflared for tunnel + GitHub CLI
+# python3, make, g++ are needed so workspace `pnpm install` can compile
+# native modules (node-pty has no Linux prebuilds)
 RUN apk add --no-cache \
     git \
     bash \
@@ -67,6 +69,9 @@ RUN apk add --no-cache \
     lsof \
     libc6-compat \
     libstdc++ \
+    python3 \
+    make \
+    g++ \
     github-cli \
   && ARCH="$(uname -m)" \
   && case "$ARCH" in \
