@@ -75,6 +75,7 @@ RUN apk add --no-cache \
     github-cli \
     docker \
     docker-cli-compose \
+    containerd \
   && ARCH="$(uname -m)" \
   && case "$ARCH" in \
        x86_64)  CF_ARCH="amd64" ;; \

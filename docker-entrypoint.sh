@@ -13,8 +13,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Start Docker daemon (Docker-in-Docker)
+# Use vfs storage driver to avoid overlay-on-overlay issues in DinD
 echo "Starting Docker daemon..."
-dockerd &>/var/log/dockerd.log &
+dockerd --storage-driver=vfs &>/var/log/dockerd.log &
 DOCKERD_PID=$!
 
 # Wait for Docker daemon to be ready
