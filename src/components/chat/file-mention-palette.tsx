@@ -1,5 +1,5 @@
 import { File, Folder } from 'lucide-react';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Command,
   CommandEmpty,
@@ -80,14 +80,31 @@ function formatFilePath(filePath: string): { basename: string; directory: string
 // =============================================================================
 
 /**
- * File mention palette component.
- *
- * Displays a floating dropdown above the chat input that shows available
- * files from the workspace. Supports keyboard navigation and filtering by file name.
- *
- * Keyboard handling is controlled by the parent component via the paletteRef.
- * Call paletteRef.current.handleKeyDown(key) to handle keyboard events.
+ * Determine whether the palette should open above or below the anchor element
+ * based on available viewport space. The palette max-height is 200px plus some
+ * margin, so we need roughly 230px of room.
  */
+function usePlacement(
+  anchorRef: React.RefObject<HTMLElement | null>,
+  isOpen: boolean
+): 'above' | 'below' {
+  const [placement, setPlacement] = useState<'above' | 'below'>('above');
+
+  useEffect(() => {
+    if (!(isOpen && anchorRef.current)) {
+      return;
+    }
+    const rect = anchorRef.current.getBoundingClientRect();
+    const paletteHeight = 230; // 200px max-height + border/margin
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+
+    setPlacement(spaceAbove >= paletteHeight || spaceAbove > spaceBelow ? 'above' : 'below');
+  }, [isOpen, anchorRef]);
+
+  return placement;
+}
+
 export function FileMentionPalette({
   files,
   isOpen,
@@ -98,6 +115,8 @@ export function FileMentionPalette({
   anchorRef,
   paletteRef,
 }: FileMentionPaletteProps) {
+  const placement = usePlacement(anchorRef, isOpen);
+
   const handleSelectByIndex = useCallback(
     (index: number): boolean => {
       const selectedFilePath = files[index];
@@ -132,7 +151,8 @@ export function FileMentionPalette({
     <div
       ref={containerRef}
       className={cn(
-        'absolute bottom-full left-0 mb-1 w-full max-w-md z-50',
+        'absolute left-0 w-full max-w-md z-50',
+        placement === 'above' ? 'bottom-full mb-1' : 'top-full mt-1',
         'rounded-md border bg-popover text-popover-foreground shadow-md'
       )}
     >
