@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -18,16 +19,21 @@ export function KanbanControls() {
   const { syncAndRefetch, isSyncing } = useKanban();
 
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      className="h-8"
-      onClick={() => syncAndRefetch()}
-      disabled={isSyncing}
-    >
-      <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
-      Refresh
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => syncAndRefetch()}
+          disabled={isSyncing}
+          aria-label="Refresh workspaces"
+        >
+          <RefreshCw className={cn('h-4 w-4', isSyncing && 'animate-spin')} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Refresh workspaces</TooltipContent>
+    </Tooltip>
   );
 }
 
