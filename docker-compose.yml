@@ -8,6 +8,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: factoryfactory
+    privileged: true
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:3000"
@@ -29,6 +30,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    develop:
+      # All paths use "rebuild" because the container runs compiled output
+      # from a multi-stage production build. sync won't work since raw
+      # TypeScript/source changes require a full build to take effect.
+      watch:
+        - action: rebuild
+          path: ./src
+        - action: rebuild
+          path: ./packages
+        - action: rebuild
+          path: ./prisma
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
 
 volumes:
   data:
