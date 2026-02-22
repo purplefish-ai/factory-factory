@@ -29,6 +29,18 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    develop:
+      watch:
+        - action: rebuild
+          path: ./src
+        - action: rebuild
+          path: ./packages
+        - action: rebuild
+          path: ./prisma
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
 
 volumes:
   data:
