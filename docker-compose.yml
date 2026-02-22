@@ -8,6 +8,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: factoryfactory
+    privileged: true
     restart: unless-stopped
     ports:
       - "${PORT:-3000}:3000"

@@ -7,8 +7,32 @@ cleanup() {
   kill "$TUNNEL_PID" 2>/dev/null || true
   wait "$SERVER_PID" 2>/dev/null || true
   wait "$TUNNEL_PID" 2>/dev/null || true
+  # Stop Docker daemon
+  kill "$DOCKERD_PID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
+
+# Start Docker daemon (Docker-in-Docker)
+echo "Starting Docker daemon..."
+dockerd &>/var/log/dockerd.log &
+DOCKERD_PID=$!
+
+# Wait for Docker daemon to be ready
+for i in $(seq 1 30); do
+  if docker info >/dev/null 2>&1; then
+    echo "Docker daemon is ready."
+    break
+  fi
+  if ! kill -0 "$DOCKERD_PID" 2>/dev/null; then
+    echo "Warning: Docker daemon exited unexpectedly. Continuing without Docker."
+    break
+  fi
+  sleep 1
+done
+
+if ! docker info >/dev/null 2>&1; then
+  echo "Warning: Docker daemon not ready after 30s. Continuing without Docker."
+fi
 
 PORT="${BACKEND_PORT:-3000}"
 
