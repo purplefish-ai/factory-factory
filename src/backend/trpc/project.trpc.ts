@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { projectManagementService } from '@/backend/domains/workspace';
+import { compareFilesByRelevance, listFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
@@ -168,6 +169,35 @@ export const projectRouter = router({
       );
 
       return { branches };
+    }),
+
+  // List all files recursively in the project repo (for autocomplete)
+  listAllFiles: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        query: z.string().optional(),
+        limit: z.number().min(1).max(100).default(50),
+      })
+    )
+    .query(async ({ input }) => {
+      const project = await projectManagementService.findById(input.projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${input.projectId}`);
+      }
+
+      let files = await listFilesRecursive(project.repoPath);
+
+      if (input.query) {
+        const queryLower = input.query.toLowerCase();
+        files = files.filter((file) => file.toLowerCase().includes(queryLower));
+      }
+
+      const queryLower = input.query?.toLowerCase();
+      files.sort((a, b) => compareFilesByRelevance(a, b, queryLower));
+      files = files.slice(0, input.limit);
+
+      return { files };
     }),
 
   // Create a new project (only repoPath required - name/slug/worktree derived)
