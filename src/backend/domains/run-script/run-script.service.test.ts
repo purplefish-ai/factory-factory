@@ -8,6 +8,7 @@ const mockMarkCompleted = vi.fn();
 const mockMarkFailed = vi.fn();
 const mockMarkRunning = vi.fn();
 const mockReset = vi.fn();
+const mockVerifyRunning = vi.fn();
 const mockEnsureTunnel = vi.fn();
 const mockStopTunnel = vi.fn();
 const mockGetTunnelUrl = vi.fn();
@@ -32,6 +33,7 @@ vi.mock('./run-script-state-machine.service', () => ({
     markFailed: (...args: unknown[]) => mockMarkFailed(...args),
     markRunning: (...args: unknown[]) => mockMarkRunning(...args),
     reset: (...args: unknown[]) => mockReset(...args),
+    verifyRunning: (...args: unknown[]) => mockVerifyRunning(...args),
   },
 }));
 
@@ -67,6 +69,7 @@ type ExitHandlerCapable = {
 
 type StopHandlerCapable = {
   runningProcesses: Map<string, { pid: number }>;
+  postRunProcesses: Map<string, { pid: number; killed: boolean; kill: (signal: string) => void }>;
 };
 
 type TransitionToRunningCapable = StopHandlerCapable & {
@@ -479,5 +482,126 @@ describe('RunScriptService.cleanupSync', () => {
     service.cleanupSync();
 
     expect(mockProcess.kill).not.toHaveBeenCalled();
+  });
+
+  it('force kills postRun processes on sync cleanup', () => {
+    const service = new RunScriptService();
+    const mockPostRun = { killed: false, kill: vi.fn(), pid: 888 };
+    (service as unknown as StopHandlerCapable).postRunProcesses.set('ws-1', mockPostRun as never);
+
+    service.cleanupSync();
+
+    expect(mockPostRun.kill).toHaveBeenCalledWith('SIGKILL');
+    expect((service as unknown as StopHandlerCapable).postRunProcesses.size).toBe(0);
+  });
+
+  it('skips already-killed postRun processes', () => {
+    const service = new RunScriptService();
+    const mockPostRun = { killed: true, kill: vi.fn(), pid: 888 };
+    (service as unknown as StopHandlerCapable).postRunProcesses.set('ws-1', mockPostRun as never);
+
+    service.cleanupSync();
+
+    expect(mockPostRun.kill).not.toHaveBeenCalled();
+    expect((service as unknown as StopHandlerCapable).postRunProcesses.size).toBe(0);
+  });
+});
+
+describe('RunScriptService.killPostRunProcess', () => {
+  type KillPostRunCapable = {
+    killPostRunProcess: (workspaceId: string) => Promise<void>;
+    postRunProcesses: Map<string, { pid: number }>;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does nothing when no postRun process exists', async () => {
+    const service = new RunScriptService() as unknown as KillPostRunCapable;
+    await service.killPostRunProcess('ws-1');
+    expect(mockTreeKill).not.toHaveBeenCalled();
+  });
+
+  it('cleans up postRun process without pid', async () => {
+    const service = new RunScriptService() as unknown as KillPostRunCapable;
+    service.postRunProcesses.set('ws-1', { pid: 0 } as never);
+
+    await service.killPostRunProcess('ws-1');
+
+    expect(mockTreeKill).not.toHaveBeenCalled();
+    expect(service.postRunProcesses.has('ws-1')).toBe(false);
+  });
+
+  it('tree-kills postRun process by pid', async () => {
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) => callback(null)
+    );
+
+    const service = new RunScriptService() as unknown as KillPostRunCapable;
+    service.postRunProcesses.set('ws-1', { pid: 888 } as never);
+
+    await service.killPostRunProcess('ws-1');
+
+    expect(mockTreeKill).toHaveBeenCalledWith(888, 'SIGTERM', expect.any(Function));
+    expect(service.postRunProcesses.has('ws-1')).toBe(false);
+  });
+
+  it('handles ESRCH error gracefully when postRun process already exited', async () => {
+    const esrchError = new Error('No such process') as NodeJS.ErrnoException;
+    esrchError.code = 'ESRCH';
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) =>
+        callback(esrchError)
+    );
+
+    const service = new RunScriptService() as unknown as KillPostRunCapable;
+    service.postRunProcesses.set('ws-1', { pid: 888 } as never);
+
+    await service.killPostRunProcess('ws-1');
+
+    expect(service.postRunProcesses.has('ws-1')).toBe(false);
+  });
+});
+
+describe('RunScriptService.getRunScriptStatus', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns status with postRun command', async () => {
+    mockVerifyRunning.mockResolvedValue('RUNNING');
+    mockFindById.mockResolvedValueOnce({ id: 'ws-1' }).mockResolvedValueOnce({
+      id: 'ws-1',
+      runScriptPid: 12_345,
+      runScriptPort: 3000,
+      runScriptStartedAt: new Date(),
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: 'cloudflared tunnel --url http://localhost:3000',
+      runScriptCleanupCommand: null,
+    });
+    mockGetTunnelUrl.mockReturnValue('https://example.trycloudflare.com');
+
+    const service = new RunScriptService();
+    const result = await service.getRunScriptStatus('ws-1');
+
+    expect(result.status).toBe('RUNNING');
+    expect(result.runScriptPostRunCommand).toBe('cloudflared tunnel --url http://localhost:3000');
+    expect(result.hasRunScript).toBe(true);
+  });
+
+  it('throws when workspace not found', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const service = new RunScriptService();
+    await expect(service.getRunScriptStatus('ws-missing')).rejects.toThrow('Workspace not found');
+  });
+
+  it('throws when workspace disappears after verify', async () => {
+    mockVerifyRunning.mockResolvedValue('IDLE');
+    mockFindById.mockResolvedValueOnce({ id: 'ws-1' }).mockResolvedValueOnce(null);
+
+    const service = new RunScriptService();
+    await expect(service.getRunScriptStatus('ws-1')).rejects.toThrow('Workspace not found');
   });
 });
