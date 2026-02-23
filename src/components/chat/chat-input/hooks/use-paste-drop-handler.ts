@@ -84,7 +84,7 @@ async function handleFileDrop(
  *
  * Paste behavior:
  * - Images: Always convert to attachments
- * - Large text (10+ lines or 1000+ chars): Convert to text attachment
+ * - Large text (20+ lines or 2000+ chars): Convert to text attachment
  * - Small text: Default behavior (insert inline)
  *
  * Drop behavior:
