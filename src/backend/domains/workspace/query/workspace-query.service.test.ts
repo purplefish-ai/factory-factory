@@ -255,6 +255,65 @@ describe('WorkspaceQueryService', () => {
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
   });
 
+  it('filters out workspaces currently archiving from project summary state results', async () => {
+    workspaceArchiveTrackerService.markArchiving('ws-2');
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'ws-1',
+        name: 'Workspace 1',
+        createdAt: new Date('2026-02-01T00:00:00.000Z'),
+        worktreePath: null,
+        branchName: null,
+        prUrl: null,
+        prNumber: null,
+        prState: 'NONE',
+        prCiStatus: null,
+        ratchetEnabled: false,
+        ratchetState: 'IDLE',
+        runScriptStatus: 'IDLE',
+        cachedKanbanColumn: 'WAITING',
+        stateComputedAt: null,
+        agentSessions: [],
+        terminalSessions: [],
+      },
+      {
+        id: 'ws-2',
+        name: 'Workspace 2',
+        createdAt: new Date('2026-02-02T00:00:00.000Z'),
+        worktreePath: null,
+        branchName: null,
+        prUrl: null,
+        prNumber: null,
+        prState: 'NONE',
+        prCiStatus: null,
+        ratchetEnabled: false,
+        ratchetState: 'IDLE',
+        runScriptStatus: 'IDLE',
+        cachedKanbanColumn: 'WAITING',
+        stateComputedAt: null,
+        agentSessions: [],
+        terminalSessions: [],
+      },
+    ]);
+    mockDeriveWorkspaceRuntimeState.mockImplementation((workspace: { id: string }) => ({
+      sessionIds: [workspace.id],
+      isWorking: false,
+      flowState: {
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'CHECKS_UNKNOWN',
+      },
+    }));
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+
+    const result = await workspaceQueryService.getProjectSummaryState('p1');
+
+    expect(result.workspaces).toHaveLength(1);
+    expect(result.workspaces[0]?.id).toBe('ws-1');
+  });
+
   it('refreshFactoryConfigs updates script commands and reports per-workspace errors', async () => {
     mockFindByProjectId.mockResolvedValue([
       { id: 'w1', worktreePath: '/tmp/w1' },

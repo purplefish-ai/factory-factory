@@ -77,6 +77,9 @@ class WorkspaceQueryService {
         excludeStatuses: [WorkspaceStatus.ARCHIVED],
       }),
     ]);
+    const nonArchivingWorkspaces = workspaces.filter(
+      (workspace) => !workspaceArchiveTrackerService.isArchiving(workspace.id)
+    );
 
     const defaultBranch = project?.defaultBranch ?? 'main';
 
@@ -92,7 +95,7 @@ class WorkspaceQueryService {
       string,
       'plan_approval' | 'user_question' | 'permission_request' | null
     >();
-    for (const workspace of workspaces) {
+    for (const workspace of nonArchivingWorkspaces) {
       const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
         this.session.isAnySessionWorking(sessionIds)
       );
@@ -114,7 +117,7 @@ class WorkspaceQueryService {
     > = {};
 
     await Promise.all(
-      workspaces.map((workspace) =>
+      nonArchivingWorkspaces.map((workspace) =>
         gitConcurrencyLimit(async () => {
           if (!workspace.worktreePath) {
             gitStatsResults[workspace.id] = null;
@@ -156,7 +159,7 @@ class WorkspaceQueryService {
     }
 
     return {
-      workspaces: workspaces.map((w) => {
+      workspaces: nonArchivingWorkspaces.map((w) => {
         const flowState = flowStateByWorkspace.get(w.id);
         const isWorking = workingStatusByWorkspace.get(w.id) ?? false;
         const kanbanColumn = computeKanbanColumn({

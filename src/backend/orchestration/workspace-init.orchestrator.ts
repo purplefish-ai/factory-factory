@@ -679,6 +679,8 @@ interface InitialAutoMessageContent {
   attachments?: MessageAttachment[];
 }
 
+type WorkspaceStartupModePreset = 'non_interactive' | 'plan';
+
 function readInitialAttachmentsFromMetadata(
   metadata: Record<string, unknown> | null,
   workspaceId: string
@@ -698,8 +700,28 @@ function readInitialAttachmentsFromMetadata(
   return undefined;
 }
 
-async function resolveInitialAutoMessageContent(
+function readStartupModePresetFromMetadata(
+  metadata: Record<string, unknown> | null,
   workspaceId: string
+): WorkspaceStartupModePreset {
+  if (!(metadata && 'startupModePreset' in metadata)) {
+    return 'non_interactive';
+  }
+
+  const startupModePreset = metadata.startupModePreset;
+  if (startupModePreset === 'non_interactive' || startupModePreset === 'plan') {
+    return startupModePreset;
+  }
+
+  logger.warn('Invalid startup mode preset in workspace creation metadata', {
+    workspaceId,
+  });
+  return 'non_interactive';
+}
+
+async function resolveInitialAutoMessageContent(
+  workspaceId: string,
+  creationMetadata: Record<string, unknown> | null
 ): Promise<InitialAutoMessageContent | null> {
   const issuePromptText =
     (await buildInitialPromptFromGitHubIssue(workspaceId)) ||
@@ -708,13 +730,11 @@ async function resolveInitialAutoMessageContent(
     return { text: issuePromptText };
   }
 
-  const workspace = await workspaceAccessor.findById(workspaceId);
-  const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
   const metadataPromptText =
-    metadata?.initialPrompt && typeof metadata.initialPrompt === 'string'
-      ? metadata.initialPrompt
+    creationMetadata?.initialPrompt && typeof creationMetadata.initialPrompt === 'string'
+      ? creationMetadata.initialPrompt
       : '';
-  const metadataAttachments = readInitialAttachmentsFromMetadata(metadata, workspaceId);
+  const metadataAttachments = readInitialAttachmentsFromMetadata(creationMetadata, workspaceId);
 
   if (!metadataPromptText && (!metadataAttachments || metadataAttachments.length === 0)) {
     return null;
@@ -739,14 +759,18 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       return null;
     }
 
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
+    const startupModePreset = readStartupModePresetFromMetadata(metadata, workspaceId);
+
     // Build the initial prompt from linked issue data, or fallback to creation metadata.
-    const initialMessage = await resolveInitialAutoMessageContent(workspaceId);
+    const initialMessage = await resolveInitialAutoMessageContent(workspaceId, metadata);
 
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')
     await sessionService.startSession(session.id, {
       initialPrompt: '',
-      startupModePreset: 'non_interactive',
+      startupModePreset,
     });
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
@@ -837,6 +861,7 @@ export async function initializeWorkspaceWorktree(
 
   let project: WorkspaceWithProject['project'] | undefined;
   let worktreeCreated = false;
+  let agentSessionPromise: Promise<string | null> = Promise.resolve(null);
 
   try {
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
@@ -878,7 +903,7 @@ export async function initializeWorkspaceWorktree(
 
     // Start Claude session eagerly - runs in parallel with setup scripts.
     // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
-    const agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
+    agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
       logger.error('Failed to start default Claude session', {
         workspaceId,
         error: error instanceof Error ? error.message : String(error),
@@ -918,6 +943,9 @@ export async function initializeWorkspaceWorktree(
     const startedSessionId = await agentSessionPromise;
     await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
   } catch (error) {
+    // Ensure any eager session start attempt has settled before cleanup so we
+    // do not race stopWorkspaceSessions() with a late startSession() call.
+    await agentSessionPromise;
     await handleWorkspaceInitFailure(workspaceId, error as Error);
   } finally {
     if (worktreeCreated) {

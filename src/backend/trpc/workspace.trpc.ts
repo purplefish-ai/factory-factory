@@ -41,6 +41,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     ratchetEnabled: z.boolean().optional(),
     initialPrompt: z.string().optional(),
     initialAttachments: z.array(AttachmentSchema).optional(),
+    startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
     provider: z.nativeEnum(SessionProvider).optional(),
   }),
   z.object({

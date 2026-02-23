@@ -50,6 +50,9 @@ export function InlineWorkspaceForm({
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
+  const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
+    'non_interactive'
+  );
 
   const fileMentions = useProjectFileMentions({
     projectId,
@@ -123,6 +126,7 @@ export function InlineWorkspaceForm({
       name,
       initialPrompt: trimmedPrompt || undefined,
       initialAttachments: attachments.length > 0 ? attachments : undefined,
+      startupModePreset: startupModePreset === 'plan' ? 'plan' : undefined,
       ratchetEnabled,
       provider,
     });
@@ -216,6 +220,19 @@ export function InlineWorkspaceForm({
               <SelectContent>
                 <SelectItem value="CLAUDE">Claude</SelectItem>
                 <SelectItem value="CODEX">Codex</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={startupModePreset}
+              onValueChange={(v) => setStartupModePreset(v as 'non_interactive' | 'plan')}
+              disabled={isCreating}
+            >
+              <SelectTrigger className="h-7 w-24 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="non_interactive">Default</SelectItem>
+                <SelectItem value="plan">Plan</SelectItem>
               </SelectContent>
             </Select>
             <Button
