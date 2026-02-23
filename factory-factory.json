@@ -1,6 +1,7 @@
 {
   "scripts": {
     "setup": "pnpm install",
-    "run": "pnpm dev"
+    "run": "pnpm dev",
+    "postRun": "cloudflared tunnel --url http://localhost:{port}"
   }
 }
