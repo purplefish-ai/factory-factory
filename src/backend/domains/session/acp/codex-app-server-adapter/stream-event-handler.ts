@@ -1,7 +1,9 @@
 import type { SessionUpdate, StopReason } from '@agentclientprotocol/sdk';
 import {
+  asString,
   dedupeLocations,
   isCommandExecutionSessionHandoffOutput,
+  isRecord,
   resolveToolCallId,
   toToolStatus,
   toTurnItemKey,
@@ -220,7 +222,7 @@ export class CodexStreamEventHandler {
   ): Promise<void> {
     const contentBlocks = Array.isArray(item.content) ? item.content : [];
     for (const content of contentBlocks) {
-      if (!this.isRecord(content) || content.type !== 'text' || typeof content.text !== 'string') {
+      if (!isRecord(content) || content.type !== 'text' || typeof content.text !== 'string') {
         continue;
       }
       await this.deps.emitSessionUpdate(sessionId, {
@@ -234,7 +236,7 @@ export class CodexStreamEventHandler {
     sessionId: string,
     item: Record<string, unknown>
   ): Promise<void> {
-    const text = this.asString(item.text);
+    const text = asString(item.text);
     if (!text) {
       return;
     }
@@ -635,7 +637,7 @@ export class CodexStreamEventHandler {
   }
 
   private extractLocations(item: unknown): Array<{ path: string; line?: number | null }> {
-    if (!this.isRecord(item) || item.type !== 'fileChange') {
+    if (!isRecord(item) || item.type !== 'fileChange') {
       return [];
     }
 
@@ -646,10 +648,10 @@ export class CodexStreamEventHandler {
 
     const locations: Array<{ path: string }> = [];
     for (const change of changes) {
-      if (!this.isRecord(change)) {
+      if (!isRecord(change)) {
         continue;
       }
-      const path = this.asString(change.path);
+      const path = asString(change.path);
       if (!path) {
         continue;
       }
@@ -657,13 +659,5 @@ export class CodexStreamEventHandler {
     }
 
     return locations;
-  }
-
-  private asString(value: unknown): string | null {
-    return typeof value === 'string' ? value : null;
-  }
-
-  private isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 }

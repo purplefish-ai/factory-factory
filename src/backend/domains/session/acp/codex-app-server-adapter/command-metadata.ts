@@ -1,4 +1,5 @@
 import type { ToolCallUpdate } from '@agentclientprotocol/sdk';
+import { dedupeLocations } from './acp-adapter-utils';
 
 type CommandDisplayContext = {
   command: string;
@@ -386,20 +387,4 @@ export function buildCommandApprovalScopeKey(params: {
   }
 
   return `cwd=${normalizeCwdForScope(params.cwd)}|${normalizedSegments.join(' && ')}`;
-}
-
-function dedupeLocations(
-  locations: Array<{ path: string; line?: number | null }>
-): Array<{ path: string; line?: number | null }> {
-  const seen = new Set<string>();
-  const result: Array<{ path: string; line?: number | null }> = [];
-  for (const location of locations) {
-    const key = `${location.path}:${location.line ?? ''}`;
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    result.push(location);
-  }
-  return result;
 }
