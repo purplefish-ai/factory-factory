@@ -24,3 +24,47 @@ export function createOptimisticWorkspaceCacheData(workspace: Workspace) {
     ciObservation: 'NOT_FETCHED' as const,
   };
 }
+
+type WorkspaceWithId = { id: string };
+
+export type ProjectSummaryCacheData<TWorkspace extends WorkspaceWithId> = {
+  workspaces: TWorkspace[];
+  reviewCount: number;
+};
+
+export function removeWorkspaceFromProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
+  cache: ProjectSummaryCacheData<TWorkspace> | undefined,
+  workspaceId: string
+): ProjectSummaryCacheData<TWorkspace> | undefined {
+  if (!cache) {
+    return cache;
+  }
+
+  const workspaces = cache.workspaces.filter((workspace) => workspace.id !== workspaceId);
+  if (workspaces.length === cache.workspaces.length) {
+    return cache;
+  }
+
+  return { ...cache, workspaces };
+}
+
+export function removeWorkspacesFromProjectSummaryCache<TWorkspace extends WorkspaceWithId>(
+  cache: ProjectSummaryCacheData<TWorkspace> | undefined,
+  workspaceIds: Iterable<string>
+): ProjectSummaryCacheData<TWorkspace> | undefined {
+  if (!cache) {
+    return cache;
+  }
+
+  const idsToRemove = new Set(workspaceIds);
+  if (idsToRemove.size === 0) {
+    return cache;
+  }
+
+  const workspaces = cache.workspaces.filter((workspace) => !idsToRemove.has(workspace.id));
+  if (workspaces.length === cache.workspaces.length) {
+    return cache;
+  }
+
+  return { ...cache, workspaces };
+}
