@@ -6,7 +6,7 @@
  * a more descriptive branch name.
  */
 
-import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
+import { sessionInterceptorBridge } from '@/backend/domains/session';
 import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
 import { buildBranchRenameInstruction } from '@/backend/prompts/branch-rename';
 import { configService } from '@/backend/services/config.service';
@@ -72,7 +72,7 @@ export const conversationRenameInterceptor: ToolInterceptor = {
 
       // Read history through session lifecycle service so provider-specific
       // session internals remain encapsulated.
-      const history = await sessionService.getSessionConversationHistory(
+      const history = await sessionInterceptorBridge.getSessionConversationHistory(
         context.sessionId,
         context.workingDir
       );
@@ -128,7 +128,7 @@ export const conversationRenameInterceptor: ToolInterceptor = {
           hasConversationSummary: !!conversationSummary,
         });
 
-        if (!sessionService.isSessionRunning(context.sessionId)) {
+        if (!sessionInterceptorBridge.isSessionRunning(context.sessionId)) {
           logger.warn('Session not running; skipping branch rename instruction', {
             sessionId: context.sessionId,
           });
@@ -139,12 +139,14 @@ export const conversationRenameInterceptor: ToolInterceptor = {
           sessionId: context.sessionId,
         });
 
-        sessionService.sendSessionMessage(context.sessionId, renameInstruction).catch((error) => {
-          logger.warn('Failed to send rename instruction', {
-            sessionId: context.sessionId,
-            error,
+        sessionInterceptorBridge
+          .sendSessionMessage(context.sessionId, renameInstruction)
+          .catch((error) => {
+            logger.warn('Failed to send rename instruction', {
+              sessionId: context.sessionId,
+              error,
+            });
           });
-        });
       }
     } catch (error) {
       logger.error('Error in conversation rename interceptor', {
