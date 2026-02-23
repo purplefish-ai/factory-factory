@@ -71,3 +71,6 @@ dist-bundle/
 # Docker tunnel URL output
 tunnel-info/
 tunnel-url/
+
+# Port file for postRun script discovery
+.factory-factory-port
