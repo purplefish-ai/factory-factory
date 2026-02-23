@@ -862,6 +862,7 @@ export async function initializeWorkspaceWorktree(
 
   let project: WorkspaceWithProject['project'] | undefined;
   let worktreeCreated = false;
+  let agentSessionPromise: Promise<string | null> = Promise.resolve(null);
 
   try {
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
@@ -903,7 +904,7 @@ export async function initializeWorkspaceWorktree(
 
     // Start Claude session eagerly - runs in parallel with setup scripts.
     // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
-    const agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
+    agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
       logger.error('Failed to start default Claude session', {
         workspaceId,
         error: error instanceof Error ? error.message : String(error),
@@ -943,6 +944,9 @@ export async function initializeWorkspaceWorktree(
     const startedSessionId = await agentSessionPromise;
     await retryQueuedDispatchAfterWorkspaceReady(workspaceId, startedSessionId);
   } catch (error) {
+    // Ensure any eager session start attempt has settled before cleanup so we
+    // do not race stopWorkspaceSessions() with a late startSession() call.
+    await agentSessionPromise;
     await handleWorkspaceInitFailure(workspaceId, error as Error);
   } finally {
     if (worktreeCreated) {
