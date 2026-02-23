@@ -1,14 +1,14 @@
 import { CircleDot, Play, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton } from '@/components/workspace';
-import type { KanbanIssue } from './kanban-context';
 
 interface IssueCardProps {
-  issue: KanbanIssue;
+  issue: NormalizedIssue;
   projectId: string;
   onClick?: () => void;
 }

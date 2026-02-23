@@ -1,5 +1,6 @@
 import { CircleDot, ExternalLink, Play, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
@@ -12,10 +13,9 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RatchetToggleButton } from '@/components/workspace';
-import type { KanbanIssue } from './kanban-context';
 
 interface IssueDetailsSheetProps {
-  issue: KanbanIssue | null;
+  issue: NormalizedIssue | null;
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -53,7 +53,7 @@ function IssueDetailsContent({
   open,
   onOpenChange,
 }: {
-  issue: KanbanIssue;
+  issue: NormalizedIssue;
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
