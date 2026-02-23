@@ -113,11 +113,7 @@ export class WorkspaceCreationService {
 
     // Set initialization mode if resuming existing branch
     if (initMode) {
-      await worktreeLifecycleService.setInitMode(
-        workspace.id,
-        initMode.useExistingBranch,
-        initMode.worktreeBasePath
-      );
+      await worktreeLifecycleService.setInitMode(workspace.id, initMode.useExistingBranch);
     }
 
     // Provision default session if enabled
@@ -153,7 +149,6 @@ export class WorkspaceCreationService {
     };
     initMode?: {
       useExistingBranch: boolean;
-      worktreeBasePath?: string;
     };
   }> {
     switch (source.type) {
@@ -210,7 +205,6 @@ export class WorkspaceCreationService {
           },
           initMode: {
             useExistingBranch: true,
-            worktreeBasePath: project.worktreeBasePath,
           },
         };
       }

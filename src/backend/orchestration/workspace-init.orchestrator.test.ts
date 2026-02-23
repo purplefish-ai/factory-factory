@@ -244,7 +244,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(worktreeLifecycleService.clearInitMode).toHaveBeenCalledWith(WORKSPACE_ID, '/base');
+      expect(worktreeLifecycleService.clearInitMode).toHaveBeenCalledWith(WORKSPACE_ID);
     });
   });
 
@@ -883,7 +883,7 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       // worktreeCreated is true, so clearInitMode should still be called via finally
-      expect(worktreeLifecycleService.clearInitMode).toHaveBeenCalledWith(WORKSPACE_ID, '/base');
+      expect(worktreeLifecycleService.clearInitMode).toHaveBeenCalledWith(WORKSPACE_ID);
     });
 
     it('marks workspace failed when workspace update throws', async () => {
