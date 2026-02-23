@@ -298,13 +298,10 @@ module.exports = {
       comment:
         'External consumers must import from domain barrel files (domains/{name}/), ' +
         'not from internal paths (domains/{name}/subfolder/). ' +
-        'This keeps domain internals encapsulated. ' +
-        'Exception: conversation-rename interceptor uses deep imports to avoid circular dependency.',
+        'This keeps domain internals encapsulated.',
       from: {
         path: '^src/backend',
-        pathNot:
-          '^src/backend/domains/([^/]+)/|' +
-          '^src/backend/interceptors/conversation-rename\\.interceptor\\.ts$',
+        pathNot: '^src/backend/domains/([^/]+)/',
       },
       to: {
         path: '^src/backend/domains/[^/]+/.+/',
