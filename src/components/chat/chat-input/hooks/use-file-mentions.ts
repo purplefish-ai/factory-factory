@@ -1,9 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { trpc } from '@/client/lib/trpc';
 import type {
   FileMentionKeyResult,
   FileMentionPaletteHandle,
 } from '@/components/chat/file-mention-palette';
-import { trpc } from '@/frontend/lib/trpc';
 
 interface UseFileMentionsOptions {
   workspaceId: string | undefined;

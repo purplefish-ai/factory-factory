@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { trpc } from '@/frontend/lib/trpc';
-import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
+import { trpc } from '@/client/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
 import { generateUniqueWorkspaceName } from '@/shared/workspace-words';
 
 /**

@@ -1,6 +1,9 @@
 import { ArrowLeftIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { useAppHeader } from '@/client/components/app-header-context';
+import { Logo } from '@/client/components/logo';
+import { trpc } from '@/client/lib/trpc';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { GithubUrlForm } from '@/components/project/github-url-form';
 import { OnboardingCliHealth } from '@/components/project/onboarding-cli-health';
@@ -10,9 +13,6 @@ import type { ScriptType } from '@/components/project/startup-script-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAppHeader } from '@/frontend/components/app-header-context';
-import { Logo } from '@/frontend/components/logo';
-import { trpc } from '@/frontend/lib/trpc';
 
 type ProjectSource = 'local' | 'github';
 

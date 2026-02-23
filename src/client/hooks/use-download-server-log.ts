@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import { downloadFile } from '@/frontend/lib/download-file';
-import { trpc } from '@/frontend/lib/trpc';
+import { downloadFile } from '@/client/lib/download-file';
+import { trpc } from '@/client/lib/trpc';
 
 export function useDownloadServerLog() {
   const [isDownloading, setIsDownloading] = useState(false);

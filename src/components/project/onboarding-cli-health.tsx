@@ -5,9 +5,9 @@ import {
   RefreshCwIcon,
   TerminalIcon,
 } from 'lucide-react';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { trpc } from '@/frontend/lib/trpc';
 
 interface OnboardingCliHealthProps {
   onOpenTerminal: () => void;

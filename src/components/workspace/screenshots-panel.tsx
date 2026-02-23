@@ -1,9 +1,8 @@
 import { Camera, Loader2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { trpc } from '@/frontend/lib/trpc';
 
 import { useWorkspacePanel } from './workspace-panel-context';
 

@@ -1,6 +1,10 @@
 import { CircleDot, GitBranch, GitPullRequest, Kanban, Settings, X } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router';
+import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
+import type { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
+import { useSidebarIssues } from '@/client/hooks/use-sidebar-issues';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,10 +26,6 @@ import {
   SidebarSeparator,
   useSidebar,
 } from '@/components/ui/sidebar';
-import type { ServerWorkspace } from '@/frontend/components/use-workspace-list-state';
-import type { useAppNavigationData } from '@/frontend/hooks/use-app-navigation-data';
-import { useSidebarIssues } from '@/frontend/hooks/use-sidebar-issues';
-import type { NormalizedIssue } from '@/frontend/lib/issue-normalization';
 import { cn } from '@/lib/utils';
 import { Logo } from './logo';
 import { PendingRequestBadge } from './pending-request-badge';

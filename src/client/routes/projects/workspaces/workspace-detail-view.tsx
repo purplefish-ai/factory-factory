@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+import { Loading } from '@/client/components/loading';
 import { Button } from '@/components/ui/button';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import {
@@ -10,7 +11,6 @@ import {
 } from '@/components/ui/sheet';
 import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
-import { Loading } from '@/frontend/components/loading';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';

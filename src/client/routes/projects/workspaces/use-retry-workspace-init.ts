@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { toast } from 'sonner';
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 import { isResumeWorkspace } from './resume-workspace-storage';
 
 interface UseRetryWorkspaceInitResult {
