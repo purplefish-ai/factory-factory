@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { useCreateWorkspace } from '@/client/hooks/use-create-workspace';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { useChatWebSocket } from '@/components/chat';
@@ -302,9 +301,6 @@ export function WorkspaceDetailContainer() {
     selectedProvider,
   });
 
-  const { handleCreate: handleCreateWorkspace, isCreating: isCreatingWorkspace } =
-    useCreateWorkspace(workspace?.projectId, slug);
-
   const handleArchive = useCallback(
     (commitUncommitted: boolean) => {
       archiveWorkspace.mutate({ id: workspaceId, commitUncommitted });
@@ -437,8 +433,6 @@ export function WorkspaceDetailContainer() {
           running={workspaceRunning}
           isCreatingSession={createSession.isPending}
           hasChanges={hasChanges}
-          onCreateWorkspace={handleCreateWorkspace}
-          isCreatingWorkspace={isCreatingWorkspace}
         />
       )}
       <WorkspaceDetailView
