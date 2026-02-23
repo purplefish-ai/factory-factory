@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { Logo } from './logo';
 import { PendingRequestBadge } from './pending-request-badge';
 import { ThemeToggle } from './theme-toggle';
+import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
 import { WorkspaceStatusIcon } from './workspace-status-icon';
 
 type NavigationData = ReturnType<typeof useAppNavigationData>;
@@ -410,19 +411,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
 
   // Group workspaces by kanban column, sorted by createdAt descending (newest first)
   const { waiting, working, done } = useMemo(() => {
-    const ws = navData.serverWorkspaces ?? [];
-    const byNewest = (a: ServerWorkspace, b: ServerWorkspace) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    return {
-      waiting: ws.filter((w) => w.cachedKanbanColumn === 'WAITING').sort(byNewest),
-      working: ws
-        .filter(
-          (w) =>
-            w.cachedKanbanColumn === 'WORKING' || (w.isWorking && w.cachedKanbanColumn !== 'DONE')
-        )
-        .sort(byNewest),
-      done: ws.filter((w) => w.cachedKanbanColumn === 'DONE').sort(byNewest),
-    };
+    return groupWorkspacesForSidebar(navData.serverWorkspaces ?? []);
   }, [navData.serverWorkspaces]);
 
   const sharedProps = {
