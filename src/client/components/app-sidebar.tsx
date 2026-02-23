@@ -359,7 +359,7 @@ function SidebarInner({
               >
                 <Link to="/admin" onClick={onNavigate}>
                   <Settings className="h-4 w-4" />
-                  <span>Admin Dashboard</span>
+                  <span>Settings</span>
                 </Link>
               </SidebarMenuButton>
               <ThemeToggle />

@@ -154,7 +154,7 @@ function LinearConfigFields({
   );
 }
 
-function ProjectIssueTrackingCard({
+export function ProjectIssueTrackingCard({
   projectId,
   projectName,
   currentProvider,
