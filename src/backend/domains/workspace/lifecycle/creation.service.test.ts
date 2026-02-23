@@ -291,6 +291,25 @@ describe('WorkspaceCreationService', () => {
           })
         );
       });
+
+      it('persists startup mode preset in creation metadata', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'MANUAL',
+          projectId: 'proj-1',
+          name: 'Planning Workspace',
+          startupModePreset: 'plan',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            creationMetadata: {
+              startupModePreset: 'plan',
+            },
+          })
+        );
+      });
     });
 
     describe('RESUME_BRANCH source', () => {

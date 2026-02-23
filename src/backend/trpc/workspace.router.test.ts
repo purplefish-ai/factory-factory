@@ -255,6 +255,25 @@ describe('workspaceRouter', () => {
     );
   });
 
+  it('passes startup mode preset through manual workspace creation', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceCreationCreate.mockResolvedValue({ workspace: { id: 'w-created' } });
+
+    await caller.create({
+      type: 'MANUAL',
+      projectId: 'p1',
+      name: 'Planning Workspace',
+      startupModePreset: 'plan',
+    });
+
+    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'MANUAL',
+        startupModePreset: 'plan',
+      })
+    );
+  });
+
   it('blocks workspace creation when default provider is unavailable', async () => {
     const { caller, cliHealthService } = createCaller();
     cliHealthService.checkHealth.mockResolvedValue({
