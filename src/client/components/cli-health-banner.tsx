@@ -1,8 +1,8 @@
 import { AlertTriangle, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { trpc } from '@/frontend/lib/trpc';
 
 interface HealthIssue {
   title: string;

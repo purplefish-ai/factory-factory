@@ -1,6 +1,7 @@
 import { CheckCircle2, Link2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { trpc } from '@/frontend/lib/trpc';
 import { IssueProvider } from '@/shared/core/enums';
 import type {
   IssueTrackerConfig,

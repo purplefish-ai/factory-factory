@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import type { ServerWorkspace } from '@/frontend/components/use-workspace-list-state';
+import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
   normalizeLinearIssue,
-} from '@/frontend/lib/issue-normalization';
-import { trpc } from '@/frontend/lib/trpc';
+} from '@/client/lib/issue-normalization';
+import { trpc } from '@/client/lib/trpc';
 
 /**
  * Fetches and normalizes GitHub/Linear issues for the sidebar Todo section.

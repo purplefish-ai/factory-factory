@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useRef } from 'react';
-import { mapSnapshotEntryToKanbanWorkspace } from '@/frontend/lib/snapshot-to-kanban';
+import { mapSnapshotEntryToKanbanWorkspace } from '@/client/lib/snapshot-to-kanban';
 import {
   mapSnapshotEntryToServerWorkspace,
   type SnapshotChangedMessage,
@@ -18,8 +18,8 @@ import {
   type SnapshotRemovedMessage,
   SnapshotServerMessageSchema,
   type WorkspaceSnapshotEntry,
-} from '@/frontend/lib/snapshot-to-sidebar';
-import { trpc } from '@/frontend/lib/trpc';
+} from '@/client/lib/snapshot-to-sidebar';
+import { trpc } from '@/client/lib/trpc';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 

@@ -1,6 +1,6 @@
 import type { inferRouterOutputs } from '@trpc/server';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { AppRouter } from '@/frontend/lib/trpc';
+import type { AppRouter } from '@/client/lib/trpc';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
 
 import { MainViewContent } from './main-view-content';

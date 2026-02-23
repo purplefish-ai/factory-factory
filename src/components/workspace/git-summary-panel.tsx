@@ -1,4 +1,4 @@
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 
 import {
   type ChangeListEntry,

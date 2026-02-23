@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
-
+import { AppHeader } from '@/client/components/app-header';
+import { AppHeaderProvider } from '@/client/components/app-header-context';
+import { AppSidebar } from '@/client/components/app-sidebar';
+import { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
+import { useRouteSidebarState } from '@/client/hooks/use-sidebar-default-open';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { AppHeader } from '@/frontend/components/app-header';
-import { AppHeaderProvider } from '@/frontend/components/app-header-context';
-import { AppSidebar } from '@/frontend/components/app-sidebar';
-import { useAppNavigationData } from '@/frontend/hooks/use-app-navigation-data';
-import { useRouteSidebarState } from '@/frontend/hooks/use-sidebar-default-open';
 import { cn } from '@/lib/utils';
 
 interface AppLayoutProps {

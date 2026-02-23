@@ -135,9 +135,9 @@ Avoid surprising behavior for existing users.
 ## File Targets (Expected)
 
 - `src/client/routes/projects/workspaces/workspace-detail-header.tsx`
-- `src/frontend/components/app-sidebar.tsx`
-- `src/frontend/components/kanban/kanban-card.tsx`
-- `src/frontend/components/kanban/issue-card.tsx`
+- `src/client/components/app-sidebar.tsx`
+- `src/client/components/kanban/kanban-card.tsx`
+- `src/client/components/kanban/issue-card.tsx`
 - `src/client/routes/admin.tsx`
 - `src/client/globals.css`
 - `src/backend/services/ratchet.service.ts`

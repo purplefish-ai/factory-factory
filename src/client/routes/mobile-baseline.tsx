@@ -1,5 +1,8 @@
 import { GitBranch, List, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { PageHeader } from '@/client/components/page-header';
+import { PRDetailPanel } from '@/client/components/pr-detail-panel';
+import { PRInboxItem } from '@/client/components/pr-inbox-item';
 import { ChatInput } from '@/components/chat';
 import { ProjectRepoForm } from '@/components/project/project-repo-form';
 import { Button } from '@/components/ui/button';
@@ -17,9 +20,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { PageHeader } from '@/frontend/components/page-header';
-import { PRDetailPanel } from '@/frontend/components/pr-detail-panel';
-import { PRInboxItem } from '@/frontend/components/pr-inbox-item';
 import type { ChatSettings, TokenStats } from '@/lib/chat-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { PRWithFullDetails } from '@/shared/github-types';
