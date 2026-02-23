@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 import {
   type NewSessionProviderSelection,
   resolveExplicitSessionProvider,

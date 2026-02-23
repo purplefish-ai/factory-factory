@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Outlet, useParams } from 'react-router';
-import { useProjectContext } from '@/frontend/lib/providers';
-import { trpc } from '@/frontend/lib/trpc';
+import { useProjectContext } from '@/client/lib/providers';
+import { trpc } from '@/client/lib/trpc';
 
 export function ProjectLayout() {
   const { slug = '' } = useParams<{ slug: string }>();

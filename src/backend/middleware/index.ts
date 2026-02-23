@@ -1,4 +1,4 @@
-export { corsMiddleware, createCorsMiddleware } from './cors.middleware';
+export { createCorsMiddleware } from './cors.middleware';
 export {
   createRequestLoggerMiddleware,
   requestLoggerMiddleware,

@@ -2,6 +2,9 @@ import type { Workspace } from '@prisma-gen/browser';
 import { ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { Loading } from '@/client/components/loading';
+import { trpc } from '@/client/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
 import { FactoryConfigScripts } from '@/components/factory-config-scripts';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -10,9 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
-import { Loading } from '@/frontend/components/loading';
-import { trpc } from '@/frontend/lib/trpc';
-import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 
 export default function NewWorkspacePage() {
   const { slug = '' } = useParams<{ slug: string }>();

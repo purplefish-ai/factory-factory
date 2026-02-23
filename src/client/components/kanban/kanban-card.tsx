@@ -2,6 +2,7 @@ import type { Workspace } from '@prisma-gen/browser';
 import { AlertTriangle, Archive, GitBranch, GitPullRequest, Play } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { PendingRequestBadge } from '@/client/components/pending-request-badge';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SetupStatusChip } from '@/components/shared/setup-status-chip';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,6 @@ import {
   RatchetToggleButton,
   WorkspaceStatusBadge,
 } from '@/components/workspace';
-import { PendingRequestBadge } from '@/frontend/components/pending-request-badge';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn, WorkspaceSidebarCiState, WorkspaceStatus } from '@/shared/core';
 import { findWorkspaceSessionRuntimeError, type SessionSummary } from '@/shared/session-runtime';

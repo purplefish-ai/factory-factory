@@ -5,7 +5,7 @@
 - `src/backend/domains/`: Domain modules (session, workspace, github, ratchet, terminal, run-script). The session domain manages ACP agent runtimes, chat services, event translation, and permission handling.
 - `src/backend/orchestration/`: Cross-domain coordination layer (bridges, workspace init/archive)
 - `src/backend/services/`: Infrastructure-only services (logger, config, scheduler, port, health, etc.)
-- `src/client/`: React UI (routes in `src/client/routes/`, router in `src/client/router.tsx`)
+- `src/client/`: React UI (routes/pages, plus client-specific hooks/components/lib; router in `src/client/router.tsx`)
 - `src/cli/`: CLI entrypoint and commands
 - `src/components/`: Shared UI components (shadcn/ui)
 - `electron/`: Electron main process wrapper

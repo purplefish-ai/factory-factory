@@ -10,7 +10,8 @@ import {
   Terminal,
   Zap,
 } from 'lucide-react';
-
+import type { AppRouter } from '@/client/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -20,8 +21,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import type { AppRouter } from '@/frontend/lib/trpc';
-import { trpc } from '@/frontend/lib/trpc';
 
 // =============================================================================
 // Types

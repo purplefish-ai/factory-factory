@@ -2,9 +2,9 @@ import {
   HeaderLeftStartSlot,
   HeaderRightSlot,
   useAppHeader,
-} from '@/frontend/components/app-header-context';
-import { KanbanBoard, KanbanControls, KanbanProvider } from '@/frontend/components/kanban';
-import { ProjectSelectorDropdown } from '@/frontend/components/project-selector';
+} from '@/client/components/app-header-context';
+import { KanbanBoard, KanbanControls, KanbanProvider } from '@/client/components/kanban';
+import { ProjectSelectorDropdown } from '@/client/components/project-selector';
 
 function BoardHeaderSlot({
   selectedProjectSlug,

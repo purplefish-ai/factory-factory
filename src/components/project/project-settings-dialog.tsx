@@ -1,5 +1,6 @@
 import { Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { trpc } from '@/client/lib/trpc';
 import { type ScriptType, StartupScriptForm } from '@/components/project/startup-script-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -15,7 +16,6 @@ import {
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { trpc } from '@/frontend/lib/trpc';
 
 interface ProjectSettingsDialogProps {
   projectId: string;

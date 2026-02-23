@@ -1,10 +1,10 @@
 import { CircleDot, Play, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { trpc } from '@/client/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton } from '@/components/workspace';
-import { trpc } from '@/frontend/lib/trpc';
-import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
 import type { KanbanIssue } from './kanban-context';
 
 interface IssueCardProps {

@@ -2,11 +2,10 @@ import { AlertCircle, Eye, FileCode, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMemo, useRef, useState } from 'react';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { trpc } from '@/frontend/lib/trpc';
 import {
   calculateLineNumberWidth,
   type DiffLine,

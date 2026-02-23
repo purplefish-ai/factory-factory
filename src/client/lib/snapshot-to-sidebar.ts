@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod';
-import type { ServerWorkspace } from '@/frontend/components/use-workspace-list-state';
+import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import {
   CIStatus,
   KanbanColumn,
