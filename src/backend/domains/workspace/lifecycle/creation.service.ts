@@ -28,6 +28,7 @@ export type WorkspaceCreationSource =
       ratchetEnabled?: boolean;
       initialPrompt?: string;
       initialAttachments?: MessageAttachment[];
+      startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
     }
   | {
@@ -73,6 +74,25 @@ export interface WorkspaceCreationDependencies {
   logger: Logger;
   configService: ConfigService;
 }
+
+type PreparedWorkspaceCreation = {
+  preparedInput: {
+    projectId: string;
+    name: string;
+    description?: string;
+    branchName?: string;
+    githubIssueNumber?: number;
+    githubIssueUrl?: string;
+    linearIssueId?: string;
+    linearIssueIdentifier?: string;
+    linearIssueUrl?: string;
+    creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
+    creationMetadata?: Prisma.InputJsonValue;
+  };
+  initMode?: {
+    useExistingBranch: boolean;
+  };
+};
 
 /**
  * Canonical workspace creation orchestrator.
@@ -133,118 +153,123 @@ export class WorkspaceCreationService {
    * Prepare workspace creation based on source type.
    * Returns normalized create input and optional init mode for branch resume.
    */
-  private async prepareCreation(source: WorkspaceCreationSource): Promise<{
-    preparedInput: {
-      projectId: string;
-      name: string;
-      description?: string;
-      branchName?: string;
-      githubIssueNumber?: number;
-      githubIssueUrl?: string;
-      linearIssueId?: string;
-      linearIssueIdentifier?: string;
-      linearIssueUrl?: string;
-      creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
-      creationMetadata?: Prisma.InputJsonValue;
-    };
-    initMode?: {
-      useExistingBranch: boolean;
-    };
-  }> {
+  private async prepareCreation(
+    source: WorkspaceCreationSource
+  ): Promise<PreparedWorkspaceCreation> {
     switch (source.type) {
-      case 'MANUAL': {
-        const metadata: Record<string, unknown> = {};
-        if (source.initialPrompt) {
-          metadata.initialPrompt = source.initialPrompt;
-        }
-        if (source.initialAttachments && source.initialAttachments.length > 0) {
-          metadata.initialAttachments = source.initialAttachments;
-        }
-        return {
-          preparedInput: {
-            projectId: source.projectId,
-            name: source.name,
-            description: source.description,
-            branchName: source.branchName,
-            creationSource: 'MANUAL',
-            ...(Object.keys(metadata).length > 0
-              ? { creationMetadata: metadata as Prisma.InputJsonValue }
-              : {}),
-          },
-        };
-      }
-
-      case 'RESUME_BRANCH': {
-        // Validate branch is not already checked out
-        const project = await projectAccessor.findById(source.projectId);
-        if (!project) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: `Project not found: ${source.projectId}`,
-          });
-        }
-
-        const isCheckedOut = await gitOpsService.isBranchCheckedOut(project, source.branchName);
-        if (isCheckedOut) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `Branch '${source.branchName}' is already checked out in another worktree.`,
-          });
-        }
-
-        return {
-          preparedInput: {
-            projectId: source.projectId,
-            name: source.name || source.branchName,
-            description: source.description,
-            branchName: source.branchName,
-            creationSource: 'RESUME_BRANCH',
-            creationMetadata: {
-              resumedBranch: source.branchName,
-            },
-          },
-          initMode: {
-            useExistingBranch: true,
-          },
-        };
-      }
-
-      case 'GITHUB_ISSUE': {
-        return {
-          preparedInput: {
-            projectId: source.projectId,
-            name: source.name || `Issue #${source.issueNumber}`,
-            description: source.description,
-            githubIssueNumber: source.issueNumber,
-            githubIssueUrl: source.issueUrl,
-            creationSource: 'GITHUB_ISSUE',
-            creationMetadata: {
-              issueNumber: source.issueNumber,
-              issueUrl: source.issueUrl,
-            },
-          },
-        };
-      }
-
-      case 'LINEAR_ISSUE': {
-        return {
-          preparedInput: {
-            projectId: source.projectId,
-            name: source.name || source.issueIdentifier,
-            description: source.description,
-            linearIssueId: source.issueId,
-            linearIssueIdentifier: source.issueIdentifier,
-            linearIssueUrl: source.issueUrl,
-            creationSource: 'LINEAR_ISSUE',
-            creationMetadata: {
-              issueId: source.issueId,
-              issueIdentifier: source.issueIdentifier,
-              issueUrl: source.issueUrl,
-            },
-          },
-        };
-      }
+      case 'MANUAL':
+        return this.prepareManualCreation(source);
+      case 'RESUME_BRANCH':
+        return await this.prepareResumeBranchCreation(source);
+      case 'GITHUB_ISSUE':
+        return this.prepareGitHubIssueCreation(source);
+      case 'LINEAR_ISSUE':
+        return this.prepareLinearIssueCreation(source);
     }
+  }
+
+  private prepareManualCreation(
+    source: Extract<WorkspaceCreationSource, { type: 'MANUAL' }>
+  ): PreparedWorkspaceCreation {
+    const metadata: Record<string, unknown> = {};
+    if (source.initialPrompt) {
+      metadata.initialPrompt = source.initialPrompt;
+    }
+    if (source.initialAttachments && source.initialAttachments.length > 0) {
+      metadata.initialAttachments = source.initialAttachments;
+    }
+    if (source.startupModePreset) {
+      metadata.startupModePreset = source.startupModePreset;
+    }
+
+    return {
+      preparedInput: {
+        projectId: source.projectId,
+        name: source.name,
+        description: source.description,
+        branchName: source.branchName,
+        creationSource: 'MANUAL',
+        ...(Object.keys(metadata).length > 0
+          ? { creationMetadata: metadata as Prisma.InputJsonValue }
+          : {}),
+      },
+    };
+  }
+
+  private async prepareResumeBranchCreation(
+    source: Extract<WorkspaceCreationSource, { type: 'RESUME_BRANCH' }>
+  ): Promise<PreparedWorkspaceCreation> {
+    const project = await projectAccessor.findById(source.projectId);
+    if (!project) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: `Project not found: ${source.projectId}`,
+      });
+    }
+
+    const isCheckedOut = await gitOpsService.isBranchCheckedOut(project, source.branchName);
+    if (isCheckedOut) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Branch '${source.branchName}' is already checked out in another worktree.`,
+      });
+    }
+
+    return {
+      preparedInput: {
+        projectId: source.projectId,
+        name: source.name || source.branchName,
+        description: source.description,
+        branchName: source.branchName,
+        creationSource: 'RESUME_BRANCH',
+        creationMetadata: {
+          resumedBranch: source.branchName,
+        },
+      },
+      initMode: {
+        useExistingBranch: true,
+      },
+    };
+  }
+
+  private prepareGitHubIssueCreation(
+    source: Extract<WorkspaceCreationSource, { type: 'GITHUB_ISSUE' }>
+  ): PreparedWorkspaceCreation {
+    return {
+      preparedInput: {
+        projectId: source.projectId,
+        name: source.name || `Issue #${source.issueNumber}`,
+        description: source.description,
+        githubIssueNumber: source.issueNumber,
+        githubIssueUrl: source.issueUrl,
+        creationSource: 'GITHUB_ISSUE',
+        creationMetadata: {
+          issueNumber: source.issueNumber,
+          issueUrl: source.issueUrl,
+        },
+      },
+    };
+  }
+
+  private prepareLinearIssueCreation(
+    source: Extract<WorkspaceCreationSource, { type: 'LINEAR_ISSUE' }>
+  ): PreparedWorkspaceCreation {
+    return {
+      preparedInput: {
+        projectId: source.projectId,
+        name: source.name || source.issueIdentifier,
+        description: source.description,
+        linearIssueId: source.issueId,
+        linearIssueIdentifier: source.issueIdentifier,
+        linearIssueUrl: source.issueUrl,
+        creationSource: 'LINEAR_ISSUE',
+        creationMetadata: {
+          issueId: source.issueId,
+          issueIdentifier: source.issueIdentifier,
+          issueUrl: source.issueUrl,
+        },
+      },
+    };
   }
 
   private async resolveWorkspaceCreationDefaults(
