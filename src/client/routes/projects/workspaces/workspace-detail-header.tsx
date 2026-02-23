@@ -794,9 +794,8 @@ export function WorkspaceDetailHeaderSlot({
   const isMobile = useIsMobile();
   const { slug, projects, handleProjectChange, handleCurrentProjectSelect } =
     useWorkspaceProjectNavigation();
-  const { branchName, name, prNumber, prState, prUrl, ratchetState, sidebarStatus } = workspace;
-  const workspaceIsMerged =
-    prState === 'MERGED' || ratchetState === 'MERGED' || sidebarStatus?.ciState === 'MERGED';
+  const { branchName, name, prNumber, prState, prUrl } = workspace;
+  const workspaceIsMerged = isWorkspaceMerged(workspace);
   const mobileTitlePrChipProps = useMemo<WorkspacePrChipProps | null>(() => {
     const pullRequest = { prUrl, prNumber, prState };
 
