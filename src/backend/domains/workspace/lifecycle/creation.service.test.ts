@@ -261,6 +261,36 @@ describe('WorkspaceCreationService', () => {
           userSettingsAccessorModule.userSettingsAccessor.getDefaultSessionProvider
         ).not.toHaveBeenCalled();
       });
+
+      it('persists initial prompt attachments in creation metadata', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'MANUAL',
+          projectId: 'proj-1',
+          name: 'My Workspace',
+          initialPrompt: 'Review these files',
+          initialAttachments: [
+            {
+              id: 'att-1',
+              name: 'screenshot.png',
+              type: 'image/png',
+              size: 128,
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+              contentType: 'image',
+            },
+          ],
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            creationMetadata: {
+              initialPrompt: 'Review these files',
+              initialAttachments: source.initialAttachments,
+            },
+          })
+        );
+      });
     });
 
     describe('RESUME_BRANCH source', () => {

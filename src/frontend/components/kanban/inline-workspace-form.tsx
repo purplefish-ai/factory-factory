@@ -1,6 +1,8 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { AttachmentPreview } from '@/components/chat/attachment-preview';
+import { usePasteDropHandler } from '@/components/chat/chat-input/hooks/use-paste-drop-handler';
 import { useProjectFileMentions } from '@/components/chat/chat-input/hooks/use-project-file-mentions';
 import { FileMentionPalette } from '@/components/chat/file-mention-palette';
 import { Button } from '@/components/ui/button';
@@ -15,6 +17,16 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { RatchetToggleButton } from '@/components/workspace';
 import { trpc } from '@/frontend/lib/trpc';
+import type { MessageAttachment } from '@/lib/chat-protocol';
+import {
+  fileToAttachment,
+  isSupportedImageType,
+  isSupportedTextFile,
+  SUPPORTED_IMAGE_TYPES,
+  SUPPORTED_TEXT_EXTENSIONS,
+  textFileToAttachment,
+} from '@/lib/image-utils';
+import { cn } from '@/lib/utils';
 import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,
@@ -27,6 +39,36 @@ interface InlineWorkspaceFormProps {
   onCreated: () => void;
 }
 
+const ATTACHMENT_ACCEPT_TYPES = [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_TEXT_EXTENSIONS].join(',');
+
+function convertFileToAttachment(file: File): Promise<MessageAttachment> {
+  if (isSupportedImageType(file.type)) {
+    return fileToAttachment(file);
+  }
+  if (isSupportedTextFile(file.name)) {
+    return textFileToAttachment(file);
+  }
+  throw new Error('unsupported file type');
+}
+
+async function collectAttachments(
+  files: FileList
+): Promise<{ attachments: MessageAttachment[]; errors: string[] }> {
+  const attachments: MessageAttachment[] = [];
+  const errors: string[] = [];
+
+  for (const file of Array.from(files)) {
+    try {
+      attachments.push(await convertFileToAttachment(file));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      errors.push(`${file.name}: ${message}`);
+    }
+  }
+
+  return { attachments, errors };
+}
+
 export function InlineWorkspaceForm({
   projectId,
   existingNames,
@@ -37,7 +79,9 @@ export function InlineWorkspaceForm({
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [initialPrompt, setInitialPrompt] = useState('');
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
 
@@ -78,6 +122,29 @@ export function InlineWorkspaceForm({
 
   const isCreating = createWorkspaceMutation.isPending;
 
+  const pasteDropHandler = usePasteDropHandler({
+    setAttachments,
+    disabled: isCreating,
+  });
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const { attachments: newAttachments, errors } = await collectAttachments(files);
+    if (newAttachments.length > 0) {
+      setAttachments((prev) => [...prev, ...newAttachments]);
+    }
+
+    if (errors.length > 0) {
+      toast.error(`Could not add ${errors.length} file(s): ${errors.join('; ')}`);
+    }
+
+    event.target.value = '';
+  };
+
   const handleLaunch = () => {
     const trimmedPrompt = initialPrompt.trim();
     const name = trimmedPrompt
@@ -88,6 +155,7 @@ export function InlineWorkspaceForm({
       projectId,
       name,
       initialPrompt: trimmedPrompt || undefined,
+      initialAttachments: attachments.length > 0 ? attachments : undefined,
       ratchetEnabled,
       provider,
     });
@@ -137,12 +205,27 @@ export function InlineWorkspaceForm({
             placeholder="What should the agent work on?"
             value={initialPrompt}
             onChange={handleChange}
+            onPaste={pasteDropHandler.handlePaste}
+            onDrop={pasteDropHandler.handleDrop}
+            onDragOver={pasteDropHandler.handleDragOver}
+            onDragLeave={pasteDropHandler.handleDragLeave}
             rows={3}
-            className="resize-none text-sm overflow-hidden"
+            className={cn(
+              'resize-none text-sm overflow-hidden',
+              pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
+            )}
             autoFocus
             disabled={isCreating}
           />
         </div>
+        {attachments.length > 0 ? (
+          <AttachmentPreview
+            attachments={attachments}
+            onRemove={(id) =>
+              setAttachments((prev) => prev.filter((attachment) => attachment.id !== id))
+            }
+          />
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
@@ -168,6 +251,26 @@ export function InlineWorkspaceForm({
                 <SelectItem value="CODEX">Codex</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isCreating}
+            >
+              <Paperclip className="h-3.5 w-3.5 mr-1" />
+              Attach
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ATTACHMENT_ACCEPT_TYPES}
+              onChange={handleFileSelect}
+              className="hidden"
+              aria-label="Attach files"
+            />
           </div>
           <div className="flex gap-2 ml-auto">
             <Button
