@@ -600,6 +600,59 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(workspaceStateMachine.markReady).toHaveBeenCalled();
     });
+
+    it('enqueues initial attachments from workspace creation metadata', async () => {
+      setupHappyPath();
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+        unsafeCoerce({
+          id: WORKSPACE_ID,
+          creationMetadata: {
+            initialAttachments: [
+              {
+                id: 'att-1',
+                name: 'evidence.png',
+                type: 'image/png',
+                size: 120,
+                data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+                contentType: 'image',
+              },
+            ],
+          },
+        })
+      );
+      vi.mocked(sessionDomainService.enqueue).mockReturnValue({ position: 0 });
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(sessionDomainService.enqueue).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          text: '',
+          attachments: [
+            expect.objectContaining({
+              id: 'att-1',
+              name: 'evidence.png',
+            }),
+          ],
+        })
+      );
+      expect(sessionDomainService.emitDelta).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          type: 'message_state_changed',
+          userMessage: expect.objectContaining({
+            attachments: [
+              expect.objectContaining({
+                id: 'att-1',
+              }),
+            ],
+          }),
+        })
+      );
+    });
   });
 
   describe('GitHub issue prompt', () => {

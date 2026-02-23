@@ -14,12 +14,14 @@ import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
+import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
+import { AttachmentSchema } from '@/shared/websocket';
 import { getDecryptedLinearConfig, getWorkspaceLinearContext } from './linear-config.helper';
 import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-init-orchestrator');
+const initialAttachmentsSchema = AttachmentSchema.array();
 
 // Module-level cached GitHub username (cross-domain logic: caches githubCLIService result)
 let cachedGitHubUsername: {
@@ -629,12 +631,14 @@ function enqueueAutoMessage(
   sessionId: string,
   workspaceId: string,
   text: string,
-  model: string
+  model: string,
+  attachments?: MessageAttachment[]
 ): void {
   const messageId = `auto-init-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const queued = {
     id: messageId,
     text,
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
     timestamp: new Date().toISOString(),
     settings: {
       selectedModel: model,
@@ -659,6 +663,7 @@ function enqueueAutoMessage(
       userMessage: {
         text: queued.text,
         timestamp: queued.timestamp,
+        attachments: queued.attachments,
         settings: {
           ...queued.settings,
           selectedModel: resolveSelectedModel(queued.settings.selectedModel),
@@ -667,6 +672,60 @@ function enqueueAutoMessage(
       },
     });
   }
+}
+
+interface InitialAutoMessageContent {
+  text: string;
+  attachments?: MessageAttachment[];
+}
+
+function readInitialAttachmentsFromMetadata(
+  metadata: Record<string, unknown> | null,
+  workspaceId: string
+): MessageAttachment[] | undefined {
+  if (!(metadata && 'initialAttachments' in metadata)) {
+    return undefined;
+  }
+
+  const parsedAttachments = initialAttachmentsSchema.safeParse(metadata.initialAttachments);
+  if (parsedAttachments.success) {
+    return parsedAttachments.data;
+  }
+
+  logger.warn('Invalid initial attachments in workspace creation metadata', {
+    workspaceId,
+  });
+  return undefined;
+}
+
+async function resolveInitialAutoMessageContent(
+  workspaceId: string
+): Promise<InitialAutoMessageContent | null> {
+  const issuePromptText =
+    (await buildInitialPromptFromGitHubIssue(workspaceId)) ||
+    (await buildInitialPromptFromLinearIssue(workspaceId));
+  if (issuePromptText) {
+    return { text: issuePromptText };
+  }
+
+  const workspace = await workspaceAccessor.findById(workspaceId);
+  const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
+  const metadataPromptText =
+    metadata?.initialPrompt && typeof metadata.initialPrompt === 'string'
+      ? metadata.initialPrompt
+      : '';
+  const metadataAttachments = readInitialAttachmentsFromMetadata(metadata, workspaceId);
+
+  if (!metadataPromptText && (!metadataAttachments || metadataAttachments.length === 0)) {
+    return null;
+  }
+
+  return {
+    text: metadataPromptText,
+    ...(metadataAttachments && metadataAttachments.length > 0
+      ? { attachments: metadataAttachments }
+      : {}),
+  };
 }
 
 async function startDefaultAgentSession(workspaceId: string): Promise<string | null> {
@@ -680,19 +739,8 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       return null;
     }
 
-    // Build the initial prompt from the linked issue (GitHub or Linear),
-    // falling back to the user-provided initial prompt in creationMetadata.
-    let initialPromptText =
-      (await buildInitialPromptFromGitHubIssue(workspaceId)) ||
-      (await buildInitialPromptFromLinearIssue(workspaceId));
-
-    if (!initialPromptText) {
-      const workspace = await workspaceAccessor.findById(workspaceId);
-      const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
-      if (metadata?.initialPrompt && typeof metadata.initialPrompt === 'string') {
-        initialPromptText = metadata.initialPrompt;
-      }
-    }
+    // Build the initial prompt from linked issue data, or fallback to creation metadata.
+    const initialMessage = await resolveInitialAutoMessageContent(workspaceId);
 
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')
@@ -702,8 +750,14 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
     });
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
-    if (initialPromptText) {
-      enqueueAutoMessage(session.id, workspaceId, initialPromptText, session.model);
+    if (initialMessage) {
+      enqueueAutoMessage(
+        session.id,
+        workspaceId,
+        initialMessage.text,
+        session.model,
+        initialMessage.attachments
+      );
     }
 
     // Trigger queue dispatch after init/session start so messages queued during
@@ -713,7 +767,8 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
     logger.debug('Auto-started default Claude session for workspace', {
       workspaceId,
       sessionId: session.id,
-      hasInitialPrompt: !!initialPromptText,
+      hasInitialPrompt: !!initialMessage?.text,
+      hasInitialAttachments: (initialMessage?.attachments?.length ?? 0) > 0,
     });
     return session.id;
   } catch (error) {

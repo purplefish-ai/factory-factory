@@ -224,6 +224,37 @@ describe('workspaceRouter', () => {
     await expect(caller.archive({ id: 'w-created' })).resolves.toEqual({ archived: true });
   });
 
+  it('passes initial attachments through manual workspace creation', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceCreationCreate.mockResolvedValue({ workspace: { id: 'w-created' } });
+
+    const initialAttachments = [
+      {
+        id: 'att-1',
+        name: 'context.txt',
+        type: 'text/plain',
+        size: 12,
+        data: 'hello world',
+        contentType: 'text' as const,
+      },
+    ];
+
+    await caller.create({
+      type: 'MANUAL',
+      projectId: 'p1',
+      name: 'With Attachments',
+      initialPrompt: 'Please use the attachment',
+      initialAttachments,
+    });
+
+    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'MANUAL',
+        initialAttachments,
+      })
+    );
+  });
+
   it('blocks workspace creation when default provider is unavailable', async () => {
     const { caller, cliHealthService } = createCaller();
     cliHealthService.checkHealth.mockResolvedValue({

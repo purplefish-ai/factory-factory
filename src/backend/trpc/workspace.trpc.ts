@@ -17,6 +17,7 @@ import {
 import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
+import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
 import { workspaceFilesRouter } from './workspace/files.trpc';
@@ -39,6 +40,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     branchName: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
     initialPrompt: z.string().optional(),
+    initialAttachments: z.array(AttachmentSchema).optional(),
     provider: z.nativeEnum(SessionProvider).optional(),
   }),
   z.object({

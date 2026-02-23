@@ -9,6 +9,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import type { configService } from '@/backend/services/config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
+import type { MessageAttachment } from '@/shared/acp-protocol';
 
 type ConfigService = typeof configService;
 type Logger = ReturnType<typeof createLogger>;
@@ -26,6 +27,7 @@ export type WorkspaceCreationSource =
       branchName?: string;
       ratchetEnabled?: boolean;
       initialPrompt?: string;
+      initialAttachments?: MessageAttachment[];
       provider?: SessionProvider;
     }
   | {
@@ -154,6 +156,9 @@ export class WorkspaceCreationService {
         const metadata: Record<string, unknown> = {};
         if (source.initialPrompt) {
           metadata.initialPrompt = source.initialPrompt;
+        }
+        if (source.initialAttachments && source.initialAttachments.length > 0) {
+          metadata.initialAttachments = source.initialAttachments;
         }
         return {
           preparedInput: {
