@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-
 import { trpc } from '@/client/lib/trpc';
+import { removeWorkspaceFromProjectSummaryCache } from '@/client/lib/workspace-cache-helpers';
 import {
   type NewSessionProviderSelection,
   resolveExplicitSessionProvider,
@@ -195,20 +195,29 @@ export function useSessionManagement({
       const projectId = workspace?.projectId;
 
       if (projectId) {
-        await utils.workspace.listWithKanbanState.cancel({ projectId });
+        await Promise.all([
+          utils.workspace.listWithKanbanState.cancel({ projectId }),
+          utils.workspace.getProjectSummaryState.cancel({ projectId }),
+        ]);
       }
 
       const previousWorkspaceList = projectId
         ? utils.workspace.listWithKanbanState.getData({ projectId })
+        : undefined;
+      const previousProjectSummaryState = projectId
+        ? utils.workspace.getProjectSummaryState.getData({ projectId })
         : undefined;
 
       if (projectId) {
         utils.workspace.listWithKanbanState.setData({ projectId }, (old) =>
           old?.filter((workspaceItem) => workspaceItem.id !== id)
         );
+        utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+          removeWorkspaceFromProjectSummaryCache(old, id)
+        );
       }
 
-      return { projectId, previousWorkspaceList };
+      return { projectId, previousWorkspaceList, previousProjectSummaryState };
     },
     onSuccess: () => {
       if (slug) {
@@ -229,6 +238,12 @@ export function useSessionManagement({
           utils.workspace.listWithKanbanState.setData(
             { projectId: context.projectId },
             context.previousWorkspaceList
+          );
+        }
+        if (context.previousProjectSummaryState) {
+          utils.workspace.getProjectSummaryState.setData(
+            { projectId: context.projectId },
+            context.previousProjectSummaryState
           );
         }
       }
