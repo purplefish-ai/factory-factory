@@ -42,6 +42,7 @@ import { createHealthRouter } from './routers/health.router';
 import {
   createChatUpgradeHandler,
   createDevLogsUpgradeHandler,
+  createPostRunLogsUpgradeHandler,
   createSetupTerminalUpgradeHandler,
   createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
@@ -88,6 +89,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   const terminalUpgradeHandler = createTerminalUpgradeHandler(context);
   const setupTerminalUpgradeHandler = createSetupTerminalUpgradeHandler(context);
   const devLogsUpgradeHandler = createDevLogsUpgradeHandler(context);
+  const postRunLogsUpgradeHandler = createPostRunLogsUpgradeHandler(context);
   const snapshotsUpgradeHandler = createSnapshotsUpgradeHandler(context);
 
   // ============================================================================
@@ -176,6 +178,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         req.path === '/terminal' ||
         req.path === '/setup-terminal' ||
         req.path === '/dev-logs' ||
+        req.path === '/post-run-logs' ||
         req.path === '/snapshots'
       ) {
         return next();
@@ -238,6 +241,11 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
     if (url.pathname === '/dev-logs') {
       devLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
+      return;
+    }
+
+    if (url.pathname === '/post-run-logs') {
+      postRunLogsUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
       return;
     }
 

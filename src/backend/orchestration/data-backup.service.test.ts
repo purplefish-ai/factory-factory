@@ -112,6 +112,7 @@ const mockWorkspace: Workspace = {
   initCompletedAt: new Date('2025-01-01T00:05:00.000Z'),
   initRetryCount: 0,
   runScriptCommand: 'npm run dev',
+  runScriptPostRunCommand: null,
   runScriptCleanupCommand: 'npm run cleanup',
   runScriptPid: 12_345,
   runScriptPort: 3000,

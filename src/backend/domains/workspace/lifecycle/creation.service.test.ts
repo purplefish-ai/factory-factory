@@ -69,6 +69,7 @@ describe('WorkspaceCreationService', () => {
     initCompletedAt: null,
     initRetryCount: 0,
     runScriptCommand: null,
+    runScriptPostRunCommand: null,
     runScriptCleanupCommand: null,
     runScriptPid: null,
     runScriptPort: null,

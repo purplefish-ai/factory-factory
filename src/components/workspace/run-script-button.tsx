@@ -116,6 +116,7 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
         {...panelProps}
         currentConfig={{
           run: status.runScriptCommand,
+          postRun: status.runScriptPostRunCommand,
           cleanup: status.runScriptCleanupCommand,
         }}
       />

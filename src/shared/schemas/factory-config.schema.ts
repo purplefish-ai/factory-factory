@@ -4,6 +4,7 @@ export const FactoryConfigSchema = z.object({
   scripts: z.object({
     setup: z.string().optional(),
     run: z.string().optional(),
+    postRun: z.string().optional(),
     cleanup: z.string().optional(),
   }),
 });

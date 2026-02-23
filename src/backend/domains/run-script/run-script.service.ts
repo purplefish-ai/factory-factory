@@ -19,11 +19,20 @@ export class RunScriptService {
   // Track running processes by workspace ID
   private readonly runningProcesses = new Map<string, ChildProcess>();
 
+  // Track postRun sidecar processes by workspace ID
+  private readonly postRunProcesses = new Map<string, ChildProcess>();
+
   // Output buffers by workspace ID (persists even after process stops)
   private readonly outputBuffers = new Map<string, string>();
 
   // Output listeners by workspace ID
   private readonly outputListeners = new Map<string, Set<(data: string) => void>>();
+
+  // PostRun output buffers (separate from main dev logs)
+  private readonly postRunOutputBuffers = new Map<string, string>();
+
+  // PostRun output listeners (separate from main dev logs)
+  private readonly postRunOutputListeners = new Map<string, Set<(data: string) => void>>();
 
   // Track whether we're shutting down to prevent double cleanup
   private isShuttingDown = false;
@@ -105,9 +114,10 @@ export class RunScriptService {
       // Store process reference
       this.runningProcesses.set(workspaceId, childProcess);
 
-      // Clear and initialize output buffer for new run
+      // Clear and initialize output buffers for new run
       const startMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting ${command}\n\n`;
       this.outputBuffers.set(workspaceId, startMessage);
+      this.postRunOutputBuffers.delete(workspaceId);
 
       // Register event handlers BEFORE async state transition to avoid missing events
       this.registerProcessHandlers(workspaceId, childProcess, pid);
@@ -177,6 +187,7 @@ export class RunScriptService {
 
     this.runningProcesses.delete(workspaceId);
     this.outputListeners.delete(workspaceId);
+    await this.killPostRunProcess(workspaceId);
     await runScriptProxyService.stopTunnel(workspaceId);
 
     // Check current state:
@@ -242,6 +253,24 @@ export class RunScriptService {
     }
   }
 
+  private appendPostRunOutput(workspaceId: string, output: string): void {
+    const currentBuffer = this.postRunOutputBuffers.get(workspaceId) ?? '';
+    let newBuffer = currentBuffer + output;
+
+    if (newBuffer.length > MAX_OUTPUT_BUFFER_SIZE) {
+      newBuffer = newBuffer.slice(-MAX_OUTPUT_BUFFER_SIZE);
+    }
+
+    this.postRunOutputBuffers.set(workspaceId, newBuffer);
+
+    const listeners = this.postRunOutputListeners.get(workspaceId);
+    if (listeners) {
+      for (const listener of listeners) {
+        listener(output);
+      }
+    }
+  }
+
   private async transitionToRunning(
     workspaceId: string,
     childProcess: ChildProcess,
@@ -258,6 +287,12 @@ export class RunScriptService {
       if (port) {
         proxyUrl = await this.ensureTunnelForActiveProcess(workspaceId, childProcess, pid, port);
       }
+
+      // Spawn postRun script (fire-and-forget, non-blocking)
+      void this.spawnPostRunScript(workspaceId, port).catch((error) => {
+        logger.warn('Failed to start postRun script', { workspaceId, error });
+      });
+
       return { success: true, port, pid, proxyUrl: proxyUrl ?? undefined };
     } catch (markRunningError) {
       return this.handleMarkRunningRace(workspaceId, childProcess, pid, port, markRunningError);
@@ -414,6 +449,7 @@ export class RunScriptService {
 
       // Kill the process tree
       await this.killProcessTree(workspaceId, childProcess, pid);
+      await this.killPostRunProcess(workspaceId);
 
       // Transition to IDLE state via state machine (completes stopping)
       await this.completeStoppingAfterStop(workspaceId);
@@ -548,6 +584,94 @@ export class RunScriptService {
     }
   }
 
+  private async spawnPostRunScript(workspaceId: string, port: number | undefined): Promise<void> {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!(workspace?.runScriptPostRunCommand && workspace.worktreePath)) {
+      return;
+    }
+
+    let command = workspace.runScriptPostRunCommand;
+    if (port && command.includes('{port}')) {
+      command = FactoryConfigService.substitutePort(command, port);
+    }
+
+    logger.info('Starting postRun script', { workspaceId, command });
+
+    const postRunProcess = spawn('bash', ['-c', command], {
+      cwd: workspace.worktreePath,
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    if (!postRunProcess.pid) {
+      logger.warn('Failed to spawn postRun process', { workspaceId });
+      return;
+    }
+
+    this.postRunProcesses.set(workspaceId, postRunProcess);
+
+    const postRunStartMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting postRun: ${command}\n`;
+    this.appendOutput(workspaceId, postRunStartMessage);
+    this.appendPostRunOutput(workspaceId, postRunStartMessage);
+
+    const handleOutput = (data: Buffer) => {
+      this.appendPostRunOutput(workspaceId, data.toString());
+    };
+
+    postRunProcess.stdout?.on('data', handleOutput);
+    postRunProcess.stdout?.on('error', (error) => {
+      logger.warn('PostRun stdout stream error', { workspaceId, error });
+    });
+
+    postRunProcess.stderr?.on('data', handleOutput);
+    postRunProcess.stderr?.on('error', (error) => {
+      logger.warn('PostRun stderr stream error', { workspaceId, error });
+    });
+
+    postRunProcess.on('exit', (code, signal) => {
+      logger.info('PostRun script exited', { workspaceId, pid: postRunProcess.pid, code, signal });
+      this.postRunProcesses.delete(workspaceId);
+    });
+
+    postRunProcess.on('error', (error) => {
+      logger.error('PostRun spawn error', error, { workspaceId });
+      this.postRunProcesses.delete(workspaceId);
+    });
+  }
+
+  private async killPostRunProcess(workspaceId: string): Promise<void> {
+    const postRunProcess = this.postRunProcesses.get(workspaceId);
+    if (!postRunProcess) {
+      return;
+    }
+
+    const postRunPid = postRunProcess.pid;
+    if (!postRunPid) {
+      this.postRunProcesses.delete(workspaceId);
+      return;
+    }
+
+    logger.info('Stopping postRun process', { workspaceId, pid: postRunPid });
+
+    await new Promise<void>((resolve) => {
+      treeKill(postRunPid, 'SIGTERM', (err) => {
+        if (err) {
+          const errorCode = (err as NodeJS.ErrnoException).code;
+          const message = err.message;
+          if (errorCode !== 'ESRCH' && !message.includes('No such process')) {
+            logger.warn('Failed to tree-kill postRun process', {
+              workspaceId,
+              pid: postRunPid,
+              error: message,
+            });
+          }
+        }
+        this.postRunProcesses.delete(workspaceId);
+        resolve();
+      });
+    });
+  }
+
   private async killProcessTree(
     workspaceId: string,
     childProcess: ChildProcess | undefined,
@@ -612,6 +736,7 @@ export class RunScriptService {
       startedAt: freshWorkspace.runScriptStartedAt,
       hasRunScript: !!freshWorkspace.runScriptCommand,
       runScriptCommand: freshWorkspace.runScriptCommand,
+      runScriptPostRunCommand: freshWorkspace.runScriptPostRunCommand,
       runScriptCleanupCommand: freshWorkspace.runScriptCleanupCommand,
     };
   }
@@ -648,6 +773,36 @@ export class RunScriptService {
   }
 
   /**
+   * Get the output buffer for a workspace's postRun script
+   */
+  getPostRunOutputBuffer(workspaceId: string): string {
+    return this.postRunOutputBuffers.get(workspaceId) ?? '';
+  }
+
+  /**
+   * Subscribe to output from a workspace's postRun script
+   * @returns Unsubscribe function
+   */
+  subscribeToPostRunOutput(workspaceId: string, listener: (data: string) => void): () => void {
+    let listeners = this.postRunOutputListeners.get(workspaceId);
+    if (!listeners) {
+      listeners = new Set();
+      this.postRunOutputListeners.set(workspaceId, listeners);
+    }
+    listeners.add(listener);
+
+    return () => {
+      const listeners = this.postRunOutputListeners.get(workspaceId);
+      if (listeners) {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          this.postRunOutputListeners.delete(workspaceId);
+        }
+      }
+    };
+  }
+
+  /**
    * Cleanup all running scripts (called on server shutdown)
    */
   async cleanup() {
@@ -671,6 +826,7 @@ export class RunScriptService {
     );
 
     this.runningProcesses.clear();
+    this.postRunProcesses.clear();
     await runScriptProxyService.cleanup();
   }
 
@@ -699,9 +855,25 @@ export class RunScriptService {
       }
     }
     this.runningProcesses.clear();
+    for (const [workspaceId, postRunProcess] of this.postRunProcesses.entries()) {
+      try {
+        if (!postRunProcess.killed) {
+          postRunProcess.kill('SIGKILL');
+        }
+        logger.info('Force killed postRun script on exit', {
+          workspaceId,
+          pid: postRunProcess.pid,
+        });
+      } catch {
+        // Ignore errors during forced shutdown
+      }
+    }
+    this.postRunProcesses.clear();
     runScriptProxyService.cleanupSync();
     this.outputBuffers.clear();
     this.outputListeners.clear();
+    this.postRunOutputBuffers.clear();
+    this.postRunOutputListeners.clear();
   }
 
   /**

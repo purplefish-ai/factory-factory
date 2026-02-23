@@ -20,6 +20,7 @@ interface DevServerSetupPanelProps {
   currentConfig?: {
     run?: string | null;
     setup?: string | null;
+    postRun?: string | null;
     cleanup?: string | null;
   };
   onSave: (config: FactoryConfig) => void;
@@ -39,6 +40,7 @@ export function DevServerSetupPanel({
 
   const [runCommand, setRunCommand] = useState('');
   const [setupCommand, setSetupCommand] = useState('');
+  const [postRunCommand, setPostRunCommand] = useState('');
   const [cleanupCommand, setCleanupCommand] = useState('');
 
   // Reset form fields when panel opens
@@ -46,6 +48,7 @@ export function DevServerSetupPanel({
     if (open) {
       setRunCommand(currentConfig?.run ?? 'npm run dev');
       setSetupCommand(currentConfig?.setup ?? '');
+      setPostRunCommand(currentConfig?.postRun ?? '');
       setCleanupCommand(currentConfig?.cleanup ?? '');
     }
   }, [open, currentConfig]);
@@ -55,6 +58,7 @@ export function DevServerSetupPanel({
       scripts: {
         ...(setupCommand && { setup: setupCommand }),
         run: runCommand,
+        ...(postRunCommand && { postRun: postRunCommand }),
         ...(cleanupCommand && { cleanup: cleanupCommand }),
       },
     });
@@ -109,6 +113,25 @@ export function DevServerSetupPanel({
             />
             <p className="text-xs text-muted-foreground">
               Command to run when workspace is initialized (e.g., install dependencies)
+            </p>
+          </div>
+
+          {/* Post-Run Command (Optional) */}
+          <div className="space-y-2">
+            <Label htmlFor="post-run-command" className="text-sm font-medium">
+              Post-Run Command <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="post-run-command"
+              placeholder="cloudflared tunnel --url http://localhost:{port}"
+              value={postRunCommand}
+              onChange={(e) => setPostRunCommand(e.target.value)}
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Command to run after the dev server starts (e.g., start a tunnel). Supports{' '}
+              <code className="bg-muted px-1">{'{port}'}</code> placeholder. Runs in parallel and is
+              killed when the dev server stops.
             </p>
           </div>
 
@@ -197,6 +220,7 @@ export function DevServerSetupPanel({
                   scripts: {
                     ...(setupCommand && { setup: setupCommand }),
                     run: runCommand,
+                    ...(postRunCommand && { postRun: postRunCommand }),
                     ...(cleanupCommand && { cleanup: cleanupCommand }),
                   },
                 },

@@ -56,6 +56,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   cachedKanbanColumn: 'WORKING',
   stateComputedAt: new Date(),
   runScriptCommand: null,
+  runScriptPostRunCommand: null,
   runScriptCleanupCommand: null,
   runScriptPid: null,
   runScriptPort: null,

@@ -318,6 +318,7 @@ class WorkspaceQueryService {
 
         await workspaceAccessor.update(workspace.id, {
           runScriptCommand: factoryConfig?.scripts.run ?? null,
+          runScriptPostRunCommand: factoryConfig?.scripts.postRun ?? null,
           runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
         });
 

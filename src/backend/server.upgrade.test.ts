@@ -7,6 +7,7 @@ const handlers = vi.hoisted(() => ({
   terminal: vi.fn(),
   setupTerminal: vi.fn(),
   devLogs: vi.fn(),
+  postRunLogs: vi.fn(),
   snapshots: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock('@/backend/routers/websocket', () => ({
   createTerminalUpgradeHandler: vi.fn(() => handlers.terminal),
   createSetupTerminalUpgradeHandler: vi.fn(() => handlers.setupTerminal),
   createDevLogsUpgradeHandler: vi.fn(() => handlers.devLogs),
+  createPostRunLogsUpgradeHandler: vi.fn(() => handlers.postRunLogs),
   createSnapshotsUpgradeHandler: vi.fn(() => handlers.snapshots),
 }));
 

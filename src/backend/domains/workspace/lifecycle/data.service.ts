@@ -37,10 +37,12 @@ class WorkspaceDataService {
   setRunScriptCommands(
     id: string,
     runScriptCommand: string | null,
+    runScriptPostRunCommand: string | null,
     runScriptCleanupCommand: string | null
   ) {
     return workspaceAccessor.update(id, {
       runScriptCommand,
+      runScriptPostRunCommand,
       runScriptCleanupCommand,
     });
   }

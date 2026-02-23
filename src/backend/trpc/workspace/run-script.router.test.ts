@@ -80,7 +80,7 @@ describe('workspaceRunScriptRouter', () => {
     const repoConfig = readFileSync(join(repoDir, 'factory-factory.json'), 'utf8');
     expect(workspaceConfig).toContain('pnpm dev');
     expect(repoConfig).toContain('pnpm dev');
-    expect(mockSetRunScriptCommands).toHaveBeenCalledWith('w1', 'pnpm dev', 'pkill node');
+    expect(mockSetRunScriptCommands).toHaveBeenCalledWith('w1', 'pnpm dev', null, 'pkill node');
   });
 
   it('validates workspace preconditions for config creation', async () => {

@@ -5,9 +5,15 @@ interface DevLogsPanelProps {
   output: string;
   outputEndRef: React.RefObject<HTMLDivElement | null>;
   className?: string;
+  emptyMessage?: string;
 }
 
-export function DevLogsPanel({ output, outputEndRef, className }: DevLogsPanelProps) {
+export function DevLogsPanel({
+  output,
+  outputEndRef,
+  className,
+  emptyMessage = 'Waiting for dev server output...',
+}: DevLogsPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -17,9 +23,7 @@ export function DevLogsPanel({ output, outputEndRef, className }: DevLogsPanelPr
         ref={containerRef}
         className="h-full overflow-y-auto overflow-x-auto font-mono text-xs p-4 bg-black text-white"
       >
-        <pre className="whitespace-pre-wrap break-words">
-          {output || 'Waiting for dev server output...'}
-        </pre>
+        <pre className="whitespace-pre-wrap break-words">{output || emptyMessage}</pre>
         <div ref={outputEndRef} />
       </div>
     </div>

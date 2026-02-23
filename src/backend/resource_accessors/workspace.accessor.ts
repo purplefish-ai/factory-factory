@@ -71,6 +71,7 @@ interface UpdateWorkspaceInput {
   stateComputedAt?: Date | null;
   // Run script tracking
   runScriptCommand?: string | null;
+  runScriptPostRunCommand?: string | null;
   runScriptCleanupCommand?: string | null;
   runScriptPid?: number | null;
   runScriptPort?: number | null;

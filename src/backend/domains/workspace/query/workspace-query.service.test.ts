@@ -335,6 +335,7 @@ describe('WorkspaceQueryService', () => {
     });
     expect(mockWorkspaceUpdate).toHaveBeenCalledWith('w1', {
       runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
       runScriptCleanupCommand: 'pkill node',
     });
   });

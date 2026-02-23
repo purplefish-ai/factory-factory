@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { cpSync, existsSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -222,13 +222,23 @@ async function runMigrationsOrExit(databasePath: string, verbose: boolean): Prom
 
 function createShutdownHandler(
   processes: { name: string; proc: ChildProcess }[],
-  shutdownState: { shuttingDown: boolean }
+  shutdownState: { shuttingDown: boolean },
+  portFilePath?: string
 ) {
   return (signal: string) => {
     if (shutdownState.shuttingDown) {
       return;
     }
     shutdownState.shuttingDown = true;
+
+    // Clean up port file
+    if (portFilePath) {
+      try {
+        unlinkSync(portFilePath);
+      } catch {
+        // File may not exist yet, ignore
+      }
+    }
 
     console.log(chalk.yellow(`\n  🛑 ${signal} received, shutting down...`));
 
@@ -371,8 +381,9 @@ program
 
     const processes: { name: string; proc: ChildProcess }[] = [];
     const shutdownState = { shuttingDown: false };
+    const portFilePath = join(process.cwd(), '.factory-factory-port');
 
-    const shutdown = createShutdownHandler(processes, shutdownState);
+    const shutdown = createShutdownHandler(processes, shutdownState, portFilePath);
     registerShutdownHandlers(shutdown);
 
     const createOnReady = (actualBackendPort: number) => async () => {
@@ -389,6 +400,9 @@ program
       });
       console.log(chalk.bold.green(`\n  ✅ Ready at ${chalk.cyan(url)}\n`));
       console.log(chalk.dim('  Press Ctrl+C to stop\n'));
+
+      // Write port file so postRun scripts can discover the frontend port
+      writeFileSync(portFilePath, frontendPort.toString(), 'utf-8');
 
       if (shouldOpen) {
         try {
