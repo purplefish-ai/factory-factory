@@ -9,21 +9,21 @@ import {
 
 /**
  * Threshold for considering text as "large" (number of lines).
- * Text with 10+ lines is shown as an attachment to avoid cluttering the input field
+ * Text with 20+ lines is shown as an attachment to avoid cluttering the input field
  * and to give users a clear visual indicator of the content size.
  */
-export const LARGE_TEXT_LINE_THRESHOLD = 10;
+export const LARGE_TEXT_LINE_THRESHOLD = 20;
 
 /**
  * Threshold for considering text as "large" (character count).
- * Text with 1000+ characters is shown as an attachment even if it has few lines,
+ * Text with 2000+ characters is shown as an attachment even if it has few lines,
  * as long single lines can also clutter the input field.
  */
-export const LARGE_TEXT_CHAR_THRESHOLD = 1000;
+export const LARGE_TEXT_CHAR_THRESHOLD = 2000;
 
 /**
  * Check if text is considered "large" and should be shown as an attachment.
- * Text is large if it has 10+ lines OR 1000+ characters.
+ * Text is large if it has 20+ lines OR 2000+ characters.
  */
 export function isLargeText(text: string): boolean {
   const lineCount = text.split('\n').length;

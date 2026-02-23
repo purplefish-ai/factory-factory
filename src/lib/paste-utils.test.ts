@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getClipboardImages } from './paste-utils';
+import {
+  getClipboardImages,
+  isLargeText,
+  LARGE_TEXT_CHAR_THRESHOLD,
+  LARGE_TEXT_LINE_THRESHOLD,
+} from './paste-utils';
 
 vi.mock('./image-utils', async () => {
   const actual = await vi.importActual<typeof import('./image-utils')>('./image-utils');
@@ -81,5 +86,32 @@ describe('getClipboardImages', () => {
 
     expect(result.attachments).toEqual([]);
     expect(result.errors).toEqual(['Image too large: 6 B (max 5 B)']);
+  });
+});
+
+describe('isLargeText', () => {
+  it('returns false below both thresholds', () => {
+    const text = 'short text';
+    expect(isLargeText(text)).toBe(false);
+  });
+
+  it('returns true at the line threshold', () => {
+    const text = Array.from({ length: LARGE_TEXT_LINE_THRESHOLD }, () => 'line').join('\n');
+    expect(isLargeText(text)).toBe(true);
+  });
+
+  it('returns false just below the line threshold', () => {
+    const text = Array.from({ length: LARGE_TEXT_LINE_THRESHOLD - 1 }, () => 'line').join('\n');
+    expect(isLargeText(text)).toBe(false);
+  });
+
+  it('returns true at the character threshold', () => {
+    const text = 'a'.repeat(LARGE_TEXT_CHAR_THRESHOLD);
+    expect(isLargeText(text)).toBe(true);
+  });
+
+  it('returns false just below the character threshold', () => {
+    const text = 'a'.repeat(LARGE_TEXT_CHAR_THRESHOLD - 1);
+    expect(isLargeText(text)).toBe(false);
   });
 });

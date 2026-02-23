@@ -174,7 +174,7 @@ export const InteractivePasteDrop: Story = {
           <p className="font-medium mb-2">Test Instructions:</p>
           <ul className="list-disc list-inside space-y-1">
             <li>Paste an image (Cmd/Ctrl+V after copying an image)</li>
-            <li>Paste large text (10+ lines or 1000+ characters)</li>
+            <li>Paste large text (20+ lines or 2000+ characters)</li>
             <li>Drag and drop an image file</li>
             <li>Drag and drop a text file (.txt, .md, .js, etc.)</li>
           </ul>
