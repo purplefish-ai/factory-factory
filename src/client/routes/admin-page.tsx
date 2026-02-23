@@ -4,6 +4,7 @@ import {
   ExternalLink,
   FileJson,
   FileText,
+  Link2,
   Pencil,
   RefreshCw,
 } from 'lucide-react';
@@ -30,15 +31,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { RatchetWrenchIcon, WorkspacesBackLink } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
+import type { PublicIssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
 import {
   ApiUsageSection,
-  IssueTrackingSection,
   ProcessesSection,
   ProcessesSectionSkeleton,
+  ProjectIssueTrackingCard,
 } from './admin/index';
 
 function getEnabledFeatures(features?: Record<string, boolean>): string {
@@ -181,45 +184,95 @@ function ProjectFactoryConfigCard({
   );
 }
 
-function FactoryConfigSection({ projects }: { projects: Array<{ id: string; name: string }> }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileJson className="w-5 h-5" />
-          Factory Configuration
-        </CardTitle>
-        <CardDescription>
-          Configuration for workspace setup and run scripts (factory-factory.json)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {projects.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No projects found.</p>
-        ) : (
-          <div className="space-y-4">
-            {projects.map((project) => (
-              <ProjectFactoryConfigCard
-                key={project.id}
-                projectId={project.id}
-                projectName={project.name}
-              />
-            ))}
+const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
-            <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
-              <p>
-                <strong>Port Allocation:</strong> Use{' '}
-                <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for
-                automatic port allocation
-              </p>
-              <p>
-                <strong>Location:</strong> factory-factory.json in repository root
-              </p>
-            </div>
+function ProjectSettingsSection({
+  projects,
+}: {
+  projects: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    issueProvider: string;
+    issueTrackerConfig: PublicIssueTrackerConfig | null;
+  }>;
+}) {
+  const [selectedSlug, setSelectedSlug] = useState<string>(
+    () => localStorage.getItem(SELECTED_PROJECT_KEY) || projects[0]?.slug || ''
+  );
+
+  const selectedProject = projects.find((p) => p.slug === selectedSlug) ?? projects[0];
+
+  if (!selectedProject) {
+    return <p className="text-sm text-muted-foreground">No projects found.</p>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <h2 className="text-lg font-semibold">Project Settings</h2>
+        <Select value={selectedProject.slug} onValueChange={setSelectedSlug}>
+          <SelectTrigger className="w-auto max-w-xs">
+            <SelectValue placeholder="Select a project" />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((project) => (
+              <SelectItem key={project.id} value={project.slug}>
+                {project.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileJson className="w-5 h-5" />
+            Factory Configuration
+          </CardTitle>
+          <CardDescription>
+            Configuration for workspace setup and run scripts (factory-factory.json)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ProjectFactoryConfigCard
+            key={selectedProject.id}
+            projectId={selectedProject.id}
+            projectName={selectedProject.name}
+          />
+          <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+            <p>
+              <strong>Port Allocation:</strong> Use{' '}
+              <code className="bg-muted px-1 rounded">{'{port}'}</code> in run script for automatic
+              port allocation
+            </p>
+            <p>
+              <strong>Location:</strong> factory-factory.json in repository root
+            </p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Link2 className="w-5 h-5" />
+            Issue Tracking
+          </CardTitle>
+          <CardDescription>Configure the issue provider (GitHub Issues or Linear)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProjectIssueTrackingCard
+            key={selectedProject.id}
+            projectId={selectedProject.id}
+            projectName={selectedProject.name}
+            currentProvider={selectedProject.issueProvider}
+            issueTrackerConfig={selectedProject.issueTrackerConfig}
+          />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -823,6 +876,8 @@ export default function AdminDashboardPage() {
         </HeaderLeftExtraSlot>
       )}
       <div className="space-y-6 p-3 md:p-6">
+        <h2 className="text-lg font-semibold">General Settings</h2>
+
         <ApiUsageSection
           apiUsage={stats?.apiUsage}
           onReset={() => resetApiStats.mutate()}
@@ -849,25 +904,17 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Factory Configuration */}
-        {projects && <FactoryConfigSection projects={projects} />}
-
-        {projects && <IssueTrackingSection projects={projects} />}
-
-        {/* User Settings */}
         <NotificationSettingsSection />
         <IdeSettingsSection />
         <ChatProviderDefaultsSection />
-        <AppInfoSection />
-
-        {/* Ratchet Settings (unified PR auto-progression system) */}
         <RatchetSettingsSection />
-
-        {/* Data Backup */}
+        <AppInfoSection />
         <DataBackupSection />
-
-        {/* Server Logs */}
         <ServerLogsSection />
+
+        <Separator className="my-2" />
+
+        {projects && <ProjectSettingsSection projects={projects} />}
       </div>
     </div>
   );
