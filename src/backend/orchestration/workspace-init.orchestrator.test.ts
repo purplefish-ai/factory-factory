@@ -568,6 +568,28 @@ describe('initializeWorkspaceWorktree', () => {
       });
     });
 
+    it('starts default session in plan mode when requested in creation metadata', async () => {
+      setupHappyPath();
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+        unsafeCoerce({
+          id: WORKSPACE_ID,
+          creationMetadata: {
+            startupModePreset: 'plan',
+          },
+        })
+      );
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(sessionService.startSession).toHaveBeenCalledWith('session-1', {
+        initialPrompt: '',
+        startupModePreset: 'plan',
+      });
+    });
+
     it('does not start session when no idle session exists', async () => {
       setupHappyPath();
       vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([]);

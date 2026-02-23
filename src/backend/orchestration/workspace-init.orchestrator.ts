@@ -679,6 +679,8 @@ interface InitialAutoMessageContent {
   attachments?: MessageAttachment[];
 }
 
+type WorkspaceStartupModePreset = 'non_interactive' | 'plan';
+
 function readInitialAttachmentsFromMetadata(
   metadata: Record<string, unknown> | null,
   workspaceId: string
@@ -696,6 +698,25 @@ function readInitialAttachmentsFromMetadata(
     workspaceId,
   });
   return undefined;
+}
+
+function readStartupModePresetFromMetadata(
+  metadata: Record<string, unknown> | null,
+  workspaceId: string
+): WorkspaceStartupModePreset {
+  if (!(metadata && 'startupModePreset' in metadata)) {
+    return 'non_interactive';
+  }
+
+  const startupModePreset = metadata.startupModePreset;
+  if (startupModePreset === 'non_interactive' || startupModePreset === 'plan') {
+    return startupModePreset;
+  }
+
+  logger.warn('Invalid startup mode preset in workspace creation metadata', {
+    workspaceId,
+  });
+  return 'non_interactive';
 }
 
 async function resolveInitialAutoMessageContent(
@@ -739,6 +760,10 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
       return null;
     }
 
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
+    const startupModePreset = readStartupModePresetFromMetadata(metadata, workspaceId);
+
     // Build the initial prompt from linked issue data, or fallback to creation metadata.
     const initialMessage = await resolveInitialAutoMessageContent(workspaceId);
 
@@ -746,7 +771,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
     // (undefined would default to 'Continue with the task.')
     await sessionService.startSession(session.id, {
       initialPrompt: '',
-      startupModePreset: 'non_interactive',
+      startupModePreset,
     });
 
     // Route the initial prompt through the queue pipeline so runtime and replay remain consistent.
