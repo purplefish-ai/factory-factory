@@ -22,6 +22,8 @@ export { chatEventForwarderService } from './chat/chat-event-forwarder.service';
 export { chatMessageHandlerService } from './chat/chat-message-handlers.service';
 export { sessionDataService } from './data/session-data.service';
 export { sessionProviderResolverService } from './data/session-provider-resolver.service';
+export type { SessionInterceptorBridge } from './interceptor.bridge';
+export { sessionInterceptorBridge } from './interceptor.bridge';
 export { sessionPromptBuilder } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 // Session lifecycle (start/stop/create)
