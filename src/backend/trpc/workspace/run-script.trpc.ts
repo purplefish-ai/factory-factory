@@ -55,6 +55,7 @@ export const workspaceRunScriptRouter = router({
         await workspaceDataService.setRunScriptCommands(
           input.workspaceId,
           input.config.scripts.run ?? null,
+          input.config.scripts.postRun ?? null,
           input.config.scripts.cleanup ?? null
         );
 

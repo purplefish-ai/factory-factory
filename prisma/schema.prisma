@@ -166,6 +166,7 @@ model Workspace {
 
   // Run script tracking (from factory-factory.json)
   runScriptCommand        String?           // The run script command to execute
+  runScriptPostRunCommand String?           // The postRun script command to execute after run is RUNNING
   runScriptCleanupCommand String?           // The cleanup script command to execute on stop
   runScriptPid            Int?              // Process ID of running script
   runScriptPort           Int?              // Allocated port for the running script

@@ -12,7 +12,10 @@ export function FactoryConfigScripts({
   variant = 'alert',
 }: FactoryConfigScriptsProps) {
   const hasScripts =
-    factoryConfig.scripts.setup || factoryConfig.scripts.run || factoryConfig.scripts.cleanup;
+    factoryConfig.scripts.setup ||
+    factoryConfig.scripts.run ||
+    factoryConfig.scripts.postRun ||
+    factoryConfig.scripts.cleanup;
 
   if (!hasScripts) {
     return null;
@@ -48,6 +51,14 @@ export function FactoryConfigScripts({
                   Have a dev server available via the play button:{' '}
                   <code className="bg-green-100 dark:bg-green-900 px-1 rounded text-xs">
                     {factoryConfig.scripts.run}
+                  </code>
+                </li>
+              )}
+              {factoryConfig.scripts.postRun && (
+                <li className="list-disc">
+                  Run after dev server starts:{' '}
+                  <code className="bg-green-100 dark:bg-green-900 px-1 rounded text-xs">
+                    {factoryConfig.scripts.postRun}
                   </code>
                 </li>
               )}
@@ -100,6 +111,18 @@ export function FactoryConfigScripts({
             </code>
             <p className="text-xs text-muted-foreground">
               Available via the play button in each workspace
+            </p>
+          </div>
+        )}
+
+        {factoryConfig.scripts.postRun && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Post-Run Script</p>
+            <code className="block bg-background px-3 py-2 rounded text-xs font-mono">
+              {factoryConfig.scripts.postRun}
+            </code>
+            <p className="text-xs text-muted-foreground">
+              Runs automatically after the dev server starts
             </p>
           </div>
         )}
