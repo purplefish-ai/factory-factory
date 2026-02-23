@@ -1,4 +1,4 @@
-import { realpath, stat } from 'node:fs/promises';
+import { readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { LIB_LIMITS } from './constants';
 
@@ -84,6 +84,97 @@ export async function isPathSafe(worktreePath: string, filePath: string): Promis
   } catch {
     return false;
   }
+}
+
+/**
+ * Recursively list all files in a directory, excluding common ignore patterns.
+ */
+export async function listFilesRecursive(
+  rootPath: string,
+  currentPath = '',
+  maxDepth = 10,
+  currentDepth = 0
+): Promise<string[]> {
+  if (currentDepth >= maxDepth) {
+    return [];
+  }
+
+  const fullPath = path.join(rootPath, currentPath);
+  const files: string[] = [];
+
+  const ignorePatterns = [
+    '.git',
+    'node_modules',
+    '.next',
+    'dist',
+    'build',
+    '.turbo',
+    'coverage',
+    '.vscode',
+    '.idea',
+  ];
+
+  try {
+    const dirents = await readdir(fullPath, { withFileTypes: true });
+
+    for (const dirent of dirents) {
+      if (ignorePatterns.includes(dirent.name)) {
+        continue;
+      }
+
+      if (dirent.name.startsWith('.')) {
+        continue;
+      }
+
+      const relativePath = currentPath ? path.join(currentPath, dirent.name) : dirent.name;
+
+      if (dirent.isDirectory()) {
+        const subFiles = await listFilesRecursive(
+          rootPath,
+          relativePath,
+          maxDepth,
+          currentDepth + 1
+        );
+        files.push(...subFiles);
+      } else {
+        files.push(relativePath);
+      }
+    }
+  } catch (_error) {
+    return files;
+  }
+
+  return files;
+}
+
+/**
+ * Comparator for sorting files by relevance to a query.
+ */
+export function compareFilesByRelevance(a: string, b: string, queryLower?: string): number {
+  if (queryLower) {
+    const aBasename = path.basename(a).toLowerCase();
+    const bBasename = path.basename(b).toLowerCase();
+
+    const aExact = aBasename === queryLower;
+    const bExact = bBasename === queryLower;
+    if (aExact !== bExact) {
+      return aExact ? -1 : 1;
+    }
+
+    const aStarts = aBasename.startsWith(queryLower);
+    const bStarts = bBasename.startsWith(queryLower);
+    if (aStarts !== bStarts) {
+      return aStarts ? -1 : 1;
+    }
+  }
+
+  const aDepth = a.split('/').length;
+  const bDepth = b.split('/').length;
+  if (aDepth !== bDepth) {
+    return aDepth - bDepth;
+  }
+
+  return a.localeCompare(b);
 }
 
 /**

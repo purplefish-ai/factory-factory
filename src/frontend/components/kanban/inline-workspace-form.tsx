@@ -1,6 +1,8 @@
 import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useProjectFileMentions } from '@/components/chat/chat-input/hooks/use-project-file-mentions';
+import { FileMentionPalette } from '@/components/chat/file-mention-palette';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -38,6 +40,12 @@ export function InlineWorkspaceForm({
   const [initialPrompt, setInitialPrompt] = useState('');
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [provider, setProvider] = useState<'CLAUDE' | 'CODEX'>('CLAUDE');
+
+  const fileMentions = useProjectFileMentions({
+    projectId,
+    inputRef: textareaRef,
+    onChange: setInitialPrompt,
+  });
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -86,6 +94,13 @@ export function InlineWorkspaceForm({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Delegate to file mention menu first
+    const mentionResult = fileMentions.delegateToFileMentionMenu(e.key);
+    if (mentionResult === 'handled') {
+      e.preventDefault();
+      return;
+    }
+
     if (e.key === 'Escape') {
       e.preventDefault();
       onCancel();
@@ -96,22 +111,38 @@ export function InlineWorkspaceForm({
     }
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newValue = e.target.value;
+    setInitialPrompt(newValue);
+    fileMentions.detectFileMention(newValue);
+    autoResize();
+  };
+
   return (
     <Card className="shrink-0 border-dashed border-primary/50">
       <CardContent className="p-3 space-y-3" onKeyDown={handleKeyDown}>
-        <Textarea
-          ref={textareaRef}
-          placeholder="What should the agent work on?"
-          value={initialPrompt}
-          onChange={(e) => {
-            setInitialPrompt(e.target.value);
-            autoResize();
-          }}
-          rows={3}
-          className="resize-none text-sm overflow-hidden"
-          autoFocus
-          disabled={isCreating}
-        />
+        <div className="relative">
+          <FileMentionPalette
+            files={fileMentions.files}
+            isOpen={fileMentions.fileMentionMenuOpen}
+            isLoading={fileMentions.filesLoading}
+            onClose={fileMentions.handleFileMentionMenuClose}
+            onSelect={fileMentions.handleFileMentionSelect}
+            filter={fileMentions.fileMentionFilter}
+            anchorRef={textareaRef as React.RefObject<HTMLElement | null>}
+            paletteRef={fileMentions.paletteRef}
+          />
+          <Textarea
+            ref={textareaRef}
+            placeholder="What should the agent work on?"
+            value={initialPrompt}
+            onChange={handleChange}
+            rows={3}
+            className="resize-none text-sm overflow-hidden"
+            autoFocus
+            disabled={isCreating}
+          />
+        </div>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">

@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "setup": "pnpm i && pnpm db:generate",
+    "setup": "pnpm install",
     "run": "pnpm dev"
   }
 }
