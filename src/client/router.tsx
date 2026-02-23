@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, RouterProvider } from 'react-router';
-import { ThemeProvider } from '@/frontend/components/theme-provider';
-import { TRPCProvider } from '@/frontend/lib/providers';
+import { ThemeProvider } from '@/client/components/theme-provider';
+import { TRPCProvider } from '@/client/lib/providers';
 import { ErrorBoundary } from './error-boundary';
 import { ProjectLayout } from './layouts/project-layout';
 import { Root } from './root';

@@ -10,6 +10,12 @@ import {
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
+import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
+import { Loading } from '@/client/components/loading';
+import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
+import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
+import { downloadFile } from '@/client/lib/download-file';
+import { trpc } from '@/client/lib/trpc';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { FactoryConfigScripts } from '@/components/factory-config-scripts';
 import { Badge } from '@/components/ui/badge';
@@ -28,12 +34,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { RatchetWrenchIcon, WorkspacesBackLink } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
-import { HeaderLeftExtraSlot, useAppHeader } from '@/frontend/components/app-header-context';
-import { Loading } from '@/frontend/components/loading';
-import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
-import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
-import { downloadFile } from '@/frontend/lib/download-file';
-import { trpc } from '@/frontend/lib/trpc';
 import {
   ApiUsageSection,
   IssueTrackingSection,

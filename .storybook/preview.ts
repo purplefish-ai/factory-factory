@@ -1,8 +1,8 @@
 import type { Preview } from '@storybook/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
+import { TRPCProvider } from '@/client/lib/providers';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { TRPCProvider } from '@/frontend/lib/providers';
 
 import '../src/client/globals.css';
 

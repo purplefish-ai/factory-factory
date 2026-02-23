@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
-import { useProjectSnapshotSync } from '@/frontend/hooks/use-project-snapshot-sync';
-import { useWorkspaceAttention } from '@/frontend/hooks/use-workspace-attention';
-import { useProjectContext } from '@/frontend/lib/providers';
-import { trpc } from '@/frontend/lib/trpc';
+import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
+import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
+import { useProjectContext } from '@/client/lib/providers';
+import { trpc } from '@/client/lib/trpc';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 

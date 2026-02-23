@@ -2,9 +2,9 @@ import { Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { z } from 'zod';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { trpc } from '@/frontend/lib/trpc';
 import { exportDataSchema } from '@/shared/schemas/export-data.schema';
 
 type ParsedExportData = z.infer<typeof exportDataSchema>;

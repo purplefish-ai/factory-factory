@@ -1,7 +1,7 @@
 import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { trpc } from '@/frontend/lib/trpc';
 
 const PROVIDER_INFO = {
   CLAUDE: {

@@ -1,7 +1,9 @@
 import { Loader2, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { trpc } from '@/client/lib/trpc';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
+import { collectAttachments } from '@/components/chat/chat-input/hooks/attachment-file-conversion';
 import { usePasteDropHandler } from '@/components/chat/chat-input/hooks/use-paste-drop-handler';
 import { useProjectFileMentions } from '@/components/chat/chat-input/hooks/use-project-file-mentions';
 import { FileMentionPalette } from '@/components/chat/file-mention-palette';
@@ -16,16 +18,8 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RatchetToggleButton } from '@/components/workspace';
-import { trpc } from '@/frontend/lib/trpc';
 import type { MessageAttachment } from '@/lib/chat-protocol';
-import {
-  fileToAttachment,
-  isSupportedImageType,
-  isSupportedTextFile,
-  SUPPORTED_IMAGE_TYPES,
-  SUPPORTED_TEXT_EXTENSIONS,
-  textFileToAttachment,
-} from '@/lib/image-utils';
+import { SUPPORTED_IMAGE_TYPES, SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import { cn } from '@/lib/utils';
 import {
   generateUniqueWorkspaceName,
@@ -40,34 +34,6 @@ interface InlineWorkspaceFormProps {
 }
 
 const ATTACHMENT_ACCEPT_TYPES = [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_TEXT_EXTENSIONS].join(',');
-
-function convertFileToAttachment(file: File): Promise<MessageAttachment> {
-  if (isSupportedImageType(file.type)) {
-    return fileToAttachment(file);
-  }
-  if (isSupportedTextFile(file.name)) {
-    return textFileToAttachment(file);
-  }
-  throw new Error('unsupported file type');
-}
-
-async function collectAttachments(
-  files: FileList
-): Promise<{ attachments: MessageAttachment[]; errors: string[] }> {
-  const attachments: MessageAttachment[] = [];
-  const errors: string[] = [];
-
-  for (const file of Array.from(files)) {
-    try {
-      attachments.push(await convertFileToAttachment(file));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      errors.push(`${file.name}: ${message}`);
-    }
-  }
-
-  return { attachments, errors };
-}
 
 export function InlineWorkspaceForm({
   projectId,
@@ -139,7 +105,8 @@ export function InlineWorkspaceForm({
     }
 
     if (errors.length > 0) {
-      toast.error(`Could not add ${errors.length} file(s): ${errors.join('; ')}`);
+      const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
+      toast.error(`Could not add ${errors.length} file(s): ${formattedErrors.join('; ')}`);
     }
 
     event.target.value = '';

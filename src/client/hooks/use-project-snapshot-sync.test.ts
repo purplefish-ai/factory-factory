@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WorkspaceSnapshotEntry } from '@/frontend/lib/snapshot-to-sidebar';
+import type { WorkspaceSnapshotEntry } from '@/client/lib/snapshot-to-sidebar';
 import type { UseWebSocketTransportOptions } from '@/hooks/use-websocket-transport';
 import { useProjectSnapshotSync } from './use-project-snapshot-sync';
 
@@ -34,7 +34,7 @@ const mockListInvalidate = vi.fn();
 const mockListWithRuntimeStateInvalidate = vi.fn();
 const mockGlobalDispatchEvent = vi.fn();
 
-vi.mock('@/frontend/lib/trpc', () => ({
+vi.mock('@/client/lib/trpc', () => ({
   trpc: {
     useUtils: () => ({
       workspace: {

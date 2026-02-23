@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, File, FileCode, Folder, Loader2 } from 'lucide-react';
 import { memo, useCallback } from 'react';
 
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';
 
 import { useFileTreeExpansion } from './file-tree-context';

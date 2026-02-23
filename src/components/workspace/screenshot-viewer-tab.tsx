@@ -1,6 +1,6 @@
 import { Loader2 } from 'lucide-react';
 
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 
 interface ScreenshotViewerTabProps {
   workspaceId: string;

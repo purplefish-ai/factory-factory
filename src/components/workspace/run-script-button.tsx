@@ -1,5 +1,6 @@
 import { Loader2, Pencil, Play, Square } from 'lucide-react';
 import { useState } from 'react';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -8,7 +9,6 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { trpc } from '@/frontend/lib/trpc';
 import { DevServerSetupPanel } from './dev-server-setup-panel';
 import { useWorkspacePanel } from './workspace-panel-context';
 

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { useCreateWorkspace } from '@/client/hooks/use-create-workspace';
+import { trpc } from '@/client/lib/trpc';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
-import { useCreateWorkspace } from '@/frontend/hooks/use-create-workspace';
-import { trpc } from '@/frontend/lib/trpc';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import {
   resolveEffectiveSessionProvider,

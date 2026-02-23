@@ -1,4 +1,4 @@
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 
 interface RunScriptLaunchInfo {
   href: string;

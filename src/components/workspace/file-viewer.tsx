@@ -5,11 +5,11 @@ import type { RefObject, UIEvent } from 'react';
 import { useRef, useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import type { AppRouter } from '@/client/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { AppRouter } from '@/frontend/lib/trpc';
-import { trpc } from '@/frontend/lib/trpc';
 import { usePersistentScroll } from './use-persistent-scroll';
 
 // =============================================================================

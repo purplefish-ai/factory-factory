@@ -3,13 +3,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { MessageAttachment } from '@/lib/chat-protocol';
-import {
-  fileToAttachment,
-  isSupportedImageType,
-  isSupportedTextFile,
-  SUPPORTED_TEXT_EXTENSIONS,
-  textFileToAttachment,
-} from '@/lib/image-utils';
+import { SUPPORTED_TEXT_EXTENSIONS } from '@/lib/image-utils';
 import {
   getClipboardImages,
   getClipboardText,
@@ -17,6 +11,7 @@ import {
   isLargeText,
   textToAttachment,
 } from '@/lib/paste-utils';
+import { collectAttachments } from './attachment-file-conversion';
 
 interface UsePasteDropHandlerOptions {
   setAttachments: (
@@ -31,11 +26,6 @@ interface UsePasteDropHandlerReturn {
   handleDragOver: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
   handleDragLeave: (event: ReactDragEvent<HTMLTextAreaElement>) => void;
   isDragging: boolean;
-}
-
-interface FileProcessingResult {
-  attachment?: MessageAttachment;
-  error?: string;
 }
 
 function shouldConvertTextToAttachment(text: string | null): text is string {
@@ -66,52 +56,13 @@ async function handleClipboardImagePaste(
   }
 }
 
-async function processDroppedFile(file: File): Promise<FileProcessingResult> {
-  try {
-    if (isSupportedImageType(file.type)) {
-      const attachment = await fileToAttachment(file);
-      return { attachment };
-    }
-
-    if (isSupportedTextFile(file.name)) {
-      const attachment = await textFileToAttachment(file);
-      return { attachment };
-    }
-
-    return { error: `${file.name}: unsupported file type` };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return { error: `${file.name}: ${message}` };
-  }
-}
-
-async function collectDroppedAttachments(files: FileList): Promise<{
-  attachments: MessageAttachment[];
-  errors: string[];
-}> {
-  const attachments: MessageAttachment[] = [];
-  const errors: string[] = [];
-
-  for (const file of Array.from(files)) {
-    const result = await processDroppedFile(file);
-    if (result.attachment) {
-      attachments.push(result.attachment);
-    }
-    if (result.error) {
-      errors.push(result.error);
-    }
-  }
-
-  return { attachments, errors };
-}
-
 async function handleFileDrop(
   files: FileList,
   setAttachments: (
     updater: MessageAttachment[] | ((prev: MessageAttachment[]) => MessageAttachment[])
   ) => void
 ): Promise<void> {
-  const { attachments: newAttachments, errors } = await collectDroppedAttachments(files);
+  const { attachments: newAttachments, errors } = await collectAttachments(files);
 
   if (newAttachments.length > 0) {
     setAttachments((prev) => [...prev, ...newAttachments]);
@@ -119,8 +70,11 @@ async function handleFileDrop(
 
   if (errors.length > 0) {
     const supportedExts = SUPPORTED_TEXT_EXTENSIONS.join(', ');
+    const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
     toast.error(
-      `Could not add ${errors.length} file(s): ${errors.join('; ')}\n\nSupported text files: ${supportedExts}`
+      `Could not add ${errors.length} file(s): ${formattedErrors.join(
+        '; '
+      )}\n\nSupported text files: ${supportedExts}`
     );
   }
 }
