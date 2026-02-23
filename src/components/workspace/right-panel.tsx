@@ -355,6 +355,7 @@ export function RightPanel({
                 output={postRunLogs.output}
                 outputEndRef={postRunLogs.outputEndRef}
                 className="h-full"
+                emptyMessage="Waiting for post-run script output..."
               />
             )}
             {activeBottomTab === 'terminal' && (
