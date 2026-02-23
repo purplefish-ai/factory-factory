@@ -28,6 +28,12 @@ export class RunScriptService {
   // Output listeners by workspace ID
   private readonly outputListeners = new Map<string, Set<(data: string) => void>>();
 
+  // PostRun output buffers (separate from main dev logs)
+  private readonly postRunOutputBuffers = new Map<string, string>();
+
+  // PostRun output listeners (separate from main dev logs)
+  private readonly postRunOutputListeners = new Map<string, Set<(data: string) => void>>();
+
   // Track whether we're shutting down to prevent double cleanup
   private isShuttingDown = false;
 
@@ -108,9 +114,10 @@ export class RunScriptService {
       // Store process reference
       this.runningProcesses.set(workspaceId, childProcess);
 
-      // Clear and initialize output buffer for new run
+      // Clear and initialize output buffers for new run
       const startMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting ${command}\n\n`;
       this.outputBuffers.set(workspaceId, startMessage);
+      this.postRunOutputBuffers.delete(workspaceId);
 
       // Register event handlers BEFORE async state transition to avoid missing events
       this.registerProcessHandlers(workspaceId, childProcess, pid);
@@ -239,6 +246,24 @@ export class RunScriptService {
     this.outputBuffers.set(workspaceId, newBuffer);
 
     const listeners = this.outputListeners.get(workspaceId);
+    if (listeners) {
+      for (const listener of listeners) {
+        listener(output);
+      }
+    }
+  }
+
+  private appendPostRunOutput(workspaceId: string, output: string): void {
+    const currentBuffer = this.postRunOutputBuffers.get(workspaceId) ?? '';
+    let newBuffer = currentBuffer + output;
+
+    if (newBuffer.length > MAX_OUTPUT_BUFFER_SIZE) {
+      newBuffer = newBuffer.slice(-MAX_OUTPUT_BUFFER_SIZE);
+    }
+
+    this.postRunOutputBuffers.set(workspaceId, newBuffer);
+
+    const listeners = this.postRunOutputListeners.get(workspaceId);
     if (listeners) {
       for (const listener of listeners) {
         listener(output);
@@ -587,9 +612,10 @@ export class RunScriptService {
 
     const postRunStartMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting postRun: ${command}\n`;
     this.appendOutput(workspaceId, postRunStartMessage);
+    this.appendPostRunOutput(workspaceId, postRunStartMessage);
 
     const handleOutput = (data: Buffer) => {
-      this.appendOutput(workspaceId, data.toString());
+      this.appendPostRunOutput(workspaceId, data.toString());
     };
 
     postRunProcess.stdout?.on('data', handleOutput);
@@ -747,6 +773,36 @@ export class RunScriptService {
   }
 
   /**
+   * Get the output buffer for a workspace's postRun script
+   */
+  getPostRunOutputBuffer(workspaceId: string): string {
+    return this.postRunOutputBuffers.get(workspaceId) ?? '';
+  }
+
+  /**
+   * Subscribe to output from a workspace's postRun script
+   * @returns Unsubscribe function
+   */
+  subscribeToPostRunOutput(workspaceId: string, listener: (data: string) => void): () => void {
+    let listeners = this.postRunOutputListeners.get(workspaceId);
+    if (!listeners) {
+      listeners = new Set();
+      this.postRunOutputListeners.set(workspaceId, listeners);
+    }
+    listeners.add(listener);
+
+    return () => {
+      const listeners = this.postRunOutputListeners.get(workspaceId);
+      if (listeners) {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          this.postRunOutputListeners.delete(workspaceId);
+        }
+      }
+    };
+  }
+
+  /**
    * Cleanup all running scripts (called on server shutdown)
    */
   async cleanup() {
@@ -816,6 +872,8 @@ export class RunScriptService {
     runScriptProxyService.cleanupSync();
     this.outputBuffers.clear();
     this.outputListeners.clear();
+    this.postRunOutputBuffers.clear();
+    this.postRunOutputListeners.clear();
   }
 
   /**

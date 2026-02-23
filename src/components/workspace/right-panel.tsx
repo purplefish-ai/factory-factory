@@ -16,6 +16,7 @@ import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './t
 import { TerminalTabBar } from './terminal-tab-bar';
 import { TodoPanelContainer } from './todo-panel-container';
 import { useDevLogs } from './use-dev-logs';
+import { usePostRunLogs } from './use-post-run-logs';
 import { type BottomPanelTab, useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
@@ -179,6 +180,7 @@ export function RightPanel({
 
   // Single shared dev logs connection for both tab indicator and panel content
   const devLogs = useDevLogs(workspaceId);
+  const postRunLogs = usePostRunLogs(workspaceId);
 
   // Terminal tab state lifted up from TerminalPanel for inline rendering
   const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
@@ -297,6 +299,19 @@ export function RightPanel({
               isActive={activeBottomTab === 'dev-logs'}
               onSelect={() => handleBottomTabChange('dev-logs')}
             />
+            <TabButton
+              label="Post-Run Logs"
+              icon={
+                <span
+                  className={cn(
+                    'w-1.5 h-1.5 rounded-full',
+                    postRunLogs.connected ? 'bg-green-500' : 'bg-red-500'
+                  )}
+                />
+              }
+              isActive={activeBottomTab === 'post-run-logs'}
+              onSelect={() => handleBottomTabChange('post-run-logs')}
+            />
             {/* Show Terminal tab only if no terminals are open, otherwise show inline terminal tabs */}
             {activeBottomTab === 'terminal' &&
             terminalTabState &&
@@ -332,6 +347,13 @@ export function RightPanel({
               <DevLogsPanel
                 output={devLogs.output}
                 outputEndRef={devLogs.outputEndRef}
+                className="h-full"
+              />
+            )}
+            {activeBottomTab === 'post-run-logs' && (
+              <DevLogsPanel
+                output={postRunLogs.output}
+                outputEndRef={postRunLogs.outputEndRef}
                 className="h-full"
               />
             )}

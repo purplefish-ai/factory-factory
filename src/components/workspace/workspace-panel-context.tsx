@@ -24,7 +24,7 @@ import {
 // Types
 // =============================================================================
 
-export type BottomPanelTab = 'terminal' | 'dev-logs' | 'setup-logs';
+export type BottomPanelTab = 'terminal' | 'dev-logs' | 'post-run-logs' | 'setup-logs';
 
 export interface MainViewTab {
   id: string;
@@ -138,7 +138,12 @@ function loadBottomTabFromStorage(workspaceId: string): BottomPanelTab {
   try {
     // Try new key first
     const stored = localStorage.getItem(`${STORAGE_KEY_BOTTOM_TAB_PREFIX}${workspaceId}`);
-    if (stored === 'terminal' || stored === 'dev-logs' || stored === 'setup-logs') {
+    if (
+      stored === 'terminal' ||
+      stored === 'dev-logs' ||
+      stored === 'post-run-logs' ||
+      stored === 'setup-logs'
+    ) {
       return stored;
     }
 
