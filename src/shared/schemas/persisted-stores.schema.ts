@@ -2,20 +2,11 @@
  * Zod schemas for validating persisted JSON stores (local files/localStorage).
  *
  * These schemas protect against malformed or corrupted data from:
- * - Resume modes map (Record<string, boolean>)
  * - Advisory lock persistence format
  * - Resume workspace ID list (string[])
  */
 
 import { z } from 'zod';
-
-/**
- * Schema for resume modes JSON file (.ff-resume-modes.json)
- * Maps workspace IDs to resume mode flags
- */
-export const resumeModesSchema = z.record(z.string(), z.boolean());
-
-export type ResumeModes = z.infer<typeof resumeModesSchema>;
 
 /**
  * Schema for a single persisted lock entry

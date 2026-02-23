@@ -79,11 +79,7 @@ export const workspaceInitRouter = router({
         const resumeMode =
           input.useExistingBranch ?? (await worktreeLifecycleService.getInitMode(workspace.id));
         if (resumeMode !== undefined) {
-          await worktreeLifecycleService.setInitMode(
-            workspace.id,
-            resumeMode,
-            workspace.project.worktreeBasePath
-          );
+          await worktreeLifecycleService.setInitMode(workspace.id, resumeMode);
         }
         // Run full initialization (creates worktree + runs startup script)
         initializeWorkspaceWorktree(workspace.id, {

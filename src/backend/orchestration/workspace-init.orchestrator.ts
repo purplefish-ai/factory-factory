@@ -866,7 +866,7 @@ export async function initializeWorkspaceWorktree(
     await handleWorkspaceInitFailure(workspaceId, error as Error);
   } finally {
     if (worktreeCreated) {
-      await worktreeLifecycleService.clearInitMode(workspaceId, project?.worktreeBasePath);
+      await worktreeLifecycleService.clearInitMode(workspaceId);
     }
   }
 }
