@@ -324,7 +324,7 @@ function SidebarInner({
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              isActive={pathname?.startsWith(`/projects/${navData.selectedProjectSlug}/workspaces`)}
+              isActive={pathname === `/projects/${navData.selectedProjectSlug}/workspaces`}
             >
               <Link to={`/projects/${navData.selectedProjectSlug}/workspaces`} onClick={onNavigate}>
                 <Kanban className="h-4 w-4" />
