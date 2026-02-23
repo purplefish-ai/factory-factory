@@ -3,6 +3,7 @@ import { AlertTriangle, Archive, GitBranch, GitPullRequest, Play } from 'lucide-
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { PendingRequestBadge } from '@/client/components/pending-request-badge';
+import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { SetupStatusChip } from '@/components/shared/setup-status-chip';
 import { Button } from '@/components/ui/button';
@@ -111,7 +112,7 @@ function CardArchiveButton({
   onArchive: (workspaceId: string, commitUncommitted: boolean) => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const requiresConfirmation = workspace.kanbanColumn !== 'DONE';
+  const requiresConfirmation = !isWorkspaceDoneOrMerged(workspace);
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();

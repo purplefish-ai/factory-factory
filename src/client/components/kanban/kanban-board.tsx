@@ -1,6 +1,7 @@
 import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -249,6 +250,9 @@ export function KanbanBoard() {
     bulkArchiveColumnId && bulkArchiveColumnId !== 'ISSUES'
       ? (workspacesByColumn[bulkArchiveColumnId as KanbanColumnType] ?? [])
       : [];
+  const shouldWarnForBulkArchive = workspacesInBulkArchiveColumn.some(
+    (workspace) => !isWorkspaceDoneOrMerged(workspace)
+  );
 
   return (
     <>
@@ -287,7 +291,8 @@ export function KanbanBoard() {
       <ArchiveWorkspaceDialog
         open={bulkArchiveDialogOpen}
         onOpenChange={setBulkArchiveDialogOpen}
-        hasUncommitted={true}
+        hasUncommitted={shouldWarnForBulkArchive}
+        showCommitOption={shouldWarnForBulkArchive}
         onConfirm={handleBulkArchiveConfirm}
         description={`This will archive all ${workspacesInBulkArchiveColumn.length} workspace(s) in this column. Archiving will remove the workspace worktrees from disk.`}
         warningText="Warning: Some workspaces may have uncommitted changes and they will be committed before archiving."
