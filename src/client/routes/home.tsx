@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 
 // Redirect root to project-scoped page
 export default function HomePage() {

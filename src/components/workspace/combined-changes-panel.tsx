@@ -1,6 +1,6 @@
 import { AlertCircle } from 'lucide-react';
+import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { trpc } from '@/frontend/lib/trpc';
 
 import {
   ChangeList,

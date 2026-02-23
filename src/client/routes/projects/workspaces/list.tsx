@@ -1,5 +1,5 @@
-import { Loading } from '@/frontend/components/loading';
-import { trpc } from '@/frontend/lib/trpc';
+import { Loading } from '@/client/components/loading';
+import { trpc } from '@/client/lib/trpc';
 import { WorkspacesBoardView } from './components';
 import { useWorkspaceProjectNavigation } from './use-workspace-project-navigation';
 

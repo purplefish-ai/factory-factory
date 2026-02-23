@@ -10,7 +10,7 @@
  * boundary — same pattern used for sidebar cache updates.
  */
 
-import type { WorkspaceSnapshotEntry } from '@/frontend/lib/snapshot-to-sidebar';
+import type { WorkspaceSnapshotEntry } from '@/client/lib/snapshot-to-sidebar';
 
 // =============================================================================
 // Mapping function

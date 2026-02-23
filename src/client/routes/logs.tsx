@@ -11,6 +11,11 @@ import {
 } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { useAppHeader } from '@/client/components/app-header-context';
+import { Loading } from '@/client/components/loading';
+import { PageHeader } from '@/client/components/page-header';
+import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
+import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -31,11 +36,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useAppHeader } from '@/frontend/components/app-header-context';
-import { Loading } from '@/frontend/components/loading';
-import { PageHeader } from '@/frontend/components/page-header';
-import { useDownloadServerLog } from '@/frontend/hooks/use-download-server-log';
-import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 200;

@@ -1,6 +1,10 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import { useAppHeader } from '@/client/components/app-header-context';
+import { PRDetailPanel } from '@/client/components/pr-detail-panel';
+import { PRInboxItem } from '@/client/components/pr-inbox-item';
+import { trpc } from '@/client/lib/trpc';
 import {
   Sheet,
   SheetContent,
@@ -9,10 +13,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAppHeader } from '@/frontend/components/app-header-context';
-import { PRDetailPanel } from '@/frontend/components/pr-detail-panel';
-import { PRInboxItem } from '@/frontend/components/pr-inbox-item';
-import { trpc } from '@/frontend/lib/trpc';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { PRWithFullDetails } from '@/shared/github-types';
 

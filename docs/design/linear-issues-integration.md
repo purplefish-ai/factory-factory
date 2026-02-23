@@ -154,7 +154,7 @@ listIssuesForProject  — look up project's API key + team, fetch issues
 getIssue              — look up project's API key, fetch single issue detail
 ```
 
-### Kanban Context Changes (`src/frontend/components/kanban/kanban-context.tsx`)
+### Kanban Context Changes (`src/client/components/kanban/kanban-context.tsx`)
 
 **New normalized issue type** (replace `GitHubIssue` as the context's issue type):
 ```ts
@@ -190,7 +190,7 @@ Note: Both `issue-card.tsx` and `issue-details-sheet.tsx` currently reference `i
 - Update dedup filter: check `githubIssueNumber` OR `linearIssueId` depending on provider
 - Add Linear connection error state to context
 
-### Kanban Column Label (`src/frontend/components/kanban/kanban-column.tsx`)
+### Kanban Column Label (`src/client/components/kanban/kanban-column.tsx`)
 
 Change `KANBAN_COLUMNS` from a constant to a function:
 ```ts
@@ -206,20 +206,20 @@ function getKanbanColumns(issueProvider: IssueProvider): ColumnConfig[] {
 }
 ```
 
-### Issue Card (`src/frontend/components/kanban/issue-card.tsx`)
+### Issue Card (`src/client/components/kanban/issue-card.tsx`)
 
 Refactor to accept `KanbanIssue` instead of `GitHubIssue`:
 - Display `issue.displayId` instead of `#${issue.number}`
 - Icon: green `CircleDot` for GitHub, different icon/color for Linear
 - "Start" handler: dispatch `GITHUB_ISSUE` or `LINEAR_ISSUE` based on `issue.provider`
 
-### Issue Details Sheet (`src/frontend/components/kanban/issue-details-sheet.tsx`)
+### Issue Details Sheet (`src/client/components/kanban/issue-details-sheet.tsx`)
 
 Refactor to accept `KanbanIssue`:
 - Fetch full issue from correct provider
 - "Open in GitHub" becomes "Open in Linear" when applicable
 
-### Kanban Board Error State (`src/frontend/components/kanban/kanban-board.tsx`)
+### Kanban Board Error State (`src/client/components/kanban/kanban-board.tsx`)
 
 In `IssuesColumn`: if `issueProvider === 'LINEAR'` and connection check fails, show:
 ```
@@ -237,11 +237,11 @@ The parent page that renders `WorkspacesBoardView` already fetches the project t
 4. **`KanbanBoard`** → reads `issueProvider` from context to generate the correct column config
 
 ### Files to modify:
-- `src/frontend/components/kanban/kanban-context.tsx` — conditional fetching, normalized type
-- `src/frontend/components/kanban/kanban-column.tsx` — dynamic label
-- `src/frontend/components/kanban/kanban-board.tsx` — pass issueProvider, error state
-- `src/frontend/components/kanban/issue-card.tsx` — accept KanbanIssue
-- `src/frontend/components/kanban/issue-details-sheet.tsx` — accept KanbanIssue
+- `src/client/components/kanban/kanban-context.tsx` — conditional fetching, normalized type
+- `src/client/components/kanban/kanban-column.tsx` — dynamic label
+- `src/client/components/kanban/kanban-board.tsx` — pass issueProvider, error state
+- `src/client/components/kanban/issue-card.tsx` — accept KanbanIssue
+- `src/client/components/kanban/issue-details-sheet.tsx` — accept KanbanIssue
 - `src/client/routes/projects/workspaces/components/workspaces-board-view.tsx` — pass issueProvider
 - `src/backend/trpc/linear.trpc.ts` — add listIssuesForProject, getIssue
 

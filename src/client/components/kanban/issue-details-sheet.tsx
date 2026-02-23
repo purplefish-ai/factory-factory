@@ -1,5 +1,7 @@
 import { CircleDot, ExternalLink, Play, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import {
@@ -11,8 +13,6 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RatchetToggleButton } from '@/components/workspace';
-import type { NormalizedIssue } from '@/frontend/lib/issue-normalization';
-import { trpc } from '@/frontend/lib/trpc';
 
 interface IssueDetailsSheetProps {
   issue: NormalizedIssue | null;

@@ -1,11 +1,11 @@
 import { Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
-import type { NormalizedIssue } from '@/frontend/lib/issue-normalization';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';

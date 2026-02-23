@@ -95,7 +95,7 @@ module.exports = {
         'Frontend UI layers should not import backend directly - use API contracts/shared schemas instead',
       from: {
         path: '^src/(client|components|frontend)',
-        pathNot: '^src/frontend/lib/trpc\\.ts$',
+        pathNot: '^src/client/lib/trpc\\.ts$',
       },
       to: { path: '^src/backend' },
     },
@@ -150,8 +150,8 @@ module.exports = {
     {
       name: 'frontend-trpc-only-imports-backend-trpc',
       severity: 'error',
-      comment: 'src/frontend/lib/trpc.ts may only import backend tRPC types, not other backend modules',
-      from: { path: '^src/frontend/lib/trpc\\.ts$' },
+      comment: 'src/client/lib/trpc.ts may only import backend tRPC types, not other backend modules',
+      from: { path: '^src/client/lib/trpc\\.ts$' },
       to: {
         path: '^src/backend/',
         pathNot: '^src/backend/trpc/',

@@ -1,6 +1,8 @@
 import { Archive, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useAppHeader } from '@/client/components/app-header-context';
+import { trpc } from '@/client/lib/trpc';
 import { ProjectSettingsDialog } from '@/components/project/project-settings-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,8 +17,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useAppHeader } from '@/frontend/components/app-header-context';
-import { trpc } from '@/frontend/lib/trpc';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 function ProjectActions({

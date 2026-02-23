@@ -3,8 +3,8 @@ import {
   type NormalizedIssue,
   normalizeGitHubIssue,
   normalizeLinearIssue,
-} from '@/frontend/lib/issue-normalization';
-import { trpc } from '@/frontend/lib/trpc';
+} from '@/client/lib/issue-normalization';
+import { trpc } from '@/client/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
 interface ArchivingWorkspaceIssueLink {

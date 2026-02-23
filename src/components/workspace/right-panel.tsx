@@ -1,11 +1,10 @@
 import { Camera, FileQuestion, Files, ListTodo, Play, Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
+import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/components/chat';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { trpc } from '@/frontend/lib/trpc';
 import { cn } from '@/lib/utils';
 
 import { CombinedChangesPanel } from './combined-changes-panel';
