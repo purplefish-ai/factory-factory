@@ -26,6 +26,7 @@ import {
   type SetSessionModeResponse,
   type StopReason,
 } from '@agentclientprotocol/sdk';
+import { asString, dedupeStrings, isRecord, resolveToolCallId } from './acp-adapter-utils';
 import type {
   AdapterSession,
   ApprovalPolicy,
@@ -76,10 +77,6 @@ function toShapeDriftDetails(value: unknown): string {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function dedupeStrings<T extends string>(values: Iterable<T>): T[] {
-  return Array.from(new Set(values));
 }
 
 function humanizeToken(value: string): string {
@@ -190,17 +187,6 @@ function toSessionId(threadId: string): string {
 
 function toThreadId(sessionId: string): string {
   return sessionId.startsWith('sess_') ? sessionId.slice('sess_'.length) : sessionId;
-}
-
-function extractToolCallIdFromUnknown(value: unknown): string | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  return asString(value.callId) ?? asString(value.call_id) ?? null;
-}
-
-function resolveToolCallId(params: { itemId: string; source?: unknown }): string {
-  return extractToolCallIdFromUnknown(params.source) ?? params.itemId;
 }
 
 function isPlanLikeMode(mode: string): boolean {
@@ -369,14 +355,6 @@ function toCodexMcpConfigMap(mcpServers: McpServer[]): Record<string, CodexMcpSe
   }
 
   return mcpServersByName;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === 'string' ? value : null;
 }
 
 function parseTextFromPromptBlock(block: PromptContentBlock): string {

@@ -11,6 +11,10 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export function dedupeStrings<T extends string>(values: Iterable<T>): T[] {
+  return Array.from(new Set(values));
+}
+
 export function toTurnItemKey(turnId: string, itemId: string): string {
   return `${turnId}:${itemId}`;
 }

@@ -1,5 +1,5 @@
 import type { ToolCallUpdate } from '@agentclientprotocol/sdk';
-import { dedupeLocations } from './acp-adapter-utils';
+import { dedupeLocations, dedupeStrings } from './acp-adapter-utils';
 
 type CommandDisplayContext = {
   command: string;
@@ -22,10 +22,6 @@ const READ_COMMANDS = new Set(['cat', 'head', 'tail', 'less', 'more']);
 const LIST_OR_FIND_COMMANDS = new Set(['ls', 'tree', 'find', 'fd']);
 const GREP_LIKE_COMMANDS = new Set(['rg', 'ripgrep', 'grep', 'ag']);
 const SHELL_META_COMMANDS = new Set(['cd', 'export', 'set', 'unset', 'alias', 'unalias', 'source']);
-
-function dedupeStrings<T extends string>(values: Iterable<T>): T[] {
-  return Array.from(new Set(values));
-}
 
 function trimOptionalQuotes(token: string): { text: string; quote: '"' | "'" | null } {
   if (token.length >= 2 && token.startsWith('"') && token.endsWith('"')) {
@@ -50,7 +46,7 @@ function sanitizeCommandToken(token: string): string {
   return unescapeCommandToken(text, quote).trim();
 }
 
-export function tokenizeCommand(command: string): string[] {
+function tokenizeCommand(command: string): string[] {
   return (command.match(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S+/g) ?? [])
     .map((token) => sanitizeCommandToken(token))
     .filter((token) => token.length > 0);
@@ -180,7 +176,7 @@ function consumeCommandChainSeparator(
   return separatorLength;
 }
 
-export function splitCommandChain(command: string): string[] {
+function splitCommandChain(command: string): string[] {
   const state: CommandChainSplitState = {
     parts: [],
     current: '',
