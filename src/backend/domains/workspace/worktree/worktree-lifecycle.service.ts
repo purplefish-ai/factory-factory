@@ -173,24 +173,19 @@ class WorktreeLifecycleService {
     }
   }
 
-  async getInitMode(workspaceId: string, worktreeBasePath?: string): Promise<boolean | undefined> {
-    // First check in-memory cache (for backward compatibility during transition)
+  async getInitMode(workspaceId: string): Promise<boolean | undefined> {
+    // First check in-memory cache for current-process initialization retries.
     if (this.initModes.has(workspaceId)) {
       return this.initModes.get(workspaceId);
     }
 
-    // Then check the database creationSource field (canonical source)
+    // Then check the database creationSource field (canonical source).
     const workspace = await workspaceAccessor.findById(workspaceId);
     if (workspace?.creationSource === 'RESUME_BRANCH') {
       return true;
     }
 
-    // Fallback to sidecar file (for workspaces created before migration)
-    if (!worktreeBasePath) {
-      return undefined;
-    }
-    const modes = await readResumeModes(worktreeBasePath);
-    return modes[workspaceId];
+    return undefined;
   }
 
   async clearInitMode(workspaceId: string, worktreeBasePath?: string): Promise<void> {
