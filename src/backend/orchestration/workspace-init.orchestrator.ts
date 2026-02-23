@@ -720,7 +720,8 @@ function readStartupModePresetFromMetadata(
 }
 
 async function resolveInitialAutoMessageContent(
-  workspaceId: string
+  workspaceId: string,
+  creationMetadata: Record<string, unknown> | null
 ): Promise<InitialAutoMessageContent | null> {
   const issuePromptText =
     (await buildInitialPromptFromGitHubIssue(workspaceId)) ||
@@ -729,13 +730,11 @@ async function resolveInitialAutoMessageContent(
     return { text: issuePromptText };
   }
 
-  const workspace = await workspaceAccessor.findById(workspaceId);
-  const metadata = workspace?.creationMetadata as Record<string, unknown> | null;
   const metadataPromptText =
-    metadata?.initialPrompt && typeof metadata.initialPrompt === 'string'
-      ? metadata.initialPrompt
+    creationMetadata?.initialPrompt && typeof creationMetadata.initialPrompt === 'string'
+      ? creationMetadata.initialPrompt
       : '';
-  const metadataAttachments = readInitialAttachmentsFromMetadata(metadata, workspaceId);
+  const metadataAttachments = readInitialAttachmentsFromMetadata(creationMetadata, workspaceId);
 
   if (!metadataPromptText && (!metadataAttachments || metadataAttachments.length === 0)) {
     return null;
@@ -765,7 +764,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
     const startupModePreset = readStartupModePresetFromMetadata(metadata, workspaceId);
 
     // Build the initial prompt from linked issue data, or fallback to creation metadata.
-    const initialMessage = await resolveInitialAutoMessageContent(workspaceId);
+    const initialMessage = await resolveInitialAutoMessageContent(workspaceId, metadata);
 
     // Start the session - pass empty string to start without any initial prompt
     // (undefined would default to 'Continue with the task.')

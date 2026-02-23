@@ -674,6 +674,7 @@ describe('initializeWorkspaceWorktree', () => {
           }),
         })
       );
+      expect(workspaceAccessor.findById).toHaveBeenCalledTimes(1);
     });
   });
 
