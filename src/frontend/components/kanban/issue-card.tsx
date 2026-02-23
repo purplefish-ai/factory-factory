@@ -3,12 +3,12 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RatchetToggleButton } from '@/components/workspace';
+import type { NormalizedIssue } from '@/frontend/lib/issue-normalization';
 import { trpc } from '@/frontend/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/frontend/lib/workspace-cache-helpers';
-import type { KanbanIssue } from './kanban-context';
 
 interface IssueCardProps {
-  issue: KanbanIssue;
+  issue: NormalizedIssue;
   projectId: string;
   onClick?: () => void;
 }

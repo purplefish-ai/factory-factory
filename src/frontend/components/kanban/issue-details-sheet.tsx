@@ -11,11 +11,11 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RatchetToggleButton } from '@/components/workspace';
+import type { NormalizedIssue } from '@/frontend/lib/issue-normalization';
 import { trpc } from '@/frontend/lib/trpc';
-import type { KanbanIssue } from './kanban-context';
 
 interface IssueDetailsSheetProps {
-  issue: KanbanIssue | null;
+  issue: NormalizedIssue | null;
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -53,7 +53,7 @@ function IssueDetailsContent({
   open,
   onOpenChange,
 }: {
-  issue: KanbanIssue;
+  issue: NormalizedIssue;
   projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;

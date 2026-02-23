@@ -7,9 +7,6 @@ import {
 import { trpc } from '@/frontend/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
-/** @deprecated Use `NormalizedIssue` from `@/frontend/lib/issue-normalization` instead. */
-export type KanbanIssue = NormalizedIssue;
-
 interface ArchivingWorkspaceIssueLink {
   githubIssueNumber: number | null;
   linearIssueId: string | null;
@@ -54,7 +51,7 @@ interface KanbanContextValue {
   projectSlug: string;
   issueProvider: string;
   workspaces: WorkspaceWithKanban[] | undefined;
-  issues: KanbanIssue[] | undefined;
+  issues: NormalizedIssue[] | undefined;
   isLoading: boolean;
   isError: boolean;
   error: { message: string } | null;

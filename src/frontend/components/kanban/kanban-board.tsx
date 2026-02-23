@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveWorkspaceDialog } from '@/components/workspace';
+import type { NormalizedIssue } from '@/frontend/lib/issue-normalization';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { KanbanColumn as KanbanColumnType } from '@/shared/core';
@@ -13,7 +14,7 @@ import { IssueCard } from './issue-card';
 import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-column';
-import { type KanbanIssue, useKanban } from './kanban-context';
+import { useKanban } from './kanban-context';
 
 export function KanbanControls() {
   const { syncAndRefetch, isSyncing } = useKanban();
@@ -299,7 +300,7 @@ export function KanbanBoard() {
 // Separate component for the Issues column
 interface IssuesColumnProps {
   column: ColumnConfig;
-  issues: KanbanIssue[];
+  issues: NormalizedIssue[];
   projectId: string;
 }
 
@@ -308,10 +309,10 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
   const isMobile = useIsMobile();
   const existingNames = useMemo(() => workspaces?.map((w) => w.name) ?? [], [workspaces]);
   const isEmpty = issues.length === 0;
-  const [selectedIssue, setSelectedIssue] = useState<KanbanIssue | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<NormalizedIssue | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  const handleIssueClick = (issue: KanbanIssue) => {
+  const handleIssueClick = (issue: NormalizedIssue) => {
     setSelectedIssue(issue);
     setIsSheetOpen(true);
   };
