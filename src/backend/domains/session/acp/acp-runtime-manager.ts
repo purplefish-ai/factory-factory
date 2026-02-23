@@ -1157,4 +1157,8 @@ export class AcpRuntimeManager {
   }
 }
 
-export const acpRuntimeManager = new AcpRuntimeManager();
+function createAcpRuntimeManager(): AcpRuntimeManager {
+  return new AcpRuntimeManager();
+}
+
+export const acpRuntimeManager = createAcpRuntimeManager();

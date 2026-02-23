@@ -1,6 +1,10 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
-import type { AcpClientOptions, AcpProcessHandle } from '@/backend/domains/session/acp';
+import type {
+  AcpClientOptions,
+  AcpProcessHandle,
+  AcpRuntimeManager,
+} from '@/backend/domains/session/acp';
 import {
   AcpEventTranslator,
   AcpPermissionBridge,
@@ -10,7 +14,10 @@ import {
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
-import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import {
+  type SessionDomainService,
+  sessionDomainService,
+} from '@/backend/domains/session/session-domain.service';
 import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
@@ -68,9 +75,18 @@ function toErrorMessage(error: unknown): string {
   return String(error);
 }
 
-class SessionService {
+export type SessionServiceDependencies = {
+  repository?: SessionRepository;
+  promptBuilder?: SessionPromptBuilder;
+  runtimeManager?: AcpRuntimeManager;
+  sessionDomainService?: SessionDomainService;
+};
+
+export class SessionService {
   private readonly repository: SessionRepository;
   private readonly promptBuilder: SessionPromptBuilder;
+  private readonly runtimeManager: AcpRuntimeManager;
+  private readonly sessionDomainService: SessionDomainService;
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
   private readonly acpPermissionBridges = new Map<string, AcpPermissionBridge>();
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
@@ -192,7 +208,7 @@ class SessionService {
         acpTraceLogger.log(sid, 'runtime_exit', { exitCode });
 
         try {
-          sessionDomainService.markProcessExit(sid, exitCode);
+          this.sessionDomainService.markProcessExit(sid, exitCode);
           const session = await this.repository.updateSession(sid, {
             status: SessionStatus.COMPLETED,
           });
@@ -217,7 +233,7 @@ class SessionService {
           message: error.message,
           stack: error.stack,
         });
-        sessionDomainService.markError(sid, error.message);
+        this.sessionDomainService.markError(sid, error.message);
         logger.error('ACP client error', {
           sessionId: sid,
           error: error.message,
@@ -250,7 +266,7 @@ class SessionService {
 
     // When configOptions change mid-session, sync the handle and re-emit capabilities
     if (delta.type === 'config_options_update') {
-      const acpHandle = acpRuntimeManager.getClient(sid);
+      const acpHandle = this.runtimeManager.getClient(sid);
       if (acpHandle) {
         const { configOptions } = delta as { configOptions: unknown[] };
         acpHandle.configOptions = configOptions as SessionConfigOption[];
@@ -259,8 +275,8 @@ class SessionService {
           providerSessionId: acpHandle.providerSessionId,
           configOptions: acpHandle.configOptions,
         });
-        sessionDomainService.emitDelta(sid, delta);
-        sessionDomainService.emitDelta(sid, {
+        this.sessionDomainService.emitDelta(sid, delta);
+        this.sessionDomainService.emitDelta(sid, {
           type: 'chat_capabilities',
           capabilities: this.buildAcpChatBarCapabilities(acpHandle),
         });
@@ -269,7 +285,7 @@ class SessionService {
     }
 
     if (delta.type !== 'agent_message') {
-      sessionDomainService.emitDelta(sid, delta);
+      this.sessionDomainService.emitDelta(sid, delta);
       return;
     }
 
@@ -285,8 +301,8 @@ class SessionService {
     // Non-text agent_message (thinking, tool_use, result): reset text accumulator
     this.acpStreamState.delete(sid);
     // Persist to transcript + allocate order in one step
-    const order = sessionDomainService.appendClaudeEvent(sid, data);
-    sessionDomainService.emitDelta(sid, { ...delta, order });
+    const order = this.sessionDomainService.appendClaudeEvent(sid, data);
+    this.sessionDomainService.emitDelta(sid, { ...delta, order });
   }
 
   private trackPendingAcpToolCalls(sid: string, delta: SessionDeltaEvent): void {
@@ -604,14 +620,14 @@ class SessionService {
     if (this.suppressAcpReplayForSession.has(sid)) {
       return;
     }
-    if (acpRuntimeManager.isSessionWorking(sid)) {
+    if (this.runtimeManager.isSessionWorking(sid)) {
       return;
     }
     const normalized = text.trim();
     if (normalized.length === 0) {
       return;
     }
-    sessionDomainService.injectCommittedUserMessage(sid, normalized);
+    this.sessionDomainService.injectCommittedUserMessage(sid, normalized);
   }
 
   /**
@@ -625,7 +641,7 @@ class SessionService {
         : '';
     let ss = this.acpStreamState.get(sid);
     if (!ss) {
-      ss = { textOrder: sessionDomainService.allocateOrder(sid), accText: '' };
+      ss = { textOrder: this.sessionDomainService.allocateOrder(sid), accText: '' };
       this.acpStreamState.set(sid, ss);
     }
     ss.accText += chunkText;
@@ -633,8 +649,8 @@ class SessionService {
       type: 'assistant',
       message: { role: 'assistant', content: [{ type: 'text', text: ss.accText }] },
     };
-    sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.textOrder);
-    sessionDomainService.emitDelta(sid, {
+    this.sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.textOrder);
+    this.sessionDomainService.emitDelta(sid, {
       type: 'agent_message',
       data: accMsg,
       order: ss.textOrder,
@@ -658,7 +674,7 @@ class SessionService {
 
     if (isUserQuestionRequest({ toolName, input: toolInput })) {
       const questions = this.extractAskUserQuestions(toolInput);
-      sessionDomainService.emitDelta(sid, {
+      this.sessionDomainService.emitDelta(sid, {
         type: 'user_question',
         requestId,
         toolName,
@@ -666,7 +682,7 @@ class SessionService {
         acpOptions,
       });
     } else {
-      sessionDomainService.emitDelta(sid, {
+      this.sessionDomainService.emitDelta(sid, {
         type: 'permission_request',
         requestId,
         toolName,
@@ -677,7 +693,7 @@ class SessionService {
       });
     }
 
-    sessionDomainService.setPendingInteractiveRequest(sid, {
+    this.sessionDomainService.setPendingInteractiveRequest(sid, {
       requestId,
       toolName,
       toolUseId: params.toolCall.toolCallId,
@@ -741,7 +757,7 @@ class SessionService {
 
     let handle: AcpProcessHandle;
     try {
-      handle = await acpRuntimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
+      handle = await this.runtimeManager.getOrCreateClient(sessionId, clientOptions, handlers, {
         workspaceId: sessionContext.workspaceId,
         workingDir: sessionContext.workingDir,
       });
@@ -761,7 +777,7 @@ class SessionService {
 
     // Emit initial config options so the frontend receives them on session start
     if (handle.configOptions.length > 0) {
-      sessionDomainService.emitDelta(sessionId, {
+      this.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
         configOptions: handle.configOptions,
       } as SessionDeltaEvent);
@@ -770,7 +786,7 @@ class SessionService {
     // Re-emit chat_capabilities now that the ACP handle exists.
     // The initial load_session fires before the handle is ready, so the
     // frontend would otherwise be stuck with EMPTY capabilities.
-    sessionDomainService.emitDelta(sessionId, {
+    this.sessionDomainService.emitDelta(sessionId, {
       type: 'chat_capabilities',
       capabilities: this.buildAcpChatBarCapabilities(handle),
     });
@@ -786,29 +802,28 @@ class SessionService {
       return false;
     }
 
-    if (!sessionDomainService.isHistoryHydrated(sessionId)) {
+    if (!this.sessionDomainService.isHistoryHydrated(sessionId)) {
       return false;
     }
 
-    return sessionDomainService.getTranscriptSnapshot(sessionId).length > 0;
+    return this.sessionDomainService.getTranscriptSnapshot(sessionId).length > 0;
   }
 
   private maybeLiftReplaySuppression(sessionId: string): void {
     if (!this.suppressAcpReplayForSession.has(sessionId)) {
       return;
     }
-    if (!acpRuntimeManager.isSessionWorking(sessionId)) {
+    if (!this.runtimeManager.isSessionWorking(sessionId)) {
       return;
     }
     this.suppressAcpReplayForSession.delete(sessionId);
   }
 
-  constructor(options?: {
-    repository?: SessionRepository;
-    promptBuilder?: SessionPromptBuilder;
-  }) {
+  constructor(options?: SessionServiceDependencies) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
+    this.runtimeManager = options?.runtimeManager ?? acpRuntimeManager;
+    this.sessionDomainService = options?.sessionDomainService ?? sessionDomainService;
   }
 
   /**
@@ -826,12 +841,12 @@ class SessionService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    if (acpRuntimeManager.isStopInProgress(sessionId)) {
+    if (this.runtimeManager.isStopInProgress(sessionId)) {
       throw new Error('Session is currently being stopped');
     }
 
     // Check if session is already running to prevent duplicate message sends
-    const existingClient = acpRuntimeManager.getClient(sessionId);
+    const existingClient = this.runtimeManager.getClient(sessionId);
     if (existingClient) {
       throw new Error('Session is already running');
     }
@@ -898,11 +913,11 @@ class SessionService {
         configOptions: executionResult.configOptions,
       });
 
-      sessionDomainService.emitDelta(sessionId, {
+      this.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
         configOptions: executionResult.configOptions,
       } as SessionDeltaEvent);
-      sessionDomainService.emitDelta(sessionId, {
+      this.sessionDomainService.emitDelta(sessionId, {
         type: 'chat_capabilities',
         capabilities: this.buildAcpChatBarCapabilities(handle),
       });
@@ -952,7 +967,7 @@ class SessionService {
     }
 
     try {
-      const configOptions = await acpRuntimeManager.setSessionMode(params.sessionId, targetMode);
+      const configOptions = await this.runtimeManager.setSessionMode(params.sessionId, targetMode);
       return { configOptions, didUpdate: true };
     } catch (error) {
       logger.warn('Failed applying startup mode preset', {
@@ -995,7 +1010,7 @@ class SessionService {
     }
 
     try {
-      const configOptions = await acpRuntimeManager.setConfigOption(
+      const configOptions = await this.runtimeManager.setConfigOption(
         params.sessionId,
         executionModeOption.id,
         targetExecutionMode
@@ -1119,7 +1134,7 @@ class SessionService {
     }
 
     try {
-      const configOptions = await acpRuntimeManager.setConfigOption(
+      const configOptions = await this.runtimeManager.setConfigOption(
         sessionId,
         executionModeOption.id,
         targetExecutionMode
@@ -1130,11 +1145,11 @@ class SessionService {
         providerSessionId: handle.providerSessionId,
         configOptions,
       });
-      sessionDomainService.emitDelta(sessionId, {
+      this.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
         configOptions,
       } as SessionDeltaEvent);
-      sessionDomainService.emitDelta(sessionId, {
+      this.sessionDomainService.emitDelta(sessionId, {
         type: 'chat_capabilities',
         capabilities: this.buildAcpChatBarCapabilities(handle),
       });
@@ -1227,13 +1242,13 @@ class SessionService {
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId = session?.workspaceId ?? this.sessionToWorkspace.get(sessionId);
 
-    if (acpRuntimeManager.isStopInProgress(sessionId)) {
+    if (this.runtimeManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
       return;
     }
 
     const current = this.getRuntimeSnapshot(sessionId);
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
+    this.sessionDomainService.setRuntimeSnapshot(sessionId, {
       ...current,
       phase: 'stopping',
       activity: 'IDLE',
@@ -1251,8 +1266,8 @@ class SessionService {
 
     let stopClientFailed = false;
     try {
-      if (!acpRuntimeManager.isStopInProgress(sessionId)) {
-        await acpRuntimeManager.stopClient(sessionId);
+      if (!this.runtimeManager.isStopInProgress(sessionId)) {
+        await this.runtimeManager.stopClient(sessionId);
       }
     } catch (error) {
       stopClientFailed = true;
@@ -1265,8 +1280,8 @@ class SessionService {
       await this.updateStoppedSessionState(sessionId);
       // Manual stop should clear queued work and publish that change immediately
       // so clients do not retain stale queued-message UI.
-      sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
+      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
         processState: 'stopped',
         activity: 'IDLE',
@@ -1393,7 +1408,7 @@ class SessionService {
     for (const session of sessions) {
       if (
         session.status === SessionStatus.RUNNING ||
-        acpRuntimeManager.isSessionRunning(session.id)
+        this.runtimeManager.isSessionRunning(session.id)
       ) {
         try {
           await this.stopSession(session.id);
@@ -1432,7 +1447,7 @@ class SessionService {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    const hadClient = !!acpRuntimeManager.getClient(sessionId);
+    const hadClient = !!this.runtimeManager.getClient(sessionId);
     const handle = await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
     if (!(hadClient || session.providerSessionId)) {
       await this.applyConfiguredPermissionPreset(sessionId, session, handle);
@@ -1454,7 +1469,7 @@ class SessionService {
       reasoningEffort?: string;
     }
   ): Promise<unknown> {
-    const hadClient = !!acpRuntimeManager.getClient(session.id);
+    const hadClient = !!this.runtimeManager.getClient(session.id);
     const handle = await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
     if (!(hadClient || session.providerSessionId)) {
       await this.applyConfiguredPermissionPreset(session.id, session, handle);
@@ -1464,11 +1479,11 @@ class SessionService {
   }
 
   getSessionClient(sessionId: string): unknown | undefined {
-    return acpRuntimeManager.getClient(sessionId);
+    return this.runtimeManager.getClient(sessionId);
   }
 
   getSessionConfigOptions(sessionId: string): SessionConfigOption[] {
-    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    const acpHandle = this.runtimeManager.getClient(sessionId);
     return acpHandle ? [...acpHandle.configOptions] : [];
   }
 
@@ -1492,7 +1507,7 @@ class SessionService {
   }
 
   async setSessionModel(sessionId: string, model?: string): Promise<void> {
-    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
       const modelOption = acpHandle.configOptions.find((o) => o.category === 'model');
       if (modelOption && model) {
@@ -1521,7 +1536,7 @@ class SessionService {
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {
-    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
       const thoughtOption = acpHandle.configOptions.find((o) => o.category === 'thought_level');
       if (thoughtOption && maxTokens != null) {
@@ -1537,10 +1552,10 @@ class SessionService {
    * authoritative config_options_update delta to all subscribers.
    */
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
-    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
       const configOptions = await this.setCachedSessionConfigOption(sessionId, configId, value);
-      sessionDomainService.emitDelta(sessionId, {
+      this.sessionDomainService.emitDelta(sessionId, {
         type: 'config_options_update',
         configOptions,
       } as SessionDeltaEvent);
@@ -1552,15 +1567,15 @@ class SessionService {
     const isModelOption = configId === 'model' || selectedOption?.category === 'model';
 
     const configOptions = isModeOption
-      ? await acpRuntimeManager.setSessionMode(sessionId, value)
+      ? await this.runtimeManager.setSessionMode(sessionId, value)
       : isModelOption
-        ? await acpRuntimeManager.setSessionModel(sessionId, value)
-        : await acpRuntimeManager.setConfigOption(sessionId, configId, value);
-    sessionDomainService.emitDelta(sessionId, {
+        ? await this.runtimeManager.setSessionModel(sessionId, value)
+        : await this.runtimeManager.setConfigOption(sessionId, configId, value);
+    this.sessionDomainService.emitDelta(sessionId, {
       type: 'config_options_update',
       configOptions,
     } as SessionDeltaEvent);
-    const acpHandleAfterUpdate = acpRuntimeManager.getClient(sessionId);
+    const acpHandleAfterUpdate = this.runtimeManager.getClient(sessionId);
     if (acpHandleAfterUpdate) {
       await this.persistAcpConfigSnapshot(sessionId, {
         provider: acpHandleAfterUpdate.provider as SessionProvider,
@@ -1631,7 +1646,7 @@ class SessionService {
   }
 
   sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
-    const acpClient = acpRuntimeManager.getClient(sessionId);
+    const acpClient = this.runtimeManager.getClient(sessionId);
     if (acpClient) {
       const normalizedText =
         typeof content === 'string' ? content : this.normalizeContentToText(content);
@@ -1693,7 +1708,7 @@ class SessionService {
     // Scope orphan detection to each prompt turn.
     this.pendingAcpToolCalls.set(sessionId, new Map());
 
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
+    this.sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'running',
       processState: 'alive',
       activity: 'WORKING',
@@ -1705,9 +1720,9 @@ class SessionService {
     }
 
     try {
-      const result = await acpRuntimeManager.sendPrompt(sessionId, content);
+      const result = await this.runtimeManager.sendPrompt(sessionId, content);
       this.finalizeOrphanedToolCalls(sessionId, `stop_reason:${result.stopReason}`);
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
         processState: 'alive',
         activity: 'IDLE',
@@ -1716,7 +1731,7 @@ class SessionService {
       return result.stopReason;
     } catch (error) {
       this.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
         processState: 'alive',
         activity: 'IDLE',
@@ -1761,11 +1776,11 @@ class SessionService {
    * Cancel an ongoing ACP prompt mid-turn.
    */
   async cancelAcpPrompt(sessionId: string): Promise<void> {
-    await acpRuntimeManager.cancelPrompt(sessionId);
+    await this.runtimeManager.cancelPrompt(sessionId);
   }
 
   getSessionConversationHistory(sessionId: string, _workingDir: string): HistoryMessage[] {
-    const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
+    const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
     return transcript.flatMap((entry) => this.mapTranscriptEntryToHistory(entry));
   }
 
@@ -1831,13 +1846,13 @@ class SessionService {
 
   getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
     const fallback = createInitialSessionRuntimeState();
-    const persisted = sessionDomainService.getRuntimeSnapshot(sessionId);
+    const persisted = this.sessionDomainService.getRuntimeSnapshot(sessionId);
     const base = persisted ?? fallback;
 
     // Check ACP runtime
-    const acpClient = acpRuntimeManager.getClient(sessionId);
+    const acpClient = this.runtimeManager.getClient(sessionId);
     if (acpClient) {
-      const isWorking = acpRuntimeManager.isSessionWorking(sessionId);
+      const isWorking = this.runtimeManager.isSessionWorking(sessionId);
       return {
         phase: isWorking ? 'running' : 'idle',
         processState: 'alive',
@@ -1846,7 +1861,7 @@ class SessionService {
       };
     }
 
-    if (acpRuntimeManager.isStopInProgress(sessionId)) {
+    if (this.runtimeManager.isStopInProgress(sessionId)) {
       return {
         ...base,
         phase: 'stopping',
@@ -1878,9 +1893,9 @@ class SessionService {
     session: AgentSessionRecord
   ): Promise<AcpProcessHandle> {
     // Check for existing ACP client first
-    const existingAcp = acpRuntimeManager.getClient(sessionId);
+    const existingAcp = this.runtimeManager.getClient(sessionId);
     if (existingAcp) {
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: existingAcp.isPromptInFlight ? 'running' : 'idle',
         processState: 'alive',
         activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
@@ -1889,7 +1904,7 @@ class SessionService {
       return existingAcp;
     }
 
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
+    this.sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'starting',
       processState: 'alive',
       activity: 'IDLE',
@@ -1900,7 +1915,7 @@ class SessionService {
     try {
       handle = await this.createAcpClient(sessionId, options, session);
     } catch (error) {
-      sessionDomainService.setRuntimeSnapshot(sessionId, {
+      this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
         processState: 'stopped',
         activity: 'IDLE',
@@ -1914,7 +1929,7 @@ class SessionService {
       status: SessionStatus.RUNNING,
     });
 
-    sessionDomainService.setRuntimeSnapshot(sessionId, {
+    this.sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: handle.isPromptInFlight ? 'running' : 'idle',
       processState: 'alive',
       activity: handle.isPromptInFlight ? 'WORKING' : 'IDLE',
@@ -1932,21 +1947,21 @@ class SessionService {
    * Check if a session is running in memory
    */
   isSessionRunning(sessionId: string): boolean {
-    return acpRuntimeManager.isSessionRunning(sessionId);
+    return this.runtimeManager.isSessionRunning(sessionId);
   }
 
   /**
    * Check if a session is actively working (not just alive, but processing)
    */
   isSessionWorking(sessionId: string): boolean {
-    return acpRuntimeManager.isSessionWorking(sessionId);
+    return this.runtimeManager.isSessionWorking(sessionId);
   }
 
   /**
    * Check if any session in the given list is actively working
    */
   isAnySessionWorking(sessionIds: string[]): boolean {
-    return acpRuntimeManager.isAnySessionWorking(sessionIds);
+    return this.runtimeManager.isAnySessionWorking(sessionIds);
   }
 
   /**
@@ -1974,7 +1989,7 @@ class SessionService {
   }
 
   async getChatBarCapabilities(sessionId: string): Promise<ChatBarCapabilities> {
-    const acpHandle = acpRuntimeManager.getClient(sessionId);
+    const acpHandle = this.runtimeManager.getClient(sessionId);
     if (acpHandle) {
       return this.buildAcpChatBarCapabilities(acpHandle);
     }
@@ -2130,7 +2145,7 @@ class SessionService {
    */
   async stopAllClients(_timeoutMs = 5000): Promise<void> {
     try {
-      await acpRuntimeManager.stopAllClients();
+      await this.runtimeManager.stopAllClients();
     } catch (error) {
       logger.error('Failed to stop ACP clients during shutdown', {
         error: error instanceof Error ? error.message : String(error),
@@ -2363,4 +2378,8 @@ class SessionService {
   }
 }
 
-export const sessionService = new SessionService();
+export function createSessionService(options?: SessionServiceDependencies): SessionService {
+  return new SessionService(options);
+}
+
+export const sessionService = createSessionService();

@@ -8,7 +8,7 @@ import { open, stat } from 'node:fs/promises';
 import type { DecisionLog } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { acpRuntimeManager, sessionDataService } from '@/backend/domains/session';
+import { sessionDataService } from '@/backend/domains/session';
 import { workspaceDataService } from '@/backend/domains/workspace';
 import { dataBackupService } from '@/backend/orchestration/data-backup.service';
 import { decisionLogQueryService } from '@/backend/orchestration/decision-log-query.service';
@@ -173,7 +173,7 @@ export const adminRouter = router({
    * Get all active processes (Agent sessions via ACP and Terminal)
    */
   getActiveProcesses: publicProcedure.query(async ({ ctx }) => {
-    const { terminalService } = ctx.appContext.services;
+    const { acpRuntimeManager, terminalService } = ctx.appContext.services;
     const logger = getLogger(ctx);
     // Get active ACP sessions from in-memory map
     const activeAcpProcesses = acpRuntimeManager.getAllActiveProcesses();
