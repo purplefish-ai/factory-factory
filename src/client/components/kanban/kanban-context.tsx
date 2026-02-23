@@ -165,6 +165,9 @@ export function KanbanProvider({
 
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
     const workspace = workspaces?.find((item) => item.id === workspaceId);
+
+    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+
     const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
       projectId,
     });
@@ -221,6 +224,9 @@ export function KanbanProvider({
       (workspace) => workspace.kanbanColumn === kanbanColumn
     );
     const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
+
+    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+
     const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
       projectId,
     });
