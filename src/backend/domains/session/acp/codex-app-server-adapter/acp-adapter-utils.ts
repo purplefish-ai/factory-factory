@@ -19,6 +19,10 @@ export function toTurnItemKey(turnId: string, itemId: string): string {
   return `${turnId}:${itemId}`;
 }
 
+export function dedupeStrings<T extends string>(values: Iterable<T>): T[] {
+  return Array.from(new Set(values));
+}
+
 function extractToolCallIdFromUnknown(value: unknown): string | null {
   if (!isRecord(value)) {
     return null;
