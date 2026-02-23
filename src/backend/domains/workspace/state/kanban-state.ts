@@ -2,7 +2,7 @@ import type { Workspace } from '@prisma-gen/client';
 import type { WorkspaceSessionBridge } from '@/backend/domains/workspace/bridges';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
-import { KanbanColumn, PRState, WorkspaceStatus } from '@/shared/core';
+import { KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 import { deriveWorkspaceRuntimeState } from './workspace-runtime-state';
 
@@ -12,6 +12,7 @@ export interface KanbanStateInput {
   lifecycle: WorkspaceStatus;
   isWorking: boolean;
   prState: PRState;
+  ratchetState: RatchetState;
   hasHadSessions: boolean;
 }
 
@@ -37,7 +38,7 @@ export interface WorkspaceWithKanbanState {
  * Returns null for workspaces that should be hidden (READY + no sessions).
  */
 export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | null {
-  const { lifecycle, isWorking, prState, hasHadSessions } = input;
+  const { lifecycle, isWorking, prState, ratchetState, hasHadSessions } = input;
 
   // Archived workspaces: return null - they use cachedKanbanColumn from before archiving
   // The caller should handle archived workspaces separately
@@ -57,8 +58,8 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
 
   // From here, lifecycle === READY and not working
 
-  // DONE: PR merged
-  if (prState === PRState.MERGED) {
+  // DONE: PR merged, as observed by either PR snapshot or ratchet monitor.
+  if (prState === PRState.MERGED || ratchetState === RatchetState.MERGED) {
     return KanbanColumn.DONE;
   }
 
@@ -106,6 +107,7 @@ class KanbanStateService {
       lifecycle: workspace.status,
       isWorking: runtimeState.isWorking,
       prState: workspace.prState,
+      ratchetState: workspace.ratchetState,
       hasHadSessions: workspace.hasHadSessions,
     });
 
@@ -134,6 +136,7 @@ class KanbanStateService {
         lifecycle: workspace.status,
         isWorking: runtimeState.isWorking,
         prState: workspace.prState,
+        ratchetState: workspace.ratchetState,
         hasHadSessions: workspace.hasHadSessions,
       });
 
@@ -172,6 +175,7 @@ class KanbanStateService {
       lifecycle: workspace.status,
       isWorking: flowState.isWorking,
       prState: workspace.prState,
+      ratchetState: workspace.ratchetState,
       hasHadSessions: workspace.hasHadSessions,
     });
 

@@ -13,7 +13,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
-import { type KanbanColumn, WorkspaceStatus } from '@/shared/core';
+import { type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');
@@ -161,6 +161,14 @@ class WorkspaceQueryService {
     return {
       workspaces: nonArchivingWorkspaces.map((w) => {
         const flowState = flowStateByWorkspace.get(w.id);
+        const isWorking = workingStatusByWorkspace.get(w.id) ?? false;
+        const kanbanColumn = computeKanbanColumn({
+          lifecycle: w.status ?? WorkspaceStatus.READY,
+          isWorking,
+          prState: w.prState ?? PRState.NONE,
+          ratchetState: w.ratchetState ?? RatchetState.IDLE,
+          hasHadSessions: w.hasHadSessions ?? true,
+        });
         const sessionDates = [
           ...(w.agentSessions?.map((s) => s.updatedAt) ?? []),
           ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
@@ -179,7 +187,7 @@ class WorkspaceQueryService {
           prNumber: w.prNumber,
           prState: w.prState,
           prCiStatus: w.prCiStatus,
-          isWorking: workingStatusByWorkspace.get(w.id) ?? false,
+          isWorking,
           gitStats: gitStatsResults[w.id] ?? null,
           lastActivityAt,
           ratchetEnabled: w.ratchetEnabled,
@@ -187,7 +195,7 @@ class WorkspaceQueryService {
           githubIssueNumber: w.githubIssueNumber,
           linearIssueId: w.linearIssueId,
           sidebarStatus: deriveWorkspaceSidebarStatus({
-            isWorking: workingStatusByWorkspace.get(w.id) ?? false,
+            isWorking,
             prUrl: w.prUrl,
             prState: w.prState,
             prCiStatus: w.prCiStatus,
@@ -197,7 +205,7 @@ class WorkspaceQueryService {
           flowPhase: flowState?.phase ?? 'NO_PR',
           ciObservation: flowState?.ciObservation ?? 'CHECKS_UNKNOWN',
           runScriptStatus: w.runScriptStatus,
-          cachedKanbanColumn: w.cachedKanbanColumn,
+          cachedKanbanColumn: kanbanColumn,
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
           pendingRequestType: pendingRequestByWorkspace.get(w.id) ?? null,
         };
@@ -236,6 +244,7 @@ class WorkspaceQueryService {
           lifecycle: workspace.status,
           isWorking: runtimeState.isWorking,
           prState: workspace.prState,
+          ratchetState: workspace.ratchetState,
           hasHadSessions: workspace.hasHadSessions,
         });
 
