@@ -8,6 +8,7 @@ export function ProjectSelectorDropdown({
   onProjectChange,
   projects,
   triggerClassName,
+  projectButtonClassName,
   triggerId = 'project-select',
   onCurrentProjectSelect,
 }: {
@@ -15,6 +16,7 @@ export function ProjectSelectorDropdown({
   onProjectChange: (value: string) => void;
   projects: Array<{ id: string; slug: string; name: string }> | undefined;
   triggerClassName?: string;
+  projectButtonClassName?: string;
   triggerId?: string;
   onCurrentProjectSelect?: () => void;
 }) {
@@ -48,7 +50,7 @@ export function ProjectSelectorDropdown({
           onCurrentProjectSelect
             ? 'cursor-pointer hover:text-foreground focus-visible:text-foreground'
             : 'cursor-default',
-          triggerClassName
+          projectButtonClassName
         )}
         aria-label={`Open ${selectedProjectName} kanban`}
       >
@@ -58,7 +60,10 @@ export function ProjectSelectorDropdown({
         <SelectTrigger
           id={triggerId}
           aria-label="Open project menu"
-          className="h-7 w-7 shrink-0 border-0 bg-transparent px-1 text-muted-foreground shadow-none focus:ring-0"
+          className={cn(
+            'h-7 w-7 shrink-0 border-0 bg-transparent px-1 text-muted-foreground shadow-none focus:ring-0',
+            triggerClassName
+          )}
         >
           <span className="sr-only">Open project menu</span>
         </SelectTrigger>

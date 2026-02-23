@@ -819,7 +819,7 @@ export function WorkspaceDetailHeaderSlot({
           onCurrentProjectSelect={handleCurrentProjectSelect}
           projects={projects}
           triggerId="workspace-detail-project-select"
-          triggerClassName="h-7 w-auto max-w-[10rem] gap-1 border-0 bg-transparent px-1 text-xs font-normal text-muted-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:text-sm"
+          projectButtonClassName="h-7 w-auto max-w-[10rem] gap-1 border-0 bg-transparent px-1 text-xs font-normal text-muted-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:text-sm"
         />
       </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
