@@ -3,6 +3,8 @@ import { Bot, Terminal, XCircle } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
+import type { AppRouter } from '@/client/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,8 +17,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { AppRouter } from '@/frontend/lib/trpc';
-import { trpc } from '@/frontend/lib/trpc';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { formatBytes, formatCpu, formatIdleTime } from '@/lib/formatters';
 

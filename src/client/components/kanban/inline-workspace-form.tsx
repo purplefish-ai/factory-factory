@@ -1,6 +1,7 @@
 import { Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { trpc } from '@/client/lib/trpc';
 import { useProjectFileMentions } from '@/components/chat/chat-input/hooks/use-project-file-mentions';
 import { FileMentionPalette } from '@/components/chat/file-mention-palette';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,6 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RatchetToggleButton } from '@/components/workspace';
-import { trpc } from '@/frontend/lib/trpc';
 import {
   generateUniqueWorkspaceName,
   generateWorkspaceNameFromPrompt,

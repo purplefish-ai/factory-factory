@@ -13,6 +13,19 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import {
+  HeaderLeftExtraSlot,
+  HeaderLeftStartSlot,
+  HeaderRightSlot,
+  useAppHeader,
+} from '@/client/components/app-header-context';
+import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
+import {
+  applyRatchetToggleState,
+  updateWorkspaceRatchetState,
+} from '@/client/lib/ratchet-toggle-cache';
+import { trpc } from '@/client/lib/trpc';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,19 +61,6 @@ import {
   useRunScriptLaunch,
   useWorkspacePanel,
 } from '@/components/workspace';
-import {
-  HeaderLeftExtraSlot,
-  HeaderLeftStartSlot,
-  HeaderRightSlot,
-  useAppHeader,
-} from '@/frontend/components/app-header-context';
-import { ProjectSelectorDropdown } from '@/frontend/components/project-selector';
-import { ProviderCliWarning } from '@/frontend/components/provider-cli-warning';
-import {
-  applyRatchetToggleState,
-  updateWorkspaceRatchetState,
-} from '@/frontend/lib/ratchet-toggle-cache';
-import { trpc } from '@/frontend/lib/trpc';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,

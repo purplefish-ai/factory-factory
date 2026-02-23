@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 import { cn } from '@/lib/utils';
 
 interface SetupLogsPanelProps {

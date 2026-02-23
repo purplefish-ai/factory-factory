@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { trpc } from '@/frontend/lib/trpc';
+import { trpc } from '@/client/lib/trpc';
 
 export function useWorkspaceProjectNavigation() {
   const { slug = '' } = useParams<{ slug: string }>();

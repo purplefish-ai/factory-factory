@@ -1,5 +1,6 @@
 import { CircleDot, ExternalLink, Play, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import {
@@ -11,7 +12,6 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RatchetToggleButton } from '@/components/workspace';
-import { trpc } from '@/frontend/lib/trpc';
 import type { KanbanIssue } from './kanban-context';
 
 interface IssueDetailsSheetProps {

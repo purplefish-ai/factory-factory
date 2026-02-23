@@ -3,11 +3,11 @@ import {
   type NormalizedIssue,
   normalizeGitHubIssue,
   normalizeLinearIssue,
-} from '@/frontend/lib/issue-normalization';
-import { trpc } from '@/frontend/lib/trpc';
+} from '@/client/lib/issue-normalization';
+import { trpc } from '@/client/lib/trpc';
 import type { WorkspaceWithKanban } from './kanban-card';
 
-/** @deprecated Use `NormalizedIssue` from `@/frontend/lib/issue-normalization` instead. */
+/** @deprecated Use `NormalizedIssue` from `@/client/lib/issue-normalization` instead. */
 export type KanbanIssue = NormalizedIssue;
 
 interface ArchivingWorkspaceIssueLink {
