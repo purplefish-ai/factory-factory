@@ -420,7 +420,8 @@ export function configureEventCollector(
     coalescer.enqueue(
       event.workspaceId,
       { status: event.toStatus },
-      'event:workspace_state_changed'
+      'event:workspace_state_changed',
+      { immediate: true }
     );
   });
 
@@ -448,7 +449,8 @@ export function configureEventCollector(
     coalescer.enqueue(
       event.workspaceId,
       { ratchetState: event.toState },
-      'event:ratchet_state_changed'
+      'event:ratchet_state_changed',
+      { immediate: true }
     );
   });
 

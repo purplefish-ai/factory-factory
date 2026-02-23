@@ -193,6 +193,7 @@ export interface SnapshotDerivationFns {
     lifecycle: WorkspaceStatus;
     isWorking: boolean;
     prState: PRState;
+    ratchetState: RatchetState;
     hasHadSessions: boolean;
   }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
@@ -386,6 +387,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       lifecycle: entry.status,
       isWorking: effectiveIsWorking,
       prState: entry.prState,
+      ratchetState: entry.ratchetState,
       hasHadSessions: entry.hasHadSessions,
     });
 

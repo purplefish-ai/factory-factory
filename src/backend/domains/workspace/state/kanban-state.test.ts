@@ -40,6 +40,7 @@ describe('computeKanbanColumn', () => {
         lifecycle: 'ARCHIVED',
         isWorking: false,
         prState: 'OPEN',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
       })
     ).toBeNull();
@@ -51,6 +52,7 @@ describe('computeKanbanColumn', () => {
         lifecycle: 'NEW',
         isWorking: false,
         prState: 'NONE',
+        ratchetState: 'IDLE',
         hasHadSessions: false,
       })
     ).toBe('WORKING');
@@ -59,6 +61,7 @@ describe('computeKanbanColumn', () => {
         lifecycle: 'READY',
         isWorking: true,
         prState: 'OPEN',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
       })
     ).toBe('WORKING');
@@ -70,6 +73,7 @@ describe('computeKanbanColumn', () => {
         lifecycle: 'READY',
         isWorking: false,
         prState: 'MERGED',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
       })
     ).toBe('DONE');
@@ -78,9 +82,22 @@ describe('computeKanbanColumn', () => {
         lifecycle: 'READY',
         isWorking: false,
         prState: 'NONE',
+        ratchetState: 'IDLE',
         hasHadSessions: false,
       })
     ).toBeNull();
+  });
+
+  it('maps ratchet MERGED to DONE even if prState has not caught up yet', () => {
+    expect(
+      computeKanbanColumn({
+        lifecycle: 'READY',
+        isWorking: false,
+        prState: 'OPEN',
+        ratchetState: 'MERGED',
+        hasHadSessions: true,
+      })
+    ).toBe('DONE');
   });
 
   it('maps idle session-backed workspaces to WAITING', () => {
@@ -89,6 +106,7 @@ describe('computeKanbanColumn', () => {
         lifecycle: 'READY',
         isWorking: false,
         prState: 'APPROVED',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
       })
     ).toBe('WAITING');
@@ -117,6 +135,7 @@ describe('kanbanStateService', () => {
       id: 'w1',
       status: WorkspaceStatus.READY,
       prState: 'OPEN',
+      ratchetState: 'IDLE',
       hasHadSessions: true,
     });
     mockDeriveRuntimeState.mockReturnValue({ isWorking: false });
@@ -139,12 +158,14 @@ describe('kanbanStateService', () => {
           id: 'w1',
           status: WorkspaceStatus.READY,
           prState: 'OPEN',
+          ratchetState: 'IDLE',
           hasHadSessions: true,
         },
         {
           id: 'w2',
           status: WorkspaceStatus.READY,
           prState: 'NONE',
+          ratchetState: 'IDLE',
           hasHadSessions: true,
         },
       ] as never,
@@ -166,6 +187,7 @@ describe('kanbanStateService', () => {
         id: 'w1',
         status: WorkspaceStatus.READY,
         prState: 'OPEN',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
         cachedKanbanColumn: 'WORKING',
       })
@@ -173,6 +195,7 @@ describe('kanbanStateService', () => {
         id: 'w2',
         status: WorkspaceStatus.READY,
         prState: 'OPEN',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
         cachedKanbanColumn: 'WAITING',
       })
@@ -180,6 +203,7 @@ describe('kanbanStateService', () => {
         id: 'w3',
         status: WorkspaceStatus.ARCHIVED,
         prState: 'OPEN',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
         cachedKanbanColumn: 'WAITING',
       });
@@ -210,6 +234,7 @@ describe('kanbanStateService', () => {
         id: 'w1',
         status: WorkspaceStatus.READY,
         prState: 'NONE',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
         cachedKanbanColumn: 'WORKING',
       })
@@ -217,6 +242,7 @@ describe('kanbanStateService', () => {
         id: 'w2',
         status: WorkspaceStatus.READY,
         prState: 'NONE',
+        ratchetState: 'IDLE',
         hasHadSessions: true,
         cachedKanbanColumn: 'WORKING',
       });

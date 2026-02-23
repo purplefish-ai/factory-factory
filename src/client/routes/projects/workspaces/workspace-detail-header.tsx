@@ -78,9 +78,19 @@ type WorkspaceHeaderWorkspace = NonNullable<ReturnType<typeof useWorkspaceData>[
 type WorkspacePrChipProps = {
   prUrl: NonNullable<WorkspaceHeaderWorkspace['prUrl']>;
   prNumber: NonNullable<WorkspaceHeaderWorkspace['prNumber']>;
-  prState: WorkspaceHeaderWorkspace['prState'];
+  isMerged: boolean;
   className?: string;
 };
+
+function isWorkspaceMerged(
+  workspace: Pick<WorkspaceHeaderWorkspace, 'prState' | 'ratchetState' | 'sidebarStatus'>
+): boolean {
+  return (
+    workspace.prState === 'MERGED' ||
+    workspace.ratchetState === 'MERGED' ||
+    workspace.sidebarStatus?.ciState === 'MERGED'
+  );
+}
 
 function hasVisiblePullRequest(
   workspace: Pick<WorkspaceHeaderWorkspace, 'prUrl' | 'prNumber' | 'prState'>
@@ -97,7 +107,7 @@ function hasVisiblePullRequest(
   );
 }
 
-function WorkspacePrChip({ prUrl, prNumber, prState, className }: WorkspacePrChipProps) {
+function WorkspacePrChip({ prUrl, prNumber, isMerged, className }: WorkspacePrChipProps) {
   return (
     <a
       href={prUrl}
@@ -105,12 +115,12 @@ function WorkspacePrChip({ prUrl, prNumber, prState, className }: WorkspacePrChi
       rel="noopener noreferrer"
       className={cn(
         'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity',
-        prState === 'MERGED' ? 'text-green-500' : 'text-muted-foreground hover:text-foreground',
+        isMerged ? 'text-green-500' : 'text-muted-foreground hover:text-foreground',
         className
       )}
     >
       <GitPullRequest className="h-3 w-3" />#{prNumber}
-      {prState === 'MERGED' && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+      {isMerged && <CheckCircle2 className="h-3 w-3 text-green-500" />}
     </a>
   );
 }
@@ -178,7 +188,7 @@ function WorkspacePrAction({
       <WorkspacePrChip
         prUrl={workspace.prUrl}
         prNumber={workspace.prNumber}
-        prState={workspace.prState}
+        isMerged={isWorkspaceMerged(workspace)}
       />
     );
   }
@@ -623,6 +633,8 @@ function ArchiveActionButton({
   onArchiveRequest: () => void;
   renderAsMenuItem?: boolean;
 }) {
+  const merged = isWorkspaceMerged(workspace);
+
   if (renderAsMenuItem) {
     return (
       <DropdownMenuItem
@@ -634,9 +646,7 @@ function ArchiveActionButton({
         }}
         disabled={archivePending}
         className={cn(
-          workspace.prState === 'MERGED'
-            ? ''
-            : 'text-destructive focus:text-destructive dark:text-destructive'
+          merged ? '' : 'text-destructive focus:text-destructive dark:text-destructive'
         )}
       >
         {archivePending ? (
@@ -653,11 +663,11 @@ function ArchiveActionButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant={workspace.prState === 'MERGED' ? 'default' : 'ghost'}
+          variant={merged ? 'default' : 'ghost'}
           size="icon"
           className={cn(
             'h-9 w-9 md:h-8 md:w-8',
-            workspace.prState === 'MERGED' ? '' : 'hover:bg-destructive/10 hover:text-destructive'
+            merged ? '' : 'hover:bg-destructive/10 hover:text-destructive'
           )}
           onClick={onArchiveRequest}
           disabled={archivePending}
@@ -784,7 +794,9 @@ export function WorkspaceDetailHeaderSlot({
   const isMobile = useIsMobile();
   const { slug, projects, handleProjectChange, handleCurrentProjectSelect } =
     useWorkspaceProjectNavigation();
-  const { branchName, name, prNumber, prState, prUrl } = workspace;
+  const { branchName, name, prNumber, prState, prUrl, ratchetState, sidebarStatus } = workspace;
+  const workspaceIsMerged =
+    prState === 'MERGED' || ratchetState === 'MERGED' || sidebarStatus?.ciState === 'MERGED';
   const mobileTitlePrChipProps = useMemo<WorkspacePrChipProps | null>(() => {
     const pullRequest = { prUrl, prNumber, prState };
 
@@ -792,8 +804,11 @@ export function WorkspaceDetailHeaderSlot({
       return null;
     }
 
-    return pullRequest;
-  }, [prNumber, prState, prUrl]);
+    return {
+      ...pullRequest,
+      isMerged: workspaceIsMerged,
+    };
+  }, [prNumber, prState, prUrl, workspaceIsMerged]);
 
   const title = useMemo(() => {
     if (isMobile && mobileTitlePrChipProps) {
@@ -801,7 +816,7 @@ export function WorkspaceDetailHeaderSlot({
         <WorkspacePrChip
           prUrl={mobileTitlePrChipProps.prUrl}
           prNumber={mobileTitlePrChipProps.prNumber}
-          prState={mobileTitlePrChipProps.prState}
+          isMerged={mobileTitlePrChipProps.isMerged}
           className="max-w-full align-middle"
         />
       );

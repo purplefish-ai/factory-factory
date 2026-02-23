@@ -97,7 +97,13 @@ export function useAppNavigationData() {
 
   const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
-    { enabled: !!selectedProjectId, refetchInterval: 30_000 }
+    {
+      enabled: !!selectedProjectId,
+      // Sidebar/project state is live-synced via /snapshots (useProjectSnapshotSync).
+      // Keep tRPC query as bootstrap/fallback, not a periodic poller.
+      staleTime: Number.POSITIVE_INFINITY,
+      refetchOnWindowFocus: false,
+    }
   );
 
   const utils = trpc.useUtils();

@@ -506,7 +506,7 @@ describe('configureEventCollector', () => {
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
   });
 
-  it('non-ARCHIVED workspace event goes through coalescer', () => {
+  it('non-ARCHIVED workspace event is applied immediately', () => {
     vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
       projectId: 'proj-1',
     } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
@@ -524,12 +524,40 @@ describe('configureEventCollector', () => {
 
     handler({ workspaceId: 'ws-1', fromStatus: 'NEW', toStatus: 'READY' });
 
-    // Not called yet -- coalescing
-    expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(150);
-
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { status: 'READY' },
+      'event:workspace_state_changed'
+    );
+  });
+
+  it('ratchet_state_changed is applied immediately', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(ratchetService.on)
+      .mock.calls.find((call) => call[0] === 'ratchet_state_changed');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      fromState: string;
+      toState: string;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      fromState: 'READY',
+      toState: 'MERGED',
+    });
+
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledWith(
+      'ws-1',
+      { ratchetState: 'MERGED' },
+      'event:ratchet_state_changed'
+    );
   });
 
   it('pr_snapshot_updated without prUrl does not overwrite existing prUrl in store', () => {
@@ -621,10 +649,9 @@ describe('configureEventCollector', () => {
       toStatus: 'READY',
     });
 
-    // Not flushed yet
-    expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
+    expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);
 
-    // Stop flushes all pending
+    // Stop should no-op pending flush and still clear coalescer.
     stopEventCollector();
 
     expect(workspaceSnapshotStore.upsert).toHaveBeenCalledTimes(1);

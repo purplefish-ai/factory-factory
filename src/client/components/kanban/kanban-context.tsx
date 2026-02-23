@@ -105,7 +105,12 @@ export function KanbanProvider({
     refetch: refetchWorkspaces,
   } = trpc.workspace.listWithKanbanState.useQuery(
     { projectId },
-    { refetchInterval: 30_000, staleTime: 25_000 }
+    {
+      // Kanban workspace state is live-synced via /snapshots (useProjectSnapshotSync).
+      // Keep tRPC query as bootstrap/fallback, not a periodic poller.
+      staleTime: Number.POSITIVE_INFINITY,
+      refetchOnWindowFocus: false,
+    }
   );
 
   // GitHub issues — enabled only when provider is GitHub

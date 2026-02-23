@@ -28,8 +28,9 @@ export function useWorkspaceData({ workspaceId }: UseWorkspaceDataOptions) {
   const { data: workspace, isLoading: workspaceLoading } = trpc.workspace.get.useQuery(
     { id: workspaceId },
     {
-      refetchInterval: 30_000, // Poll every 30s for background updates (worktreePath set on creation)
-      staleTime: 10_000, // Data considered fresh for 10s
+      // Workspace state is live-synced via /snapshots (useProjectSnapshotSync).
+      // Keep tRPC query as bootstrap/fallback, not a periodic poller.
+      staleTime: Number.POSITIVE_INFINITY,
       refetchOnWindowFocus: false, // Don't refetch on tab focus
     }
   );
