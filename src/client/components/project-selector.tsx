@@ -1,10 +1,4 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 const CURRENT_PROJECT_VALUE = '__current_project__';
@@ -25,6 +19,7 @@ export function ProjectSelectorDropdown({
   onCurrentProjectSelect?: () => void;
 }) {
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
+  const selectedProjectName = selectedProject?.name ?? 'Select a project';
   const shouldRenderCurrentProjectItem = Boolean(selectedProject && onCurrentProjectSelect);
   const selectableProjects = shouldRenderCurrentProjectItem
     ? projects?.filter((project) => project.slug !== selectedProjectSlug)
@@ -38,35 +33,57 @@ export function ProjectSelectorDropdown({
     onProjectChange(value);
   };
 
+  const handleCurrentProjectClick = () => {
+    onCurrentProjectSelect?.();
+  };
+
   return (
-    <Select value={selectedProjectSlug} onValueChange={handleValueChange}>
-      <SelectTrigger
-        id={triggerId}
-        className={cn('w-full max-w-full gap-3 px-4', triggerClassName)}
+    <div className="flex min-w-0 items-center gap-0.5">
+      <button
+        type="button"
+        onClick={handleCurrentProjectClick}
+        disabled={!onCurrentProjectSelect}
+        className={cn(
+          'min-w-0 truncate text-left',
+          onCurrentProjectSelect
+            ? 'cursor-pointer hover:text-foreground focus-visible:text-foreground'
+            : 'cursor-default',
+          triggerClassName
+        )}
+        aria-label={`Open ${selectedProjectName} kanban`}
       >
-        <SelectValue placeholder="Select a project" />
-      </SelectTrigger>
-      <SelectContent>
-        {shouldRenderCurrentProjectItem && selectedProject ? (
-          <SelectItem value={selectedProject.slug} className="hidden" aria-hidden>
-            {selectedProject.name}
+        {selectedProjectName}
+      </button>
+      <Select value={selectedProjectSlug} onValueChange={handleValueChange}>
+        <SelectTrigger
+          id={triggerId}
+          aria-label="Open project menu"
+          className="h-7 w-7 shrink-0 border-0 bg-transparent px-1 text-muted-foreground shadow-none focus:ring-0"
+        >
+          <span className="sr-only">Open project menu</span>
+        </SelectTrigger>
+        <SelectContent>
+          {shouldRenderCurrentProjectItem && selectedProject ? (
+            <SelectItem value={selectedProject.slug} className="hidden" aria-hidden>
+              {selectedProject.name}
+            </SelectItem>
+          ) : null}
+          {shouldRenderCurrentProjectItem && selectedProject ? (
+            <SelectItem value={CURRENT_PROJECT_VALUE}>{selectedProject.name}</SelectItem>
+          ) : null}
+          {selectableProjects?.map((project) => (
+            <SelectItem key={project.id} value={project.slug}>
+              {project.name}
+            </SelectItem>
+          ))}
+          <SelectItem value="__create__" className="text-muted-foreground">
+            + Create project
           </SelectItem>
-        ) : null}
-        {shouldRenderCurrentProjectItem && selectedProject ? (
-          <SelectItem value={CURRENT_PROJECT_VALUE}>{selectedProject.name}</SelectItem>
-        ) : null}
-        {selectableProjects?.map((project) => (
-          <SelectItem key={project.id} value={project.slug}>
-            {project.name}
+          <SelectItem value="__manage__" className="text-muted-foreground">
+            Manage projects...
           </SelectItem>
-        ))}
-        <SelectItem value="__create__" className="text-muted-foreground">
-          + Create project
-        </SelectItem>
-        <SelectItem value="__manage__" className="text-muted-foreground">
-          Manage projects...
-        </SelectItem>
-      </SelectContent>
-    </Select>
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
