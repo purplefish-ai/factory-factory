@@ -276,7 +276,7 @@ function SidebarInner({
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton
-                  onClick={onCreateWorkspace}
+                  onClick={() => onCreateWorkspace()}
                   disabled={!canCreateWorkspace || isCreatingWorkspace}
                   className="h-9"
                 >
