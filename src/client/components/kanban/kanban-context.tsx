@@ -5,6 +5,10 @@ import {
   normalizeLinearIssue,
 } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
+import {
+  removeWorkspaceFromProjectSummaryCache,
+  removeWorkspacesFromProjectSummaryCache,
+} from '@/client/lib/workspace-cache-helpers';
 import type { WorkspaceWithKanban } from './kanban-card';
 
 interface ArchivingWorkspaceIssueLink {
@@ -161,6 +165,17 @@ export function KanbanProvider({
 
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
     const workspace = workspaces?.find((item) => item.id === workspaceId);
+
+    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+
+    const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
+      projectId,
+    });
+
+    utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+      removeWorkspaceFromProjectSummaryCache(old, workspaceId)
+    );
+
     setArchivingWorkspaceIds((prev) => {
       const next = new Set(prev);
       next.add(workspaceId);
@@ -181,6 +196,9 @@ export function KanbanProvider({
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
         utils.workspace.get.invalidate({ id: workspaceId }),
       ]);
+    } catch (error) {
+      utils.workspace.getProjectSummaryState.setData({ projectId }, previousProjectSummaryState);
+      throw error;
     } finally {
       setArchivingWorkspaceIds((prev) => {
         if (!prev.has(workspaceId)) {
@@ -206,6 +224,16 @@ export function KanbanProvider({
       (workspace) => workspace.kanbanColumn === kanbanColumn
     );
     const workspaceIdsToArchive = workspacesToArchive.map((workspace) => workspace.id);
+
+    await utils.workspace.getProjectSummaryState.cancel({ projectId });
+
+    const previousProjectSummaryState = utils.workspace.getProjectSummaryState.getData({
+      projectId,
+    });
+
+    utils.workspace.getProjectSummaryState.setData({ projectId }, (old) =>
+      removeWorkspacesFromProjectSummaryCache(old, workspaceIdsToArchive)
+    );
 
     setArchivingWorkspaceIds((prev) => {
       const next = new Set(prev);
@@ -236,6 +264,9 @@ export function KanbanProvider({
         refetchWorkspaces(),
         utils.workspace.getProjectSummaryState.invalidate({ projectId }),
       ]);
+    } catch (error) {
+      utils.workspace.getProjectSummaryState.setData({ projectId }, previousProjectSummaryState);
+      throw error;
     } finally {
       setArchivingWorkspaceIds((prev) => {
         const next = new Set(prev);
