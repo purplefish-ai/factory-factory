@@ -26,7 +26,13 @@ import {
   type SetSessionModeResponse,
   type StopReason,
 } from '@agentclientprotocol/sdk';
-import { asString, dedupeStrings, isRecord, resolveToolCallId } from './acp-adapter-utils';
+import {
+  asString,
+  dedupeStrings,
+  extractLocations,
+  isRecord,
+  resolveToolCallId,
+} from './acp-adapter-utils';
 import type {
   AdapterSession,
   ApprovalPolicy,
@@ -1711,31 +1717,6 @@ export class CodexAppServerAcpAdapter implements Agent {
     }
   }
 
-  private extractLocations(item: unknown): Array<{ path: string; line?: number | null }> {
-    if (!isRecord(item) || item.type !== 'fileChange') {
-      return [];
-    }
-
-    const changes = item.changes;
-    if (!Array.isArray(changes)) {
-      return [];
-    }
-
-    const locations: Array<{ path: string }> = [];
-    for (const change of changes) {
-      if (!isRecord(change)) {
-        continue;
-      }
-      const path = asString(change.path);
-      if (!path) {
-        continue;
-      }
-      locations.push({ path });
-    }
-
-    return locations;
-  }
-
   private buildToolCallState(
     session: AdapterSession,
     item: { type: string; id: string } & Record<string, unknown>,
@@ -1766,7 +1747,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       locations = parsed.locations;
     } else if (item.type === 'fileChange') {
       title = 'fileChange';
-      locations = this.extractLocations(item);
+      locations = extractLocations(item);
     } else if (item.type === 'mcpToolCall') {
       const server = asString(item.server) ?? 'mcp';
       const tool = asString(item.tool) ?? 'tool';

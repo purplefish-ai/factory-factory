@@ -2,6 +2,7 @@ import type { SessionUpdate, StopReason } from '@agentclientprotocol/sdk';
 import {
   asString,
   dedupeLocations,
+  extractLocations,
   isCommandExecutionSessionHandoffOutput,
   isRecord,
   resolveToolCallId,
@@ -617,7 +618,7 @@ export class CodexStreamEventHandler {
 
     const statusFromItem = toToolStatus(item.status);
     const status = statusFromItem ?? 'completed';
-    const completionLocations = this.extractLocations(item);
+    const completionLocations = extractLocations(item);
     const locations = dedupeLocations([...existing.locations, ...completionLocations]);
 
     await this.deps.emitSessionUpdate(session.sessionId, {
@@ -634,30 +635,5 @@ export class CodexStreamEventHandler {
     session.syntheticallyCompletedToolItemIds.delete(item.id);
 
     await this.deps.maybeRequestPlanApproval(session, item, turnId, existing);
-  }
-
-  private extractLocations(item: unknown): Array<{ path: string; line?: number | null }> {
-    if (!isRecord(item) || item.type !== 'fileChange') {
-      return [];
-    }
-
-    const changes = item.changes;
-    if (!Array.isArray(changes)) {
-      return [];
-    }
-
-    const locations: Array<{ path: string }> = [];
-    for (const change of changes) {
-      if (!isRecord(change)) {
-        continue;
-      }
-      const path = asString(change.path);
-      if (!path) {
-        continue;
-      }
-      locations.push({ path });
-    }
-
-    return locations;
   }
 }

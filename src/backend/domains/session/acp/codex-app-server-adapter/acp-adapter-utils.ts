@@ -66,3 +66,28 @@ export function dedupeLocations(
   }
   return result;
 }
+
+export function extractLocations(item: unknown): Array<{ path: string; line?: number | null }> {
+  if (!isRecord(item) || item.type !== 'fileChange') {
+    return [];
+  }
+
+  const changes = item.changes;
+  if (!Array.isArray(changes)) {
+    return [];
+  }
+
+  const locations: Array<{ path: string; line?: number | null }> = [];
+  for (const change of changes) {
+    if (!isRecord(change)) {
+      continue;
+    }
+    const path = asString(change.path);
+    if (!path) {
+      continue;
+    }
+    locations.push({ path });
+  }
+
+  return locations;
+}
