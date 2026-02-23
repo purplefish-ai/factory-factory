@@ -22,6 +22,7 @@ export type ArchiveWorkspaceDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hasUncommitted: boolean;
+  showCommitOption?: boolean;
   onConfirm: (commitUncommitted: boolean) => void;
   description?: string;
   warningText?: string;
@@ -32,6 +33,7 @@ export function ArchiveWorkspaceDialog({
   open,
   onOpenChange,
   hasUncommitted,
+  showCommitOption = true,
   onConfirm,
   description = defaultDescription,
   warningText = defaultWarning,
@@ -62,13 +64,15 @@ export function ArchiveWorkspaceDialog({
               {warningText}
             </div>
           )}
-          <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={commitChangesChecked}
-              onCheckedChange={(checked) => setCommitChangesChecked(checked === true)}
-            />
-            {checkboxLabel}
-          </label>
+          {showCommitOption && (
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={commitChangesChecked}
+                onCheckedChange={(checked) => setCommitChangesChecked(checked === true)}
+              />
+              {checkboxLabel}
+            </label>
+          )}
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel
@@ -84,10 +88,10 @@ export function ArchiveWorkspaceDialog({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onConfirm(commitChangesChecked);
+              onConfirm(showCommitOption ? commitChangesChecked : true);
               onOpenChange(false);
             }}
-            disabled={hasUncommitted && !commitChangesChecked}
+            disabled={showCommitOption && hasUncommitted && !commitChangesChecked}
             className={buttonVariants({ variant: 'destructive' })}
           >
             Archive

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useCreateWorkspace } from '@/client/hooks/use-create-workspace';
 import { trpc } from '@/client/lib/trpc';
+import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
@@ -310,18 +311,19 @@ export function WorkspaceDetailContainer() {
     },
     [archiveWorkspace, workspaceId]
   );
+  const isDoneOrMergedWorkspace = isWorkspaceDoneOrMerged(workspace);
 
   const handleArchiveRequest = useCallback(() => {
-    // If PR is merged, skip confirmation and archive immediately.
+    // If workspace is done/merged, skip confirmation and archive immediately.
     // Default commitUncommitted to true so we never lose work if git status hasn't loaded yet.
-    if (workspace?.prState === 'MERGED') {
+    if (isDoneOrMergedWorkspace) {
       handleArchive(true);
       return;
     }
 
     // Otherwise show confirmation dialog
     setArchiveDialogOpen(true);
-  }, [workspace?.prState, handleArchive]);
+  }, [isDoneOrMergedWorkspace, handleArchive]);
 
   const handleBackToWorkspaces = useCallback(
     () => navigate(`/projects/${slug}/workspaces`),
@@ -479,7 +481,7 @@ export function WorkspaceDetailContainer() {
         archiveDialog={{
           open: archiveDialogOpen,
           setOpen: setArchiveDialogOpen,
-          hasUncommitted,
+          hasUncommitted: hasUncommitted && !isDoneOrMergedWorkspace,
           onConfirm: handleArchive,
         }}
       />
