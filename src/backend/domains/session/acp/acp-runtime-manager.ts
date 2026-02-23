@@ -1157,7 +1157,7 @@ export class AcpRuntimeManager {
   }
 }
 
-export function createAcpRuntimeManager(): AcpRuntimeManager {
+function createAcpRuntimeManager(): AcpRuntimeManager {
   return new AcpRuntimeManager();
 }
 

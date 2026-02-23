@@ -471,7 +471,7 @@ export class SessionDomainService extends EventEmitter {
   }
 }
 
-export function createSessionDomainService(): SessionDomainService {
+function createSessionDomainService(): SessionDomainService {
   return new SessionDomainService();
 }
 

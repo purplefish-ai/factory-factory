@@ -7,7 +7,6 @@ export type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
 export {
   AcpRuntimeManager,
   acpRuntimeManager,
-  createAcpRuntimeManager,
 } from './acp-runtime-manager';
 export {
   CodexAppServerAcpAdapter,

@@ -222,6 +222,8 @@ let activeCoalescer: EventCoalescer | null = null;
 let pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
 let runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
 let eventCollectorSessionServices: EventCollectorSessionServices = defaultSessionServices;
+let listenerSessionDomainService: EventCollectorSessionServices['sessionDomainService'] | null =
+  null;
 
 async function refreshWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
@@ -360,6 +362,19 @@ async function handleLinearIssueCompletedOnMerge(workspaceId: string): Promise<v
 export function configureEventCollector(
   services: Partial<EventCollectorSessionServices> = {}
 ): void {
+  const previousSessionDomainService =
+    listenerSessionDomainService ?? eventCollectorSessionServices.sessionDomainService;
+
+  // Guard against duplicate listeners across repeated configure calls.
+  if (pendingRequestChangedHandler) {
+    previousSessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
+    pendingRequestChangedHandler = null;
+  }
+  if (runtimeChangedHandler) {
+    previousSessionDomainService.off('runtime_changed', runtimeChangedHandler);
+    runtimeChangedHandler = null;
+  }
+
   eventCollectorSessionServices = {
     ...defaultSessionServices,
     ...services,
@@ -394,22 +409,6 @@ export function configureEventCollector(
         });
       });
   };
-
-  // Guard against duplicate listeners across repeated configure calls.
-  if (pendingRequestChangedHandler) {
-    eventCollectorSessionServices.sessionDomainService.off(
-      'pending_request_changed',
-      pendingRequestChangedHandler
-    );
-    pendingRequestChangedHandler = null;
-  }
-  if (runtimeChangedHandler) {
-    eventCollectorSessionServices.sessionDomainService.off(
-      'runtime_changed',
-      runtimeChangedHandler
-    );
-    runtimeChangedHandler = null;
-  }
 
   // 1. Workspace state changes
   workspaceStateMachine.on(WORKSPACE_STATE_CHANGED, (event: WorkspaceStateChangedEvent) => {
@@ -530,6 +529,7 @@ export function configureEventCollector(
     );
   };
   eventCollectorSessionServices.sessionDomainService.on('runtime_changed', runtimeChangedHandler);
+  listenerSessionDomainService = eventCollectorSessionServices.sessionDomainService;
 
   logger.info('Event collector configured with 10 event subscriptions');
 }
@@ -543,20 +543,18 @@ export function configureEventCollector(
  * Called during server shutdown before domain services stop.
  */
 export function stopEventCollector(): void {
+  const sessionDomainService =
+    listenerSessionDomainService ?? eventCollectorSessionServices.sessionDomainService;
+
   if (pendingRequestChangedHandler) {
-    eventCollectorSessionServices.sessionDomainService.off(
-      'pending_request_changed',
-      pendingRequestChangedHandler
-    );
+    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
     pendingRequestChangedHandler = null;
   }
   if (runtimeChangedHandler) {
-    eventCollectorSessionServices.sessionDomainService.off(
-      'runtime_changed',
-      runtimeChangedHandler
-    );
+    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
     runtimeChangedHandler = null;
   }
+  listenerSessionDomainService = null;
 
   if (activeCoalescer) {
     activeCoalescer.flushAll();

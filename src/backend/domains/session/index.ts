@@ -10,7 +10,6 @@ export {
   AcpRuntimeManager,
   acpRuntimeManager,
   CodexAppServerAcpAdapter,
-  createAcpRuntimeManager,
   runCodexAppServerAcpAdapter,
 } from './acp';
 // Bridge interfaces for orchestration layer wiring
@@ -38,4 +37,4 @@ export type {
 } from './runtime';
 
 // Core domain service (in-memory state management)
-export { createSessionDomainService, sessionDomainService } from './session-domain.service';
+export { sessionDomainService } from './session-domain.service';

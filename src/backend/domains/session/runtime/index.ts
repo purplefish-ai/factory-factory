@@ -3,7 +3,6 @@ export {
   AcpProcessHandle,
   AcpRuntimeManager,
   acpRuntimeManager,
-  createAcpRuntimeManager,
 } from '@/backend/domains/session/acp';
 // ACP runtime (Phase 19+)
 export type { AcpRuntimeEventHandlers } from '@/backend/domains/session/acp/acp-runtime-manager';
