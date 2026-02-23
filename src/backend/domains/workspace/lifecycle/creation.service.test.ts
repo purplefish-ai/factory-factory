@@ -287,7 +287,7 @@ describe('WorkspaceCreationService', () => {
         );
         expect(
           worktreeLifecycleServiceModule.worktreeLifecycleService.setInitMode
-        ).toHaveBeenCalledWith('ws-123', true, '/path/to/worktrees');
+        ).toHaveBeenCalledWith('ws-123', true);
       });
 
       it('should use branch name as workspace name when name not provided', async () => {

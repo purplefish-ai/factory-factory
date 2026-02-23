@@ -791,7 +791,7 @@ export async function initializeWorkspaceWorktree(
     const baseBranch = options?.branchName ?? project.defaultBranch;
     const useExistingBranch =
       options?.useExistingBranch ??
-      (await worktreeLifecycleService.getInitMode(workspaceId, project.worktreeBasePath)) ??
+      (await worktreeLifecycleService.getInitMode(workspaceId)) ??
       false;
 
     await gitOpsService.ensureBaseBranchExists(project, baseBranch, project.defaultBranch);
@@ -866,7 +866,7 @@ export async function initializeWorkspaceWorktree(
     await handleWorkspaceInitFailure(workspaceId, error as Error);
   } finally {
     if (worktreeCreated) {
-      await worktreeLifecycleService.clearInitMode(workspaceId, project?.worktreeBasePath);
+      await worktreeLifecycleService.clearInitMode(workspaceId);
     }
   }
 }

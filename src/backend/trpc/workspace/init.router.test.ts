@@ -101,7 +101,7 @@ describe('workspaceInitRouter', () => {
     await expect(caller.retryInit({ id: 'w1' })).resolves.toEqual({ id: 'w1', status: 'NEW' });
 
     expect(mockResetToNew).toHaveBeenCalledWith('w1', 3);
-    expect(mockSetInitMode).toHaveBeenCalledWith('w1', true, '/tmp/worktrees');
+    expect(mockSetInitMode).toHaveBeenCalledWith('w1', true);
 
     await Promise.resolve();
     expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('w1', {

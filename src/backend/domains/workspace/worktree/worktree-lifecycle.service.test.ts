@@ -1,8 +1,6 @@
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { resumeModesSchema } from '@/shared/schemas/persisted-stores.schema';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import {
   assertWorktreePathSafe,
   WorktreePathSafetyError,
@@ -27,78 +25,60 @@ describe('worktreeLifecycleService path safety', () => {
   });
 });
 
-describe('worktreeLifecycleService resume mode persistence', () => {
-  it('persists concurrent resume mode writes without dropping entries', async () => {
-    const worktreeBasePath = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-resume-'));
-    try {
-      await Promise.all([
-        worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath),
-        worktreeLifecycleService.setInitMode('workspace-2', true, worktreeBasePath),
-      ]);
-
-      const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
-      const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(content);
-      const data = resumeModesSchema.parse(parsed);
-
-      expect(data['workspace-1']).toBe(true);
-      expect(data['workspace-2']).toBe(true);
-    } finally {
-      await fs.rm(worktreeBasePath, { recursive: true, force: true });
-    }
+describe('worktreeLifecycleService init mode', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('handles malformed resume modes JSON gracefully', async () => {
-    const worktreeBasePath = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-resume-'));
-    try {
-      const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
-      await fs.writeFile(filePath, '{"invalid": "not a boolean"}', 'utf-8');
+  it('stores and clears init mode in memory', async () => {
+    const workspaceId = 'workspace-memory-mode';
 
-      await worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath);
+    await worktreeLifecycleService.setInitMode(workspaceId, true);
+    await expect(worktreeLifecycleService.getInitMode(workspaceId)).resolves.toBe(true);
 
-      const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(content);
-      const data = resumeModesSchema.parse(parsed);
+    await worktreeLifecycleService.setInitMode(workspaceId, false);
+    await expect(worktreeLifecycleService.getInitMode(workspaceId)).resolves.toBe(false);
 
-      expect(data['workspace-1']).toBe(true);
-    } finally {
-      await fs.rm(worktreeBasePath, { recursive: true, force: true });
-    }
+    await worktreeLifecycleService.clearInitMode(workspaceId);
+    vi.spyOn(workspaceAccessor, 'findById').mockResolvedValue(null);
+    await expect(worktreeLifecycleService.getInitMode(workspaceId)).resolves.toBeUndefined();
   });
 
-  it('handles corrupted JSON gracefully', async () => {
-    const worktreeBasePath = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-resume-'));
-    try {
-      const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
-      await fs.writeFile(filePath, '{invalid json', 'utf-8');
+  it('falls back to creation source when init mode is not cached', async () => {
+    const workspaceId = 'workspace-db-fallback';
 
-      await worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath);
+    await worktreeLifecycleService.clearInitMode(workspaceId);
+    const findByIdSpy = vi.spyOn(workspaceAccessor, 'findById').mockResolvedValue(
+      unsafeCoerce({
+        id: workspaceId,
+        creationSource: 'RESUME_BRANCH',
+      })
+    );
 
-      const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(content);
-      const data = resumeModesSchema.parse(parsed);
-
-      expect(data['workspace-1']).toBe(true);
-    } finally {
-      await fs.rm(worktreeBasePath, { recursive: true, force: true });
-    }
+    await expect(worktreeLifecycleService.getInitMode(workspaceId)).resolves.toBe(true);
+    expect(findByIdSpy).toHaveBeenCalledWith(workspaceId);
   });
 
-  it('handles non-object JSON gracefully', async () => {
-    const worktreeBasePath = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-resume-'));
-    try {
-      const filePath = path.join(worktreeBasePath, '.ff-resume-modes.json');
-      await fs.writeFile(filePath, '["array", "not", "object"]', 'utf-8');
+  it('returns undefined when mode is not cached and creation source is not resume branch', async () => {
+    const workspaceId = 'workspace-no-mode';
 
-      await worktreeLifecycleService.setInitMode('workspace-1', true, worktreeBasePath);
+    await worktreeLifecycleService.clearInitMode(workspaceId);
+    vi.spyOn(workspaceAccessor, 'findById').mockResolvedValue(
+      unsafeCoerce({
+        id: workspaceId,
+        creationSource: 'MANUAL',
+      })
+    );
 
-      const content = await fs.readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(content);
-      const data = resumeModesSchema.parse(parsed);
+    await expect(worktreeLifecycleService.getInitMode(workspaceId)).resolves.toBeUndefined();
+  });
 
-      expect(data['workspace-1']).toBe(true);
-    } finally {
-      await fs.rm(worktreeBasePath, { recursive: true, force: true });
-    }
+  it('ignores undefined init mode updates', async () => {
+    const workspaceId = 'workspace-undefined-mode';
+
+    await worktreeLifecycleService.setInitMode(workspaceId, undefined);
+    vi.spyOn(workspaceAccessor, 'findById').mockResolvedValue(null);
+
+    await expect(worktreeLifecycleService.getInitMode(workspaceId)).resolves.toBeUndefined();
   });
 });
