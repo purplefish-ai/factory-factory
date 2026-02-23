@@ -9,10 +9,12 @@ import {
 } from './domains/run-script';
 import {
   type AcpTraceLogger,
+  acpRuntimeManager,
   acpTraceLogger,
   chatConnectionService,
   chatEventForwarderService,
   chatMessageHandlerService,
+  createSessionService,
   type SessionFileLogger,
   sessionDomainService,
   sessionFileLogger,
@@ -30,6 +32,7 @@ import { rateLimiter } from './services/rate-limiter.service';
 import { serverInstanceService } from './services/server-instance.service';
 
 export type AppServices = {
+  acpRuntimeManager: typeof acpRuntimeManager;
   chatConnectionService: typeof chatConnectionService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
@@ -62,7 +65,20 @@ export type AppContext = {
 };
 
 export function createServices(overrides: Partial<AppServices> = {}): AppServices {
+  const resolvedAcpRuntimeManager = overrides.acpRuntimeManager ?? acpRuntimeManager;
+  const resolvedSessionDomainService = overrides.sessionDomainService ?? sessionDomainService;
+  const resolvedSessionService =
+    overrides.sessionService ??
+    (resolvedAcpRuntimeManager === acpRuntimeManager &&
+    resolvedSessionDomainService === sessionDomainService
+      ? sessionService
+      : createSessionService({
+          runtimeManager: resolvedAcpRuntimeManager,
+          sessionDomainService: resolvedSessionDomainService,
+        }));
+
   const services: AppServices = {
+    acpRuntimeManager: resolvedAcpRuntimeManager,
     chatConnectionService,
     chatEventForwarderService,
     chatMessageHandlerService,
@@ -80,8 +96,8 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     serverInstanceService,
     acpTraceLogger,
     sessionFileLogger,
-    sessionService,
-    sessionDomainService,
+    sessionService: resolvedSessionService,
+    sessionDomainService: resolvedSessionDomainService,
     startupScriptService,
     terminalService,
     workspaceStateMachine,

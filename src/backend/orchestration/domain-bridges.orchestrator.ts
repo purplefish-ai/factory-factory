@@ -37,7 +37,65 @@ import {
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
-export function configureDomainBridges(): void {
+type BridgeServices = {
+  chatEventForwarderService: typeof chatEventForwarderService;
+  chatMessageHandlerService: typeof chatMessageHandlerService;
+  fixerSessionService: typeof fixerSessionService;
+  getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
+  githubCLIService: typeof githubCLIService;
+  kanbanStateService: typeof kanbanStateService;
+  prSnapshotService: typeof prSnapshotService;
+  ratchetService: typeof ratchetService;
+  reconciliationService: typeof reconciliationService;
+  sessionDomainService: typeof sessionDomainService;
+  sessionService: typeof sessionService;
+  startupScriptService: typeof startupScriptService;
+  workspaceActivityService: typeof workspaceActivityService;
+  workspaceQueryService: typeof workspaceQueryService;
+  workspaceSnapshotStore: typeof workspaceSnapshotStore;
+  workspaceStateMachine: typeof workspaceStateMachine;
+};
+
+const defaultServices: BridgeServices = {
+  chatEventForwarderService,
+  chatMessageHandlerService,
+  fixerSessionService,
+  getWorkspaceInitPolicy,
+  githubCLIService,
+  kanbanStateService,
+  prSnapshotService,
+  ratchetService,
+  reconciliationService,
+  sessionDomainService,
+  sessionService,
+  startupScriptService,
+  workspaceActivityService,
+  workspaceQueryService,
+  workspaceSnapshotStore,
+  workspaceStateMachine,
+};
+
+export function configureDomainBridges(services: Partial<BridgeServices> = {}): void {
+  const resolved = { ...defaultServices, ...services };
+  const {
+    chatEventForwarderService,
+    chatMessageHandlerService,
+    fixerSessionService,
+    getWorkspaceInitPolicy,
+    githubCLIService,
+    kanbanStateService,
+    prSnapshotService,
+    ratchetService,
+    reconciliationService,
+    sessionDomainService,
+    sessionService,
+    startupScriptService,
+    workspaceActivityService,
+    workspaceQueryService,
+    workspaceSnapshotStore,
+    workspaceStateMachine,
+  } = resolved;
+
   // === Ratchet domain bridges ===
   const ratchetSessionBridge: RatchetSessionBridge = {
     isSessionRunning: (id) => sessionService.isSessionRunning(id),

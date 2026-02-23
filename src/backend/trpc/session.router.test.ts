@@ -47,6 +47,7 @@ function createCaller() {
   };
   const sessionDomainService = {
     clearSession: vi.fn(),
+    storeInitialMessage: mockSessionDomainService.storeInitialMessage,
   };
   const cliHealthService = {
     checkHealth: vi.fn(

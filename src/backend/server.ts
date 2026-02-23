@@ -302,9 +302,9 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           });
           process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
 
-          configureDomainBridges();
-          configureEventCollector();
-          configureSnapshotReconciliation();
+          configureDomainBridges(context.services);
+          configureEventCollector(context.services);
+          configureSnapshotReconciliation(context.services);
 
           try {
             await reconciliationService.cleanupOrphans();
