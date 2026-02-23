@@ -10,6 +10,7 @@ export {
   AcpRuntimeManager,
   acpRuntimeManager,
   CodexAppServerAcpAdapter,
+  createAcpRuntimeManager,
   runCodexAppServerAcpAdapter,
 } from './acp';
 // Bridge interfaces for orchestration layer wiring
@@ -25,7 +26,7 @@ export { sessionProviderResolverService } from './data/session-provider-resolver
 export { sessionPromptBuilder } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 // Session lifecycle (start/stop/create)
-export { sessionService } from './lifecycle/session.service';
+export { createSessionService, sessionService } from './lifecycle/session.service';
 export { AcpTraceLogger, acpTraceLogger } from './logging/acp-trace-logger.service';
 // Session file logging
 export { SessionFileLogger, sessionFileLogger } from './logging/session-file-logger.service';
@@ -37,4 +38,4 @@ export type {
 } from './runtime';
 
 // Core domain service (in-memory state management)
-export { sessionDomainService } from './session-domain.service';
+export { createSessionDomainService, sessionDomainService } from './session-domain.service';

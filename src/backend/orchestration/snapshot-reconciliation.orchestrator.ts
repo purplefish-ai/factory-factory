@@ -41,6 +41,11 @@ import {
 const RECONCILIATION_INTERVAL_MS = 60_000;
 const GIT_CONCURRENCY = 3;
 
+type SnapshotReconciliationSessionServices = {
+  chatEventForwarderService: typeof chatEventForwarderService;
+  sessionService: typeof sessionService;
+};
+
 // ---------------------------------------------------------------------------
 // Logger
 // ---------------------------------------------------------------------------
@@ -368,11 +373,19 @@ export const snapshotReconciliationService = new SnapshotReconciliationService()
  * Configure and start the snapshot reconciliation service.
  * Must be called AFTER configureDomainBridges() in server startup.
  */
-export function configureSnapshotReconciliation(): void {
+export function configureSnapshotReconciliation(
+  services: Partial<SnapshotReconciliationSessionServices> = {}
+): void {
+  const resolved = {
+    chatEventForwarderService,
+    sessionService,
+    ...services,
+  };
+
   snapshotReconciliationService.configure({
     session: {
-      getRuntimeSnapshot: (sessionId) => sessionService.getRuntimeSnapshot(sessionId),
-      getAllPendingRequests: () => chatEventForwarderService.getAllPendingRequests(),
+      getRuntimeSnapshot: (sessionId) => resolved.sessionService.getRuntimeSnapshot(sessionId),
+      getAllPendingRequests: () => resolved.chatEventForwarderService.getAllPendingRequests(),
     },
   });
   snapshotReconciliationService.start();

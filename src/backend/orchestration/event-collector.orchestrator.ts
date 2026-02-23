@@ -98,6 +98,20 @@ const logger = createLogger('event-collector');
 const DEFAULT_WINDOW_MS = 150;
 const IDLE_PR_REFRESH_COOLDOWN_MS = 30_000;
 
+type EventCollectorSessionServices = {
+  chatEventForwarderService: typeof chatEventForwarderService;
+  sessionDataService: typeof sessionDataService;
+  sessionDomainService: typeof sessionDomainService;
+  sessionService: typeof sessionService;
+};
+
+const defaultSessionServices: EventCollectorSessionServices = {
+  chatEventForwarderService,
+  sessionDataService,
+  sessionDomainService,
+  sessionService,
+};
+
 /**
  * Per-workspace coalescing buffer that accumulates SnapshotUpdateInput fields
  * and flushes them in a single store.upsert() after a debounce window.
@@ -207,6 +221,7 @@ export class EventCoalescer {
 let activeCoalescer: EventCoalescer | null = null;
 let pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
 let runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
+let eventCollectorSessionServices: EventCollectorSessionServices = defaultSessionServices;
 
 async function refreshWorkspaceSessionSummaries(
   coalescer: EventCoalescer,
@@ -218,12 +233,15 @@ async function refreshWorkspaceSessionSummaries(
     if (activeCoalescer !== coalescer) {
       return;
     }
-    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
+    const sessions =
+      await eventCollectorSessionServices.sessionDataService.findAgentSessionsByWorkspaceId(
+        workspaceId
+      );
     if (activeCoalescer !== coalescer) {
       return;
     }
     const sessionSummaries = buildWorkspaceSessionSummaries(sessions, (sessionId) =>
-      sessionService.getRuntimeSnapshot(sessionId)
+      eventCollectorSessionServices.sessionService.getRuntimeSnapshot(sessionId)
     );
     coalescer.enqueue(
       workspaceId,
@@ -253,19 +271,23 @@ async function refreshWorkspacePendingRequestType(
     if (activeCoalescer !== coalescer) {
       return;
     }
-    const session = await sessionDataService.findAgentSessionById(sessionId);
+    const session =
+      await eventCollectorSessionServices.sessionDataService.findAgentSessionById(sessionId);
     if (!session || activeCoalescer !== coalescer) {
       return;
     }
 
-    const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(session.workspaceId);
+    const sessions =
+      await eventCollectorSessionServices.sessionDataService.findAgentSessionsByWorkspaceId(
+        session.workspaceId
+      );
     if (activeCoalescer !== coalescer) {
       return;
     }
 
     const pendingRequestType = computePendingRequestType(
       sessions.map((s) => s.id),
-      chatEventForwarderService.getAllPendingRequests()
+      eventCollectorSessionServices.chatEventForwarderService.getAllPendingRequests()
     );
     coalescer.enqueue(session.workspaceId, { pendingRequestType }, source);
   } catch (error) {
@@ -285,7 +307,8 @@ async function refreshWorkspaceSessionSummariesForSession(
     if (activeCoalescer !== coalescer) {
       return;
     }
-    const session = await sessionDataService.findAgentSessionById(sessionId);
+    const session =
+      await eventCollectorSessionServices.sessionDataService.findAgentSessionById(sessionId);
     if (!session || activeCoalescer !== coalescer) {
       return;
     }
@@ -334,7 +357,13 @@ async function handleLinearIssueCompletedOnMerge(workspaceId: string): Promise<v
  *
  * Must be called AFTER configureDomainBridges() in server startup.
  */
-export function configureEventCollector(): void {
+export function configureEventCollector(
+  services: Partial<EventCollectorSessionServices> = {}
+): void {
+  eventCollectorSessionServices = {
+    ...defaultSessionServices,
+    ...services,
+  };
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
   activeCoalescer = coalescer;
   const lastIdlePrRefreshByWorkspace = new Map<string, number>();
@@ -368,11 +397,17 @@ export function configureEventCollector(): void {
 
   // Guard against duplicate listeners across repeated configure calls.
   if (pendingRequestChangedHandler) {
-    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
+    eventCollectorSessionServices.sessionDomainService.off(
+      'pending_request_changed',
+      pendingRequestChangedHandler
+    );
     pendingRequestChangedHandler = null;
   }
   if (runtimeChangedHandler) {
-    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
+    eventCollectorSessionServices.sessionDomainService.off(
+      'runtime_changed',
+      runtimeChangedHandler
+    );
     runtimeChangedHandler = null;
   }
 
@@ -483,7 +518,10 @@ export function configureEventCollector(): void {
   pendingRequestChangedHandler = ({ sessionId }) => {
     void refreshWorkspacePendingRequestType(coalescer, sessionId, 'event:pending_request_changed');
   };
-  sessionDomainService.on('pending_request_changed', pendingRequestChangedHandler);
+  eventCollectorSessionServices.sessionDomainService.on(
+    'pending_request_changed',
+    pendingRequestChangedHandler
+  );
   runtimeChangedHandler = ({ sessionId }) => {
     void refreshWorkspaceSessionSummariesForSession(
       coalescer,
@@ -491,7 +529,7 @@ export function configureEventCollector(): void {
       'event:session_runtime_changed'
     );
   };
-  sessionDomainService.on('runtime_changed', runtimeChangedHandler);
+  eventCollectorSessionServices.sessionDomainService.on('runtime_changed', runtimeChangedHandler);
 
   logger.info('Event collector configured with 10 event subscriptions');
 }
@@ -506,11 +544,17 @@ export function configureEventCollector(): void {
  */
 export function stopEventCollector(): void {
   if (pendingRequestChangedHandler) {
-    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
+    eventCollectorSessionServices.sessionDomainService.off(
+      'pending_request_changed',
+      pendingRequestChangedHandler
+    );
     pendingRequestChangedHandler = null;
   }
   if (runtimeChangedHandler) {
-    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
+    eventCollectorSessionServices.sessionDomainService.off(
+      'runtime_changed',
+      runtimeChangedHandler
+    );
     runtimeChangedHandler = null;
   }
 

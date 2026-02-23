@@ -1,11 +1,7 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import {
-  sessionDataService,
-  sessionDomainService,
-  sessionProviderResolverService,
-} from '@/backend/domains/session';
+import { sessionDataService, sessionProviderResolverService } from '@/backend/domains/session';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { SessionStatus } from '@/shared/core';
@@ -76,7 +72,7 @@ export const sessionRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { configService } = ctx.appContext.services;
+      const { configService, sessionDomainService } = ctx.appContext.services;
       // Check per-workspace session limit
       const maxSessions = configService.getMaxSessionsPerWorkspace();
       const existingSessions = await sessionDataService.findAgentSessionsByWorkspaceId(

@@ -36,7 +36,7 @@ import {
 
 const logger = createLogger('session-domain-service');
 
-class SessionDomainService extends EventEmitter {
+export class SessionDomainService extends EventEmitter {
   private readonly registry = new SessionStoreRegistry();
   private readonly publisher = new SessionPublisher();
   private readonly nowIso = () => new Date().toISOString();
@@ -471,4 +471,8 @@ class SessionDomainService extends EventEmitter {
   }
 }
 
-export const sessionDomainService = new SessionDomainService();
+export function createSessionDomainService(): SessionDomainService {
+  return new SessionDomainService();
+}
+
+export const sessionDomainService = createSessionDomainService();
