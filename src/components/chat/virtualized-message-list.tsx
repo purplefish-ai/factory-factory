@@ -50,18 +50,43 @@ interface VirtualizedMessageListProps {
 
 const STICK_TO_BOTTOM_THRESHOLD = 48;
 
+function parseCssPixels(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getVerticalSpacingFromStyles(styles: CSSStyleDeclaration): {
+  verticalPadding: number;
+  verticalBorder: number;
+} {
+  const verticalPadding = parseCssPixels(styles.paddingTop) + parseCssPixels(styles.paddingBottom);
+  const verticalBorder =
+    parseCssPixels(styles.borderTopWidth) + parseCssPixels(styles.borderBottomWidth);
+
+  return {
+    verticalPadding,
+    verticalBorder,
+  };
+}
+
+function getElementBorderBoxHeight(element: Element): number {
+  if (element instanceof HTMLElement) {
+    const styles = getComputedStyle(element);
+    const { verticalBorder } = getVerticalSpacingFromStyles(styles);
+    return element.clientHeight + verticalBorder;
+  }
+
+  return element.getBoundingClientRect().height;
+}
+
 function getObservedBorderBoxHeight(entry: ResizeObserverEntry): number {
-  const borderBoxSize = entry.borderBoxSize;
-  const firstBox = borderBoxSize[0];
+  const firstBox = entry.borderBoxSize?.[0];
   if (firstBox) {
     return firstBox.blockSize;
   }
 
   const styles = getComputedStyle(entry.target);
-  const verticalPadding =
-    Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
-  const verticalBorder =
-    Number.parseFloat(styles.borderTopWidth) + Number.parseFloat(styles.borderBottomWidth);
+  const { verticalPadding, verticalBorder } = getVerticalSpacingFromStyles(styles);
   return entry.contentRect.height + verticalPadding + verticalBorder;
 }
 
@@ -324,7 +349,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    let previousContentHeight = content.getBoundingClientRect().height;
+    let previousContentHeight = getElementBorderBoxHeight(content);
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
