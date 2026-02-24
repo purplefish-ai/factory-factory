@@ -5,6 +5,47 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.8] - 2026-02-24
+
+### Added
+
+- Add `postRun` script support to `factory-factory.json` for post-session automation hooks (#1206)
+- Add startup mode selection when creating Kanban workspaces (#1218)
+- Add Kanban new-task attachment support in workspace creation flows (#1211)
+- Add `@` file mention autocomplete in Kanban workspace creation (#1202)
+- Add build tools to Docker runner stage for native module compilation (#1201)
+- Add `CLOUD_MODE` flag for Docker tunnel control (#1199)
+
+### Changed
+
+- Unify workspace state projection and remove UI polling for more immediate status updates (#1228)
+- Improve Kanban navigation and workspace creation flow, including direct project-name navigation and sidebar creation entrypoints (#1223, #1208)
+- Update workspace and board UX with refined headers, controls, and mobile PR context chips (#1196, #1197, #1200, #1219, #1220)
+- Group terminal logs under a single Logs tab and streamline sidebar tab/grouping behavior (#1230, #1231, #1232)
+- Separate settings into General and Project sections for clearer configuration boundaries (#1215)
+- Increase pasted text attachment threshold for larger input support (#1226)
+- Consolidate `src/frontend` into `src/client` to simplify client structure and ownership (#1207)
+- Revert workspace scripts to `pnpm install/dev` defaults (#1205)
+- Switch local Docker development to `docker-compose` with file watching (#1203)
+- Skip archive warnings for done or merged workspaces to reduce unnecessary prompts (#1214)
+
+### Fixed
+
+- Fix archived workspaces lingering in sidebar and project summary views by tightening archive filtering and visibility updates (#1221, #1227)
+- Fix Workspaces sidebar navigation button highlighting on detail routes (#1222)
+- Fix duplicate workspace entries appearing in the sidebar (#1216)
+- Fix Docker-in-Docker daemon crash by adding `containerd` and vfs driver configuration (#1204)
+- Harden JSON fallback parsing with schema validation and remove unsafe runtime coercions in snapshot paths (#1234, #1233)
+
+### Refactored
+
+- Refactor Codex ACP adapter into parser, stream, and protocol modules (#1225)
+- Extract session configuration and permission services and split associated tests for better module isolation (#1224)
+- Route conversation rename behavior through the session domain barrel API (#1217)
+- Inject session runtime singletons through `AppContext` to centralize runtime wiring (#1213)
+- Refactor run script service dependency-injection wiring (#1235)
+- Remove deprecated or legacy compatibility paths (`KanbanIssue` alias, sidecar init fallback, eager CORS app context initialization) (#1209, #1210, #1212)
+
 ## [0.3.7] - 2026-02-20
 
 ### Added
