@@ -27,11 +27,14 @@ describe('ci-status', () => {
     ).toBe('FAILING');
   });
 
-  it('treats ACTION_REQUIRED and ERROR as failing in visual derivation', () => {
+  it('treats ACTION_REQUIRED, ERROR, and TIMED_OUT as failing in visual derivation', () => {
     expect(
       deriveCiVisualStateFromChecks([{ conclusion: 'ACTION_REQUIRED', status: 'COMPLETED' }])
     ).toBe('FAILING');
     expect(deriveCiVisualStateFromChecks([{ state: 'ERROR' }])).toBe('FAILING');
+    expect(deriveCiVisualStateFromChecks([{ conclusion: 'TIMED_OUT', status: 'COMPLETED' }])).toBe(
+      'FAILING'
+    );
   });
 
   it('returns RUNNING when checks are incomplete', () => {
@@ -57,6 +60,10 @@ describe('ci-status', () => {
         { status: 'COMPLETED', conclusion: 'FAILURE' },
       ])
     ).toBe('FAILURE');
+
+    expect(deriveCiStatusFromCheckRollup([{ status: 'COMPLETED', conclusion: 'TIMED_OUT' }])).toBe(
+      'FAILURE'
+    );
 
     expect(deriveCiStatusFromCheckRollup([{ status: 'IN_PROGRESS' }])).toBe('PENDING');
 

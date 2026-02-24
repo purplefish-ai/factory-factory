@@ -24,7 +24,12 @@ export function deriveCiStatusFromCheckRollup(
 
   const hasFailure = checks.some((check) => {
     const state = getEffectiveState(check);
-    return state === 'FAILURE' || state === 'ERROR' || state === 'ACTION_REQUIRED';
+    return (
+      state === 'FAILURE' ||
+      state === 'ERROR' ||
+      state === 'ACTION_REQUIRED' ||
+      state === 'TIMED_OUT'
+    );
   });
   if (hasFailure) {
     return CIStatus.FAILURE;
