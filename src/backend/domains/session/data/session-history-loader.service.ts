@@ -7,7 +7,7 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 
-const logger = createLogger('claude-session-history-loader');
+const logger = createLogger('session-history-loader');
 
 const ToolResultChunkType = z.enum([
   'tool_result',
