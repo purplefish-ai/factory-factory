@@ -4,7 +4,6 @@
  * Transitions Linear issue states in response to workspace lifecycle events.
  * Callers provide the decrypted API key — this service is encryption-unaware.
  *
- * Full integration wiring is implemented in Deliverable 5.
  */
 
 import { createLogger } from '@/backend/services/logger.service';
