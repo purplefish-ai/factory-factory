@@ -37,6 +37,28 @@ describe('web-search-parser', () => {
         },
       });
     });
+
+    it('preserves resolved action types when normalizing query fields', () => {
+      const parsed = parseWebSearchToolInput({
+        type: 'webSearch',
+        id: 'ws_3',
+        query: 'OpenAI Codex app-server command/exec method',
+        action: {
+          type: 'browse',
+        },
+      });
+
+      expect(parsed).toEqual({
+        type: 'webSearch',
+        id: 'ws_3',
+        query: 'OpenAI Codex app-server command/exec method',
+        action: {
+          type: 'browse',
+          query: 'OpenAI Codex app-server command/exec method',
+          queries: ['OpenAI Codex app-server command/exec method'],
+        },
+      });
+    });
   });
 
   describe('parseWebSearchToolResult', () => {

@@ -65,10 +65,11 @@ function normalizeSearchAction(action: WebSearchAction, query: string): WebSearc
 
   const existingQueries = dedupeQueries(action.queries ?? []);
   const queries = existingQueries.length > 0 ? existingQueries : [query];
+  const type = action.type.trim().toLowerCase() === 'other' ? 'search' : action.type;
 
   return {
     ...action,
-    type: 'search',
+    type,
     query,
     queries,
   };
