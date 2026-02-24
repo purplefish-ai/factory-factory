@@ -210,7 +210,7 @@ export function InlineWorkspaceForm({
           />
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
               <RatchetToggleButton
                 enabled={ratchetEnabled}
@@ -219,7 +219,6 @@ export function InlineWorkspaceForm({
                 onToggle={setRatchetEnabled}
                 disabled={isLoadingSettings || isCreating}
               />
-              <span className="text-xs text-muted-foreground max-[420px]:hidden">Auto-fix</span>
             </div>
             <Select
               value={provider}
@@ -251,12 +250,12 @@ export function InlineWorkspaceForm({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs"
+              className="h-7 w-7 shrink-0 px-0"
+              aria-label="Attach files"
               onClick={() => fileInputRef.current?.click()}
               disabled={isCreating}
             >
-              <Paperclip className="h-3.5 w-3.5 mr-1" />
-              Attach
+              <Paperclip className="h-3.5 w-3.5" />
             </Button>
             <input
               ref={fileInputRef}
@@ -268,7 +267,7 @@ export function InlineWorkspaceForm({
               aria-label="Attach files"
             />
           </div>
-          <div className="flex gap-2 ml-auto">
+          <div className="ml-auto flex shrink-0 gap-2">
             <Button
               variant="ghost"
               size="sm"

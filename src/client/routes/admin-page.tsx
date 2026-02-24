@@ -593,7 +593,7 @@ function RatchetSettingsSection() {
   const utils = trpc.useUtils();
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
-      toast.success('Auto-fix settings updated');
+      toast.success('Ratchet settings updated');
       utils.userSettings.get.invalidate();
     },
     onError: (error) => {
@@ -604,11 +604,11 @@ function RatchetSettingsSection() {
   const triggerRatchetCheck = trpc.admin.triggerRatchetCheck.useMutation({
     onSuccess: (result) => {
       toast.success(
-        `Auto-fix check completed: ${result.checked} checked, ${result.stateChanges} state changes, ${result.actionsTriggered} actions triggered`
+        `Ratchet check completed: ${result.checked} checked, ${result.stateChanges} state changes, ${result.actionsTriggered} actions triggered`
       );
     },
     onError: (error) => {
-      toast.error(`Failed to trigger auto-fix check: ${error.message}`);
+      toast.error(`Failed to trigger ratchet check: ${error.message}`);
     },
   });
 
@@ -618,7 +618,7 @@ function RatchetSettingsSection() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
-            Auto-Fix Pull Requests
+            Ratchet Pull Requests
           </CardTitle>
           <CardDescription>
             Automatically dispatch agents to fix CI failures and address code review comments
@@ -638,7 +638,7 @@ function RatchetSettingsSection() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <RatchetWrenchIcon enabled className="w-5 h-5" iconClassName="w-3.5 h-3.5" />
-          Auto-Fix Pull Requests
+          Ratchet Pull Requests
         </CardTitle>
         <CardDescription>
           Automatically dispatch agents to fix CI failures and address code review comments
@@ -660,7 +660,7 @@ function RatchetSettingsSection() {
           <div className="space-y-0.5">
             <Label htmlFor="ratchet-enabled">Default for new workspaces</Label>
             <p className="text-sm text-muted-foreground">
-              Enable auto-fix for workspaces created from GitHub issues
+              Enable Ratchet for workspaces created from GitHub issues
             </p>
           </div>
           <Switch
