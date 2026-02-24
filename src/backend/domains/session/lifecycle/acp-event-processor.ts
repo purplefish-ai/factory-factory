@@ -4,13 +4,13 @@ import {
   type AcpRuntimeEventHandlers,
   type AcpRuntimeManager,
 } from '@/backend/domains/session/acp';
+import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
+import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
+import type { SessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
-import { acpTraceLogger } from '../logging/acp-trace-logger.service';
-import { sessionFileLogger } from '../logging/session-file-logger.service';
-import type { SessionDomainService } from '../session-domain.service';
 import type { SessionConfigService } from './session.config.service';
 import type { SessionPermissionService } from './session.permission.service';
 
