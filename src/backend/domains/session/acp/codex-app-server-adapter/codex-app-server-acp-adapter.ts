@@ -18,7 +18,6 @@ import {
   type PromptResponse,
   RequestError,
   type SessionConfigOption,
-  type SessionConfigSelectOption,
   type SessionUpdate,
   type SetSessionConfigOptionRequest,
   type SetSessionConfigOptionResponse,
@@ -30,6 +29,7 @@ import {
   asString,
   dedupeStrings,
   extractLocations,
+  isNonEmptyString,
   isRecord,
   resolveToolCallId,
 } from './acp-adapter-utils';
@@ -56,136 +56,32 @@ import {
 } from './codex-zod';
 import { resolveCommandDisplay } from './command-metadata';
 import { handleCodexServerPermissionRequest } from './protocol-permission-handler';
+import {
+  buildConfigOptions,
+  createSandboxPolicyFromMode,
+  DEFAULT_APPROVAL_POLICIES,
+  DEFAULT_SANDBOX_MODES,
+  getCollaborationModeValues,
+  getExecutionPresets,
+  isKnownModel,
+  isReasoningEffortSupportedForModel,
+  resolveCollaborationModeLabel,
+  resolveDefaultCollaborationMode,
+  resolveDefaultModel,
+  resolveReasoningEffortForModel,
+  resolveSandboxPolicy,
+  resolveSessionModel,
+  resolveTurnCollaborationMode,
+} from './session-config-resolver';
+import { CodexAdapterSessionStateContainer } from './session-state-container';
+import { ShapeDriftReporter, type ShapeDriftWarn } from './shape-drift-reporter';
 import { CodexStreamEventHandler } from './stream-event-handler';
 
 const PENDING_TURN_ID = '__pending_turn__';
 const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
-const DEFAULT_APPROVAL_POLICIES: ApprovalPolicy[] = ['on-failure', 'on-request', 'never'];
-const DEFAULT_SANDBOX_MODES: SandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access'];
-const SHAPE_DRIFT_DETAILS_LIMIT = 700;
 
 type PromptContentBlock = PromptRequest['prompt'][number];
 type TurnStartResponse = ReturnType<typeof turnStartResponseSchema.parse>;
-
-function toShapeDriftDetails(value: unknown): string {
-  try {
-    const text = JSON.stringify(value);
-    if (typeof text !== 'string') {
-      return '[unserializable]';
-    }
-    return text.length > SHAPE_DRIFT_DETAILS_LIMIT
-      ? `${text.slice(0, SHAPE_DRIFT_DETAILS_LIMIT)}...`
-      : text;
-  } catch {
-    return '[unserializable]';
-  }
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function humanizeToken(value: string): string {
-  return value
-    .split(/[-_]/)
-    .filter((part) => part.length > 0)
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function sanitizeModeName(mode: string): string {
-  return mode
-    .split('_')
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function formatApprovalPolicyLabel(policy: ApprovalPolicy): string {
-  if (policy === 'on-request') {
-    return 'On Request';
-  }
-  if (policy === 'on-failure') {
-    return 'On Failure';
-  }
-  if (policy === 'never') {
-    return 'Never Ask';
-  }
-  if (policy === 'untrusted') {
-    return 'Untrusted';
-  }
-  return humanizeToken(policy);
-}
-
-function formatSandboxModeLabel(mode: SandboxMode): string {
-  if (mode === 'workspace-write') {
-    return 'Workspace Write';
-  }
-  if (mode === 'read-only') {
-    return 'Read-only';
-  }
-  if (mode === 'danger-full-access') {
-    return 'Full Access';
-  }
-  return humanizeToken(mode);
-}
-
-function formatExecutionPresetName(
-  approvalPolicy: ApprovalPolicy,
-  sandboxMode: SandboxMode
-): string {
-  if (approvalPolicy === 'never' && sandboxMode === 'danger-full-access') {
-    return 'YOLO (Full Access)';
-  }
-
-  return `${formatApprovalPolicyLabel(approvalPolicy)} (${formatSandboxModeLabel(sandboxMode)})`;
-}
-
-function createWorkspaceWriteSandboxPolicy(cwd: string): Record<string, unknown> {
-  return {
-    type: 'workspaceWrite',
-    writableRoots: [cwd],
-    readOnlyAccess: { type: 'fullAccess' },
-    networkAccess: true,
-    excludeTmpdirEnvVar: false,
-    excludeSlashTmp: false,
-  };
-}
-
-function createDangerFullAccessSandboxPolicy(): Record<string, unknown> {
-  return {
-    type: 'dangerFullAccess',
-  };
-}
-
-function parseSandboxModeFromPolicy(policy: unknown): SandboxMode | null {
-  if (!isRecord(policy)) {
-    return null;
-  }
-  const policyType = asString(policy.type);
-  if (policyType === 'workspaceWrite') {
-    return 'workspace-write';
-  }
-  if (policyType === 'readOnly') {
-    return 'read-only';
-  }
-  if (policyType === 'dangerFullAccess') {
-    return 'danger-full-access';
-  }
-  return null;
-}
-
-function createSandboxPolicyFromMode(mode: SandboxMode, cwd: string): Record<string, unknown> {
-  if (mode === 'danger-full-access') {
-    return createDangerFullAccessSandboxPolicy();
-  }
-  if (mode === 'read-only') {
-    return {
-      type: 'readOnly',
-      access: { type: 'fullAccess' },
-    };
-  }
-  return createWorkspaceWriteSandboxPolicy(cwd);
-}
 
 function toSessionId(threadId: string): string {
   return `sess_${threadId}`;
@@ -392,143 +288,44 @@ function parseTextFromPromptBlock(block: PromptContentBlock): string {
   return JSON.stringify(block);
 }
 
-function createCollaborationModeConfigOption(
-  currentMode: string,
-  collaborationModes: CollaborationModeEntry[]
-): SessionConfigOption {
-  const options = collaborationModes
-    .filter((entry) => isNonEmptyString(entry.mode))
-    .map((entry) => ({
-      value: entry.mode,
-      name: entry.name,
-    }));
-
-  if (!options.some((option) => option.value === currentMode)) {
-    options.unshift({ value: currentMode, name: sanitizeModeName(currentMode) });
-  }
-
-  return {
-    id: 'mode',
-    category: 'mode',
-    name: 'Collaboration Mode',
-    type: 'select',
-    currentValue: currentMode,
-    options,
-  };
-}
-
-function createModelConfigOption(
-  currentModel: string,
-  modelCatalog: CodexModelEntry[]
-): SessionConfigOption {
-  const options: SessionConfigSelectOption[] = modelCatalog.map((model) => ({
-    value: model.id,
-    name: model.displayName,
-    description: model.description,
-  }));
-
-  if (!options.some((option) => option.value === currentModel)) {
-    options.unshift({ value: currentModel, name: currentModel });
-  }
-
-  return {
-    id: 'model',
-    category: 'model',
-    name: 'Model',
-    type: 'select',
-    currentValue: currentModel,
-    options,
-  };
-}
-
-function createReasoningEffortConfigOption(
-  currentReasoningEffort: ReasoningEffort | null,
-  modelCatalog: CodexModelEntry[],
-  currentModel: string
-): SessionConfigOption | null {
-  const modelEntry = modelCatalog.find((model) => model.id === currentModel);
-  if (!modelEntry) {
-    return null;
-  }
-
-  const supportedEntries = modelEntry.supportedReasoningEfforts.filter((entry) =>
-    isNonEmptyString(entry.reasoningEffort)
-  );
-  if (supportedEntries.length === 0) {
-    return null;
-  }
-
-  const supportedByValue = new Map<string, string | undefined>();
-  for (const entry of supportedEntries) {
-    if (!supportedByValue.has(entry.reasoningEffort)) {
-      supportedByValue.set(entry.reasoningEffort, entry.description);
-    }
-  }
-
-  const supportedValues = [...supportedByValue.keys()];
-  const resolvedCurrent =
-    currentReasoningEffort && supportedByValue.has(currentReasoningEffort)
-      ? currentReasoningEffort
-      : supportedByValue.has(modelEntry.defaultReasoningEffort)
-        ? modelEntry.defaultReasoningEffort
-        : supportedValues[0];
-
-  if (!resolvedCurrent) {
-    return null;
-  }
-
-  return {
-    id: 'reasoning_effort',
-    category: 'thought_level',
-    name: 'Reasoning Effort',
-    type: 'select',
-    currentValue: resolvedCurrent,
-    options: supportedValues.map((value) => ({
-      value,
-      name: value,
-      ...(supportedByValue.get(value) ? { description: supportedByValue.get(value) } : {}),
-    })),
-  };
-}
-
-function createExecutionModeConfigOption(
-  currentPresetId: ExecutionPreset['id'],
-  presets: ExecutionPreset[]
-): SessionConfigOption {
-  return {
-    id: 'execution_mode',
-    category: 'permission',
-    name: 'Execution Mode',
-    type: 'select',
-    currentValue: currentPresetId,
-    options: presets.map((preset) => ({
-      value: preset.id,
-      name: preset.name,
-      ...(preset.description ? { description: preset.description } : {}),
-    })),
-  };
-}
-
-function toExecutionPresetId(approvalPolicy: ApprovalPolicy, sandboxMode: SandboxMode): string {
-  return JSON.stringify([approvalPolicy, sandboxMode]);
-}
-
 export class CodexAppServerAcpAdapter implements Agent {
   private readonly connection: AgentSideConnection;
   private readonly codex: CodexClient;
-  private readonly sessions = new Map<string, AdapterSession>();
-  private readonly sessionIdByThreadId = new Map<string, string>();
+  private readonly stateContainer = new CodexAdapterSessionStateContainer();
   private modelCatalog: CodexModelEntry[] = [];
   private allowedApprovalPolicies: ApprovalPolicy[] = [];
   private allowedSandboxModes: SandboxMode[] = [];
   private collaborationModes: CollaborationModeEntry[] = [];
-  private readonly mcpServersByThreadId = new Map<string, Record<string, CodexMcpServerConfig>>();
-  private appliedMcpServerConfigJson = '{}';
-  private readonly shapeDriftCounts = new Map<string, number>();
+  private readonly shapeDriftReporter: ShapeDriftReporter;
   private readonly streamEventHandler: CodexStreamEventHandler;
 
-  constructor(connection: AgentSideConnection, codexClient?: CodexClient) {
+  private get sessions(): Map<string, AdapterSession> {
+    return this.stateContainer.sessions;
+  }
+
+  private get sessionIdByThreadId(): Map<string, string> {
+    return this.stateContainer.sessionIdByThreadId;
+  }
+
+  private get mcpServersByThreadId(): Map<string, Record<string, CodexMcpServerConfig>> {
+    return this.stateContainer.mcpServersByThreadId;
+  }
+
+  private get appliedMcpServerConfigJson(): string {
+    return this.stateContainer.appliedMcpServerConfigJson;
+  }
+
+  private set appliedMcpServerConfigJson(value: string) {
+    this.stateContainer.appliedMcpServerConfigJson = value;
+  }
+
+  constructor(
+    connection: AgentSideConnection,
+    codexClient?: CodexClient,
+    options?: { shapeDriftWarn?: ShapeDriftWarn }
+  ) {
     this.connection = connection;
+    this.shapeDriftReporter = new ShapeDriftReporter(options?.shapeDriftWarn);
     this.codex =
       codexClient ??
       new CodexRpcClient({
@@ -663,7 +460,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     const reasoningEffort = this.resolveReasoningEffortForModel(model, response.reasoningEffort);
     const collaborationMode = this.resolveDefaultCollaborationMode();
 
-    const session: AdapterSession = {
+    const session = this.stateContainer.createSession({
       sessionId,
       threadId: response.thread.id,
       cwd: params.cwd,
@@ -674,25 +471,13 @@ export class CodexAppServerAcpAdapter implements Agent {
         reasoningEffort,
         collaborationMode,
       },
-      activeTurn: null,
-      toolCallsByItemId: new Map(),
-      syntheticallyCompletedToolItemIds: new Set(),
-      reasoningDeltaItemIds: new Set(),
-      planTextByItemId: new Map(),
-      planApprovalRequestedByTurnId: new Set(),
-      pendingPlanApprovalsByTurnId: new Map(),
-      pendingTurnCompletionsByTurnId: new Map(),
-      commandApprovalScopes: new Set(),
-      replayedTurnItemKeys: new Set(),
-    };
+    });
 
-    this.sessions.set(sessionId, session);
-    this.sessionIdByThreadId.set(session.threadId, sessionId);
+    this.stateContainer.registerSession(session);
     try {
       await this.applyMcpServers(session.threadId, params.mcpServers);
     } catch (error) {
-      this.sessions.delete(sessionId);
-      this.sessionIdByThreadId.delete(session.threadId);
+      this.stateContainer.deleteSession(sessionId);
       throw error;
     }
 
@@ -715,7 +500,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     const reasoningEffort = this.resolveReasoningEffortForModel(model, response.reasoningEffort);
     const collaborationMode = this.resolveDefaultCollaborationMode();
 
-    const session: AdapterSession = {
+    const session = this.stateContainer.createSession({
       sessionId: params.sessionId,
       threadId: response.thread.id,
       cwd: params.cwd,
@@ -726,20 +511,9 @@ export class CodexAppServerAcpAdapter implements Agent {
         reasoningEffort,
         collaborationMode,
       },
-      activeTurn: null,
-      toolCallsByItemId: new Map(),
-      syntheticallyCompletedToolItemIds: new Set(),
-      reasoningDeltaItemIds: new Set(),
-      planTextByItemId: new Map(),
-      planApprovalRequestedByTurnId: new Set(),
-      pendingPlanApprovalsByTurnId: new Map(),
-      pendingTurnCompletionsByTurnId: new Map(),
-      commandApprovalScopes: new Set(),
-      replayedTurnItemKeys: new Set(),
-    };
+    });
 
-    this.sessions.set(session.sessionId, session);
-    this.sessionIdByThreadId.set(session.threadId, session.sessionId);
+    this.stateContainer.registerSession(session);
     try {
       await this.applyMcpServers(session.threadId, params.mcpServers);
       await this.replayThreadHistory(session.sessionId, session.threadId);
@@ -749,8 +523,7 @@ export class CodexAppServerAcpAdapter implements Agent {
       } catch {
         // Preserve the original session load failure.
       }
-      this.sessions.delete(session.sessionId);
-      this.sessionIdByThreadId.delete(session.threadId);
+      this.stateContainer.deleteSession(session.sessionId);
       throw error;
     }
 
@@ -814,7 +587,7 @@ export class CodexAppServerAcpAdapter implements Agent {
         break;
       }
       case 'model': {
-        if (!this.modelCatalog.some((model) => model.id === params.value)) {
+        if (!isKnownModel(this.modelCatalog, params.value)) {
           throw RequestError.invalidParams({
             configId: params.configId,
             value: params.value,
@@ -829,14 +602,13 @@ export class CodexAppServerAcpAdapter implements Agent {
       }
       case 'reasoning_effort':
       case 'thought_level': {
-        const modelEntry = this.modelCatalog.find((model) => model.id === session.defaults.model);
-        const supportedReasoningEfforts = modelEntry?.supportedReasoningEfforts ?? [];
-        const supportedValues = new Set(
-          supportedReasoningEfforts
-            .map((entry) => entry.reasoningEffort)
-            .filter((effort): effort is string => isNonEmptyString(effort))
-        );
-        if (!supportedValues.has(params.value)) {
+        if (
+          !isReasoningEffortSupportedForModel(
+            this.modelCatalog,
+            session.defaults.model,
+            params.value
+          )
+        ) {
           throw RequestError.invalidParams({
             configId: params.configId,
             value: params.value,
@@ -1019,15 +791,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private resolveDefaultModel(): string {
-    const preferred = this.modelCatalog.find((model) => model.isDefault);
-    const fallback = this.modelCatalog[0]?.id;
-    if (preferred?.id) {
-      return preferred.id;
-    }
-    if (fallback) {
-      return fallback;
-    }
-    throw new Error('Codex app-server model/list returned no models');
+    return resolveDefaultModel(this.modelCatalog);
   }
 
   private buildMergedMcpServersConfig(): Record<string, CodexMcpServerConfig> {
@@ -1104,27 +868,13 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private buildConfigOptions(session: AdapterSession): SessionConfigOption[] {
-    const executionPresets = this.getExecutionPresets(session);
-    const currentExecutionPreset = this.resolveExecutionPresetId(session, executionPresets);
-    const configOptions: SessionConfigOption[] = [
-      createModelConfigOption(session.defaults.model, this.modelCatalog),
-      createCollaborationModeConfigOption(
-        session.defaults.collaborationMode,
-        this.collaborationModes
-      ),
-      createExecutionModeConfigOption(currentExecutionPreset, executionPresets),
-    ];
-
-    const reasoningOption = createReasoningEffortConfigOption(
-      session.defaults.reasoningEffort,
+    return buildConfigOptions(
+      session,
       this.modelCatalog,
-      session.defaults.model
+      this.collaborationModes,
+      this.allowedApprovalPolicies,
+      this.allowedSandboxModes
     );
-    if (reasoningOption) {
-      configOptions.push(reasoningOption);
-    }
-
-    return configOptions;
   }
 
   private requireApprovalPolicy(
@@ -1138,158 +888,38 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private resolveSessionModel(model: unknown, fallbackModel: string): string {
-    return isNonEmptyString(model) ? model : fallbackModel;
+    return resolveSessionModel(model, fallbackModel);
   }
 
   private resolveSandboxPolicy(sandbox: unknown, cwd: string): Record<string, unknown> {
-    return isRecord(sandbox) ? sandbox : createWorkspaceWriteSandboxPolicy(cwd);
+    return resolveSandboxPolicy(sandbox, cwd);
   }
 
   private resolveDefaultCollaborationMode(): string {
-    if (this.collaborationModes.length === 0) {
-      throw new Error('Codex collaborationMode/list returned no modes');
-    }
-    const preferredDefault = this.collaborationModes.find((entry) => entry.mode === 'default');
-    const firstMode = this.collaborationModes[0]?.mode;
-    if (!firstMode) {
-      throw new Error('Codex collaborationMode/list returned an invalid mode entry');
-    }
-    return preferredDefault?.mode ?? firstMode;
+    return resolveDefaultCollaborationMode(this.collaborationModes);
   }
 
   private resolveTurnCollaborationMode(session: AdapterSession): Record<string, unknown> | null {
-    const modeEntry = this.collaborationModes.find(
-      (entry) => entry.mode === session.defaults.collaborationMode
-    );
-
-    return {
-      mode: modeEntry?.mode ?? session.defaults.collaborationMode,
-      settings: {
-        model: modeEntry?.model ?? session.defaults.model,
-        reasoning_effort: modeEntry?.reasoningEffort ?? session.defaults.reasoningEffort,
-        developer_instructions: modeEntry?.developerInstructions ?? null,
-      },
-    };
+    return resolveTurnCollaborationMode(this.collaborationModes, session);
   }
 
   private resolveReasoningEffortForModel(
     modelId: string,
     candidateReasoningEffort: unknown
   ): ReasoningEffort | null {
-    const modelEntry = this.modelCatalog.find((entry) => entry.id === modelId);
-    if (!modelEntry) {
-      return null;
-    }
-
-    const supportedEntries = modelEntry.supportedReasoningEfforts.filter((entry) =>
-      isNonEmptyString(entry.reasoningEffort)
-    );
-    if (supportedEntries.length === 0) {
-      return null;
-    }
-
-    const supportedValues = dedupeStrings(supportedEntries.map((entry) => entry.reasoningEffort));
-    if (
-      isNonEmptyString(candidateReasoningEffort) &&
-      supportedValues.includes(candidateReasoningEffort)
-    ) {
-      return candidateReasoningEffort;
-    }
-    if (supportedValues.includes(modelEntry.defaultReasoningEffort)) {
-      return modelEntry.defaultReasoningEffort;
-    }
-    return supportedValues[0] ?? null;
+    return resolveReasoningEffortForModel(this.modelCatalog, modelId, candidateReasoningEffort);
   }
 
   private getCollaborationModeValues(currentMode: string): string[] {
-    const values = this.collaborationModes
-      .map((entry) => entry.mode)
-      .filter((mode): mode is string => isNonEmptyString(mode));
-    if (!values.includes(currentMode)) {
-      values.unshift(currentMode);
-    }
-    return dedupeStrings(values);
-  }
-
-  private resolveCurrentSandboxMode(session: AdapterSession): SandboxMode {
-    const currentSandboxMode = parseSandboxModeFromPolicy(session.defaults.sandboxPolicy);
-    if (currentSandboxMode) {
-      return currentSandboxMode;
-    }
-    const allowedSandboxMode = this.allowedSandboxModes[0];
-    if (allowedSandboxMode) {
-      return allowedSandboxMode;
-    }
-    throw new Error('Unable to resolve current sandbox mode for execution-mode options');
+    return getCollaborationModeValues(this.collaborationModes, currentMode);
   }
 
   private getExecutionPresets(session: AdapterSession): ExecutionPreset[] {
-    const currentSandboxMode = this.resolveCurrentSandboxMode(session);
-    const policies =
-      this.allowedApprovalPolicies.length > 0
-        ? this.allowedApprovalPolicies
-        : [session.defaults.approvalPolicy];
-    const sandboxModes =
-      this.allowedSandboxModes.length > 0 ? this.allowedSandboxModes : [currentSandboxMode];
-
-    const presets: ExecutionPreset[] = [];
-    const seen = new Set<string>();
-    const addPreset = (
-      approvalPolicy: ApprovalPolicy,
-      sandboxMode: SandboxMode,
-      description?: string
-    ): void => {
-      const id = toExecutionPresetId(approvalPolicy, sandboxMode);
-      if (seen.has(id)) {
-        return;
-      }
-      seen.add(id);
-      presets.push({
-        id,
-        name: formatExecutionPresetName(approvalPolicy, sandboxMode),
-        ...(description ? { description } : {}),
-        approvalPolicy,
-        sandboxMode,
-      });
-    };
-
-    addPreset(
-      session.defaults.approvalPolicy,
-      currentSandboxMode,
-      `Current session: ${formatExecutionPresetName(
-        session.defaults.approvalPolicy,
-        currentSandboxMode
-      )}`
-    );
-    for (const policy of policies) {
-      for (const sandboxMode of sandboxModes) {
-        addPreset(policy, sandboxMode);
-      }
-    }
-
-    return presets;
-  }
-
-  private resolveExecutionPresetId(
-    session: AdapterSession,
-    presets: ExecutionPreset[]
-  ): ExecutionPreset['id'] {
-    const currentSandboxMode = this.resolveCurrentSandboxMode(session);
-    const currentPresetId = toExecutionPresetId(
-      session.defaults.approvalPolicy,
-      currentSandboxMode
-    );
-    const fallbackPresetId = presets[0]?.id;
-    if (!fallbackPresetId) {
-      throw new Error('Execution-mode presets are unavailable for this session');
-    }
-    return presets.some((preset) => preset.id === currentPresetId)
-      ? currentPresetId
-      : fallbackPresetId;
+    return getExecutionPresets(session, this.allowedApprovalPolicies, this.allowedSandboxModes);
   }
 
   private requireSession(sessionId: string): AdapterSession {
-    const session = this.sessions.get(sessionId);
+    const session = this.stateContainer.getSession(sessionId);
     if (!session) {
       throw RequestError.invalidParams({ sessionId });
     }
@@ -1537,11 +1167,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private resolveCollaborationModeLabel(modeId: string): string {
-    const entry = this.collaborationModes.find((candidate) => candidate.mode === modeId);
-    if (entry?.name) {
-      return entry.name;
-    }
-    return sanitizeModeName(modeId);
+    return resolveCollaborationModeLabel(this.collaborationModes, modeId);
   }
 
   private buildPlanApprovalOptions(session: AdapterSession): {
@@ -1802,14 +1428,7 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private reportShapeDrift(event: string, details?: unknown): void {
-    const count = (this.shapeDriftCounts.get(event) ?? 0) + 1;
-    this.shapeDriftCounts.set(event, count);
-
-    const includeDetails = details !== undefined && (count <= 5 || count % 50 === 0);
-    const detailsSuffix = includeDetails ? ` details=${toShapeDriftDetails(details)}` : '';
-    process.stderr.write(
-      `[codex-app-server-acp] shape-drift event=${event} count=${count}${detailsSuffix}\n`
-    );
+    this.shapeDriftReporter.report(event, details);
   }
 
   private async emitSessionUpdate(sessionId: string, update: SessionUpdate): Promise<void> {
@@ -1821,9 +1440,12 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 }
 
-export function runCodexAppServerAcpAdapter(): void {
+export function runCodexAppServerAcpAdapter(options?: { shapeDriftWarn?: ShapeDriftWarn }): void {
   const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
   const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
   const stream = ndJsonStream(output, input);
-  new AgentSideConnection((connection) => new CodexAppServerAcpAdapter(connection), stream);
+  new AgentSideConnection(
+    (connection) => new CodexAppServerAcpAdapter(connection, undefined, options),
+    stream
+  );
 }

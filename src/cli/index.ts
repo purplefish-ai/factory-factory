@@ -11,7 +11,7 @@ import { config } from 'dotenv';
 import open from 'open';
 import { runCodexAppServerAcpAdapter } from '@/backend/domains/session';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
-import { getLogFilePath } from '@/backend/services/logger.service';
+import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 
@@ -706,7 +706,10 @@ program
 
 const internalProgram = program.command('internal', { hidden: true });
 internalProgram.command('codex-app-server-acp').action(() => {
-  runCodexAppServerAcpAdapter();
+  const logger = createLogger('codex-app-server-acp-adapter');
+  runCodexAppServerAcpAdapter({
+    shapeDriftWarn: (message, context) => logger.warn(message, context),
+  });
 });
 
 // ============================================================================
