@@ -4,7 +4,11 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceSessionBridge,
 } from '@/backend/domains/workspace/bridges';
-import { WorkspaceStatus } from '@/shared/core';
+import { deriveWorkspaceFlowState } from '@/backend/domains/workspace/state/flow-state';
+import { computeKanbanColumn } from '@/backend/domains/workspace/state/kanban-state';
+import { WorkspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
+import { CIStatus, PRState, RatchetState, RunScriptStatus, WorkspaceStatus } from '@/shared/core';
+import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { workspaceQueryService } from './workspace-query.service';
 
 const mockFindByProjectIdWithSessions = vi.fn();
@@ -97,12 +101,12 @@ describe('WorkspaceQueryService', () => {
 
     mockDeriveWorkspaceRuntimeState.mockImplementation((workspace: { id: string }) => {
       if (workspace.id === 'ws-1') {
-        return { sessionIds: ['s-1'], isWorking: false };
+        return { sessionIds: ['s-1'], isSessionWorking: false, isWorking: false };
       }
       if (workspace.id === 'ws-2') {
-        return { sessionIds: ['s-2'], isWorking: true };
+        return { sessionIds: ['s-2'], isSessionWorking: true, isWorking: true };
       }
-      return { sessionIds: ['s-3'], isWorking: false };
+      return { sessionIds: ['s-3'], isSessionWorking: false, isWorking: false };
     });
 
     mockGetAllPendingRequests.mockReturnValue(
@@ -137,14 +141,20 @@ describe('WorkspaceQueryService', () => {
       {
         id: 'w1',
         status: WorkspaceStatus.READY,
+        prUrl: null,
         prState: 'NONE',
+        prCiStatus: 'UNKNOWN',
+        ratchetState: 'IDLE',
         hasHadSessions: false,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
       },
       {
         id: 'w2',
         status: WorkspaceStatus.READY,
+        prUrl: 'https://github.com/o/r/pull/2',
         prState: 'OPEN',
+        prCiStatus: 'PENDING',
+        ratchetState: 'REVIEW_PENDING',
         hasHadSessions: true,
         createdAt: new Date('2026-01-02T00:00:00.000Z'),
       },
@@ -152,8 +162,10 @@ describe('WorkspaceQueryService', () => {
 
     mockDeriveWorkspaceRuntimeState.mockImplementation((workspace: { id: string }) => ({
       sessionIds: [workspace.id],
+      isSessionWorking: false,
       isWorking: false,
       flowState: {
+        isWorking: false,
         shouldAnimateRatchetButton: workspace.id === 'w2',
         phase: 'HAS_PR',
         ciObservation: 'CHECKS_UNKNOWN',
@@ -216,8 +228,10 @@ describe('WorkspaceQueryService', () => {
 
     mockDeriveWorkspaceRuntimeState.mockImplementation((workspace: { id: string }) => ({
       sessionIds: [workspace.id],
+      isSessionWorking: workspace.id === 'w2',
       isWorking: workspace.id === 'w2',
       flowState: {
+        isWorking: workspace.id === 'w2',
         shouldAnimateRatchetButton: workspace.id === 'w2',
         phase: workspace.id === 'w2' ? 'HAS_PR' : 'NO_PR',
         ciObservation: 'CHECKS_UNKNOWN',
@@ -251,6 +265,103 @@ describe('WorkspaceQueryService', () => {
     const second = await workspaceQueryService.getProjectSummaryState('p1');
     expect(second.reviewCount).toBe(1);
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
+  });
+
+  it('returns derived fields equivalent to snapshot store for identical raw inputs', async () => {
+    const workspace = {
+      id: 'w-eq',
+      projectId: 'p1',
+      name: 'Equivalent Workspace',
+      status: WorkspaceStatus.READY,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      worktreePath: null,
+      branchName: 'feature/equivalence',
+      prUrl: 'https://github.com/o/r/pull/12',
+      prNumber: 12,
+      prState: PRState.OPEN,
+      prCiStatus: CIStatus.PENDING,
+      prUpdatedAt: new Date('2026-01-01T00:10:00.000Z'),
+      ratchetEnabled: true,
+      ratchetState: RatchetState.REVIEW_PENDING,
+      runScriptStatus: RunScriptStatus.IDLE,
+      hasHadSessions: true,
+      stateComputedAt: null,
+      githubIssueNumber: null,
+      linearIssueId: null,
+      agentSessions: [{ updatedAt: new Date('2026-01-01T00:20:00.000Z') }],
+      terminalSessions: [],
+    };
+
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockFindByProjectIdWithSessions.mockResolvedValue([workspace]);
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+
+    const flowState = deriveWorkspaceFlowState({
+      prUrl: workspace.prUrl,
+      prState: workspace.prState,
+      prCiStatus: workspace.prCiStatus,
+      prUpdatedAt: workspace.prUpdatedAt,
+      ratchetEnabled: workspace.ratchetEnabled,
+      ratchetState: workspace.ratchetState,
+    });
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: ['s-eq'],
+      isSessionWorking: false,
+      isWorking: flowState.isWorking,
+      flowState,
+    });
+
+    const summary = await workspaceQueryService.getProjectSummaryState('p1');
+    const kanban = await workspaceQueryService.listWithKanbanState({ projectId: 'p1' });
+    const summaryWorkspace = summary.workspaces[0];
+
+    const snapshotStore = new WorkspaceSnapshotStore();
+    snapshotStore.configure({
+      deriveFlowState: (input) =>
+        deriveWorkspaceFlowState({
+          ...input,
+          prUpdatedAt: input.prUpdatedAt ? new Date(input.prUpdatedAt) : null,
+        }),
+      computeKanbanColumn,
+      deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+    });
+    snapshotStore.upsert(
+      workspace.id,
+      {
+        projectId: workspace.projectId,
+        name: workspace.name,
+        status: workspace.status,
+        createdAt: workspace.createdAt.toISOString(),
+        branchName: workspace.branchName,
+        prUrl: workspace.prUrl,
+        prNumber: workspace.prNumber,
+        prState: workspace.prState,
+        prCiStatus: workspace.prCiStatus,
+        prUpdatedAt: workspace.prUpdatedAt.toISOString(),
+        ratchetEnabled: workspace.ratchetEnabled,
+        ratchetState: workspace.ratchetState,
+        runScriptStatus: workspace.runScriptStatus,
+        hasHadSessions: workspace.hasHadSessions,
+        isWorking: false,
+      },
+      'test:equivalence',
+      Date.now()
+    );
+    const snapshotEntry = snapshotStore.getByWorkspaceId(workspace.id);
+
+    expect(snapshotEntry).toBeDefined();
+    expect(summaryWorkspace).toBeDefined();
+    expect(kanban[0]).toBeDefined();
+
+    expect(summaryWorkspace?.flowPhase).toBe(snapshotEntry?.flowPhase);
+    expect(summaryWorkspace?.ciObservation).toBe(snapshotEntry?.ciObservation);
+    expect(summaryWorkspace?.sidebarStatus).toEqual(snapshotEntry?.sidebarStatus);
+    expect(summaryWorkspace?.cachedKanbanColumn).toBe(snapshotEntry?.kanbanColumn);
+
+    expect(kanban[0]?.flowPhase).toBe(snapshotEntry?.flowPhase);
+    expect(kanban[0]?.ciObservation).toBe(snapshotEntry?.ciObservation);
+    expect(kanban[0]?.kanbanColumn).toBe(snapshotEntry?.kanbanColumn);
   });
 
   it('refreshFactoryConfigs updates script commands and reports per-workspace errors', async () => {
