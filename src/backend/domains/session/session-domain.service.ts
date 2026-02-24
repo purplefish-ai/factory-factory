@@ -329,6 +329,7 @@ export class SessionDomainService extends EventEmitter {
 
   markProcessExit(sessionId: string, code: number | null): void {
     const store = this.registry.getOrCreate(sessionId);
+    const pendingRequest = store.pendingInteractiveRequest;
     handleProcessExit({
       store,
       code,
@@ -340,11 +341,29 @@ export class SessionDomainService extends EventEmitter {
         this.publisher.forwardSnapshot(targetStore, options);
       },
     });
+
+    if (pendingRequest) {
+      this.emit('pending_request_changed', {
+        sessionId,
+        requestId: pendingRequest.requestId,
+        hasPending: false,
+      });
+    }
   }
 
   clearQueuedWork(sessionId: string, options?: { emitSnapshot?: boolean }): void {
     const store = this.registry.getOrCreate(sessionId);
+    const pendingRequest = store.pendingInteractiveRequest;
     const hadQueuedWork = clearQueuedWork(store);
+
+    if (pendingRequest) {
+      this.emit('pending_request_changed', {
+        sessionId,
+        requestId: pendingRequest.requestId,
+        hasPending: false,
+      });
+    }
+
     if (!hadQueuedWork || options?.emitSnapshot === false) {
       return;
     }

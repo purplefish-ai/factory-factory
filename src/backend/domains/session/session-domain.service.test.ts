@@ -117,6 +117,9 @@ describe('SessionDomainService', () => {
   });
 
   it('markProcessExit clears queue but preserves transcript for reload', () => {
+    const listener = vi.fn();
+    sessionDomainService.on('pending_request_changed', listener);
+
     sessionDomainService.enqueue('s1', {
       id: 'q1',
       text: 'queued',
@@ -128,6 +131,16 @@ describe('SessionDomainService', () => {
         planModeEnabled: false,
       },
     });
+
+    sessionDomainService.setPendingInteractiveRequest('s1', {
+      requestId: 'r1',
+      toolName: 'AskUserQuestion',
+      toolUseId: 'tu1',
+      input: { question: 'continue?' },
+      planContent: null,
+      timestamp: '2026-02-14T00:00:00.000Z',
+    });
+    listener.mockClear();
 
     sessionDomainService.injectCommittedUserMessage('s1', 'before-exit');
     sessionDomainService.markProcessExit('s1', 1);
@@ -150,6 +163,14 @@ describe('SessionDomainService', () => {
       }),
       messages: [expect.objectContaining({ source: 'user', text: 'before-exit' })],
     });
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 's1',
+        requestId: 'r1',
+        hasPending: false,
+      })
+    );
+    expect(sessionDomainService.getPendingInteractiveRequest('s1')).toBeNull();
   });
 
   it('returns transcript snapshot sorted by order', () => {
@@ -243,6 +264,9 @@ describe('SessionDomainService additional behavior', () => {
   });
 
   it('supports queue operations and manual snapshots', () => {
+    const listener = vi.fn();
+    sessionDomainService.on('pending_request_changed', listener);
+
     sessionDomainService.enqueue('s1', queuedMessage('q1', 'first'));
     sessionDomainService.enqueue('s1', queuedMessage('q2', 'second'));
 
@@ -267,8 +291,26 @@ describe('SessionDomainService additional behavior', () => {
       })
     );
 
+    sessionDomainService.setPendingInteractiveRequest('s1', {
+      requestId: 'r1',
+      toolName: 'AskUserQuestion',
+      toolUseId: 'tu1',
+      input: { question: 'continue?' },
+      planContent: null,
+      timestamp: '2026-02-14T00:00:00.000Z',
+    });
+    listener.mockClear();
+
     sessionDomainService.clearQueuedWork('s1');
     expect(sessionDomainService.getQueueLength('s1')).toBe(0);
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 's1',
+        requestId: 'r1',
+        hasPending: false,
+      })
+    );
+    expect(sessionDomainService.getPendingInteractiveRequest('s1')).toBeNull();
   });
 
   it('tracks and clears pending interactive requests with event emission', () => {
