@@ -67,10 +67,25 @@ describe('mapSnapshotEntryToServerWorkspace', () => {
     expect(result.cachedKanbanColumn).toBe('DONE');
   });
 
-  it('maps computedAt to stateComputedAt', () => {
+  it('maps computedAt to snapshotComputedAt', () => {
     const entry = makeEntry({ computedAt: '2026-02-01T12:00:00Z' });
     const result = mapSnapshotEntryToServerWorkspace(entry);
-    expect(result.stateComputedAt).toBe('2026-02-01T12:00:00Z');
+    expect(result.snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
+  });
+
+  it('preserves existing stateComputedAt when applying snapshot data', () => {
+    const entry = makeEntry({ computedAt: '2026-02-01T12:00:00Z' });
+    const result = mapSnapshotEntryToServerWorkspace(entry, {
+      stateComputedAt: '2026-01-20T00:00:00Z',
+    });
+
+    expect(result.stateComputedAt).toBe('2026-01-20T00:00:00Z');
+  });
+
+  it('defaults stateComputedAt to null when existing cache is missing', () => {
+    const entry = makeEntry({ computedAt: '2026-02-01T12:00:00Z' });
+    const result = mapSnapshotEntryToServerWorkspace(entry);
+    expect(result.stateComputedAt).toBeNull();
   });
 
   it('passes through common fields unchanged', () => {

@@ -65,6 +65,7 @@ export const WorkspaceSnapshotEntrySchema = z.object({
   workspaceId: z.string(),
   projectId: z.string(),
   version: z.number(),
+  // Snapshot-store computation timestamp (not DB workspace.stateComputedAt).
   computedAt: z.string(),
   source: z.string(),
   name: z.string(),
@@ -147,10 +148,20 @@ export type SnapshotServerMessage = z.infer<typeof SnapshotServerMessageSchema>;
  * sidebar's React Query cache. Renames fields and drops store-internal
  * fields (version, projectId, status, prUpdatedAt, hasHadSessions, source,
  * fieldTimestamps).
+ *
+ * `stateComputedAt` semantics: this value tracks the DB-backed kanban-state
+ * recompute timestamp, so snapshot updates must preserve the existing cache
+ * value. Snapshot transport recency is exposed separately as
+ * `snapshotComputedAt`.
  */
 export function mapSnapshotEntryToServerWorkspace(
   entry: WorkspaceSnapshotEntry,
-  existing?: Partial<Pick<ServerWorkspace, 'githubIssueNumber' | 'linearIssueId'>>
+  existing?: Partial<
+    Pick<
+      ServerWorkspace,
+      'githubIssueNumber' | 'linearIssueId' | 'stateComputedAt' | 'snapshotComputedAt'
+    >
+  >
 ): ServerWorkspace {
   return {
     id: entry.workspaceId,
@@ -174,7 +185,8 @@ export function mapSnapshotEntryToServerWorkspace(
     runScriptStatus: entry.runScriptStatus,
     pendingRequestType: entry.pendingRequestType,
     cachedKanbanColumn: entry.kanbanColumn,
-    stateComputedAt: entry.computedAt,
+    stateComputedAt: existing?.stateComputedAt ?? null,
+    snapshotComputedAt: entry.computedAt,
     // Preserved from cache (not in snapshot data)
     githubIssueNumber: (existing?.githubIssueNumber as number | null) ?? null,
     linearIssueId: (existing?.linearIssueId as string | null) ?? null,
