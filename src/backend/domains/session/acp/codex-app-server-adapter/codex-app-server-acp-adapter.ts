@@ -29,7 +29,6 @@ import {
   asString,
   dedupeStrings,
   extractLocations,
-  isNonEmptyString,
   isRecord,
   resolveToolCallId,
 } from './acp-adapter-utils';
@@ -46,21 +45,13 @@ import type {
   ToolCallState,
 } from './adapter-state';
 import { CodexRequestError, CodexRpcClient } from './codex-rpc-client';
-import {
-  collaborationModeListResponseSchema,
-  configRequirementsReadResponseSchema,
-  modelListResponseSchema,
-  threadResumeResponseSchema,
-  threadStartResponseSchema,
-  turnStartResponseSchema,
-} from './codex-zod';
+import { turnStartResponseSchema } from './codex-zod';
 import { resolveCommandDisplay } from './command-metadata';
 import { handleCodexServerPermissionRequest } from './protocol-permission-handler';
+import { attachCloseWatcherWithRetry } from './retry-logic';
 import {
   buildConfigOptions,
   createSandboxPolicyFromMode,
-  DEFAULT_APPROVAL_POLICIES,
-  DEFAULT_SANDBOX_MODES,
   getCollaborationModeValues,
   getExecutionPresets,
   isKnownModel,
@@ -73,23 +64,21 @@ import {
   resolveSessionModel,
   resolveTurnCollaborationMode,
 } from './session-config-resolver';
+import {
+  loadCollaborationModes,
+  loadConfigRequirements,
+  loadModelCatalog,
+  negotiateNewSession,
+  negotiateSessionResume,
+} from './session-negotiation';
 import { CodexAdapterSessionStateContainer } from './session-state-container';
 import { ShapeDriftReporter, type ShapeDriftWarn } from './shape-drift-reporter';
 import { CodexStreamEventHandler } from './stream-event-handler';
 
 const PENDING_TURN_ID = '__pending_turn__';
-const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
 
 type PromptContentBlock = PromptRequest['prompt'][number];
 type TurnStartResponse = ReturnType<typeof turnStartResponseSchema.parse>;
-
-function toSessionId(threadId: string): string {
-  return `sess_${threadId}`;
-}
-
-function toThreadId(sessionId: string): string {
-  return sessionId.startsWith('sess_') ? sessionId.slice('sess_'.length) : sessionId;
-}
 
 function isPlanLikeMode(mode: string): boolean {
   return /plan/i.test(mode);
@@ -378,33 +367,16 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   private monitorConnectionClose(): void {
-    // AgentSideConnection initializes internals after toAgent(); defer watcher
-    // attachment and retry if closed isn't readable yet.
-    let attachAttempts = 0;
-    const attachCloseWatcher = () => {
-      try {
-        void this.connection.closed
-          .finally(async () => {
-            await this.codex.stop();
-          })
-          .catch(() => {
-            // Ignore close-watcher errors and still attempt subprocess shutdown.
-          });
-      } catch {
-        attachAttempts += 1;
-        if (attachAttempts >= MAX_CLOSE_WATCHER_ATTACH_RETRIES) {
-          process.stderr.write(
-            `[codex-app-server-acp] failed to attach close watcher after ${MAX_CLOSE_WATCHER_ATTACH_RETRIES} attempts\n`
-          );
-          void this.codex.stop();
-          return;
-        }
-        const retryTimer = setTimeout(attachCloseWatcher, 0);
-        retryTimer.unref?.();
-      }
-    };
-
-    queueMicrotask(attachCloseWatcher);
+    attachCloseWatcherWithRetry({
+      getClosed: () => this.connection.closed,
+      onClose: async () => this.codex.stop(),
+      onAttachRetryLimitReached: (maxAttempts) => {
+        process.stderr.write(
+          `[codex-app-server-acp] failed to attach close watcher after ${maxAttempts} attempts\n`
+        );
+        void this.codex.stop();
+      },
+    });
   }
 
   async initialize(_params: InitializeRequest): Promise<InitializeResponse> {
@@ -421,11 +393,11 @@ export class CodexAppServerAcpAdapter implements Agent {
     });
     this.codex.notify('initialized');
 
-    const configRequirements = await this.loadConfigRequirements();
+    const configRequirements = await loadConfigRequirements({ codex: this.codex });
     this.allowedApprovalPolicies = configRequirements.allowedApprovalPolicies;
     this.allowedSandboxModes = configRequirements.allowedSandboxModes;
-    this.collaborationModes = await this.loadCollaborationModes();
-    this.modelCatalog = await this.loadModelCatalog();
+    this.collaborationModes = await loadCollaborationModes({ codex: this.codex });
+    this.modelCatalog = await loadModelCatalog({ codex: this.codex });
 
     return {
       protocolVersion: PROTOCOL_VERSION,
@@ -445,74 +417,46 @@ export class CodexAppServerAcpAdapter implements Agent {
   }
 
   async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
-    const defaultModel = this.resolveDefaultModel();
-
-    const responseRaw = await this.codex.request('thread/start', {
+    const negotiatedSession = await negotiateNewSession({
+      codex: this.codex,
       cwd: params.cwd,
-      model: defaultModel,
+      resolveDefaultModel: () => this.resolveDefaultModel(),
+      resolveSessionModel: (model, fallbackModel) => this.resolveSessionModel(model, fallbackModel),
+      resolveSandboxPolicy: (sandbox, cwd) => this.resolveSandboxPolicy(sandbox, cwd),
+      resolveReasoningEffortForModel: (modelId, candidateReasoningEffort) =>
+        this.resolveReasoningEffortForModel(modelId, candidateReasoningEffort),
+      resolveDefaultCollaborationMode: () => this.resolveDefaultCollaborationMode(),
     });
 
-    const response = threadStartResponseSchema.parse(responseRaw);
-    const sessionId = toSessionId(response.thread.id);
-    const approvalPolicy = this.requireApprovalPolicy(response.approvalPolicy, 'thread/start');
-    const model = this.resolveSessionModel(response.model, defaultModel);
-    const sandboxPolicy = this.resolveSandboxPolicy(response.sandbox, params.cwd);
-    const reasoningEffort = this.resolveReasoningEffortForModel(model, response.reasoningEffort);
-    const collaborationMode = this.resolveDefaultCollaborationMode();
-
-    const session = this.stateContainer.createSession({
-      sessionId,
-      threadId: response.thread.id,
-      cwd: params.cwd,
-      defaults: {
-        model,
-        approvalPolicy,
-        sandboxPolicy,
-        reasoningEffort,
-        collaborationMode,
-      },
-    });
-
+    const session = this.stateContainer.createSession(negotiatedSession);
     this.stateContainer.registerSession(session);
     try {
       await this.applyMcpServers(session.threadId, params.mcpServers);
     } catch (error) {
-      this.stateContainer.deleteSession(sessionId);
+      this.stateContainer.deleteSession(negotiatedSession.sessionId);
       throw error;
     }
 
     return {
-      sessionId,
+      sessionId: negotiatedSession.sessionId,
       configOptions: this.buildConfigOptions(session),
     };
   }
 
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
-    const threadId = toThreadId(params.sessionId);
-    const responseRaw = await this.codex.request('thread/resume', {
-      threadId,
-      cwd: params.cwd,
-    });
-    const response = threadResumeResponseSchema.parse(responseRaw);
-    const approvalPolicy = this.requireApprovalPolicy(response.approvalPolicy, 'thread/resume');
-    const model = this.resolveSessionModel(response.model, this.resolveDefaultModel());
-    const sandboxPolicy = this.resolveSandboxPolicy(response.sandbox, params.cwd);
-    const reasoningEffort = this.resolveReasoningEffortForModel(model, response.reasoningEffort);
-    const collaborationMode = this.resolveDefaultCollaborationMode();
-
-    const session = this.stateContainer.createSession({
+    const negotiatedSession = await negotiateSessionResume({
+      codex: this.codex,
       sessionId: params.sessionId,
-      threadId: response.thread.id,
       cwd: params.cwd,
-      defaults: {
-        model,
-        approvalPolicy,
-        sandboxPolicy,
-        reasoningEffort,
-        collaborationMode,
-      },
+      resolveDefaultModel: () => this.resolveDefaultModel(),
+      resolveSessionModel: (model, fallbackModel) => this.resolveSessionModel(model, fallbackModel),
+      resolveSandboxPolicy: (sandbox, cwd) => this.resolveSandboxPolicy(sandbox, cwd),
+      resolveReasoningEffortForModel: (modelId, candidateReasoningEffort) =>
+        this.resolveReasoningEffortForModel(modelId, candidateReasoningEffort),
+      resolveDefaultCollaborationMode: () => this.resolveDefaultCollaborationMode(),
     });
 
+    const session = this.stateContainer.createSession(negotiatedSession);
     this.stateContainer.registerSession(session);
     try {
       await this.applyMcpServers(session.threadId, params.mcpServers);
@@ -877,16 +821,6 @@ export class CodexAppServerAcpAdapter implements Agent {
     );
   }
 
-  private requireApprovalPolicy(
-    approvalPolicy: unknown,
-    source: 'thread/start' | 'thread/resume'
-  ): ApprovalPolicy {
-    if (!isNonEmptyString(approvalPolicy)) {
-      throw new Error(`Codex ${source} response did not include approvalPolicy`);
-    }
-    return approvalPolicy;
-  }
-
   private resolveSessionModel(model: unknown, fallbackModel: string): string {
     return resolveSessionModel(model, fallbackModel);
   }
@@ -924,165 +858,6 @@ export class CodexAppServerAcpAdapter implements Agent {
       throw RequestError.invalidParams({ sessionId });
     }
     return session;
-  }
-
-  private async loadConfigRequirements(): Promise<{
-    allowedApprovalPolicies: ApprovalPolicy[];
-    allowedSandboxModes: SandboxMode[];
-  }> {
-    const raw = await this.codex.request('configRequirements/read', undefined);
-    const parsed = configRequirementsReadResponseSchema.parse(raw);
-    const requirements = parsed.requirements;
-    const allowedApprovalPolicies = dedupeStrings(
-      (requirements?.allowedApprovalPolicies ?? []).filter(isNonEmptyString)
-    );
-    const allowedSandboxModes = dedupeStrings(
-      (requirements?.allowedSandboxModes ?? []).filter(
-        (mode): mode is SandboxMode =>
-          mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access'
-      )
-    );
-    const hasExplicitApprovalPolicies = Array.isArray(requirements?.allowedApprovalPolicies);
-    const hasExplicitSandboxModes = Array.isArray(requirements?.allowedSandboxModes);
-
-    return {
-      allowedApprovalPolicies:
-        allowedApprovalPolicies.length > 0
-          ? allowedApprovalPolicies
-          : hasExplicitApprovalPolicies
-            ? []
-            : DEFAULT_APPROVAL_POLICIES,
-      allowedSandboxModes:
-        allowedSandboxModes.length > 0
-          ? allowedSandboxModes
-          : hasExplicitSandboxModes
-            ? []
-            : DEFAULT_SANDBOX_MODES,
-    };
-  }
-
-  private async loadCollaborationModes(): Promise<CollaborationModeEntry[]> {
-    const entries: CollaborationModeEntry[] = [];
-    let cursor: string | null = null;
-
-    for (;;) {
-      const response = await this.requestCollaborationModeListWithRetry(cursor);
-      entries.push(
-        ...response.data.flatMap((entry) =>
-          isNonEmptyString(entry.mode)
-            ? [
-                {
-                  mode: entry.mode,
-                  name: entry.name,
-                  model: entry.model ?? null,
-                  reasoningEffort: entry.reasoning_effort ?? null,
-                  developerInstructions: entry.developer_instructions ?? null,
-                },
-              ]
-            : []
-        )
-      );
-
-      cursor = response.nextCursor ?? null;
-      if (!cursor) {
-        break;
-      }
-    }
-
-    if (entries.length === 0) {
-      throw new Error('Codex collaborationMode/list returned no modes');
-    }
-    return entries;
-  }
-
-  private async requestCollaborationModeListWithRetry(
-    cursor?: string | null,
-    maxAttempts = 3
-  ): Promise<ReturnType<typeof collaborationModeListResponseSchema.parse>> {
-    let attempt = 0;
-    let lastError: unknown;
-
-    while (attempt < maxAttempts) {
-      attempt += 1;
-      try {
-        const raw = await this.codex.request('collaborationMode/list', cursor ? { cursor } : {});
-        return collaborationModeListResponseSchema.parse(raw);
-      } catch (error) {
-        lastError = error;
-        if (
-          !(error instanceof CodexRequestError) ||
-          error.code !== -32_001 ||
-          attempt >= maxAttempts
-        ) {
-          throw error;
-        }
-
-        const delayMs = Math.round(2 ** attempt * 100 + Math.random() * 120);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-
-    throw lastError;
-  }
-
-  private async loadModelCatalog(): Promise<CodexModelEntry[]> {
-    const models: CodexModelEntry[] = [];
-    let cursor: string | null = null;
-
-    for (;;) {
-      const response = await this.requestModelListWithRetry(cursor);
-      models.push(
-        ...response.data.map((model) => ({
-          id: model.id,
-          displayName: model.displayName,
-          description: model.description,
-          defaultReasoningEffort: model.defaultReasoningEffort,
-          supportedReasoningEfforts: (model.supportedReasoningEfforts ?? [])
-            .filter((entry) => isNonEmptyString(entry.reasoningEffort))
-            .map((entry) => ({
-              reasoningEffort: entry.reasoningEffort,
-              description: entry.description,
-            })),
-          inputModalities: model.inputModalities ?? [],
-          isDefault: model.isDefault ?? false,
-        }))
-      );
-
-      cursor = response.nextCursor ?? null;
-      if (!cursor) {
-        return models;
-      }
-    }
-  }
-
-  private async requestModelListWithRetry(
-    cursor?: string | null,
-    maxAttempts = 3
-  ): Promise<ReturnType<typeof modelListResponseSchema.parse>> {
-    let attempt = 0;
-    let lastError: unknown;
-
-    while (attempt < maxAttempts) {
-      attempt += 1;
-      try {
-        const raw = await this.codex.request('model/list', cursor ? { cursor } : {});
-        return modelListResponseSchema.parse(raw);
-      } catch (error) {
-        lastError = error;
-        if (
-          !(error instanceof CodexRequestError) ||
-          error.code !== -32_001 ||
-          attempt >= maxAttempts
-        ) {
-          throw error;
-        }
-
-        const delayMs = Math.round(2 ** attempt * 100 + Math.random() * 120);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
-
-    throw lastError;
   }
 
   private async replayThreadHistory(sessionId: string, threadId: string): Promise<void> {
