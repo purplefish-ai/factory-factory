@@ -3,8 +3,8 @@ import type {
   HandlerRegistryDependencies,
 } from '@/backend/domains/session/chat/chat-message-handlers/types';
 import { buildQueuedMessage } from '@/backend/domains/session/chat/chat-message-handlers/utils';
-import { claudeSessionHistoryLoaderService } from '@/backend/domains/session/data/claude-session-history-loader.service';
 import { codexSessionHistoryLoaderService } from '@/backend/domains/session/data/codex-session-history-loader.service';
+import { claudeSessionHistoryLoaderService } from '@/backend/domains/session/data/session-history-loader.service';
 import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { buildTranscriptFromHistory } from '@/backend/domains/session/store/session-transcript';

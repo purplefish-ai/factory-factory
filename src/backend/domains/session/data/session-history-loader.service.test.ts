@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configService } from '@/backend/services/config.service';
-import { claudeSessionHistoryLoaderService } from './claude-session-history-loader.service';
+import { claudeSessionHistoryLoaderService } from './session-history-loader.service';
 
 function encodeProjectPath(cwd: string): string {
   const windowsPathMatch = cwd.match(/^([A-Za-z]):[\\/]/);
