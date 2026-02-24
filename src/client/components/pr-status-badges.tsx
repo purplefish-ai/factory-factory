@@ -22,6 +22,10 @@ function isSkippedOrCancelledCheck(check: GitHubStatusCheck): boolean {
   return check.conclusion === 'SKIPPED' || check.conclusion === 'CANCELLED';
 }
 
+function isPassedCheck(check: GitHubStatusCheck): boolean {
+  return check.status === 'COMPLETED' && check.conclusion === 'SUCCESS';
+}
+
 interface CIStatusDotProps {
   checks: GitHubStatusCheck[] | null;
   size?: 'sm' | 'md';
@@ -101,7 +105,7 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
 
   const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
   const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
-  const passed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'SUCCESS').length;
+  const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
 
   if (failed > 0) {
     return (
@@ -228,9 +232,7 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
 
   const uniqueChecks = deduplicateChecks(checks);
 
-  const passed = uniqueChecks.filter(
-    (c) => !isSkippedOrCancelledCheck(c) && getSingleCheckCiStatus(c) === 'SUCCESS'
-  ).length;
+  const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
   const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
   const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
   const skipped = uniqueChecks.filter((c) => isSkippedOrCancelledCheck(c)).length;

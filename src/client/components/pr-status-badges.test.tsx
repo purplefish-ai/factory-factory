@@ -1,8 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CIChecksSection } from './pr-status-badges';
+import { CIChecksSection, CIStatusBadge } from './pr-status-badges';
 
-function createCheck(name: string, conclusion: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'CANCELLED') {
+function createCheck(
+  name: string,
+  conclusion: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'CANCELLED' | 'NEUTRAL'
+) {
   return {
     __typename: 'CheckRun' as const,
     name,
@@ -39,5 +42,23 @@ describe('CIChecksSection', () => {
     expect(markup).toContain('1 passed');
     expect(markup).toContain('2 skipped');
     expect(markup).not.toContain('3 passed');
+  });
+});
+
+describe('CIStatusBadge', () => {
+  it('does not count skipped, cancelled, or neutral checks as passed', () => {
+    const markup = renderToStaticMarkup(
+      <CIStatusBadge
+        checks={[
+          createCheck('typecheck', 'SUCCESS'),
+          createCheck('lint', 'SKIPPED'),
+          createCheck('build', 'CANCELLED'),
+          createCheck('audit', 'NEUTRAL'),
+        ]}
+      />
+    );
+
+    expect(markup).toContain('1 passed');
+    expect(markup).not.toContain('4 passed');
   });
 });
