@@ -113,9 +113,9 @@ const ResizableHandle = ({ withHandle, className, direction, ...props }: Resizab
         // Orientation-specific styles
         isHorizontalHandle
           ? // Horizontal handle (for vertical panel groups)
-            'h-1 w-full after:absolute after:inset-x-0 after:top-1/2 after:h-4 after:-translate-y-1/2'
+            "h-1 w-full cursor-row-resize after:content-[''] after:absolute after:inset-x-0 after:top-1/2 after:h-4 after:-translate-y-1/2"
           : // Vertical handle (for horizontal panel groups) - default
-            'w-px after:absolute after:inset-y-0 after:left-1/2 after:w-4 after:-translate-x-1/2',
+            "w-px cursor-col-resize after:content-[''] after:absolute after:inset-y-0 after:left-1/2 after:w-4 after:-translate-x-1/2",
         className
       )}
       {...props}
