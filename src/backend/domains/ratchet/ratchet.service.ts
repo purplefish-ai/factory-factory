@@ -8,104 +8,54 @@
  */
 
 import { EventEmitter } from 'node:events';
-import type { SessionProvider } from '@prisma-gen/client';
 import pLimit from 'p-limit';
-import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
-import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
-  SERVICE_CACHE_TTL_MS,
   SERVICE_CONCURRENCY,
   SERVICE_INTERVAL_MS,
-  SERVICE_THRESHOLDS,
   SERVICE_TIMEOUT_MS,
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { CIStatus, RatchetState, SessionStatus } from '@/shared/core';
+import { CIStatus, RatchetState } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
-import { fixerSessionService } from './fixer-session.service';
-import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';
+import type {
+  PRStateInfo,
+  RatchetAction,
+  RatchetCheckResult,
+  RatchetDecision,
+  RatchetDecisionContext,
+  ReviewPollResult,
+  ReviewPollTracker,
+  WorkspaceRatchetResult,
+  WorkspaceWithPR,
+} from './ratchet.types';
+import {
+  getActiveRatchetSession as getActiveRatchetSessionHelper,
+  hasActiveSession as hasActiveSessionHelper,
+} from './ratchet-active-session.helpers';
+import { triggerRatchetFixer } from './ratchet-fixer-dispatch.helpers';
+import type { AuthenticatedUsernameCache } from './ratchet-pr-state.helpers';
+import {
+  buildFailedCheckDiagnostics as buildFailedCheckDiagnosticsHelper,
+  buildReviewTimestampDiagnostics as buildReviewTimestampDiagnosticsHelper,
+  buildSnapshotDiagnostics as buildSnapshotDiagnosticsHelper,
+  computeCiSnapshotKey as computeCiSnapshotKeyHelper,
+  computeLatestReviewActivityAtMs as computeLatestReviewActivityAtMsHelper,
+  determineRatchetState as determineRatchetStateHelper,
+  fetchPRState as fetchPRStateHelper,
+  getAuthenticatedUsernameCached as getAuthenticatedUsernameCachedHelper,
+  hasNewReviewActivitySinceLastDispatch as hasNewReviewActivitySinceLastDispatchHelper,
+  shouldSkipCleanPR as shouldSkipCleanPRHelper,
+} from './ratchet-pr-state.helpers';
+import {
+  handleReviewCommentPoll as handleReviewCommentPollHelper,
+  processReviewCommentPoll as processReviewCommentPollHelper,
+} from './ratchet-review-poll.helpers';
 
 const logger = createLogger('ratchet');
 
-const RATCHET_WORKFLOW = 'ratchet';
-
-/** Interval (ms) between review comment re-polls while PR is open and clean. */
-const REVIEW_POLL_INTERVAL_MS = 2 * 60_000; // 2 min
-
-interface ReviewPollTracker {
-  snapshotKey: string;
-  lastPolledAt: number;
-  pollCount: number;
-}
-
-type ReviewPollResult =
-  | { action: 'waiting' }
-  | { action: 'comments-found'; freshPrState: PRStateInfo };
-
-interface PRStateInfo {
-  ciStatus: CIStatus;
-  snapshotKey: string;
-  hasChangesRequested: boolean;
-  latestReviewActivityAtMs: number | null;
-  statusCheckRollup: Array<{
-    name?: string;
-    status?: string;
-    conclusion?: string | null;
-    detailsUrl?: string;
-  }> | null;
-  prState: string;
-  prNumber: number;
-  reviewComments: Array<{
-    author: string;
-    body: string;
-    path: string;
-    line: number | null;
-    url: string;
-  }>;
-}
-
-interface RatchetDecisionContext {
-  workspace: WorkspaceWithPR;
-  prStateInfo: PRStateInfo;
-  previousState: RatchetState;
-  newState: RatchetState;
-  finalState: RatchetState;
-  hasNewReviewActivitySinceLastDispatch: boolean;
-  hasStateChangedSinceLastDispatch: boolean;
-  isCleanPrWithNoNewReviewActivity: boolean;
-  activeRatchetSession: RatchetAction | null;
-  hasOtherActiveSession: boolean;
-}
-
-type RatchetDecision = { type: 'RETURN_ACTION'; action: RatchetAction } | { type: 'TRIGGER_FIXER' };
-
-export type RatchetAction =
-  | { type: 'WAITING'; reason: string }
-  | { type: 'FIXER_ACTIVE'; sessionId: string }
-  | { type: 'TRIGGERED_FIXER'; sessionId: string; promptSent: boolean }
-  | { type: 'DISABLED'; reason: string }
-  | { type: 'COMPLETED' }
-  | { type: 'ERROR'; error: string };
-
-export interface WorkspaceRatchetResult {
-  workspaceId: string;
-  previousState: RatchetState;
-  newState: RatchetState;
-  action: RatchetAction;
-}
-
-export interface RatchetCheckResult {
-  checked: number;
-  stateChanges: number;
-  actionsTriggered: number;
-  results: WorkspaceRatchetResult[];
-}
-
-type WorkspaceWithPR = NonNullable<
-  Awaited<ReturnType<typeof workspaceAccessor.findForRatchetById>>
->;
+export type { RatchetAction, RatchetCheckResult, WorkspaceRatchetResult } from './ratchet.types';
 
 export const RATCHET_STATE_CHANGED = 'ratchet_state_changed' as const;
 export const RATCHET_TOGGLED = 'ratchet_toggled' as const;
@@ -130,7 +80,7 @@ class RatchetService extends EventEmitter {
   private workspaceCheckTimeoutMs = SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
   private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private readonly inFlightWorkspaceChecks = new Map<string, Promise<WorkspaceRatchetResult>>();
-  private cachedAuthenticatedUsername: { value: string | null; expiresAtMs: number } | null = null;
+  private cachedAuthenticatedUsername: AuthenticatedUsernameCache | null = null;
   private readonly backoff = new RateLimitBackoff();
   private readonly reviewPollTrackers = new Map<string, ReviewPollTracker>();
 
@@ -384,14 +334,15 @@ class RatchetService extends EventEmitter {
 
     const activeSessionId = workspace.ratchetActiveSessionId;
     if (activeSessionId && this.session.isSessionRunning(activeSessionId)) {
-      await this.safeStopSession(
-        activeSessionId,
-        'Failed to stop active ratchet session while disabling ratchet',
-        {
+      try {
+        await this.session.stopSession(activeSessionId);
+      } catch (error) {
+        logger.warn('Failed to stop active ratchet session while disabling ratchet', {
           workspaceId,
           sessionId: activeSessionId,
-        }
-      );
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     await workspaceAccessor.update(workspaceId, {
@@ -633,23 +584,7 @@ class RatchetService extends EventEmitter {
     prStateInfo: PRStateInfo | null,
     decisionContext: RatchetDecisionContext | null
   ) {
-    if (!prStateInfo) {
-      return {
-        ciSnapshotKey: null,
-        snapshotComparison: null,
-      };
-    }
-
-    return {
-      ciSnapshotKey: this.computeCiSnapshotKey(prStateInfo.ciStatus, prStateInfo.statusCheckRollup),
-      snapshotComparison: {
-        previousDispatchSnapshotKey: workspace.ratchetLastCiRunId,
-        currentSnapshotKey: prStateInfo.snapshotKey,
-        changedSinceLastDispatch:
-          decisionContext?.hasStateChangedSinceLastDispatch ??
-          this.hasStateChangedSinceLastDispatch(workspace, prStateInfo),
-      },
-    };
+    return buildSnapshotDiagnosticsHelper(workspace, prStateInfo, decisionContext);
   }
 
   private buildReviewTimestampDiagnostics(
@@ -657,63 +592,11 @@ class RatchetService extends EventEmitter {
     prStateInfo: PRStateInfo | null,
     decisionContext: RatchetDecisionContext | null
   ) {
-    const latestReviewActivityAtMs = prStateInfo?.latestReviewActivityAtMs ?? null;
-    const prReviewLastCheckedAtMs = workspace.prReviewLastCheckedAt?.getTime() ?? null;
-    const deltaMs =
-      latestReviewActivityAtMs !== null && prReviewLastCheckedAtMs !== null
-        ? latestReviewActivityAtMs - prReviewLastCheckedAtMs
-        : null;
-
-    if (!prStateInfo) {
-      return {
-        latestReviewActivityAtMs,
-        reviewTimestampComparison: null,
-      };
-    }
-
-    return {
-      latestReviewActivityAtMs,
-      reviewTimestampComparison: {
-        prReviewLastCheckedAt: workspace.prReviewLastCheckedAt?.toISOString() ?? null,
-        latestReviewActivityAt:
-          latestReviewActivityAtMs !== null
-            ? new Date(latestReviewActivityAtMs).toISOString()
-            : null,
-        prReviewLastCheckedAtMs,
-        latestReviewActivityAtMs,
-        deltaMs,
-        hasNewReviewActivitySinceLastDispatch:
-          decisionContext?.hasNewReviewActivitySinceLastDispatch !== undefined
-            ? decisionContext.hasNewReviewActivitySinceLastDispatch
-            : this.hasNewReviewActivitySinceLastDispatch(workspace, prStateInfo),
-      },
-    };
+    return buildReviewTimestampDiagnosticsHelper(workspace, prStateInfo, decisionContext, logger);
   }
 
   private buildFailedCheckDiagnostics(prStateInfo: PRStateInfo | null) {
-    return (
-      prStateInfo?.statusCheckRollup
-        ?.filter((check) => {
-          const conclusion = check.conclusion?.toUpperCase();
-          return (
-            conclusion === 'FAILURE' ||
-            conclusion === 'TIMED_OUT' ||
-            conclusion === 'CANCELLED' ||
-            conclusion === 'ERROR' ||
-            conclusion === 'ACTION_REQUIRED'
-          );
-        })
-        .map((check) => {
-          const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
-          return {
-            name: check.name ?? 'unknown',
-            status: check.status ?? null,
-            conclusion: check.conclusion ?? null,
-            runId: runIdMatch?.[1] ?? null,
-            detailsUrl: check.detailsUrl ?? null,
-          };
-        }) ?? []
-    );
+    return buildFailedCheckDiagnosticsHelper(prStateInfo);
   }
 
   private describeNonRatchetingReason(
@@ -903,47 +786,14 @@ class RatchetService extends EventEmitter {
   }
 
   private shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {
-    if (prStateInfo.ciStatus !== CIStatus.SUCCESS || prStateInfo.hasChangesRequested) {
-      return false;
-    }
-
-    return !this.hasNewReviewActivitySinceLastDispatch(workspace, prStateInfo);
+    return shouldSkipCleanPRHelper(workspace, prStateInfo, logger);
   }
 
   private hasNewReviewActivitySinceLastDispatch(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo
   ): boolean {
-    if (prStateInfo.latestReviewActivityAtMs === null) {
-      return false;
-    }
-
-    if (!workspace.prReviewLastCheckedAt) {
-      return true;
-    }
-
-    if (prStateInfo.latestReviewActivityAtMs > workspace.prReviewLastCheckedAt.getTime()) {
-      return true;
-    }
-
-    // Self-heal: if the review check timestamp is stale and there's no active fixer session,
-    // treat as new activity so the ratchet re-evaluates. This catches edge cases where a
-    // dispatch was recorded but the session died through an unanticipated path.
-    if (!workspace.ratchetActiveSessionId) {
-      const age = Date.now() - workspace.prReviewLastCheckedAt.getTime();
-      if (age > SERVICE_THRESHOLDS.ratchetReviewCheckStaleMs) {
-        logger.info(
-          'Review check timestamp is stale with no active session, treating as new activity',
-          {
-            workspaceId: workspace.id,
-            checkedAtAge: Math.round(age / 1000),
-          }
-        );
-        return true;
-      }
-    }
-
-    return false;
+    return hasNewReviewActivitySinceLastDispatchHelper(workspace, prStateInfo, logger);
   }
 
   private async processReviewCommentPoll(
@@ -951,51 +801,42 @@ class RatchetService extends EventEmitter {
     prStateInfo: PRStateInfo,
     authenticatedUsername: string | null
   ): Promise<WorkspaceRatchetResult | null> {
-    const pollResult = await this.handleReviewCommentPoll(
+    return await processReviewCommentPollHelper({
       workspace,
       prStateInfo,
-      authenticatedUsername
-    );
-
-    if (pollResult.action === 'comments-found') {
-      const freshContext = await this.buildRatchetDecisionContext(
-        workspace,
-        pollResult.freshPrState
-      );
-      const freshDecision = this.decideRatchetAction(freshContext);
-      const freshAction = await this.applyRatchetDecision(freshContext, freshDecision);
-
-      await this.updateWorkspaceAfterCheck(
-        workspace,
-        pollResult.freshPrState,
-        freshAction,
-        freshContext.finalState
-      );
-      if (freshContext.previousState !== freshContext.finalState) {
+      authenticatedUsername,
+      handleReviewCommentPoll: (workspaceArg, prStateInfoArg, authenticatedUsernameArg) =>
+        this.handleReviewCommentPoll(workspaceArg, prStateInfoArg, authenticatedUsernameArg),
+      buildRatchetDecisionContext: (workspaceArg, prStateInfoArg) =>
+        this.buildRatchetDecisionContext(workspaceArg, prStateInfoArg),
+      decideRatchetAction: (context) => this.decideRatchetAction(context),
+      applyRatchetDecision: (context, decision) => this.applyRatchetDecision(context, decision),
+      updateWorkspaceAfterCheck: (workspaceArg, prStateInfoArg, action, nextState) =>
+        this.updateWorkspaceAfterCheck(workspaceArg, prStateInfoArg, action, nextState),
+      emitStateChange: (workspaceArg, fromState, toState) => {
         this.emit(RATCHET_STATE_CHANGED, {
-          workspaceId: workspace.id,
-          fromState: freshContext.previousState,
-          toState: freshContext.finalState,
+          workspaceId: workspaceArg.id,
+          fromState,
+          toState,
         } satisfies RatchetStateChangedEvent);
-      }
-      this.logWorkspaceRatchetingDecision(
-        workspace,
-        freshContext.previousState,
-        freshContext.finalState,
-        freshAction,
-        pollResult.freshPrState,
-        freshContext
-      );
-
-      return {
-        workspaceId: workspace.id,
-        previousState: freshContext.previousState,
-        newState: freshContext.finalState,
-        action: freshAction,
-      };
-    }
-
-    return null;
+      },
+      logWorkspaceRatchetingDecision: (
+        workspaceArg,
+        previousState,
+        finalState,
+        action,
+        prStateInfoArg,
+        context
+      ) =>
+        this.logWorkspaceRatchetingDecision(
+          workspaceArg,
+          previousState,
+          finalState,
+          action,
+          prStateInfoArg,
+          context
+        ),
+    });
   }
 
   private async handleReviewCommentPoll(
@@ -1003,62 +844,18 @@ class RatchetService extends EventEmitter {
     prStateInfo: PRStateInfo,
     authenticatedUsername: string | null
   ): Promise<ReviewPollResult> {
-    const existing = this.reviewPollTrackers.get(workspace.id);
-
-    if (!existing) {
-      this.reviewPollTrackers.set(workspace.id, {
-        snapshotKey: prStateInfo.snapshotKey,
-        lastPolledAt: Date.now(),
-        pollCount: 0,
-      });
-      logger.info('Started review comment polling', {
-        workspaceId: workspace.id,
-        snapshotKey: prStateInfo.snapshotKey,
-      });
-      return { action: 'waiting' };
-    }
-
-    if (existing.snapshotKey !== prStateInfo.snapshotKey) {
-      this.reviewPollTrackers.set(workspace.id, {
-        snapshotKey: prStateInfo.snapshotKey,
-        lastPolledAt: Date.now(),
-        pollCount: 0,
-      });
-      logger.info('Reset review comment polling (new snapshot)', {
-        workspaceId: workspace.id,
-        snapshotKey: prStateInfo.snapshotKey,
-      });
-      return { action: 'waiting' };
-    }
-
-    if (Date.now() - existing.lastPolledAt < REVIEW_POLL_INTERVAL_MS) {
-      return { action: 'waiting' };
-    }
-
-    if (this.isShuttingDown) {
-      return { action: 'waiting' };
-    }
-
-    const freshPrState = await this.fetchPRState(workspace, authenticatedUsername);
-
-    if (!freshPrState) {
-      return { action: 'waiting' };
-    }
-
-    existing.pollCount++;
-    existing.lastPolledAt = Date.now();
-
-    if (!this.shouldSkipCleanPR(workspace, freshPrState)) {
-      this.reviewPollTrackers.delete(workspace.id);
-      logger.info('Review comments detected during poll', {
-        workspaceId: workspace.id,
-        pollNumber: existing.pollCount,
-        latestReviewActivityAtMs: freshPrState.latestReviewActivityAtMs,
-      });
-      return { action: 'comments-found', freshPrState };
-    }
-
-    return { action: 'waiting' };
+    return await handleReviewCommentPollHelper({
+      workspace,
+      prStateInfo,
+      authenticatedUsername,
+      reviewPollTrackers: this.reviewPollTrackers,
+      isShuttingDown: this.isShuttingDown,
+      fetchPRState: (workspaceArg, authenticatedUsernameArg) =>
+        this.fetchPRState(workspaceArg, authenticatedUsernameArg),
+      shouldSkipCleanPR: (workspaceArg, prStateInfoArg) =>
+        this.shouldSkipCleanPR(workspaceArg, prStateInfoArg),
+      logger,
+    });
   }
 
   private hasStateChangedSinceLastDispatch(
@@ -1093,223 +890,50 @@ class RatchetService extends EventEmitter {
   }
 
   private async getActiveRatchetSession(workspace: WorkspaceWithPR): Promise<RatchetAction | null> {
-    if (!workspace.ratchetActiveSessionId) {
-      return null;
-    }
-
-    const resolvedRatchetProvider = await ratchetProviderResolverService.resolveRatchetProvider({
-      workspaceId: workspace.id,
+    return await getActiveRatchetSessionHelper({
       workspace,
+      sessionBridge: this.session,
+      snapshotBridge: this.snapshot,
+      logger,
     });
-    const session = await agentSessionAccessor.findById(workspace.ratchetActiveSessionId);
-    if (!session) {
-      await this.clearFailedRatchetDispatch(workspace, 'session not found in database');
-      return null;
-    }
-
-    if (session.provider !== resolvedRatchetProvider) {
-      await this.clearFailedRatchetDispatch(
-        workspace,
-        `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`
-      );
-      await this.stopSessionForProviderMismatch(
-        workspace.id,
-        session.id,
-        resolvedRatchetProvider,
-        session.provider
-      );
-      return null;
-    }
-
-    if (session.status !== SessionStatus.RUNNING) {
-      await this.clearFailedRatchetDispatch(workspace, `session status is ${session.status}`);
-      return null;
-    }
-
-    if (!this.session.isSessionRunning(session.id)) {
-      await this.clearFailedRatchetDispatch(workspace, 'session process is not running');
-      return null;
-    }
-
-    // Ratchet session has completed its current unit of work: close it to avoid lingering idle agents.
-    if (!this.session.isSessionWorking(session.id)) {
-      await this.clearActiveRatchetSession(workspace.id);
-      await this.stopCompletedRatchetSession(workspace.id, session.id);
-      return null;
-    }
-
-    return { type: 'FIXER_ACTIVE', sessionId: workspace.ratchetActiveSessionId };
-  }
-
-  /**
-   * Clear a ratchet session that died without completing its work.
-   * Resets dispatch tracking so the next poll cycle re-evaluates and re-dispatches.
-   */
-  private async clearFailedRatchetDispatch(
-    workspace: WorkspaceWithPR,
-    reason: string
-  ): Promise<void> {
-    logger.info('Clearing failed ratchet dispatch, resetting state for retry', {
-      workspaceId: workspace.id,
-      sessionId: workspace.ratchetActiveSessionId,
-      reason,
-    });
-    await workspaceAccessor.update(workspace.id, {
-      ratchetActiveSessionId: null,
-      ratchetLastCiRunId: null,
-    });
-    await this.snapshot.recordReviewCheck(workspace.id, null);
   }
 
   private async hasActiveSession(workspaceId: string): Promise<boolean> {
-    const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
-    return sessions.some((session) => this.session.isSessionWorking(session.id));
-  }
-
-  private async clearActiveRatchetSession(workspaceId: string): Promise<void> {
-    await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: null });
-  }
-
-  private async safeStopSession(
-    sessionId: string,
-    warningMessage: string,
-    warningContext: Record<string, unknown>
-  ): Promise<void> {
-    try {
-      await this.session.stopSession(sessionId);
-    } catch (error) {
-      logger.warn(warningMessage, {
-        ...warningContext,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  private async stopCompletedRatchetSession(workspaceId: string, sessionId: string): Promise<void> {
-    await this.safeStopSession(sessionId, 'Failed to stop completed ratchet session', {
-      workspaceId,
-      sessionId,
-    });
-  }
-
-  private async stopSessionForProviderMismatch(
-    workspaceId: string,
-    sessionId: string,
-    expectedProvider: SessionProvider,
-    actualProvider: SessionProvider
-  ): Promise<void> {
-    await this.safeStopSession(sessionId, 'Failed to stop mismatched ratchet provider session', {
-      workspaceId,
-      sessionId,
-      expectedProvider,
-      actualProvider,
-    });
-  }
-
-  private resolveRatchetPrContext(
-    workspace: WorkspaceWithPR
-  ): { repo: string; prNumber: number } | null {
-    const prInfo = this.github.extractPRInfo(workspace.prUrl);
-    if (!prInfo) {
-      logger.warn('Could not parse PR URL', { prUrl: workspace.prUrl });
-      return null;
-    }
-
-    const prNumber = workspace.prNumber ?? prInfo.number;
-    if (!prNumber) {
-      logger.warn('Could not determine PR number for ratchet check', {
-        workspaceId: workspace.id,
-        prUrl: workspace.prUrl,
-      });
-      return null;
-    }
-
-    return {
-      repo: `${prInfo.owner}/${prInfo.repo}`,
-      prNumber,
-    };
+    return await hasActiveSessionHelper(workspaceId, this.session);
   }
 
   private async fetchPRState(
     workspace: WorkspaceWithPR,
     authenticatedUsername: string | null
   ): Promise<PRStateInfo | null> {
-    const prContext = this.resolveRatchetPrContext(workspace);
-    if (!prContext) {
-      return null;
-    }
-
-    try {
-      const [prDetails, reviewComments] = await Promise.all([
-        this.github.getPRFullDetails(prContext.repo, prContext.prNumber),
-        this.github.getReviewComments(prContext.repo, prContext.prNumber),
-      ]);
-
-      const statusCheckRollup =
-        prDetails.statusCheckRollup?.map((check) => ({
-          name: check.name,
-          status: check.status,
-          conclusion: check.conclusion ?? undefined,
-          detailsUrl: check.detailsUrl,
-        })) ?? null;
-
-      const ciStatus = this.github.computeCIStatus(statusCheckRollup);
-
-      const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
-      const latestReviewActivityAtMs = this.computeLatestReviewActivityAtMs(
-        prDetails,
-        reviewComments,
-        authenticatedUsername
-      );
-      const snapshotKey = this.computeDispatchSnapshotKey(
+    return await fetchPRStateHelper({
+      workspace,
+      authenticatedUsername,
+      github: this.github,
+      backoff: this.backoff,
+      logger,
+      computeLatestReviewActivityAtMs: (prDetails, reviewComments, authenticatedUsernameArg) =>
+        this.computeLatestReviewActivityAtMs(prDetails, reviewComments, authenticatedUsernameArg),
+      computeDispatchSnapshotKey: (
         ciStatus,
         hasChangesRequested,
         latestReviewActivityAtMs,
-        statusCheckRollup
-      );
-
-      const filteredReviewComments = reviewComments
-        .filter((c) => !this.isIgnoredReviewAuthor(c.author.login, authenticatedUsername))
-        .map((c) => ({
-          author: c.author.login,
-          body: c.body,
-          path: c.path,
-          line: c.line,
-          url: c.url,
-        }));
-
-      return {
-        ciStatus,
-        snapshotKey,
-        hasChangesRequested,
-        latestReviewActivityAtMs,
-        statusCheckRollup,
-        prState: prDetails.state,
-        prNumber: prDetails.number,
-        reviewComments: filteredReviewComments,
-      };
-    } catch (error) {
-      this.backoff.handleError(
-        error,
-        logger,
-        'Ratchet',
-        { workspaceId: workspace.id, prUrl: workspace.prUrl },
-        SERVICE_INTERVAL_MS.ratchetPoll
-      );
-      return null;
-    }
+        statusChecks
+      ) =>
+        this.computeDispatchSnapshotKey(
+          ciStatus,
+          hasChangesRequested,
+          latestReviewActivityAtMs,
+          statusChecks
+        ),
+    });
   }
 
   private computeDispatchSnapshotKey(
     ciStatus: CIStatus,
     hasChangesRequested: boolean,
     latestReviewActivityAtMs: number | null,
-    statusChecks: Array<{
-      name?: string;
-      status?: string;
-      conclusion?: string | null;
-      detailsUrl?: string;
-    }> | null
+    statusChecks: PRStateInfo['statusCheckRollup']
   ): string {
     const ciKey = this.computeCiSnapshotKey(ciStatus, statusChecks);
     const reviewKey = `${hasChangesRequested ? 'changes-requested' : 'no-changes-requested'}:${
@@ -1320,44 +944,9 @@ class RatchetService extends EventEmitter {
 
   private computeCiSnapshotKey(
     ciStatus: CIStatus,
-    statusChecks: Array<{
-      name?: string;
-      status?: string;
-      conclusion?: string | null;
-      detailsUrl?: string;
-    }> | null
+    statusChecks: PRStateInfo['statusCheckRollup']
   ): string {
-    if (ciStatus !== CIStatus.FAILURE) {
-      return `ci:${ciStatus}`;
-    }
-
-    const failedChecks =
-      statusChecks?.filter((check) => {
-        const conclusion = check.conclusion?.toUpperCase();
-        return (
-          conclusion === 'FAILURE' ||
-          conclusion === 'TIMED_OUT' ||
-          conclusion === 'CANCELLED' ||
-          conclusion === 'ERROR' ||
-          conclusion === 'ACTION_REQUIRED'
-        );
-      }) ?? [];
-
-    if (failedChecks.length === 0) {
-      return 'ci:FAILURE:unknown';
-    }
-
-    const signature = failedChecks
-      .map((check) => {
-        const runIdMatch = check.detailsUrl?.match(/\/actions\/runs\/(\d+)/);
-        const runId = runIdMatch?.[1];
-        const stableCheckIdentity = runId ?? check.detailsUrl ?? 'no-run-id-or-details-url';
-        return `${check.name ?? 'unknown'}:${check.conclusion ?? 'UNKNOWN'}:${stableCheckIdentity}`;
-      })
-      .sort()
-      .join('|');
-
-    return `ci:FAILURE:${signature}`;
+    return computeCiSnapshotKeyHelper(ciStatus, statusChecks);
   }
 
   private computeLatestReviewActivityAtMs(
@@ -1368,145 +957,32 @@ class RatchetService extends EventEmitter {
     reviewComments: Array<{ updatedAt: string; author: { login: string } }>,
     authenticatedUsername: string | null
   ): number | null {
-    const entries = [
-      ...prDetails.reviews.map((review) => ({
-        authorLogin: review.author.login,
-        timestamp: review.submittedAt,
-      })),
-      ...prDetails.comments.map((comment) => ({
-        authorLogin: comment.author.login,
-        timestamp: comment.updatedAt,
-      })),
-      ...reviewComments.map((reviewComment) => ({
-        authorLogin: reviewComment.author.login,
-        timestamp: reviewComment.updatedAt,
-      })),
-    ];
-
-    const timestamps = entries
-      .filter(
-        (entry): entry is { authorLogin: string; timestamp: string } =>
-          entry.timestamp !== null &&
-          !this.isIgnoredReviewAuthor(entry.authorLogin, authenticatedUsername)
-      )
-      .map((entry) => Date.parse(entry.timestamp))
-      .filter((timestamp) => Number.isFinite(timestamp));
-
-    return timestamps.length > 0 ? Math.max(...timestamps) : null;
-  }
-
-  private isIgnoredReviewAuthor(
-    authorLogin: string,
-    authenticatedUsername: string | null
-  ): boolean {
-    if (!authenticatedUsername) {
-      return false;
-    }
-    return authorLogin === authenticatedUsername;
+    return computeLatestReviewActivityAtMsHelper(prDetails, reviewComments, authenticatedUsername);
   }
 
   private async getAuthenticatedUsernameCached(): Promise<string | null> {
-    const nowMs = Date.now();
-    if (this.cachedAuthenticatedUsername && this.cachedAuthenticatedUsername.expiresAtMs > nowMs) {
-      return this.cachedAuthenticatedUsername.value;
-    }
-
-    const username = await this.github.getAuthenticatedUsername();
-    this.cachedAuthenticatedUsername = {
-      value: username,
-      expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
-    };
+    const { username, cache } = await getAuthenticatedUsernameCachedHelper({
+      cachedValue: this.cachedAuthenticatedUsername,
+      github: this.github,
+    });
+    this.cachedAuthenticatedUsername = cache;
     return username;
   }
 
   private determineRatchetState(pr: PRStateInfo): RatchetState {
-    if (pr.prState === 'MERGED') {
-      return RatchetState.MERGED;
-    }
-
-    if (pr.prState !== 'OPEN') {
-      return RatchetState.IDLE;
-    }
-
-    if (pr.ciStatus === CIStatus.PENDING || pr.ciStatus === CIStatus.UNKNOWN) {
-      return RatchetState.CI_RUNNING;
-    }
-
-    if (pr.ciStatus === CIStatus.FAILURE) {
-      return RatchetState.CI_FAILED;
-    }
-
-    if (pr.hasChangesRequested) {
-      return RatchetState.REVIEW_PENDING;
-    }
-
-    return RatchetState.READY;
+    return determineRatchetStateHelper(pr);
   }
 
   private async triggerFixer(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo
   ): Promise<RatchetAction> {
-    try {
-      const result = await fixerSessionService.acquireAndDispatch({
-        workspaceId: workspace.id,
-        workflow: RATCHET_WORKFLOW,
-        sessionName: 'Ratchet',
-        runningIdleAction: 'restart',
-        dispatchMode: 'start_empty_and_send',
-        buildPrompt: () =>
-          buildRatchetDispatchPrompt(
-            workspace.prUrl,
-            prStateInfo.prNumber,
-            prStateInfo.reviewComments
-          ),
-        beforeStart: ({ sessionId, prompt }) => {
-          this.session.injectCommittedUserMessage(sessionId, prompt);
-        },
-      });
-
-      if (result.status === 'started') {
-        const promptSent = result.promptSent ?? true;
-        if (!promptSent) {
-          logger.warn('Ratchet session started but prompt delivery failed', {
-            workspaceId: workspace.id,
-            sessionId: result.sessionId,
-          });
-          await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
-          if (this.session.isSessionRunning(result.sessionId)) {
-            await this.session.stopSession(result.sessionId);
-          }
-          return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
-        }
-
-        await workspaceAccessor.update(workspace.id, {
-          ratchetActiveSessionId: result.sessionId,
-        });
-
-        return {
-          type: 'TRIGGERED_FIXER',
-          sessionId: result.sessionId,
-          promptSent,
-        };
-      }
-
-      if (result.status === 'already_active') {
-        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: result.sessionId });
-        return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
-      }
-
-      if (result.status === 'skipped') {
-        return { type: 'ERROR', error: result.reason };
-      }
-
-      return { type: 'ERROR', error: result.error };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to trigger ratchet fixer', error as Error, {
-        workspaceId: workspace.id,
-      });
-      return { type: 'ERROR', error: errorMessage };
-    }
+    return await triggerRatchetFixer({
+      workspace,
+      prStateInfo,
+      sessionBridge: this.session,
+      logger,
+    });
   }
 }
 
