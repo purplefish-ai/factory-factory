@@ -36,6 +36,21 @@ import { WorkspaceStatusIcon } from './workspace-status-icon';
 
 type NavigationData = ReturnType<typeof useAppNavigationData>;
 
+function isWorkspacesBoardPath(pathname: string): boolean {
+  return /^\/projects\/[^/]+\/workspaces\/?$/.test(pathname);
+}
+
+export function shouldAutoCloseSidebarOnNavigation(
+  previousPathname: string,
+  currentPathname: string
+): boolean {
+  return (
+    currentPathname !== previousPathname &&
+    isWorkspacesBoardPath(currentPathname) &&
+    !isWorkspacesBoardPath(previousPathname)
+  );
+}
+
 // =============================================================================
 // Workspace item component
 // =============================================================================
@@ -367,20 +382,25 @@ function SidebarInner({
 export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { pathname } = useLocation();
   const prevPathnameRef = useRef(pathname);
-  const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
+  const { open, openMobile, setOpen, setOpenMobile, isMobile } = useSidebar();
   const { handleCreate, isCreating: isCreatingWorkspace } = useCreateWorkspace(
     navData.selectedProjectId,
     navData.selectedProjectSlug,
     navData.serverWorkspaces?.map((workspace) => workspace.name)
   );
 
-  // Auto-close mobile sidebar on route navigation
+  // Auto-close sidebar only when navigating into the Workspaces board route.
   useEffect(() => {
-    if (pathname !== prevPathnameRef.current) {
+    const prevPathname = prevPathnameRef.current;
+    const navigatedToWorkspacesBoard = shouldAutoCloseSidebarOnNavigation(prevPathname, pathname);
+
+    if (navigatedToWorkspacesBoard) {
+      setOpen(false);
       setOpenMobile(false);
     }
+
     prevPathnameRef.current = pathname;
-  }, [pathname, setOpenMobile]);
+  }, [pathname, setOpen, setOpenMobile]);
 
   // Fetch issues for the Todo section
   const { issues } = useSidebarIssues(
