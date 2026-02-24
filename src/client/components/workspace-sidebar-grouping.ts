@@ -19,22 +19,14 @@ function byNewest(a: ServerWorkspace, b: ServerWorkspace): number {
   return getCreatedAtMs(b.createdAt) - getCreatedAtMs(a.createdAt);
 }
 
-function isInWorkingSection(workspace: ServerWorkspace): boolean {
-  if (workspace.cachedKanbanColumn === 'DONE') {
-    return false;
-  }
-
-  return workspace.cachedKanbanColumn === 'WORKING' || workspace.isWorking;
-}
-
 export function groupWorkspacesForSidebar(workspaces: ServerWorkspace[]): SidebarWorkspaceGroups {
   return {
     waiting: workspaces
-      .filter(
-        (workspace) => workspace.cachedKanbanColumn === 'WAITING' && !isInWorkingSection(workspace)
-      )
+      .filter((workspace) => workspace.cachedKanbanColumn === 'WAITING')
       .sort(byNewest),
-    working: workspaces.filter((workspace) => isInWorkingSection(workspace)).sort(byNewest),
+    working: workspaces
+      .filter((workspace) => workspace.cachedKanbanColumn === 'WORKING')
+      .sort(byNewest),
     done: workspaces.filter((workspace) => workspace.cachedKanbanColumn === 'DONE').sort(byNewest),
   };
 }
