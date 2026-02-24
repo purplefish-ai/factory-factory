@@ -364,12 +364,6 @@ function checkSourceText(relPath, sourceText, violations) {
   visit(sourceFile);
 }
 
-export function collectSourceViolations(relPath, sourceText) {
-  const violations = [];
-  checkSourceText(relPath, sourceText, violations);
-  return violations;
-}
-
 function checkFile(filePath, rootDir, violations) {
   const relPath = path.relative(rootDir, filePath).replaceAll(path.sep, '/');
   if (isTestPath(relPath)) {
@@ -393,10 +387,6 @@ export function collectSingleWriterViolations({
   }
 
   return violations;
-}
-
-export function collectWorkspaceMutatorMethodsForTest(sourceText, filePath = WORKSPACE_ACCESSOR_REL_PATH) {
-  return collectWorkspaceMutatingMethods(sourceText, filePath);
 }
 
 function reportViolations(violations) {
