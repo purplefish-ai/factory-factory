@@ -2,6 +2,7 @@ import { Loader2, Paperclip } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
+import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
 import { collectAttachments } from '@/components/chat/chat-input/hooks/attachment-file-conversion';
 import { usePasteDropHandler } from '@/components/chat/chat-input/hooks/use-paste-drop-handler';
@@ -84,6 +85,12 @@ export function InlineWorkspaceForm({
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
     onSuccess: (workspace) => {
+      utils.workspace.get.setData({ id: workspace.id }, (old) => {
+        if (old) {
+          return old;
+        }
+        return createOptimisticWorkspaceCacheData(workspace);
+      });
       utils.workspace.listWithKanbanState.invalidate({ projectId });
       utils.workspace.list.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
@@ -145,7 +152,7 @@ export function InlineWorkspaceForm({
       return;
     }
 
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !isCreating) {
       e.preventDefault();
       onCancel();
     }
