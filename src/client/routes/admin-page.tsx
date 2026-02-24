@@ -200,7 +200,6 @@ function ProjectSettingsSection({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h2 className="text-lg font-semibold">Project Settings</h2>
         <Select value={selectedProject.slug} onValueChange={setSelectedSlug}>
           <SelectTrigger className="w-auto max-w-xs">
             <SelectValue placeholder="Select a project" />
