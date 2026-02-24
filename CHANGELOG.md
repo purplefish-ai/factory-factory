@@ -5,6 +5,54 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.9] - 2026-02-24
+
+### Added
+
+- Add first-class web search tool display in session tool cards (#1237)
+- Add ACP context compaction indicator state wiring (#1246)
+- Add app/core enum drift guard to keep shared enum contracts synchronized (#1256, #1259)
+- Add workspace-detail navigation affordances with Reviews workspace and back-link actions (#1262, #1268, #1269)
+- Add stop hook to pre-push branch rename interceptor for safer interrupt handling (#1273)
+
+### Changed
+
+- Improve terminal/logs hierarchy and setup status UX (#1236)
+- Centralize environment variable validation through `ConfigEnvSchema` for consistent startup checks (#1247)
+- Centralize workspace archiving with persisted `ARCHIVING` state and hide archiving rows in snapshot streams (#1250, #1280)
+- Unify snapshot projection semantics (`stateComputedAt`) and workspace derived-state assembly to reduce backend/UI drift (#1253, #1257, #1260)
+- Unify CI status classification and run-script config persistence behavior (#1258, #1261)
+- Organize settings into tabs and reuse Kanban workspace creation UI in the sidebar flow (#1266, #1272)
+- Downgrade ratchet workspace check failures to warnings and route reconciliation initialization through the ratchet bridge (#1270, #1277)
+- Make ACP context compaction translation type-safe and propagate `stopAllClients` timeout through runtime manager boundaries (#1276, #1278)
+- Expand single-writer checker coverage for workspace mutators (#1267)
+
+### Fixed
+
+- Fix chat auto-scroll behavior during rapid tool-call expansion (#1248)
+- Clear pending request state and prompt-turn timers when sessions stop (#1243, #1245)
+- Fix sidebar/layout regressions across workspace flows: board sidebar reset on navigation, side-panel resize handle hit target, draggable app sidebar resizing, new-workspace card button wrapping, and sidebar workspace form overflow (#1279, #1281, #1282, #1284, #1285)
+- Fix inconsistent auto-fix label naming in sidebar workspace form (#1279)
+
+### Refactored
+
+- Extract workspace flow types into shared modules (#1238)
+- Refactor interceptor timer lifecycle handling (#1239)
+- Refactor `SessionService` ACP event processing into dedicated modules (#1240)
+- Refactor Codex app-server ACP adapter into focused parser/retry/negotiation modules (#1241, #1283)
+- Extract workspace initialization startup script pipeline (#1242)
+- Refactor ratchet service into focused helper modules (#1249)
+- Rename session history loader service file for clearer ownership (#1274)
+
+### Removed
+
+- Remove dead `FEATURE_*` flags from config and admin diagnostics (#1244)
+- Remove `BACKEND_PORT` marker from normal startup logs (#1271)
+
+### Documentation
+
+- Remove stale Linear sync deliverable comment (#1275)
+
 ## [0.3.8] - 2026-02-24
 
 ### Added
