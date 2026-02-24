@@ -1,4 +1,4 @@
-import { Camera, FileQuestion, Files, ListTodo, Play, Plus, Terminal } from 'lucide-react';
+import { Camera, FileQuestion, Files, ListTodo, Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/components/chat';
@@ -30,9 +30,14 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // =============================================================================
 
 type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots';
+type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
 interface PersistedTopPanelState {
   topTab: TopPanelTab;
+}
+
+function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
+  return tab === 'setup-logs' || tab === 'dev-logs' || tab === 'post-run-logs';
 }
 
 function parseStoredTopTab(value: string | null): TopPanelTab | null {
@@ -256,6 +261,35 @@ export function RightPanel({
     [setActiveBottomTab]
   );
 
+  const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>('setup-logs');
+
+  useEffect(() => {
+    if (!isLogsBottomTab(activeBottomTab)) {
+      return;
+    }
+    setLastLogsTab(activeBottomTab);
+  }, [activeBottomTab]);
+
+  const handleLogsTabChange = useCallback(() => {
+    handleBottomTabChange(lastLogsTab);
+  }, [handleBottomTabChange, lastLogsTab]);
+
+  const handleLogsSubTabChange = useCallback(
+    (tab: LogsBottomTab) => {
+      setLastLogsTab(tab);
+      handleBottomTabChange(tab);
+    },
+    [handleBottomTabChange]
+  );
+
+  const isLogsActive = isLogsBottomTab(activeBottomTab);
+  const activeLogsTab = isLogsBottomTab(activeBottomTab) ? activeBottomTab : lastLogsTab;
+
+  const setupLogsSucceeded = initStatus?.status === 'READY';
+  const devLogsSucceeded = devLogs.connected;
+  const postRunLogsSucceeded = postRunLogs.connected;
+  const logsGroupSucceeded = setupLogsSucceeded && devLogsSucceeded && postRunLogsSucceeded;
+
   return (
     <ResizablePanelGroup
       direction="vertical"
@@ -275,42 +309,21 @@ export function RightPanel({
 
       <ResizableHandle direction="vertical" />
 
-      {/* Bottom Panel: Terminal / Dev Logs */}
+      {/* Bottom Panel: Terminal / Logs */}
       <ResizablePanel defaultSize="40%" minSize="15%">
         <div className="flex flex-col h-full min-h-0">
           {/* Unified tab bar with terminal tabs inline */}
-          <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
+          <div
+            className={cn(
+              'flex items-center gap-0.5 p-1 bg-muted/50 min-w-0',
+              !isLogsActive && 'border-b'
+            )}
+          >
             <TabButton
-              label="Setup Logs"
-              icon={<Play className="h-3.5 w-3.5" />}
-              isActive={activeBottomTab === 'setup-logs'}
-              onSelect={() => handleBottomTabChange('setup-logs')}
-            />
-            <TabButton
-              label="Dev Logs"
-              icon={
-                <span
-                  className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    devLogs.connected ? 'bg-green-500' : 'bg-red-500'
-                  )}
-                />
-              }
-              isActive={activeBottomTab === 'dev-logs'}
-              onSelect={() => handleBottomTabChange('dev-logs')}
-            />
-            <TabButton
-              label="Post-Run Logs"
-              icon={
-                <span
-                  className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    postRunLogs.connected ? 'bg-green-500' : 'bg-red-500'
-                  )}
-                />
-              }
-              isActive={activeBottomTab === 'post-run-logs'}
-              onSelect={() => handleBottomTabChange('post-run-logs')}
+              label="Logs"
+              icon={<StatusDot success={logsGroupSucceeded} />}
+              isActive={isLogsActive}
+              onSelect={handleLogsTabChange}
             />
             {/* Show Terminal tab only if no terminals are open, otherwise show inline terminal tabs */}
             {activeBottomTab === 'terminal' &&
@@ -337,6 +350,29 @@ export function RightPanel({
               </>
             )}
           </div>
+
+          {isLogsActive && (
+            <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
+              <TabButton
+                label="Setup"
+                icon={<StatusDot success={setupLogsSucceeded} />}
+                isActive={activeLogsTab === 'setup-logs'}
+                onSelect={() => handleLogsSubTabChange('setup-logs')}
+              />
+              <TabButton
+                label="Dev"
+                icon={<StatusDot success={devLogsSucceeded} />}
+                isActive={activeLogsTab === 'dev-logs'}
+                onSelect={() => handleLogsSubTabChange('dev-logs')}
+              />
+              <TabButton
+                label="Post-Run"
+                icon={<StatusDot success={postRunLogsSucceeded} />}
+                isActive={activeLogsTab === 'post-run-logs'}
+                onSelect={() => handleLogsSubTabChange('post-run-logs')}
+              />
+            </div>
+          )}
 
           {/* Content */}
           <div className="flex-1 overflow-hidden">
@@ -377,6 +413,16 @@ export function RightPanel({
 // =============================================================================
 // Terminal Components
 // =============================================================================
+
+interface StatusDotProps {
+  success: boolean;
+}
+
+function StatusDot({ success }: StatusDotProps) {
+  return (
+    <span className={cn('w-1.5 h-1.5 rounded-full', success ? 'bg-green-500' : 'bg-red-500')} />
+  );
+}
 
 interface NewTerminalButtonProps {
   onNewTab: () => void;
