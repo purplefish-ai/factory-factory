@@ -111,6 +111,16 @@ import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 const WORKSPACE_ID = 'ws-1';
 
+function createDeferredPromise<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function makeWorkspaceWithProject(overrides = {}) {
   return unsafeCoerce<
     NonNullable<Awaited<ReturnType<typeof workspaceAccessor.findByIdWithProject>>>
@@ -919,6 +929,33 @@ describe('initializeWorkspaceWorktree', () => {
         WORKSPACE_ID,
         'db update error'
       );
+    });
+
+    it('waits for eager session start to settle before failure cleanup', async () => {
+      setupHappyPath();
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+
+      const startSessionDeferred = createDeferredPromise<void>();
+      vi.mocked(sessionService.startSession).mockReturnValue(startSessionDeferred.promise as never);
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+      vi.mocked(startupScriptService.runStartupScript).mockRejectedValue(new Error('script boom'));
+
+      const initializationPromise = initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+
+      startSessionDeferred.resolve(undefined);
+      await initializationPromise;
+
+      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
   });
 
