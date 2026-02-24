@@ -285,10 +285,14 @@ export function RightPanel({
   const isLogsActive = isLogsBottomTab(activeBottomTab);
   const activeLogsTab = isLogsBottomTab(activeBottomTab) ? activeBottomTab : lastLogsTab;
 
-  const setupLogsSucceeded = initStatus?.status === 'READY';
-  const devLogsSucceeded = devLogs.connected;
-  const postRunLogsSucceeded = postRunLogs.connected;
-  const logsGroupSucceeded = setupLogsSucceeded && devLogsSucceeded && postRunLogsSucceeded;
+  const setupLogsStatus = getSetupLogsStatus(initStatus?.status);
+  const devLogsStatus: StatusDotStatus = devLogs.connected ? 'success' : 'error';
+  const postRunLogsStatus: StatusDotStatus = postRunLogs.connected ? 'success' : 'error';
+  const logsGroupStatus = getLogsGroupStatus({
+    setupLogsStatus,
+    devLogsStatus,
+    postRunLogsStatus,
+  });
 
   return (
     <ResizablePanelGroup
@@ -321,7 +325,7 @@ export function RightPanel({
           >
             <TabButton
               label="Logs"
-              icon={<StatusDot success={logsGroupSucceeded} />}
+              icon={<StatusDot status={logsGroupStatus} />}
               isActive={isLogsActive}
               onSelect={handleLogsTabChange}
             />
@@ -355,19 +359,19 @@ export function RightPanel({
             <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
               <TabButton
                 label="Setup"
-                icon={<StatusDot success={setupLogsSucceeded} />}
+                icon={<StatusDot status={setupLogsStatus} />}
                 isActive={activeLogsTab === 'setup-logs'}
                 onSelect={() => handleLogsSubTabChange('setup-logs')}
               />
               <TabButton
                 label="Dev"
-                icon={<StatusDot success={devLogsSucceeded} />}
+                icon={<StatusDot status={devLogsStatus} />}
                 isActive={activeLogsTab === 'dev-logs'}
                 onSelect={() => handleLogsSubTabChange('dev-logs')}
               />
               <TabButton
                 label="Post-Run"
-                icon={<StatusDot success={postRunLogsSucceeded} />}
+                icon={<StatusDot status={postRunLogsStatus} />}
                 isActive={activeLogsTab === 'post-run-logs'}
                 onSelect={() => handleLogsSubTabChange('post-run-logs')}
               />
@@ -414,14 +418,54 @@ export function RightPanel({
 // Terminal Components
 // =============================================================================
 
+type StatusDotStatus = 'success' | 'pending' | 'error';
+
 interface StatusDotProps {
-  success: boolean;
+  status: StatusDotStatus;
 }
 
-function StatusDot({ success }: StatusDotProps) {
+function StatusDot({ status }: StatusDotProps) {
   return (
-    <span className={cn('w-1.5 h-1.5 rounded-full', success ? 'bg-green-500' : 'bg-red-500')} />
+    <span
+      className={cn(
+        'w-1.5 h-1.5 rounded-full',
+        status === 'success' && 'bg-green-500',
+        status === 'pending' && 'bg-yellow-500 animate-pulse',
+        status === 'error' && 'bg-red-500'
+      )}
+    />
   );
+}
+
+function getSetupLogsStatus(status: string | undefined): StatusDotStatus {
+  if (status === 'READY') {
+    return 'success';
+  }
+  if (status === 'FAILED') {
+    return 'error';
+  }
+  return 'pending';
+}
+
+function getLogsGroupStatus({
+  setupLogsStatus,
+  devLogsStatus,
+  postRunLogsStatus,
+}: {
+  setupLogsStatus: StatusDotStatus;
+  devLogsStatus: StatusDotStatus;
+  postRunLogsStatus: StatusDotStatus;
+}): StatusDotStatus {
+  if (setupLogsStatus === 'error') {
+    return 'error';
+  }
+  if (setupLogsStatus === 'pending') {
+    return 'pending';
+  }
+  if (devLogsStatus === 'error' || postRunLogsStatus === 'error') {
+    return 'error';
+  }
+  return 'success';
 }
 
 interface NewTerminalButtonProps {
