@@ -353,7 +353,7 @@ function RatchetingToggle({
         ) : (
           <Zap className="h-4 w-4" />
         )}
-        {workspaceRatchetEnabled ? 'Turn off auto-fix' : 'Turn on auto-fix'}
+        {workspaceRatchetEnabled ? 'Turn off Ratchet' : 'Turn on Ratchet'}
       </DropdownMenuItem>
     );
   }
