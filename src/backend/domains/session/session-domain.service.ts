@@ -464,6 +464,18 @@ export class SessionDomainService extends EventEmitter {
     return store.historyHydrated === true;
   }
 
+  setHistoryRetryAt(sessionId: string, retryAt: number): void {
+    this.registry.setHistoryRetryAt(sessionId, retryAt);
+  }
+
+  canAttemptHistoryHydration(sessionId: string): boolean {
+    return this.registry.canAttemptHistoryHydration(sessionId);
+  }
+
+  clearHistoryRetryCooldown(sessionId: string): void {
+    this.registry.clearHistoryRetryCooldown(sessionId);
+  }
+
   markHistoryHydrated(
     sessionId: string,
     source: 'jsonl' | 'acp_fallback' | 'none',

@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   emitDelta: vi.fn(),
   getTranscriptSnapshot: vi.fn(),
   isHistoryHydrated: vi.fn(),
+  canAttemptHistoryHydration: vi.fn(),
+  setHistoryRetryAt: vi.fn(),
+  clearHistoryRetryCooldown: vi.fn(),
   markHistoryHydrated: vi.fn(),
   replaceTranscript: vi.fn(),
   consumeInitialMessage: vi.fn(),
@@ -51,6 +54,9 @@ vi.mock('@/backend/domains/session/session-domain.service', () => ({
     emitDelta: mocks.emitDelta,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
     isHistoryHydrated: mocks.isHistoryHydrated,
+    canAttemptHistoryHydration: mocks.canAttemptHistoryHydration,
+    setHistoryRetryAt: mocks.setHistoryRetryAt,
+    clearHistoryRetryCooldown: mocks.clearHistoryRetryCooldown,
     markHistoryHydrated: mocks.markHistoryHydrated,
     replaceTranscript: mocks.replaceTranscript,
     consumeInitialMessage: mocks.consumeInitialMessage,
@@ -73,16 +79,58 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import {
-  createLoadSessionHandler,
-  resetHistoryRetryCooldownStateForTests,
-} from './load-session.handler';
+import { createLoadSessionHandler } from './load-session.handler';
 
 describe('createLoadSessionHandler', () => {
   beforeEach(() => {
+    const historyRetryAtBySession = new Map<string, number>();
+    const pruneExpiredHistoryRetryEntries = (now: number): void => {
+      for (const [trackedSessionId, retryAt] of historyRetryAtBySession) {
+        if (retryAt <= now) {
+          historyRetryAtBySession.delete(trackedSessionId);
+        }
+      }
+    };
+    const evictHistoryRetryEntryWithEarliestRetryAt = (): void => {
+      let sessionIdToEvict: string | undefined;
+      let earliestRetryAt = Number.POSITIVE_INFINITY;
+
+      for (const [trackedSessionId, retryAt] of historyRetryAtBySession) {
+        if (retryAt < earliestRetryAt) {
+          earliestRetryAt = retryAt;
+          sessionIdToEvict = trackedSessionId;
+        }
+      }
+
+      if (sessionIdToEvict) {
+        historyRetryAtBySession.delete(sessionIdToEvict);
+      }
+    };
+
     vi.useRealTimers();
     vi.clearAllMocks();
-    resetHistoryRetryCooldownStateForTests();
+    mocks.canAttemptHistoryHydration.mockImplementation((sessionId: string) => {
+      const now = Date.now();
+      pruneExpiredHistoryRetryEntries(now);
+      const retryAt = historyRetryAtBySession.get(sessionId);
+      if (retryAt === undefined) {
+        return true;
+      }
+      return retryAt <= now;
+    });
+    mocks.setHistoryRetryAt.mockImplementation((sessionId: string, retryAt: number) => {
+      const now = Date.now();
+      pruneExpiredHistoryRetryEntries(now);
+
+      if (!historyRetryAtBySession.has(sessionId) && historyRetryAtBySession.size >= 1024) {
+        evictHistoryRetryEntryWithEarliestRetryAt();
+      }
+
+      historyRetryAtBySession.set(sessionId, retryAt);
+    });
+    mocks.clearHistoryRetryCooldown.mockImplementation((sessionId: string) => {
+      historyRetryAtBySession.delete(sessionId);
+    });
     mocks.getRuntimeSnapshot.mockReturnValue({
       phase: 'idle',
       processState: 'stopped',
