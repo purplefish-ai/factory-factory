@@ -451,6 +451,10 @@ export class RunScriptService {
       // STOPPING can be sticky if a previous stop flow failed mid-cleanup.
       // Try to complete it opportunistically.
       if (status === 'STOPPING') {
+        if (childProcess || pid) {
+          await this.killProcessTree(workspaceId, childProcess, pid);
+          await this.killPostRunProcess(workspaceId);
+        }
         await this.completeStoppingAfterStop(workspaceId);
         await runScriptProxyService.stopTunnel(workspaceId);
         return { success: true };
@@ -638,55 +642,60 @@ export class RunScriptService {
     worktreePath: string,
     port: number | undefined
   ): Promise<void> {
-    let command = runScriptPostRunCommand;
-    if (port && command.includes('{port}')) {
-      command = FactoryConfigService.substitutePort(command, port);
-    }
+    return Promise.resolve().then(() => {
+      let command = runScriptPostRunCommand;
+      if (port && command.includes('{port}')) {
+        command = FactoryConfigService.substitutePort(command, port);
+      }
 
-    logger.info('Starting postRun script', { workspaceId, command });
+      logger.info('Starting postRun script', { workspaceId, command });
 
-    const postRunProcess = spawn('bash', ['-c', command], {
-      cwd: worktreePath,
-      detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      const postRunProcess = spawn('bash', ['-c', command], {
+        cwd: worktreePath,
+        detached: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      if (!postRunProcess.pid) {
+        logger.warn('Failed to spawn postRun process', { workspaceId });
+        return;
+      }
+
+      this.postRunProcesses.set(workspaceId, postRunProcess);
+
+      const postRunStartMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting postRun: ${command}\n`;
+      this.appendOutput(workspaceId, postRunStartMessage);
+      this.appendPostRunOutput(workspaceId, postRunStartMessage);
+
+      const handleOutput = (data: Buffer) => {
+        this.appendPostRunOutput(workspaceId, data.toString());
+      };
+
+      postRunProcess.stdout?.on('data', handleOutput);
+      postRunProcess.stdout?.on('error', (error) => {
+        logger.warn('PostRun stdout stream error', { workspaceId, error });
+      });
+
+      postRunProcess.stderr?.on('data', handleOutput);
+      postRunProcess.stderr?.on('error', (error) => {
+        logger.warn('PostRun stderr stream error', { workspaceId, error });
+      });
+
+      postRunProcess.on('exit', (code, signal) => {
+        logger.info('PostRun script exited', {
+          workspaceId,
+          pid: postRunProcess.pid,
+          code,
+          signal,
+        });
+        this.postRunProcesses.delete(workspaceId);
+      });
+
+      postRunProcess.on('error', (error) => {
+        logger.error('PostRun spawn error', error, { workspaceId });
+        this.postRunProcesses.delete(workspaceId);
+      });
     });
-
-    if (!postRunProcess.pid) {
-      logger.warn('Failed to spawn postRun process', { workspaceId });
-      return Promise.resolve();
-    }
-
-    this.postRunProcesses.set(workspaceId, postRunProcess);
-
-    const postRunStartMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting postRun: ${command}\n`;
-    this.appendOutput(workspaceId, postRunStartMessage);
-    this.appendPostRunOutput(workspaceId, postRunStartMessage);
-
-    const handleOutput = (data: Buffer) => {
-      this.appendPostRunOutput(workspaceId, data.toString());
-    };
-
-    postRunProcess.stdout?.on('data', handleOutput);
-    postRunProcess.stdout?.on('error', (error) => {
-      logger.warn('PostRun stdout stream error', { workspaceId, error });
-    });
-
-    postRunProcess.stderr?.on('data', handleOutput);
-    postRunProcess.stderr?.on('error', (error) => {
-      logger.warn('PostRun stderr stream error', { workspaceId, error });
-    });
-
-    postRunProcess.on('exit', (code, signal) => {
-      logger.info('PostRun script exited', { workspaceId, pid: postRunProcess.pid, code, signal });
-      this.postRunProcesses.delete(workspaceId);
-    });
-
-    postRunProcess.on('error', (error) => {
-      logger.error('PostRun spawn error', error, { workspaceId });
-      this.postRunProcesses.delete(workspaceId);
-    });
-
-    return Promise.resolve();
   }
 
   private async killPostRunProcess(workspaceId: string): Promise<void> {

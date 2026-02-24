@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FactoryConfigService } from '@/backend/services/factory-config.service';
 
 const mockTreeKill = vi.fn();
 const mockFindById = vi.fn();
@@ -208,6 +209,26 @@ describe('RunScriptService.stopRunScript', () => {
 
     expect(result).toEqual({ success: true });
     expect(mockBeginStopping).not.toHaveBeenCalled();
+    expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('kills lingering process before completing STOPPING to IDLE', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      runScriptStatus: 'STOPPING',
+      runScriptPid: 12_345,
+    });
+    mockCompleteStopping.mockResolvedValue(undefined);
+
+    const service = new RunScriptService();
+    (service as unknown as StopHandlerCapable).runningProcesses.set('ws-1', { pid: 12_345 });
+    (service as unknown as StopHandlerCapable).postRunProcesses.set('ws-1', { pid: 888 } as never);
+
+    const result = await service.stopRunScript('ws-1');
+
+    expect(result).toEqual({ success: true });
+    expect(mockTreeKill).toHaveBeenCalledWith(12_345, 'SIGTERM', expect.any(Function));
+    expect(mockTreeKill).toHaveBeenCalledWith(888, 'SIGTERM', expect.any(Function));
     expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
   });
 
@@ -532,6 +553,33 @@ describe('RunScriptService.transitionToRunning', () => {
 
     expect(result).toMatchObject({ success: true, pid: 12_345 });
     expect(spawnPostRunSpy).toHaveBeenCalledWith('ws-1', 'echo post-run', '/tmp/ws-1', undefined);
+  });
+
+  it('keeps transition successful when postRun setup throws synchronously', async () => {
+    mockMarkRunning.mockResolvedValue(undefined);
+    mockEnsureTunnel.mockResolvedValue(null);
+    const substitutePortSpy = vi
+      .spyOn(FactoryConfigService, 'substitutePort')
+      .mockImplementation(() => {
+        throw new Error('bad postRun command');
+      });
+
+    const service = new RunScriptService() as unknown as TransitionToRunningCapable;
+    const childProcess = { pid: 12_345, exitCode: null };
+    service.runningProcesses.set('ws-1', childProcess);
+
+    const result = await service.transitionToRunning(
+      'ws-1',
+      childProcess,
+      12_345,
+      5173,
+      'echo {port}',
+      '/tmp/ws-1'
+    );
+
+    expect(result).toMatchObject({ success: true, port: 5173, pid: 12_345 });
+    expect(mockFindById).not.toHaveBeenCalled();
+    substitutePortSpy.mockRestore();
   });
 });
 
