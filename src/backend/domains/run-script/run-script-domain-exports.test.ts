@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createRunScriptService,
   RunScriptService,
   RunScriptStateMachineError,
-  runScriptService,
   runScriptStateMachine,
   startupScriptService,
 } from './index';
 
 describe('Run script domain barrel exports', () => {
-  it('exports runScriptService singleton', () => {
-    expect(runScriptService).toBeDefined();
-    expect(runScriptService).toBeInstanceOf(RunScriptService);
+  it('exports runScriptService factory', () => {
+    const service = createRunScriptService();
+    expect(service).toBeDefined();
+    expect(service).toBeInstanceOf(RunScriptService);
   });
 
   it('exports RunScriptService class', () => {
