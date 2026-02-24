@@ -312,7 +312,12 @@ class WorkspaceQueryService {
         await runScriptConfigPersistenceService.syncWorkspaceCommandsFromWorktreeConfig({
           workspaceId: workspace.id,
           worktreePath: workspace.worktreePath,
-          persistWorkspaceCommands: (id, commands) => workspaceAccessor.update(id, commands),
+          persistWorkspaceCommands: (id, commands) =>
+            workspaceAccessor.update(id, {
+              runScriptCommand: commands.runScriptCommand,
+              runScriptPostRunCommand: commands.runScriptPostRunCommand,
+              runScriptCleanupCommand: commands.runScriptCleanupCommand,
+            }),
         });
 
         updatedCount++;

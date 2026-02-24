@@ -71,8 +71,9 @@ export class RunScriptService {
           runScriptPostRunCommand: workspace.runScriptPostRunCommand,
           runScriptCleanupCommand: workspace.runScriptCleanupCommand,
         },
-        persistWorkspaceCommands: (id, runScriptCommands) =>
-          workspaceAccessor.update(id, runScriptCommands),
+        // Workspace command cache writes are owned by workspace domain writers.
+        // We still reconcile to execute canonical commands from factory config.
+        persistWorkspaceCommands: async () => Promise.resolve(),
       });
 
       if (!commands.runScriptCommand) {

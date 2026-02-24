@@ -844,7 +844,12 @@ export async function initializeWorkspaceWorktree(
     await runScriptConfigPersistenceService.syncWorkspaceCommandsFromFactoryConfig({
       workspaceId,
       factoryConfig,
-      persistWorkspaceCommands: (id, commands) => workspaceAccessor.update(id, commands),
+      persistWorkspaceCommands: (id, commands) =>
+        workspaceAccessor.update(id, {
+          runScriptCommand: commands.runScriptCommand,
+          runScriptPostRunCommand: commands.runScriptPostRunCommand,
+          runScriptCleanupCommand: commands.runScriptCleanupCommand,
+        }),
     });
 
     // Mark Linear issue as started (fire-and-forget, non-fatal)
