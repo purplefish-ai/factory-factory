@@ -197,7 +197,6 @@ export function RightPanel({
     setTerminalTabState(state);
   }, []);
 
-  // Auto-switch to Setup Logs during provisioning, back to terminal when done
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
     {
@@ -207,18 +206,6 @@ export function RightPanel({
       },
     }
   );
-  const prevInitStatusRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    const status = initStatus?.status;
-    const prev = prevInitStatusRef.current;
-    prevInitStatusRef.current = status;
-
-    // On first load or workspace change: if provisioning, switch to setup logs
-    if (prev === undefined && (status === 'NEW' || status === 'PROVISIONING')) {
-      setActiveBottomTab('setup-logs');
-    }
-  }, [initStatus?.status, setActiveBottomTab]);
 
   // Load persisted tabs from localStorage on mount or workspaceId change
   useEffect(() => {
@@ -366,25 +353,33 @@ export function RightPanel({
           </div>
 
           {isLogsActive && (
-            <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
-              <TabButton
-                label="Setup"
-                icon={<StatusDot status={setupLogsStatus} />}
-                isActive={activeLogsTab === 'setup-logs'}
-                onSelect={() => handleLogsSubTabChange('setup-logs')}
-              />
-              <TabButton
-                label="Dev"
-                icon={<StatusDot status={devLogsStatus} />}
-                isActive={activeLogsTab === 'dev-logs'}
-                onSelect={() => handleLogsSubTabChange('dev-logs')}
-              />
-              <TabButton
-                label="Post-Run"
-                icon={<StatusDot status={postRunLogsStatus} />}
-                isActive={activeLogsTab === 'post-run-logs'}
-                onSelect={() => handleLogsSubTabChange('post-run-logs')}
-              />
+            <div className="flex items-center gap-2 px-2 py-1 bg-muted/40 border-b min-w-0">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground/80 font-medium whitespace-nowrap">
+                Log source
+              </span>
+              <div className="flex items-center gap-0.5 min-w-0 rounded-md border border-border/70 bg-muted/70 p-0.5">
+                <TabButton
+                  label="Setup"
+                  icon={<StatusDot status={setupLogsStatus} />}
+                  isActive={activeLogsTab === 'setup-logs'}
+                  onSelect={() => handleLogsSubTabChange('setup-logs')}
+                  className={getLogsSubTabButtonClass(activeLogsTab === 'setup-logs')}
+                />
+                <TabButton
+                  label="Dev"
+                  icon={<StatusDot status={devLogsStatus} />}
+                  isActive={activeLogsTab === 'dev-logs'}
+                  onSelect={() => handleLogsSubTabChange('dev-logs')}
+                  className={getLogsSubTabButtonClass(activeLogsTab === 'dev-logs')}
+                />
+                <TabButton
+                  label="Post-Run"
+                  icon={<StatusDot status={postRunLogsStatus} />}
+                  isActive={activeLogsTab === 'post-run-logs'}
+                  onSelect={() => handleLogsSubTabChange('post-run-logs')}
+                  className={getLogsSubTabButtonClass(activeLogsTab === 'post-run-logs')}
+                />
+              </div>
             </div>
           )}
 
@@ -539,5 +534,12 @@ function TerminalTabsInline({ terminalTabState }: TerminalTabsInlineProps) {
       className="min-w-0 flex-1"
       renderNewButton={(handleNewTab) => <NewTerminalButton onNewTab={handleNewTab} />}
     />
+  );
+}
+
+function getLogsSubTabButtonClass(isActive: boolean): string {
+  return cn(
+    'text-xs px-2 py-0.5 h-6 border-transparent',
+    !isActive && 'text-muted-foreground/90 hover:text-foreground'
   );
 }

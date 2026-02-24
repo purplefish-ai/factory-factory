@@ -39,20 +39,18 @@ export function SetupLogsPanel({ workspaceId, className }: SetupLogsPanelProps) 
   const statusLabel =
     status === 'PROVISIONING'
       ? 'Running...'
-      : status === 'READY'
-        ? 'Completed'
-        : status === 'FAILED'
-          ? 'Failed'
-          : '';
+      : status === 'FAILED'
+        ? 'Failed'
+        : '';
+  const showStatusBanner = status === 'PROVISIONING' || status === 'FAILED';
 
   return (
     <div className={cn('h-full bg-background flex flex-col', className)}>
-      {statusLabel && (
+      {showStatusBanner && (
         <div className="flex items-center gap-2 px-4 py-1.5 border-b text-xs text-muted-foreground">
           {status === 'PROVISIONING' && (
             <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
           )}
-          {status === 'READY' && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
           {status === 'FAILED' && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
           <span>Startup script: {statusLabel}</span>
         </div>
