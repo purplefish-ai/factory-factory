@@ -3,6 +3,7 @@ export const WorkspaceStatus = {
   PROVISIONING: 'PROVISIONING',
   READY: 'READY',
   FAILED: 'FAILED',
+  ARCHIVING: 'ARCHIVING',
   ARCHIVED: 'ARCHIVED',
 } as const;
 export type WorkspaceStatus = (typeof WorkspaceStatus)[keyof typeof WorkspaceStatus];
@@ -56,9 +57,16 @@ export const WorkspaceCreationSource = {
   MANUAL: 'MANUAL',
   RESUME_BRANCH: 'RESUME_BRANCH',
   GITHUB_ISSUE: 'GITHUB_ISSUE',
+  LINEAR_ISSUE: 'LINEAR_ISSUE',
 } as const;
 export type WorkspaceCreationSource =
   (typeof WorkspaceCreationSource)[keyof typeof WorkspaceCreationSource];
+
+export const IssueProvider = {
+  GITHUB: 'GITHUB',
+  LINEAR: 'LINEAR',
+} as const;
+export type IssueProvider = (typeof IssueProvider)[keyof typeof IssueProvider];
 
 export const RunScriptStatus = {
   IDLE: 'IDLE',

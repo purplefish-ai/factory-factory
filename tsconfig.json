@@ -42,7 +42,8 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@prisma-gen/*": ["./prisma/generated/*"]
+      "@prisma-gen/*": ["./prisma/generated/*"],
+      "@factory-factory/core-types/*": ["./packages/core/src/types/*"]
     }
   },
   "include": [

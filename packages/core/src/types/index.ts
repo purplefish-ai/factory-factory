@@ -1,5 +1,6 @@
 export {
   CIStatus,
+  IssueProvider,
   KanbanColumn,
   PRState,
   RatchetState,
