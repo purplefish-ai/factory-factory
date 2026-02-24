@@ -74,7 +74,12 @@ export class AcpEventProcessor {
             type: string;
             update: SessionUpdate;
           };
-          if (update.sessionUpdate === 'user_message_chunk' && update.content.type === 'text') {
+          if (
+            update.sessionUpdate === 'user_message_chunk' &&
+            'content' in update &&
+            update.content?.type === 'text' &&
+            typeof update.content.text === 'string'
+          ) {
             this.handleAcpUserMessageChunk(sid, update.content.text);
             return;
           }
