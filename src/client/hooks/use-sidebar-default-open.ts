@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 
 type RouteCategory = 'workspace_detail' | 'board' | 'default';
@@ -29,6 +29,10 @@ function getRouteCategory(pathname: string): RouteCategory {
   return 'default';
 }
 
+export function getRouteCategoryForPath(pathname: string): RouteCategory {
+  return getRouteCategory(pathname);
+}
+
 function getPersistedState(category: RouteCategory): boolean | null {
   try {
     const value = localStorage.getItem(STORAGE_KEYS[category]);
@@ -48,6 +52,24 @@ function getPersistedState(category: RouteCategory): boolean | null {
 // The board view should always start collapsed — the sidebar opens only
 // transiently (e.g. to click a link) and resets on next visit.
 const TRANSIENT_CATEGORIES: Set<RouteCategory> = new Set(['board']);
+
+export function clearTransientOverrideOnCategoryChange(
+  overrides: Partial<Record<RouteCategory, boolean>>,
+  previousCategory: RouteCategory,
+  nextCategory: RouteCategory
+): Partial<Record<RouteCategory, boolean>> {
+  if (previousCategory === nextCategory || !TRANSIENT_CATEGORIES.has(previousCategory)) {
+    return overrides;
+  }
+
+  if (!(previousCategory in overrides)) {
+    return overrides;
+  }
+
+  const nextOverrides = { ...overrides };
+  delete nextOverrides[previousCategory];
+  return nextOverrides;
+}
 
 function persistState(category: RouteCategory, open: boolean) {
   if (TRANSIENT_CATEGORIES.has(category)) {
@@ -87,16 +109,33 @@ function loadAllPersistedStates(): Partial<Record<RouteCategory, boolean>> {
 export function useRouteSidebarState(): [boolean, (open: boolean) => void] {
   const { pathname } = useLocation();
   const category = getRouteCategory(pathname);
+  const previousCategoryRef = useRef<RouteCategory>(category);
+  const transientOverridesRef = useRef<Partial<Record<RouteCategory, boolean>>>({});
+  const [, forceRender] = useState(0);
 
   // Store user overrides per category (initialized from localStorage)
   const [overrides, setOverrides] =
     useState<Partial<Record<RouteCategory, boolean>>>(loadAllPersistedStates);
 
+  // Clear transient overrides as soon as we leave their route category.
+  transientOverridesRef.current = clearTransientOverrideOnCategoryChange(
+    transientOverridesRef.current,
+    previousCategoryRef.current,
+    category
+  );
+  previousCategoryRef.current = category;
+
   // Derive open state synchronously — no useEffect, no flash
-  const open = overrides[category] ?? ROUTE_DEFAULTS[category];
+  const open =
+    transientOverridesRef.current[category] ?? overrides[category] ?? ROUTE_DEFAULTS[category];
 
   const setOpen = useCallback(
     (value: boolean) => {
+      if (TRANSIENT_CATEGORIES.has(category)) {
+        transientOverridesRef.current = { ...transientOverridesRef.current, [category]: value };
+        forceRender((count) => count + 1);
+        return;
+      }
       setOverrides((prev) => ({ ...prev, [category]: value }));
       persistState(category, value);
     },
