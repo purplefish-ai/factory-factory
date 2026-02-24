@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { configService } from '@/backend/services/config.service';
 import { AcpTraceLogger } from './acp-trace-logger.service';
 
 function waitForFlush(): Promise<void> {
@@ -26,10 +27,19 @@ describe('AcpTraceLogger', () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const createdDirs: string[] = [];
 
+  const restoreEnv = (key: string, value: string | undefined): void => {
+    if (value === undefined) {
+      Reflect.deleteProperty(process.env, key);
+      return;
+    }
+    process.env[key] = value;
+  };
+
   afterEach(async () => {
-    process.env.ACP_TRACE_LOGS_ENABLED = originalEnabled;
-    process.env.ACP_TRACE_LOGS_PATH = originalPath;
-    process.env.NODE_ENV = originalNodeEnv;
+    restoreEnv('ACP_TRACE_LOGS_ENABLED', originalEnabled);
+    restoreEnv('ACP_TRACE_LOGS_PATH', originalPath);
+    restoreEnv('NODE_ENV', originalNodeEnv);
+    configService.reload();
 
     while (createdDirs.length > 0) {
       const dir = createdDirs.pop();
@@ -45,6 +55,7 @@ describe('AcpTraceLogger', () => {
     createdDirs.push(dir);
     process.env.ACP_TRACE_LOGS_ENABLED = 'true';
     process.env.ACP_TRACE_LOGS_PATH = dir;
+    configService.reload();
 
     const logger = new AcpTraceLogger();
     logger.log('session-1', 'raw_acp_event', { eventType: 'acp_session_update' });
@@ -76,6 +87,7 @@ describe('AcpTraceLogger', () => {
     process.env.ACP_TRACE_LOGS_ENABLED = 'false';
     process.env.ACP_TRACE_LOGS_PATH = dir;
     process.env.NODE_ENV = 'production';
+    configService.reload();
 
     const logger = new AcpTraceLogger();
     logger.log('session-1', 'raw_acp_event', { eventType: 'acp_session_update' });
@@ -91,6 +103,7 @@ describe('AcpTraceLogger', () => {
     createdDirs.push(dir);
     process.env.ACP_TRACE_LOGS_ENABLED = 'true';
     process.env.ACP_TRACE_LOGS_PATH = dir;
+    configService.reload();
 
     const logger = new AcpTraceLogger();
     logger.log('session-1', 'raw_acp_event', { eventType: 'acp_session_update' });

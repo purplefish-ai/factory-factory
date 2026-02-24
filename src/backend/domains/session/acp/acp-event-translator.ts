@@ -6,6 +6,11 @@ export type AcpTranslatedDelta = {
   [key: string]: unknown;
 };
 
+type ContextCompactionUpdate = {
+  sessionUpdate: 'context_compaction';
+  [key: string]: unknown;
+};
+
 /**
  * Stateless translator that maps ACP SessionUpdate variants to FF SessionDeltaEvent arrays.
  *
@@ -23,6 +28,11 @@ export class AcpEventTranslator {
   }
 
   translateSessionUpdate(update: SessionUpdate): AcpTranslatedDelta[] {
+    const sessionUpdate = (update as { sessionUpdate: string }).sessionUpdate;
+    if (sessionUpdate === 'context_compaction') {
+      return this.translateContextCompactionUpdate(update as unknown as ContextCompactionUpdate);
+    }
+
     switch (update.sessionUpdate) {
       case 'agent_message_chunk':
         return this.translateAgentMessageChunk(update);
@@ -345,5 +355,96 @@ export class AcpEventTranslator {
         },
       },
     ];
+  }
+
+  private translateContextCompactionUpdate(update: ContextCompactionUpdate): AcpTranslatedDelta[] {
+    const active = this.extractContextCompactionActiveState(update);
+    if (active === null) {
+      this.logger.warn('context_compaction: unknown payload shape', { update });
+      return [];
+    }
+
+    return [{ type: active ? 'compacting_start' : 'compacting_end' }];
+  }
+
+  private extractContextCompactionActiveState(update: Record<string, unknown>): boolean | null {
+    const nested =
+      this.getObject(update.context_compaction) ??
+      this.getObject(update.contextCompaction) ??
+      this.getObject(update.payload);
+
+    const candidates = [update, ...(nested ? [nested] : [])];
+    for (const candidate of candidates) {
+      const fromBoolean = this.readCompactionBoolean(candidate);
+      if (fromBoolean !== null) {
+        return fromBoolean;
+      }
+    }
+
+    for (const candidate of candidates) {
+      const fromString = this.readCompactionStringState(candidate);
+      if (fromString !== null) {
+        return fromString;
+      }
+    }
+
+    return null;
+  }
+
+  private readCompactionBoolean(source: Record<string, unknown>): boolean | null {
+    const booleanFields = ['isCompacting', 'compacting', 'active', 'inProgress', 'in_progress'];
+    for (const field of booleanFields) {
+      const value = source[field];
+      if (typeof value === 'boolean') {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private readCompactionStringState(source: Record<string, unknown>): boolean | null {
+    const stringFields = ['state', 'status', 'phase', 'event', 'action'];
+    for (const field of stringFields) {
+      const raw = source[field];
+      if (typeof raw !== 'string') {
+        continue;
+      }
+      const normalized = raw.trim().toLowerCase();
+      if (
+        normalized === 'start' ||
+        normalized === 'started' ||
+        normalized === 'starting' ||
+        normalized === 'begin' ||
+        normalized === 'began' ||
+        normalized === 'in_progress' ||
+        normalized === 'running' ||
+        normalized === 'active' ||
+        normalized === 'compacting'
+      ) {
+        return true;
+      }
+      if (
+        normalized === 'end' ||
+        normalized === 'ended' ||
+        normalized === 'ending' ||
+        normalized === 'finish' ||
+        normalized === 'finished' ||
+        normalized === 'done' ||
+        normalized === 'completed' ||
+        normalized === 'inactive' ||
+        normalized === 'idle' ||
+        normalized === 'stopped'
+      ) {
+        return false;
+      }
+    }
+    return null;
+  }
+
+  private getObject(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
   }
 }

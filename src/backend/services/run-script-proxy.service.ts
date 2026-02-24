@@ -11,6 +11,7 @@ import {
   proxyAuthenticatedWebSocketUpgrade,
   startCloudflaredTunnel,
 } from '@/shared/proxy-utils';
+import { configService } from './config.service';
 import { createLogger } from './logger.service';
 
 const logger = createLogger('run-script-proxy-service');
@@ -150,7 +151,7 @@ export class RunScriptProxyService {
   private cloudflaredUnavailable = false;
 
   private isEnabled(): boolean {
-    return process.env.FF_RUN_SCRIPT_PROXY_ENABLED === '1';
+    return configService.isRunScriptProxyEnabled();
   }
 
   getTunnelUrl(workspaceId: string): string | null {

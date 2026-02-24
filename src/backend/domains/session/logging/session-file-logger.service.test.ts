@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Hoist the mock functions so they're available before the mock is evaluated
 const mockGetWsLogsPath = vi.hoisted(() => vi.fn());
 const mockIsDevelopment = vi.hoisted(() => vi.fn());
+const mockIsWsLogsEnabled = vi.hoisted(() => vi.fn());
 const mockCreateWriteStream = vi.hoisted(() => vi.fn());
 
 // Mock config service before importing the service
@@ -11,6 +12,7 @@ vi.mock('@/backend/services/config.service', () => ({
   configService: {
     getWsLogsPath: mockGetWsLogsPath,
     isDevelopment: mockIsDevelopment,
+    isWsLogsEnabled: mockIsWsLogsEnabled,
   },
 }));
 
@@ -69,6 +71,7 @@ describe('SessionFileLogger', () => {
 
     // Default config mock - enable in tests (dev mode)
     mockIsDevelopment.mockReturnValue(true);
+    mockIsWsLogsEnabled.mockReturnValue(false);
     mockGetWsLogsPath.mockReturnValue(defaultWsLogsPath);
 
     // Create fresh mock stream

@@ -94,12 +94,15 @@ interface SystemConfig {
   worktreeBaseDir: string;
   reposDir: string;
   debugLogDir: string;
+  acpTraceLogsPath: string;
+  claudeConfigDir: string;
   wsLogsPath: string;
   frontendStaticPath?: string;
 
   // Server settings
   backendPort: number;
   nodeEnv: 'development' | 'production' | 'test';
+  webConcurrency?: number;
 
   // Database (SQLite)
   databasePath: string;
@@ -134,6 +137,12 @@ interface SystemConfig {
 
   // Debug settings
   debug: DebugConfig;
+
+  // ACP/runtime settings
+  acpStartupTimeoutMs: number;
+  acpTraceLogsEnabled: boolean;
+  wsLogsEnabled: boolean;
+  runScriptProxyEnabled: boolean;
 
   // Event compression settings
   compression: CompressionConfig;
@@ -262,19 +271,24 @@ function loadSystemConfig(): SystemConfig {
     : join(baseDir, 'worktrees');
 
   const nodeEnv = env.NODE_ENV;
+  const debugLogDir = join(baseDir, 'debug');
+  const acpTraceLogsEnabled = env.ACP_TRACE_LOGS_ENABLED ?? nodeEnv === 'development';
 
   const config: SystemConfig = {
     // Directory paths
     baseDir,
     worktreeBaseDir,
     reposDir: env.REPOS_DIR ? expandEnvVars(env.REPOS_DIR) : join(baseDir, 'repos'),
-    debugLogDir: join(baseDir, 'debug'),
+    debugLogDir,
+    acpTraceLogsPath: env.ACP_TRACE_LOGS_PATH ?? join(debugLogDir, 'acp-events'),
+    claudeConfigDir: env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'),
     wsLogsPath: env.WS_LOGS_PATH ?? join(process.cwd(), '.context', 'ws-logs'),
     frontendStaticPath: env.FRONTEND_STATIC_PATH,
 
     // Server settings
     backendPort: env.BACKEND_PORT,
     nodeEnv,
+    webConcurrency: env.WEB_CONCURRENCY,
 
     // Database (SQLite - defaults to ~/factory-factory/data.db)
     databasePath: env.DATABASE_PATH ?? join(baseDir, 'data.db'),
@@ -311,6 +325,12 @@ function loadSystemConfig(): SystemConfig {
     debug: {
       chatWebSocket: env.DEBUG_CHAT_WS,
     },
+
+    // ACP/runtime settings
+    acpStartupTimeoutMs: env.ACP_STARTUP_TIMEOUT_MS,
+    acpTraceLogsEnabled,
+    wsLogsEnabled: env.WS_LOGS_ENABLED,
+    runScriptProxyEnabled: env.FF_RUN_SCRIPT_PROXY_ENABLED,
 
     // Event compression settings
     compression: {
@@ -437,6 +457,27 @@ class ConfigService {
   }
 
   /**
+   * Get ACP startup timeout in milliseconds
+   */
+  getAcpStartupTimeoutMs(): number {
+    return this.config.acpStartupTimeoutMs;
+  }
+
+  /**
+   * Check if ACP trace logging is enabled
+   */
+  isAcpTraceLoggingEnabled(): boolean {
+    return this.config.acpTraceLogsEnabled;
+  }
+
+  /**
+   * Get ACP trace logs path
+   */
+  getAcpTraceLogsPath(): string {
+    return this.config.acpTraceLogsPath;
+  }
+
+  /**
    * Get database file path (SQLite)
    */
   getDatabasePath(): string {
@@ -497,6 +538,34 @@ class ConfigService {
    */
   getWsLogsPath(): string {
     return this.config.wsLogsPath;
+  }
+
+  /**
+   * Check if session WebSocket file logging is enabled
+   */
+  isWsLogsEnabled(): boolean {
+    return this.config.wsLogsEnabled;
+  }
+
+  /**
+   * Get runtime WEB_CONCURRENCY hint if configured
+   */
+  getWebConcurrency(): number | undefined {
+    return this.config.webConcurrency;
+  }
+
+  /**
+   * Check if run-script proxy is enabled
+   */
+  isRunScriptProxyEnabled(): boolean {
+    return this.config.runScriptProxyEnabled;
+  }
+
+  /**
+   * Get Claude config directory path
+   */
+  getClaudeConfigDir(): string {
+    return this.config.claudeConfigDir;
   }
 
   /**

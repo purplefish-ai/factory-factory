@@ -188,7 +188,7 @@ export interface ChatState {
   pendingMessages: Map<string, PendingMessageContent>;
   /** Last rejected message for recovery (allows restoring to input) */
   lastRejectedMessage: RejectedMessageInfo | null;
-  /** Whether context compaction is in progress (placeholder for future SDK support) */
+  /** Whether context compaction is in progress */
   isCompacting: boolean;
   /** Tool progress tracking for long-running tools - Map from tool_use_id to progress info */
   toolProgress: Map<string, ToolProgressInfo>;

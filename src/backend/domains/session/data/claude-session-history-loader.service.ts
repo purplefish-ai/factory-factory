@@ -1,8 +1,8 @@
 import { access, readdir, stat } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { summarizeZodIssues } from '@/backend/domains/session/zod-issue-summary';
+import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
@@ -51,7 +51,7 @@ export type ClaudeSessionHistoryLoadResult =
   | { status: 'error'; reason: 'read_failed'; filePath: string };
 
 function getClaudeConfigDir(): string {
-  return process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
+  return configService.getClaudeConfigDir();
 }
 
 function encodeProjectPath(cwd: string): string {

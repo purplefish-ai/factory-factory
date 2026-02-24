@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { configService } from '@/backend/services/config.service';
 import { claudeSessionHistoryLoaderService } from './claude-session-history-loader.service';
 
 function encodeProjectPath(cwd: string): string {
@@ -40,14 +41,16 @@ describe('claudeSessionHistoryLoaderService', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'ff-claude-history-'));
     originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = tempDir;
+    configService.reload();
   });
 
   afterEach(() => {
     if (typeof originalClaudeConfigDir === 'string') {
       process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
     } else {
-      process.env.CLAUDE_CONFIG_DIR = undefined;
+      Reflect.deleteProperty(process.env, 'CLAUDE_CONFIG_DIR');
     }
+    configService.reload();
     rmSync(tempDir, { recursive: true, force: true });
   });
 

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configService } from '@/backend/services/config.service';
 
 // Mock dependencies before importing the service
 const mockFindById = vi.fn();
@@ -785,6 +786,7 @@ describe('FileLockService', () => {
       restoreEnv('pm_id', originalPmId);
       restoreEnv('NODE_APP_INSTANCE', originalNodeAppInstance);
       restoreEnv('WEB_CONCURRENCY', originalWebConcurrency);
+      configService.reload();
     });
 
     it('warns when cluster-like runtime is detected', async () => {
@@ -806,6 +808,7 @@ describe('FileLockService', () => {
       Reflect.deleteProperty(process.env, 'pm_id');
       Reflect.deleteProperty(process.env, 'NODE_APP_INSTANCE');
       process.env.WEB_CONCURRENCY = '1';
+      configService.reload();
 
       mockLoggerWarn.mockClear();
       const service = new FileLockService();
