@@ -1,4 +1,3 @@
-import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
@@ -93,7 +92,7 @@ class ReconciliationService {
 
   /**
    * Initialize workspaces that need worktrees via the state machine.
-   * Uses initializeWorkspaceWorktree to ensure proper state transitions
+   * Uses workspace bridge initialization to ensure proper state transitions
    * (NEW -> PROVISIONING -> READY/FAILED), factory-factory.json support,
    * and startup script handling.
    *
@@ -123,7 +122,7 @@ class ReconciliationService {
       } else {
         // NEW workspace - initialize normally
         try {
-          await initializeWorkspaceWorktree(workspace.id, {
+          await this.workspace.initializeWorktree(workspace.id, {
             branchName: workspace.branchName ?? undefined,
           });
           logger.info('Initialized workspace via reconciliation', {

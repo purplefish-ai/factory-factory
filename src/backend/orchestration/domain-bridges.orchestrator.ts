@@ -36,6 +36,7 @@ import {
 } from '@/backend/domains/workspace';
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 type BridgeServices = {
   chatEventForwarderService: typeof chatEventForwarderService;
@@ -143,6 +144,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       markFailed: async (id, reason) => {
         await workspaceStateMachine.markFailed(id, reason);
       },
+      initializeWorktree: (id, options) => initializeWorkspaceWorktree(id, options),
     },
   });
 
