@@ -79,19 +79,28 @@ import { sessionPromptBuilder } from './session.prompt-builder';
 import { sessionRepository } from './session.repository';
 import { sessionService } from './session.service';
 
+function getAcpProcessorState() {
+  return (
+    sessionService as unknown as {
+      acpEventProcessor: {
+        pendingAcpToolCalls: Map<string, Map<string, unknown>>;
+        sessionToWorkspace: Map<string, string>;
+        sessionToWorkingDir: Map<string, string>;
+        handleAcpDelta: (sid: string, delta: unknown) => void;
+      };
+    }
+  ).acpEventProcessor;
+}
+
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
-    const serviceState = sessionService as unknown as {
-      pendingAcpToolCalls: Map<string, Map<string, unknown>>;
-      sessionToWorkspace: Map<string, string>;
-      sessionToWorkingDir: Map<string, string>;
-    };
-    serviceState.pendingAcpToolCalls.clear();
-    serviceState.sessionToWorkspace.clear();
-    serviceState.sessionToWorkingDir.clear();
+    const acpProcessor = getAcpProcessorState();
+    acpProcessor.pendingAcpToolCalls.clear();
+    acpProcessor.sessionToWorkspace.clear();
+    acpProcessor.sessionToWorkingDir.clear();
     sessionService.setPromptTurnCompleteHandler(null);
     sessionService.configure({
       workspace: {
@@ -439,15 +448,11 @@ describe('SessionService', () => {
   });
 
   it('notifies interceptors for ACP tool_use start and tool_result completion', () => {
-    const serviceState = sessionService as unknown as {
-      handleAcpDelta: (sid: string, delta: unknown) => void;
-      sessionToWorkspace: Map<string, string>;
-      sessionToWorkingDir: Map<string, string>;
-    };
-    serviceState.sessionToWorkspace.set('session-1', 'workspace-1');
-    serviceState.sessionToWorkingDir.set('session-1', '/tmp/workspace');
+    const acpProcessor = getAcpProcessorState();
+    acpProcessor.sessionToWorkspace.set('session-1', 'workspace-1');
+    acpProcessor.sessionToWorkingDir.set('session-1', '/tmp/workspace');
 
-    serviceState.handleAcpDelta('session-1', {
+    acpProcessor.handleAcpDelta('session-1', {
       type: 'agent_message',
       data: {
         type: 'stream_event',
@@ -464,7 +469,7 @@ describe('SessionService', () => {
       },
     });
 
-    serviceState.handleAcpDelta('session-1', {
+    acpProcessor.handleAcpDelta('session-1', {
       type: 'tool_progress',
       tool_use_id: 'call-1',
       tool_name: 'commandExecution',
@@ -472,7 +477,7 @@ describe('SessionService', () => {
       elapsed_time_seconds: 1,
     });
 
-    serviceState.handleAcpDelta('session-1', {
+    acpProcessor.handleAcpDelta('session-1', {
       type: 'agent_message',
       data: {
         type: 'user',
@@ -649,22 +654,18 @@ describe('SessionService', () => {
   });
 
   it('finalizes orphaned ACP tool calls during manual stop', async () => {
-    const pendingToolCalls = (
-      sessionService as unknown as {
-        pendingAcpToolCalls: Map<
-          string,
-          Map<
-            string,
-            {
-              toolUseId: string;
-              toolName: string;
-              acpKind?: string;
-              acpLocations?: Array<{ path: string; line?: number | null }>;
-            }
-          >
-        >;
-      }
-    ).pendingAcpToolCalls;
+    const pendingToolCalls = getAcpProcessorState().pendingAcpToolCalls as Map<
+      string,
+      Map<
+        string,
+        {
+          toolUseId: string;
+          toolName: string;
+          acpKind?: string;
+          acpLocations?: Array<{ path: string; line?: number | null }>;
+        }
+      >
+    >;
 
     pendingToolCalls.set(
       'session-1',
@@ -733,22 +734,18 @@ describe('SessionService', () => {
       },
     });
 
-    const pendingToolCalls = (
-      sessionService as unknown as {
-        pendingAcpToolCalls: Map<
-          string,
-          Map<
-            string,
-            {
-              toolUseId: string;
-              toolName: string;
-              acpKind?: string;
-              acpLocations?: Array<{ path: string; line?: number | null }>;
-            }
-          >
-        >;
-      }
-    ).pendingAcpToolCalls;
+    const pendingToolCalls = getAcpProcessorState().pendingAcpToolCalls as Map<
+      string,
+      Map<
+        string,
+        {
+          toolUseId: string;
+          toolName: string;
+          acpKind?: string;
+          acpLocations?: Array<{ path: string; line?: number | null }>;
+        }
+      >
+    >;
 
     pendingToolCalls.set(
       'session-1',
@@ -1114,22 +1111,18 @@ describe('SessionService', () => {
   });
 
   it('finalizes orphaned ACP tool calls when prompt ends without terminal updates', async () => {
-    const pendingToolCalls = (
-      sessionService as unknown as {
-        pendingAcpToolCalls: Map<
-          string,
-          Map<
-            string,
-            {
-              toolUseId: string;
-              toolName: string;
-              acpKind?: string;
-              acpLocations?: Array<{ path: string; line?: number | null }>;
-            }
-          >
-        >;
-      }
-    ).pendingAcpToolCalls;
+    const pendingToolCalls = getAcpProcessorState().pendingAcpToolCalls as Map<
+      string,
+      Map<
+        string,
+        {
+          toolUseId: string;
+          toolName: string;
+          acpKind?: string;
+          acpLocations?: Array<{ path: string; line?: number | null }>;
+        }
+      >
+    >;
 
     vi.mocked(acpRuntimeManager.sendPrompt).mockImplementation(() => {
       pendingToolCalls.set(
