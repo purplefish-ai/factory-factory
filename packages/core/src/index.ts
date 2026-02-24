@@ -22,6 +22,7 @@ export {
 // Types & Enums
 export {
   CIStatus,
+  IssueProvider,
   KanbanColumn,
   PRState,
   RatchetState,
