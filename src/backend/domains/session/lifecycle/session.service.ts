@@ -1018,12 +1018,12 @@ export class SessionService {
 
   /**
    * Stop all active clients during shutdown.
-   * @param _timeoutMs - Timeout (unused, kept for API compatibility)
+   * @param timeoutMs - Maximum wait time for each client shutdown attempt
    */
-  async stopAllClients(_timeoutMs = 5000): Promise<void> {
+  async stopAllClients(timeoutMs = 5000): Promise<void> {
     this.clearAllScheduledPromptTurnCompletions();
     try {
-      await this.runtimeManager.stopAllClients();
+      await this.runtimeManager.stopAllClients(timeoutMs);
     } catch (error) {
       logger.error('Failed to stop ACP clients during shutdown', {
         error: error instanceof Error ? error.message : String(error),

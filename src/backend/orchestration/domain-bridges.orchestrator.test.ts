@@ -58,6 +58,10 @@ vi.mock('@/backend/domains/run-script', () => ({
   startupScriptService: { configure: vi.fn() },
 }));
 
+vi.mock('./workspace-init.orchestrator', () => ({
+  initializeWorkspaceWorktree: vi.fn(),
+}));
+
 // --- Import mocked modules to get references ---
 
 import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
@@ -81,6 +85,7 @@ import {
   workspaceStateMachine,
 } from '@/backend/domains/workspace';
 import { configureDomainBridges } from './domain-bridges.orchestrator';
+import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 // Helper to extract bridge argument from a mocked configure call.
 function getBridge<T>(mockFn: (arg: T) => void): T {
@@ -208,6 +213,16 @@ describe('configureDomainBridges', () => {
 
       await bridge.workspace.markFailed('ws1', 'broken');
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith('ws1', 'broken');
+    });
+
+    it('workspace bridge initializeWorktree delegates to initializeWorkspaceWorktree', async () => {
+      configureDomainBridges();
+      const bridge = getBridge(reconciliationService.configure);
+
+      await bridge.workspace.initializeWorktree('ws1', { branchName: 'feature/test' });
+      expect(initializeWorkspaceWorktree).toHaveBeenCalledWith('ws1', {
+        branchName: 'feature/test',
+      });
     });
   });
 

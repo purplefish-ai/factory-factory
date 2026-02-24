@@ -24,11 +24,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-// Mock initializeWorkspaceWorktree
-const mockInitializeWorkspaceWorktree = vi.fn();
-vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
-  initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
-}));
+const mockInitializeWorktree = vi.fn();
 
 // Import after mocks are set up
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
@@ -50,6 +46,7 @@ describe('ReconciliationService', () => {
             data: { status: 'FAILED', initErrorMessage: reason },
           });
         },
+        initializeWorktree: (...args: unknown[]) => mockInitializeWorktree(...args),
       },
     });
   });
@@ -69,11 +66,11 @@ describe('ReconciliationService', () => {
       };
 
       mockFindMany.mockResolvedValue([newWorkspace]);
-      mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
+      mockInitializeWorktree.mockResolvedValue(undefined);
 
       await reconciliationService.reconcile();
 
-      expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', {
+      expect(mockInitializeWorktree).toHaveBeenCalledWith('ws-1', {
         branchName: 'feature/test',
       });
     });
@@ -97,8 +94,8 @@ describe('ReconciliationService', () => {
 
       await reconciliationService.reconcile();
 
-      // Should NOT call initializeWorkspaceWorktree for stale PROVISIONING
-      expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
+      // Should NOT call initializeWorktree for stale PROVISIONING
+      expect(mockInitializeWorktree).not.toHaveBeenCalled();
 
       // Should transition to FAILED via state machine
       expect(mockUpdate).toHaveBeenCalledWith({
@@ -132,12 +129,12 @@ describe('ReconciliationService', () => {
       mockFindMany.mockResolvedValue([newWorkspace, staleWorkspace]);
       mockFindUnique.mockResolvedValue(staleWorkspace);
       mockUpdate.mockResolvedValue({ ...staleWorkspace, status: 'FAILED' });
-      mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
+      mockInitializeWorktree.mockResolvedValue(undefined);
 
       await reconciliationService.reconcile();
 
       // NEW workspace should be initialized
-      expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('ws-1', {
+      expect(mockInitializeWorktree).toHaveBeenCalledWith('ws-1', {
         branchName: 'feature/new',
       });
 
@@ -159,7 +156,7 @@ describe('ReconciliationService', () => {
       };
 
       mockFindMany.mockResolvedValue([newWorkspace]);
-      mockInitializeWorkspaceWorktree.mockRejectedValue(new Error('Git clone failed'));
+      mockInitializeWorktree.mockRejectedValue(new Error('Git clone failed'));
 
       // Should not throw
       await expect(reconciliationService.reconcile()).resolves.not.toThrow();

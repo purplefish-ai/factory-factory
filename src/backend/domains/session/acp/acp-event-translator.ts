@@ -11,6 +11,9 @@ type ContextCompactionUpdate = {
   [key: string]: unknown;
 };
 
+// Compatibility shim until ACP SDK adds `context_compaction` to SessionUpdate.
+type TranslatableSessionUpdate = SessionUpdate | ContextCompactionUpdate;
+
 /**
  * Stateless translator that maps ACP SessionUpdate variants to FF SessionDeltaEvent arrays.
  *
@@ -27,12 +30,7 @@ export class AcpEventTranslator {
     this.logger = logger;
   }
 
-  translateSessionUpdate(update: SessionUpdate): AcpTranslatedDelta[] {
-    const sessionUpdate = (update as { sessionUpdate: string }).sessionUpdate;
-    if (sessionUpdate === 'context_compaction') {
-      return this.translateContextCompactionUpdate(update as unknown as ContextCompactionUpdate);
-    }
-
+  translateSessionUpdate(update: TranslatableSessionUpdate): AcpTranslatedDelta[] {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk':
         return this.translateAgentMessageChunk(update);
@@ -58,6 +56,9 @@ export class AcpEventTranslator {
       case 'config_option_update':
         return this.translateConfigOptionUpdate(update);
 
+      case 'context_compaction':
+        return this.translateContextCompactionUpdate(update);
+
       // Not yet translated -- log-only
       case 'current_mode_update':
       case 'session_info_update':
@@ -66,7 +67,7 @@ export class AcpEventTranslator {
 
       default:
         this.logger.warn('Unknown ACP session update type', {
-          sessionUpdate: (update as { sessionUpdate: string }).sessionUpdate,
+          sessionUpdate: this.readSessionUpdateType(update),
         });
         return [];
     }
@@ -446,5 +447,12 @@ export class AcpEventTranslator {
       return null;
     }
     return value as Record<string, unknown>;
+  }
+
+  private readSessionUpdateType(update: { sessionUpdate?: unknown }): string {
+    if (typeof update.sessionUpdate === 'string') {
+      return update.sessionUpdate;
+    }
+    return 'unknown';
   }
 }
