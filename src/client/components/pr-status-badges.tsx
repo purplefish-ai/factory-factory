@@ -18,8 +18,13 @@ function getSingleCheckCiStatus(check: GitHubStatusCheck) {
   return deriveCiStatusFromCheckRollup([check]);
 }
 
-function isSkippedOrCancelledCheck(check: GitHubStatusCheck): boolean {
-  return check.conclusion === 'SKIPPED' || check.conclusion === 'CANCELLED';
+function isNonPassingCompletedCheck(check: GitHubStatusCheck): boolean {
+  return (
+    check.status === 'COMPLETED' &&
+    (check.conclusion === 'SKIPPED' ||
+      check.conclusion === 'CANCELLED' ||
+      check.conclusion === 'NEUTRAL')
+  );
 }
 
 function isPassedCheck(check: GitHubStatusCheck): boolean {
@@ -106,6 +111,7 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
   const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
   const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
   const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
+  const skipped = uniqueChecks.filter((c) => isNonPassingCompletedCheck(c)).length;
 
   if (failed > 0) {
     return (
@@ -121,9 +127,23 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
       </Badge>
     );
   }
+  if (passed > 0) {
+    return (
+      <Badge variant="secondary" className="bg-green-500/20 text-green-600 text-xs">
+        {passed} passed
+      </Badge>
+    );
+  }
+  if (skipped > 0) {
+    return (
+      <Badge variant="secondary" className="bg-gray-500/20 text-gray-600 text-xs">
+        {skipped} skipped
+      </Badge>
+    );
+  }
   return (
-    <Badge variant="secondary" className="bg-green-500/20 text-green-600 text-xs">
-      {passed} passed
+    <Badge variant="outline" className="text-xs">
+      {getCiVisualLabel('UNKNOWN')}
     </Badge>
   );
 }
@@ -169,7 +189,7 @@ function CICheckItem({ check }: CICheckItemProps) {
   const ciStatus = getSingleCheckCiStatus(check);
 
   const getStatusIcon = () => {
-    if (isSkippedOrCancelledCheck(check)) {
+    if (isNonPassingCompletedCheck(check)) {
       return <span className="text-gray-400">○</span>;
     }
     if (ciStatus === 'SUCCESS') {
@@ -182,7 +202,7 @@ function CICheckItem({ check }: CICheckItemProps) {
   };
 
   const getStatusColor = () => {
-    if (isSkippedOrCancelledCheck(check)) {
+    if (isNonPassingCompletedCheck(check)) {
       return 'text-gray-500';
     }
     if (ciStatus === 'SUCCESS') {
@@ -235,7 +255,7 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
   const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
   const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
   const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
-  const skipped = uniqueChecks.filter((c) => isSkippedOrCancelledCheck(c)).length;
+  const skipped = uniqueChecks.filter((c) => isNonPassingCompletedCheck(c)).length;
 
   return (
     <div className="border-b">

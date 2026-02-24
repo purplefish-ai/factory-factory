@@ -15,10 +15,14 @@ function createCheck(
 }
 
 describe('CIChecksSection', () => {
-  it('renders skipped and cancelled checks with neutral icon and text color', () => {
+  it('renders skipped, cancelled, and neutral checks with neutral icon and text color', () => {
     const markup = renderToStaticMarkup(
       <CIChecksSection
-        checks={[createCheck('lint', 'SKIPPED'), createCheck('build', 'CANCELLED')]}
+        checks={[
+          createCheck('lint', 'SKIPPED'),
+          createCheck('build', 'CANCELLED'),
+          createCheck('coverage', 'NEUTRAL'),
+        ]}
       />
     );
 
@@ -28,19 +32,20 @@ describe('CIChecksSection', () => {
     expect(markup).not.toContain('✓');
   });
 
-  it('does not count skipped and cancelled checks as passed in section summary', () => {
+  it('does not count skipped, cancelled, and neutral checks as passed in section summary', () => {
     const markup = renderToStaticMarkup(
       <CIChecksSection
         checks={[
           createCheck('typecheck', 'SUCCESS'),
           createCheck('lint', 'SKIPPED'),
           createCheck('build', 'CANCELLED'),
+          createCheck('audit', 'NEUTRAL'),
         ]}
       />
     );
 
     expect(markup).toContain('1 passed');
-    expect(markup).toContain('2 skipped');
+    expect(markup).toContain('3 skipped');
     expect(markup).not.toContain('3 passed');
   });
 });
@@ -60,5 +65,20 @@ describe('CIStatusBadge', () => {
 
     expect(markup).toContain('1 passed');
     expect(markup).not.toContain('4 passed');
+  });
+
+  it('shows skipped when all checks are non-passing terminal outcomes', () => {
+    const markup = renderToStaticMarkup(
+      <CIStatusBadge
+        checks={[
+          createCheck('lint', 'SKIPPED'),
+          createCheck('build', 'CANCELLED'),
+          createCheck('audit', 'NEUTRAL'),
+        ]}
+      />
+    );
+
+    expect(markup).toContain('3 skipped');
+    expect(markup).not.toContain('0 passed');
   });
 });
