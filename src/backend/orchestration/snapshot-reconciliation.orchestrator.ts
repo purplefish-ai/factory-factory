@@ -82,7 +82,21 @@ interface DriftEntry {
 // Drift detection (pure function, exported for testing)
 // ---------------------------------------------------------------------------
 
-const DRIFT_FIELD_GROUPS: { group: string; fields: string[] }[] = [
+type DriftComparableField =
+  | 'status'
+  | 'name'
+  | 'branchName'
+  | 'prState'
+  | 'prCiStatus'
+  | 'prNumber'
+  | 'ratchetEnabled'
+  | 'ratchetState'
+  | 'runScriptStatus'
+  | 'isWorking'
+  | 'pendingRequestType'
+  | 'sessionSummaries';
+
+const DRIFT_FIELD_GROUPS: { group: string; fields: DriftComparableField[] }[] = [
   { group: 'workspace', fields: ['status', 'name', 'branchName'] },
   { group: 'pr', fields: ['prState', 'prCiStatus', 'prNumber'] },
   { group: 'ratchet', fields: ['ratchetEnabled', 'ratchetState'] },
@@ -102,11 +116,11 @@ export function detectDrift(
 
   for (const { group, fields } of DRIFT_FIELD_GROUPS) {
     for (const field of fields) {
-      const authValue = (authoritative as Record<string, unknown>)[field];
+      const authValue = authoritative[field];
       if (authValue === undefined) {
         continue;
       }
-      const snapValue = (existing as unknown as Record<string, unknown>)[field];
+      const snapValue = existing[field];
       if (!isDeepStrictEqual(authValue, snapValue)) {
         drifts.push({
           field,

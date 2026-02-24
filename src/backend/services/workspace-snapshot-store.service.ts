@@ -234,9 +234,11 @@ const RATCHET_FIELDS = ['ratchetEnabled', 'ratchetState'] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
 
+type SnapshotField = Exclude<keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry, 'projectId'>;
+
 type FieldGroupMapping = {
   group: SnapshotFieldGroup;
-  fields: readonly string[];
+  fields: readonly SnapshotField[];
 };
 
 const FIELD_GROUP_MAPPINGS: FieldGroupMapping[] = [
@@ -277,6 +279,17 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   private entries = new Map<string, WorkspaceSnapshotEntry>();
   private projectIndex = new Map<string, Set<string>>();
   private deriveFns: SnapshotDerivationFns | null = null;
+
+  private assignField<K extends SnapshotField>(
+    entry: WorkspaceSnapshotEntry,
+    update: SnapshotUpdateInput,
+    field: K
+  ): void {
+    const value = update[field];
+    if (value !== undefined) {
+      entry[field] = value as WorkspaceSnapshotEntry[K];
+    }
+  }
 
   /**
    * Configure derivation functions. Must be called before any upsert operations.
@@ -344,18 +357,13 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     ts: number
   ): void {
     for (const mapping of FIELD_GROUP_MAPPINGS) {
-      const hasFieldsInGroup = mapping.fields.some(
-        (field) => (update as Record<string, unknown>)[field] !== undefined
-      );
+      const hasFieldsInGroup = mapping.fields.some((field) => update[field] !== undefined);
       if (!hasFieldsInGroup || ts <= entry.fieldTimestamps[mapping.group]) {
         continue;
       }
       entry.fieldTimestamps[mapping.group] = ts;
       for (const field of mapping.fields) {
-        const value = (update as Record<string, unknown>)[field];
-        if (value !== undefined) {
-          (entry as unknown as Record<string, unknown>)[field] = value;
-        }
+        this.assignField(entry, update, field);
       }
     }
   }
