@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unify workspace state projection and remove UI polling for more immediate status updates (#1228)
 - Improve Kanban navigation and workspace creation flow, including direct project-name navigation and sidebar creation entrypoints (#1223, #1208)
 - Update workspace and board UX with refined headers, controls, and mobile PR context chips (#1196, #1197, #1200, #1219, #1220)
+- Group terminal logs under a single Logs tab and streamline sidebar tab/grouping behavior (#1230, #1231, #1232)
 - Separate settings into General and Project sections for clearer configuration boundaries (#1215)
 - Increase pasted text attachment threshold for larger input support (#1226)
 - Consolidate `src/frontend` into `src/client` to simplify client structure and ownership (#1207)
@@ -34,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix Workspaces sidebar navigation button highlighting on detail routes (#1222)
 - Fix duplicate workspace entries appearing in the sidebar (#1216)
 - Fix Docker-in-Docker daemon crash by adding `containerd` and vfs driver configuration (#1204)
+- Harden JSON fallback parsing with schema validation and remove unsafe runtime coercions in snapshot paths (#1234, #1233)
 
 ### Refactored
 
@@ -41,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extract session configuration and permission services and split associated tests for better module isolation (#1224)
 - Route conversation rename behavior through the session domain barrel API (#1217)
 - Inject session runtime singletons through `AppContext` to centralize runtime wiring (#1213)
+- Refactor run script service dependency-injection wiring (#1235)
 - Remove deprecated or legacy compatibility paths (`KanbanIssue` alias, sidecar init fallback, eager CORS app context initialization) (#1209, #1210, #1212)
 
 ## [0.3.7] - 2026-02-20
