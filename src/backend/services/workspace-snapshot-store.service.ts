@@ -22,6 +22,8 @@ import type {
   RunScriptStatus,
   WorkspaceStatus,
 } from '@/shared/core';
+import type { SessionSummary } from '@/shared/session-runtime';
+import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { createLogger } from './logger.service';
 
@@ -41,32 +43,6 @@ export type SnapshotFieldGroup =
   | 'ratchet'
   | 'runScript'
   | 'reconciliation';
-
-/**
- * Flow phase derived from PR + ratchet state.
- * Duplicated from workspace domain to maintain ARCH-02 compliance (no domain imports).
- */
-export type WorkspaceFlowPhase =
-  | 'NO_PR'
-  | 'CI_WAIT'
-  | 'RATCHET_VERIFY'
-  | 'RATCHET_FIXING'
-  | 'READY'
-  | 'MERGED';
-
-/**
- * CI observation state derived from PR CI status.
- * Duplicated from workspace domain to maintain ARCH-02 compliance (no domain imports).
- */
-export type WorkspaceCiObservation =
-  | 'NOT_FETCHED'
-  | 'NO_CHECKS'
-  | 'CHECKS_PENDING'
-  | 'CHECKS_FAILED'
-  | 'CHECKS_PASSED'
-  | 'CHECKS_UNKNOWN';
-
-import type { SessionSummary } from '@/shared/session-runtime';
 export type WorkspaceSessionSummary = SessionSummary;
 
 /**
