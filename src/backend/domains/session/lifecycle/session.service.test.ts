@@ -1420,6 +1420,7 @@ describe('SessionService', () => {
     await sessionService.stopAllClients(4321);
 
     expect(acpRuntimeManager.stopAllClients).toHaveBeenCalledTimes(1);
+    expect(acpRuntimeManager.stopAllClients).toHaveBeenCalledWith(4321);
   });
 
   it('propagates ACP shutdown failure', async () => {
@@ -1428,5 +1429,6 @@ describe('SessionService', () => {
     );
 
     await expect(sessionService.stopAllClients()).rejects.toThrow('acp shutdown failed');
+    expect(acpRuntimeManager.stopAllClients).toHaveBeenCalledWith(5000);
   });
 });
