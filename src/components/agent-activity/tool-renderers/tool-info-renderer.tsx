@@ -11,7 +11,12 @@ import { memo } from 'react';
 import type { ToolCallInfo } from '@/components/agent-activity/types';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { AgentMessage, PairedToolCall, ToolSequence } from '@/lib/chat-protocol';
+import type {
+  AgentMessage,
+  PairedToolCall,
+  ToolResultContentValue,
+  ToolSequence,
+} from '@/lib/chat-protocol';
 import {
   extractToolInfo,
   extractToolResultInfo,
@@ -22,6 +27,7 @@ import { cn } from '@/lib/utils';
 import { getDisplayToolName } from './tool-display-utils';
 import { ToolInputRenderer } from './tool-input-renderer';
 import { ToolResultContentRenderer } from './tool-result-renderer';
+import { isWebSearchToolName, parseWebSearchToolResult } from './web-search-parser';
 
 // =============================================================================
 // Tool Info Renderer
@@ -31,6 +37,19 @@ export interface ToolInfoRendererProps {
   message: AgentMessage;
   defaultOpen?: boolean;
   isPending?: boolean;
+}
+
+function resolveDisplayInput(
+  name: string,
+  input: Record<string, unknown>,
+  resultContent?: ToolResultContentValue
+): Record<string, unknown> {
+  if (!(isWebSearchToolName(name) && resultContent)) {
+    return input;
+  }
+
+  const payload = parseWebSearchToolResult(resultContent);
+  return payload ? { ...payload } : input;
 }
 
 /**
@@ -303,7 +322,11 @@ export const ToolSequenceGroup = memo(function ToolSequenceGroup({
         {displayCalls.map((call, index) => (
           <React.Fragment key={call.id}>
             <span className={call.status === 'error' ? 'text-destructive' : undefined}>
-              {getDisplayToolName(call.name, call.input, { summary: true })}
+              {getDisplayToolName(
+                call.name,
+                resolveDisplayInput(call.name, call.input, call.result?.content),
+                { summary: true }
+              )}
             </span>
             {index < displayCalls.length - 1 && ', '}
           </React.Fragment>
@@ -392,7 +415,8 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
 
   const isPending = call.status === 'pending';
   const isError = call.status === 'error';
-  const displayName = getDisplayToolName(call.name, call.input);
+  const displayInput = resolveDisplayInput(call.name, call.input, call.result?.content);
+  const displayName = getDisplayToolName(call.name, displayInput);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -441,7 +465,11 @@ const PairedToolCallRenderer = memo(function PairedToolCallRenderer({
             {/* Tool Input */}
             <div className="min-w-0">
               <div className="text-[10px] font-medium text-muted-foreground mb-0.5">Input</div>
-              <ToolInputRenderer name={call.name} input={call.input} />
+              <ToolInputRenderer
+                name={call.name}
+                input={call.input}
+                resultContent={call.result?.content}
+              />
             </div>
             {/* Tool Result */}
             {call.result && (
@@ -540,7 +568,8 @@ interface ToolCallItemProps {
 
 const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps) {
   const [isOpen, setIsOpen] = React.useState(false);
-  const displayName = getDisplayToolName(toolCall.name, toolCall.input);
+  const displayInput = resolveDisplayInput(toolCall.name, toolCall.input, toolCall.result?.content);
+  const displayName = getDisplayToolName(toolCall.name, displayInput);
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -567,7 +596,11 @@ const ToolCallItem = memo(function ToolCallItem({ toolCall }: ToolCallItemProps)
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="px-4 pb-1.5 space-y-1 overflow-x-auto">
-          <ToolInputRenderer name={toolCall.name} input={toolCall.input} />
+          <ToolInputRenderer
+            name={toolCall.name}
+            input={toolCall.input}
+            resultContent={toolCall.result?.content}
+          />
           {toolCall.result && (
             <ToolResultContentRenderer
               content={toolCall.result.content}

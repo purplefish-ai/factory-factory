@@ -87,5 +87,31 @@ describe('tool-display-utils', () => {
       );
       expect(summaryDisplay).toBe('Read deeply nested path…');
     });
+
+    it('formats webSearch as first-class labels', () => {
+      const display = getDisplayToolName(
+        'webSearch',
+        {
+          type: 'webSearch',
+          id: 'ws_123',
+          query: 'OpenAI Codex app-server command/exec method',
+          action: { type: 'other' },
+        },
+        { summary: false }
+      );
+      const summaryDisplay = getDisplayToolName(
+        'webSearch',
+        {
+          type: 'webSearch',
+          id: 'ws_123',
+          query: 'OpenAI Codex app-server command/exec method',
+          action: { type: 'other' },
+        },
+        { summary: true }
+      );
+
+      expect(display).toBe('Web search OpenAI Codex app-server command/exec method');
+      expect(summaryDisplay).toBe('Web search');
+    });
   });
 });

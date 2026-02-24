@@ -1,8 +1,10 @@
 import { isCodexFileChangeToolName } from './file-change-parser';
+import { isWebSearchToolName, parseWebSearchToolInput } from './web-search-parser';
 
 const SUMMARY_TOOL_NAME_MAX = 24;
 const DETAIL_TOOL_NAME_MAX = 96;
 const RUN_COMMAND_PREVIEW_MAX = 84;
+const WEB_SEARCH_PREVIEW_MAX = 84;
 const SHELL_EXECUTABLES = new Set(['bash', 'dash', 'ksh', 'mksh', 'sh', 'zsh', 'fish']);
 
 export function normalizeWhitespace(value: string): string {
@@ -89,6 +91,22 @@ export function getDisplayToolName(
 
   if (isCodexFileChangeToolName(normalizedName)) {
     return 'File changes';
+  }
+
+  if (isWebSearchToolName(normalizedName)) {
+    if (options.summary) {
+      return 'Web search';
+    }
+
+    const payload = parseWebSearchToolInput(input);
+    const query =
+      payload?.query ?? (/^websearch\s*:\s*(.+)$/i.exec(normalizedName)?.[1]?.trim() || '');
+
+    if (!query) {
+      return 'Web search';
+    }
+
+    return truncateWithEllipsis(`Web search ${query}`, WEB_SEARCH_PREVIEW_MAX);
   }
 
   return truncateWithEllipsis(
