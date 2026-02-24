@@ -72,12 +72,15 @@ function deduplicateChecks(checks: GitHubStatusCheck[]): GitHubStatusCheck[] {
   const getPriority = (check: GitHubStatusCheck): number => {
     const ciStatus = getSingleCheckCiStatus(check);
     if (ciStatus === 'FAILURE') {
-      return 4;
+      return 5;
     }
     if (ciStatus === 'PENDING') {
+      return 4;
+    }
+    if (isPassedCheck(check)) {
       return 3;
     }
-    if (ciStatus === 'SUCCESS') {
+    if (isNonPassingCompletedCheck(check)) {
       return 2;
     }
     return 1;

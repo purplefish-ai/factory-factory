@@ -81,4 +81,15 @@ describe('CIStatusBadge', () => {
     expect(markup).toContain('3 skipped');
     expect(markup).not.toContain('0 passed');
   });
+
+  it('prefers true success over skipped or cancelled duplicate check runs', () => {
+    const markup = renderToStaticMarkup(
+      <CIStatusBadge
+        checks={[createCheck('build', 'CANCELLED'), createCheck('build', 'SUCCESS')]}
+      />
+    );
+
+    expect(markup).toContain('1 passed');
+    expect(markup).not.toContain('1 skipped');
+  });
 });
