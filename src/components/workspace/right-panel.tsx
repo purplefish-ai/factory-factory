@@ -189,7 +189,6 @@ export function RightPanel({
 
   // Terminal tab state lifted up from TerminalPanel for inline rendering
   const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
-  const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>('setup-logs');
 
   // Track last selected logs subtab for Logs tab navigation
   const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>('setup-logs');
@@ -230,7 +229,6 @@ export function RightPanel({
 
     // Reset terminal tab state when workspace changes
     setTerminalTabState(null);
-    setLastLogsTab('setup-logs');
 
     // Reset logs subtab selection to default when workspace changes
     setLastLogsTab('setup-logs');
