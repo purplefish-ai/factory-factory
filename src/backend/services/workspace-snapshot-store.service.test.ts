@@ -63,6 +63,7 @@ describe('WorkspaceSnapshotStore', () => {
       deriveFlowState: (_input) => ({
         phase: 'NO_PR' as const,
         ciObservation: 'CHECKS_UNKNOWN' as const,
+        hasActivePr: false,
         isWorking: false,
         shouldAnimateRatchetButton: false,
       }),
@@ -338,6 +339,7 @@ describe('WorkspaceSnapshotStore', () => {
             input.prCiStatus === 'SUCCESS'
               ? ('CHECKS_PASSED' as const)
               : ('CHECKS_UNKNOWN' as const),
+          hasActivePr: input.prUrl !== null,
           isWorking: input.prUrl !== null && input.prCiStatus === 'PENDING',
           shouldAnimateRatchetButton: input.ratchetEnabled && input.prCiStatus === 'PENDING',
         }),
@@ -505,6 +507,7 @@ describe('WorkspaceSnapshotStore', () => {
         deriveFlowState: (input) => ({
           phase: input.prUrl ? ('CI_WAIT' as const) : ('NO_PR' as const),
           ciObservation: 'CHECKS_UNKNOWN' as const,
+          hasActivePr: input.prUrl !== null,
           isWorking: false,
           shouldAnimateRatchetButton: false,
         }),
