@@ -50,6 +50,46 @@ interface VirtualizedMessageListProps {
 
 const STICK_TO_BOTTOM_THRESHOLD = 48;
 
+function parseCssPixels(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getVerticalSpacingFromStyles(styles: CSSStyleDeclaration): {
+  verticalPadding: number;
+  verticalBorder: number;
+} {
+  const verticalPadding = parseCssPixels(styles.paddingTop) + parseCssPixels(styles.paddingBottom);
+  const verticalBorder =
+    parseCssPixels(styles.borderTopWidth) + parseCssPixels(styles.borderBottomWidth);
+
+  return {
+    verticalPadding,
+    verticalBorder,
+  };
+}
+
+function getElementBorderBoxHeight(element: Element): number {
+  if (element instanceof HTMLElement) {
+    const styles = getComputedStyle(element);
+    const { verticalBorder } = getVerticalSpacingFromStyles(styles);
+    return element.clientHeight + verticalBorder;
+  }
+
+  return element.getBoundingClientRect().height;
+}
+
+function getObservedBorderBoxHeight(entry: ResizeObserverEntry): number {
+  const firstBox = entry.borderBoxSize?.[0];
+  if (firstBox) {
+    return firstBox.blockSize;
+  }
+
+  const styles = getComputedStyle(entry.target);
+  const { verticalPadding, verticalBorder } = getVerticalSpacingFromStyles(styles);
+  return entry.contentRect.height + verticalPadding + verticalBorder;
+}
+
 // =============================================================================
 // Empty State Component
 // =============================================================================
@@ -309,25 +349,17 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    let previousContentHeight: number | null = null;
+    let previousContentHeight = getElementBorderBoxHeight(content);
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
         return;
       }
-      const nextContentHeight = entry.contentRect.height;
-      if (previousContentHeight === null) {
-        // Seed baseline from ResizeObserver's content-box measurements.
-        previousContentHeight = nextContentHeight;
-        return;
-      }
+      const nextContentHeight = getObservedBorderBoxHeight(entry);
 
       const growthAmount = nextContentHeight - previousContentHeight;
       const grew = growthAmount > 0;
       previousContentHeight = nextContentHeight;
-      if (!grew) {
-        return;
-      }
 
       const container = scrollContainerRef.current;
       if (!container) {
@@ -336,8 +368,12 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (!grew) {
+        return;
+      }
+
       const wasNearBottomBeforeGrowth =
-        distanceFromBottom - growthAmount < STICK_TO_BOTTOM_THRESHOLD;
+        distanceFromBottom - growthAmount <= STICK_TO_BOTTOM_THRESHOLD;
       if (!wasNearBottomBeforeGrowth) {
         return;
       }
@@ -353,7 +389,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       });
     });
 
-    observer.observe(content);
+    try {
+      observer.observe(content, { box: 'border-box' });
+    } catch {
+      observer.observe(content);
+    }
     return () => {
       observer.disconnect();
       if (resizeStickRafRef.current !== null) {

@@ -125,7 +125,11 @@ async function flushAnimationFrame(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-function triggerResize(height: number) {
+function triggerResize(
+  height: number,
+  borderBoxHeight: number | null = height,
+  target: Element = document.body
+) {
   const entry = {
     contentRect: {
       width: 0,
@@ -138,6 +142,10 @@ function triggerResize(height: number) {
       left: 0,
       toJSON: () => ({}),
     },
+    target,
+    ...(borderBoxHeight === null
+      ? {}
+      : { borderBoxSize: [{ inlineSize: 0, blockSize: borderBoxHeight }] }),
   } as unknown as ResizeObserverEntry;
 
   for (const callback of resizeObserverMocks.callbacks) {
@@ -499,7 +507,7 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
 
     triggerResize(220);
     await flushAnimationFrame();
-    expect(harness.viewport.scrollTop).toBe(120);
+    expect(harness.viewport.scrollTop).toBe(640);
 
     triggerResize(300);
     await flushAnimationFrame();
@@ -509,6 +517,104 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     triggerResize(380);
     await flushAnimationFrame();
     expect(harness.viewport.scrollTop).toBe(920);
+
+    harness.cleanup();
+  });
+
+  it('keeps first growth callback pinned with non-zero border-box baseline', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    let scrollHeight = 640;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 120;
+
+    await flushEffects();
+
+    const content = document.querySelector('div.p-4.min-w-0');
+    expect(content).not.toBeNull();
+    if (!content) {
+      harness.cleanup();
+      return;
+    }
+    Object.defineProperty(content, 'clientHeight', {
+      configurable: true,
+      value: 252,
+    });
+
+    harness.render({
+      loadingSession: false,
+      messages: [],
+      isNearBottom: true,
+    });
+    await flushEffects();
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+    await flushEffects();
+
+    scrollHeight = 720;
+    triggerResize(300, 332);
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(720);
+
+    harness.cleanup();
+  });
+
+  it('falls back when borderBoxSize is unavailable and keeps growth pinning', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      value: 640,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 120;
+
+    const content = document.querySelector('div.p-4.min-w-0');
+    expect(content).not.toBeNull();
+    if (!content) {
+      harness.cleanup();
+      return;
+    }
+
+    (content as HTMLElement).style.paddingTop = '16px';
+    (content as HTMLElement).style.paddingBottom = '16px';
+    Object.defineProperty(content, 'clientHeight', {
+      configurable: true,
+      value: 332,
+    });
+
+    await flushEffects();
+
+    triggerResize(300, null, content);
+    await flushAnimationFrame();
+    harness.viewport.scrollTop = 120;
+
+    triggerResize(320, null, content);
+    await flushAnimationFrame();
+    expect(harness.viewport.scrollTop).toBe(640);
 
     harness.cleanup();
   });
