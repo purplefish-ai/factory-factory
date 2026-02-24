@@ -25,7 +25,7 @@ vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/session/data/claude-session-history-loader.service', () => ({
+vi.mock('@/backend/domains/session/data/session-history-loader.service', () => ({
   claudeSessionHistoryLoaderService: {
     loadSessionHistory: mocks.loadClaudeSessionHistory,
   },
