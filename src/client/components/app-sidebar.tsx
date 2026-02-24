@@ -1,13 +1,4 @@
-import {
-  CircleDot,
-  GitBranch,
-  GitPullRequest,
-  Kanban,
-  Loader2,
-  Plus,
-  Settings,
-  X,
-} from 'lucide-react';
+import { CircleDot, GitBranch, GitPullRequest, Loader2, Plus, Settings, X } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
@@ -321,17 +312,6 @@ function SidebarInner({
 
       <SidebarFooter>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              isActive={pathname === `/projects/${navData.selectedProjectSlug}/workspaces`}
-            >
-              <Link to={`/projects/${navData.selectedProjectSlug}/workspaces`} onClick={onNavigate}>
-                <Kanban className="h-4 w-4" />
-                <span>Workspaces</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild

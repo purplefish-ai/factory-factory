@@ -23,7 +23,7 @@ function makeWorkspace(
 }
 
 describe('groupWorkspacesForSidebar', () => {
-  it('keeps waiting/working/done groups mutually exclusive', () => {
+  it('groups strictly by cachedKanbanColumn', () => {
     const workspaces = [
       makeWorkspace({
         id: 'waiting-and-working',
@@ -57,11 +57,11 @@ describe('groupWorkspacesForSidebar', () => {
 
     const grouped = groupWorkspacesForSidebar(workspaces);
 
-    expect(grouped.waiting.map((workspace) => workspace.id)).toEqual(['waiting-only']);
-    expect(grouped.working.map((workspace) => workspace.id)).toEqual([
-      'working-only',
+    expect(grouped.waiting.map((workspace) => workspace.id)).toEqual([
+      'waiting-only',
       'waiting-and-working',
     ]);
+    expect(grouped.working.map((workspace) => workspace.id)).toEqual(['working-only']);
     expect(grouped.done.map((workspace) => workspace.id)).toEqual(['done-and-working']);
   });
 });
