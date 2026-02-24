@@ -14,6 +14,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import type {
   CIStatus,
   KanbanColumn,
@@ -162,6 +163,7 @@ export interface SnapshotDerivationFns {
   }) => {
     phase: WorkspaceFlowPhase;
     ciObservation: WorkspaceCiObservation;
+    hasActivePr: boolean;
     isWorking: boolean;
     shouldAnimateRatchetButton: boolean;
   };
@@ -357,31 +359,28 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       ratchetEnabled: entry.ratchetEnabled,
       ratchetState: entry.ratchetState,
     });
+    const derivedState = assembleWorkspaceDerivedState(
+      {
+        lifecycle: entry.status,
+        prUrl: entry.prUrl,
+        prState: entry.prState,
+        prCiStatus: entry.prCiStatus,
+        ratchetState: entry.ratchetState,
+        hasHadSessions: entry.hasHadSessions,
+        sessionIsWorking: entry.isWorking,
+        flowState,
+      },
+      {
+        computeKanbanColumn: this.derive.computeKanbanColumn,
+        deriveSidebarStatus: this.derive.deriveSidebarStatus,
+      }
+    );
 
-    // Effective isWorking comes from authoritative session-domain state plus
-    // flow-state working. sessionSummaries can be temporarily stale when
-    // activity and summary updates are split across events.
-    const effectiveIsWorking = entry.isWorking || flowState.isWorking;
-
-    entry.flowPhase = flowState.phase;
-    entry.ciObservation = flowState.ciObservation;
-    entry.ratchetButtonAnimated = flowState.shouldAnimateRatchetButton;
-
-    entry.kanbanColumn = this.derive.computeKanbanColumn({
-      lifecycle: entry.status,
-      isWorking: effectiveIsWorking,
-      prState: entry.prState,
-      ratchetState: entry.ratchetState,
-      hasHadSessions: entry.hasHadSessions,
-    });
-
-    entry.sidebarStatus = this.derive.deriveSidebarStatus({
-      isWorking: effectiveIsWorking,
-      prUrl: entry.prUrl,
-      prState: entry.prState,
-      prCiStatus: entry.prCiStatus,
-      ratchetState: entry.ratchetState,
-    });
+    entry.flowPhase = derivedState.flowPhase;
+    entry.ciObservation = derivedState.ciObservation;
+    entry.ratchetButtonAnimated = derivedState.ratchetButtonAnimated;
+    entry.kanbanColumn = derivedState.kanbanColumn;
+    entry.sidebarStatus = derivedState.sidebarStatus;
   }
 
   /**
