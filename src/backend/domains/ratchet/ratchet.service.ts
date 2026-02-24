@@ -40,7 +40,7 @@ import {
   buildFailedCheckDiagnostics as buildFailedCheckDiagnosticsHelper,
   buildReviewTimestampDiagnostics as buildReviewTimestampDiagnosticsHelper,
   buildSnapshotDiagnostics as buildSnapshotDiagnosticsHelper,
-  computeCiSnapshotKey as computeCiSnapshotKeyHelper,
+  computeDispatchSnapshotKey as computeDispatchSnapshotKeyHelper,
   computeLatestReviewActivityAtMs as computeLatestReviewActivityAtMsHelper,
   determineRatchetState as determineRatchetStateHelper,
   fetchPRState as fetchPRStateHelper,
@@ -941,18 +941,12 @@ class RatchetService extends EventEmitter {
     latestReviewActivityAtMs: number | null,
     statusChecks: PRStateInfo['statusCheckRollup']
   ): string {
-    const ciKey = this.computeCiSnapshotKey(ciStatus, statusChecks);
-    const reviewKey = `${hasChangesRequested ? 'changes-requested' : 'no-changes-requested'}:${
-      latestReviewActivityAtMs ?? 'none'
-    }`;
-    return `${ciKey}|${reviewKey}`;
-  }
-
-  private computeCiSnapshotKey(
-    ciStatus: CIStatus,
-    statusChecks: PRStateInfo['statusCheckRollup']
-  ): string {
-    return computeCiSnapshotKeyHelper(ciStatus, statusChecks);
+    return computeDispatchSnapshotKeyHelper(
+      ciStatus,
+      hasChangesRequested,
+      latestReviewActivityAtMs,
+      statusChecks
+    );
   }
 
   private computeLatestReviewActivityAtMs(
