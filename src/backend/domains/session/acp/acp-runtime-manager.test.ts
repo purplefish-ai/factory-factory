@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
 import { PassThrough } from 'node:stream';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---- Hoisted mock state (shared between factory and tests) ----
 
@@ -192,19 +192,9 @@ function setupSuccessfulSpawn() {
 
 describe('AcpRuntimeManager', () => {
   let manager: AcpRuntimeManager;
-  let originalAcpStartupTimeout: string | undefined;
 
   beforeEach(() => {
     manager = new AcpRuntimeManager();
-    originalAcpStartupTimeout = process.env.ACP_STARTUP_TIMEOUT_MS;
-  });
-
-  afterEach(() => {
-    if (typeof originalAcpStartupTimeout === 'string') {
-      process.env.ACP_STARTUP_TIMEOUT_MS = originalAcpStartupTimeout;
-      return;
-    }
-    Reflect.deleteProperty(process.env, 'ACP_STARTUP_TIMEOUT_MS');
   });
 
   describe('getOrCreateClient', () => {
@@ -381,7 +371,7 @@ describe('AcpRuntimeManager', () => {
     });
 
     it('times out when ACP initialize handshake never resolves', async () => {
-      process.env.ACP_STARTUP_TIMEOUT_MS = '20';
+      manager.setAcpStartupTimeoutMs(20);
 
       const child = createMockChildProcess();
       mockSpawn.mockReturnValue(child);
@@ -406,7 +396,7 @@ describe('AcpRuntimeManager', () => {
     });
 
     it('times out when ACP session creation never resolves', async () => {
-      process.env.ACP_STARTUP_TIMEOUT_MS = '20';
+      manager.setAcpStartupTimeoutMs(20);
 
       const child = createMockChildProcess();
       mockSpawn.mockReturnValue(child);

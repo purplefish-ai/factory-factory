@@ -134,7 +134,7 @@ export class SessionFileLogger {
 
   constructor() {
     // Default: only enabled in development unless explicitly overridden
-    this.enabled = configService.isDevelopment() || process.env.WS_LOGS_ENABLED === 'true';
+    this.enabled = configService.isDevelopment() || configService.isWsLogsEnabled();
     // Get from config service (which uses WS_LOGS_PATH env var or falls back to .context/ws-logs in cwd)
     // For Electron, this will be in userData directory
     this.logDir = configService.getWsLogsPath();

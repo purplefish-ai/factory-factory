@@ -93,19 +93,6 @@ type SpawnCommand = {
 const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
 const MAX_FACTORY_ROOT_SEARCH_DEPTH = 20;
 
-function resolveAcpStartupTimeoutMs(): number {
-  const raw = process.env.ACP_STARTUP_TIMEOUT_MS;
-  if (!raw) {
-    return DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-  }
-
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_ACP_STARTUP_TIMEOUT_MS;
-  }
-  return parsed;
-}
-
 async function withTimeout<T>(params: {
   promise: Promise<T>;
   timeoutMs: number;
@@ -507,6 +494,19 @@ export class AcpRuntimeManager {
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
   private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
+  private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+
+  constructor(options?: { acpStartupTimeoutMs?: number }) {
+    this.setAcpStartupTimeoutMs(options?.acpStartupTimeoutMs ?? DEFAULT_ACP_STARTUP_TIMEOUT_MS);
+  }
+
+  setAcpStartupTimeoutMs(timeoutMs: number): void {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      this.acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+      return;
+    }
+    this.acpStartupTimeoutMs = Math.floor(timeoutMs);
+  }
 
   setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
     this.onClientCreatedCallback = callback;
@@ -670,7 +670,7 @@ export class AcpRuntimeManager {
 
     let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
     let sessionInfo: Awaited<ReturnType<AcpRuntimeManager['createOrResumeSession']>>;
-    const startupTimeoutMs = resolveAcpStartupTimeoutMs();
+    const startupTimeoutMs = this.acpStartupTimeoutMs;
     const startupErrorSettled = startupError.catch(() => undefined);
 
     try {

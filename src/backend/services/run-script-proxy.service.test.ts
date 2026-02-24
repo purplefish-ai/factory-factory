@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configService } from './config.service';
 
 const mockStartCloudflaredTunnel = vi.hoisted(() => vi.fn());
 const mockKillProcessWithTimeout = vi.hoisted(() => vi.fn(async () => undefined));
@@ -59,6 +60,7 @@ describe('RunScriptProxyService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.FF_RUN_SCRIPT_PROXY_ENABLED = '1';
+    configService.reload();
     mockStartCloudflaredTunnel.mockResolvedValue({
       publicUrl: 'https://abc.trycloudflare.com',
       proc: createChildProcess(),
@@ -67,10 +69,12 @@ describe('RunScriptProxyService', () => {
 
   afterEach(() => {
     process.env.FF_RUN_SCRIPT_PROXY_ENABLED = originalProxyEnv;
+    configService.reload();
   });
 
   it('returns null when proxy feature is disabled', async () => {
     process.env.FF_RUN_SCRIPT_PROXY_ENABLED = '0';
+    configService.reload();
     const service = new RunScriptProxyService();
 
     await expect(service.ensureTunnel('w1', 3000)).resolves.toBeNull();

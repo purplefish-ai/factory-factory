@@ -70,6 +70,9 @@ const defaultRunScriptService = createRunScriptService({
 
 export function createServices(overrides: Partial<AppServices> = {}): AppServices {
   const resolvedAcpRuntimeManager = overrides.acpRuntimeManager ?? acpRuntimeManager;
+  if (typeof resolvedAcpRuntimeManager.setAcpStartupTimeoutMs === 'function') {
+    resolvedAcpRuntimeManager.setAcpStartupTimeoutMs(configService.getAcpStartupTimeoutMs());
+  }
   const resolvedSessionDomainService = overrides.sessionDomainService ?? sessionDomainService;
   const resolvedSessionService =
     overrides.sessionService ??
