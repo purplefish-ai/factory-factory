@@ -18,6 +18,7 @@ import {
   type SnapshotRemovedEvent,
   workspaceSnapshotStore,
 } from '@/backend/services/workspace-snapshot-store.service';
+import { WorkspaceStatus } from '@/shared/core';
 import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
 // ============================================================================
@@ -41,6 +42,10 @@ export const snapshotConnections: SnapshotConnectionsMap = new Map();
 
 let storeSubscriptionActive = false;
 
+function isHiddenWorkspaceStatus(status: WorkspaceStatus): boolean {
+  return status === WorkspaceStatus.ARCHIVING || status === WorkspaceStatus.ARCHIVED;
+}
+
 function ensureStoreSubscription(
   connections: SnapshotConnectionsMap,
   logger: ReturnType<AppContext['services']['createLogger']>
@@ -56,11 +61,18 @@ function ensureStoreSubscription(
       return;
     }
 
-    const message = JSON.stringify({
-      type: 'snapshot_changed',
-      workspaceId: event.workspaceId,
-      entry: event.entry,
-    });
+    const message = JSON.stringify(
+      isHiddenWorkspaceStatus(event.entry.status)
+        ? {
+            type: 'snapshot_removed',
+            workspaceId: event.workspaceId,
+          }
+        : {
+            type: 'snapshot_changed',
+            workspaceId: event.workspaceId,
+            entry: event.entry,
+          }
+    );
 
     for (const ws of projectClients) {
       if (ws.readyState === WS_READY_STATE.OPEN) {
@@ -124,7 +136,9 @@ export function createSnapshotsUpgradeHandler(appContext: AppContext) {
       getOrCreateConnectionSet(snapshotConnections, projectId).add(ws);
 
       // Send full project snapshot (WSKT-02, WSKT-05)
-      const entries = workspaceSnapshotStore.getByProjectId(projectId);
+      const entries = workspaceSnapshotStore
+        .getByProjectId(projectId)
+        .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
       ws.send(
         JSON.stringify({
           type: 'snapshot_full',

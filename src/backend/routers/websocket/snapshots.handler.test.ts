@@ -136,9 +136,16 @@ describe('createSnapshotsUpgradeHandler', () => {
   });
 
   it('sends full snapshot on connect', () => {
+    const visibleEntry = {
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+      name: 'Visible',
+      status: 'READY',
+    };
     const testEntries = [
-      { workspaceId: 'ws-1', projectId: 'proj-1', name: 'Test' },
-      { workspaceId: 'ws-2', projectId: 'proj-1', name: 'Test 2' },
+      visibleEntry,
+      { workspaceId: 'ws-2', projectId: 'proj-1', name: 'Archiving', status: 'ARCHIVING' },
+      { workspaceId: 'ws-3', projectId: 'proj-1', name: 'Archived', status: 'ARCHIVED' },
     ];
     mockGetByProjectId.mockReturnValue(testEntries as never);
 
@@ -151,7 +158,7 @@ describe('createSnapshotsUpgradeHandler', () => {
       JSON.stringify({
         type: 'snapshot_full',
         projectId: 'proj-1',
-        entries: testEntries,
+        entries: [visibleEntry],
       })
     );
   });
@@ -184,7 +191,12 @@ describe('createSnapshotsUpgradeHandler', () => {
     const event: SnapshotChangedEvent = {
       workspaceId: 'ws-1',
       projectId: 'proj-A',
-      entry: { workspaceId: 'ws-1', projectId: 'proj-A', name: 'Updated' } as never,
+      entry: {
+        workspaceId: 'ws-1',
+        projectId: 'proj-A',
+        name: 'Updated',
+        status: 'READY',
+      } as never,
     };
     changedListener!(event);
 
@@ -196,6 +208,36 @@ describe('createSnapshotsUpgradeHandler', () => {
       })
     );
     expect(wsB.send).not.toHaveBeenCalled();
+  });
+
+  it('routes ARCHIVING snapshot_changed as snapshot_removed', () => {
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+
+    callHandler(handler, ws, 'proj-1');
+    ws.send.mockClear();
+
+    const changedListener = storeListeners.get('snapshot_changed');
+    expect(changedListener).toBeDefined();
+
+    const event: SnapshotChangedEvent = {
+      workspaceId: 'ws-1',
+      projectId: 'proj-1',
+      entry: {
+        workspaceId: 'ws-1',
+        projectId: 'proj-1',
+        name: 'Archiving',
+        status: 'ARCHIVING',
+      } as never,
+    };
+    changedListener!(event);
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: 'snapshot_removed',
+        workspaceId: 'ws-1',
+      })
+    );
   });
 
   it('sends snapshot_removed to project clients', () => {
@@ -236,7 +278,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     changedListener!({
       workspaceId: 'ws-1',
       projectId: 'proj-1',
-      entry: { workspaceId: 'ws-1' },
+      entry: { workspaceId: 'ws-1', status: 'READY' },
     });
 
     expect(ws.send).not.toHaveBeenCalled();
