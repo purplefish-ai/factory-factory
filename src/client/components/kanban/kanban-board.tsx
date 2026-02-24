@@ -350,7 +350,9 @@ function IssuesColumn({ column, issues, projectId }: IssuesColumnProps) {
               projectId={projectId}
               existingNames={existingNames}
               onCancel={() => setShowInlineForm(false)}
-              onCreated={() => setShowInlineForm(false)}
+              onCreated={() => {
+                setShowInlineForm(false);
+              }}
             />
           ) : !isMobile ? (
             <button
