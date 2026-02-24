@@ -84,6 +84,7 @@ describe('mapSnapshotEntryToKanbanWorkspace', () => {
     expect(result.ratchetButtonAnimated).toBe(false);
     expect(result.flowPhase).toBe('CI_WAIT');
     expect(result.pendingRequestType).toBe('plan_approval');
+    expect(result.snapshotComputedAt).toBe(entry.computedAt);
     expect(result.sessionSummaries).toEqual([]);
   });
 
@@ -99,12 +100,14 @@ describe('mapSnapshotEntryToKanbanWorkspace', () => {
       description: 'A workspace for testing',
       initErrorMessage: 'Some init error',
       githubIssueNumber: 99,
+      stateComputedAt: '2026-01-12T00:00:00Z',
     };
     const result = mapSnapshotEntryToKanbanWorkspace(entry, existing);
 
     expect(result.description).toBe('A workspace for testing');
     expect(result.initErrorMessage).toBe('Some init error');
     expect(result.githubIssueNumber).toBe(99);
+    expect(result.stateComputedAt).toBe('2026-01-12T00:00:00Z');
   });
 
   it('defaults missing-from-snapshot fields to null when no existing entry', () => {
@@ -114,6 +117,7 @@ describe('mapSnapshotEntryToKanbanWorkspace', () => {
     expect(result.description).toBeNull();
     expect(result.initErrorMessage).toBeNull();
     expect(result.githubIssueNumber).toBeNull();
+    expect(result.stateComputedAt).toBeNull();
   });
 
   it('defaults missing-from-snapshot fields to null when existing entry lacks them', () => {
@@ -124,6 +128,7 @@ describe('mapSnapshotEntryToKanbanWorkspace', () => {
     expect(result.description).toBeNull();
     expect(result.initErrorMessage).toBeNull();
     expect(result.githubIssueNumber).toBeNull();
+    expect(result.stateComputedAt).toBeNull();
   });
 
   it('always sets isArchived to false', () => {
