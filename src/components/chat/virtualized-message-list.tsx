@@ -309,25 +309,17 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       return;
     }
 
-    let previousContentHeight: number | null = null;
+    let previousContentHeight = content.getBoundingClientRect().height;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
         return;
       }
       const nextContentHeight = entry.contentRect.height;
-      if (previousContentHeight === null) {
-        // Seed baseline from ResizeObserver's content-box measurements.
-        previousContentHeight = nextContentHeight;
-        return;
-      }
 
       const growthAmount = nextContentHeight - previousContentHeight;
       const grew = growthAmount > 0;
       previousContentHeight = nextContentHeight;
-      if (!grew) {
-        return;
-      }
 
       const container = scrollContainerRef.current;
       if (!container) {
@@ -336,8 +328,12 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
 
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (!grew) {
+        return;
+      }
+
       const wasNearBottomBeforeGrowth =
-        distanceFromBottom - growthAmount < STICK_TO_BOTTOM_THRESHOLD;
+        distanceFromBottom - growthAmount <= STICK_TO_BOTTOM_THRESHOLD;
       if (!wasNearBottomBeforeGrowth) {
         return;
       }

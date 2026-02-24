@@ -499,7 +499,7 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
 
     triggerResize(220);
     await flushAnimationFrame();
-    expect(harness.viewport.scrollTop).toBe(120);
+    expect(harness.viewport.scrollTop).toBe(640);
 
     triggerResize(300);
     await flushAnimationFrame();
