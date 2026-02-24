@@ -1,12 +1,8 @@
 import type { createLogger } from '@/backend/services/logger.service';
 import type {
   PRStateInfo,
-  RatchetAction,
-  RatchetDecision,
-  RatchetDecisionContext,
   ReviewPollResult,
   ReviewPollTracker,
-  WorkspaceRatchetResult,
   WorkspaceWithPR,
 } from './ratchet.types';
 
@@ -95,92 +91,4 @@ export async function handleReviewCommentPoll(params: {
   }
 
   return { action: 'waiting' };
-}
-
-export async function processReviewCommentPoll(params: {
-  workspace: WorkspaceWithPR;
-  prStateInfo: PRStateInfo;
-  authenticatedUsername: string | null;
-  handleReviewCommentPoll: (
-    workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo,
-    authenticatedUsername: string | null
-  ) => Promise<ReviewPollResult>;
-  buildRatchetDecisionContext: (
-    workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo
-  ) => Promise<RatchetDecisionContext>;
-  decideRatchetAction: (context: RatchetDecisionContext) => RatchetDecision;
-  applyRatchetDecision: (
-    context: RatchetDecisionContext,
-    decision: RatchetDecision
-  ) => Promise<RatchetAction>;
-  updateWorkspaceAfterCheck: (
-    workspace: WorkspaceWithPR,
-    prStateInfo: PRStateInfo,
-    action: RatchetAction,
-    nextState: RatchetDecisionContext['finalState']
-  ) => Promise<void>;
-  emitStateChange: (
-    workspace: WorkspaceWithPR,
-    fromState: RatchetDecisionContext['previousState'],
-    toState: RatchetDecisionContext['finalState']
-  ) => void;
-  logWorkspaceRatchetingDecision: (
-    workspace: WorkspaceWithPR,
-    previousState: RatchetDecisionContext['previousState'],
-    finalState: RatchetDecisionContext['finalState'],
-    action: RatchetAction,
-    prStateInfo: PRStateInfo,
-    context: RatchetDecisionContext
-  ) => void;
-}): Promise<WorkspaceRatchetResult | null> {
-  const {
-    workspace,
-    prStateInfo,
-    authenticatedUsername,
-    handleReviewCommentPoll: handlePoll,
-    buildRatchetDecisionContext,
-    decideRatchetAction,
-    applyRatchetDecision,
-    updateWorkspaceAfterCheck,
-    emitStateChange,
-    logWorkspaceRatchetingDecision,
-  } = params;
-
-  const pollResult = await handlePoll(workspace, prStateInfo, authenticatedUsername);
-
-  if (pollResult.action !== 'comments-found') {
-    return null;
-  }
-
-  const freshContext = await buildRatchetDecisionContext(workspace, pollResult.freshPrState);
-  const freshDecision = decideRatchetAction(freshContext);
-  const freshAction = await applyRatchetDecision(freshContext, freshDecision);
-
-  await updateWorkspaceAfterCheck(
-    workspace,
-    pollResult.freshPrState,
-    freshAction,
-    freshContext.finalState
-  );
-  if (freshContext.previousState !== freshContext.finalState) {
-    emitStateChange(workspace, freshContext.previousState, freshContext.finalState);
-  }
-
-  logWorkspaceRatchetingDecision(
-    workspace,
-    freshContext.previousState,
-    freshContext.finalState,
-    freshAction,
-    pollResult.freshPrState,
-    freshContext
-  );
-
-  return {
-    workspaceId: workspace.id,
-    previousState: freshContext.previousState,
-    newState: freshContext.finalState,
-    action: freshAction,
-  };
 }

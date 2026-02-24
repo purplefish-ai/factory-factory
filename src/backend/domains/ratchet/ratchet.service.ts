@@ -48,10 +48,7 @@ import {
   hasNewReviewActivitySinceLastDispatch as hasNewReviewActivitySinceLastDispatchHelper,
   shouldSkipCleanPR as shouldSkipCleanPRHelper,
 } from './ratchet-pr-state.helpers';
-import {
-  handleReviewCommentPoll as handleReviewCommentPollHelper,
-  processReviewCommentPoll as processReviewCommentPollHelper,
-} from './ratchet-review-poll.helpers';
+import { handleReviewCommentPoll as handleReviewCommentPollHelper } from './ratchet-review-poll.helpers';
 
 const logger = createLogger('ratchet');
 
@@ -801,42 +798,49 @@ class RatchetService extends EventEmitter {
     prStateInfo: PRStateInfo,
     authenticatedUsername: string | null
   ): Promise<WorkspaceRatchetResult | null> {
-    return await processReviewCommentPollHelper({
+    const pollResult = await this.handleReviewCommentPoll(
       workspace,
       prStateInfo,
-      authenticatedUsername,
-      handleReviewCommentPoll: (workspaceArg, prStateInfoArg, authenticatedUsernameArg) =>
-        this.handleReviewCommentPoll(workspaceArg, prStateInfoArg, authenticatedUsernameArg),
-      buildRatchetDecisionContext: (workspaceArg, prStateInfoArg) =>
-        this.buildRatchetDecisionContext(workspaceArg, prStateInfoArg),
-      decideRatchetAction: (context) => this.decideRatchetAction(context),
-      applyRatchetDecision: (context, decision) => this.applyRatchetDecision(context, decision),
-      updateWorkspaceAfterCheck: (workspaceArg, prStateInfoArg, action, nextState) =>
-        this.updateWorkspaceAfterCheck(workspaceArg, prStateInfoArg, action, nextState),
-      emitStateChange: (workspaceArg, fromState, toState) => {
-        this.emit(RATCHET_STATE_CHANGED, {
-          workspaceId: workspaceArg.id,
-          fromState,
-          toState,
-        } satisfies RatchetStateChangedEvent);
-      },
-      logWorkspaceRatchetingDecision: (
-        workspaceArg,
-        previousState,
-        finalState,
-        action,
-        prStateInfoArg,
-        context
-      ) =>
-        this.logWorkspaceRatchetingDecision(
-          workspaceArg,
-          previousState,
-          finalState,
-          action,
-          prStateInfoArg,
-          context
-        ),
-    });
+      authenticatedUsername
+    );
+
+    if (pollResult.action !== 'comments-found') {
+      return null;
+    }
+
+    const freshContext = await this.buildRatchetDecisionContext(workspace, pollResult.freshPrState);
+    const freshDecision = this.decideRatchetAction(freshContext);
+    const freshAction = await this.applyRatchetDecision(freshContext, freshDecision);
+
+    await this.updateWorkspaceAfterCheck(
+      workspace,
+      pollResult.freshPrState,
+      freshAction,
+      freshContext.finalState
+    );
+    if (freshContext.previousState !== freshContext.finalState) {
+      this.emit(RATCHET_STATE_CHANGED, {
+        workspaceId: workspace.id,
+        fromState: freshContext.previousState,
+        toState: freshContext.finalState,
+      } satisfies RatchetStateChangedEvent);
+    }
+
+    this.logWorkspaceRatchetingDecision(
+      workspace,
+      freshContext.previousState,
+      freshContext.finalState,
+      freshAction,
+      pollResult.freshPrState,
+      freshContext
+    );
+
+    return {
+      workspaceId: workspace.id,
+      previousState: freshContext.previousState,
+      newState: freshContext.finalState,
+      action: freshAction,
+    };
   }
 
   private async handleReviewCommentPoll(
