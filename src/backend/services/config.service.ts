@@ -116,13 +116,6 @@ interface SystemConfig {
   // Session limits
   maxSessionsPerWorkspace: number;
 
-  // Feature flags
-  features: {
-    authentication: boolean;
-    metrics: boolean;
-    errorTracking: boolean;
-  };
-
   // Logger settings
   logger: LoggerConfig;
 
@@ -302,13 +295,6 @@ function loadSystemConfig(): SystemConfig {
     // Session limits
     maxSessionsPerWorkspace: env.MAX_SESSIONS_PER_WORKSPACE,
 
-    // Feature flags
-    features: {
-      authentication: env.FEATURE_AUTHENTICATION,
-      metrics: env.FEATURE_METRICS,
-      errorTracking: env.FEATURE_ERROR_TRACKING,
-    },
-
     // Logger settings
     logger: buildLoggerConfig(nodeEnv, env),
 
@@ -391,13 +377,6 @@ class ConfigService {
    */
   getDefaultSessionProfile(): SessionProfile {
     return { ...this.config.defaultSessionProfile };
-  }
-
-  /**
-   * Check if a feature is enabled
-   */
-  isFeatureEnabled(feature: keyof SystemConfig['features']): boolean {
-    return this.config.features[feature];
   }
 
   /**
