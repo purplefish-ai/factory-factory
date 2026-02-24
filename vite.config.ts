@@ -8,6 +8,7 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  envPrefix: ['VITE_', 'DEBUG_'],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),

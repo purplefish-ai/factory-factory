@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { WebSocketMessage } from '@/lib/chat-protocol';
 import { isWebSocketMessage, isWsAgentMessage } from '@/lib/chat-protocol';
-import { createDebugLogger } from '@/lib/debug';
+import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import type { ChatAction, ChatState } from './reducer';
 import { createActionFromWebSocketMessage } from './reducer';
 import {
@@ -14,7 +14,7 @@ import {
 // Debug Logging
 // =============================================================================
 
-const DEBUG_CHAT_TRANSPORT = false;
+const DEBUG_CHAT_TRANSPORT = DEBUG_CHAT_WS;
 const debug = createDebugLogger(DEBUG_CHAT_TRANSPORT);
 
 // =============================================================================
