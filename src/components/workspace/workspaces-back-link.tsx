@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
+import { useSidebar } from '@/components/ui/sidebar';
 
 interface WorkspacesBackLinkProps {
   projectSlug: string;
@@ -11,9 +12,17 @@ interface WorkspacesBackLinkProps {
  * Displays "Workspaces" with an arrow icon, responsive to screen size.
  */
 export function WorkspacesBackLink({ projectSlug }: WorkspacesBackLinkProps) {
+  const { setOpen, setOpenMobile } = useSidebar();
+
   return (
     <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground" asChild>
-      <Link to={`/projects/${projectSlug}/workspaces`}>
+      <Link
+        to={`/projects/${projectSlug}/workspaces`}
+        onClick={() => {
+          setOpen(false);
+          setOpenMobile(false);
+        }}
+      >
         <ArrowLeft className="h-3.5 w-3.5" />
         <span className="hidden sm:inline">Workspaces</span>
       </Link>
