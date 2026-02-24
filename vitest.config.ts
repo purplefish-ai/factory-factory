@@ -31,6 +31,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@prisma-gen': path.resolve(__dirname, './prisma/generated'),
+      '@factory-factory/core-types': path.resolve(__dirname, './packages/core/src/types'),
     },
   },
 });

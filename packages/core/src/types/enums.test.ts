@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CIStatus,
+  IssueProvider,
   KanbanColumn,
   PRState,
   RatchetState,
@@ -17,6 +18,7 @@ describe('domain enums', () => {
       'PROVISIONING',
       'READY',
       'FAILED',
+      'ARCHIVING',
       'ARCHIVED',
     ]);
   });
@@ -67,7 +69,12 @@ describe('domain enums', () => {
       'MANUAL',
       'RESUME_BRANCH',
       'GITHUB_ISSUE',
+      'LINEAR_ISSUE',
     ]);
+  });
+
+  it('IssueProvider has all expected values', () => {
+    expect(Object.values(IssueProvider)).toEqual(['GITHUB', 'LINEAR']);
   });
 
   it('RunScriptStatus has all expected values', () => {
