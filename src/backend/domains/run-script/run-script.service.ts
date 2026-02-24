@@ -475,12 +475,21 @@ export class RunScriptService {
         return { success: true };
       }
 
-      const commands = await this.reconcileWorkspaceCommands(workspace);
+      let runScriptCleanupCommand = workspace.runScriptCleanupCommand;
+      try {
+        const commands = await this.reconcileWorkspaceCommands(workspace);
+        runScriptCleanupCommand = commands.runScriptCleanupCommand;
+      } catch (error) {
+        logger.warn('Failed to reconcile workspace commands during stop; using cached cleanup', {
+          workspaceId,
+          error,
+        });
+      }
 
       // Run cleanup script if configured
-      if (commands.runScriptCleanupCommand && workspace.worktreePath) {
+      if (runScriptCleanupCommand && workspace.worktreePath) {
         await this.runCleanupScript(workspaceId, {
-          runScriptCleanupCommand: commands.runScriptCleanupCommand,
+          runScriptCleanupCommand,
           worktreePath: workspace.worktreePath,
           runScriptPort: workspace.runScriptPort,
         });

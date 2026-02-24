@@ -348,6 +348,51 @@ describe('RunScriptService.stopRunScript', () => {
       runScriptPort: 3000,
     });
   });
+
+  it('falls back to cached cleanup command when reconciliation fails during stop', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 12_345,
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: 'echo cached cleanup {port}',
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: 3000,
+    });
+    mockBeginStopping.mockResolvedValue(undefined);
+    mockCompleteStopping.mockResolvedValue(undefined);
+    mockReconcileWorkspaceCommandCache.mockRejectedValue(new Error('Invalid factory-factory.json'));
+
+    const service = new RunScriptService();
+    const runCleanupSpy = vi
+      .spyOn(
+        service as unknown as {
+          runCleanupScript: (
+            workspaceId: string,
+            workspace: {
+              runScriptCleanupCommand: string;
+              worktreePath: string;
+              runScriptPort: number | null;
+            }
+          ) => Promise<void>;
+        },
+        'runCleanupScript'
+      )
+      .mockResolvedValue(undefined);
+    (service as unknown as StopHandlerCapable).runningProcesses.set('ws-1', { pid: 12_345 });
+
+    const result = await service.stopRunScript('ws-1');
+
+    expect(result).toEqual({ success: true });
+    expect(runCleanupSpy).toHaveBeenCalledWith('ws-1', {
+      runScriptCleanupCommand: 'echo cached cleanup {port}',
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: 3000,
+    });
+    expect(mockTreeKill).toHaveBeenCalledWith(12_345, 'SIGTERM', expect.any(Function));
+    expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
+  });
 });
 
 describe('RunScriptService.handleProcessExit edge cases', () => {
