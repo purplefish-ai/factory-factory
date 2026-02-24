@@ -257,9 +257,10 @@ class RatchetService extends EventEmitter {
       return await this.withWorkspaceCheckTimeout(workspace, checkPromise);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Ratchet workspace check failed', error as Error, {
+      logger.warn('Ratchet workspace check failed', {
         workspaceId: workspace.id,
         prUrl: workspace.prUrl,
+        error: errorMessage,
       });
       return {
         workspaceId: workspace.id,
