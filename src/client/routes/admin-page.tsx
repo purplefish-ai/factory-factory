@@ -44,16 +44,6 @@ import {
   ProjectIssueTrackingCard,
 } from './admin/index';
 
-function getEnabledFeatures(features?: Record<string, boolean>): string {
-  if (!features) {
-    return 'none';
-  }
-  const enabled = Object.entries(features)
-    .filter(([, isEnabled]) => isEnabled)
-    .map(([feature]) => feature);
-  return enabled.length > 0 ? enabled.join(', ') : 'none';
-}
-
 function formatPortLabel(
   port: number | null | undefined,
   missingLabel = '(restart to detect)'
@@ -896,10 +886,6 @@ export default function AdminDashboardPage() {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
               <span className="font-medium">Environment:</span>
               <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
-              <span className="font-medium sm:ml-2">Features:</span>
-              <span className="text-muted-foreground break-words">
-                {getEnabledFeatures(stats?.features)}
-              </span>
             </div>
           </CardContent>
         </Card>
