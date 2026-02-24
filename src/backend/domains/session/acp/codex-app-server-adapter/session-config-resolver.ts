@@ -1,5 +1,5 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
-import { dedupeStrings, isRecord } from './acp-adapter-utils';
+import { dedupeStrings, isNonEmptyString, isRecord } from './acp-adapter-utils';
 import type {
   AdapterSession,
   ApprovalPolicy,
@@ -16,10 +16,6 @@ export const DEFAULT_SANDBOX_MODES: SandboxMode[] = [
   'workspace-write',
   'danger-full-access',
 ];
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
 
 function humanizeToken(value: string): string {
   return value

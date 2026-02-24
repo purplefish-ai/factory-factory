@@ -29,6 +29,7 @@ import {
   asString,
   dedupeStrings,
   extractLocations,
+  isNonEmptyString,
   isRecord,
   resolveToolCallId,
 } from './acp-adapter-utils';
@@ -81,10 +82,6 @@ const MAX_CLOSE_WATCHER_ATTACH_RETRIES = 50;
 
 type PromptContentBlock = PromptRequest['prompt'][number];
 type TurnStartResponse = ReturnType<typeof turnStartResponseSchema.parse>;
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
 
 function toSessionId(threadId: string): string {
   return `sess_${threadId}`;
