@@ -8,7 +8,10 @@ const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  envPrefix: ['VITE_', 'DEBUG_'],
+  envPrefix: 'VITE_',
+  define: {
+    'import.meta.env.DEBUG_CHAT_WS': JSON.stringify(process.env.DEBUG_CHAT_WS ?? ''),
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
