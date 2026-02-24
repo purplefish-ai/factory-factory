@@ -16,58 +16,6 @@ import type { LoadSessionMessage } from '@/shared/websocket';
 
 const logger = createLogger('load-session-handler');
 const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
-const MAX_TRACKED_HISTORY_RETRY_SESSIONS = 1024;
-const nextHistoryRetryAtBySession = new Map<string, number>();
-
-function pruneExpiredHistoryRetryEntries(now: number): void {
-  for (const [trackedSessionId, retryAt] of nextHistoryRetryAtBySession) {
-    if (retryAt <= now) {
-      nextHistoryRetryAtBySession.delete(trackedSessionId);
-    }
-  }
-}
-
-function evictHistoryRetryEntryWithEarliestRetryAt(): void {
-  let sessionIdToEvict: string | undefined;
-  let earliestRetryAt = Number.POSITIVE_INFINITY;
-
-  for (const [trackedSessionId, retryAt] of nextHistoryRetryAtBySession) {
-    if (retryAt < earliestRetryAt) {
-      earliestRetryAt = retryAt;
-      sessionIdToEvict = trackedSessionId;
-    }
-  }
-
-  if (sessionIdToEvict) {
-    nextHistoryRetryAtBySession.delete(sessionIdToEvict);
-  }
-}
-
-function setHistoryRetryAt(sessionId: string, retryAt: number): void {
-  const now = Date.now();
-  pruneExpiredHistoryRetryEntries(now);
-  if (
-    !nextHistoryRetryAtBySession.has(sessionId) &&
-    nextHistoryRetryAtBySession.size >= MAX_TRACKED_HISTORY_RETRY_SESSIONS
-  ) {
-    evictHistoryRetryEntryWithEarliestRetryAt();
-  }
-  nextHistoryRetryAtBySession.set(sessionId, retryAt);
-}
-
-function canAttemptHistoryHydration(sessionId: string): boolean {
-  const now = Date.now();
-  pruneExpiredHistoryRetryEntries(now);
-  const retryAt = nextHistoryRetryAtBySession.get(sessionId);
-  if (!retryAt) {
-    return true;
-  }
-  return retryAt <= now;
-}
-
-export function resetHistoryRetryCooldownStateForTests(): void {
-  nextHistoryRetryAtBySession.clear();
-}
 
 export function createLoadSessionHandler(
   deps: HandlerRegistryDependencies
@@ -137,12 +85,12 @@ async function hydrateProviderHistoryIfNeeded(
   }
 
   if (!dbSession.providerSessionId) {
-    nextHistoryRetryAtBySession.delete(sessionId);
+    sessionDomainService.clearHistoryRetryCooldown(sessionId);
     sessionDomainService.markHistoryHydrated(sessionId, 'none');
     return;
   }
 
-  if (!canAttemptHistoryHydration(sessionId)) {
+  if (!sessionDomainService.canAttemptHistoryHydration(sessionId)) {
     logger.debug('Skipping provider JSONL history hydration during retry cooldown', {
       sessionId,
       provider: dbSession.provider,
@@ -165,7 +113,7 @@ async function hydrateProviderHistoryIfNeeded(
         });
 
   if (loadResult.status === 'loaded') {
-    nextHistoryRetryAtBySession.delete(sessionId);
+    sessionDomainService.clearHistoryRetryCooldown(sessionId);
     const transcript = buildTranscriptFromHistory(loadResult.history);
     sessionDomainService.replaceTranscript(sessionId, transcript, { historySource: 'jsonl' });
     logger.debug('Hydrated provider transcript from JSONL history', {
@@ -181,7 +129,7 @@ async function hydrateProviderHistoryIfNeeded(
   }
 
   if (loadResult.status === 'error') {
-    setHistoryRetryAt(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
+    sessionDomainService.setHistoryRetryAt(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
     logger.warn('Provider JSONL history hydration failed; keeping session eligible for retry', {
       sessionId,
       provider: dbSession.provider,
@@ -191,7 +139,7 @@ async function hydrateProviderHistoryIfNeeded(
     return;
   }
 
-  nextHistoryRetryAtBySession.delete(sessionId);
+  sessionDomainService.clearHistoryRetryCooldown(sessionId);
   sessionDomainService.markHistoryHydrated(sessionId, 'none');
   logger.debug('Provider JSONL history not available; skipping runtime fallback hydration', {
     sessionId,
