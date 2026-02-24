@@ -184,7 +184,7 @@ function isWorkspaceAccessorCallReceiver(receiver) {
 
   return (
     ts.isPropertyAccessExpression(receiver) &&
-    ts.isThis(receiver.expression) &&
+    receiver.expression.kind === ts.SyntaxKind.ThisKeyword &&
     receiver.name.text === 'workspaces'
   );
 }

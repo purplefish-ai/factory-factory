@@ -103,6 +103,35 @@ describe('check-single-writer', () => {
     expect(result.output).toContain('unauthorized write of workspace field "ratchetState"');
   });
 
+  it('analyzes this.workspaces mutator calls without crashing', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/domains/session/lifecycle/session.repository.ts',
+        content: `
+          class SessionRepository {
+            workspaces;
+
+            constructor(workspaces) {
+              this.workspaces = workspaces;
+            }
+
+            async clear(workspaceId, sessionId) {
+              await this.workspaces.clearRatchetActiveSession(workspaceId, sessionId);
+            }
+          }
+        `,
+      },
+    ]);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      'unauthorized write of workspace field "ratchetActiveSessionId"'
+    );
+    expect(result.output).not.toContain('TypeError');
+  });
+
   it('fails when a new workspace mutator is missing checker coverage rules', () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'single-writer-'));
     tempDirs.push(tempRoot);
