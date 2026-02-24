@@ -19,7 +19,8 @@ import type { WorkspaceSnapshotEntry } from '@/client/lib/snapshot-to-sidebar';
 /**
  * Maps a WorkspaceSnapshotEntry to the kanban workspace shape used by the
  * `listWithKanbanState` React Query cache. Merges fields not present in
- * the snapshot from the existing cache entry (or defaults to null).
+ * the snapshot from the existing cache entry (or defaults to null), including
+ * preserving DB-backed `stateComputedAt` semantics.
  */
 export function mapSnapshotEntryToKanbanWorkspace(
   entry: WorkspaceSnapshotEntry,
@@ -46,10 +47,12 @@ export function mapSnapshotEntryToKanbanWorkspace(
     flowPhase: entry.flowPhase,
     pendingRequestType: entry.pendingRequestType,
     isArchived: false,
+    snapshotComputedAt: entry.computedAt,
 
     // Fields NOT in snapshot — merge from existing cache entry or default to null
     description: existing?.description ?? null,
     initErrorMessage: existing?.initErrorMessage ?? null,
     githubIssueNumber: existing?.githubIssueNumber ?? null,
+    stateComputedAt: existing?.stateComputedAt ?? null,
   };
 }
