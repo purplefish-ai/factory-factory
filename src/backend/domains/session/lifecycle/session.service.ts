@@ -5,7 +5,7 @@ import type {
   AcpRuntimeManager,
 } from '@/backend/domains/session/acp';
 import { type AcpRuntimeEventHandlers, acpRuntimeManager } from '@/backend/domains/session/acp';
-import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
+import type { SessionLifecycleWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import {
   type SessionDomainService,
@@ -69,7 +69,7 @@ export class SessionService {
   private readonly sessionConfigService: SessionConfigService;
   private readonly acpEventProcessor: AcpEventProcessor;
   /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
-  private workspaceBridge: SessionWorkspaceBridge | null = null;
+  private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   /** Optional callback invoked after an ACP prompt turn settles. */
   private promptTurnCompleteHandler: PromptTurnCompleteHandler | null = null;
   private readonly promptTurnCompleteTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -77,10 +77,8 @@ export class SessionService {
   /**
    * Configure cross-domain bridges. Called once at startup by orchestration layer.
    */
-  configure(bridges: {
-    workspace: Pick<SessionWorkspaceBridge, 'markSessionRunning' | 'markSessionIdle'>;
-  }): void {
-    this.workspaceBridge = bridges.workspace as SessionWorkspaceBridge;
+  configure(bridges: { workspace: SessionLifecycleWorkspaceBridge }): void {
+    this.workspaceBridge = bridges.workspace;
   }
 
   setPromptTurnCompleteHandler(handler: PromptTurnCompleteHandler | null): void {
@@ -141,7 +139,7 @@ export class SessionService {
           });
           logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
 
-          await this.repository.clearRatchetActiveSession(session.workspaceId, sid);
+          await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sid);
           if (session.workflow === 'ratchet') {
             await this.repository.deleteSession(sid);
             logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
@@ -489,7 +487,7 @@ export class SessionService {
     }
 
     try {
-      await this.repository.clearRatchetActiveSession(session.workspaceId, sessionId);
+      await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sessionId);
     } catch (error) {
       logger.warn('Failed clearing ratchet active session pointer during stop', {
         sessionId,
@@ -513,6 +511,17 @@ export class SessionService {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  private async clearRatchetActiveSessionIfMatching(
+    workspaceId: string,
+    sessionId: string
+  ): Promise<void> {
+    if (!this.workspaceBridge) {
+      return;
+    }
+
+    await this.workspaceBridge.clearRatchetActiveSessionIfMatching(workspaceId, sessionId);
   }
 
   /**

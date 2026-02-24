@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // --- Module mocks (inline vi.fn() - no top-level variable references) ---
 
 vi.mock('@/backend/domains/ratchet', () => ({
-  ratchetService: { configure: vi.fn() },
+  ratchetService: { configure: vi.fn(), clearRatchetActiveSessionIfMatching: vi.fn() },
   fixerSessionService: {
     configure: vi.fn(),
     acquireAndDispatch: vi.fn(),
@@ -293,6 +293,14 @@ describe('configureDomainBridges', () => {
 
       bridge.workspace.markSessionIdle('ws1', 's1');
       expect(workspaceActivityService.markSessionIdle).toHaveBeenCalledWith('ws1', 's1');
+    });
+
+    it('sessionService workspace bridge delegates ratchet session cleanup', async () => {
+      configureDomainBridges();
+      const bridge = getBridge(sessionService.configure);
+
+      await bridge.workspace.clearRatchetActiveSessionIfMatching('ws1', 's1');
+      expect(ratchetService.clearRatchetActiveSessionIfMatching).toHaveBeenCalledWith('ws1', 's1');
     });
 
     it('sessionService prompt-turn callback delegates queue dispatch to chat handlers', async () => {
