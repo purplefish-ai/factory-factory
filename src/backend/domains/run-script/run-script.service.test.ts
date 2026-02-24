@@ -14,6 +14,7 @@ const mockStopTunnel = vi.fn();
 const mockGetTunnelUrl = vi.fn();
 const mockCleanupTunnels = vi.fn();
 const mockCleanupTunnelsSync = vi.fn();
+const mockReconcileWorkspaceCommandCache = vi.fn();
 
 vi.mock('tree-kill', () => ({
   default: (...args: unknown[]) => mockTreeKill(...args),
@@ -56,6 +57,13 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
+vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
+  runScriptConfigPersistenceService: {
+    reconcileWorkspaceCommandCache: (...args: unknown[]) =>
+      mockReconcileWorkspaceCommandCache(...args),
+  },
+}));
+
 import { RunScriptService } from './run-script.service';
 
 type ExitHandlerCapable = {
@@ -77,7 +85,9 @@ type TransitionToRunningCapable = StopHandlerCapable & {
     workspaceId: string,
     childProcess: { pid: number; exitCode: number | null },
     pid: number,
-    port: number | undefined
+    port: number | undefined,
+    runScriptPostRunCommand?: string | null,
+    worktreePath?: string | null
   ) => Promise<{
     success: boolean;
     port?: number;
@@ -125,6 +135,18 @@ describe('RunScriptService.handleProcessExit', () => {
 describe('RunScriptService.stopRunScript', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReconcileWorkspaceCommandCache.mockImplementation((input: { workspace: unknown }) => {
+      const workspace = input.workspace as {
+        runScriptCommand: string | null;
+        runScriptPostRunCommand: string | null;
+        runScriptCleanupCommand: string | null;
+      };
+      return {
+        runScriptCommand: workspace.runScriptCommand,
+        runScriptPostRunCommand: workspace.runScriptPostRunCommand,
+        runScriptCleanupCommand: workspace.runScriptCleanupCommand,
+      };
+    });
     mockTreeKill.mockImplementation(
       (_pid: number, _signal: string, callback: (error: Error | null) => void) => callback(null)
     );
@@ -278,6 +300,54 @@ describe('RunScriptService.stopRunScript', () => {
     expect(result).toEqual({ success: true });
     expect((service as unknown as StopHandlerCapable).runningProcesses.has('ws-1')).toBe(false);
   });
+
+  it('uses reconciled cleanup command during stop flow', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 12_345,
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: null,
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: 3000,
+    });
+    mockBeginStopping.mockResolvedValue(undefined);
+    mockCompleteStopping.mockResolvedValue(undefined);
+    mockReconcileWorkspaceCommandCache.mockResolvedValue({
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: 'echo cleanup {port}',
+    });
+
+    const service = new RunScriptService();
+    const runCleanupSpy = vi
+      .spyOn(
+        service as unknown as {
+          runCleanupScript: (
+            workspaceId: string,
+            workspace: {
+              runScriptCleanupCommand: string;
+              worktreePath: string;
+              runScriptPort: number | null;
+            }
+          ) => Promise<void>;
+        },
+        'runCleanupScript'
+      )
+      .mockResolvedValue(undefined);
+    (service as unknown as StopHandlerCapable).runningProcesses.set('ws-1', { pid: 12_345 });
+
+    const result = await service.stopRunScript('ws-1');
+
+    expect(result).toEqual({ success: true });
+    expect(mockReconcileWorkspaceCommandCache).toHaveBeenCalledTimes(1);
+    expect(runCleanupSpy).toHaveBeenCalledWith('ws-1', {
+      runScriptCleanupCommand: 'echo cleanup {port}',
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: 3000,
+    });
+  });
 });
 
 describe('RunScriptService.handleProcessExit edge cases', () => {
@@ -389,6 +459,34 @@ describe('RunScriptService.transitionToRunning', () => {
     expect(mockStopTunnel).toHaveBeenCalledWith('ws-1');
     expect(result).toMatchObject({ success: true, port: 5173, pid: 12_345 });
     expect(result.proxyUrl).toBeUndefined();
+  });
+
+  it('starts postRun using reconciled command arguments', async () => {
+    mockMarkRunning.mockResolvedValue(undefined);
+
+    const service = new RunScriptService() as unknown as TransitionToRunningCapable & {
+      spawnPostRunScript: (
+        workspaceId: string,
+        runScriptPostRunCommand: string,
+        worktreePath: string,
+        port: number | undefined
+      ) => Promise<void>;
+    };
+    const spawnPostRunSpy = vi.spyOn(service, 'spawnPostRunScript').mockResolvedValue(undefined);
+    const childProcess = { pid: 12_345, exitCode: null };
+    service.runningProcesses.set('ws-1', childProcess);
+
+    const result = await service.transitionToRunning(
+      'ws-1',
+      childProcess,
+      12_345,
+      undefined,
+      'echo post-run',
+      '/tmp/ws-1'
+    );
+
+    expect(result).toMatchObject({ success: true, pid: 12_345 });
+    expect(spawnPostRunSpy).toHaveBeenCalledWith('ws-1', 'echo post-run', '/tmp/ws-1', undefined);
   });
 });
 
