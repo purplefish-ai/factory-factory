@@ -18,6 +18,10 @@ function getSingleCheckCiStatus(check: GitHubStatusCheck) {
   return deriveCiStatusFromCheckRollup([check]);
 }
 
+function isSkippedOrCancelledCheck(check: GitHubStatusCheck): boolean {
+  return check.conclusion === 'SKIPPED' || check.conclusion === 'CANCELLED';
+}
+
 interface CIStatusDotProps {
   checks: GitHubStatusCheck[] | null;
   size?: 'sm' | 'md';
@@ -161,27 +165,27 @@ function CICheckItem({ check }: CICheckItemProps) {
   const ciStatus = getSingleCheckCiStatus(check);
 
   const getStatusIcon = () => {
+    if (isSkippedOrCancelledCheck(check)) {
+      return <span className="text-gray-400">○</span>;
+    }
     if (ciStatus === 'SUCCESS') {
       return <span className="text-green-500">✓</span>;
     }
     if (ciStatus === 'FAILURE') {
       return <span className="text-red-500">✗</span>;
     }
-    if (check.conclusion === 'SKIPPED' || check.conclusion === 'CANCELLED') {
-      return <span className="text-gray-400">○</span>;
-    }
     return <span className="text-yellow-500 animate-pulse">◐</span>;
   };
 
   const getStatusColor = () => {
+    if (isSkippedOrCancelledCheck(check)) {
+      return 'text-gray-500';
+    }
     if (ciStatus === 'SUCCESS') {
       return 'text-green-600';
     }
     if (ciStatus === 'FAILURE') {
       return 'text-red-600';
-    }
-    if (check.conclusion === 'SKIPPED' || check.conclusion === 'CANCELLED') {
-      return 'text-gray-500';
     }
     return 'text-yellow-600';
   };
@@ -224,12 +228,12 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
 
   const uniqueChecks = deduplicateChecks(checks);
 
-  const passed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'SUCCESS').length;
+  const passed = uniqueChecks.filter(
+    (c) => !isSkippedOrCancelledCheck(c) && getSingleCheckCiStatus(c) === 'SUCCESS'
+  ).length;
   const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
   const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
-  const skipped = uniqueChecks.filter(
-    (c) => c.conclusion === 'SKIPPED' || c.conclusion === 'CANCELLED'
-  ).length;
+  const skipped = uniqueChecks.filter((c) => isSkippedOrCancelledCheck(c)).length;
 
   return (
     <div className="border-b">
