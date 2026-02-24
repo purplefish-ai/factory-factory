@@ -1,8 +1,7 @@
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { workspaceDataService } from '@/backend/domains/workspace';
+import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 
@@ -33,31 +32,19 @@ export const workspaceRunScriptRouter = router({
       }
 
       try {
-        const configContent = JSON.stringify(input.config, null, 2);
-
-        // Write to the workspace worktree
-        await writeFile(
-          join(workspace.worktreePath, 'factory-factory.json'),
-          configContent,
-          'utf-8'
-        );
-
-        // Also write to the project repo so the admin panel and future workspaces pick it up
-        if (workspace.project?.repoPath) {
-          await writeFile(
-            join(workspace.project.repoPath, 'factory-factory.json'),
-            configContent,
-            'utf-8'
-          );
-        }
-
-        // Update workspace with new run script command
-        await workspaceDataService.setRunScriptCommands(
-          input.workspaceId,
-          input.config.scripts.run ?? null,
-          input.config.scripts.postRun ?? null,
-          input.config.scripts.cleanup ?? null
-        );
+        await runScriptConfigPersistenceService.writeFactoryConfigAndSyncWorkspace({
+          workspaceId: input.workspaceId,
+          worktreePath: workspace.worktreePath,
+          projectRepoPath: workspace.project?.repoPath,
+          config: input.config,
+          persistWorkspaceCommands: (id, commands) =>
+            workspaceDataService.setRunScriptCommands(
+              id,
+              commands.runScriptCommand,
+              commands.runScriptPostRunCommand,
+              commands.runScriptCleanupCommand
+            ),
+        });
 
         return { success: true };
       } catch (error) {

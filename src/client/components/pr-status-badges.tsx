@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import {
   type CiVisualState,
+  deriveCiStatusFromCheckRollup,
   deriveCiVisualStateFromChecks,
   getCiVisualLabel,
 } from '@/shared/ci-status';
@@ -11,6 +12,23 @@ export type CIStatus = CiVisualState;
 
 export function getCIStatus(checks: GitHubStatusCheck[] | null): CIStatus {
   return deriveCiVisualStateFromChecks(checks);
+}
+
+function getSingleCheckCiStatus(check: GitHubStatusCheck) {
+  return deriveCiStatusFromCheckRollup([check]);
+}
+
+function isNonPassingCompletedCheck(check: GitHubStatusCheck): boolean {
+  return (
+    check.status === 'COMPLETED' &&
+    (check.conclusion === 'SKIPPED' ||
+      check.conclusion === 'CANCELLED' ||
+      check.conclusion === 'NEUTRAL')
+  );
+}
+
+function isPassedCheck(check: GitHubStatusCheck): boolean {
+  return check.status === 'COMPLETED' && check.conclusion === 'SUCCESS';
 }
 
 interface CIStatusDotProps {
@@ -52,13 +70,17 @@ function deduplicateChecks(checks: GitHubStatusCheck[]): GitHubStatusCheck[] {
   const checkMap = new Map<string, GitHubStatusCheck>();
 
   const getPriority = (check: GitHubStatusCheck): number => {
-    if (check.conclusion === 'FAILURE') {
+    const ciStatus = getSingleCheckCiStatus(check);
+    if (ciStatus === 'FAILURE') {
+      return 5;
+    }
+    if (ciStatus === 'PENDING') {
       return 4;
     }
-    if (check.status !== 'COMPLETED' || check.conclusion === null) {
+    if (isPassedCheck(check)) {
       return 3;
     }
-    if (check.conclusion === 'SUCCESS') {
+    if (isNonPassingCompletedCheck(check)) {
       return 2;
     }
     return 1;
@@ -89,11 +111,10 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
 
   const uniqueChecks = deduplicateChecks(checks);
 
-  const failed = uniqueChecks.filter((c) => c.conclusion === 'FAILURE').length;
-  const pending = uniqueChecks.filter(
-    (c) => c.status !== 'COMPLETED' || c.conclusion === null
-  ).length;
-  const passed = uniqueChecks.filter((c) => c.conclusion === 'SUCCESS').length;
+  const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
+  const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
+  const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
+  const skipped = uniqueChecks.filter((c) => isNonPassingCompletedCheck(c)).length;
 
   if (failed > 0) {
     return (
@@ -109,9 +130,23 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
       </Badge>
     );
   }
+  if (passed > 0) {
+    return (
+      <Badge variant="secondary" className="bg-green-500/20 text-green-600 text-xs">
+        {passed} passed
+      </Badge>
+    );
+  }
+  if (skipped > 0) {
+    return (
+      <Badge variant="secondary" className="bg-gray-500/20 text-gray-600 text-xs">
+        {skipped} skipped
+      </Badge>
+    );
+  }
   return (
-    <Badge variant="secondary" className="bg-green-500/20 text-green-600 text-xs">
-      {passed} passed
+    <Badge variant="outline" className="text-xs">
+      {getCiVisualLabel('UNKNOWN')}
     </Badge>
   );
 }
@@ -154,28 +189,30 @@ interface CICheckItemProps {
 }
 
 function CICheckItem({ check }: CICheckItemProps) {
+  const ciStatus = getSingleCheckCiStatus(check);
+
   const getStatusIcon = () => {
-    if (check.conclusion === 'SUCCESS') {
+    if (isNonPassingCompletedCheck(check)) {
+      return <span className="text-gray-400">○</span>;
+    }
+    if (ciStatus === 'SUCCESS') {
       return <span className="text-green-500">✓</span>;
     }
-    if (check.conclusion === 'FAILURE') {
+    if (ciStatus === 'FAILURE') {
       return <span className="text-red-500">✗</span>;
-    }
-    if (check.conclusion === 'SKIPPED' || check.conclusion === 'CANCELLED') {
-      return <span className="text-gray-400">○</span>;
     }
     return <span className="text-yellow-500 animate-pulse">◐</span>;
   };
 
   const getStatusColor = () => {
-    if (check.conclusion === 'SUCCESS') {
+    if (isNonPassingCompletedCheck(check)) {
+      return 'text-gray-500';
+    }
+    if (ciStatus === 'SUCCESS') {
       return 'text-green-600';
     }
-    if (check.conclusion === 'FAILURE') {
+    if (ciStatus === 'FAILURE') {
       return 'text-red-600';
-    }
-    if (check.conclusion === 'SKIPPED' || check.conclusion === 'CANCELLED') {
-      return 'text-gray-500';
     }
     return 'text-yellow-600';
   };
@@ -218,14 +255,10 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
 
   const uniqueChecks = deduplicateChecks(checks);
 
-  const passed = uniqueChecks.filter((c) => c.conclusion === 'SUCCESS').length;
-  const failed = uniqueChecks.filter((c) => c.conclusion === 'FAILURE').length;
-  const pending = uniqueChecks.filter(
-    (c) => c.status !== 'COMPLETED' || c.conclusion === null
-  ).length;
-  const skipped = uniqueChecks.filter(
-    (c) => c.conclusion === 'SKIPPED' || c.conclusion === 'CANCELLED'
-  ).length;
+  const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
+  const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
+  const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
+  const skipped = uniqueChecks.filter((c) => isNonPassingCompletedCheck(c)).length;
 
   return (
     <div className="border-b">

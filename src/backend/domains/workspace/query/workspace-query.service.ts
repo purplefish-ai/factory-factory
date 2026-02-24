@@ -16,6 +16,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
@@ -318,12 +319,15 @@ class WorkspaceQueryService {
       }
 
       try {
-        const factoryConfig = await FactoryConfigService.readConfig(workspace.worktreePath);
-
-        await workspaceAccessor.update(workspace.id, {
-          runScriptCommand: factoryConfig?.scripts.run ?? null,
-          runScriptPostRunCommand: factoryConfig?.scripts.postRun ?? null,
-          runScriptCleanupCommand: factoryConfig?.scripts.cleanup ?? null,
+        await runScriptConfigPersistenceService.syncWorkspaceCommandsFromWorktreeConfig({
+          workspaceId: workspace.id,
+          worktreePath: workspace.worktreePath,
+          persistWorkspaceCommands: (id, commands) =>
+            workspaceAccessor.update(id, {
+              runScriptCommand: commands.runScriptCommand,
+              runScriptPostRunCommand: commands.runScriptPostRunCommand,
+              runScriptCleanupCommand: commands.runScriptCleanupCommand,
+            }),
         });
 
         updatedCount++;

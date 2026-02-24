@@ -4,6 +4,10 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { PortAllocationService } from '@/backend/services/port-allocation.service';
+import {
+  type RunScriptCommandCache,
+  runScriptConfigPersistenceService,
+} from '@/backend/services/run-script-config-persistence.service';
 import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
 import { runScriptStateMachine } from './run-script-state-machine.service';
 
@@ -58,12 +62,14 @@ export class RunScriptService {
         throw new Error('Workspace not found');
       }
 
-      if (!workspace.runScriptCommand) {
-        throw new Error('No run script configured for this workspace');
-      }
-
       if (!workspace.worktreePath) {
         throw new Error('Workspace worktree not initialized');
+      }
+
+      const commands = await this.reconcileWorkspaceCommands(workspace);
+
+      if (!commands.runScriptCommand) {
+        throw new Error('No run script configured for this workspace');
       }
 
       // Verify stale processes and atomically transition to STARTING.
@@ -80,7 +86,7 @@ export class RunScriptService {
         };
       }
 
-      let command = workspace.runScriptCommand;
+      let command = commands.runScriptCommand;
       let port: number | undefined;
 
       // Allocate port if command contains {port} placeholder
@@ -124,10 +130,32 @@ export class RunScriptService {
 
       // Transition to RUNNING state AFTER registering all event handlers
       // This ensures we don't miss any events that fire during the async DB operation.
-      return await this.transitionToRunning(workspaceId, childProcess, pid, port);
+      return await this.transitionToRunning(
+        workspaceId,
+        childProcess,
+        pid,
+        port,
+        commands.runScriptPostRunCommand,
+        workspace.worktreePath
+      );
     } catch (error) {
       return this.handleStartError(workspaceId, error as Error);
     }
+  }
+
+  private reconcileWorkspaceCommands(workspace: {
+    id: string;
+    worktreePath: string | null;
+    runScriptCommand: string | null;
+    runScriptPostRunCommand: string | null;
+    runScriptCleanupCommand: string | null;
+  }): Promise<RunScriptCommandCache> {
+    return runScriptConfigPersistenceService.reconcileWorkspaceCommandCache({
+      workspace,
+      // Workspace command cache writes are owned by workspace domain writers.
+      // We still reconcile to execute canonical commands from factory config.
+      persistWorkspaceCommands: async () => Promise.resolve(),
+    });
   }
 
   private registerProcessHandlers(
@@ -275,7 +303,9 @@ export class RunScriptService {
     workspaceId: string,
     childProcess: ChildProcess,
     pid: number,
-    port: number | undefined
+    port: number | undefined,
+    runScriptPostRunCommand: string | null = null,
+    worktreePath: string | null = null
   ): Promise<{ success: boolean; port?: number; pid?: number; proxyUrl?: string; error?: string }> {
     // If the process exits very fast, the exit handler may have already transitioned
     // STARTING -> COMPLETED/FAILED before we get here. In that case, markRunning will
@@ -289,9 +319,16 @@ export class RunScriptService {
       }
 
       // Spawn postRun script (fire-and-forget, non-blocking)
-      void this.spawnPostRunScript(workspaceId, port).catch((error) => {
-        logger.warn('Failed to start postRun script', { workspaceId, error });
-      });
+      if (runScriptPostRunCommand && worktreePath) {
+        void this.spawnPostRunScript(
+          workspaceId,
+          runScriptPostRunCommand,
+          worktreePath,
+          port
+        ).catch((error) => {
+          logger.warn('Failed to start postRun script', { workspaceId, error });
+        });
+      }
 
       return { success: true, port, pid, proxyUrl: proxyUrl ?? undefined };
     } catch (markRunningError) {
@@ -414,6 +451,10 @@ export class RunScriptService {
       // STOPPING can be sticky if a previous stop flow failed mid-cleanup.
       // Try to complete it opportunistically.
       if (status === 'STOPPING') {
+        if (childProcess || pid) {
+          await this.killProcessTree(workspaceId, childProcess, pid);
+          await this.killPostRunProcess(workspaceId);
+        }
         await this.completeStoppingAfterStop(workspaceId);
         await runScriptProxyService.stopTunnel(workspaceId);
         return { success: true };
@@ -438,10 +479,21 @@ export class RunScriptService {
         return { success: true };
       }
 
+      let runScriptCleanupCommand = workspace.runScriptCleanupCommand;
+      try {
+        const commands = await this.reconcileWorkspaceCommands(workspace);
+        runScriptCleanupCommand = commands.runScriptCleanupCommand;
+      } catch (error) {
+        logger.warn('Failed to reconcile workspace commands during stop; using cached cleanup', {
+          workspaceId,
+          error,
+        });
+      }
+
       // Run cleanup script if configured
-      if (workspace.runScriptCleanupCommand && workspace.worktreePath) {
+      if (runScriptCleanupCommand && workspace.worktreePath) {
         await this.runCleanupScript(workspaceId, {
-          runScriptCleanupCommand: workspace.runScriptCleanupCommand,
+          runScriptCleanupCommand,
           worktreePath: workspace.worktreePath,
           runScriptPort: workspace.runScriptPort,
         });
@@ -584,13 +636,15 @@ export class RunScriptService {
     }
   }
 
-  private async spawnPostRunScript(workspaceId: string, port: number | undefined): Promise<void> {
-    const workspace = await workspaceAccessor.findById(workspaceId);
-    if (!(workspace?.runScriptPostRunCommand && workspace.worktreePath)) {
-      return;
-    }
+  private async spawnPostRunScript(
+    workspaceId: string,
+    runScriptPostRunCommand: string,
+    worktreePath: string,
+    port: number | undefined
+  ): Promise<void> {
+    await Promise.resolve();
 
-    let command = workspace.runScriptPostRunCommand;
+    let command = runScriptPostRunCommand;
     if (port && command.includes('{port}')) {
       command = FactoryConfigService.substitutePort(command, port);
     }
@@ -598,7 +652,7 @@ export class RunScriptService {
     logger.info('Starting postRun script', { workspaceId, command });
 
     const postRunProcess = spawn('bash', ['-c', command], {
-      cwd: workspace.worktreePath,
+      cwd: worktreePath,
       detached: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -629,7 +683,12 @@ export class RunScriptService {
     });
 
     postRunProcess.on('exit', (code, signal) => {
-      logger.info('PostRun script exited', { workspaceId, pid: postRunProcess.pid, code, signal });
+      logger.info('PostRun script exited', {
+        workspaceId,
+        pid: postRunProcess.pid,
+        code,
+        signal,
+      });
       this.postRunProcesses.delete(workspaceId);
     });
 
