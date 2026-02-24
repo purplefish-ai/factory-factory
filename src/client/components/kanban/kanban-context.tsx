@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -69,6 +69,9 @@ interface KanbanContextValue {
   isBulkArchiving: boolean;
   showInlineForm: boolean;
   setShowInlineForm: (show: boolean) => void;
+  quickChatWorkspaceId: string | null;
+  openQuickChat: (workspaceId: string) => void;
+  closeQuickChat: () => void;
 }
 
 const KanbanContext = createContext<KanbanContextValue | null>(null);
@@ -145,6 +148,12 @@ export function KanbanProvider({
     Map<string, ArchivingWorkspaceIssueLink>
   >(new Map());
   const [showInlineForm, setShowInlineForm] = useState(false);
+  const [quickChatWorkspaceId, setQuickChatWorkspaceId] = useState<string | null>(null);
+  const openQuickChat = useCallback(
+    (workspaceId: string) => setQuickChatWorkspaceId(workspaceId),
+    []
+  );
+  const closeQuickChat = useCallback(() => setQuickChatWorkspaceId(null), []);
 
   const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
 
@@ -352,6 +361,9 @@ export function KanbanProvider({
         isBulkArchiving: bulkArchiveMutation.isPending,
         showInlineForm,
         setShowInlineForm,
+        quickChatWorkspaceId,
+        openQuickChat,
+        closeQuickChat,
       }}
     >
       {children}

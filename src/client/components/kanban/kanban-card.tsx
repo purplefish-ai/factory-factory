@@ -1,5 +1,12 @@
 import type { Workspace } from '@prisma-gen/browser';
-import { AlertTriangle, Archive, GitBranch, GitPullRequest, Play } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  GitBranch,
+  GitPullRequest,
+  MessageSquare,
+  Play,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { PendingRequestBadge } from '@/client/components/pending-request-badge';
@@ -35,6 +42,7 @@ interface KanbanCardProps {
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   isTogglePending?: boolean;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  onOpenQuickChat?: (workspaceId: string) => void;
 }
 
 function CardStatusIndicator({
@@ -162,6 +170,7 @@ function CardTitleIcons({
   sessionRuntimeError,
   onToggleRatcheting,
   onArchive,
+  onOpenQuickChat,
 }: {
   workspace: WorkspaceWithKanban;
   ratchetEnabled: boolean;
@@ -170,9 +179,41 @@ function CardTitleIcons({
   sessionRuntimeError: string | null;
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
+  onOpenQuickChat?: (workspaceId: string) => void;
 }) {
+  const showQuickChat =
+    !isArchived &&
+    workspace.status !== 'NEW' &&
+    workspace.status !== 'PROVISIONING' &&
+    onOpenQuickChat;
   return (
     <div className="flex items-center gap-1.5 shrink-0">
+      {showQuickChat && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'h-6 w-6 shrink-0 relative',
+                !workspace.pendingRequestType &&
+                  'md:opacity-0 md:group-hover:opacity-100 transition-opacity'
+              )}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenQuickChat(workspace.id);
+              }}
+            >
+              <MessageSquare className="h-3 w-3" />
+              {workspace.pendingRequestType && (
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Quick Chat</TooltipContent>
+        </Tooltip>
+      )}
       <RatchetToggleButton
         enabled={ratchetEnabled}
         state={workspace.ratchetState}
@@ -240,6 +281,7 @@ export function KanbanCard({
   onToggleRatcheting,
   isTogglePending = false,
   onArchive,
+  onOpenQuickChat,
 }: KanbanCardProps) {
   const { showPR, isArchived, ratchetEnabled, sidebarStatus, sessionRuntimeError } =
     deriveCardState(workspace);
@@ -275,6 +317,7 @@ export function KanbanCard({
               sessionRuntimeError={sessionRuntimeError}
               onToggleRatcheting={onToggleRatcheting}
               onArchive={onArchive}
+              onOpenQuickChat={onOpenQuickChat}
             />
           </div>
         </CardHeader>
