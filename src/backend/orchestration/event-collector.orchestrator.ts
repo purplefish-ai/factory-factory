@@ -72,7 +72,7 @@ export interface StoreInterface {
 interface PendingUpdate {
   fields: SnapshotUpdateInput;
   sources: Set<string>;
-  timer: NodeJS.Timeout;
+  timer: NodeJS.Timeout | null;
 }
 
 interface EnqueueOptions {
@@ -138,14 +138,16 @@ export class EventCoalescer {
     let pending = this.pending.get(workspaceId);
 
     if (pending) {
-      clearTimeout(pending.timer);
+      if (pending.timer) {
+        clearTimeout(pending.timer);
+      }
       Object.assign(pending.fields, fields);
       pending.sources.add(source);
     } else {
       pending = {
         fields: { ...fields },
         sources: new Set([source]),
-        timer: null as unknown as NodeJS.Timeout,
+        timer: null,
       };
       this.pending.set(workspaceId, pending);
     }
@@ -189,7 +191,9 @@ export class EventCoalescer {
    */
   flushAll(): void {
     for (const [workspaceId, pending] of this.pending) {
-      clearTimeout(pending.timer);
+      if (pending.timer) {
+        clearTimeout(pending.timer);
+      }
 
       const existing = this.store.getByWorkspaceId(workspaceId);
       if (!(existing || pending.fields.projectId)) {
