@@ -31,9 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RatchetWrenchIcon, WorkspacesBackLink } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
 import type { PublicIssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
@@ -826,6 +826,7 @@ function ServerLogsSection() {
 
 export default function AdminDashboardPage() {
   useAppHeader({ title: 'Settings' });
+  const [settingsTab, setSettingsTab] = useState<'general' | 'project'>('general');
 
   const {
     data: stats,
@@ -866,41 +867,59 @@ export default function AdminDashboardPage() {
         </HeaderLeftExtraSlot>
       )}
       <div className="space-y-6 p-3 md:p-6">
-        <h2 className="text-lg font-semibold">General Settings</h2>
+        <Tabs
+          value={settingsTab}
+          onValueChange={(value) => setSettingsTab(value as 'general' | 'project')}
+        >
+          <TabsList className="w-full sm:w-auto">
+            <TabsTrigger value="general" className="flex-1 sm:flex-initial">
+              General Settings
+            </TabsTrigger>
+            <TabsTrigger value="project" className="flex-1 sm:flex-initial">
+              Project Settings
+            </TabsTrigger>
+          </TabsList>
 
-        <ApiUsageSection
-          apiUsage={stats?.apiUsage}
-          onReset={() => resetApiStats.mutate()}
-          isResetting={resetApiStats.isPending}
-        />
+          <TabsContent value="general" className="space-y-6 mt-4">
+            <ApiUsageSection
+              apiUsage={stats?.apiUsage}
+              onReset={() => resetApiStats.mutate()}
+              isResetting={resetApiStats.isPending}
+            />
 
-        {isLoadingProcesses ? (
-          <ProcessesSectionSkeleton />
-        ) : (
-          <ProcessesSection processes={processes} />
-        )}
+            {isLoadingProcesses ? (
+              <ProcessesSectionSkeleton />
+            ) : (
+              <ProcessesSection processes={processes} />
+            )}
 
-        {/* Environment Info */}
-        <Card className="bg-muted/50">
-          <CardContent className="py-4">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-              <span className="font-medium">Environment:</span>
-              <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
-            </div>
-          </CardContent>
-        </Card>
+            {/* Environment Info */}
+            <Card className="bg-muted/50">
+              <CardContent className="py-4">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                  <span className="font-medium">Environment:</span>
+                  <Badge variant="outline">{stats?.environment || 'unknown'}</Badge>
+                </div>
+              </CardContent>
+            </Card>
 
-        <NotificationSettingsSection />
-        <IdeSettingsSection />
-        <ChatProviderDefaultsSection />
-        <RatchetSettingsSection />
-        <AppInfoSection />
-        <DataBackupSection />
-        <ServerLogsSection />
+            <NotificationSettingsSection />
+            <IdeSettingsSection />
+            <ChatProviderDefaultsSection />
+            <RatchetSettingsSection />
+            <AppInfoSection />
+            <DataBackupSection />
+            <ServerLogsSection />
+          </TabsContent>
 
-        <Separator className="my-2" />
-
-        {projects && <ProjectSettingsSection projects={projects} />}
+          <TabsContent value="project" className="mt-4">
+            {projects ? (
+              <ProjectSettingsSection projects={projects} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading projects...</p>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
