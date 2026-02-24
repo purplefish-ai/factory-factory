@@ -309,7 +309,9 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
             port: actualPort,
             environment: configService.getEnvironment(),
           });
-          process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
+          if (configService.isRunScriptProxyEnabled()) {
+            process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
+          }
 
           configureDomainBridges(context.services);
           configureEventCollector(context.services);
