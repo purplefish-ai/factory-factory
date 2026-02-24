@@ -441,6 +441,40 @@ PRAGMA defer_foreign_keys=OFF;`
     }
   });
 
+  it('rejects migrations with multi-line string literals', () => {
+    createMigrationDir('001_multiline_string_literal');
+    setupMigration(
+      '001_multiline_string_literal',
+      `CREATE TABLE notes (id INTEGER PRIMARY KEY, content TEXT NOT NULL);
+INSERT INTO notes (content) VALUES ('line one
+-- this is string content, not a SQL comment
+line three');`
+    );
+
+    expect(() =>
+      runMigrations({
+        databasePath,
+        migrationsPath,
+        log: () => {
+          /* no-op */
+        },
+      })
+    ).toThrow(/multi-line string literal/i);
+
+    const db = new Database(databasePath);
+    try {
+      const appliedMigrations = getAppliedMigrations(db);
+      expect(appliedMigrations).toHaveLength(0);
+
+      const notesTable = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notes'")
+        .all() as Array<{ name: string }>;
+      expect(notesTable).toHaveLength(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it('migrates ClaudeSession rows to AgentSession with locked mapping and indexes', () => {
     createMigrationDir('001_agent_session_cutover');
     const migrationSqlPath = join(

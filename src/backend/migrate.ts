@@ -37,6 +37,108 @@ function classifyPragmaBucket(trimmedPragma: string, foundNonPragma: boolean): '
   return foundNonPragma ? 'post' : 'pre';
 }
 
+interface SqlScanState {
+  inSingleQuotedString: boolean;
+  inLineComment: boolean;
+  inBlockComment: boolean;
+}
+
+function scanInsideSingleQuotedString(
+  state: SqlScanState,
+  char: string,
+  nextChar: string | undefined
+): number | true {
+  if (char === "'") {
+    if (nextChar === "'") {
+      return 1;
+    }
+    state.inSingleQuotedString = false;
+    return 0;
+  }
+
+  if (char === '\n') {
+    return true;
+  }
+
+  return 0;
+}
+
+function scanOutsideSingleQuotedString(
+  state: SqlScanState,
+  char: string,
+  nextChar: string | undefined
+): number {
+  if (state.inLineComment) {
+    if (char === '\n') {
+      state.inLineComment = false;
+    }
+    return 0;
+  }
+
+  if (state.inBlockComment) {
+    if (char === '*' && nextChar === '/') {
+      state.inBlockComment = false;
+      return 1;
+    }
+    return 0;
+  }
+
+  if (char === "'") {
+    state.inSingleQuotedString = true;
+    return 0;
+  }
+
+  if (char === '-' && nextChar === '-') {
+    state.inLineComment = true;
+    return 1;
+  }
+
+  if (char === '/' && nextChar === '*') {
+    state.inBlockComment = true;
+    return 1;
+  }
+
+  return 0;
+}
+
+function hasMultilineStringLiteral(sql: string): boolean {
+  const state: SqlScanState = {
+    inSingleQuotedString: false,
+    inLineComment: false,
+    inBlockComment: false,
+  };
+
+  for (let i = 0; i < sql.length; i += 1) {
+    const char = sql[i] ?? '';
+    const nextChar = sql[i + 1];
+
+    if (state.inSingleQuotedString) {
+      const singleQuoteScanResult = scanInsideSingleQuotedString(state, char, nextChar);
+      if (singleQuoteScanResult === true) {
+        return true;
+      }
+      i += singleQuoteScanResult;
+      continue;
+    }
+
+    i += scanOutsideSingleQuotedString(state, char, nextChar);
+  }
+
+  return false;
+}
+
+function assertNoMultilineStringLiterals(sql: string, migrationName: string): void {
+  if (!hasMultilineStringLiteral(sql)) {
+    return;
+  }
+
+  throw new Error(
+    `[migrate] Migration "${migrationName}" contains a multi-line string literal. ` +
+      'Custom migration parsing does not support multi-line string literals. ' +
+      'Use single-line string literals or run the data migration outside migrate.ts.'
+  );
+}
+
 /**
  * Parse migration SQL to separate PRAGMAs from DDL/DML statements.
  * PRAGMAs must execute outside a transaction in SQLite.
@@ -49,10 +151,8 @@ function classifyPragmaBucket(trimmedPragma: string, foundNonPragma: boolean): '
  * - Preserves order (pre-pragmas, DDL, post-pragmas)
  *
  * LIMITATION: This parser does NOT handle multi-line string literals correctly.
- * If a custom migration contains a multi-line string with "--" or "PRAGMA" in it,
- * the parser will incorrectly strip or extract those lines. This is acceptable
- * because Prisma DDL migrations never have this pattern. For custom migrations
- * with data, avoid multi-line strings or use db.exec() directly.
+ * To avoid silent corruption, migrations with multi-line string literals are
+ * rejected before parsing in applySingleMigration().
  */
 function parseMigrationSql(migrationSql: string): {
   prePragmas: string[];
@@ -105,6 +205,7 @@ function applySingleMigration(
   checksum: string,
   log: (msg: string) => void
 ): void {
+  assertNoMultilineStringLiterals(sql, migrationName);
   const { prePragmas, ddlDml, postPragmas } = parseMigrationSql(sql);
 
   // Define an atomic transaction for the migration
