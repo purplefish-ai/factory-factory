@@ -1,5 +1,11 @@
 import { CircleDot, GitBranch, GitPullRequest, Plus, Settings, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { InlineWorkspaceForm } from '@/client/components/kanban/inline-workspace-form';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
@@ -28,6 +34,11 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import {
+  clampSidebarWidth,
+  getPersistedSidebarWidth,
+  persistSidebarWidth,
+} from './app-sidebar-resize';
 import { Logo } from './logo';
 import { PendingRequestBadge } from './pending-request-badge';
 import { ThemeToggle } from './theme-toggle';
@@ -388,8 +399,11 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { pathname } = useLocation();
   const prevPathnameRef = useRef(pathname);
   const prevSelectedProjectIdRef = useRef(navData.selectedProjectId);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
   const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(getPersistedSidebarWidth);
 
   // Auto-close mobile sidebar on route navigation
   useEffect(() => {
@@ -406,6 +420,22 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     }
   }, [navData.selectedProjectId]);
 
+  useEffect(() => {
+    persistSidebarWidth(sidebarWidth);
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!open && resizeCleanupRef.current) {
+      resizeCleanupRef.current();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      resizeCleanupRef.current?.();
+    };
+  }, []);
+
   // Fetch issues for the Todo section
   const { issues } = useSidebarIssues(
     navData.selectedProjectId,
@@ -417,6 +447,59 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { waiting, working, done } = useMemo(() => {
     return groupWorkspacesForSidebar(navData.serverWorkspaces ?? []);
   }, [navData.serverWorkspaces]);
+
+  const handleResizePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || !open) {
+      return;
+    }
+
+    event.preventDefault();
+    resizeCleanupRef.current?.();
+
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    const handleElement = event.currentTarget;
+    const controller = new AbortController();
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    const cleanup = () => {
+      controller.abort();
+      setIsResizingSidebar(false);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      resizeCleanupRef.current = null;
+      if (handleElement.hasPointerCapture(pointerId)) {
+        handleElement.releasePointerCapture(pointerId);
+      }
+    };
+
+    resizeCleanupRef.current = cleanup;
+    setIsResizingSidebar(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    handleElement.setPointerCapture(pointerId);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) {
+        return;
+      }
+      const deltaX = moveEvent.clientX - startX;
+      setSidebarWidth(clampSidebarWidth(startWidth + deltaX));
+    };
+
+    const handlePointerEnd = (endEvent: PointerEvent) => {
+      if (endEvent.pointerId !== pointerId) {
+        return;
+      }
+      cleanup();
+    };
+
+    window.addEventListener('pointermove', handlePointerMove, { signal: controller.signal });
+    window.addEventListener('pointerup', handlePointerEnd, { signal: controller.signal });
+    window.addEventListener('pointercancel', handlePointerEnd, { signal: controller.signal });
+  };
 
   const sharedProps = {
     navData,
@@ -460,11 +543,23 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     <div
       className={cn(
         'shrink-0 overflow-hidden transition-[width] duration-200 ease-linear',
-        open ? 'w-[22rem]' : 'w-0'
+        isResizingSidebar && 'duration-0'
       )}
+      style={{ width: open ? `${sidebarWidth}px` : '0px' }}
     >
-      <div className="flex h-full w-[22rem] flex-col border-r bg-sidebar text-sidebar-foreground">
+      <div
+        className="relative flex h-full flex-col border-r bg-sidebar text-sidebar-foreground"
+        style={{ width: `${sidebarWidth}px` }}
+      >
         <SidebarInner {...sharedProps} showCloseButton={false} />
+        {open && (
+          <button
+            type="button"
+            aria-label="Resize sidebar"
+            className="absolute inset-y-0 right-0 z-30 w-3 cursor-col-resize touch-none bg-transparent hover:bg-sidebar-border/40"
+            onPointerDown={handleResizePointerDown}
+          />
+        )}
       </div>
     </div>
   );
