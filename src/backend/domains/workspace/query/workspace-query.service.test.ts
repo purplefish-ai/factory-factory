@@ -16,6 +16,7 @@ const mockProjectFindById = vi.fn();
 const mockDeriveWorkspaceRuntimeState = vi.fn();
 const mockReadConfig = vi.fn();
 const mockGetWorkspaceGitStats = vi.fn();
+const mockSyncWorkspaceCommandsFromWorktreeConfig = vi.fn();
 
 vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   workspaceAccessor: {
@@ -40,6 +41,13 @@ vi.mock('@/backend/domains/workspace/state/workspace-runtime-state', () => ({
 vi.mock('@/backend/services/factory-config.service', () => ({
   FactoryConfigService: {
     readConfig: (...args: unknown[]) => mockReadConfig(...args),
+  },
+}));
+
+vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
+  runScriptConfigPersistenceService: {
+    syncWorkspaceCommandsFromWorktreeConfig: (...args: unknown[]) =>
+      mockSyncWorkspaceCommandsFromWorktreeConfig(...args),
   },
 }));
 
@@ -260,10 +268,13 @@ describe('WorkspaceQueryService', () => {
       { id: 'w3', worktreePath: null },
     ]);
 
-    mockReadConfig
-      .mockResolvedValueOnce({ scripts: { run: 'pnpm dev', cleanup: 'pkill node' } })
+    mockSyncWorkspaceCommandsFromWorktreeConfig
+      .mockResolvedValueOnce({
+        runScriptCommand: 'pnpm dev',
+        runScriptPostRunCommand: null,
+        runScriptCleanupCommand: 'pkill node',
+      })
       .mockRejectedValueOnce(new Error('bad config'));
-    mockWorkspaceUpdate.mockResolvedValue(undefined);
 
     const result = await workspaceQueryService.refreshFactoryConfigs('p1');
 
@@ -272,11 +283,17 @@ describe('WorkspaceQueryService', () => {
       totalWorkspaces: 3,
       errors: [{ workspaceId: 'w2', error: 'bad config' }],
     });
-    expect(mockWorkspaceUpdate).toHaveBeenCalledWith('w1', {
-      runScriptCommand: 'pnpm dev',
-      runScriptPostRunCommand: null,
-      runScriptCleanupCommand: 'pkill node',
+    expect(mockSyncWorkspaceCommandsFromWorktreeConfig).toHaveBeenCalledWith({
+      workspaceId: 'w1',
+      worktreePath: '/tmp/w1',
+      persistWorkspaceCommands: expect.any(Function),
     });
+    expect(mockSyncWorkspaceCommandsFromWorktreeConfig).toHaveBeenCalledWith({
+      workspaceId: 'w2',
+      worktreePath: '/tmp/w2',
+      persistWorkspaceCommands: expect.any(Function),
+    });
+    expect(mockSyncWorkspaceCommandsFromWorktreeConfig).toHaveBeenCalledTimes(2);
   });
 
   it('getFactoryConfig validates project and handles read errors', async () => {

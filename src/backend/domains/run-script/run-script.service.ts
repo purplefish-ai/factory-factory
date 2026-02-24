@@ -4,6 +4,7 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { PortAllocationService } from '@/backend/services/port-allocation.service';
+import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
 import { runScriptStateMachine } from './run-script-state-machine.service';
 
@@ -58,12 +59,24 @@ export class RunScriptService {
         throw new Error('Workspace not found');
       }
 
-      if (!workspace.runScriptCommand) {
-        throw new Error('No run script configured for this workspace');
-      }
-
       if (!workspace.worktreePath) {
         throw new Error('Workspace worktree not initialized');
+      }
+
+      const commands = await runScriptConfigPersistenceService.reconcileWorkspaceCommandCache({
+        workspace: {
+          id: workspace.id,
+          worktreePath: workspace.worktreePath,
+          runScriptCommand: workspace.runScriptCommand,
+          runScriptPostRunCommand: workspace.runScriptPostRunCommand,
+          runScriptCleanupCommand: workspace.runScriptCleanupCommand,
+        },
+        persistWorkspaceCommands: (id, runScriptCommands) =>
+          workspaceAccessor.update(id, runScriptCommands),
+      });
+
+      if (!commands.runScriptCommand) {
+        throw new Error('No run script configured for this workspace');
       }
 
       // Verify stale processes and atomically transition to STARTING.
@@ -80,7 +93,7 @@ export class RunScriptService {
         };
       }
 
-      let command = workspace.runScriptCommand;
+      let command = commands.runScriptCommand;
       let port: number | undefined;
 
       // Allocate port if command contains {port} placeholder
