@@ -169,6 +169,29 @@ describe('useProjectSnapshotSync', () => {
       expect(result.reviewCount).toBe(5);
     });
 
+    it('preserves existing stateComputedAt and sets snapshotComputedAt', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({
+        workspaceId: 'ws-1',
+        computedAt: '2026-02-01T12:00:00Z',
+      });
+      onMessage({
+        type: 'snapshot_full',
+        projectId: 'proj-1',
+        entries: [entry],
+      });
+
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater({
+        workspaces: [{ id: 'ws-1', stateComputedAt: '2026-01-01T00:00:00Z' }],
+        reviewCount: 0,
+      });
+      expect(result.workspaces[0].stateComputedAt).toBe('2026-01-01T00:00:00Z');
+      expect(result.workspaces[0].snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
+    });
+
     it('defaults reviewCount to 0 when no prev exists', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
@@ -216,6 +239,26 @@ describe('useProjectSnapshotSync', () => {
       expect(result.reviewCount).toBe(3);
     });
 
+    it('does not overwrite existing stateComputedAt during upsert', () => {
+      useProjectSnapshotSync('proj-1');
+      const onMessage = capturedOptions!.onMessage!;
+
+      const entry = makeEntry({ workspaceId: 'ws-1', computedAt: '2026-02-01T12:00:00Z' });
+      onMessage({
+        type: 'snapshot_changed',
+        workspaceId: 'ws-1',
+        entry,
+      });
+
+      const [, updater] = mockSetData.mock.calls[0]!;
+      const result = updater({
+        workspaces: [{ id: 'ws-1', name: 'old', stateComputedAt: '2026-01-01T00:00:00Z' }],
+        reviewCount: 0,
+      });
+      expect(result.workspaces[0].stateComputedAt).toBe('2026-01-01T00:00:00Z');
+      expect(result.workspaces[0].snapshotComputedAt).toBe('2026-02-01T12:00:00Z');
+    });
+
     it('appends a new workspace when not found', () => {
       useProjectSnapshotSync('proj-1');
       const onMessage = capturedOptions!.onMessage!;
@@ -252,6 +295,8 @@ describe('useProjectSnapshotSync', () => {
       const [, updater] = mockSetData.mock.calls[0]!;
       const result = updater(undefined);
       expect(result.workspaces).toHaveLength(1);
+      expect(result.workspaces[0].stateComputedAt).toBeNull();
+      expect(result.workspaces[0].snapshotComputedAt).toBe('2026-01-15T10:00:00Z');
       expect(result.reviewCount).toBe(0);
     });
   });

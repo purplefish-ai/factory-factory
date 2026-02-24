@@ -204,6 +204,7 @@ class WorkspaceQueryService {
           ciObservation: derivedState.ciObservation,
           runScriptStatus: w.runScriptStatus,
           cachedKanbanColumn: derivedState.kanbanColumn,
+          // DB timestamp for last cached kanban-state recompute/change.
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
           pendingRequestType: pendingRequestByWorkspace.get(w.id) ?? null,
         };
