@@ -12,7 +12,7 @@ import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
 interface InitializationOverlayProps {
   workspaceId: string;
-  status: 'NEW' | 'PROVISIONING' | 'READY' | 'FAILED' | 'ARCHIVED';
+  status: 'NEW' | 'PROVISIONING' | 'READY' | 'FAILED' | 'ARCHIVING' | 'ARCHIVED';
   initErrorMessage: string | null;
   initOutput: string | null;
   hasStartupScript: boolean;
@@ -30,7 +30,7 @@ export function InitializationOverlay({
   const { retry, retryInit } = useRetryWorkspaceInit(workspaceId);
 
   useEffect(() => {
-    if (status === 'READY' || status === 'ARCHIVED') {
+    if (status === 'READY' || status === 'ARCHIVING' || status === 'ARCHIVED') {
       forgetResumeWorkspace(workspaceId);
     }
   }, [status, workspaceId]);

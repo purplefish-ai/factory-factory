@@ -11,8 +11,9 @@
  *   PROVISIONING → FAILED (error)
  *   FAILED → PROVISIONING (retry startup script, with count check)
  *   FAILED → NEW (retry from scratch when worktree creation failed)
- *   READY → ARCHIVED
- *   FAILED → ARCHIVED
+ *   READY → ARCHIVING → ARCHIVED
+ *   FAILED → ARCHIVING → ARCHIVED
+ *   ARCHIVING → READY/FAILED (rollback on archive failure)
  */
 
 import { EventEmitter } from 'node:events';
@@ -29,8 +30,9 @@ const logger = createLogger('workspace-state-machine');
 const VALID_TRANSITIONS: Record<WorkspaceStatus, WorkspaceStatus[]> = {
   NEW: ['PROVISIONING'],
   PROVISIONING: ['READY', 'FAILED'],
-  READY: ['ARCHIVED'],
-  FAILED: ['PROVISIONING', 'NEW', 'ARCHIVED'],
+  READY: ['ARCHIVING'],
+  FAILED: ['PROVISIONING', 'NEW', 'ARCHIVING'],
+  ARCHIVING: ['READY', 'FAILED', 'ARCHIVED'],
   ARCHIVED: [],
 };
 
@@ -72,6 +74,13 @@ export interface WorkspaceStateChangedEvent {
 export interface StartProvisioningOptions {
   /** Maximum number of retries allowed (default 3) */
   maxRetries?: number;
+}
+
+type ArchivingSourceStatus = Extract<WorkspaceStatus, 'READY' | 'FAILED'>;
+
+export interface StartArchivingResult {
+  workspace: Workspace;
+  previousStatus: ArchivingSourceStatus;
 }
 
 class WorkspaceStateMachineService extends EventEmitter {
@@ -118,7 +127,11 @@ class WorkspaceStateMachineService extends EventEmitter {
         break;
 
       case 'READY':
-        updateData.initCompletedAt = now;
+        // Mark init completion only for PROVISIONING -> READY,
+        // not for ARCHIVING rollback transitions.
+        if (currentStatus === 'PROVISIONING') {
+          updateData.initCompletedAt = now;
+        }
         if (options?.worktreePath !== undefined) {
           updateData.worktreePath = options.worktreePath;
         }
@@ -128,7 +141,11 @@ class WorkspaceStateMachineService extends EventEmitter {
         break;
 
       case 'FAILED':
-        updateData.initCompletedAt = now;
+        // Mark init completion only for PROVISIONING -> FAILED,
+        // not for ARCHIVING rollback transitions.
+        if (currentStatus === 'PROVISIONING') {
+          updateData.initCompletedAt = now;
+        }
         if (options?.errorMessage !== undefined) {
           updateData.initErrorMessage = options.errorMessage;
         }
@@ -255,11 +272,77 @@ class WorkspaceStateMachineService extends EventEmitter {
   }
 
   /**
-   * Archive a workspace.
-   * Can only archive from READY or FAILED status.
+   * Mark a workspace as archiving.
+   * Can only begin archiving from READY or FAILED status.
+   */
+  async startArchivingWithSourceStatus(workspaceId: string): Promise<StartArchivingResult> {
+    const workspace = await workspaceAccessor.findRawById(workspaceId);
+
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    const currentStatus = workspace.status;
+
+    if (!(currentStatus === 'READY' || currentStatus === 'FAILED')) {
+      throw new WorkspaceStateMachineError(
+        workspaceId,
+        currentStatus,
+        'ARCHIVING',
+        `Cannot start archiving from status: ${currentStatus}`
+      );
+    }
+
+    const result = await workspaceAccessor.transitionWithCas(workspaceId, currentStatus, {
+      status: 'ARCHIVING',
+    });
+
+    if (result.count === 0) {
+      throw new WorkspaceStateMachineError(
+        workspaceId,
+        currentStatus,
+        'ARCHIVING',
+        'Transition failed: status changed by another process'
+      );
+    }
+
+    const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
+
+    this.emit(WORKSPACE_STATE_CHANGED, {
+      workspaceId,
+      fromStatus: currentStatus,
+      toStatus: 'ARCHIVING',
+    } satisfies WorkspaceStateChangedEvent);
+
+    logger.debug('Workspace status transitioned', {
+      workspaceId,
+      from: currentStatus,
+      to: 'ARCHIVING',
+    });
+
+    return {
+      workspace: updated,
+      previousStatus: currentStatus,
+    };
+  }
+
+  startArchiving(workspaceId: string): Promise<Workspace> {
+    return this.startArchivingWithSourceStatus(workspaceId).then((result) => result.workspace);
+  }
+
+  /**
+   * Mark an archiving workspace as fully archived.
+   */
+  markArchived(workspaceId: string): Promise<Workspace> {
+    return this.transition(workspaceId, 'ARCHIVED');
+  }
+
+  /**
+   * Backward-compatible archive helper.
+   * Expects workspace to already be in ARCHIVING state.
    */
   archive(workspaceId: string): Promise<Workspace> {
-    return this.transition(workspaceId, 'ARCHIVED');
+    return this.markArchived(workspaceId);
   }
 
   /**

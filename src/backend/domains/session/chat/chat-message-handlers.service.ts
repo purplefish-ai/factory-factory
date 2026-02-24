@@ -474,8 +474,8 @@ class ChatMessageHandlerService {
     status?: string | null;
     worktreePath?: string | null;
   }): string | null {
-    if (workspace.status === 'ARCHIVED') {
-      return 'Workspace is archived. Unarchive it before sending messages.';
+    if (workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED') {
+      return 'Workspace is archived or archiving and cannot accept new messages.';
     }
 
     if (workspace.status === 'FAILED' && !workspace.worktreePath) {

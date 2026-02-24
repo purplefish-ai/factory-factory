@@ -266,7 +266,7 @@ class ProjectAccessor {
         _count: {
           select: {
             workspaces: {
-              where: { status: { not: 'ARCHIVED' } },
+              where: { status: { notIn: ['ARCHIVING', 'ARCHIVED'] } },
             },
           },
         },

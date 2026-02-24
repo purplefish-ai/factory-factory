@@ -1,0 +1,4 @@
+-- Add ARCHIVING to WorkspaceStatus enum.
+--
+-- SQLite stores Prisma enums as TEXT columns, so no DDL is required.
+-- The canonical enum change is represented in prisma/schema.prisma.

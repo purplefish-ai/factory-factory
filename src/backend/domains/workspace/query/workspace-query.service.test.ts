@@ -4,7 +4,6 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceSessionBridge,
 } from '@/backend/domains/workspace/bridges';
-import { workspaceArchiveTrackerService } from '@/backend/domains/workspace/lifecycle/archive-tracker.service';
 import { WorkspaceStatus } from '@/shared/core';
 import { workspaceQueryService } from './workspace-query.service';
 
@@ -81,7 +80,6 @@ describe('WorkspaceQueryService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    workspaceArchiveTrackerService.reset();
 
     workspaceQueryService.configure({
       session: mockSessionBridge,
@@ -255,65 +253,6 @@ describe('WorkspaceQueryService', () => {
     expect(mockGithubListReviewRequests).not.toHaveBeenCalled();
   });
 
-  it('filters out workspaces currently archiving from project summary state results', async () => {
-    workspaceArchiveTrackerService.markArchiving('ws-2');
-    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
-    mockFindByProjectIdWithSessions.mockResolvedValue([
-      {
-        id: 'ws-1',
-        name: 'Workspace 1',
-        createdAt: new Date('2026-02-01T00:00:00.000Z'),
-        worktreePath: null,
-        branchName: null,
-        prUrl: null,
-        prNumber: null,
-        prState: 'NONE',
-        prCiStatus: null,
-        ratchetEnabled: false,
-        ratchetState: 'IDLE',
-        runScriptStatus: 'IDLE',
-        cachedKanbanColumn: 'WAITING',
-        stateComputedAt: null,
-        agentSessions: [],
-        terminalSessions: [],
-      },
-      {
-        id: 'ws-2',
-        name: 'Workspace 2',
-        createdAt: new Date('2026-02-02T00:00:00.000Z'),
-        worktreePath: null,
-        branchName: null,
-        prUrl: null,
-        prNumber: null,
-        prState: 'NONE',
-        prCiStatus: null,
-        ratchetEnabled: false,
-        ratchetState: 'IDLE',
-        runScriptStatus: 'IDLE',
-        cachedKanbanColumn: 'WAITING',
-        stateComputedAt: null,
-        agentSessions: [],
-        terminalSessions: [],
-      },
-    ]);
-    mockDeriveWorkspaceRuntimeState.mockImplementation((workspace: { id: string }) => ({
-      sessionIds: [workspace.id],
-      isWorking: false,
-      flowState: {
-        shouldAnimateRatchetButton: false,
-        phase: 'NO_PR',
-        ciObservation: 'CHECKS_UNKNOWN',
-      },
-    }));
-    mockGetAllPendingRequests.mockReturnValue(new Map());
-    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
-
-    const result = await workspaceQueryService.getProjectSummaryState('p1');
-
-    expect(result.workspaces).toHaveLength(1);
-    expect(result.workspaces[0]?.id).toBe('ws-1');
-  });
-
   it('refreshFactoryConfigs updates script commands and reports per-workspace errors', async () => {
     mockFindByProjectId.mockResolvedValue([
       { id: 'w1', worktreePath: '/tmp/w1' },
@@ -448,40 +387,24 @@ describe('WorkspaceQueryService', () => {
     await expect(workspaceQueryService.hasChanges('w1')).resolves.toBe(false);
   });
 
-  it('filters out workspaces currently archiving from kanban list results', async () => {
-    workspaceArchiveTrackerService.markArchiving('ws-2');
-    mockFindByProjectIdWithSessions.mockResolvedValue([
-      {
-        id: 'ws-1',
-        name: 'Workspace 1',
-        status: 'READY',
-        prState: 'NONE',
-        hasHadSessions: true,
-        createdAt: new Date('2026-02-01T00:00:00.000Z'),
-      },
-      {
-        id: 'ws-2',
-        name: 'Workspace 2',
-        status: 'READY',
-        prState: 'NONE',
-        hasHadSessions: true,
-        createdAt: new Date('2026-02-02T00:00:00.000Z'),
-      },
-    ]);
-    mockDeriveWorkspaceRuntimeState.mockReturnValue({
-      sessionIds: [],
-      isWorking: false,
-      flowState: {
-        shouldAnimateRatchetButton: false,
-        phase: 'NO_PR',
-        ciObservation: 'CHECKS_UNKNOWN',
-      },
-    });
+  it('queries active workspaces by excluding ARCHIVING and ARCHIVED statuses', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([]);
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
     mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
 
-    const result = await workspaceQueryService.listWithKanbanState({ projectId: 'proj-1' });
+    await workspaceQueryService.getProjectSummaryState('p1');
+    await workspaceQueryService.listWithKanbanState({ projectId: 'p1' });
+    await workspaceQueryService.syncAllPRStatuses('p1');
 
-    expect(result).toHaveLength(1);
-    expect(result[0]?.id).toBe('ws-1');
+    expect(mockFindByProjectIdWithSessions).toHaveBeenNthCalledWith(1, 'p1', {
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+    expect(mockFindByProjectIdWithSessions).toHaveBeenNthCalledWith(2, 'p1', {
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+    expect(mockFindByProjectIdWithSessions).toHaveBeenNthCalledWith(3, 'p1', {
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
   });
 });

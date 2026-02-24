@@ -37,6 +37,12 @@ const statusConfig: Record<Exclude<WorkspaceStatus, 'READY' | 'ARCHIVED'>, Statu
     label: 'Setup failed',
     variant: 'destructive',
   },
+  ARCHIVING: {
+    icon: Loader2,
+    label: 'Archiving',
+    variant: 'secondary',
+    iconClassName: 'animate-spin',
+  },
 };
 
 export function WorkspaceStatusBadge({
