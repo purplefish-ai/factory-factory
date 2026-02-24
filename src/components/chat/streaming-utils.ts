@@ -9,14 +9,14 @@
 import { z } from 'zod';
 import type { AgentMessage, AgentStreamEvent, InputJsonDelta } from '@/lib/chat-protocol';
 import { isStreamEventMessage } from '@/lib/chat-protocol';
-import { createDebugLogger } from '@/lib/debug';
+import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import type { ChatAction } from './reducer';
 
 // =============================================================================
 // Debug Logging
 // =============================================================================
 
-const DEBUG_STREAMING = false;
+const DEBUG_STREAMING = DEBUG_CHAT_WS;
 const debug = createDebugLogger(DEBUG_STREAMING);
 
 // =============================================================================

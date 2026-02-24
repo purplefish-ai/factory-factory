@@ -14,6 +14,16 @@ interface DebugLogger {
 }
 
 /**
+ * Match backend DEBUG_CHAT_WS parsing:
+ * only the literal string "true" enables debug logging.
+ */
+export function isDebugFlagEnabled(value: unknown): boolean {
+  return value === 'true';
+}
+
+export const DEBUG_CHAT_WS = isDebugFlagEnabled(import.meta.env.DEBUG_CHAT_WS);
+
+/**
  * Create a debug logger that only logs when the flag is enabled.
  * All logging is a no-op when disabled to avoid any runtime overhead.
  */

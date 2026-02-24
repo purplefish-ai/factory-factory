@@ -15,12 +15,12 @@
 
 import { useEffect, useRef } from 'react';
 import { DEFAULT_CHAT_SETTINGS } from '@/lib/chat-protocol';
-import { createDebugLogger } from '@/lib/debug';
+import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import { loadDraft, loadSettingsWithDefaults } from './chat-persistence';
 import type { ChatAction } from './reducer';
 import { clearToolInputAccumulator, type ToolInputAccumulatorState } from './streaming-utils';
 
-const DEBUG_SESSION = false;
+const DEBUG_SESSION = DEBUG_CHAT_WS;
 const debug = createDebugLogger(DEBUG_SESSION);
 
 export interface UseChatSessionOptions {

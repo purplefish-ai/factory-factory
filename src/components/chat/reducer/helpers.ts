@@ -13,12 +13,12 @@ import {
   shouldSuppressDuplicateResultMessage,
   updateTokenStatsFromResult,
 } from '@/lib/chat-protocol';
-import { createDebugLogger } from '@/lib/debug';
+import { createDebugLogger, DEBUG_CHAT_WS } from '@/lib/debug';
 import { isUserQuestionRequest } from '@/shared/pending-request-types';
 import type { ChatState, PendingRequest } from './types';
 
-// Debug logger for chat reducer - set to true during development to see ignored state transitions
-const DEBUG_CHAT_REDUCER = false;
+// Shared chat debug flag, controlled by DEBUG_CHAT_WS env var.
+const DEBUG_CHAT_REDUCER = DEBUG_CHAT_WS;
 const debug = createDebugLogger(DEBUG_CHAT_REDUCER);
 export const debugLog = (...args: unknown[]): void => {
   debug.log(...args);
