@@ -81,6 +81,10 @@ export interface RatchetPRSnapshotBridge {
 /** Workspace capabilities needed by ratchet domain */
 export interface RatchetWorkspaceBridge {
   markFailed(workspaceId: string, reason: string): Promise<void>;
+  initializeWorktree(
+    workspaceId: string,
+    options?: { branchName?: string; useExistingBranch?: boolean }
+  ): Promise<void>;
 }
 
 /** GitHub capabilities needed by ratchet domain */

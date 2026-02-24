@@ -339,10 +339,7 @@ module.exports = {
         'Orchestration coordinates domains, not the other way around.',
       from: {
         path: '^src/backend/domains/',
-        pathNot:
-          '\\.test\\.ts$|' +
-          // reconciliation needs to re-trigger workspace init for stuck provisioning
-          '^src/backend/domains/ratchet/reconciliation\\.service\\.ts$',
+        pathNot: '\\.test\\.ts$',
       },
       to: { path: '^src/backend/orchestration/' },
     },
