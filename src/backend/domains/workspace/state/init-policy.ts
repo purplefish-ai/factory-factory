@@ -87,7 +87,7 @@ function deriveWorkspaceInitPhase(input: WorkspaceInitPolicyInput): WorkspaceIni
   const hasWorktree = Boolean(input.worktreePath);
   const hasWarning = Boolean(input.initErrorMessage);
 
-  if (input.status === 'ARCHIVED') {
+  if (input.status === 'ARCHIVING' || input.status === 'ARCHIVED') {
     return 'ARCHIVED';
   }
 

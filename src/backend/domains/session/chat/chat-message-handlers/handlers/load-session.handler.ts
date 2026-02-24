@@ -94,7 +94,8 @@ export function createLoadSessionHandler(
       processState: sessionRuntime.processState,
       hasWorktreePath: Boolean(dbSession.workspace.worktreePath),
       provider: dbSession.provider,
-      isWorkspaceArchived: dbSession.workspace.status === 'ARCHIVED',
+      isWorkspaceArchived:
+        dbSession.workspace.status === 'ARCHIVING' || dbSession.workspace.status === 'ARCHIVED',
     });
 
     const chatCapabilities = await sessionService.getChatBarCapabilities(sessionId);

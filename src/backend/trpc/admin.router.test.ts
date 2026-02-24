@@ -73,7 +73,6 @@ function createCaller() {
         configService: {
           getSystemConfig: () => ({
             nodeEnv: 'test',
-            features: { authentication: false, metrics: true, errorTracking: false },
           }),
           getAppVersion: () => '0.3.6',
         },
@@ -144,7 +143,6 @@ describe('adminRouter', () => {
     await expect(caller.getSystemStats()).resolves.toEqual({
       apiUsage: expect.objectContaining({ totalRequests: 200 }),
       environment: 'test',
-      features: { authentication: false, metrics: true, errorTracking: false },
     });
   });
 

@@ -202,7 +202,12 @@ export function RightPanel({
     {
       refetchInterval: (query) => {
         const status = query.state.data?.status;
-        return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
+        return status === 'READY' ||
+          status === 'FAILED' ||
+          status === 'ARCHIVING' ||
+          status === 'ARCHIVED'
+          ? false
+          : 1000;
       },
     }
   );
@@ -443,7 +448,7 @@ function StatusDot({ status }: StatusDotProps) {
 }
 
 function getSetupLogsStatus(status: string | undefined): StatusDotStatus {
-  if (status === 'READY' || status === 'ARCHIVED') {
+  if (status === 'READY' || status === 'ARCHIVING' || status === 'ARCHIVED') {
     return 'success';
   }
   if (status === 'FAILED') {

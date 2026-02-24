@@ -40,9 +40,9 @@ export interface WorkspaceWithKanbanState {
 export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | null {
   const { lifecycle, isWorking, prState, ratchetState, hasHadSessions } = input;
 
-  // Archived workspaces: return null - they use cachedKanbanColumn from before archiving
+  // Archiving/archived workspaces: return null - they use cachedKanbanColumn from before archiving
   // The caller should handle archived workspaces separately
-  if (lifecycle === WorkspaceStatus.ARCHIVED) {
+  if (lifecycle === WorkspaceStatus.ARCHIVING || lifecycle === WorkspaceStatus.ARCHIVED) {
     return null;
   }
 
@@ -164,7 +164,10 @@ class KanbanStateService {
     }
 
     // Don't update cached column for archived workspaces - preserve pre-archive state
-    if (workspace.status === WorkspaceStatus.ARCHIVED) {
+    if (
+      workspace.status === WorkspaceStatus.ARCHIVING ||
+      workspace.status === WorkspaceStatus.ARCHIVED
+    ) {
       return;
     }
 

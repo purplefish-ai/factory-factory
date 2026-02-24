@@ -17,6 +17,7 @@ enum WorkspaceStatus {
   PROVISIONING // Git worktree being created, startup script running
   READY        // Successfully initialized
   FAILED       // Initialization failed
+  ARCHIVING    // Archive in progress (cleanup + transition)
   ARCHIVED     // Workspace archived
 }
 

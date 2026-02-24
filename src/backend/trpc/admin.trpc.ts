@@ -49,7 +49,6 @@ export const adminRouter = router({
     return {
       apiUsage,
       environment: config.nodeEnv,
-      features: config.features,
     };
   }),
 

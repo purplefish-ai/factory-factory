@@ -4,7 +4,6 @@ import type {
   WorkspacePRSnapshotBridge,
   WorkspaceSessionBridge,
 } from '@/backend/domains/workspace/bridges';
-import { workspaceArchiveTrackerService } from '@/backend/domains/workspace/lifecycle/archive-tracker.service';
 import { computeKanbanColumn } from '@/backend/domains/workspace/state/kanban-state';
 import { computePendingRequestType } from '@/backend/domains/workspace/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/domains/workspace/state/workspace-runtime-state';
@@ -74,12 +73,9 @@ class WorkspaceQueryService {
     const [project, workspaces] = await Promise.all([
       projectAccessor.findById(projectId),
       workspaceAccessor.findByProjectIdWithSessions(projectId, {
-        excludeStatuses: [WorkspaceStatus.ARCHIVED],
+        excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
       }),
     ]);
-    const nonArchivingWorkspaces = workspaces.filter(
-      (workspace) => !workspaceArchiveTrackerService.isArchiving(workspace.id)
-    );
 
     const defaultBranch = project?.defaultBranch ?? 'main';
 
@@ -95,7 +91,7 @@ class WorkspaceQueryService {
       string,
       'plan_approval' | 'user_question' | 'permission_request' | null
     >();
-    for (const workspace of nonArchivingWorkspaces) {
+    for (const workspace of workspaces) {
       const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
         this.session.isAnySessionWorking(sessionIds)
       );
@@ -117,7 +113,7 @@ class WorkspaceQueryService {
     > = {};
 
     await Promise.all(
-      nonArchivingWorkspaces.map((workspace) =>
+      workspaces.map((workspace) =>
         gitConcurrencyLimit(async () => {
           if (!workspace.worktreePath) {
             gitStatsResults[workspace.id] = null;
@@ -159,7 +155,7 @@ class WorkspaceQueryService {
     }
 
     return {
-      workspaces: nonArchivingWorkspaces.map((w) => {
+      workspaces: workspaces.map((w) => {
         const flowState = flowStateByWorkspace.get(w.id);
         const isWorking = workingStatusByWorkspace.get(w.id) ?? false;
         const kanbanColumn = computeKanbanColumn({
@@ -225,16 +221,13 @@ class WorkspaceQueryService {
 
     const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
       ...filters,
-      excludeStatuses: [WorkspaceStatus.ARCHIVED],
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
-    const nonArchivingWorkspaces = workspaces.filter(
-      (workspace) => !workspaceArchiveTrackerService.isArchiving(workspace.id)
-    );
 
     // Get all pending requests from active sessions
     const allPendingRequests = this.session.getAllPendingRequests();
 
-    return nonArchivingWorkspaces
+    return workspaces
       .map((workspace) => {
         const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
           this.session.isAnySessionWorking(sessionIds)
@@ -386,7 +379,7 @@ class WorkspaceQueryService {
 
   async syncAllPRStatuses(projectId: string) {
     const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
-      excludeStatuses: [WorkspaceStatus.ARCHIVED],
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
 
     const workspacesWithPRs = workspaces.filter(

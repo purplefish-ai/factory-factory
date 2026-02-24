@@ -1,9 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import {
-  workspaceArchiveTrackerService,
-  workspaceStateMachine,
-  worktreeLifecycleService,
-} from '@/backend/domains/workspace';
+import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
 import { createLogger } from '@/backend/services/logger.service';
 import type { WorkspaceWithProject } from './types';
 
@@ -89,14 +85,16 @@ export async function archiveWorkspace(
 ) {
   const { runScriptService, sessionService, terminalService } = services;
 
-  if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVED')) {
+  if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING')) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: `Cannot archive workspace from status: ${workspace.status}`,
     });
   }
 
-  workspaceArchiveTrackerService.markArchiving(workspace.id);
+  const { previousStatus: statusBeforeArchive } =
+    await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
+
   try {
     const cleanupResults = await Promise.allSettled([
       sessionService.stopWorkspaceSessions(workspace.id),
@@ -138,13 +136,22 @@ export async function archiveWorkspace(
       throw error;
     }
 
-    const archivedWorkspace = await workspaceStateMachine.archive(workspace.id);
+    const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
 
     // Handle associated GitHub issue after successful archive
     await handleGitHubIssueOnArchive(workspace, services);
 
     return archivedWorkspace;
-  } finally {
-    workspaceArchiveTrackerService.clearArchiving(workspace.id);
+  } catch (error) {
+    try {
+      await workspaceStateMachine.transition(workspace.id, statusBeforeArchive);
+    } catch (rollbackError) {
+      logger.error('Failed to rollback workspace status after archive failure', {
+        workspaceId: workspace.id,
+        rollbackTo: statusBeforeArchive,
+        error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+      });
+    }
+    throw error;
   }
 }
