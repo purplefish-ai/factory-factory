@@ -34,6 +34,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 // Import after mocks are set up
 import { execFile } from 'node:child_process';
+import { deriveCiStatusFromCheckRollup } from '@/shared/core';
 import { githubCLIService } from './github-cli.service';
 
 vi.mocked(execFile).mockImplementation(mockExecFile as never);
@@ -740,6 +741,29 @@ describe('GitHubCLIService', () => {
       // STALE is not SUCCESS/NEUTRAL/CANCELLED/SKIPPED, nor FAILURE/ERROR/ACTION_REQUIRED
       // So allSuccess check will fail, returning UNKNOWN
       expect(result).toBe('UNKNOWN');
+    });
+
+    it('matches shared core classification for mixed check-rollup payloads', () => {
+      const cases = [
+        [{ status: 'COMPLETED', conclusion: 'FAILURE' }],
+        [{ state: 'ERROR' }],
+        [{ status: 'COMPLETED', conclusion: 'ACTION_REQUIRED' }],
+        [{ status: 'IN_PROGRESS' }],
+        [{ state: 'EXPECTED' }],
+        [{ status: 'COMPLETED', conclusion: 'NEUTRAL' }],
+        [{ status: 'COMPLETED', conclusion: 'CANCELLED' }],
+        [
+          { status: 'COMPLETED', conclusion: 'SUCCESS' },
+          { status: 'COMPLETED', conclusion: 'FAILURE' },
+          { status: 'IN_PROGRESS' },
+        ],
+      ];
+
+      for (const checks of cases) {
+        expect(githubCLIService.computeCIStatus(checks)).toBe(
+          deriveCiStatusFromCheckRollup(checks)
+        );
+      }
     });
   });
 

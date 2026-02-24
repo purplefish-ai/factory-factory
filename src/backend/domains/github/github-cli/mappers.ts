@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { CIStatus, PRState } from '@/shared/core';
+import { type CIStatus, deriveCiStatusFromCheckRollup, PRState } from '@/shared/core';
 import type {
   GitHubComment,
   GitHubLabel,
@@ -146,62 +146,7 @@ export function computeCIStatus(
     state?: string;
   }> | null
 ): CIStatus {
-  if (!statusCheckRollup || statusCheckRollup.length === 0) {
-    return CIStatus.UNKNOWN;
-  }
-
-  // Helper to get the effective state from a check
-  const getEffectiveState = (check: {
-    status?: string;
-    conclusion?: string;
-    state?: string;
-  }): string => {
-    // For GitHub Check Runs: use conclusion if completed, otherwise use status
-    if (check.status === 'COMPLETED' && check.conclusion) {
-      return check.conclusion;
-    }
-    // For legacy format or non-completed checks
-    return check.state || check.status || 'PENDING';
-  };
-
-  // Check for any failures first
-  const hasFailure = statusCheckRollup.some((check) => {
-    const state = getEffectiveState(check);
-    return state === 'FAILURE' || state === 'ERROR' || state === 'ACTION_REQUIRED';
-  });
-  if (hasFailure) {
-    return CIStatus.FAILURE;
-  }
-
-  // Check if any are still pending/running
-  const hasPending = statusCheckRollup.some((check) => {
-    const state = getEffectiveState(check);
-    return (
-      state === 'PENDING' ||
-      state === 'EXPECTED' ||
-      state === 'QUEUED' ||
-      state === 'IN_PROGRESS' ||
-      check.status === 'QUEUED' ||
-      check.status === 'IN_PROGRESS'
-    );
-  });
-  if (hasPending) {
-    return CIStatus.PENDING;
-  }
-
-  // All checks passed (ignoring NEUTRAL, CANCELLED, SKIPPED)
-  const allSuccess = statusCheckRollup.every((check) => {
-    const state = getEffectiveState(check);
-    return (
-      state === 'SUCCESS' || state === 'NEUTRAL' || state === 'CANCELLED' || state === 'SKIPPED'
-    );
-  });
-  if (allSuccess) {
-    return CIStatus.SUCCESS;
-  }
-
-  // Default to unknown for any other state combinations
-  return CIStatus.UNKNOWN;
+  return deriveCiStatusFromCheckRollup(statusCheckRollup);
 }
 
 /**
