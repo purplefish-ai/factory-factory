@@ -332,7 +332,7 @@ function SidebarInner({
               asChild
               isActive={pathname === '/reviews' || pathname?.startsWith('/reviews/')}
             >
-              <Link to="/reviews" onClick={onNavigate}>
+              <Link to="/reviews">
                 <GitPullRequest className="h-4 w-4" />
                 <span>Reviews</span>
                 {navData.reviewCount > 0 && (
@@ -353,7 +353,7 @@ function SidebarInner({
                 isActive={pathname === '/admin' || pathname?.startsWith('/admin/')}
                 className="flex-1"
               >
-                <Link to="/admin" onClick={onNavigate}>
+                <Link to="/admin">
                   <Settings className="h-4 w-4" />
                   <span>Settings</span>
                 </Link>
