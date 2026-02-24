@@ -84,7 +84,6 @@ export async function archiveWorkspace(
   services: ArchiveWorkspaceDependencies
 ) {
   const { runScriptService, sessionService, terminalService } = services;
-  const statusBeforeArchive = workspace.status;
 
   if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVING')) {
     throw new TRPCError({
@@ -93,7 +92,8 @@ export async function archiveWorkspace(
     });
   }
 
-  await workspaceStateMachine.startArchiving(workspace.id);
+  const { previousStatus: statusBeforeArchive } =
+    await workspaceStateMachine.startArchivingWithSourceStatus(workspace.id);
 
   try {
     const cleanupResults = await Promise.allSettled([

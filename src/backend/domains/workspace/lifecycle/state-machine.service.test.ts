@@ -301,6 +301,44 @@ describe('WorkspaceStateMachineService', () => {
 
       expect(result.status).toBe('ARCHIVED');
     });
+
+    it('should not set initCompletedAt when rolling back ARCHIVING to READY', async () => {
+      const workspace = { id: 'ws-1', status: 'ARCHIVING' };
+      const updatedWorkspace = { ...workspace, status: 'READY' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.transition('ws-1', 'READY');
+
+      expect(result.status).toBe('READY');
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', status: 'ARCHIVING' },
+        data: expect.not.objectContaining({
+          initCompletedAt: expect.any(Date),
+        }),
+      });
+    });
+
+    it('should not set initCompletedAt when rolling back ARCHIVING to FAILED', async () => {
+      const workspace = { id: 'ws-1', status: 'ARCHIVING' };
+      const updatedWorkspace = { ...workspace, status: 'FAILED' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.transition('ws-1', 'FAILED');
+
+      expect(result.status).toBe('FAILED');
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'ws-1', status: 'ARCHIVING' },
+        data: expect.not.objectContaining({
+          initCompletedAt: expect.any(Date),
+        }),
+      });
+    });
   });
 
   describe('startProvisioning', () => {
@@ -516,6 +554,47 @@ describe('WorkspaceStateMachineService', () => {
 
       await expect(workspaceStateMachine.startArchiving('ws-1')).rejects.toThrow(
         WorkspaceStateMachineError
+      );
+    });
+  });
+
+  describe('startArchivingWithSourceStatus', () => {
+    it('should return previous READY status when starting archiving', async () => {
+      const workspace = { id: 'ws-1', status: 'READY' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.startArchivingWithSourceStatus('ws-1');
+
+      expect(result.previousStatus).toBe('READY');
+      expect(result.workspace.status).toBe('ARCHIVING');
+    });
+
+    it('should return previous FAILED status when starting archiving', async () => {
+      const workspace = { id: 'ws-1', status: 'FAILED' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.startArchivingWithSourceStatus('ws-1');
+
+      expect(result.previousStatus).toBe('FAILED');
+      expect(result.workspace.status).toBe('ARCHIVING');
+    });
+
+    it('should fail when status changes during start archiving CAS', async () => {
+      const workspace = { id: 'ws-1', status: 'READY' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      await expect(workspaceStateMachine.startArchivingWithSourceStatus('ws-1')).rejects.toThrow(
+        /Transition failed: status changed by another process/
       );
     });
   });

@@ -76,6 +76,13 @@ export interface StartProvisioningOptions {
   maxRetries?: number;
 }
 
+type ArchivingSourceStatus = Extract<WorkspaceStatus, 'READY' | 'FAILED'>;
+
+export interface StartArchivingResult {
+  workspace: Workspace;
+  previousStatus: ArchivingSourceStatus;
+}
+
 class WorkspaceStateMachineService extends EventEmitter {
   /**
    * Check if a state transition is valid.
@@ -120,7 +127,11 @@ class WorkspaceStateMachineService extends EventEmitter {
         break;
 
       case 'READY':
-        updateData.initCompletedAt = now;
+        // Mark init completion only for PROVISIONING -> READY,
+        // not for ARCHIVING rollback transitions.
+        if (currentStatus === 'PROVISIONING') {
+          updateData.initCompletedAt = now;
+        }
         if (options?.worktreePath !== undefined) {
           updateData.worktreePath = options.worktreePath;
         }
@@ -130,7 +141,11 @@ class WorkspaceStateMachineService extends EventEmitter {
         break;
 
       case 'FAILED':
-        updateData.initCompletedAt = now;
+        // Mark init completion only for PROVISIONING -> FAILED,
+        // not for ARCHIVING rollback transitions.
+        if (currentStatus === 'PROVISIONING') {
+          updateData.initCompletedAt = now;
+        }
         if (options?.errorMessage !== undefined) {
           updateData.initErrorMessage = options.errorMessage;
         }
@@ -260,8 +275,59 @@ class WorkspaceStateMachineService extends EventEmitter {
    * Mark a workspace as archiving.
    * Can only begin archiving from READY or FAILED status.
    */
+  async startArchivingWithSourceStatus(workspaceId: string): Promise<StartArchivingResult> {
+    const workspace = await workspaceAccessor.findRawById(workspaceId);
+
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    const currentStatus = workspace.status;
+
+    if (!(currentStatus === 'READY' || currentStatus === 'FAILED')) {
+      throw new WorkspaceStateMachineError(
+        workspaceId,
+        currentStatus,
+        'ARCHIVING',
+        `Cannot start archiving from status: ${currentStatus}`
+      );
+    }
+
+    const result = await workspaceAccessor.transitionWithCas(workspaceId, currentStatus, {
+      status: 'ARCHIVING',
+    });
+
+    if (result.count === 0) {
+      throw new WorkspaceStateMachineError(
+        workspaceId,
+        currentStatus,
+        'ARCHIVING',
+        'Transition failed: status changed by another process'
+      );
+    }
+
+    const updated = await workspaceAccessor.findRawByIdOrThrow(workspaceId);
+
+    this.emit(WORKSPACE_STATE_CHANGED, {
+      workspaceId,
+      fromStatus: currentStatus,
+      toStatus: 'ARCHIVING',
+    } satisfies WorkspaceStateChangedEvent);
+
+    logger.debug('Workspace status transitioned', {
+      workspaceId,
+      from: currentStatus,
+      to: 'ARCHIVING',
+    });
+
+    return {
+      workspace: updated,
+      previousStatus: currentStatus,
+    };
+  }
+
   startArchiving(workspaceId: string): Promise<Workspace> {
-    return this.transition(workspaceId, 'ARCHIVING');
+    return this.startArchivingWithSourceStatus(workspaceId).then((result) => result.workspace);
   }
 
   /**

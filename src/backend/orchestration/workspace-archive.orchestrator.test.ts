@@ -7,6 +7,7 @@ vi.mock('@/backend/domains/workspace', () => ({
   workspaceStateMachine: {
     isValidTransition: vi.fn(),
     startArchiving: vi.fn(),
+    startArchivingWithSourceStatus: vi.fn(),
     markArchived: vi.fn(),
     transition: vi.fn(),
   },
@@ -72,6 +73,12 @@ describe('archiveWorkspace', () => {
     vi.mocked(workspaceStateMachine.startArchiving).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'ARCHIVING' })
     );
+    vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockResolvedValue(
+      unsafeCoerce({
+        workspace: { id: 'ws-1', status: 'ARCHIVING' },
+        previousStatus: 'READY',
+      })
+    );
     vi.mocked(workspaceStateMachine.markArchived).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'ARCHIVED' })
     );
@@ -119,7 +126,7 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(workspaceStateMachine.startArchiving).toHaveBeenCalledWith('ws-1');
+      expect(workspaceStateMachine.startArchivingWithSourceStatus).toHaveBeenCalledWith('ws-1');
       expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
     });
 
@@ -140,7 +147,7 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(workspaceStateMachine.startArchiving).toHaveBeenCalledWith('ws-1');
+      expect(workspaceStateMachine.startArchivingWithSourceStatus).toHaveBeenCalledWith('ws-1');
       expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
     });
 
@@ -246,6 +253,22 @@ describe('archiveWorkspace', () => {
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-1', 'READY');
+    });
+
+    it('rolls status back using the captured source status from ARCHIVING transition', async () => {
+      vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockResolvedValue(
+        unsafeCoerce({
+          workspace: { id: 'ws-1', status: 'ARCHIVING' },
+          previousStatus: 'FAILED',
+        })
+      );
+      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
+        new Error('cleanup failed')
+      );
+      const workspace = makeWorkspace();
+
+      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
+      expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-1', 'FAILED');
     });
   });
 
@@ -369,9 +392,14 @@ describe('archiveWorkspace', () => {
         callOrder.push('cleanupWorktree');
         return Promise.resolve();
       }) as never);
-      vi.mocked(workspaceStateMachine.startArchiving).mockImplementation((() => {
+      vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockImplementation((() => {
         callOrder.push('startArchiving');
-        return Promise.resolve(unsafeCoerce({ id: 'ws-1', status: 'ARCHIVING' }));
+        return Promise.resolve(
+          unsafeCoerce({
+            workspace: { id: 'ws-1', status: 'ARCHIVING' },
+            previousStatus: 'READY',
+          })
+        );
       }) as never);
       vi.mocked(workspaceStateMachine.markArchived).mockImplementation((() => {
         callOrder.push('markArchived');
@@ -393,9 +421,14 @@ describe('archiveWorkspace', () => {
         callOrder.push('cleanupWorktree');
         return Promise.resolve();
       }) as never);
-      vi.mocked(workspaceStateMachine.startArchiving).mockImplementation((() => {
+      vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockImplementation((() => {
         callOrder.push('startArchiving');
-        return Promise.resolve(unsafeCoerce({ id: 'ws-1', status: 'ARCHIVING' }));
+        return Promise.resolve(
+          unsafeCoerce({
+            workspace: { id: 'ws-1', status: 'ARCHIVING' },
+            previousStatus: 'READY',
+          })
+        );
       }) as never);
       vi.mocked(workspaceStateMachine.markArchived).mockImplementation((() => {
         callOrder.push('markArchived');
