@@ -309,7 +309,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
             port: actualPort,
             environment: configService.getEnvironment(),
           });
-          if (process.env.FF_RUN_SCRIPT_PROXY_ENABLED === '1') {
+          if (configService.isRunScriptProxyEnabled()) {
             process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
           }
 
