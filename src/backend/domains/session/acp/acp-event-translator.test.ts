@@ -503,6 +503,60 @@ describe('AcpEventTranslator', () => {
     });
   });
 
+  describe('context_compaction', () => {
+    it('emits compacting_start for active state strings', () => {
+      const { translator } = createTranslator();
+      const update = {
+        sessionUpdate: 'context_compaction',
+        state: 'started',
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events).toEqual([{ type: 'compacting_start' }]);
+    });
+
+    it('emits compacting_end for inactive boolean state', () => {
+      const { translator } = createTranslator();
+      const update = {
+        sessionUpdate: 'context_compaction',
+        compacting: false,
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events).toEqual([{ type: 'compacting_end' }]);
+    });
+
+    it('supports nested payloads', () => {
+      const { translator } = createTranslator();
+      const update = {
+        sessionUpdate: 'context_compaction',
+        payload: { status: 'in_progress' },
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events).toEqual([{ type: 'compacting_start' }]);
+    });
+
+    it('returns empty array and logs warning for unknown payload shape', () => {
+      const { translator, logger } = createTranslator();
+      const update = {
+        sessionUpdate: 'context_compaction',
+        payload: { unknown: 'value' },
+      } as unknown as SessionUpdate;
+
+      const events = translator.translateSessionUpdate(update);
+
+      expect(events).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'context_compaction: unknown payload shape',
+        expect.objectContaining({ update })
+      );
+    });
+  });
+
   describe('deferred types', () => {
     it.each([
       'config_option_update',
