@@ -150,7 +150,7 @@ export type SnapshotServerMessage = z.infer<typeof SnapshotServerMessageSchema>;
  */
 export function mapSnapshotEntryToServerWorkspace(
   entry: WorkspaceSnapshotEntry,
-  existing?: Record<string, unknown>
+  existing?: Partial<Pick<ServerWorkspace, 'githubIssueNumber' | 'linearIssueId'>>
 ): ServerWorkspace {
   return {
     id: entry.workspaceId,

@@ -36,6 +36,17 @@ interface HastRoot {
 
 type HastNode = HastText | HastElement;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function isHastRoot(value: unknown): value is HastRoot {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return value.type === 'root' && Array.isArray(value.children);
+}
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -207,7 +218,11 @@ function tokenizeAndMapLines(
   }
 
   const content = fileLines.map((l) => l.content).join('\n');
-  const root = refractor.highlight(content, language) as unknown as HastRoot;
+  const highlighted = refractor.highlight(content, language);
+  if (!isHastRoot(highlighted)) {
+    return;
+  }
+  const root = highlighted;
   const tokenLines = splitHastByLine(root, stylesheet);
 
   for (let i = 0; i < fileLines.length; i++) {

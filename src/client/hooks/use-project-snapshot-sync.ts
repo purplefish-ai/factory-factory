@@ -23,11 +23,13 @@ import { trpc } from '@/client/lib/trpc';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import { buildWebSocketUrl } from '@/lib/websocket-config';
 
+type CacheWorkspace = ReturnType<typeof mapSnapshotEntryToServerWorkspace>;
+
 // Type alias for the sidebar cache data shape (matches tRPC-inferred getProjectSummaryState output).
 // We use a local type so the updater callbacks can be properly typed without
 // running into ServerWorkspace's `createdAt: string | Date` vs the tRPC-inferred `Date`.
 type CacheData = {
-  workspaces: Record<string, unknown>[];
+  workspaces: CacheWorkspace[];
   reviewCount: number;
 };
 
@@ -181,10 +183,10 @@ function applySnapshotFullMessage(
   const { setData: setWorkspaceDetailData } = utils.workspace.get;
 
   setData({ projectId: message.projectId }, ((prev: CacheData | undefined) => {
-    const existingById = new Map<string, Record<string, unknown>>();
+    const existingById = new Map<string, CacheWorkspace>();
     if (prev) {
       for (const w of prev.workspaces) {
-        existingById.set((w as { id: string }).id, w);
+        existingById.set(w.id, w);
       }
     }
     return {
@@ -226,17 +228,15 @@ function applySnapshotChangedMessage(
       };
     }
 
-    const existingEntry = prev.workspaces.find(
-      (w) => (w as { id: string }).id === message.entry.workspaceId
-    );
+    const existingEntry = prev.workspaces.find((w) => w.id === message.entry.workspaceId);
     const mapped = mapSnapshotEntryToServerWorkspace(message.entry, existingEntry);
-    const existingIndex = prev.workspaces.findIndex((w) => (w as { id: string }).id === mapped.id);
+    const existingIndex = prev.workspaces.findIndex((w) => w.id === mapped.id);
     const workspaces = [...prev.workspaces];
 
     if (existingIndex >= 0) {
-      workspaces[existingIndex] = mapped as unknown as Record<string, unknown>;
+      workspaces[existingIndex] = mapped;
     } else {
-      workspaces.push(mapped as unknown as Record<string, unknown>);
+      workspaces.push(mapped);
     }
 
     return { workspaces, reviewCount: prev.reviewCount };
@@ -268,7 +268,7 @@ function applySnapshotRemovedMessage(
       return prev;
     }
     return {
-      workspaces: prev.workspaces.filter((w) => (w as { id: string }).id !== message.workspaceId),
+      workspaces: prev.workspaces.filter((w) => w.id !== message.workspaceId),
       reviewCount: prev.reviewCount,
     };
   }) as never);
