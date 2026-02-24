@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { useAppHeader } from '@/client/components/app-header-context';
+import { HeaderLeftExtraSlot, useAppHeader } from '@/client/components/app-header-context';
 import { PRDetailPanel } from '@/client/components/pr-detail-panel';
 import { PRInboxItem } from '@/client/components/pr-inbox-item';
 import { trpc } from '@/client/lib/trpc';
@@ -13,6 +13,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { WorkspacesBackLink } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { PRWithFullDetails } from '@/shared/github-types';
 
@@ -446,6 +447,13 @@ function ReviewsPageContent() {
   const { data, isLoading } = trpc.prReview.listReviewRequests.useQuery(undefined, {
     refetchInterval: 30_000,
   });
+  const { data: projects } = trpc.project.list.useQuery();
+  const projectSlug = projects?.[0]?.slug;
+  const headerBackLink = projectSlug ? (
+    <HeaderLeftExtraSlot>
+      <WorkspacesBackLink projectSlug={projectSlug} />
+    </HeaderLeftExtraSlot>
+  ) : null;
 
   const prs: ReviewRequest[] = data?.prs ?? [];
 
@@ -501,39 +509,45 @@ function ReviewsPageContent() {
   useScrollToSelectedReview(itemRefs, selectedIndex);
 
   if (isLoading) {
-    return isMobile ? <ReviewsDashboardMobileSkeleton /> : <ReviewsDashboardSkeleton />;
-  }
-
-  if (prs.length === 0) {
-    return <ReviewsEmptyState />;
-  }
-
-  if (isMobile) {
     return (
-      <ReviewsMobileLayout
-        prs={prs}
-        prDetails={prDetails}
-        selectedIndex={selectedIndex}
-        itemRefs={itemRefs}
-        onSelect={(index) => {
-          setSelectedIndex(index);
-          setMobileDetailsOpen(true);
-        }}
-        mobileDetailsOpen={mobileDetailsOpen}
-        setMobileDetailsOpen={setMobileDetailsOpen}
-        selectedPR={selectedPR}
-        selectedDetails={selectedDetails}
-        selectedDiff={selectedDiff}
-        diffLoading={diffLoading}
-        onFetchDiff={fetchDiff}
-        onOpenGitHub={handleOpenGitHub}
-        onApprove={handleApprove}
-        approving={approving}
-      />
+      <>
+        {headerBackLink}
+        {isMobile ? <ReviewsDashboardMobileSkeleton /> : <ReviewsDashboardSkeleton />}
+      </>
     );
   }
 
-  return (
+  if (prs.length === 0) {
+    return (
+      <>
+        {headerBackLink}
+        <ReviewsEmptyState />
+      </>
+    );
+  }
+
+  const content = isMobile ? (
+    <ReviewsMobileLayout
+      prs={prs}
+      prDetails={prDetails}
+      selectedIndex={selectedIndex}
+      itemRefs={itemRefs}
+      onSelect={(index) => {
+        setSelectedIndex(index);
+        setMobileDetailsOpen(true);
+      }}
+      mobileDetailsOpen={mobileDetailsOpen}
+      setMobileDetailsOpen={setMobileDetailsOpen}
+      selectedPR={selectedPR}
+      selectedDetails={selectedDetails}
+      selectedDiff={selectedDiff}
+      diffLoading={diffLoading}
+      onFetchDiff={fetchDiff}
+      onOpenGitHub={handleOpenGitHub}
+      onApprove={handleApprove}
+      approving={approving}
+    />
+  ) : (
     <ReviewsDesktopLayout
       prs={prs}
       prDetails={prDetails}
@@ -548,6 +562,13 @@ function ReviewsPageContent() {
       onApprove={handleApprove}
       approving={approving}
     />
+  );
+
+  return (
+    <>
+      {headerBackLink}
+      {content}
+    </>
   );
 }
 
