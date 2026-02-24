@@ -28,6 +28,16 @@ function parseBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function parseOneZeroBoolean(value: unknown): boolean | undefined {
+  if (value === '1' || value === 1) {
+    return true;
+  }
+  if (value === '0' || value === 0) {
+    return false;
+  }
+  return undefined;
+}
+
 function toTrimmedString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -58,6 +68,16 @@ export const ConfigEnvSchema = z.object({
   DEFAULT_PERMISSIONS: z.preprocess(toLowerString, PermissionModeSchema).catch('yolo'),
   LOG_LEVEL: z.preprocess(toLowerString, LogLevelSchema).catch('info'),
   SERVICE_NAME: z.preprocess(toTrimmedString, z.string().min(1)).catch('factoryfactory'),
+  ACP_STARTUP_TIMEOUT_MS: PositiveIntEnvSchema.catch(30_000),
+  ACP_TRACE_LOGS_ENABLED: z.preprocess(parseBoolean, z.boolean()).optional().catch(undefined),
+  ACP_TRACE_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  WS_LOGS_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(false),
+  WEB_CONCURRENCY: z
+    .preprocess(parseInteger, z.number().int().nonnegative())
+    .optional()
+    .catch(undefined),
+  FF_RUN_SCRIPT_PROXY_ENABLED: z.preprocess(parseOneZeroBoolean, z.boolean()).catch(false),
+  CLAUDE_CONFIG_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   CLAUDE_RATE_LIMIT_PER_MINUTE: PositiveIntEnvSchema.catch(60),
   CLAUDE_RATE_LIMIT_PER_HOUR: PositiveIntEnvSchema.catch(1000),
   RATE_LIMIT_QUEUE_SIZE: PositiveIntEnvSchema.catch(100),

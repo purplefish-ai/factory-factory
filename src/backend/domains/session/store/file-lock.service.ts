@@ -21,6 +21,7 @@ import * as path from 'node:path';
 import { summarizeZodIssues } from '@/backend/domains/session/zod-issue-summary';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
+import { configService } from '@/backend/services/config.service';
 import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
@@ -155,11 +156,7 @@ export class FileLockService {
     const pmId = this.readEnvSignal('pm_id');
     const nodeAppInstance = this.readEnvSignal('NODE_APP_INSTANCE');
 
-    const webConcurrencyRaw = process.env.WEB_CONCURRENCY;
-    const webConcurrency =
-      webConcurrencyRaw && Number.isFinite(Number(webConcurrencyRaw))
-        ? Number(webConcurrencyRaw)
-        : undefined;
+    const webConcurrency = configService.getWebConcurrency();
 
     const isLikelyMultiProcess =
       nodeUniqueId !== undefined ||

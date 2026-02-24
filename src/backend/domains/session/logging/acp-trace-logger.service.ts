@@ -36,17 +36,6 @@ interface AcpTraceEntry {
   payload: unknown;
 }
 
-function shouldEnableAcpTraceLogging(): boolean {
-  const raw = process.env.ACP_TRACE_LOGS_ENABLED;
-  if (raw === 'true') {
-    return true;
-  }
-  if (raw === 'false') {
-    return false;
-  }
-  return process.env.NODE_ENV === 'development';
-}
-
 function safeSessionId(sessionId: string): string {
   return sessionId.replace(/[^a-zA-Z0-9-]/g, '_');
 }
@@ -71,9 +60,8 @@ export class AcpTraceLogger {
   private readonly sessionLogs = new Map<string, AcpTraceState>();
 
   constructor() {
-    this.enabled = shouldEnableAcpTraceLogging();
-    this.logDir =
-      process.env.ACP_TRACE_LOGS_PATH ?? join(configService.getDebugLogDir(), 'acp-events');
+    this.enabled = configService.isAcpTraceLoggingEnabled();
+    this.logDir = configService.getAcpTraceLogsPath();
 
     if (this.enabled && !existsSync(this.logDir)) {
       mkdirSync(this.logDir, { recursive: true });
