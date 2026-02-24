@@ -21,6 +21,10 @@ export const prePushRenameInterceptor: ToolInterceptor = {
   name: 'pre-push-rename',
   tools: '*',
 
+  stop(): void {
+    renamedWorkspaces.clear();
+  },
+
   async onToolStart(event: ToolEvent, context: InterceptorContext): Promise<void> {
     let renameCompleted = false;
     try {
