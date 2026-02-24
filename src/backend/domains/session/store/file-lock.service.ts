@@ -18,6 +18,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { summarizeZodIssues } from '@/backend/domains/session/zod-issue-summary';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from '@/backend/services/constants';
@@ -266,10 +267,7 @@ export class FileLockService {
         logger.warn('Lock store JSON failed schema validation', {
           worktreePath,
           lockFilePath,
-          issues: persistedResult.error.issues.map((issue) => {
-            const issuePath = issue.path.length > 0 ? issue.path.join('.') : '<root>';
-            return `${issuePath}: ${issue.message}`;
-          }),
+          issues: summarizeZodIssues(persistedResult.error.issues),
         });
         return locks;
       }

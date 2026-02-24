@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { z } from 'zod';
+import { summarizeZodIssues } from '@/backend/domains/session/zod-issue-summary';
 import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage } from '@/shared/acp-protocol';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
@@ -81,13 +82,6 @@ function getProviderSessionIdCandidates(providerSessionId: string): string[] {
 
 function isMatchingProviderSessionId(candidateId: string, providerSessionId: string): boolean {
   return normalizeProviderSessionId(candidateId) === normalizeProviderSessionId(providerSessionId);
-}
-
-function summarizeZodIssues(issues: z.ZodIssue[]): string[] {
-  return issues.map((issue) => {
-    const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
-    return `${path}: ${issue.message}`;
-  });
 }
 
 function truncateForLog(value: string, maxLength = 200): string {

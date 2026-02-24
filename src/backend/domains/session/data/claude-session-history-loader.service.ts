@@ -2,6 +2,7 @@ import { access, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { summarizeZodIssues } from '@/backend/domains/session/zod-issue-summary';
 import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
@@ -90,13 +91,6 @@ function safeJsonStringify(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-function summarizeZodIssues(issues: z.ZodIssue[]): string[] {
-  return issues.map((issue) => {
-    const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
-    return `${path}: ${issue.message}`;
-  });
 }
 
 function normalizeTimestamp(
