@@ -19,6 +19,11 @@ export {
 } from '@/shared/websocket';
 
 export {
+  type SetupTerminalMessageInput,
+  SetupTerminalMessageSchema,
+} from './setup-terminal-message.schema';
+
+export {
   type TerminalMessageInput,
   TerminalMessageSchema,
 } from './terminal-message.schema';

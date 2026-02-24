@@ -14,6 +14,10 @@ import type { IPty } from 'node-pty';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import {
+  type SetupTerminalMessageInput,
+  SetupTerminalMessageSchema,
+} from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
 import { markWebSocketAlive } from './upgrade-utils';
 
@@ -23,22 +27,17 @@ function getNodePty(): typeof import('node-pty') {
   return require('node-pty');
 }
 
-interface SetupTerminalMessage {
-  type: string;
-  data?: string;
-  cols?: number;
-  rows?: number;
-}
-
 interface SetupTerminalState {
   pty: IPty | null;
 }
 
+type SetupTerminalLogger = ReturnType<AppContext['services']['createLogger']>;
+
 function handleCreate(
   ws: WebSocket,
-  message: SetupTerminalMessage,
+  message: Extract<SetupTerminalMessageInput, { type: 'create' }>,
   state: SetupTerminalState,
-  logger: ReturnType<AppContext['services']['createLogger']>
+  logger: SetupTerminalLogger
 ): void {
   if (state.pty) {
     ws.send(JSON.stringify({ type: 'error', message: 'Terminal already exists' }));
@@ -82,14 +81,20 @@ function handleCreate(
   ws.send(JSON.stringify({ type: 'created' }));
 }
 
-function handleInput(message: SetupTerminalMessage, state: SetupTerminalState): void {
-  if (state.pty && message.data) {
+function handleInput(
+  message: Extract<SetupTerminalMessageInput, { type: 'input' }>,
+  state: SetupTerminalState
+): void {
+  if (state.pty) {
     state.pty.write(message.data);
   }
 }
 
-function handleResize(message: SetupTerminalMessage, state: SetupTerminalState): void {
-  if (state.pty && message.cols && message.rows) {
+function handleResize(
+  message: Extract<SetupTerminalMessageInput, { type: 'resize' }>,
+  state: SetupTerminalState
+): void {
+  if (state.pty) {
     state.pty.resize(message.cols, message.rows);
   }
 }
@@ -97,6 +102,29 @@ function handleResize(message: SetupTerminalMessage, state: SetupTerminalState):
 function handlePing(ws: WebSocket): void {
   if (ws.readyState === WS_READY_STATE.OPEN) {
     ws.send(JSON.stringify({ type: 'pong' }));
+  }
+}
+
+function parseSetupTerminalMessage(
+  data: unknown,
+  logger: SetupTerminalLogger
+): SetupTerminalMessageInput | null {
+  const rawMessage: unknown = JSON.parse(toMessageString(data));
+  const parseResult = SetupTerminalMessageSchema.safeParse(rawMessage);
+
+  if (!parseResult.success) {
+    logger.warn('Invalid setup terminal message format', {
+      errors: parseResult.error.issues,
+    });
+    return null;
+  }
+
+  return parseResult.data;
+}
+
+function sendSocketError(ws: WebSocket, message: string): void {
+  if (ws.readyState === WS_READY_STATE.OPEN) {
+    ws.send(JSON.stringify({ type: 'error', message }));
   }
 }
 
@@ -119,8 +147,11 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
 
       ws.on('message', (data) => {
         try {
-          const raw: unknown = JSON.parse(toMessageString(data));
-          const message = raw as SetupTerminalMessage;
+          const message = parseSetupTerminalMessage(data, logger);
+          if (!message) {
+            sendSocketError(ws, 'Invalid message format');
+            return;
+          }
 
           switch (message.type) {
             case 'create':
@@ -139,9 +170,7 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
         } catch (error) {
           const err = error as Error;
           logger.error('Error in setup terminal', err);
-          if (ws.readyState === WS_READY_STATE.OPEN) {
-            ws.send(JSON.stringify({ type: 'error', message: err.message }));
-          }
+          sendSocketError(ws, err.message);
         }
       });
 
