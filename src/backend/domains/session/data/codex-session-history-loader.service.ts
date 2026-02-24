@@ -11,6 +11,7 @@ import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
 const logger = createLogger('codex-session-history-loader');
 const SAFE_PROVIDER_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 const MAX_SESSION_FILE_SEARCH_DEPTH = 5;
+const JsonObjectSchema = z.record(z.string(), z.unknown());
 
 const CodexHistoryEntrySchema = z
   .object({
@@ -82,16 +83,48 @@ function isMatchingProviderSessionId(candidateId: string, providerSessionId: str
   return normalizeProviderSessionId(candidateId) === normalizeProviderSessionId(providerSessionId);
 }
 
-function parseHistoryEntry(line: string): CodexHistoryEntry | null {
+function summarizeZodIssues(issues: z.ZodIssue[]): string[] {
+  return issues.map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+    return `${path}: ${issue.message}`;
+  });
+}
+
+function truncateForLog(value: string, maxLength = 200): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength)}...(truncated)`;
+}
+
+function parseHistoryEntry(params: {
+  line: string;
+  filePath: string;
+  lineNumber: number;
+}): CodexHistoryEntry | null {
   let parsedLine: unknown;
   try {
-    parsedLine = JSON.parse(line);
-  } catch {
+    parsedLine = JSON.parse(params.line);
+  } catch (error) {
+    logger.warn('Skipping malformed Codex history JSON line', {
+      filePath: params.filePath,
+      lineNumber: params.lineNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 
   const parsed = CodexHistoryEntrySchema.safeParse(parsedLine);
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) {
+    logger.warn('Skipping Codex history line that failed schema validation', {
+      filePath: params.filePath,
+      lineNumber: params.lineNumber,
+      issues: summarizeZodIssues(parsed.error.issues),
+    });
+    return null;
+  }
+
+  return parsed.data;
 }
 
 function normalizeTimestamp(
@@ -155,11 +188,21 @@ function normalizeCodexFunctionArgs(argumentsValue: unknown): Record<string, unk
 
   try {
     const parsed = JSON.parse(argumentsValue);
-    if (isRecord(parsed)) {
-      return parsed;
+    const validated = JsonObjectSchema.safeParse(parsed);
+    if (validated.success) {
+      return validated.data;
     }
+
+    logger.warn('Codex function call arguments parsed but failed object validation', {
+      issues: summarizeZodIssues(validated.error.issues),
+      argumentsPreview: truncateForLog(argumentsValue),
+    });
     return { rawArguments: argumentsValue };
-  } catch {
+  } catch (error) {
+    logger.warn('Codex function call arguments are not valid JSON', {
+      error: error instanceof Error ? error.message : String(error),
+      argumentsPreview: truncateForLog(argumentsValue),
+    });
     return { rawArguments: argumentsValue };
   }
 }
@@ -244,6 +287,51 @@ function parseCodexResponseItemMessages(
   return [];
 }
 
+function parseJsonLineWithLogging(params: {
+  line: string;
+  filePath: string;
+  lineNumber: number;
+}): unknown | null {
+  try {
+    return JSON.parse(params.line);
+  } catch (error) {
+    logger.warn('Failed to parse Codex session_meta candidate line', {
+      filePath: params.filePath,
+      lineNumber: params.lineNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+function parseSessionMetaLine(params: {
+  line: string;
+  filePath: string;
+  lineNumber: number;
+}): { id?: string; cwd?: string } | null {
+  const parsedLine = parseJsonLineWithLogging(params);
+  if (!parsedLine) {
+    return null;
+  }
+
+  const parsedMeta = CodexSessionMetaEntrySchema.safeParse(parsedLine);
+  if (!parsedMeta.success) {
+    if (isRecord(parsedLine) && parsedLine.type === 'session_meta') {
+      logger.warn('Codex session_meta line failed schema validation', {
+        filePath: params.filePath,
+        lineNumber: params.lineNumber,
+        issues: summarizeZodIssues(parsedMeta.error.issues),
+      });
+    }
+    return null;
+  }
+
+  return {
+    id: parsedMeta.data.payload.id,
+    cwd: parsedMeta.data.payload.cwd,
+  };
+}
+
 async function parseSessionMeta(filePath: string): Promise<{ id?: string; cwd?: string } | null> {
   const stream = createReadStream(filePath, { encoding: 'utf-8' });
   const reader = createInterface({ input: stream, crlfDelay: Number.POSITIVE_INFINITY });
@@ -261,22 +349,10 @@ async function parseSessionMeta(filePath: string): Promise<{ id?: string; cwd?: 
         continue;
       }
 
-      let parsedLine: unknown;
-      try {
-        parsedLine = JSON.parse(trimmed);
-      } catch {
-        continue;
+      const parsedMeta = parseSessionMetaLine({ line: trimmed, filePath, lineNumber });
+      if (parsedMeta) {
+        return parsedMeta;
       }
-
-      const parsedMeta = CodexSessionMetaEntrySchema.safeParse(parsedLine);
-      if (!parsedMeta.success) {
-        continue;
-      }
-
-      return {
-        id: parsedMeta.data.payload.id,
-        cwd: parsedMeta.data.payload.cwd,
-      };
     }
   } catch {
     return null;
@@ -421,7 +497,7 @@ class CodexSessionHistoryLoaderService {
     await readNonEmptyJsonlLines({
       filePath,
       onLine: (trimmed, lineNumber) =>
-        this.appendHistoryFromLine(history, trimmed, lineNumber, fallbackBaseTimestampMs),
+        this.appendHistoryFromLine(history, filePath, trimmed, lineNumber, fallbackBaseTimestampMs),
       onError: (error) => {
         hadReadError = true;
         logger.warn('Failed parsing Codex session history file', {
@@ -436,11 +512,12 @@ class CodexSessionHistoryLoaderService {
 
   private appendHistoryFromLine(
     history: HistoryMessage[],
+    filePath: string,
     line: string,
     lineNumber: number,
     fallbackBaseTimestampMs: number
   ): void {
-    const entry = parseHistoryEntry(line);
+    const entry = parseHistoryEntry({ line, filePath, lineNumber });
     if (!entry) {
       return;
     }

@@ -92,6 +92,13 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
+function summarizeZodIssues(issues: z.ZodIssue[]): string[] {
+  return issues.map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+    return `${path}: ${issue.message}`;
+  });
+}
+
 function normalizeTimestamp(
   entry: ClaudeSessionHistoryEntry,
   lineNumber: number,
@@ -296,16 +303,34 @@ function parseContentAsHistory(
   return messages;
 }
 
-function parseHistoryEntry(line: string): ClaudeSessionHistoryEntry | null {
+function parseHistoryEntry(params: {
+  line: string;
+  filePath: string;
+  lineNumber: number;
+}): ClaudeSessionHistoryEntry | null {
   let parsedLine: unknown;
   try {
-    parsedLine = JSON.parse(line);
-  } catch {
+    parsedLine = JSON.parse(params.line);
+  } catch (error) {
+    logger.warn('Skipping malformed Claude history JSON line', {
+      filePath: params.filePath,
+      lineNumber: params.lineNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 
   const parsedEntry = ClaudeHistoryEntrySchema.safeParse(parsedLine);
-  return parsedEntry.success ? parsedEntry.data : null;
+  if (!parsedEntry.success) {
+    logger.warn('Skipping Claude history line that failed schema validation', {
+      filePath: params.filePath,
+      lineNumber: params.lineNumber,
+      issues: summarizeZodIssues(parsedEntry.error.issues),
+    });
+    return null;
+  }
+
+  return parsedEntry.data;
 }
 
 function resolveSessionRole(entry: ClaudeSessionHistoryEntry): 'assistant' | 'user' | null {
@@ -424,7 +449,7 @@ class ClaudeSessionHistoryLoaderService {
     await readNonEmptyJsonlLines({
       filePath,
       onLine: (trimmed, lineNumber) => {
-        const entry = parseHistoryEntry(trimmed);
+        const entry = parseHistoryEntry({ line: trimmed, filePath, lineNumber });
         if (!(entry && isEntryEligible(entry, providerSessionId))) {
           return;
         }

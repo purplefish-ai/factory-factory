@@ -249,8 +249,31 @@ export class FileLockService {
 
     try {
       const content = await fs.readFile(lockFilePath, 'utf-8');
-      const parsed = JSON.parse(content);
-      const persisted = persistedLockStoreSchema.parse(parsed);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch (error) {
+        logger.warn('Failed to parse lock store JSON', {
+          worktreePath,
+          lockFilePath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return locks;
+      }
+
+      const persistedResult = persistedLockStoreSchema.safeParse(parsed);
+      if (!persistedResult.success) {
+        logger.warn('Lock store JSON failed schema validation', {
+          worktreePath,
+          lockFilePath,
+          issues: persistedResult.error.issues.map((issue) => {
+            const issuePath = issue.path.length > 0 ? issue.path.join('.') : '<root>';
+            return `${issuePath}: ${issue.message}`;
+          }),
+        });
+        return locks;
+      }
+      const persisted = persistedResult.data;
 
       const now = new Date();
       for (const lock of persisted.locks) {
