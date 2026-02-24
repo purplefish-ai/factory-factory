@@ -878,7 +878,7 @@ export class RunScriptService {
 
   /**
    * Register process signal handlers for graceful shutdown.
-   * Called once at module load time after singleton creation.
+   * Should be called once for the process-lifetime service instance.
    */
   registerShutdownHandlers(): void {
     if (this.shutdownHandlersRegistered) {
@@ -918,5 +918,12 @@ export class RunScriptService {
   }
 }
 
-export const runScriptService = new RunScriptService();
-runScriptService.registerShutdownHandlers();
+export function createRunScriptService(
+  options: { registerShutdownHandlers?: boolean } = {}
+): RunScriptService {
+  const service = new RunScriptService();
+  if (options.registerShutdownHandlers) {
+    service.registerShutdownHandlers();
+  }
+  return service;
+}

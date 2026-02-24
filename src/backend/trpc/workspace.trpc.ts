@@ -252,11 +252,15 @@ export const workspaceRouter = router({
   // Archive a workspace
   archive: publicProcedure
     .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const workspace = await getWorkspaceWithProjectOrThrow(input.id);
-      return archiveWorkspace(workspace, {
-        commitUncommitted: input.commitUncommitted ?? true,
-      });
+      return archiveWorkspace(
+        workspace,
+        {
+          commitUncommitted: input.commitUncommitted ?? true,
+        },
+        ctx.appContext.services
+      );
     }),
 
   // Bulk archive workspaces in a specific kanban column
@@ -289,7 +293,7 @@ export const workspaceRouter = router({
       for (const workspaceWithState of workspacesWithState) {
         try {
           const workspace = await getWorkspaceWithProjectOrThrow(workspaceWithState.id);
-          await archiveWorkspace(workspace, { commitUncommitted });
+          await archiveWorkspace(workspace, { commitUncommitted }, ctx.appContext.services);
           results.push({ id: workspace.id, success: true });
         } catch (error) {
           logger.error('Failed to archive workspace during bulk operation', {
