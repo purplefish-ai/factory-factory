@@ -1,6 +1,5 @@
 import { githubCLIService } from '@/backend/domains/github';
 import { linearClientService, linearStateSyncService } from '@/backend/domains/linear';
-import { startupScriptService } from '@/backend/domains/run-script';
 import {
   chatMessageHandlerService,
   sessionDomainService,
@@ -19,6 +18,7 @@ import { SessionStatus } from '@/shared/core';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getDecryptedLinearConfig, getWorkspaceLinearContext } from './linear-config.helper';
 import type { WorkspaceWithProject } from './types';
+import { executeStartupScriptPipeline } from './workspace-init-script-pipeline';
 
 const logger = createLogger('workspace-init-orchestrator');
 const initialAttachmentsSchema = AttachmentSchema.array();
@@ -92,86 +92,6 @@ async function readFactoryConfigSafe(
     });
     return null;
   }
-}
-
-async function runFactorySetupScriptIfConfigured(
-  workspaceId: string,
-  workspaceWithProject: WorkspaceWithProject,
-  worktreePath: string,
-  factoryConfig: Awaited<ReturnType<typeof FactoryConfigService.readConfig>>
-): Promise<{ ran: boolean; success: boolean }> {
-  if (!factoryConfig?.scripts.setup) {
-    return { ran: false, success: true };
-  }
-
-  logger.info('Running setup script from factory-factory.json', { workspaceId });
-
-  const scriptResult = await startupScriptService.runStartupScript(
-    { ...workspaceWithProject, worktreePath },
-    {
-      ...workspaceWithProject.project,
-      startupScriptCommand: factoryConfig.scripts.setup,
-      startupScriptPath: null,
-    }
-  );
-
-  if (!scriptResult.success) {
-    const finalWorkspace = await workspaceAccessor.findById(workspaceId);
-    logger.warn('Setup script from factory-factory.json failed but workspace created', {
-      workspaceId,
-      error: finalWorkspace?.initErrorMessage,
-    });
-    try {
-      await sessionService.stopWorkspaceSessions(workspaceId);
-    } catch (error) {
-      logger.warn('Failed to stop Claude sessions after setup script failure', {
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return { ran: true, success: scriptResult.success };
-}
-
-async function runProjectStartupScriptIfConfigured(
-  workspaceId: string,
-  workspaceWithProject: WorkspaceWithProject,
-  worktreePath: string
-): Promise<{ ran: boolean; success: boolean }> {
-  const project = workspaceWithProject.project;
-  if (!startupScriptService.hasStartupScript(project)) {
-    return { ran: false, success: true };
-  }
-
-  logger.info('Running startup script for workspace', {
-    workspaceId,
-    hasCommand: !!project.startupScriptCommand,
-    hasScriptPath: !!project.startupScriptPath,
-  });
-
-  const scriptResult = await startupScriptService.runStartupScript(
-    { ...workspaceWithProject, worktreePath },
-    project
-  );
-
-  if (!scriptResult.success) {
-    const finalWorkspace = await workspaceAccessor.findById(workspaceId);
-    logger.warn('Startup script failed but workspace created', {
-      workspaceId,
-      error: finalWorkspace?.initErrorMessage,
-    });
-    try {
-      await sessionService.stopWorkspaceSessions(workspaceId);
-    } catch (error) {
-      logger.warn('Failed to stop Claude sessions after startup script failure', {
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return { ran: true, success: scriptResult.success };
 }
 
 async function handleWorkspaceInitFailure(workspaceId: string, error: Error): Promise<void> {
@@ -937,31 +857,19 @@ export async function initializeWorkspaceWorktree(
       return null;
     });
 
-    const factorySetupResult = await runFactorySetupScriptIfConfigured(
+    const startupScriptPipelineResult = await executeStartupScriptPipeline({
       workspaceId,
       workspaceWithProject,
-      worktreeInfo.worktreePath,
-      factoryConfig
-    );
-    if (factorySetupResult.ran) {
+      worktreePath: worktreeInfo.worktreePath,
+      factoryConfig,
+      getWorkspaceInitErrorMessage: async () =>
+        (await workspaceAccessor.findById(workspaceId))?.initErrorMessage,
+    });
+    if (startupScriptPipelineResult.handled) {
       await awaitSessionAndDispatchIfSuccess(
         workspaceId,
         agentSessionPromise,
-        factorySetupResult.success
-      );
-      return;
-    }
-
-    const projectSetupResult = await runProjectStartupScriptIfConfigured(
-      workspaceId,
-      workspaceWithProject,
-      worktreeInfo.worktreePath
-    );
-    if (projectSetupResult.ran) {
-      await awaitSessionAndDispatchIfSuccess(
-        workspaceId,
-        agentSessionPromise,
-        projectSetupResult.success
+        startupScriptPipelineResult.success
       );
       return;
     }
