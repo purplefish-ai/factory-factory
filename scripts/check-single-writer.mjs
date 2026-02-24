@@ -1,11 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-const ROOT_DIR = process.cwd();
-const BACKEND_DIR = path.join(ROOT_DIR, 'src/backend');
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
+const WORKSPACE_ACCESSOR_REL_PATH = 'src/backend/resource_accessors/workspace.accessor.ts';
 
 const workspaceFieldOwners = {
   prUrl: new Set(['src/backend/domains/github/pr-snapshot.service.ts']),
@@ -49,6 +49,24 @@ const workspaceFieldOwners = {
     'src/backend/domains/workspace/query/workspace-query.service.ts',
     'src/backend/domains/workspace/lifecycle/data.service.ts',
   ]),
+};
+
+const workspaceMutationRules = {
+  update: { type: 'payload', payloadIndex: 1, requireStaticPayload: true },
+  transitionWithCas: { type: 'payload', payloadIndex: 2, requireStaticPayload: false },
+  casRunScriptStatusUpdate: { type: 'payload', payloadIndex: 2, requireStaticPayload: false },
+  startProvisioningRetryIfAllowed: {
+    type: 'static',
+    fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage'],
+  },
+  resetToNewIfAllowed: {
+    type: 'static',
+    fields: ['status', 'initRetryCount', 'initStartedAt', 'initCompletedAt', 'initErrorMessage'],
+  },
+  markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
+  clearRatchetActiveSession: { type: 'static', fields: ['ratchetActiveSessionId'] },
+  appendInitOutput: { type: 'static', fields: ['initOutput'] },
+  clearInitOutput: { type: 'static', fields: ['initOutput'] },
 };
 
 function collectSourceFiles(dir) {
@@ -159,16 +177,34 @@ function extractObjectFields(expression) {
   return result;
 }
 
-function isWorkspaceAccessorUpdateCall(node) {
-  if (!ts.isCallExpression(node)) {
-    return false;
+function isWorkspaceAccessorCallReceiver(receiver) {
+  if (ts.isIdentifier(receiver) && receiver.text === 'workspaceAccessor') {
+    return true;
   }
-  if (!ts.isPropertyAccessExpression(node.expression)) {
-    return false;
+
+  return (
+    ts.isPropertyAccessExpression(receiver) &&
+    ts.isThis(receiver.expression) &&
+    receiver.name.text === 'workspaces'
+  );
+}
+
+function getWorkspaceMutationCall(node) {
+  if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) {
+    return null;
   }
-  const target = node.expression.expression;
+
   const method = node.expression.name.text;
-  return ts.isIdentifier(target) && target.text === 'workspaceAccessor' && method === 'update';
+  const rule = workspaceMutationRules[method];
+  if (!rule) {
+    return null;
+  }
+
+  if (!isWorkspaceAccessorCallReceiver(node.expression.expression)) {
+    return null;
+  }
+
+  return { method, rule };
 }
 
 function checkRestrictedProcedures(relPath, sourceText, violations) {
@@ -193,48 +229,132 @@ function checkRestrictedProcedures(relPath, sourceText, violations) {
   }
 }
 
-function checkFile(filePath, violations) {
-  const relPath = path.relative(ROOT_DIR, filePath).replaceAll(path.sep, '/');
-  if (isTestPath(relPath)) {
-    return;
+function checkOwnershipForFields(relPath, fields, violations) {
+  for (const field of fields) {
+    const owners = workspaceFieldOwners[field];
+    if (!owners) {
+      continue;
+    }
+
+    if (!owners.has(relPath)) {
+      const ownerList = Array.from(owners).join(', ');
+      violations.push(
+        `${relPath}: unauthorized write of workspace field "${field}". Allowed writer(s): ${ownerList}`
+      );
+    }
   }
+}
 
-  const sourceText = readFileSync(filePath, 'utf8');
-  checkRestrictedProcedures(relPath, sourceText, violations);
-
+function collectWorkspaceMutatingMethods(workspaceAccessorText, filePath = WORKSPACE_ACCESSOR_REL_PATH) {
   const sourceFile = ts.createSourceFile(
     filePath,
-    sourceText,
+    workspaceAccessorText,
     ts.ScriptTarget.Latest,
     true,
     getScriptKind(filePath)
   );
 
-  function visit(node) {
-    if (isWorkspaceAccessorUpdateCall(node)) {
-      const payload = node.arguments[1];
-      if (!payload) {
-        violations.push(`${relPath}: workspaceAccessor.update call is missing payload argument.`);
-      } else {
-        const extraction = extractObjectFields(payload);
-        if (extraction.dynamic) {
-          violations.push(
-            `${relPath}: workspaceAccessor.update payload must be statically analyzable object literal.`
-          );
-        }
+  const mutatingMethods = new Set();
 
-        for (const field of extraction.fields) {
-          const owners = workspaceFieldOwners[field];
-          if (!owners) {
-            continue;
-          }
-          if (!owners.has(relPath)) {
-            const ownerList = Array.from(owners).join(', ');
+  function methodCallsWorkspacePrismaWrite(node) {
+    let writes = false;
+
+    function visit(inner) {
+      if (writes) {
+        return;
+      }
+
+      if (ts.isCallExpression(inner) && ts.isPropertyAccessExpression(inner.expression)) {
+        const methodTarget = inner.expression.expression;
+        if (
+          ts.isPropertyAccessExpression(methodTarget) &&
+          ts.isIdentifier(methodTarget.expression) &&
+          methodTarget.expression.text === 'prisma' &&
+          methodTarget.name.text === 'workspace' &&
+          (inner.expression.name.text === 'update' || inner.expression.name.text === 'updateMany')
+        ) {
+          writes = true;
+          return;
+        }
+      }
+
+      ts.forEachChild(inner, visit);
+    }
+
+    visit(node);
+    return writes;
+  }
+
+  function visit(node) {
+    if (ts.isMethodDeclaration(node) && node.body && ts.isIdentifier(node.name)) {
+      if (methodCallsWorkspacePrismaWrite(node.body)) {
+        mutatingMethods.add(node.name.text);
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return mutatingMethods;
+}
+
+function checkWorkspaceMutatorCoverage({ rootDir, violations }) {
+  const accessorPath = path.join(rootDir, WORKSPACE_ACCESSOR_REL_PATH);
+  const accessorText = readFileSync(accessorPath, 'utf8');
+  const discovered = collectWorkspaceMutatingMethods(accessorText, accessorPath);
+  const configured = new Set(Object.keys(workspaceMutationRules));
+
+  const missingRules = Array.from(discovered)
+    .filter((method) => !configured.has(method))
+    .sort();
+  if (missingRules.length > 0) {
+    violations.push(
+      `${WORKSPACE_ACCESSOR_REL_PATH}: workspace mutator(s) missing from checker rules: ${missingRules.join(', ')}`
+    );
+  }
+
+  const staleRules = Array.from(configured)
+    .filter((method) => !discovered.has(method))
+    .sort();
+  if (staleRules.length > 0) {
+    violations.push(
+      `${WORKSPACE_ACCESSOR_REL_PATH}: checker has stale mutator rule(s): ${staleRules.join(', ')}`
+    );
+  }
+}
+
+function checkSourceText(relPath, sourceText, violations) {
+  checkRestrictedProcedures(relPath, sourceText, violations);
+
+  const sourceFile = ts.createSourceFile(
+    relPath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    getScriptKind(relPath)
+  );
+
+  function visit(node) {
+    const mutationCall = getWorkspaceMutationCall(node);
+    if (mutationCall) {
+      if (mutationCall.rule.type === 'payload') {
+        const payload = node.arguments[mutationCall.rule.payloadIndex];
+        if (!payload) {
+          violations.push(
+            `${relPath}: workspaceAccessor.${mutationCall.method} call is missing payload argument.`
+          );
+        } else {
+          const extraction = extractObjectFields(payload);
+          if (extraction.dynamic && mutationCall.rule.requireStaticPayload) {
             violations.push(
-              `${relPath}: unauthorized write of workspace field "${field}". Allowed writer(s): ${ownerList}`
+              `${relPath}: workspaceAccessor.${mutationCall.method} payload must be statically analyzable object literal.`
             );
           }
+          checkOwnershipForFields(relPath, extraction.fields, violations);
         }
+      } else {
+        checkOwnershipForFields(relPath, mutationCall.rule.fields, violations);
       }
     }
 
@@ -244,17 +364,69 @@ function checkFile(filePath, violations) {
   visit(sourceFile);
 }
 
-const sourceFiles = collectSourceFiles(BACKEND_DIR);
-const violations = [];
-
-for (const filePath of sourceFiles) {
-  checkFile(filePath, violations);
+export function collectSourceViolations(relPath, sourceText) {
+  const violations = [];
+  checkSourceText(relPath, sourceText, violations);
+  return violations;
 }
 
-if (violations.length > 0) {
+function checkFile(filePath, rootDir, violations) {
+  const relPath = path.relative(rootDir, filePath).replaceAll(path.sep, '/');
+  if (isTestPath(relPath)) {
+    return;
+  }
+
+  const sourceText = readFileSync(filePath, 'utf8');
+  checkSourceText(relPath, sourceText, violations);
+}
+
+export function collectSingleWriterViolations({
+  rootDir = process.cwd(),
+  backendDir = path.join(rootDir, 'src/backend'),
+} = {}) {
+  const violations = [];
+  checkWorkspaceMutatorCoverage({ rootDir, violations });
+
+  const sourceFiles = collectSourceFiles(backendDir);
+  for (const filePath of sourceFiles) {
+    checkFile(filePath, rootDir, violations);
+  }
+
+  return violations;
+}
+
+export function collectWorkspaceMutatorMethodsForTest(sourceText, filePath = WORKSPACE_ACCESSOR_REL_PATH) {
+  return collectWorkspaceMutatingMethods(sourceText, filePath);
+}
+
+function reportViolations(violations) {
+  if (violations.length === 0) {
+    return;
+  }
+
   console.error('Single-writer ownership violations found:\n');
   for (const violation of violations) {
     console.error(`- ${violation}`);
   }
-  process.exit(1);
+}
+
+export function runSingleWriterCheck(options = {}) {
+  const violations = collectSingleWriterViolations(options);
+  reportViolations(violations);
+  return violations.length === 0;
+}
+
+function isExecutedDirectly() {
+  const entryPath = process.argv[1];
+  if (!entryPath) {
+    return false;
+  }
+  return path.resolve(entryPath) === fileURLToPath(import.meta.url);
+}
+
+if (isExecutedDirectly()) {
+  const passed = runSingleWriterCheck();
+  if (!passed) {
+    process.exit(1);
+  }
 }
