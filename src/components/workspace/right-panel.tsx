@@ -189,6 +189,7 @@ export function RightPanel({
 
   // Terminal tab state lifted up from TerminalPanel for inline rendering
   const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
+  const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>('setup-logs');
 
   const handleTerminalStateChange = useCallback((state: TerminalTabState) => {
     setTerminalTabState(state);
@@ -226,6 +227,7 @@ export function RightPanel({
 
     // Reset terminal tab state when workspace changes
     setTerminalTabState(null);
+    setLastLogsTab('setup-logs');
 
     const persisted = loadPersistedTopPanelState(workspaceId);
     setActiveTopTab(persisted.topTab);
@@ -260,8 +262,6 @@ export function RightPanel({
     },
     [setActiveBottomTab]
   );
-
-  const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>('setup-logs');
 
   useEffect(() => {
     if (!isLogsBottomTab(activeBottomTab)) {
@@ -464,6 +464,9 @@ function getLogsGroupStatus({
   }
   if (devLogsStatus === 'error' || postRunLogsStatus === 'error') {
     return 'error';
+  }
+  if (devLogsStatus === 'pending' || postRunLogsStatus === 'pending') {
+    return 'pending';
   }
   return 'success';
 }
