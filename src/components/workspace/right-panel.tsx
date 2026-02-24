@@ -290,8 +290,14 @@ export function RightPanel({
   const activeLogsTab = isLogsBottomTab(activeBottomTab) ? activeBottomTab : lastLogsTab;
 
   const setupLogsStatus = getSetupLogsStatus(initStatus?.status);
-  const devLogsStatus: StatusDotStatus = devLogs.connected ? 'success' : 'error';
-  const postRunLogsStatus: StatusDotStatus = postRunLogs.connected ? 'success' : 'error';
+  const devLogsStatus = getStreamingLogsStatus({
+    connected: devLogs.connected,
+    hasDisconnected: devLogs.hasDisconnected,
+  });
+  const postRunLogsStatus = getStreamingLogsStatus({
+    connected: postRunLogs.connected,
+    hasDisconnected: postRunLogs.hasDisconnected,
+  });
   const logsGroupStatus = getLogsGroupStatus({
     setupLogsStatus,
     devLogsStatus,
@@ -442,10 +448,26 @@ function StatusDot({ status }: StatusDotProps) {
 }
 
 function getSetupLogsStatus(status: string | undefined): StatusDotStatus {
-  if (status === 'READY') {
+  if (status === 'READY' || status === 'ARCHIVED') {
     return 'success';
   }
   if (status === 'FAILED') {
+    return 'error';
+  }
+  return 'pending';
+}
+
+function getStreamingLogsStatus({
+  connected,
+  hasDisconnected,
+}: {
+  connected: boolean;
+  hasDisconnected: boolean;
+}): StatusDotStatus {
+  if (connected) {
+    return 'success';
+  }
+  if (hasDisconnected) {
     return 'error';
   }
   return 'pending';
