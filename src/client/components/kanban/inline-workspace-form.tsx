@@ -209,8 +209,8 @@ export function InlineWorkspaceForm({
             }
           />
         ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <div className="space-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
               <RatchetToggleButton
                 enabled={ratchetEnabled}
@@ -267,11 +267,11 @@ export function InlineWorkspaceForm({
               aria-label="Attach files"
             />
           </div>
-          <div className="ml-auto flex shrink-0 gap-2">
+          <div className="flex justify-end gap-2">
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs"
+              className="h-7 text-xs whitespace-nowrap"
               onClick={onCancel}
               disabled={isCreating}
             >
@@ -279,7 +279,7 @@ export function InlineWorkspaceForm({
             </Button>
             <Button
               size="sm"
-              className="h-7 text-xs"
+              className="h-7 text-xs whitespace-nowrap"
               onClick={handleLaunch}
               disabled={
                 isCreating ||
