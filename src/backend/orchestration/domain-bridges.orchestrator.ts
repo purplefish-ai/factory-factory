@@ -188,6 +188,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     workspace: {
       markSessionRunning: (wsId, sId) => workspaceActivityService.markSessionRunning(wsId, sId),
       markSessionIdle: (wsId, sId) => workspaceActivityService.markSessionIdle(wsId, sId),
+      clearRatchetActiveSessionIfMatching: (workspaceId, sessionId) =>
+        ratchetService.clearRatchetActiveSessionIfMatching(workspaceId, sessionId),
     },
   });
 

@@ -19,6 +19,13 @@ export interface SessionWorkspaceBridge {
   ): void;
 }
 
+/** Workspace callbacks needed by session lifecycle service */
+export interface SessionLifecycleWorkspaceBridge {
+  markSessionRunning(workspaceId: string, sessionId: string): void;
+  markSessionIdle(workspaceId: string, sessionId: string): void;
+  clearRatchetActiveSessionIfMatching(workspaceId: string, sessionId: string): Promise<void>;
+}
+
 /** Workspace init policy callback needed by session domain */
 export interface SessionInitPolicyBridge {
   getWorkspaceInitPolicy(input: SessionInitPolicyInput): SessionInitPolicyResult;

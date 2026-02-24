@@ -5,6 +5,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
+const mockClearRatchetActiveSessionIfMatching = vi.fn();
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -60,7 +61,6 @@ vi.mock('./session.repository', () => ({
     getProjectById: vi.fn(),
     markWorkspaceHasHadSessions: vi.fn(),
     updateSession: vi.fn(),
-    clearRatchetActiveSession: vi.fn(),
     deleteSession: vi.fn(),
   },
 }));
@@ -97,6 +97,7 @@ describe('SessionService', () => {
     vi.clearAllMocks();
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
+    mockClearRatchetActiveSessionIfMatching.mockReset();
     const acpProcessor = getAcpProcessorState();
     acpProcessor.pendingAcpToolCalls.clear();
     acpProcessor.sessionToWorkspace.clear();
@@ -106,6 +107,7 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle: vi.fn(),
+        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
       },
     });
     vi.mocked(acpRuntimeManager.getClient).mockReturnValue(undefined);
@@ -673,6 +675,7 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
+        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
       },
     });
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -709,7 +712,7 @@ describe('SessionService', () => {
       status: SessionStatus.IDLE,
     });
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
-    expect(sessionRepository.clearRatchetActiveSession).not.toHaveBeenCalled();
+    expect(mockClearRatchetActiveSessionIfMatching).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
@@ -791,6 +794,7 @@ describe('SessionService', () => {
       workspace: {
         markSessionRunning: vi.fn(),
         markSessionIdle,
+        clearRatchetActiveSessionIfMatching: mockClearRatchetActiveSessionIfMatching,
       },
     });
 
@@ -854,12 +858,11 @@ describe('SessionService', () => {
       })
     );
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
-    vi.mocked(sessionRepository.clearRatchetActiveSession).mockResolvedValue();
     vi.mocked(sessionRepository.deleteSession).mockResolvedValue({} as never);
 
     await sessionService.stopSession('session-1');
 
-    expect(sessionRepository.clearRatchetActiveSession).toHaveBeenCalledWith(
+    expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
       'workspace-1',
       'session-1'
     );
@@ -899,7 +902,7 @@ describe('SessionService', () => {
       cleanupTransientRatchetSession: false,
     });
 
-    expect(sessionRepository.clearRatchetActiveSession).toHaveBeenCalledWith(
+    expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
       'workspace-1',
       'session-3'
     );
@@ -1030,7 +1033,6 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getProjectById).mockResolvedValue(project);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    vi.mocked(sessionRepository.clearRatchetActiveSession).mockResolvedValue();
     vi.mocked(sessionRepository.deleteSession).mockResolvedValue(session);
 
     vi.mocked(sessionPromptBuilder.shouldInjectBranchRename).mockReturnValue(false);
@@ -1054,7 +1056,7 @@ describe('SessionService', () => {
     expect(sessionRepository.updateSession).toHaveBeenCalledWith('session-1', {
       status: SessionStatus.COMPLETED,
     });
-    expect(sessionRepository.clearRatchetActiveSession).toHaveBeenCalledWith(
+    expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
       'workspace-1',
       'session-1'
     );
@@ -1094,7 +1096,6 @@ describe('SessionService', () => {
     vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
     vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
     vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
-    vi.mocked(sessionRepository.clearRatchetActiveSession).mockResolvedValue();
 
     vi.mocked(sessionPromptBuilder.shouldInjectBranchRename).mockReturnValue(false);
     vi.mocked(sessionPromptBuilder.buildSystemPrompt).mockReturnValue({

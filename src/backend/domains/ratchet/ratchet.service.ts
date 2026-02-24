@@ -246,6 +246,10 @@ class RatchetService extends EventEmitter {
     return this.runWorkspaceCheckSafely(workspace);
   }
 
+  async clearRatchetActiveSessionIfMatching(workspaceId: string, sessionId: string): Promise<void> {
+    await workspaceAccessor.clearRatchetActiveSession(workspaceId, sessionId);
+  }
+
   private async runWorkspaceCheckSafely(
     workspace: WorkspaceWithPR
   ): Promise<WorkspaceRatchetResult> {
