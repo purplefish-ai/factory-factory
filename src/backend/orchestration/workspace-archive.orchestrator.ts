@@ -1,8 +1,4 @@
 import { TRPCError } from '@trpc/server';
-import { githubCLIService } from '@/backend/domains/github';
-import { runScriptService } from '@/backend/domains/run-script';
-import { sessionService } from '@/backend/domains/session';
-import { terminalService } from '@/backend/domains/terminal';
 import {
   workspaceArchiveTrackerService,
   workspaceStateMachine,
@@ -17,11 +13,35 @@ interface WorktreeCleanupOptions {
   commitUncommitted: boolean;
 }
 
+export type ArchiveWorkspaceDependencies = {
+  githubCLIService: {
+    addIssueComment(
+      owner: string,
+      repo: string,
+      issueNumber: number,
+      comment: string
+    ): Promise<void>;
+  };
+  runScriptService: {
+    stopRunScript(workspaceId: string): Promise<{ success: boolean; error?: string }>;
+  };
+  sessionService: {
+    stopWorkspaceSessions(workspaceId: string): Promise<void>;
+  };
+  terminalService: {
+    destroyWorkspaceTerminals(workspaceId: string): void;
+  };
+};
+
 /**
  * Handle GitHub issue after workspace archive.
  * If there's a merged PR, add a comment referencing it.
  */
-async function handleGitHubIssueOnArchive(workspace: WorkspaceWithProject): Promise<void> {
+async function handleGitHubIssueOnArchive(
+  workspace: WorkspaceWithProject,
+  services: ArchiveWorkspaceDependencies
+): Promise<void> {
+  const { githubCLIService } = services;
   const project = workspace.project;
   if (!(workspace.githubIssueNumber && project?.githubOwner && project?.githubRepo)) {
     return;
@@ -64,8 +84,11 @@ async function handleGitHubIssueOnArchive(workspace: WorkspaceWithProject): Prom
  */
 export async function archiveWorkspace(
   workspace: WorkspaceWithProject,
-  options: WorktreeCleanupOptions
+  options: WorktreeCleanupOptions,
+  services: ArchiveWorkspaceDependencies
 ) {
+  const { runScriptService, sessionService, terminalService } = services;
+
   if (!workspaceStateMachine.isValidTransition(workspace.status, 'ARCHIVED')) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
@@ -118,7 +141,7 @@ export async function archiveWorkspace(
     const archivedWorkspace = await workspaceStateMachine.archive(workspace.id);
 
     // Handle associated GitHub issue after successful archive
-    await handleGitHubIssueOnArchive(workspace);
+    await handleGitHubIssueOnArchive(workspace, services);
 
     return archivedWorkspace;
   } finally {

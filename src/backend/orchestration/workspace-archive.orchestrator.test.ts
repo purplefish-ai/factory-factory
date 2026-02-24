@@ -3,30 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { WorkspaceWithProject } from './types';
 
-vi.mock('@/backend/domains/github', () => ({
-  githubCLIService: {
-    addIssueComment: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/domains/run-script', () => ({
-  runScriptService: {
-    stopRunScript: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/domains/session', () => ({
-  sessionService: {
-    stopWorkspaceSessions: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/domains/terminal', () => ({
-  terminalService: {
-    destroyWorkspaceTerminals: vi.fn(),
-  },
-}));
-
 vi.mock('@/backend/domains/workspace', () => ({
   workspaceArchiveTrackerService: {
     markArchiving: vi.fn(),
@@ -50,16 +26,13 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { githubCLIService } from '@/backend/domains/github';
-import { runScriptService } from '@/backend/domains/run-script';
-import { sessionService } from '@/backend/domains/session';
-import { terminalService } from '@/backend/domains/terminal';
 import {
   workspaceArchiveTrackerService,
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/domains/workspace';
-import { archiveWorkspace } from './workspace-archive.orchestrator';
+import type { ArchiveWorkspaceDependencies } from './workspace-archive.orchestrator';
+import { archiveWorkspace as archiveWorkspaceWithServices } from './workspace-archive.orchestrator';
 
 function makeWorkspace(overrides: Partial<WorkspaceWithProject> = {}): WorkspaceWithProject {
   return unsafeCoerce<WorkspaceWithProject>({
@@ -79,6 +52,25 @@ function makeWorkspace(overrides: Partial<WorkspaceWithProject> = {}): Workspace
 
 const defaultOptions = { commitUncommitted: false };
 
+const services = unsafeCoerce<ArchiveWorkspaceDependencies>({
+  githubCLIService: {
+    addIssueComment: vi.fn(),
+  },
+  runScriptService: {
+    stopRunScript: vi.fn(),
+  },
+  sessionService: {
+    stopWorkspaceSessions: vi.fn(),
+  },
+  terminalService: {
+    destroyWorkspaceTerminals: vi.fn(),
+  },
+});
+
+function archiveWorkspace(workspace: WorkspaceWithProject, options = defaultOptions) {
+  return archiveWorkspaceWithServices(workspace, options, services);
+}
+
 describe('archiveWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -89,11 +81,11 @@ describe('archiveWorkspace', () => {
     vi.mocked(workspaceArchiveTrackerService.markArchiving).mockReturnValue(undefined);
     vi.mocked(workspaceArchiveTrackerService.clearArchiving).mockReturnValue(undefined);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
-    vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
-    vi.mocked(runScriptService.stopRunScript).mockResolvedValue(
+    vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
+    vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
       unsafeCoerce({ success: true } as const)
     );
-    vi.mocked(terminalService.destroyWorkspaceTerminals).mockReturnValue(undefined);
+    vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockReturnValue(undefined);
   });
 
   describe('state transition validation', () => {
@@ -119,7 +111,7 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
 
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
-      expect(sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+      expect(services.sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).not.toHaveBeenCalled();
     });
   });
@@ -137,9 +129,9 @@ describe('archiveWorkspace', () => {
       const workspace = makeWorkspace();
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
-      expect(runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
-      expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
+      expect(services.sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+      expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
+      expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
       expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(
         workspace,
         defaultOptions
@@ -174,7 +166,7 @@ describe('archiveWorkspace', () => {
 
   describe('process cleanup errors (fail closed)', () => {
     it('fails archive when session stop fails', async () => {
-      vi.mocked(sessionService.stopWorkspaceSessions).mockRejectedValue(
+      vi.mocked(services.sessionService.stopWorkspaceSessions).mockRejectedValue(
         new Error('session stop failed')
       );
       const workspace = makeWorkspace();
@@ -187,7 +179,7 @@ describe('archiveWorkspace', () => {
     });
 
     it('fails archive when run script stop rejects', async () => {
-      vi.mocked(runScriptService.stopRunScript).mockRejectedValue(
+      vi.mocked(services.runScriptService.stopRunScript).mockRejectedValue(
         new Error('run script stop failed')
       );
       const workspace = makeWorkspace();
@@ -200,7 +192,7 @@ describe('archiveWorkspace', () => {
     });
 
     it('fails archive when run script stop returns unsuccessful result', async () => {
-      vi.mocked(runScriptService.stopRunScript).mockResolvedValue(
+      vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
         unsafeCoerce({ success: false, error: 'stop failed' })
       );
       const workspace = makeWorkspace();
@@ -213,7 +205,7 @@ describe('archiveWorkspace', () => {
     });
 
     it('fails archive when terminal destroy throws', async () => {
-      vi.mocked(terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
+      vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
         throw new Error('terminal destroy failed');
       });
       const workspace = makeWorkspace();
@@ -268,7 +260,7 @@ describe('archiveWorkspace', () => {
 
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(githubCLIService.addIssueComment).toHaveBeenCalledWith(
+      expect(services.githubCLIService.addIssueComment).toHaveBeenCalledWith(
         'owner',
         'repo',
         42,
@@ -285,7 +277,7 @@ describe('archiveWorkspace', () => {
 
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(githubCLIService.addIssueComment).not.toHaveBeenCalled();
+      expect(services.githubCLIService.addIssueComment).not.toHaveBeenCalled();
     });
 
     it('skips comment when PR is not merged', async () => {
@@ -297,7 +289,7 @@ describe('archiveWorkspace', () => {
 
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(githubCLIService.addIssueComment).not.toHaveBeenCalled();
+      expect(services.githubCLIService.addIssueComment).not.toHaveBeenCalled();
     });
 
     it('skips comment when PR URL is missing even if state is MERGED', async () => {
@@ -309,7 +301,7 @@ describe('archiveWorkspace', () => {
 
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(githubCLIService.addIssueComment).not.toHaveBeenCalled();
+      expect(services.githubCLIService.addIssueComment).not.toHaveBeenCalled();
     });
 
     it('skips comment when project lacks GitHub owner/repo', async () => {
@@ -326,11 +318,13 @@ describe('archiveWorkspace', () => {
 
       await archiveWorkspace(workspace, defaultOptions);
 
-      expect(githubCLIService.addIssueComment).not.toHaveBeenCalled();
+      expect(services.githubCLIService.addIssueComment).not.toHaveBeenCalled();
     });
 
     it('does not fail archive when GitHub comment fails', async () => {
-      vi.mocked(githubCLIService.addIssueComment).mockRejectedValue(new Error('GitHub API error'));
+      vi.mocked(services.githubCLIService.addIssueComment).mockRejectedValue(
+        new Error('GitHub API error')
+      );
       const workspace = makeWorkspace({
         githubIssueNumber: 42,
         prState: 'MERGED' as never,
@@ -352,7 +346,7 @@ describe('archiveWorkspace', () => {
 
       await archiveWorkspace(workspace, defaultOptions);
 
-      const commentArg = vi.mocked(githubCLIService.addIssueComment).mock.calls[0]?.[3];
+      const commentArg = vi.mocked(services.githubCLIService.addIssueComment).mock.calls[0]?.[3];
       expect(commentArg).toContain('merged');
       expect(commentArg).toContain('https://github.com/owner/repo/pull/99');
     });
@@ -361,15 +355,15 @@ describe('archiveWorkspace', () => {
   describe('ordering guarantees', () => {
     it('stops processes before cleaning up worktree', async () => {
       const callOrder: string[] = [];
-      vi.mocked(sessionService.stopWorkspaceSessions).mockImplementation((() => {
+      vi.mocked(services.sessionService.stopWorkspaceSessions).mockImplementation((() => {
         callOrder.push('stopSessions');
         return Promise.resolve(undefined);
       }) as never);
-      vi.mocked(runScriptService.stopRunScript).mockImplementation((() => {
+      vi.mocked(services.runScriptService.stopRunScript).mockImplementation((() => {
         callOrder.push('stopRunScript');
         return Promise.resolve(unsafeCoerce({ success: true }));
       }) as never);
-      vi.mocked(terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
+      vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockImplementation(() => {
         callOrder.push('destroyTerminals');
       });
       vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockImplementation((() => {
@@ -400,7 +394,7 @@ describe('archiveWorkspace', () => {
         callOrder.push('archive');
         return Promise.resolve(unsafeCoerce({ id: 'ws-1', status: 'ARCHIVED' }));
       }) as never);
-      vi.mocked(githubCLIService.addIssueComment).mockImplementation((() => {
+      vi.mocked(services.githubCLIService.addIssueComment).mockImplementation((() => {
         callOrder.push('addIssueComment');
         return Promise.resolve();
       }) as never);

@@ -2,8 +2,8 @@
 import { githubCLIService } from './domains/github';
 import { ratchetService } from './domains/ratchet';
 import {
+  createRunScriptService,
   type RunScriptService,
-  runScriptService,
   runScriptStateMachine,
   startupScriptService,
 } from './domains/run-script';
@@ -64,6 +64,10 @@ export type AppContext = {
   config: AppConfig;
 };
 
+const defaultRunScriptService = createRunScriptService({
+  registerShutdownHandlers: true,
+});
+
 export function createServices(overrides: Partial<AppServices> = {}): AppServices {
   const resolvedAcpRuntimeManager = overrides.acpRuntimeManager ?? acpRuntimeManager;
   const resolvedSessionDomainService = overrides.sessionDomainService ?? sessionDomainService;
@@ -90,7 +94,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     kanbanStateService,
     ratchetService,
     rateLimiter,
-    runScriptService: runScriptService,
+    runScriptService: overrides.runScriptService ?? defaultRunScriptService,
     runScriptStateMachine,
     schedulerService,
     serverInstanceService,
