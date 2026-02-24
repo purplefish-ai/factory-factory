@@ -17,6 +17,8 @@ function createTranslator() {
   return { translator, logger };
 }
 
+type TranslatorSessionUpdate = Parameters<AcpEventTranslator['translateSessionUpdate']>[0];
+
 describe('AcpEventTranslator', () => {
   describe('agent_message_chunk', () => {
     it('translates text content to agent_message delta', () => {
@@ -506,10 +508,10 @@ describe('AcpEventTranslator', () => {
   describe('context_compaction', () => {
     it('emits compacting_start for active state strings', () => {
       const { translator } = createTranslator();
-      const update = {
+      const update: TranslatorSessionUpdate = {
         sessionUpdate: 'context_compaction',
         state: 'started',
-      } as unknown as SessionUpdate;
+      };
 
       const events = translator.translateSessionUpdate(update);
 
@@ -518,10 +520,10 @@ describe('AcpEventTranslator', () => {
 
     it('emits compacting_end for inactive boolean state', () => {
       const { translator } = createTranslator();
-      const update = {
+      const update: TranslatorSessionUpdate = {
         sessionUpdate: 'context_compaction',
         compacting: false,
-      } as unknown as SessionUpdate;
+      };
 
       const events = translator.translateSessionUpdate(update);
 
@@ -530,10 +532,10 @@ describe('AcpEventTranslator', () => {
 
     it('supports nested payloads', () => {
       const { translator } = createTranslator();
-      const update = {
+      const update: TranslatorSessionUpdate = {
         sessionUpdate: 'context_compaction',
         payload: { status: 'in_progress' },
-      } as unknown as SessionUpdate;
+      };
 
       const events = translator.translateSessionUpdate(update);
 
@@ -542,10 +544,10 @@ describe('AcpEventTranslator', () => {
 
     it('returns empty array and logs warning for unknown payload shape', () => {
       const { translator, logger } = createTranslator();
-      const update = {
+      const update: TranslatorSessionUpdate = {
         sessionUpdate: 'context_compaction',
         payload: { unknown: 'value' },
-      } as unknown as SessionUpdate;
+      };
 
       const events = translator.translateSessionUpdate(update);
 
