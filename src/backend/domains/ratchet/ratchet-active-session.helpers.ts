@@ -26,13 +26,6 @@ async function clearFailedRatchetDispatch(params: {
   await snapshotBridge.recordReviewCheck(workspace.id, null);
 }
 
-async function clearActiveRatchetSession(
-  workspaceId: string,
-  clearActiveSession: (workspaceId: string) => Promise<void>
-): Promise<void> {
-  await clearActiveSession(workspaceId);
-}
-
 async function safeStopSession(params: {
   sessionBridge: RatchetSessionBridge;
   sessionId: string;
@@ -171,7 +164,7 @@ export async function getActiveRatchetSession(params: {
 
   // Ratchet session has completed its current unit of work: close it to avoid lingering idle agents.
   if (!sessionBridge.isSessionWorking(session.id)) {
-    await clearActiveRatchetSession(workspace.id, clearActiveSession);
+    await clearActiveSession(workspace.id);
     await stopCompletedRatchetSession({
       workspaceId: workspace.id,
       sessionId: session.id,
