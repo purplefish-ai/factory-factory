@@ -521,7 +521,7 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     harness.cleanup();
   });
 
-  it('keeps first growth callback pinned with border-box baseline and content-box resize data', async () => {
+  it('keeps first growth callback pinned with non-zero border-box baseline', async () => {
     const harness = createHarness({
       loadingSession: false,
       messages: [makeMessage('m-1', 0)],
@@ -539,6 +539,8 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     });
     harness.viewport.scrollTop = 120;
 
+    await flushEffects();
+
     const content = document.querySelector('div.p-4.min-w-0');
     expect(content).not.toBeNull();
     if (!content) {
@@ -550,6 +552,18 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
       value: 252,
     });
 
+    harness.render({
+      loadingSession: false,
+      messages: [],
+      isNearBottom: true,
+    });
+    await flushEffects();
+
+    harness.render({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
     await flushEffects();
 
     scrollHeight = 720;
