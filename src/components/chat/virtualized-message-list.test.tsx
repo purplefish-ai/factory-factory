@@ -545,17 +545,10 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
       harness.cleanup();
       return;
     }
-    const boundingRectSpy = vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 252,
-      top: 0,
-      right: 320,
-      bottom: 252,
-      left: 0,
-      toJSON: () => ({}),
-    } as DOMRect);
+    Object.defineProperty(content, 'clientHeight', {
+      configurable: true,
+      value: 252,
+    });
 
     await flushEffects();
 
@@ -565,7 +558,6 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
 
     expect(harness.viewport.scrollTop).toBe(720);
 
-    boundingRectSpy.mockRestore();
     harness.cleanup();
   });
 
