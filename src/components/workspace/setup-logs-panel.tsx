@@ -37,11 +37,7 @@ export function SetupLogsPanel({ workspaceId, className }: SetupLogsPanelProps) 
   }
 
   const statusLabel =
-    status === 'PROVISIONING'
-      ? 'Running...'
-      : status === 'FAILED'
-        ? 'Failed'
-        : '';
+    status === 'PROVISIONING' ? 'Running...' : status === 'FAILED' ? 'Failed' : '';
   const showStatusBanner = status === 'PROVISIONING' || status === 'FAILED';
 
   return (
