@@ -4,20 +4,13 @@ import type {
   AcpProcessHandle,
   AcpRuntimeManager,
 } from '@/backend/domains/session/acp';
-import {
-  AcpEventTranslator,
-  type AcpRuntimeEventHandlers,
-  acpRuntimeManager,
-} from '@/backend/domains/session/acp';
+import { type AcpRuntimeEventHandlers, acpRuntimeManager } from '@/backend/domains/session/acp';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
-import { sessionFileLogger } from '@/backend/domains/session/logging/session-file-logger.service';
 import {
   type SessionDomainService,
   sessionDomainService,
 } from '@/backend/domains/session/session-domain.service';
-import { interceptorRegistry } from '@/backend/interceptors/registry';
-import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
@@ -33,6 +26,7 @@ import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
+import { AcpEventProcessor } from './acp-event-processor';
 import {
   type PersistAcpConfigSnapshotParams,
   SessionConfigService,
@@ -48,13 +42,6 @@ const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 type SessionPermissionMode = 'bypassPermissions' | 'plan';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
-type PendingAcpToolCall = {
-  toolUseId: string;
-  toolName: string;
-  toolInput?: Record<string, unknown>;
-  acpKind?: string;
-  acpLocations?: Array<{ path: string; line?: number | null }>;
-};
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -78,24 +65,11 @@ export class SessionService {
   private readonly promptBuilder: SessionPromptBuilder;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
-  private readonly acpEventTranslator = new AcpEventTranslator(logger);
   private readonly sessionPermissionService: SessionPermissionService;
   private readonly sessionConfigService: SessionConfigService;
-  /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
-  private readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
-  /** Per-session ACP tool calls that have started but not yet been completed by tool_result. */
-  private readonly pendingAcpToolCalls = new Map<string, Map<string, PendingAcpToolCall>>();
-  /**
-   * Suppress transcript-mutating ACP replay events for sessions whose transcript was
-   * already hydrated from on-disk history during passive load_session.
-   */
-  private readonly suppressAcpReplayForSession = new Set<string>();
+  private readonly acpEventProcessor: AcpEventProcessor;
   /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
   private workspaceBridge: SessionWorkspaceBridge | null = null;
-  /** Maps sessionId → workspaceId for bridge calls during sendAcpMessage */
-  private readonly sessionToWorkspace = new Map<string, string>();
-  /** Maps sessionId → workingDir for interceptor context */
-  private readonly sessionToWorkingDir = new Map<string, string>();
   /** Optional callback invoked after an ACP prompt turn settles. */
   private promptTurnCompleteHandler: PromptTurnCompleteHandler | null = null;
 
@@ -126,45 +100,10 @@ export class SessionService {
   }
 
   private setupAcpEventHandler(sessionId: string): AcpRuntimeEventHandlers {
-    const permissionBridge = this.sessionPermissionService.createPermissionBridge(sessionId);
+    const runtimeEventHandler = this.acpEventProcessor.createRuntimeEventHandler(sessionId);
 
     return {
-      permissionBridge,
-      onAcpEvent: (sid: string, event: unknown) => {
-        const typed = event as { type: string };
-
-        if (typed.type === 'acp_session_update') {
-          const { update } = event as {
-            type: string;
-            update: import('@agentclientprotocol/sdk').SessionUpdate;
-          };
-          if (update.sessionUpdate === 'user_message_chunk' && update.content.type === 'text') {
-            this.handleAcpUserMessageChunk(sid, update.content.text);
-            return;
-          }
-          const deltas = this.acpEventTranslator.translateSessionUpdate(update);
-          if (deltas.length === 0) {
-            acpTraceLogger.log(sid, 'translated_delta', {
-              sessionUpdate: update.sessionUpdate,
-              deltaCount: 0,
-            });
-          }
-          for (const [index, delta] of deltas.entries()) {
-            acpTraceLogger.log(sid, 'translated_delta', {
-              sessionUpdate: update.sessionUpdate,
-              deltaIndex: index,
-              delta,
-            });
-            this.handleAcpDelta(sid, delta as SessionDeltaEvent);
-          }
-          return;
-        }
-
-        if (typed.type === 'acp_permission_request') {
-          this.sessionPermissionService.handlePermissionRequest(sid, event);
-          return;
-        }
-      },
+      ...runtimeEventHandler,
       onSessionId: async (sid: string, providerSessionId: string) => {
         try {
           await this.repository.updateSession(sid, { providerSessionId });
@@ -186,11 +125,7 @@ export class SessionService {
       },
       onExit: async (sid: string, exitCode: number | null) => {
         // Clean up permission bridge, streaming state, and workspace mapping on exit
-        this.acpStreamState.delete(sid);
-        this.pendingAcpToolCalls.delete(sid);
-        this.suppressAcpReplayForSession.delete(sid);
-        this.sessionToWorkspace.delete(sid);
-        this.sessionToWorkingDir.delete(sid);
+        this.acpEventProcessor.clearSessionState(sid);
         this.sessionPermissionService.cancelPendingRequests(sid);
         acpTraceLogger.log(sid, 'runtime_exit', { exitCode });
 
@@ -228,414 +163,9 @@ export class SessionService {
         });
       },
       onAcpLog: (sid: string, payload: Record<string, unknown>) => {
-        acpTraceLogger.log(sid, 'raw_acp_event', payload);
-        sessionFileLogger.log(sid, 'FROM_CLAUDE_CLI', payload);
+        this.acpEventProcessor.handleAcpLog(sid, payload);
       },
     };
-  }
-
-  /**
-   * Handle a single translated ACP delta: persist and emit agent_messages,
-   * accumulate text chunks, and forward non-message deltas.
-   */
-  private handleAcpDelta(sid: string, delta: SessionDeltaEvent): void {
-    this.maybeLiftReplaySuppression(sid);
-
-    if (
-      this.suppressAcpReplayForSession.has(sid) &&
-      delta.type !== 'config_options_update' &&
-      delta.type !== 'slash_commands'
-    ) {
-      return;
-    }
-
-    this.trackPendingAcpToolCalls(sid, delta);
-
-    // When configOptions change mid-session, sync the handle and re-emit capabilities
-    if (delta.type === 'config_options_update') {
-      const acpHandle = this.runtimeManager.getClient(sid);
-      if (acpHandle) {
-        const { configOptions } = delta as { configOptions: unknown[] };
-        this.sessionConfigService.applyConfigOptionsUpdateDelta(
-          sid,
-          acpHandle,
-          configOptions as SessionConfigOption[]
-        );
-        return;
-      }
-    }
-
-    if (delta.type !== 'agent_message') {
-      this.sessionDomainService.emitDelta(sid, delta);
-      return;
-    }
-
-    const data = (delta as { data: AgentMessage }).data;
-
-    // Text chunks: accumulate into single message, reuse same order
-    // so the frontend upserts rather than inserting a new bubble per chunk.
-    if (data.type === 'assistant') {
-      this.accumulateAcpText(sid, data);
-      return;
-    }
-
-    // Non-text agent_message (thinking, tool_use, result): reset text accumulator
-    this.acpStreamState.delete(sid);
-    // Persist to transcript + allocate order in one step
-    const order = this.sessionDomainService.appendClaudeEvent(sid, data);
-    this.sessionDomainService.emitDelta(sid, { ...delta, order });
-  }
-
-  private trackPendingAcpToolCalls(sid: string, delta: SessionDeltaEvent): void {
-    if (delta.type === 'agent_message') {
-      this.trackPendingFromAgentMessage(sid, (delta as { data: AgentMessage }).data);
-      return;
-    }
-
-    if (delta.type === 'tool_progress') {
-      this.trackPendingFromToolProgress(
-        sid,
-        delta as {
-          tool_use_id?: string;
-          tool_name?: string;
-          acpStatus?: string;
-          acpKind?: string;
-          acpLocations?: Array<{ path: string; line?: number | null }>;
-        }
-      );
-    }
-  }
-
-  private trackPendingFromAgentMessage(sid: string, data: AgentMessage): void {
-    if (data.type === 'stream_event') {
-      this.trackPendingFromToolUseStreamEvent(sid, data);
-    }
-
-    if (data.type !== 'user') {
-      return;
-    }
-
-    this.clearPendingFromToolResultMessage(sid, data);
-  }
-
-  private trackPendingFromToolUseStreamEvent(sid: string, data: AgentMessage): void {
-    const streamEvent = (
-      data as {
-        event?: {
-          type?: string;
-          content_block?: { type?: string; id?: unknown; name?: unknown; input?: unknown };
-        };
-      }
-    ).event;
-    const contentBlock = streamEvent?.content_block;
-    const isToolUse =
-      streamEvent?.type === 'content_block_start' && contentBlock?.type === 'tool_use';
-    if (!isToolUse) {
-      return;
-    }
-    const toolUseId = typeof contentBlock?.id === 'string' ? contentBlock.id : null;
-    if (!toolUseId) {
-      return;
-    }
-    const toolName = typeof contentBlock?.name === 'string' ? contentBlock.name : 'ACP Tool';
-    const toolInput = this.normalizeToolInput(contentBlock?.input);
-    const existing = this.getPendingToolCall(sid, toolUseId);
-    this.upsertPendingToolCall(sid, toolUseId, { toolName, toolInput });
-    if (!existing) {
-      this.notifyInterceptorToolStart(sid, {
-        toolUseId,
-        toolName,
-        toolInput: toolInput ?? {},
-      });
-    }
-  }
-
-  private clearPendingFromToolResultMessage(sid: string, data: AgentMessage): void {
-    if (data.type !== 'user') {
-      return;
-    }
-    const content = data.message?.content;
-    if (!Array.isArray(content)) {
-      return;
-    }
-    for (const item of content) {
-      if (item.type === 'tool_result') {
-        const pending = this.getPendingToolCall(sid, item.tool_use_id);
-        this.notifyInterceptorToolComplete(
-          sid,
-          item.tool_use_id,
-          item.content,
-          item.is_error === true,
-          pending
-        );
-        this.removePendingToolCall(sid, item.tool_use_id);
-      }
-    }
-  }
-
-  private trackPendingFromToolProgress(
-    sid: string,
-    progress: {
-      tool_use_id?: string;
-      tool_name?: string;
-      acpStatus?: string;
-      acpKind?: string;
-      acpLocations?: Array<{ path: string; line?: number | null }>;
-    }
-  ): void {
-    if (!progress.tool_use_id) {
-      return;
-    }
-    // ACP translator emits terminal tool_progress before tool_result in the same batch.
-    // Keep pending metadata here and clear only after processing tool_result.
-    const existing = this.getPendingToolCall(sid, progress.tool_use_id);
-    this.upsertPendingToolCall(sid, progress.tool_use_id, {
-      toolName: progress.tool_name ?? 'ACP Tool',
-      acpKind: progress.acpKind,
-      acpLocations: progress.acpLocations,
-    });
-    if (!existing) {
-      this.notifyInterceptorToolStart(sid, {
-        toolUseId: progress.tool_use_id,
-        toolName: progress.tool_name ?? 'ACP Tool',
-        toolInput: {},
-      });
-    }
-  }
-
-  private upsertPendingToolCall(
-    sid: string,
-    toolUseId: string,
-    update: Pick<PendingAcpToolCall, 'toolName'> &
-      Partial<Pick<PendingAcpToolCall, 'toolInput' | 'acpKind' | 'acpLocations'>>
-  ): void {
-    const pendingById = this.pendingAcpToolCalls.get(sid) ?? new Map<string, PendingAcpToolCall>();
-    const existing = pendingById.get(toolUseId);
-    pendingById.set(toolUseId, {
-      toolUseId,
-      toolName: update.toolName || existing?.toolName || 'ACP Tool',
-      toolInput: update.toolInput ?? existing?.toolInput,
-      acpKind: update.acpKind ?? existing?.acpKind,
-      acpLocations: update.acpLocations ?? existing?.acpLocations,
-    });
-    this.pendingAcpToolCalls.set(sid, pendingById);
-  }
-
-  private getPendingToolCall(sid: string, toolUseId: string): PendingAcpToolCall | undefined {
-    return this.pendingAcpToolCalls.get(sid)?.get(toolUseId);
-  }
-
-  private removePendingToolCall(sid: string, toolUseId: string): void {
-    const pendingById = this.pendingAcpToolCalls.get(sid);
-    if (!pendingById) {
-      return;
-    }
-    pendingById.delete(toolUseId);
-    if (pendingById.size === 0) {
-      this.pendingAcpToolCalls.delete(sid);
-    }
-  }
-
-  private normalizeToolInput(input: unknown): Record<string, unknown> | undefined {
-    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
-      return undefined;
-    }
-    return input as Record<string, unknown>;
-  }
-
-  private extractToolResultText(content: unknown): string {
-    if (typeof content === 'string') {
-      return content;
-    }
-
-    if (Array.isArray(content)) {
-      return content
-        .flatMap((item) => {
-          if (
-            typeof item === 'object' &&
-            item !== null &&
-            (item as { type?: unknown }).type === 'text' &&
-            typeof (item as { text?: unknown }).text === 'string'
-          ) {
-            return [(item as { text: string }).text];
-          }
-          return [];
-        })
-        .join('\n');
-    }
-
-    if (content === undefined || content === null) {
-      return '';
-    }
-
-    try {
-      return JSON.stringify(content);
-    } catch {
-      return String(content);
-    }
-  }
-
-  private getInterceptorContext(sessionId: string): InterceptorContext | null {
-    const workspaceId = this.sessionToWorkspace.get(sessionId);
-    const workingDir = this.sessionToWorkingDir.get(sessionId);
-    if (!(workspaceId && workingDir)) {
-      return null;
-    }
-
-    return {
-      sessionId,
-      workspaceId,
-      workingDir,
-      timestamp: new Date(),
-    };
-  }
-
-  private notifyInterceptorToolStart(
-    sessionId: string,
-    tool: Pick<PendingAcpToolCall, 'toolUseId' | 'toolName'> & {
-      toolInput: Record<string, unknown>;
-    }
-  ): void {
-    const context = this.getInterceptorContext(sessionId);
-    if (!context) {
-      return;
-    }
-
-    const event: ToolEvent = {
-      toolUseId: tool.toolUseId,
-      toolName: tool.toolName,
-      input: tool.toolInput,
-    };
-    interceptorRegistry.notifyToolStart(event, context);
-  }
-
-  private notifyInterceptorToolComplete(
-    sessionId: string,
-    toolUseId: string,
-    content: unknown,
-    isError: boolean,
-    pending: PendingAcpToolCall | undefined
-  ): void {
-    const context = this.getInterceptorContext(sessionId);
-    if (!context) {
-      return;
-    }
-
-    const event: ToolEvent = {
-      toolUseId,
-      toolName: pending?.toolName ?? 'ACP Tool',
-      input: pending?.toolInput ?? {},
-      output: {
-        content: this.extractToolResultText(content),
-        isError,
-      },
-    };
-    interceptorRegistry.notifyToolComplete(event, context);
-  }
-
-  private finalizeOrphanedToolCalls(sid: string, reason: string): void {
-    const pendingById = this.pendingAcpToolCalls.get(sid);
-    if (!pendingById || pendingById.size === 0) {
-      this.pendingAcpToolCalls.delete(sid);
-      return;
-    }
-
-    const toolUseIds = [...pendingById.keys()];
-    logger.warn('Finalizing orphaned ACP tool calls without terminal status', {
-      sessionId: sid,
-      reason,
-      count: toolUseIds.length,
-      toolUseIds,
-    });
-
-    for (const pending of pendingById.values()) {
-      const syntheticProgress = {
-        type: 'tool_progress',
-        tool_use_id: pending.toolUseId,
-        tool_name: pending.toolName,
-        acpStatus: 'failed',
-        elapsed_time_seconds: 0,
-        ...(pending.acpKind ? { acpKind: pending.acpKind } : {}),
-        ...(pending.acpLocations ? { acpLocations: pending.acpLocations } : {}),
-      } as SessionDeltaEvent;
-      this.handleAcpDelta(sid, syntheticProgress);
-
-      const syntheticResult = {
-        type: 'agent_message',
-        data: {
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [
-              {
-                type: 'tool_result',
-                tool_use_id: pending.toolUseId,
-                content: `Tool call did not receive a terminal ACP update (${reason}). Marked as failed locally.`,
-                is_error: true,
-              },
-            ],
-          },
-        },
-      } as SessionDeltaEvent;
-      this.handleAcpDelta(sid, syntheticResult);
-
-      acpTraceLogger.log(sid, 'translated_delta', {
-        sessionUpdate: 'synthetic_orphan_tool_call',
-        delta: syntheticProgress,
-      });
-      acpTraceLogger.log(sid, 'translated_delta', {
-        sessionUpdate: 'synthetic_orphan_tool_call',
-        delta: syntheticResult,
-      });
-    }
-
-    this.pendingAcpToolCalls.delete(sid);
-  }
-
-  /**
-   * ACP can emit user_message_chunk during both replay (idle) and live sends (working).
-   * Live sends are already committed by our send pipeline, so only inject replay chunks.
-   */
-  private handleAcpUserMessageChunk(sid: string, text: string): void {
-    this.maybeLiftReplaySuppression(sid);
-    if (this.suppressAcpReplayForSession.has(sid)) {
-      return;
-    }
-    if (this.runtimeManager.isSessionWorking(sid)) {
-      return;
-    }
-    const normalized = text.trim();
-    if (normalized.length === 0) {
-      return;
-    }
-    this.sessionDomainService.injectCommittedUserMessage(sid, normalized);
-  }
-
-  /**
-   * Accumulate ACP assistant text chunks into a single message at a stable order.
-   */
-  private accumulateAcpText(sid: string, data: AgentMessage): void {
-    const content = data.message?.content;
-    const chunkText =
-      Array.isArray(content) && content[0]?.type === 'text'
-        ? (content[0] as { text: string }).text
-        : '';
-    let ss = this.acpStreamState.get(sid);
-    if (!ss) {
-      ss = { textOrder: this.sessionDomainService.allocateOrder(sid), accText: '' };
-      this.acpStreamState.set(sid, ss);
-    }
-    ss.accText += chunkText;
-    const accMsg: AgentMessage = {
-      type: 'assistant',
-      message: { role: 'assistant', content: [{ type: 'text', text: ss.accText }] },
-    };
-    this.sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.textOrder);
-    this.sessionDomainService.emitDelta(sid, {
-      type: 'agent_message',
-      data: accMsg,
-      order: ss.textOrder,
-    } as SessionDeltaEvent & { order: number });
   }
 
   private async createAcpClient(
@@ -652,16 +182,14 @@ export class SessionService {
     }
 
     await this.repository.markWorkspaceHasHadSessions(sessionContext.workspaceId);
-    this.sessionToWorkspace.set(sessionId, sessionContext.workspaceId);
-    this.sessionToWorkingDir.set(sessionId, sessionContext.workingDir);
+    this.acpEventProcessor.registerSessionContext(sessionId, {
+      workspaceId: sessionContext.workspaceId,
+      workingDir: sessionContext.workingDir,
+    });
 
     const handlers = this.setupAcpEventHandler(sessionId);
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
-    if (shouldSuppressReplay) {
-      this.suppressAcpReplayForSession.add(sessionId);
-    } else {
-      this.suppressAcpReplayForSession.delete(sessionId);
-    }
+    this.acpEventProcessor.setReplaySuppression(sessionId, shouldSuppressReplay);
 
     const clientOptions: AcpClientOptions = {
       provider: session?.provider ?? 'CLAUDE',
@@ -680,9 +208,7 @@ export class SessionService {
         workingDir: sessionContext.workingDir,
       });
     } catch (error) {
-      this.suppressAcpReplayForSession.delete(sessionId);
-      this.sessionToWorkspace.delete(sessionId);
-      this.sessionToWorkingDir.delete(sessionId);
+      this.acpEventProcessor.clearSessionState(sessionId);
       throw error;
     }
 
@@ -726,17 +252,6 @@ export class SessionService {
 
     return this.sessionDomainService.getTranscriptSnapshot(sessionId).length > 0;
   }
-
-  private maybeLiftReplaySuppression(sessionId: string): void {
-    if (!this.suppressAcpReplayForSession.has(sessionId)) {
-      return;
-    }
-    if (!this.runtimeManager.isSessionWorking(sessionId)) {
-      return;
-    }
-    this.suppressAcpReplayForSession.delete(sessionId);
-  }
-
   constructor(options?: SessionServiceDependencies) {
     this.repository = options?.repository ?? sessionRepository;
     this.promptBuilder = options?.promptBuilder ?? sessionPromptBuilder;
@@ -749,6 +264,12 @@ export class SessionService {
       repository: this.repository,
       runtimeManager: this.runtimeManager,
       sessionDomainService: this.sessionDomainService,
+    });
+    this.acpEventProcessor = new AcpEventProcessor({
+      runtimeManager: this.runtimeManager,
+      sessionDomainService: this.sessionDomainService,
+      sessionPermissionService: this.sessionPermissionService,
+      sessionConfigService: this.sessionConfigService,
     });
   }
 
@@ -834,7 +355,7 @@ export class SessionService {
     options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
     const session = await this.loadSessionForStop(sessionId);
-    const workspaceId = session?.workspaceId ?? this.sessionToWorkspace.get(sessionId);
+    const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
 
     if (this.runtimeManager.isStopInProgress(sessionId)) {
       logger.debug('Session stop already in progress', { sessionId });
@@ -850,8 +371,8 @@ export class SessionService {
     });
 
     // Cancel pending ACP permissions and clean up streaming state
-    this.acpStreamState.delete(sessionId);
-    this.suppressAcpReplayForSession.delete(sessionId);
+    this.acpEventProcessor.clearStreamingState(sessionId);
+    this.acpEventProcessor.clearReplaySuppression(sessionId);
     this.sessionPermissionService.cancelPendingRequests(sessionId);
 
     let stopClientFailed = false;
@@ -878,8 +399,7 @@ export class SessionService {
         updatedAt: new Date().toISOString(),
       });
       this.markWorkspaceSessionIdleOnStop(workspaceId, sessionId);
-      this.sessionToWorkspace.delete(sessionId);
-      this.sessionToWorkingDir.delete(sessionId);
+      this.acpEventProcessor.clearSessionContext(sessionId);
 
       if (!stopClientFailed) {
         const shouldCleanupTransientRatchetSession =
@@ -901,13 +421,13 @@ export class SessionService {
 
   private finalizeOrphanedToolCallsOnStop(sessionId: string): void {
     try {
-      this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
+      this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'session_stop');
     } catch (error) {
       logger.warn('Failed finalizing orphaned ACP tool calls during stop', {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });
-      this.pendingAcpToolCalls.delete(sessionId);
+      this.acpEventProcessor.clearPendingToolCalls(sessionId);
     }
   }
 
@@ -1161,9 +681,9 @@ export class SessionService {
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
   async sendAcpMessage(sessionId: string, content: string): Promise<string> {
-    const workspaceId = this.sessionToWorkspace.get(sessionId);
+    const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     // Scope orphan detection to each prompt turn.
-    this.pendingAcpToolCalls.set(sessionId, new Map());
+    this.acpEventProcessor.beginPromptTurn(sessionId);
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
       phase: 'running',
@@ -1178,7 +698,10 @@ export class SessionService {
 
     try {
       const result = await this.runtimeManager.sendPrompt(sessionId, content);
-      this.finalizeOrphanedToolCalls(sessionId, `stop_reason:${result.stopReason}`);
+      this.acpEventProcessor.finalizeOrphanedToolCalls(
+        sessionId,
+        `stop_reason:${result.stopReason}`
+      );
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
         processState: 'alive',
@@ -1187,7 +710,7 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
-      this.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
+      this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
         processState: 'alive',
