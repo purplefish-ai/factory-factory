@@ -1,9 +1,9 @@
-import { CircleDot, GitBranch, GitPullRequest, Loader2, Plus, Settings, X } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { CircleDot, GitBranch, GitPullRequest, Plus, Settings, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
+import { InlineWorkspaceForm } from '@/client/components/kanban/inline-workspace-form';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import type { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
-import { useCreateWorkspace } from '@/client/hooks/use-create-workspace';
 import { useSidebarIssues } from '@/client/hooks/use-sidebar-issues';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
@@ -226,9 +226,11 @@ function SidebarInner({
   waiting,
   working,
   done,
-  onCreateWorkspace,
+  selectedProjectId,
+  existingWorkspaceNames,
+  showNewWorkspaceForm,
+  onShowNewWorkspaceFormChange,
   canCreateWorkspace,
-  isCreatingWorkspace,
   onNavigate,
   showCloseButton,
 }: {
@@ -237,9 +239,11 @@ function SidebarInner({
   waiting: ServerWorkspace[];
   working: ServerWorkspace[];
   done: ServerWorkspace[];
-  onCreateWorkspace: () => void;
+  selectedProjectId: string | undefined;
+  existingWorkspaceNames: string[];
+  showNewWorkspaceForm: boolean;
+  onShowNewWorkspaceFormChange: (show: boolean) => void;
   canCreateWorkspace: boolean;
-  isCreatingWorkspace: boolean;
   onNavigate?: () => void;
   showCloseButton: boolean;
 }) {
@@ -265,22 +269,32 @@ function SidebarInner({
       <SidebarContent className={showCloseButton ? undefined : 'pt-2'}>
         <SidebarGroup className="pb-0">
           <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => onCreateWorkspace()}
-                  disabled={!canCreateWorkspace || isCreatingWorkspace}
-                  className="h-9"
-                >
-                  {isCreatingWorkspace ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
+            {showNewWorkspaceForm && selectedProjectId ? (
+              <div className="px-1">
+                <InlineWorkspaceForm
+                  projectId={selectedProjectId}
+                  existingNames={existingWorkspaceNames}
+                  onCancel={() => onShowNewWorkspaceFormChange(false)}
+                  onCreated={() => {
+                    onShowNewWorkspaceFormChange(false);
+                    onNavigate?.();
+                  }}
+                />
+              </div>
+            ) : (
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => onShowNewWorkspaceFormChange(true)}
+                    disabled={!canCreateWorkspace}
+                    className="h-9"
+                  >
                     <Plus className="h-4 w-4" />
-                  )}
-                  <span>{isCreatingWorkspace ? 'Creating workspace...' : 'New Workspace'}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
+                    <span>New Workspace</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
 
@@ -367,12 +381,9 @@ function SidebarInner({
 export function AppSidebar({ navData }: { navData: NavigationData }) {
   const { pathname } = useLocation();
   const prevPathnameRef = useRef(pathname);
+  const prevSelectedProjectIdRef = useRef(navData.selectedProjectId);
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
-  const { handleCreate, isCreating: isCreatingWorkspace } = useCreateWorkspace(
-    navData.selectedProjectId,
-    navData.selectedProjectSlug,
-    navData.serverWorkspaces?.map((workspace) => workspace.name)
-  );
+  const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
 
   // Auto-close mobile sidebar on route navigation
   useEffect(() => {
@@ -381,6 +392,13 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     }
     prevPathnameRef.current = pathname;
   }, [pathname, setOpenMobile]);
+
+  useEffect(() => {
+    if (prevSelectedProjectIdRef.current !== navData.selectedProjectId) {
+      prevSelectedProjectIdRef.current = navData.selectedProjectId;
+      setShowNewWorkspaceForm(false);
+    }
+  }, [navData.selectedProjectId]);
 
   // Fetch issues for the Todo section
   const { issues } = useSidebarIssues(
@@ -400,9 +418,11 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     waiting,
     working,
     done,
-    onCreateWorkspace: handleCreate,
+    selectedProjectId: navData.selectedProjectId,
+    existingWorkspaceNames: navData.serverWorkspaces?.map((workspace) => workspace.name) ?? [],
+    showNewWorkspaceForm,
+    onShowNewWorkspaceFormChange: setShowNewWorkspaceForm,
     canCreateWorkspace: Boolean(navData.selectedProjectId && navData.selectedProjectSlug),
-    isCreatingWorkspace,
   };
 
   // Mobile: Sheet overlay
