@@ -163,6 +163,7 @@ export interface SnapshotDerivationFns {
   }) => {
     phase: WorkspaceFlowPhase;
     ciObservation: WorkspaceCiObservation;
+    hasActivePr: boolean;
     isWorking: boolean;
     shouldAnimateRatchetButton: boolean;
   };

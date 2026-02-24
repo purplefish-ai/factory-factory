@@ -5,6 +5,7 @@ import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 export interface WorkspaceDerivedFlowState {
   phase: WorkspaceFlowPhase;
   ciObservation: WorkspaceCiObservation;
+  hasActivePr: boolean;
   isWorking: boolean;
   shouldAnimateRatchetButton: boolean;
 }
@@ -49,6 +50,7 @@ export interface WorkspaceDerivedState {
 export const DEFAULT_WORKSPACE_DERIVED_FLOW_STATE: WorkspaceDerivedFlowState = {
   phase: 'NO_PR',
   ciObservation: 'CHECKS_UNKNOWN',
+  hasActivePr: false,
   isWorking: false,
   shouldAnimateRatchetButton: false,
 };

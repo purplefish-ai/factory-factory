@@ -165,6 +165,7 @@ describe('WorkspaceQueryService', () => {
       isSessionWorking: false,
       isWorking: false,
       flowState: {
+        hasActivePr: workspace.id === 'w2',
         isWorking: false,
         shouldAnimateRatchetButton: workspace.id === 'w2',
         phase: 'HAS_PR',
@@ -231,6 +232,7 @@ describe('WorkspaceQueryService', () => {
       isSessionWorking: workspace.id === 'w2',
       isWorking: workspace.id === 'w2',
       flowState: {
+        hasActivePr: workspace.id === 'w2',
         isWorking: workspace.id === 'w2',
         shouldAnimateRatchetButton: workspace.id === 'w2',
         phase: workspace.id === 'w2' ? 'HAS_PR' : 'NO_PR',

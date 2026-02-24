@@ -377,6 +377,7 @@ describe('websocket integration', () => {
       deriveFlowState: () => ({
         phase: 'NO_PR',
         ciObservation: 'CHECKS_UNKNOWN',
+        hasActivePr: false,
         isWorking: false,
         shouldAnimateRatchetButton: false,
       }),

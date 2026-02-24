@@ -60,6 +60,7 @@ describe('assembleWorkspaceDerivedState', () => {
         flowState: {
           phase: 'CI_WAIT',
           ciObservation: 'CHECKS_PENDING',
+          hasActivePr: true,
           isWorking: true,
           shouldAnimateRatchetButton: true,
         },
