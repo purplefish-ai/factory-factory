@@ -1,7 +1,9 @@
 import { FileCode, Zap } from 'lucide-react';
+import type { ReactElement } from 'react';
 import { memo } from 'react';
 import type { Todo } from '@/components/chat/use-todo-tracker';
 import { TodoItem } from '@/components/shared';
+import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { calculateTodoProgress } from '@/lib/todo-utils';
 import {
   isCodexFileChangeToolName,
@@ -10,6 +12,11 @@ import {
 } from './file-change-parser';
 import { CodexFileChangeRenderer } from './file-change-renderer';
 import { extractCommandPreviewFromInput, isRunLikeToolName } from './tool-display-utils';
+import {
+  isWebSearchToolName,
+  parseWebSearchToolInput,
+  parseWebSearchToolResult,
+} from './web-search-parser';
 
 // =============================================================================
 // Constants
@@ -219,6 +226,50 @@ const RunToolRenderer = memo(function RunToolRenderer({
   );
 });
 
+const WebSearchToolRenderer = memo(function WebSearchToolRenderer({
+  input,
+  resultContent,
+}: {
+  input: Record<string, unknown>;
+  resultContent?: ToolResultContentValue;
+}) {
+  const resultPayload = resultContent ? parseWebSearchToolResult(resultContent) : null;
+  const payload = resultPayload ?? parseWebSearchToolInput(input);
+
+  if (!payload) {
+    return (
+      <div className="w-0 min-w-full">
+        <pre className="text-xs overflow-x-auto max-h-32 overflow-y-auto rounded bg-muted px-1.5 py-1">
+          {JSON.stringify(input, null, 2)}
+        </pre>
+      </div>
+    );
+  }
+
+  const queries = payload.action.queries ?? (payload.query ? [payload.query] : []);
+
+  return (
+    <div className="space-y-1 w-0 min-w-full">
+      <div className="rounded bg-muted px-1.5 py-1 font-mono">
+        <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words">
+          {payload.query || '(query not resolved yet)'}
+        </pre>
+      </div>
+      <div className="text-[10px] text-muted-foreground">action: {payload.action.type}</div>
+      {queries.length > 0 && (
+        <details className="text-xs">
+          <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
+            Queries
+          </summary>
+          <pre className="mt-1 text-xs overflow-x-auto rounded bg-muted px-1.5 py-1">
+            {JSON.stringify(queries, null, 2)}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+});
+
 // =============================================================================
 // Tool Input Renderer
 // =============================================================================
@@ -226,26 +277,28 @@ const RunToolRenderer = memo(function RunToolRenderer({
 export interface ToolInputRendererProps {
   name: string;
   input: Record<string, unknown>;
+  resultContent?: ToolResultContentValue;
 }
 
-export const ToolInputRenderer = memo(function ToolInputRenderer({
+function renderSpecialToolInput({
   name,
   input,
-}: ToolInputRendererProps) {
-  // Special rendering for Task tool (subagent launches)
+  resultContent,
+}: ToolInputRendererProps): ReactElement | null {
   if (name === 'Task') {
     return <TaskToolRenderer input={input} />;
   }
 
-  // Special rendering for TodoWrite tool
   if (name === 'TodoWrite') {
     return <TodoWriteToolRenderer input={input} />;
   }
 
-  // Run tool labels may include command text in the name.
-  // Prefer rendering from structured input to keep headers concise.
   if (isRunLikeToolName(name)) {
     return <RunToolRenderer input={input} />;
+  }
+
+  if (isWebSearchToolName(name)) {
+    return <WebSearchToolRenderer input={input} resultContent={resultContent} />;
   }
 
   const fileChangePayload = parseCodexFileChangeToolInput(input);
@@ -256,6 +309,19 @@ export const ToolInputRenderer = memo(function ToolInputRenderer({
         rawPayload={serializeUnknownPayload(input)}
       />
     );
+  }
+
+  return null;
+}
+
+export const ToolInputRenderer = memo(function ToolInputRenderer({
+  name,
+  input,
+  resultContent,
+}: ToolInputRendererProps) {
+  const specialRenderer = renderSpecialToolInput({ name, input, resultContent });
+  if (specialRenderer) {
+    return specialRenderer;
   }
 
   // Special rendering for common tools
