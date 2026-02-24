@@ -163,6 +163,17 @@ export const prePrRenameInterceptor: ToolInterceptor = {
   name: 'pre-pr-rename',
   tools: '*',
 
+  start(): void {
+    // Ensure no stale state leaks across server restarts.
+    renamedWorkspaces.clear();
+    remoteCleanupCandidates.clear();
+  },
+
+  stop(): void {
+    renamedWorkspaces.clear();
+    remoteCleanupCandidates.clear();
+  },
+
   async onToolStart(event: ToolEvent, context: InterceptorContext): Promise<void> {
     let renameCompleted = false;
     try {

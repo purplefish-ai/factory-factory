@@ -1,8 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InterceptorContext, ToolEvent } from './types';
-
-const mockSetInterval = vi.hoisted(() => vi.fn());
-vi.stubGlobal('setInterval', mockSetInterval as unknown as typeof setInterval);
 
 const mockSessionInterceptorBridge = vi.hoisted(() => ({
   getSessionConversationHistory: vi.fn(),
@@ -71,6 +68,10 @@ const event: ToolEvent = {
 };
 
 describe('conversationRenameInterceptor', () => {
+  afterEach(() => {
+    conversationRenameInterceptor.stop?.();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockWorkspaceDataService.findById.mockResolvedValue({
@@ -140,5 +141,22 @@ describe('conversationRenameInterceptor', () => {
     await expect(
       conversationRenameInterceptor.onToolComplete?.(event, { ...context, sessionId: 'session-4' })
     ).resolves.toBeUndefined();
+  });
+
+  it('starts and stops cleanup interval via lifecycle hooks', () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+
+    conversationRenameInterceptor.start?.();
+    conversationRenameInterceptor.start?.();
+
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+
+    conversationRenameInterceptor.stop?.();
+
+    expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
   });
 });

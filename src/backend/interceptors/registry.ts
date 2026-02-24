@@ -14,13 +14,77 @@ const logger = createLogger('interceptor-registry');
 
 class InterceptorRegistry {
   private interceptors: ToolInterceptor[] = [];
+  private started = false;
 
   /**
    * Register an interceptor.
    */
   register(interceptor: ToolInterceptor): void {
+    if (this.interceptors.some((existing) => existing.name === interceptor.name)) {
+      logger.debug('Skipping duplicate interceptor registration', { name: interceptor.name });
+      return;
+    }
+
     this.interceptors.push(interceptor);
     logger.info('Registered interceptor', { name: interceptor.name, tools: interceptor.tools });
+
+    if (this.started) {
+      void this.startInterceptor(interceptor);
+    }
+  }
+
+  private async startInterceptor(interceptor: ToolInterceptor): Promise<void> {
+    if (!interceptor.start) {
+      return;
+    }
+
+    try {
+      await interceptor.start();
+    } catch (error) {
+      logger.error('Interceptor start hook error', {
+        interceptor: interceptor.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async stopInterceptor(interceptor: ToolInterceptor): Promise<void> {
+    if (!interceptor.stop) {
+      return;
+    }
+
+    try {
+      await interceptor.stop();
+    } catch (error) {
+      logger.error('Interceptor stop hook error', {
+        interceptor: interceptor.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Start all registered interceptors.
+   */
+  async start(): Promise<void> {
+    if (this.started) {
+      return;
+    }
+
+    this.started = true;
+    for (const interceptor of this.interceptors) {
+      await this.startInterceptor(interceptor);
+    }
+  }
+
+  /**
+   * Stop all registered interceptors.
+   */
+  async stop(): Promise<void> {
+    this.started = false;
+    for (const interceptor of this.interceptors) {
+      await this.stopInterceptor(interceptor);
+    }
   }
 
   /**

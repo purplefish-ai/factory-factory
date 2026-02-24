@@ -23,7 +23,7 @@ import { WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from './app-context';
 import { prisma } from './db';
 import { reconciliationService } from './domains/ratchet';
-import { registerInterceptors } from './interceptors';
+import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import {
   createCorsMiddleware,
   createRequestLoggerMiddleware,
@@ -266,6 +266,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     logger.info('Starting graceful cleanup');
 
     clearInterval(heartbeatInterval);
+    await stopInterceptors();
 
     // Close WebSocket server
     wss.close();
@@ -330,6 +331,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
           sessionFileLogger.cleanupOldLogs();
           acpTraceLogger.cleanupOldLogs();
+          await startInterceptors();
           reconciliationService.startPeriodicCleanup();
           rateLimiter.start();
           schedulerService.start();
