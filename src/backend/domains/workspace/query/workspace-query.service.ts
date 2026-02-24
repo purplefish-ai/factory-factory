@@ -7,13 +7,17 @@ import type {
 import { computeKanbanColumn } from '@/backend/domains/workspace/state/kanban-state';
 import { computePendingRequestType } from '@/backend/domains/workspace/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/domains/workspace/state/workspace-runtime-state';
+import {
+  assembleWorkspaceDerivedState,
+  DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
+} from '@/backend/lib/workspace-derived-state';
 import { projectAccessor } from '@/backend/resource_accessors/project.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
-import { type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');
@@ -83,10 +87,9 @@ class WorkspaceQueryService {
     // Get all pending requests from active sessions
     const allPendingRequests = this.session.getAllPendingRequests();
 
-    const workingStatusByWorkspace = new Map<string, boolean>();
-    const flowStateByWorkspace = new Map<
+    const runtimeStateByWorkspace = new Map<
       string,
-      ReturnType<typeof deriveWorkspaceRuntimeState>['flowState']
+      ReturnType<typeof deriveWorkspaceRuntimeState>
     >();
     const pendingRequestByWorkspace = new Map<
       string,
@@ -96,10 +99,7 @@ class WorkspaceQueryService {
       const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
         this.session.isAnySessionWorking(sessionIds)
       );
-      const flowState = runtimeState.flowState;
-      flowStateByWorkspace.set(workspace.id, flowState);
-
-      workingStatusByWorkspace.set(workspace.id, runtimeState.isWorking);
+      runtimeStateByWorkspace.set(workspace.id, runtimeState);
 
       const pendingRequestType = computePendingRequestType(
         runtimeState.sessionIds,
@@ -157,15 +157,23 @@ class WorkspaceQueryService {
 
     return {
       workspaces: workspaces.map((w) => {
-        const flowState = flowStateByWorkspace.get(w.id);
-        const isWorking = workingStatusByWorkspace.get(w.id) ?? false;
-        const kanbanColumn = computeKanbanColumn({
-          lifecycle: w.status ?? WorkspaceStatus.READY,
-          isWorking,
-          prState: w.prState ?? PRState.NONE,
-          ratchetState: w.ratchetState ?? RatchetState.IDLE,
-          hasHadSessions: w.hasHadSessions ?? true,
-        });
+        const runtimeState = runtimeStateByWorkspace.get(w.id);
+        const derivedState = assembleWorkspaceDerivedState(
+          {
+            lifecycle: w.status ?? WorkspaceStatus.READY,
+            prUrl: w.prUrl,
+            prState: w.prState ?? PRState.NONE,
+            prCiStatus: w.prCiStatus ?? CIStatus.UNKNOWN,
+            ratchetState: w.ratchetState ?? RatchetState.IDLE,
+            hasHadSessions: w.hasHadSessions ?? true,
+            sessionIsWorking: runtimeState?.isSessionWorking ?? false,
+            flowState: runtimeState?.flowState ?? DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
+          },
+          {
+            computeKanbanColumn,
+            deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+          }
+        );
         const sessionDates = [
           ...(w.agentSessions?.map((s) => s.updatedAt) ?? []),
           ...(w.terminalSessions?.map((s) => s.updatedAt) ?? []),
@@ -184,25 +192,19 @@ class WorkspaceQueryService {
           prNumber: w.prNumber,
           prState: w.prState,
           prCiStatus: w.prCiStatus,
-          isWorking,
+          isWorking: derivedState.isWorking,
           gitStats: gitStatsResults[w.id] ?? null,
           lastActivityAt,
           ratchetEnabled: w.ratchetEnabled,
           ratchetState: w.ratchetState,
           githubIssueNumber: w.githubIssueNumber,
           linearIssueId: w.linearIssueId,
-          sidebarStatus: deriveWorkspaceSidebarStatus({
-            isWorking,
-            prUrl: w.prUrl,
-            prState: w.prState,
-            prCiStatus: w.prCiStatus,
-            ratchetState: w.ratchetState,
-          }),
-          ratchetButtonAnimated: flowState?.shouldAnimateRatchetButton ?? false,
-          flowPhase: flowState?.phase ?? 'NO_PR',
-          ciObservation: flowState?.ciObservation ?? 'CHECKS_UNKNOWN',
+          sidebarStatus: derivedState.sidebarStatus,
+          ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
+          flowPhase: derivedState.flowPhase,
+          ciObservation: derivedState.ciObservation,
           runScriptStatus: w.runScriptStatus,
-          cachedKanbanColumn: kanbanColumn,
+          cachedKanbanColumn: derivedState.kanbanColumn,
           // DB timestamp for last cached kanban-state recompute/change.
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
           pendingRequestType: pendingRequestByWorkspace.get(w.id) ?? null,
@@ -234,14 +236,22 @@ class WorkspaceQueryService {
         const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
           this.session.isAnySessionWorking(sessionIds)
         );
-
-        const kanbanColumn = computeKanbanColumn({
-          lifecycle: workspace.status,
-          isWorking: runtimeState.isWorking,
-          prState: workspace.prState,
-          ratchetState: workspace.ratchetState,
-          hasHadSessions: workspace.hasHadSessions,
-        });
+        const derivedState = assembleWorkspaceDerivedState(
+          {
+            lifecycle: workspace.status,
+            prUrl: workspace.prUrl,
+            prState: workspace.prState,
+            prCiStatus: workspace.prCiStatus,
+            ratchetState: workspace.ratchetState,
+            hasHadSessions: workspace.hasHadSessions,
+            sessionIsWorking: runtimeState.isSessionWorking,
+            flowState: runtimeState.flowState,
+          },
+          {
+            computeKanbanColumn,
+            deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+          }
+        );
 
         const pendingRequestType = computePendingRequestType(
           runtimeState.sessionIds,
@@ -250,11 +260,11 @@ class WorkspaceQueryService {
 
         return {
           ...workspace,
-          kanbanColumn,
-          isWorking: runtimeState.isWorking,
-          ratchetButtonAnimated: runtimeState.flowState.shouldAnimateRatchetButton,
-          flowPhase: runtimeState.flowState.phase,
-          ciObservation: runtimeState.flowState.ciObservation,
+          kanbanColumn: derivedState.kanbanColumn,
+          isWorking: derivedState.isWorking,
+          ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
+          flowPhase: derivedState.flowPhase,
+          ciObservation: derivedState.ciObservation,
           isArchived: false,
           pendingRequestType,
         };

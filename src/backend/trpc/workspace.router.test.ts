@@ -27,6 +27,7 @@ const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 const mockBuildSessionSummaries = vi.hoisted(() => vi.fn());
 const mockHasWorkingSessionSummary = vi.hoisted(() => vi.fn());
 const mockDeriveWorkspaceSidebarStatus = vi.hoisted(() => vi.fn());
+const mockComputeKanbanColumn = vi.hoisted(() => vi.fn());
 const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
@@ -38,6 +39,7 @@ vi.mock('@/backend/domains/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
   workspaceQueryService: mockWorkspaceQueryService,
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
+  computeKanbanColumn: (...args: unknown[]) => mockComputeKanbanColumn(...args),
   WorkspaceCreationService: class {
     create = (...args: unknown[]) => mockWorkspaceCreationCreate(...args);
   },
@@ -162,6 +164,7 @@ describe('workspaceRouter', () => {
     mockBuildSessionSummaries.mockReturnValue([{ id: 's1', status: 'IDLE' }]);
     mockHasWorkingSessionSummary.mockReturnValue(false);
     mockDeriveWorkspaceSidebarStatus.mockReturnValue({ activityState: 'IDLE', ciState: 'NONE' });
+    mockComputeKanbanColumn.mockReturnValue('WAITING');
   });
 
   it('lists workspaces and returns enriched workspace details', async () => {
@@ -171,8 +174,10 @@ describe('workspaceRouter', () => {
       status: WorkspaceStatus.READY,
       prUrl: null,
       prState: PRState.NONE,
-      prCiStatus: null,
+      prCiStatus: 'UNKNOWN',
+      ratchetEnabled: false,
       ratchetState: RatchetState.IDLE,
+      hasHadSessions: true,
       agentSessions: [],
     };
     mockWorkspaceDataService.findByProjectId.mockResolvedValue([workspace]);

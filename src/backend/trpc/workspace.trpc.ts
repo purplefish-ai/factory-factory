@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { ratchetService } from '@/backend/domains/ratchet';
 import { sessionProviderResolverService, sessionService } from '@/backend/domains/session';
 import {
+  computeKanbanColumn,
   deriveWorkspaceFlowStateFromWorkspace,
   WorkspaceCreationService,
   workspaceDataService,
@@ -14,6 +15,7 @@ import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
+import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
@@ -133,21 +135,29 @@ export const workspaceRouter = router({
     const sessionSummaries = buildWorkspaceSessionSummaries(workspace.agentSessions ?? [], (id) =>
       sessionService.getRuntimeSnapshot(id)
     );
-    const isSessionWorking = hasWorkingSessionSummary(sessionSummaries);
-    const isWorking = isSessionWorking || flowState.isWorking;
-    return {
-      ...workspace,
-      sessionSummaries,
-      sidebarStatus: deriveWorkspaceSidebarStatus({
-        isWorking,
+    const derivedState = assembleWorkspaceDerivedState(
+      {
+        lifecycle: workspace.status,
         prUrl: workspace.prUrl,
         prState: workspace.prState,
         prCiStatus: workspace.prCiStatus,
         ratchetState: workspace.ratchetState,
-      }),
-      ratchetButtonAnimated: flowState.shouldAnimateRatchetButton,
-      flowPhase: flowState.phase,
-      ciObservation: flowState.ciObservation,
+        hasHadSessions: workspace.hasHadSessions,
+        sessionIsWorking: hasWorkingSessionSummary(sessionSummaries),
+        flowState,
+      },
+      {
+        computeKanbanColumn,
+        deriveSidebarStatus: deriveWorkspaceSidebarStatus,
+      }
+    );
+    return {
+      ...workspace,
+      sessionSummaries,
+      sidebarStatus: derivedState.sidebarStatus,
+      ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
+      flowPhase: derivedState.flowPhase,
+      ciObservation: derivedState.ciObservation,
     };
   }),
 
