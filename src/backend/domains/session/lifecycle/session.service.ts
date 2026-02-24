@@ -72,6 +72,7 @@ export class SessionService {
   private workspaceBridge: SessionWorkspaceBridge | null = null;
   /** Optional callback invoked after an ACP prompt turn settles. */
   private promptTurnCompleteHandler: PromptTurnCompleteHandler | null = null;
+  private readonly promptTurnCompleteTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
   /**
    * Configure cross-domain bridges. Called once at startup by orchestration layer.
@@ -84,6 +85,9 @@ export class SessionService {
 
   setPromptTurnCompleteHandler(handler: PromptTurnCompleteHandler | null): void {
     this.promptTurnCompleteHandler = handler;
+    if (!handler) {
+      this.clearAllScheduledPromptTurnCompletions();
+    }
   }
 
   private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
@@ -124,6 +128,7 @@ export class SessionService {
         }
       },
       onExit: async (sid: string, exitCode: number | null) => {
+        this.clearScheduledPromptTurnCompletion(sid);
         // Clean up permission bridge, streaming state, and workspace mapping on exit
         this.acpEventProcessor.clearSessionState(sid);
         this.sessionPermissionService.cancelPendingRequests(sid);
@@ -354,6 +359,7 @@ export class SessionService {
     sessionId: string,
     options?: { cleanupTransientRatchetSession?: boolean }
   ): Promise<void> {
+    this.clearScheduledPromptTurnCompletion(sessionId);
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
 
@@ -732,9 +738,12 @@ export class SessionService {
       return;
     }
 
-    setTimeout(() => {
+    this.clearScheduledPromptTurnCompletion(sessionId);
+    const timeout = setTimeout(() => {
+      this.promptTurnCompleteTimeouts.delete(sessionId);
       void this.notifyPromptTurnComplete(sessionId);
     }, 0);
+    this.promptTurnCompleteTimeouts.set(sessionId, timeout);
   }
 
   private async notifyPromptTurnComplete(sessionId: string): Promise<void> {
@@ -750,6 +759,23 @@ export class SessionService {
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  private clearScheduledPromptTurnCompletion(sessionId: string): void {
+    const timeout = this.promptTurnCompleteTimeouts.get(sessionId);
+    if (!timeout) {
+      return;
+    }
+
+    clearTimeout(timeout);
+    this.promptTurnCompleteTimeouts.delete(sessionId);
+  }
+
+  private clearAllScheduledPromptTurnCompletions(): void {
+    for (const timeout of this.promptTurnCompleteTimeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.promptTurnCompleteTimeouts.clear();
   }
 
   /**
@@ -986,6 +1012,7 @@ export class SessionService {
    * @param _timeoutMs - Timeout (unused, kept for API compatibility)
    */
   async stopAllClients(_timeoutMs = 5000): Promise<void> {
+    this.clearAllScheduledPromptTurnCompletions();
     try {
       await this.runtimeManager.stopAllClients();
     } catch (error) {

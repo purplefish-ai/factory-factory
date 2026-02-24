@@ -1263,6 +1263,27 @@ describe('SessionService', () => {
     }
   });
 
+  it('cancels scheduled prompt-turn completion callback when session stops first', async () => {
+    vi.useFakeTimers();
+    try {
+      const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
+      sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
+      vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({
+        stopReason: 'end_turn',
+      } as never);
+      vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+      vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+      await sessionService.sendAcpMessage('session-1', 'hello');
+      await sessionService.stopSession('session-1');
+
+      await vi.runOnlyPendingTimersAsync();
+      expect(onPromptTurnComplete).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('swallows prompt-turn completion callback failures', async () => {
     vi.useFakeTimers();
     try {
