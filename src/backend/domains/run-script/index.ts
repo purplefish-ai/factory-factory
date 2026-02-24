@@ -6,7 +6,7 @@
 export type { RunScriptWorkspaceBridge } from './bridges';
 
 // Run script execution
-export { RunScriptService, runScriptService } from './run-script.service';
+export { createRunScriptService, RunScriptService } from './run-script.service';
 
 // State machine
 export {
