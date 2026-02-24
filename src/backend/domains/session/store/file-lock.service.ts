@@ -18,6 +18,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { summarizeZodIssues } from '@/backend/domains/session/zod-issue-summary';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from '@/backend/services/constants';
@@ -249,8 +250,28 @@ export class FileLockService {
 
     try {
       const content = await fs.readFile(lockFilePath, 'utf-8');
-      const parsed = JSON.parse(content);
-      const persisted = persistedLockStoreSchema.parse(parsed);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch (error) {
+        logger.warn('Failed to parse lock store JSON', {
+          worktreePath,
+          lockFilePath,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return locks;
+      }
+
+      const persistedResult = persistedLockStoreSchema.safeParse(parsed);
+      if (!persistedResult.success) {
+        logger.warn('Lock store JSON failed schema validation', {
+          worktreePath,
+          lockFilePath,
+          issues: summarizeZodIssues(persistedResult.error.issues),
+        });
+        return locks;
+      }
+      const persisted = persistedResult.data;
 
       const now = new Date();
       for (const lock of persisted.locks) {

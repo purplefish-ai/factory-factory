@@ -2,6 +2,7 @@ import { access, readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { summarizeZodIssues } from '@/backend/domains/session/zod-issue-summary';
 import { createLogger } from '@/backend/services/logger.service';
 import type { HistoryMessage, ToolResultContentValue } from '@/shared/acp-protocol';
 import { readNonEmptyJsonlLines } from './session-history-jsonl-reader';
@@ -296,16 +297,34 @@ function parseContentAsHistory(
   return messages;
 }
 
-function parseHistoryEntry(line: string): ClaudeSessionHistoryEntry | null {
+function parseHistoryEntry(params: {
+  line: string;
+  filePath: string;
+  lineNumber: number;
+}): ClaudeSessionHistoryEntry | null {
   let parsedLine: unknown;
   try {
-    parsedLine = JSON.parse(line);
-  } catch {
+    parsedLine = JSON.parse(params.line);
+  } catch (error) {
+    logger.warn('Skipping malformed Claude history JSON line', {
+      filePath: params.filePath,
+      lineNumber: params.lineNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 
   const parsedEntry = ClaudeHistoryEntrySchema.safeParse(parsedLine);
-  return parsedEntry.success ? parsedEntry.data : null;
+  if (!parsedEntry.success) {
+    logger.warn('Skipping Claude history line that failed schema validation', {
+      filePath: params.filePath,
+      lineNumber: params.lineNumber,
+      issues: summarizeZodIssues(parsedEntry.error.issues),
+    });
+    return null;
+  }
+
+  return parsedEntry.data;
 }
 
 function resolveSessionRole(entry: ClaudeSessionHistoryEntry): 'assistant' | 'user' | null {
@@ -424,7 +443,7 @@ class ClaudeSessionHistoryLoaderService {
     await readNonEmptyJsonlLines({
       filePath,
       onLine: (trimmed, lineNumber) => {
-        const entry = parseHistoryEntry(trimmed);
+        const entry = parseHistoryEntry({ line: trimmed, filePath, lineNumber });
         if (!(entry && isEntryEligible(entry, providerSessionId))) {
           return;
         }
