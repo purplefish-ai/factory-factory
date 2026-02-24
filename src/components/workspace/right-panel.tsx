@@ -1,4 +1,4 @@
-import { Camera, FileQuestion, Files, ListTodo, Play, Plus, Terminal } from 'lucide-react';
+import { Camera, FileQuestion, Files, ListTodo, Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/components/chat';
@@ -30,9 +30,14 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // =============================================================================
 
 type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots';
+type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
 interface PersistedTopPanelState {
   topTab: TopPanelTab;
+}
+
+function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
+  return tab === 'setup-logs' || tab === 'dev-logs' || tab === 'post-run-logs';
 }
 
 function parseStoredTopTab(value: string | null): TopPanelTab | null {
@@ -185,6 +190,9 @@ export function RightPanel({
   // Terminal tab state lifted up from TerminalPanel for inline rendering
   const [terminalTabState, setTerminalTabState] = useState<TerminalTabState | null>(null);
 
+  // Track last selected logs subtab for Logs tab navigation
+  const [lastLogsTab, setLastLogsTab] = useState<LogsBottomTab>('setup-logs');
+
   const handleTerminalStateChange = useCallback((state: TerminalTabState) => {
     setTerminalTabState(state);
   }, []);
@@ -222,6 +230,9 @@ export function RightPanel({
     // Reset terminal tab state when workspace changes
     setTerminalTabState(null);
 
+    // Reset logs subtab selection to default when workspace changes
+    setLastLogsTab('setup-logs');
+
     const persisted = loadPersistedTopPanelState(workspaceId);
     setActiveTopTab(persisted.topTab);
   }, [workspaceId]);
@@ -256,6 +267,43 @@ export function RightPanel({
     [setActiveBottomTab]
   );
 
+  useEffect(() => {
+    if (!isLogsBottomTab(activeBottomTab)) {
+      return;
+    }
+    setLastLogsTab(activeBottomTab);
+  }, [activeBottomTab]);
+
+  const handleLogsTabChange = useCallback(() => {
+    handleBottomTabChange(lastLogsTab);
+  }, [handleBottomTabChange, lastLogsTab]);
+
+  const handleLogsSubTabChange = useCallback(
+    (tab: LogsBottomTab) => {
+      setLastLogsTab(tab);
+      handleBottomTabChange(tab);
+    },
+    [handleBottomTabChange]
+  );
+
+  const isLogsActive = isLogsBottomTab(activeBottomTab);
+  const activeLogsTab = isLogsBottomTab(activeBottomTab) ? activeBottomTab : lastLogsTab;
+
+  const setupLogsStatus = getSetupLogsStatus(initStatus?.status);
+  const devLogsStatus = getStreamingLogsStatus({
+    connected: devLogs.connected,
+    hasDisconnected: devLogs.hasDisconnected,
+  });
+  const postRunLogsStatus = getStreamingLogsStatus({
+    connected: postRunLogs.connected,
+    hasDisconnected: postRunLogs.hasDisconnected,
+  });
+  const logsGroupStatus = getLogsGroupStatus({
+    setupLogsStatus,
+    devLogsStatus,
+    postRunLogsStatus,
+  });
+
   return (
     <ResizablePanelGroup
       direction="vertical"
@@ -275,42 +323,21 @@ export function RightPanel({
 
       <ResizableHandle direction="vertical" />
 
-      {/* Bottom Panel: Terminal / Dev Logs */}
+      {/* Bottom Panel: Terminal / Logs */}
       <ResizablePanel defaultSize="40%" minSize="15%">
         <div className="flex flex-col h-full min-h-0">
           {/* Unified tab bar with terminal tabs inline */}
-          <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
+          <div
+            className={cn(
+              'flex items-center gap-0.5 p-1 bg-muted/50 min-w-0',
+              !isLogsActive && 'border-b'
+            )}
+          >
             <TabButton
-              label="Setup Logs"
-              icon={<Play className="h-3.5 w-3.5" />}
-              isActive={activeBottomTab === 'setup-logs'}
-              onSelect={() => handleBottomTabChange('setup-logs')}
-            />
-            <TabButton
-              label="Dev Logs"
-              icon={
-                <span
-                  className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    devLogs.connected ? 'bg-green-500' : 'bg-red-500'
-                  )}
-                />
-              }
-              isActive={activeBottomTab === 'dev-logs'}
-              onSelect={() => handleBottomTabChange('dev-logs')}
-            />
-            <TabButton
-              label="Post-Run Logs"
-              icon={
-                <span
-                  className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    postRunLogs.connected ? 'bg-green-500' : 'bg-red-500'
-                  )}
-                />
-              }
-              isActive={activeBottomTab === 'post-run-logs'}
-              onSelect={() => handleBottomTabChange('post-run-logs')}
+              label="Logs"
+              icon={<StatusDot status={logsGroupStatus} />}
+              isActive={isLogsActive}
+              onSelect={handleLogsTabChange}
             />
             {/* Show Terminal tab only if no terminals are open, otherwise show inline terminal tabs */}
             {activeBottomTab === 'terminal' &&
@@ -337,6 +364,29 @@ export function RightPanel({
               </>
             )}
           </div>
+
+          {isLogsActive && (
+            <div className="flex items-center gap-0.5 p-1 bg-muted/50 border-b min-w-0">
+              <TabButton
+                label="Setup"
+                icon={<StatusDot status={setupLogsStatus} />}
+                isActive={activeLogsTab === 'setup-logs'}
+                onSelect={() => handleLogsSubTabChange('setup-logs')}
+              />
+              <TabButton
+                label="Dev"
+                icon={<StatusDot status={devLogsStatus} />}
+                isActive={activeLogsTab === 'dev-logs'}
+                onSelect={() => handleLogsSubTabChange('dev-logs')}
+              />
+              <TabButton
+                label="Post-Run"
+                icon={<StatusDot status={postRunLogsStatus} />}
+                isActive={activeLogsTab === 'post-run-logs'}
+                onSelect={() => handleLogsSubTabChange('post-run-logs')}
+              />
+            </div>
+          )}
 
           {/* Content */}
           <div className="flex-1 overflow-hidden">
@@ -377,6 +427,75 @@ export function RightPanel({
 // =============================================================================
 // Terminal Components
 // =============================================================================
+
+type StatusDotStatus = 'success' | 'pending' | 'error';
+
+interface StatusDotProps {
+  status: StatusDotStatus;
+}
+
+function StatusDot({ status }: StatusDotProps) {
+  return (
+    <span
+      className={cn(
+        'w-1.5 h-1.5 rounded-full',
+        status === 'success' && 'bg-green-500',
+        status === 'pending' && 'bg-yellow-500 animate-pulse',
+        status === 'error' && 'bg-red-500'
+      )}
+    />
+  );
+}
+
+function getSetupLogsStatus(status: string | undefined): StatusDotStatus {
+  if (status === 'READY' || status === 'ARCHIVED') {
+    return 'success';
+  }
+  if (status === 'FAILED') {
+    return 'error';
+  }
+  return 'pending';
+}
+
+function getStreamingLogsStatus({
+  connected,
+  hasDisconnected,
+}: {
+  connected: boolean;
+  hasDisconnected: boolean;
+}): StatusDotStatus {
+  if (connected) {
+    return 'success';
+  }
+  if (hasDisconnected) {
+    return 'error';
+  }
+  return 'pending';
+}
+
+function getLogsGroupStatus({
+  setupLogsStatus,
+  devLogsStatus,
+  postRunLogsStatus,
+}: {
+  setupLogsStatus: StatusDotStatus;
+  devLogsStatus: StatusDotStatus;
+  postRunLogsStatus: StatusDotStatus;
+}): StatusDotStatus {
+  if (setupLogsStatus === 'error') {
+    return 'error';
+  }
+  if (setupLogsStatus === 'pending') {
+    return 'pending';
+  }
+  if (devLogsStatus === 'error' || postRunLogsStatus === 'error') {
+    return 'error';
+  }
+  if (devLogsStatus === 'pending' || postRunLogsStatus === 'pending') {
+    return 'pending';
+  }
+  return 'success';
+}
 
 interface NewTerminalButtonProps {
   onNewTab: () => void;

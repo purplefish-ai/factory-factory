@@ -16,6 +16,7 @@ type PostRunLogsMessage = z.infer<typeof PostRunLogsMessageSchema>;
 
 interface UsePostRunLogsResult {
   connected: boolean;
+  hasDisconnected: boolean;
   output: string;
   outputEndRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -33,6 +34,7 @@ interface UsePostRunLogsResult {
  */
 export function usePostRunLogs(workspaceId: string): UsePostRunLogsResult {
   const [output, setOutput] = useState<string>('');
+  const [hasDisconnected, setHasDisconnected] = useState(false);
   const outputEndRef = useRef<HTMLDivElement | null>(null);
 
   const url = buildWebSocketUrl('/post-run-logs', { workspaceId });
@@ -58,10 +60,12 @@ export function usePostRunLogs(workspaceId: string): UsePostRunLogsResult {
   );
 
   const handleConnected = useCallback(() => {
+    setHasDisconnected(false);
     setOutput((prev) => (prev ? `${prev}Reconnected!\n\n` : 'Connected!\n\n'));
   }, []);
 
   const handleDisconnected = useCallback(() => {
+    setHasDisconnected(true);
     setOutput((prev) => `${prev}Disconnected. Reconnecting...\n`);
   }, []);
 
@@ -73,5 +77,5 @@ export function usePostRunLogs(workspaceId: string): UsePostRunLogsResult {
     queuePolicy: 'drop',
   });
 
-  return { connected, output, outputEndRef };
+  return { connected, hasDisconnected, output, outputEndRef };
 }

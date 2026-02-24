@@ -16,6 +16,7 @@ type DevLogsMessage = z.infer<typeof DevLogsMessageSchema>;
 
 interface UseDevLogsResult {
   connected: boolean;
+  hasDisconnected: boolean;
   output: string;
   outputEndRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -38,6 +39,7 @@ interface UseDevLogsResult {
  */
 export function useDevLogs(workspaceId: string): UseDevLogsResult {
   const [output, setOutput] = useState<string>('');
+  const [hasDisconnected, setHasDisconnected] = useState(false);
   const outputEndRef = useRef<HTMLDivElement | null>(null);
 
   const url = buildWebSocketUrl('/dev-logs', { workspaceId });
@@ -64,10 +66,12 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
   );
 
   const handleConnected = useCallback(() => {
+    setHasDisconnected(false);
     setOutput((prev) => (prev ? `${prev}Reconnected!\n\n` : 'Connected!\n\n'));
   }, []);
 
   const handleDisconnected = useCallback(() => {
+    setHasDisconnected(true);
     setOutput((prev) => `${prev}Disconnected. Reconnecting...\n`);
   }, []);
 
@@ -79,5 +83,5 @@ export function useDevLogs(workspaceId: string): UseDevLogsResult {
     queuePolicy: 'drop',
   });
 
-  return { connected, output, outputEndRef };
+  return { connected, hasDisconnected, output, outputEndRef };
 }
