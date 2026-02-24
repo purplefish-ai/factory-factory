@@ -16,6 +16,7 @@ import { IssueDetailsSheet } from './issue-details-sheet';
 import type { WorkspaceWithKanban } from './kanban-card';
 import { type ColumnConfig, getKanbanColumns, KanbanColumn } from './kanban-column';
 import { useKanban } from './kanban-context';
+import { QuickChatSheet } from './quick-chat-sheet';
 
 export function KanbanControls() {
   const { syncAndRefetch, isSyncing } = useKanban();
@@ -63,6 +64,9 @@ export function KanbanBoard() {
     isBulkArchiving,
     showInlineForm,
     setShowInlineForm,
+    quickChatWorkspaceId,
+    openQuickChat,
+    closeQuickChat,
   } = useKanban();
 
   const isMobile = useIsMobile();
@@ -239,9 +243,12 @@ export function KanbanBoard() {
               onArchive={archiveWorkspace}
               onBulkArchive={() => handleBulkArchive(activeColumn.id)}
               isBulkArchiving={isBulkArchiving}
+              onOpenQuickChat={openQuickChat}
             />
           )}
         </div>
+
+        <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
       </div>
     );
   }
@@ -283,6 +290,7 @@ export function KanbanBoard() {
               onArchive={archiveWorkspace}
               onBulkArchive={() => handleBulkArchive(column.id)}
               isBulkArchiving={isBulkArchiving}
+              onOpenQuickChat={openQuickChat}
             />
           );
         })}
@@ -298,6 +306,8 @@ export function KanbanBoard() {
         warningText="Warning: Some workspaces may have uncommitted changes and they will be committed before archiving."
         checkboxLabel="Commit uncommitted changes before archiving"
       />
+
+      <QuickChatSheet workspaceId={quickChatWorkspaceId} onClose={closeQuickChat} />
     </>
   );
 }

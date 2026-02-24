@@ -34,6 +34,7 @@ interface SessionTabBarProps {
   onCloseSession: (sessionId: string) => void;
   disabled?: boolean;
   className?: string;
+  readOnly?: boolean;
 }
 
 // =============================================================================
@@ -94,6 +95,7 @@ interface SessionTabProps {
   onSelect: () => void;
   onClose: () => void;
   disabled?: boolean;
+  readOnly?: boolean;
 }
 
 function SessionTab({
@@ -104,6 +106,7 @@ function SessionTab({
   onSelect,
   onClose,
   disabled,
+  readOnly,
 }: SessionTabProps) {
   const StatusIcon = getStatusIcon(session.status, isRunning);
 
@@ -154,22 +157,24 @@ function SessionTab({
 
       <span className="truncate max-w-[120px]">{displayName}</span>
 
-      {/* Close button - visible on hover */}
-      <button
-        type="button"
-        onClick={handleClose}
-        disabled={disabled}
-        className={cn(
-          'ml-1 rounded p-0.5 transition-opacity',
-          'opacity-100 md:opacity-0',
-          'hover:bg-muted-foreground/20 md:focus-visible:opacity-100',
-          'md:group-hover:opacity-100',
-          disabled && 'pointer-events-none'
-        )}
-        aria-label={`Close ${displayName}`}
-      >
-        <X className="h-3 w-3" />
-      </button>
+      {/* Close button - visible on hover, hidden in readOnly mode */}
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={handleClose}
+          disabled={disabled}
+          className={cn(
+            'ml-1 rounded p-0.5 transition-opacity',
+            'opacity-100 md:opacity-0',
+            'hover:bg-muted-foreground/20 md:focus-visible:opacity-100',
+            'md:group-hover:opacity-100',
+            disabled && 'pointer-events-none'
+          )}
+          aria-label={`Close ${displayName}`}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
     </div>
   );
 }
@@ -187,6 +192,7 @@ export function SessionTabBar({
   onCloseSession,
   disabled = false,
   className,
+  readOnly = false,
 }: SessionTabBarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
@@ -285,6 +291,7 @@ export function SessionTabBar({
                 onSelect={() => onSelectSession(session.id)}
                 onClose={() => onCloseSession(session.id)}
                 disabled={disabled}
+                readOnly={readOnly}
               />
             );
           })
@@ -304,16 +311,18 @@ export function SessionTabBar({
         </Button>
       )}
 
-      {/* New session button */}
-      <button
-        type="button"
-        onClick={onCreateSession}
-        disabled={disabled}
-        title="New Session"
-        className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
-      >
-        <Plus className="h-4 w-4" />
-      </button>
+      {/* New session button — hidden in readOnly mode */}
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={onCreateSession}
+          disabled={disabled}
+          title="New Session"
+          className="h-7 w-7 shrink-0 ml-1 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-sidebar-accent hover:text-foreground disabled:opacity-50 disabled:pointer-events-none"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }

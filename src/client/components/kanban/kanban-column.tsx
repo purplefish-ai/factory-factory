@@ -46,6 +46,7 @@ interface KanbanColumnProps {
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   onBulkArchive?: () => void;
   isBulkArchiving?: boolean;
+  onOpenQuickChat?: (workspaceId: string) => void;
 }
 
 export function KanbanColumn({
@@ -57,6 +58,7 @@ export function KanbanColumn({
   onArchive,
   onBulkArchive,
   isBulkArchiving,
+  onOpenQuickChat,
 }: KanbanColumnProps) {
   const isEmpty = workspaces.length === 0;
   const showBulkArchiveButton = column.id === 'DONE' && !isEmpty;
@@ -105,6 +107,7 @@ export function KanbanColumn({
                 onToggleRatcheting={onToggleRatcheting}
                 isTogglePending={togglingWorkspaceId === workspace.id}
                 onArchive={onArchive}
+                onOpenQuickChat={onOpenQuickChat}
               />
             </div>
           ))
