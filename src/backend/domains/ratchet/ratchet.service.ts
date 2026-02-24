@@ -894,6 +894,8 @@ class RatchetService extends EventEmitter {
       workspace,
       sessionBridge: this.session,
       snapshotBridge: this.snapshot,
+      resetDispatchState: (workspaceId) => this.resetDispatchState(workspaceId),
+      clearActiveSession: (workspaceId) => this.clearActiveSession(workspaceId),
       logger,
     });
   }
@@ -981,7 +983,24 @@ class RatchetService extends EventEmitter {
       workspace,
       prStateInfo,
       sessionBridge: this.session,
+      setActiveSession: (workspaceId, sessionId) => this.setActiveSession(workspaceId, sessionId),
+      clearActiveSession: (workspaceId) => this.clearActiveSession(workspaceId),
       logger,
+    });
+  }
+
+  private async setActiveSession(workspaceId: string, sessionId: string): Promise<void> {
+    await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: sessionId });
+  }
+
+  private async clearActiveSession(workspaceId: string): Promise<void> {
+    await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: null });
+  }
+
+  private async resetDispatchState(workspaceId: string): Promise<void> {
+    await workspaceAccessor.update(workspaceId, {
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: null,
     });
   }
 }

@@ -1,6 +1,5 @@
 import type { SessionProvider } from '@prisma-gen/client';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import type { createLogger } from '@/backend/services/logger.service';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
@@ -12,25 +11,26 @@ type Logger = ReturnType<typeof createLogger>;
 async function clearFailedRatchetDispatch(params: {
   workspace: WorkspaceWithPR;
   snapshotBridge: RatchetPRSnapshotBridge;
+  resetDispatchState: (workspaceId: string) => Promise<void>;
   reason: string;
   logger: Logger;
 }): Promise<void> {
-  const { workspace, snapshotBridge, reason, logger } = params;
+  const { workspace, snapshotBridge, resetDispatchState, reason, logger } = params;
   logger.info('Clearing failed ratchet dispatch, resetting state for retry', {
     workspaceId: workspace.id,
     sessionId: workspace.ratchetActiveSessionId,
     reason,
   });
 
-  await workspaceAccessor.update(workspace.id, {
-    ratchetActiveSessionId: null,
-    ratchetLastCiRunId: null,
-  });
+  await resetDispatchState(workspace.id);
   await snapshotBridge.recordReviewCheck(workspace.id, null);
 }
 
-async function clearActiveRatchetSession(workspaceId: string): Promise<void> {
-  await workspaceAccessor.update(workspaceId, { ratchetActiveSessionId: null });
+async function clearActiveRatchetSession(
+  workspaceId: string,
+  clearActiveSession: (workspaceId: string) => Promise<void>
+): Promise<void> {
+  await clearActiveSession(workspaceId);
 }
 
 async function safeStopSession(params: {
@@ -95,9 +95,18 @@ export async function getActiveRatchetSession(params: {
   workspace: WorkspaceWithPR;
   sessionBridge: RatchetSessionBridge;
   snapshotBridge: RatchetPRSnapshotBridge;
+  resetDispatchState: (workspaceId: string) => Promise<void>;
+  clearActiveSession: (workspaceId: string) => Promise<void>;
   logger: Logger;
 }): Promise<RatchetAction | null> {
-  const { workspace, sessionBridge, snapshotBridge, logger } = params;
+  const {
+    workspace,
+    sessionBridge,
+    snapshotBridge,
+    resetDispatchState,
+    clearActiveSession,
+    logger,
+  } = params;
 
   if (!workspace.ratchetActiveSessionId) {
     return null;
@@ -112,6 +121,7 @@ export async function getActiveRatchetSession(params: {
     await clearFailedRatchetDispatch({
       workspace,
       snapshotBridge,
+      resetDispatchState,
       reason: 'session not found in database',
       logger,
     });
@@ -122,6 +132,7 @@ export async function getActiveRatchetSession(params: {
     await clearFailedRatchetDispatch({
       workspace,
       snapshotBridge,
+      resetDispatchState,
       reason: `provider mismatch: expected ${resolvedRatchetProvider}, got ${session.provider}`,
       logger,
     });
@@ -140,6 +151,7 @@ export async function getActiveRatchetSession(params: {
     await clearFailedRatchetDispatch({
       workspace,
       snapshotBridge,
+      resetDispatchState,
       reason: `session status is ${session.status}`,
       logger,
     });
@@ -150,6 +162,7 @@ export async function getActiveRatchetSession(params: {
     await clearFailedRatchetDispatch({
       workspace,
       snapshotBridge,
+      resetDispatchState,
       reason: 'session process is not running',
       logger,
     });
@@ -158,7 +171,7 @@ export async function getActiveRatchetSession(params: {
 
   // Ratchet session has completed its current unit of work: close it to avoid lingering idle agents.
   if (!sessionBridge.isSessionWorking(session.id)) {
-    await clearActiveRatchetSession(workspace.id);
+    await clearActiveRatchetSession(workspace.id, clearActiveSession);
     await stopCompletedRatchetSession({
       workspaceId: workspace.id,
       sessionId: session.id,

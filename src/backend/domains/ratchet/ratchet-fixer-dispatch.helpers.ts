@@ -1,5 +1,4 @@
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
@@ -13,9 +12,12 @@ export async function triggerRatchetFixer(params: {
   workspace: WorkspaceWithPR;
   prStateInfo: PRStateInfo;
   sessionBridge: RatchetSessionBridge;
+  setActiveSession: (workspaceId: string, sessionId: string) => Promise<void>;
+  clearActiveSession: (workspaceId: string) => Promise<void>;
   logger: Logger;
 }): Promise<RatchetAction> {
-  const { workspace, prStateInfo, sessionBridge, logger } = params;
+  const { workspace, prStateInfo, sessionBridge, setActiveSession, clearActiveSession, logger } =
+    params;
 
   try {
     const result = await fixerSessionService.acquireAndDispatch({
@@ -42,16 +44,14 @@ export async function triggerRatchetFixer(params: {
           workspaceId: workspace.id,
           sessionId: result.sessionId,
         });
-        await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: null });
+        await clearActiveSession(workspace.id);
         if (sessionBridge.isSessionRunning(result.sessionId)) {
           await sessionBridge.stopSession(result.sessionId);
         }
         return { type: 'ERROR', error: 'Failed to deliver initial ratchet prompt' };
       }
 
-      await workspaceAccessor.update(workspace.id, {
-        ratchetActiveSessionId: result.sessionId,
-      });
+      await setActiveSession(workspace.id, result.sessionId);
 
       return {
         type: 'TRIGGERED_FIXER',
@@ -61,7 +61,7 @@ export async function triggerRatchetFixer(params: {
     }
 
     if (result.status === 'already_active') {
-      await workspaceAccessor.update(workspace.id, { ratchetActiveSessionId: result.sessionId });
+      await setActiveSession(workspace.id, result.sessionId);
       return { type: 'FIXER_ACTIVE', sessionId: result.sessionId };
     }
 
