@@ -11,8 +11,9 @@
  *   PROVISIONING → FAILED (error)
  *   FAILED → PROVISIONING (retry startup script, with count check)
  *   FAILED → NEW (retry from scratch when worktree creation failed)
- *   READY → ARCHIVED
- *   FAILED → ARCHIVED
+ *   READY → ARCHIVING → ARCHIVED
+ *   FAILED → ARCHIVING → ARCHIVED
+ *   ARCHIVING → READY/FAILED (rollback on archive failure)
  */
 
 import { EventEmitter } from 'node:events';
@@ -29,8 +30,9 @@ const logger = createLogger('workspace-state-machine');
 const VALID_TRANSITIONS: Record<WorkspaceStatus, WorkspaceStatus[]> = {
   NEW: ['PROVISIONING'],
   PROVISIONING: ['READY', 'FAILED'],
-  READY: ['ARCHIVED'],
-  FAILED: ['PROVISIONING', 'NEW', 'ARCHIVED'],
+  READY: ['ARCHIVING'],
+  FAILED: ['PROVISIONING', 'NEW', 'ARCHIVING'],
+  ARCHIVING: ['READY', 'FAILED', 'ARCHIVED'],
   ARCHIVED: [],
 };
 
@@ -255,11 +257,26 @@ class WorkspaceStateMachineService extends EventEmitter {
   }
 
   /**
-   * Archive a workspace.
-   * Can only archive from READY or FAILED status.
+   * Mark a workspace as archiving.
+   * Can only begin archiving from READY or FAILED status.
+   */
+  startArchiving(workspaceId: string): Promise<Workspace> {
+    return this.transition(workspaceId, 'ARCHIVING');
+  }
+
+  /**
+   * Mark an archiving workspace as fully archived.
+   */
+  markArchived(workspaceId: string): Promise<Workspace> {
+    return this.transition(workspaceId, 'ARCHIVED');
+  }
+
+  /**
+   * Backward-compatible archive helper.
+   * Expects workspace to already be in ARCHIVING state.
    */
   archive(workspaceId: string): Promise<Workspace> {
-    return this.transition(workspaceId, 'ARCHIVED');
+    return this.markArchived(workspaceId);
   }
 
   /**

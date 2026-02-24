@@ -3,6 +3,7 @@ export const WorkspaceStatus = {
   PROVISIONING: 'PROVISIONING',
   READY: 'READY',
   FAILED: 'FAILED',
+  ARCHIVING: 'ARCHIVING',
   ARCHIVED: 'ARCHIVED',
 } as const;
 export type WorkspaceStatus = (typeof WorkspaceStatus)[keyof typeof WorkspaceStatus];

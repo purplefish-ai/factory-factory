@@ -16,7 +16,12 @@ export function SetupLogsPanel({ workspaceId, className }: SetupLogsPanelProps) 
     {
       refetchInterval: (query) => {
         const status = query.state.data?.status;
-        return status === 'READY' || status === 'FAILED' || status === 'ARCHIVED' ? false : 1000;
+        return status === 'READY' ||
+          status === 'FAILED' ||
+          status === 'ARCHIVING' ||
+          status === 'ARCHIVED'
+          ? false
+          : 1000;
       },
     }
   );

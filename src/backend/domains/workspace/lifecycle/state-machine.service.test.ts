@@ -56,16 +56,28 @@ describe('WorkspaceStateMachineService', () => {
       expect(workspaceStateMachine.isValidTransition('FAILED', 'PROVISIONING')).toBe(true);
     });
 
-    it('should allow FAILED → ARCHIVED', () => {
-      expect(workspaceStateMachine.isValidTransition('FAILED', 'ARCHIVED')).toBe(true);
+    it('should allow FAILED → ARCHIVING', () => {
+      expect(workspaceStateMachine.isValidTransition('FAILED', 'ARCHIVING')).toBe(true);
     });
 
     it('should allow FAILED → NEW (reset for worktree retry)', () => {
       expect(workspaceStateMachine.isValidTransition('FAILED', 'NEW')).toBe(true);
     });
 
-    it('should allow READY → ARCHIVED', () => {
-      expect(workspaceStateMachine.isValidTransition('READY', 'ARCHIVED')).toBe(true);
+    it('should allow READY → ARCHIVING', () => {
+      expect(workspaceStateMachine.isValidTransition('READY', 'ARCHIVING')).toBe(true);
+    });
+
+    it('should allow ARCHIVING → ARCHIVED', () => {
+      expect(workspaceStateMachine.isValidTransition('ARCHIVING', 'ARCHIVED')).toBe(true);
+    });
+
+    it('should allow ARCHIVING → READY rollback', () => {
+      expect(workspaceStateMachine.isValidTransition('ARCHIVING', 'READY')).toBe(true);
+    });
+
+    it('should allow ARCHIVING → FAILED rollback', () => {
+      expect(workspaceStateMachine.isValidTransition('ARCHIVING', 'FAILED')).toBe(true);
     });
 
     it('should not allow NEW → READY (skipping PROVISIONING)', () => {
@@ -78,6 +90,10 @@ describe('WorkspaceStateMachineService', () => {
 
     it('should not allow READY → PROVISIONING', () => {
       expect(workspaceStateMachine.isValidTransition('READY', 'PROVISIONING')).toBe(false);
+    });
+
+    it('should not allow ARCHIVING → NEW', () => {
+      expect(workspaceStateMachine.isValidTransition('ARCHIVING', 'NEW')).toBe(false);
     });
 
     it('should not allow ARCHIVED → any state', () => {
@@ -247,21 +263,34 @@ describe('WorkspaceStateMachineService', () => {
       });
     });
 
-    it('should transition from READY to ARCHIVED', async () => {
+    it('should transition from READY to ARCHIVING', async () => {
       const workspace = { id: 'ws-1', status: 'READY' };
-      const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
 
       mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
       mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
-      const result = await workspaceStateMachine.transition('ws-1', 'ARCHIVED');
+      const result = await workspaceStateMachine.transition('ws-1', 'ARCHIVING');
 
-      expect(result.status).toBe('ARCHIVED');
+      expect(result.status).toBe('ARCHIVING');
     });
 
-    it('should transition from FAILED to ARCHIVED', async () => {
+    it('should transition from FAILED to ARCHIVING', async () => {
       const workspace = { id: 'ws-1', status: 'FAILED' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.transition('ws-1', 'ARCHIVING');
+
+      expect(result.status).toBe('ARCHIVING');
+    });
+
+    it('should transition from ARCHIVING to ARCHIVED', async () => {
+      const workspace = { id: 'ws-1', status: 'ARCHIVING' };
       const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
 
       mockFindUnique.mockResolvedValue(workspace);
@@ -445,47 +474,71 @@ describe('WorkspaceStateMachineService', () => {
     });
   });
 
-  describe('archive', () => {
-    it('should transition workspace to ARCHIVED from READY', async () => {
+  describe('startArchiving', () => {
+    it('should transition workspace to ARCHIVING from READY', async () => {
       const workspace = { id: 'ws-1', status: 'READY' };
-      const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
 
       mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
       mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
-      const result = await workspaceStateMachine.archive('ws-1');
+      const result = await workspaceStateMachine.startArchiving('ws-1');
 
-      expect(result.status).toBe('ARCHIVED');
+      expect(result.status).toBe('ARCHIVING');
     });
 
-    it('should transition workspace to ARCHIVED from FAILED', async () => {
+    it('should transition workspace to ARCHIVING from FAILED', async () => {
       const workspace = { id: 'ws-1', status: 'FAILED' };
-      const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
 
       mockFindUnique.mockResolvedValue(workspace);
       mockUpdateMany.mockResolvedValue({ count: 1 });
       mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
 
-      const result = await workspaceStateMachine.archive('ws-1');
+      const result = await workspaceStateMachine.startArchiving('ws-1');
 
-      expect(result.status).toBe('ARCHIVED');
+      expect(result.status).toBe('ARCHIVING');
     });
 
-    it('should throw error when trying to archive from NEW', async () => {
+    it('should throw error when trying to start archiving from NEW', async () => {
       const workspace = { id: 'ws-1', status: 'NEW' };
       mockFindUnique.mockResolvedValue(workspace);
 
-      await expect(workspaceStateMachine.archive('ws-1')).rejects.toThrow(
+      await expect(workspaceStateMachine.startArchiving('ws-1')).rejects.toThrow(
         WorkspaceStateMachineError
       );
     });
 
-    it('should throw error when trying to archive from PROVISIONING', async () => {
+    it('should throw error when trying to start archiving from PROVISIONING', async () => {
       const workspace = { id: 'ws-1', status: 'PROVISIONING' };
       mockFindUnique.mockResolvedValue(workspace);
 
-      await expect(workspaceStateMachine.archive('ws-1')).rejects.toThrow(
+      await expect(workspaceStateMachine.startArchiving('ws-1')).rejects.toThrow(
+        WorkspaceStateMachineError
+      );
+    });
+  });
+
+  describe('markArchived', () => {
+    it('should transition workspace to ARCHIVED from ARCHIVING', async () => {
+      const workspace = { id: 'ws-1', status: 'ARCHIVING' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVED' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.markArchived('ws-1');
+
+      expect(result.status).toBe('ARCHIVED');
+    });
+
+    it('should throw error when trying to mark archived from READY', async () => {
+      const workspace = { id: 'ws-1', status: 'READY' };
+      mockFindUnique.mockResolvedValue(workspace);
+
+      await expect(workspaceStateMachine.markArchived('ws-1')).rejects.toThrow(
         WorkspaceStateMachineError
       );
     });

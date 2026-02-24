@@ -120,7 +120,7 @@ export function WorkspaceDetailContainer() {
     useWorkspaceData({ workspaceId: workspaceId });
 
   useEffect(() => {
-    if (workspace?.status !== 'ARCHIVED') {
+    if (workspace?.status !== 'ARCHIVING' && workspace?.status !== 'ARCHIVED') {
       return;
     }
 

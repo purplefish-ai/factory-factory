@@ -214,7 +214,8 @@ function CardTitleIcons({
 
 function deriveCardState(workspace: WorkspaceWithKanban) {
   const showPR = Boolean(workspace.prState !== 'NONE' && workspace.prNumber && workspace.prUrl);
-  const isArchived = workspace.isArchived || workspace.status === 'ARCHIVED';
+  const isArchived =
+    workspace.isArchived || workspace.status === 'ARCHIVING' || workspace.status === 'ARCHIVED';
   const ratchetEnabled = workspace.ratchetEnabled ?? true;
   const sidebarStatus = deriveWorkspaceSidebarStatus({
     isWorking: workspace.isWorking,
