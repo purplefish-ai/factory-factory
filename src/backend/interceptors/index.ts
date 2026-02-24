@@ -23,5 +23,19 @@ export function registerInterceptors(): void {
   interceptorRegistry.register(prDetectionInterceptor);
 }
 
+/**
+ * Start all interceptor lifecycle hooks.
+ */
+export async function startInterceptors(): Promise<void> {
+  await interceptorRegistry.start();
+}
+
+/**
+ * Stop all interceptor lifecycle hooks.
+ */
+export async function stopInterceptors(): Promise<void> {
+  await interceptorRegistry.stop();
+}
+
 export { interceptorRegistry } from './registry';
 export type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';

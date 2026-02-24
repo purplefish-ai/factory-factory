@@ -23,12 +23,12 @@ const processedSessions = new Map<string, number>();
 // Cleanup old processed sessions entries after 24 hours
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+let cleanupInterval: ReturnType<typeof setInterval> | undefined;
 
 // Message count threshold for triggering rename (configurable via config service)
 const MESSAGE_THRESHOLD = configService.getBranchRenameMessageThreshold();
 
-// Periodically clean up old entries to prevent memory leak
-setInterval(() => {
+function cleanupProcessedSessions(): void {
   const now = Date.now();
   let cleaned = 0;
   for (const [sessionId, timestamp] of processedSessions.entries()) {
@@ -43,11 +43,28 @@ setInterval(() => {
       remaining: processedSessions.size,
     });
   }
-}, CLEANUP_INTERVAL_MS);
+}
 
 export const conversationRenameInterceptor: ToolInterceptor = {
   name: 'conversation-rename',
   tools: ['*'], // Listen to all tool completions
+
+  start(): void {
+    if (cleanupInterval) {
+      return;
+    }
+
+    cleanupInterval = setInterval(cleanupProcessedSessions, CLEANUP_INTERVAL_MS);
+  },
+
+  stop(): void {
+    if (cleanupInterval) {
+      clearInterval(cleanupInterval);
+      cleanupInterval = undefined;
+    }
+
+    processedSessions.clear();
+  },
 
   async onToolComplete(_event: ToolEvent, context: InterceptorContext): Promise<void> {
     try {

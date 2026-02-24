@@ -51,6 +51,8 @@ vi.mock('@/backend/domains/ratchet', async (importOriginal) => {
 
 vi.mock('@/backend/interceptors', () => ({
   registerInterceptors: vi.fn(),
+  startInterceptors: vi.fn(async () => undefined),
+  stopInterceptors: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/backend/trpc/index', () => ({

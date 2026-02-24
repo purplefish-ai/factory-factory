@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InterceptorContext, ToolEvent } from './types';
 
 const mockFindById = vi.fn();
@@ -51,8 +51,13 @@ function createEvent(overrides: Partial<ToolEvent>): ToolEvent {
 }
 
 describe('prePrRenameInterceptor', () => {
+  afterEach(() => {
+    prePrRenameInterceptor.stop?.();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    prePrRenameInterceptor.start?.();
     mockFindById.mockResolvedValue({
       id: 'workspace-1',
       name: 'Fix authentication bug',

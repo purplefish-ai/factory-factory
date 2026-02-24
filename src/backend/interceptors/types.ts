@@ -41,6 +41,12 @@ export interface ToolInterceptor {
   /** Tools to intercept: array of tool names or '*' for all tools */
   readonly tools: string[] | '*';
 
+  /** Optional lifecycle hook called during server startup */
+  start?(): void | Promise<void>;
+
+  /** Optional lifecycle hook called during server shutdown */
+  stop?(): void | Promise<void>;
+
   /** Called when a tool starts (before execution) */
   onToolStart?(event: ToolEvent, context: InterceptorContext): Promise<void>;
 
