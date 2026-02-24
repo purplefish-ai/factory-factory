@@ -50,6 +50,21 @@ interface VirtualizedMessageListProps {
 
 const STICK_TO_BOTTOM_THRESHOLD = 48;
 
+function getObservedBorderBoxHeight(entry: ResizeObserverEntry): number {
+  const borderBoxSize = entry.borderBoxSize;
+  const firstBox = borderBoxSize[0];
+  if (firstBox) {
+    return firstBox.blockSize;
+  }
+
+  const styles = getComputedStyle(entry.target);
+  const verticalPadding =
+    Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom);
+  const verticalBorder =
+    Number.parseFloat(styles.borderTopWidth) + Number.parseFloat(styles.borderBottomWidth);
+  return entry.contentRect.height + verticalPadding + verticalBorder;
+}
+
 // =============================================================================
 // Empty State Component
 // =============================================================================
@@ -315,7 +330,7 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       if (!entry) {
         return;
       }
-      const nextContentHeight = entry.contentRect.height;
+      const nextContentHeight = getObservedBorderBoxHeight(entry);
 
       const growthAmount = nextContentHeight - previousContentHeight;
       const grew = growthAmount > 0;
@@ -349,7 +364,11 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
       });
     });
 
-    observer.observe(content);
+    try {
+      observer.observe(content, { box: 'border-box' });
+    } catch {
+      observer.observe(content);
+    }
     return () => {
       observer.disconnect();
       if (resizeStickRafRef.current !== null) {

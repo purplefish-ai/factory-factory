@@ -125,7 +125,7 @@ async function flushAnimationFrame(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-function triggerResize(height: number) {
+function triggerResize(height: number, borderBoxHeight = height) {
   const entry = {
     contentRect: {
       width: 0,
@@ -138,6 +138,7 @@ function triggerResize(height: number) {
       left: 0,
       toJSON: () => ({}),
     },
+    borderBoxSize: [{ inlineSize: 0, blockSize: borderBoxHeight }],
   } as unknown as ResizeObserverEntry;
 
   for (const callback of resizeObserverMocks.callbacks) {
@@ -510,6 +511,54 @@ describe('VirtualizedMessageList auto-scroll behavior', () => {
     await flushAnimationFrame();
     expect(harness.viewport.scrollTop).toBe(920);
 
+    harness.cleanup();
+  });
+
+  it('keeps first growth callback pinned with border-box baseline and content-box resize data', async () => {
+    const harness = createHarness({
+      loadingSession: false,
+      messages: [makeMessage('m-1', 0)],
+      isNearBottom: true,
+    });
+
+    let scrollHeight = 640;
+    Object.defineProperty(harness.viewport, 'scrollHeight', {
+      configurable: true,
+      get: () => scrollHeight,
+    });
+    Object.defineProperty(harness.viewport, 'clientHeight', {
+      configurable: true,
+      value: 500,
+    });
+    harness.viewport.scrollTop = 120;
+
+    const content = document.querySelector('div.p-4.min-w-0');
+    expect(content).not.toBeNull();
+    if (!content) {
+      harness.cleanup();
+      return;
+    }
+    const boundingRectSpy = vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 320,
+      height: 252,
+      top: 0,
+      right: 320,
+      bottom: 252,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    await flushEffects();
+
+    scrollHeight = 720;
+    triggerResize(300, 332);
+    await flushAnimationFrame();
+
+    expect(harness.viewport.scrollTop).toBe(720);
+
+    boundingRectSpy.mockRestore();
     harness.cleanup();
   });
 
