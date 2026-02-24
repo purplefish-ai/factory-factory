@@ -28,9 +28,9 @@ import {
 
 interface InlineWorkspaceFormProps {
   projectId: string;
-  existingNames: string[];
+  existingNames?: string[];
   onCancel: () => void;
-  onCreated: () => void;
+  onCreated: (workspaceId: string) => void;
 }
 
 const ATTACHMENT_ACCEPT_TYPES = [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_TEXT_EXTENSIONS].join(',');
@@ -43,6 +43,11 @@ export function InlineWorkspaceForm({
 }: InlineWorkspaceFormProps) {
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
+  const shouldFetchExistingNames = existingNames === undefined;
+  const { data: listedWorkspaces, isLoading: isLoadingWorkspaceList } =
+    trpc.workspace.list.useQuery({ projectId }, { enabled: shouldFetchExistingNames });
+  const availableWorkspaceNames =
+    existingNames ?? listedWorkspaces?.map((workspace) => workspace.name) ?? [];
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -78,11 +83,11 @@ export function InlineWorkspaceForm({
   }, [userSettings]);
 
   const createWorkspaceMutation = trpc.workspace.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (workspace) => {
       utils.workspace.listWithKanbanState.invalidate({ projectId });
       utils.workspace.list.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
-      onCreated();
+      onCreated(workspace.id);
     },
     onError: (error) => {
       toast.error(`Failed to create workspace: ${error.message}`);
@@ -118,8 +123,8 @@ export function InlineWorkspaceForm({
   const handleLaunch = () => {
     const trimmedPrompt = initialPrompt.trim();
     const name = trimmedPrompt
-      ? generateWorkspaceNameFromPrompt(trimmedPrompt, existingNames)
-      : generateUniqueWorkspaceName(existingNames);
+      ? generateWorkspaceNameFromPrompt(trimmedPrompt, availableWorkspaceNames)
+      : generateUniqueWorkspaceName(availableWorkspaceNames);
     createWorkspaceMutation.mutate({
       type: 'MANUAL',
       projectId,
@@ -270,7 +275,11 @@ export function InlineWorkspaceForm({
               size="sm"
               className="h-7 text-xs"
               onClick={handleLaunch}
-              disabled={isCreating || isLoadingSettings}
+              disabled={
+                isCreating ||
+                isLoadingSettings ||
+                (shouldFetchExistingNames && isLoadingWorkspaceList)
+              }
             >
               {isCreating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
               Launch

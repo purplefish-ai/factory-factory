@@ -1,6 +1,6 @@
 import { CircleDot, GitBranch, GitPullRequest, Plus, Settings, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { InlineWorkspaceForm } from '@/client/components/kanban/inline-workspace-form';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import type { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
@@ -240,7 +240,7 @@ function SidebarInner({
   working: ServerWorkspace[];
   done: ServerWorkspace[];
   selectedProjectId: string | undefined;
-  existingWorkspaceNames: string[];
+  existingWorkspaceNames: string[] | undefined;
   showNewWorkspaceForm: boolean;
   onShowNewWorkspaceFormChange: (show: boolean) => void;
   canCreateWorkspace: boolean;
@@ -248,6 +248,7 @@ function SidebarInner({
   showCloseButton: boolean;
 }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   return (
     <>
@@ -275,8 +276,13 @@ function SidebarInner({
                   projectId={selectedProjectId}
                   existingNames={existingWorkspaceNames}
                   onCancel={() => onShowNewWorkspaceFormChange(false)}
-                  onCreated={() => {
+                  onCreated={(workspaceId) => {
                     onShowNewWorkspaceFormChange(false);
+                    if (navData.selectedProjectSlug) {
+                      void navigate(
+                        `/projects/${navData.selectedProjectSlug}/workspaces/${workspaceId}`
+                      );
+                    }
                     onNavigate?.();
                   }}
                 />
@@ -419,7 +425,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     working,
     done,
     selectedProjectId: navData.selectedProjectId,
-    existingWorkspaceNames: navData.serverWorkspaces?.map((workspace) => workspace.name) ?? [],
+    existingWorkspaceNames: navData.serverWorkspaces?.map((workspace) => workspace.name),
     showNewWorkspaceForm,
     onShowNewWorkspaceFormChange: setShowNewWorkspaceForm,
     canCreateWorkspace: Boolean(navData.selectedProjectId && navData.selectedProjectSlug),
