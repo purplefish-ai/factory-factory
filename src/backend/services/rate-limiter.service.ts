@@ -256,6 +256,7 @@ class RateLimiter {
       const request = this.requestQueue.shift();
       if (request) {
         request.resolve();
+        await Promise.resolve();
       }
     }
 

@@ -85,6 +85,37 @@ describe('rateLimiter', () => {
     expect(rateLimiter.getApiUsageStats().totalRequests).toBe(2);
   });
 
+  it('keeps queue processing active when a resolved queued request immediately re-queues', async () => {
+    await rateLimiter.acquireSlot('agent-1', null);
+
+    let thirdAcquire: Promise<void> | null = null;
+    const secondAcquire = rateLimiter.acquireSlot('agent-2', null).then(() => {
+      thirdAcquire = rateLimiter.acquireSlot('agent-3', null);
+      void thirdAcquire.catch(() => undefined);
+    });
+
+    await Promise.resolve();
+    expect(rateLimiter.getApiUsageStats().queueDepth).toBe(1);
+
+    getInternals().requestTimestamps = [];
+    vi.advanceTimersByTime(1000);
+    await secondAcquire;
+    await Promise.resolve();
+
+    expect(rateLimiter.getApiUsageStats().queueDepth).toBe(1);
+    expect(getInternals().isProcessingQueue).toBe(true);
+    expect(getInternals().queueProcessingPromise).not.toBeNull();
+
+    if (!thirdAcquire) {
+      throw new Error('Expected third acquire request to be queued');
+    }
+
+    getInternals().requestTimestamps = [];
+    vi.advanceTimersByTime(1000);
+    await expect(thirdAcquire).resolves.toBeUndefined();
+    expect(rateLimiter.getApiUsageStats().queueDepth).toBe(0);
+  });
+
   it('rejects when queue is full', async () => {
     rateLimiter.updateConfig({
       claudeRequestsPerMinute: 0,
