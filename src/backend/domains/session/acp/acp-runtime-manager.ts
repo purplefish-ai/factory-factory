@@ -594,8 +594,8 @@ export class AcpRuntimeManager {
       : isCodex
         ? resolveInternalCodexAcpSpawnCommand()
         : (() => {
-            const binaryName = 'claude-code-acp';
-            const packageName = '@zed-industries/claude-code-acp';
+            const binaryName = 'claude-agent-acp';
+            const packageName = '@zed-industries/claude-agent-acp';
             const binaryPath = resolveAcpBinary(packageName, binaryName);
             return {
               command: binaryPath,
