@@ -165,7 +165,7 @@ export class RunScriptService {
   ): void {
     // Handle process exit
     childProcess.on('exit', (code, signal) => {
-      void this.handleProcessExit(workspaceId, pid, code, signal).catch((error) => {
+      void this.handleProcessExit(workspaceId, childProcess, pid, code, signal).catch((error) => {
         logger.error('Failed to handle run script exit', error as Error, {
           workspaceId,
           pid,
@@ -207,11 +207,22 @@ export class RunScriptService {
 
   private async handleProcessExit(
     workspaceId: string,
+    childProcess: ChildProcess,
     pid: number,
     code: number | null,
     signal: string | null
   ): Promise<void> {
     logger.info('Run script exited', { workspaceId, pid, code, signal });
+
+    const trackedProcess = this.runningProcesses.get(workspaceId);
+    if (trackedProcess && trackedProcess !== childProcess) {
+      logger.info('Ignoring stale run script exit from non-active process', {
+        workspaceId,
+        exitingPid: pid,
+        activePid: trackedProcess.pid,
+      });
+      return;
+    }
 
     this.runningProcesses.delete(workspaceId);
     this.outputListeners.delete(workspaceId);
@@ -454,6 +465,7 @@ export class RunScriptService {
         if (childProcess || pid) {
           await this.killProcessTree(workspaceId, childProcess, pid);
           await this.killPostRunProcess(workspaceId);
+          await this.waitForProcessExit(workspaceId, childProcess, pid);
         }
         await this.completeStoppingAfterStop(workspaceId);
         await runScriptProxyService.stopTunnel(workspaceId);
@@ -502,6 +514,7 @@ export class RunScriptService {
       // Kill the process tree
       await this.killProcessTree(workspaceId, childProcess, pid);
       await this.killPostRunProcess(workspaceId);
+      await this.waitForProcessExit(workspaceId, childProcess, pid);
 
       // Transition to IDLE state via state machine (completes stopping)
       await this.completeStoppingAfterStop(workspaceId);
@@ -766,6 +779,65 @@ export class RunScriptService {
         this.runningProcesses.delete(workspaceId);
         resolve();
       });
+    });
+  }
+
+  private async waitForProcessExit(
+    workspaceId: string,
+    childProcess: ChildProcess | undefined,
+    pid: number | null
+  ): Promise<void> {
+    if (!childProcess) {
+      return;
+    }
+
+    if (childProcess.exitCode !== null) {
+      return;
+    }
+
+    if (typeof childProcess.once !== 'function' || typeof childProcess.off !== 'function') {
+      return;
+    }
+
+    const waitPid = childProcess.pid ?? pid ?? undefined;
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        logger.warn('Timed out waiting for run script process exit after stop', {
+          workspaceId,
+          pid: waitPid,
+        });
+        resolve();
+      }, 10_000);
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        childProcess.off('exit', onExit);
+        childProcess.off('error', onError);
+      };
+
+      const onExit = () => {
+        cleanup();
+        resolve();
+      };
+
+      const onError = (error: Error) => {
+        cleanup();
+        logger.warn('Run script process emitted error while waiting for exit', {
+          workspaceId,
+          pid: waitPid,
+          error,
+        });
+        resolve();
+      };
+
+      childProcess.once('exit', onExit);
+      childProcess.once('error', onError);
+
+      if (childProcess.exitCode !== null) {
+        cleanup();
+        resolve();
+      }
     });
   }
 
