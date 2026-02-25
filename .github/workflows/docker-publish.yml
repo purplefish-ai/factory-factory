@@ -2,7 +2,7 @@ name: Docker Build & Push
 
 on:
   push:
-    branches: [main, adeeshaek/docker-build-fails-16-616-executing]
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
