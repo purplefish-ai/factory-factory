@@ -77,6 +77,7 @@ function createTestAppContext(): AppContext {
     services: {
       configService: {
         getBackendPort: () => 0,
+        getBackendHost: () => undefined,
         getEnvironment: () => 'test',
         getFrontendStaticPath: () => null,
         isDevelopment: () => false,

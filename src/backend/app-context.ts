@@ -76,6 +76,12 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
   if (typeof resolvedAcpRuntimeManager.setAcpStartupTimeoutMs === 'function') {
     resolvedAcpRuntimeManager.setAcpStartupTimeoutMs(configService.getAcpStartupTimeoutMs());
   }
+  if (typeof resolvedAcpRuntimeManager.configureEnvironment === 'function') {
+    resolvedAcpRuntimeManager.configureEnvironment({
+      preferSourceEntrypoint: !configService.isProduction(),
+      childProcessEnvProvider: () => configService.getChildProcessEnv(),
+    });
+  }
   const resolvedSessionDomainService = overrides.sessionDomainService ?? sessionDomainService;
   const resolvedSessionService =
     overrides.sessionService ??

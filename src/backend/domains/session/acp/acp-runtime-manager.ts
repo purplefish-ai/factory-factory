@@ -15,7 +15,7 @@ import {
   type SessionModeState,
 } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
-import { createLogger } from '@/backend/services/logger.service';
+import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
 import { AcpClientHandler } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpProcessHandle } from './acp-process-handle';
@@ -161,7 +161,7 @@ function resolveFactoryRootForInternalCodexAdapter(): string {
   throw new Error('Cannot resolve Factory Factory root for CODEX ACP adapter spawn');
 }
 
-function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
+function resolveInternalCodexAcpSpawnCommand(preferSourceEntrypoint: boolean): SpawnCommand {
   const projectRoot = resolveFactoryRootForInternalCodexAdapter();
   const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
   const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
@@ -175,7 +175,6 @@ function resolveInternalCodexAcpSpawnCommand(): SpawnCommand {
   const hasTypeScriptRuntime =
     process.execArgv.some((arg) => arg.includes('tsx')) ||
     process.execArgv.some((arg) => arg.includes('ts-node'));
-  const preferSourceEntrypoint = process.env.NODE_ENV !== 'production';
 
   const buildNodeSpawnCommand = (entrypoint: string): SpawnCommand => {
     const args = [entrypoint, 'internal', 'codex-app-server-acp'];
@@ -496,6 +495,8 @@ export class AcpRuntimeManager {
   private readonly lockRefCounts = new Map<string, number>();
   private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
   private acpStartupTimeoutMs = DEFAULT_ACP_STARTUP_TIMEOUT_MS;
+  private preferSourceEntrypoint = true;
+  private childProcessEnvProvider: () => NodeJS.ProcessEnv = getCurrentProcessEnv;
 
   constructor(options?: { acpStartupTimeoutMs?: number }) {
     this.setAcpStartupTimeoutMs(options?.acpStartupTimeoutMs ?? DEFAULT_ACP_STARTUP_TIMEOUT_MS);
@@ -507,6 +508,14 @@ export class AcpRuntimeManager {
       return;
     }
     this.acpStartupTimeoutMs = Math.floor(timeoutMs);
+  }
+
+  configureEnvironment(options: {
+    preferSourceEntrypoint: boolean;
+    childProcessEnvProvider: () => NodeJS.ProcessEnv;
+  }): void {
+    this.preferSourceEntrypoint = options.preferSourceEntrypoint;
+    this.childProcessEnvProvider = options.childProcessEnvProvider;
   }
 
   setOnClientCreated(callback: AcpRuntimeCreatedCallback): void {
@@ -592,7 +601,7 @@ export class AcpRuntimeManager {
           commandLabel: options.adapterBinaryPath,
         }
       : isCodex
-        ? resolveInternalCodexAcpSpawnCommand()
+        ? resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint)
         : (() => {
             const binaryName = 'claude-code-acp';
             const packageName = '@zed-industries/claude-code-acp';
@@ -613,7 +622,7 @@ export class AcpRuntimeManager {
     });
 
     const spawnEnv = {
-      ...process.env,
+      ...this.childProcessEnvProvider(),
       BROWSER: 'none',
       ...(isCodex ? { DOTENV_CONFIG_QUIET: 'true' } : {}),
     };
