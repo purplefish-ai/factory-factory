@@ -3,7 +3,6 @@ import type { RequestPermissionRequest, RequestPermissionResponse } from '@agent
 interface PendingPermission {
   resolve: (response: RequestPermissionResponse) => void;
   params: RequestPermissionRequest;
-  timeout: ReturnType<typeof setTimeout>;
 }
 
 type ToolUserInputAnswers = Record<string, string[]>;
@@ -23,12 +22,7 @@ type ToolUserInputAnswers = Record<string, string[]>;
  *   4. On session cancel/stop -> cancelAll resolves all pending with cancelled outcome
  */
 export class AcpPermissionBridge {
-  private readonly responseTimeoutMs: number;
   private readonly pending = new Map<string, PendingPermission>();
-
-  constructor(responseTimeoutMs = 5 * 60 * 1000) {
-    this.responseTimeoutMs = responseTimeoutMs;
-  }
 
   /**
    * Called by AcpClientHandler.requestPermission().
@@ -41,7 +35,6 @@ export class AcpPermissionBridge {
     return new Promise<RequestPermissionResponse>((resolve) => {
       const existing = this.pending.get(requestId);
       if (existing) {
-        clearTimeout(existing.timeout);
         existing.resolve({
           outcome: {
             outcome: 'cancelled',
@@ -49,21 +42,7 @@ export class AcpPermissionBridge {
         });
       }
 
-      const timeout = setTimeout(() => {
-        const entry = this.pending.get(requestId);
-        if (!entry) {
-          return;
-        }
-        this.pending.delete(requestId);
-        entry.resolve({
-          outcome: {
-            outcome: 'cancelled',
-          },
-        });
-      }, this.responseTimeoutMs);
-
-      timeout.unref?.();
-      this.pending.set(requestId, { resolve, params, timeout });
+      this.pending.set(requestId, { resolve, params });
     });
   }
 
@@ -79,7 +58,6 @@ export class AcpPermissionBridge {
     }
 
     this.pending.delete(requestId);
-    clearTimeout(entry.timeout);
     entry.resolve({
       ...(answers && Object.keys(answers).length > 0
         ? {
@@ -104,7 +82,6 @@ export class AcpPermissionBridge {
    */
   cancelAll(): void {
     for (const entry of this.pending.values()) {
-      clearTimeout(entry.timeout);
       entry.resolve({
         outcome: {
           outcome: 'cancelled',
