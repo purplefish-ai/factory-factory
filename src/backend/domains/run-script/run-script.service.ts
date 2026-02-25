@@ -882,6 +882,17 @@ export class RunScriptService {
   }
 
   /**
+   * Evict in-memory run-script buffers/listeners for a workspace.
+   * Called when a workspace lifecycle reaches ARCHIVED.
+   */
+  evictWorkspaceBuffers(workspaceId: string): void {
+    this.outputBuffers.delete(workspaceId);
+    this.outputListeners.delete(workspaceId);
+    this.postRunOutputBuffers.delete(workspaceId);
+    this.postRunOutputListeners.delete(workspaceId);
+  }
+
+  /**
    * Subscribe to output from a workspace's run script
    * @returns Unsubscribe function
    */

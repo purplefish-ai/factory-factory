@@ -401,6 +401,10 @@ export class TerminalService {
       logger.warn('Error killing terminal', { terminalId, error });
     }
 
+    // Clear retained output aggressively to release memory even if external
+    // references to the instance survive map removal.
+    instance.outputBuffer = '';
+
     logger.info('Terminal destroyed', { terminalId, workspaceId });
     return true;
   }
