@@ -16,7 +16,7 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
-import { type AppContext, createAppContext } from '@/backend/app-context';
+import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { ConnectionInfo } from '@/backend/domains/session';
 import { toError } from '@/backend/lib/error-utils';
@@ -296,12 +296,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     });
   };
 }
-
-export const handleChatUpgrade = createChatUpgradeHandler(createAppContext());
-
-// ============================================================================
-// Re-exports for external usage
-// ============================================================================
 
 export type { ConnectionInfo } from '@/backend/domains/session';
 export type { ChatMessageInput } from '@/backend/schemas/websocket';

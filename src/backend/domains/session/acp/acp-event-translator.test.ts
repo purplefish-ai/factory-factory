@@ -78,7 +78,7 @@ describe('AcpEventTranslator', () => {
   });
 
   describe('agent_thought_chunk', () => {
-    it('translates text to assistant thinking content', () => {
+    it('translates text to thinking content_block', () => {
       const { translator } = createTranslator();
       const update = {
         sessionUpdate: 'agent_thought_chunk',
@@ -91,10 +91,14 @@ describe('AcpEventTranslator', () => {
       expect(events[0]).toEqual({
         type: 'agent_message',
         data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Let me think about this...' }],
+          type: 'stream_event',
+          event: {
+            type: 'content_block_delta',
+            index: 0,
+            delta: {
+              type: 'thinking_delta',
+              thinking: 'Let me think about this...',
+            },
           },
         },
       });
