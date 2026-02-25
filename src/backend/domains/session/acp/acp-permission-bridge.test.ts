@@ -185,20 +185,28 @@ describe('AcpPermissionBridge', () => {
     expect(bridge.getPendingParams('nonexistent')).toBeUndefined();
   });
 
-  it('auto-cancels pending requests after timeout', async () => {
+  it('keeps pending requests open without timeout', async () => {
     vi.useFakeTimers();
-    const bridge = new AcpPermissionBridge(1000);
+    const bridge = new AcpPermissionBridge();
 
     const promise = bridge.waitForUserResponse('req-timeout', createMockParams());
+    const settled = vi.fn();
+    void promise.then(settled);
     expect(bridge.pendingCount).toBe(1);
 
-    await vi.advanceTimersByTimeAsync(1001);
-    await expect(promise).resolves.toEqual({ outcome: { outcome: 'cancelled' } });
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    expect(settled).not.toHaveBeenCalled();
+    expect(bridge.pendingCount).toBe(1);
+
+    bridge.resolvePermission('req-timeout', 'allow_once');
+    await expect(promise).resolves.toEqual({
+      outcome: { outcome: 'selected', optionId: 'allow_once' },
+    });
     expect(bridge.pendingCount).toBe(0);
   });
 
   it('cancels previous pending request when requestId is reused', async () => {
-    const bridge = new AcpPermissionBridge(10_000);
+    const bridge = new AcpPermissionBridge();
 
     const first = bridge.waitForUserResponse('req-1', createMockParams({ sessionId: 's-1' }));
     const second = bridge.waitForUserResponse('req-1', createMockParams({ sessionId: 's-2' }));
