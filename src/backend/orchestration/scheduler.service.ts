@@ -35,7 +35,7 @@ class SchedulerService {
     this.isShuttingDown = false;
 
     this.syncInterval = setInterval(() => {
-      if (this.isShuttingDown) {
+      if (this.isShuttingDown || this.syncInProgress !== null) {
         return;
       }
 

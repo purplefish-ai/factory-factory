@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 
 const mockFindNeedingPRSync = vi.fn();
 const mockFindNeedingPRDiscovery = vi.fn();
@@ -35,6 +36,17 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 import { schedulerService } from './scheduler.service';
+
+function createDeferred<T>() {
+  let resolve: ((value: T | PromiseLike<T>) => void) | undefined;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return {
+    promise,
+    resolve: (value: T) => resolve?.(value),
+  };
+}
 
 describe('SchedulerService', () => {
   beforeEach(() => {
@@ -188,12 +200,87 @@ describe('SchedulerService', () => {
       mockFindNeedingPRDiscovery.mockResolvedValue([]);
 
       schedulerService.start();
-      await vi.advanceTimersByTimeAsync(3 * 60 * 1000); // Updated to 3 minutes to match new polling interval
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
 
       expect(mockFindNeedingPRSync).toHaveBeenCalledTimes(1);
       expect(mockFindNeedingPRDiscovery).toHaveBeenCalledTimes(1);
 
       await schedulerService.stop();
+    });
+
+    it('does not overlap periodic batches when previous tick is still running', async () => {
+      const deferredSync = createDeferred<{
+        success: boolean;
+        snapshot: { prNumber: number; prState: string; prReviewState: null; prCiStatus: string };
+      }>();
+
+      mockFindNeedingPRSync.mockResolvedValue([
+        { id: 'ws-1', prUrl: 'https://example.com/pull/1' },
+      ]);
+      mockFindNeedingPRDiscovery.mockResolvedValue([]);
+      mockRefreshWorkspace.mockImplementation(() => deferredSync.promise);
+
+      schedulerService.start();
+
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+
+      const syncCalls = mockFindNeedingPRSync.mock.calls.length;
+      const discoveryCalls = mockFindNeedingPRDiscovery.mock.calls.length;
+      const refreshCalls = mockRefreshWorkspace.mock.calls.length;
+
+      deferredSync.resolve({
+        success: true,
+        snapshot: {
+          prNumber: 1,
+          prState: 'OPEN',
+          prReviewState: null,
+          prCiStatus: 'PENDING',
+        },
+      });
+
+      await schedulerService.stop();
+
+      expect(syncCalls).toBe(1);
+      expect(discoveryCalls).toBe(1);
+      expect(refreshCalls).toBe(1);
+    });
+
+    it('waits for in-flight sync work before stopping', async () => {
+      const deferredSync = createDeferred<{
+        success: boolean;
+        snapshot: { prNumber: number; prState: string; prReviewState: null; prCiStatus: string };
+      }>();
+
+      mockFindNeedingPRSync.mockResolvedValue([
+        { id: 'ws-1', prUrl: 'https://example.com/pull/1' },
+      ]);
+      mockFindNeedingPRDiscovery.mockResolvedValue([]);
+      mockRefreshWorkspace.mockImplementation(() => deferredSync.promise);
+
+      schedulerService.start();
+      await vi.advanceTimersByTimeAsync(SERVICE_INTERVAL_MS.schedulerPrSync);
+
+      let stopped = false;
+      const stopPromise = schedulerService.stop().then(() => {
+        stopped = true;
+      });
+
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+
+      deferredSync.resolve({
+        success: true,
+        snapshot: {
+          prNumber: 1,
+          prState: 'OPEN',
+          prReviewState: null,
+          prCiStatus: 'PENDING',
+        },
+      });
+
+      await stopPromise;
+      expect(stopped).toBe(true);
     });
   });
 });
