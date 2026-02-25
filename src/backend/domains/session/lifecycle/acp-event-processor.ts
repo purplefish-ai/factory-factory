@@ -24,6 +24,14 @@ type PendingAcpToolCall = {
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
 
+type AssistantChunkType = 'text' | 'thinking';
+
+type AcpAssistantStreamState = {
+  order: number;
+  chunkType: AssistantChunkType;
+  accContent: string;
+};
+
 export type AcpEventProcessorDependencies = {
   runtimeManager: AcpRuntimeManager;
   sessionDomainService: SessionDomainService;
@@ -38,8 +46,8 @@ export class AcpEventProcessor {
   private readonly sessionConfigService: SessionConfigService;
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
 
-  /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
-  readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
+  /** Per-session assistant chunk accumulation state for ACP streaming. */
+  readonly acpStreamState = new Map<string, AcpAssistantStreamState>();
   /** Per-session ACP tool calls that have started but not yet been completed by tool_result. */
   readonly pendingAcpToolCalls = new Map<string, Map<string, PendingAcpToolCall>>();
   /**
@@ -199,14 +207,16 @@ export class AcpEventProcessor {
 
     const data = (delta as { data: AgentMessage }).data;
 
-    // Text chunks: accumulate into single message, reuse same order
+    // Text/thinking chunks: accumulate into single message, reuse same order
     // so the frontend upserts rather than inserting a new bubble per chunk.
     if (data.type === 'assistant') {
-      this.accumulateAcpText(sid, data);
-      return;
+      const accumulated = this.accumulateAcpAssistantContent(sid, data);
+      if (accumulated) {
+        return;
+      }
     }
 
-    // Non-text agent_message (thinking, tool_use, result): reset text accumulator
+    // Non-accumulated agent_message (tool_use, result, complex assistant payload): reset accumulator
     this.acpStreamState.delete(sid);
     // Persist to transcript + allocate order in one step
     const order = this.sessionDomainService.appendClaudeEvent(sid, data);
@@ -292,30 +302,60 @@ export class AcpEventProcessor {
   }
 
   /**
-   * Accumulate ACP assistant text chunks into a single message at a stable order.
+   * Accumulate ACP assistant text/thinking chunks into a single message at a stable order.
    */
-  private accumulateAcpText(sid: string, data: AgentMessage): void {
-    const content = data.message?.content;
-    const chunkText =
-      Array.isArray(content) && content[0]?.type === 'text'
-        ? (content[0] as { text: string }).text
-        : '';
+  private accumulateAcpAssistantContent(sid: string, data: AgentMessage): boolean {
+    const chunk = this.extractAssistantChunk(data);
+    if (!chunk) {
+      return false;
+    }
+
     let ss = this.acpStreamState.get(sid);
-    if (!ss) {
-      ss = { textOrder: this.sessionDomainService.allocateOrder(sid), accText: '' };
+    if (!ss || ss.chunkType !== chunk.chunkType) {
+      ss = {
+        order: this.sessionDomainService.allocateOrder(sid),
+        chunkType: chunk.chunkType,
+        accContent: '',
+      };
       this.acpStreamState.set(sid, ss);
     }
-    ss.accText += chunkText;
+
+    ss.accContent += chunk.content;
     const accMsg: AgentMessage = {
       type: 'assistant',
-      message: { role: 'assistant', content: [{ type: 'text', text: ss.accText }] },
+      message: {
+        role: 'assistant',
+        content:
+          ss.chunkType === 'thinking'
+            ? [{ type: 'thinking', thinking: ss.accContent }]
+            : [{ type: 'text', text: ss.accContent }],
+      },
     };
-    this.sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.textOrder);
+    this.sessionDomainService.upsertClaudeEvent(sid, accMsg, ss.order);
     this.sessionDomainService.emitDelta(sid, {
       type: 'agent_message',
       data: accMsg,
-      order: ss.textOrder,
+      order: ss.order,
     } as SessionDeltaEvent & { order: number });
+    return true;
+  }
+
+  private extractAssistantChunk(
+    data: AgentMessage
+  ): { chunkType: AssistantChunkType; content: string } | null {
+    const content = data.message?.content;
+    if (!Array.isArray(content) || content.length !== 1) {
+      return null;
+    }
+
+    const first = content[0];
+    if (first?.type === 'text') {
+      return { chunkType: 'text', content: first.text };
+    }
+    if (first?.type === 'thinking') {
+      return { chunkType: 'thinking', content: first.thinking };
+    }
+    return null;
   }
 
   private trackPendingAcpToolCalls(sid: string, delta: SessionDeltaEvent): void {
