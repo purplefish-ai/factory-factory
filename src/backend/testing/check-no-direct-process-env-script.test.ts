@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { findProcessEnvViolations } from '../../../scripts/check-no-direct-process-env.mjs';
+import { findProcessEnvViolations } from '@/../scripts/check-no-direct-process-env.mjs';
 
 describe('check-no-direct-process-env script', () => {
   let tempRoot: string | null = null;
