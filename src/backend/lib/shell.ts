@@ -12,6 +12,7 @@
  */
 
 import { exec, type SpawnOptions, spawn } from 'node:child_process';
+import { StringDecoder } from 'node:string_decoder';
 import { promisify } from 'node:util';
 import { LIB_LIMITS } from './constants';
 
@@ -133,13 +134,15 @@ export function execCommand(
 
     let stdout = '';
     let stderr = '';
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
 
     proc.stdout?.on('data', (data: Buffer) => {
-      stdout += data.toString();
+      stdout += stdoutDecoder.write(data);
     });
 
     proc.stderr?.on('data', (data: Buffer) => {
-      stderr += data.toString();
+      stderr += stderrDecoder.write(data);
     });
 
     proc.on('error', (error) => {
@@ -148,9 +151,9 @@ export function execCommand(
 
     proc.on('close', (code) => {
       resolve({
-        stdout,
-        stderr,
-        code: code ?? 0,
+        stdout: stdout + stdoutDecoder.end(),
+        stderr: stderr + stderrDecoder.end(),
+        code: code ?? -1,
       });
     });
   });

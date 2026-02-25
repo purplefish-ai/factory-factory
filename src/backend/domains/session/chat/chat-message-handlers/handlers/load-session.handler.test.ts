@@ -214,6 +214,60 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
+  it('does not replace transcript if new messages arrive during history load', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CLAUDE',
+      status: 'IDLE',
+      model: 'claude-sonnet-4-5',
+      providerSessionId: 'provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+
+    type LoadedHistoryResult = { status: 'loaded'; filePath: string; history: unknown[] };
+    let resolveLoad!: (value: LoadedHistoryResult) => void;
+    const loadPromise = new Promise<LoadedHistoryResult>((resolve) => {
+      resolveLoad = resolve;
+    });
+    mocks.loadClaudeSessionHistory.mockReturnValue(loadPromise);
+
+    let transcriptSnapshot: unknown[] = [];
+    mocks.getTranscriptSnapshot.mockImplementation(() => transcriptSnapshot);
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    const pendingLoad = handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    transcriptSnapshot = [{ id: 'msg-during-load' }];
+
+    resolveLoad({
+      status: 'loaded',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
+      history: [
+        {
+          type: 'user',
+          content: 'historical message',
+          timestamp: '2026-02-14T00:00:00.000Z',
+        },
+      ],
+    });
+
+    await pendingLoad;
+
+    expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+  });
+
   it('marks Claude history hydration as none when JSONL file is not found', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',

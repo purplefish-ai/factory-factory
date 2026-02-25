@@ -163,6 +163,7 @@ beforeEach(() => {
     writable: true,
     value: createStorageStub(),
   });
+  localStorage.clear();
 });
 
 afterEach(() => {

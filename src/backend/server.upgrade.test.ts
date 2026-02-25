@@ -209,4 +209,44 @@ describe('server websocket upgrade routing', () => {
     expect(handlers.devLogs).not.toHaveBeenCalled();
     expect(handlers.snapshots).not.toHaveBeenCalled();
   });
+
+  it('destroys socket and does not throw for malformed Host header', () => {
+    const server = createTestServer();
+
+    const request = {
+      headers: { host: '[!!]' },
+      url: '/chat?sessionId=s1',
+    };
+    const socket = { destroy: vi.fn() };
+
+    expect(() => {
+      server.getHttpServer().emit('upgrade', request, socket, Buffer.alloc(0));
+    }).not.toThrow();
+
+    expect(socket.destroy).toHaveBeenCalledOnce();
+    expect(handlers.chat).not.toHaveBeenCalled();
+    expect(handlers.terminal).not.toHaveBeenCalled();
+    expect(handlers.devLogs).not.toHaveBeenCalled();
+    expect(handlers.snapshots).not.toHaveBeenCalled();
+  });
+
+  it('destroys socket and does not throw for malformed upgrade URL', () => {
+    const server = createTestServer();
+
+    const request = {
+      headers: { host: 'localhost:3001' },
+      url: 'http://%',
+    };
+    const socket = { destroy: vi.fn() };
+
+    expect(() => {
+      server.getHttpServer().emit('upgrade', request, socket, Buffer.alloc(0));
+    }).not.toThrow();
+
+    expect(socket.destroy).toHaveBeenCalledOnce();
+    expect(handlers.chat).not.toHaveBeenCalled();
+    expect(handlers.terminal).not.toHaveBeenCalled();
+    expect(handlers.devLogs).not.toHaveBeenCalled();
+    expect(handlers.snapshots).not.toHaveBeenCalled();
+  });
 });

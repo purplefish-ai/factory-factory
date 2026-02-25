@@ -23,6 +23,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 5000,
   },
   server: {
+    allowedHosts: 'all',
     proxy: {
       '/api': {
         target: backendUrl,

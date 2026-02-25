@@ -60,7 +60,6 @@ import {
   RunScriptPortBadge,
   useRunScriptLaunch,
   useWorkspacePanel,
-  WorkspacesBackLink,
 } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -836,7 +835,6 @@ export function WorkspaceDetailHeaderSlot({
           triggerId="workspace-detail-project-select"
           projectButtonClassName="h-7 w-auto max-w-[10rem] gap-1 border-0 bg-transparent px-1 text-xs font-normal text-muted-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:text-sm"
         />
-        <WorkspacesBackLink projectSlug={slug} />
       </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
         <div className="hidden md:flex items-center gap-2 min-w-0">
