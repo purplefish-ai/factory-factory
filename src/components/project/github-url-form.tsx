@@ -112,7 +112,7 @@ export function GithubUrlForm({
           value={githubUrl}
           onChange={(e) => setGithubUrl(e.target.value)}
           className="font-mono"
-          placeholder="https://github.com/owner/repo"
+          placeholder="https://github.com/owner/repo or git@github.com:owner/repo"
           autoFocus
         />
         {parsedRepo && githubUrl.trim() && (
@@ -125,7 +125,8 @@ export function GithubUrlForm({
         )}
         {githubUrl.trim() && !parsedRepo && (
           <p className="text-xs text-destructive">
-            Invalid GitHub URL. Expected format: https://github.com/owner/repo
+            Invalid GitHub URL. Use HTTPS (https://github.com/owner/repo) or SSH
+            (git@github.com:owner/repo) format
           </p>
         )}
       </div>

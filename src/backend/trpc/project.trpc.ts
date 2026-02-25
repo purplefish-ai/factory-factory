@@ -353,7 +353,9 @@ export const projectRouter = router({
       // Parse the GitHub URL
       const parsed = parseGithubUrl(input.githubUrl);
       if (!parsed) {
-        throw new Error('Invalid GitHub URL. Expected format: https://github.com/owner/repo');
+        throw new Error(
+          'Invalid GitHub URL. Use HTTPS (https://github.com/owner/repo) or SSH (git@github.com:owner/repo) format'
+        );
       }
 
       // Compute clone destination
