@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { AppContext } from '@/backend/app-context';
 import { HTTP_STATUS } from '@/backend/constants/http';
+import { toError } from '@/backend/lib/error-utils';
 import { healthService } from '@/backend/orchestration/health.service';
 
 // ============================================================================
@@ -38,7 +39,7 @@ export function createHealthRouter(appContext: AppContext): Router {
         database: 'connected',
       });
     } catch (error) {
-      logger.error('Database health check failed', error as Error);
+      logger.error('Database health check failed', toError(error));
       res.status(HTTP_STATUS.SERVICE_UNAVAILABLE).json({
         status: 'error',
         timestamp: new Date().toISOString(),

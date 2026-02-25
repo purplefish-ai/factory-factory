@@ -13,6 +13,7 @@ import {
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import type { AppContext } from '@/backend/app-context';
+import { toError } from '@/backend/lib/error-utils';
 import {
   clearIntegrationDatabase,
   createIntegrationDatabase,
@@ -242,7 +243,7 @@ function createChatAppContext(worktreeBaseDir: string) {
 
 function waitForSocketError(ws: WebSocket): Promise<Error> {
   return new Promise((resolve) => {
-    ws.once('error', (error) => resolve(error as Error));
+    ws.once('error', (error) => resolve(toError(error)));
   });
 }
 

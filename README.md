@@ -33,6 +33,7 @@
 - [Feature Highlights](#feature-highlights)
   - [Ratchet (Automatic PR Progression)](#-ratchet-automatic-pr-progression)
   - [GitHub Integration](#-github-integration)
+  - [Linear Integration](#-linear-integration)
   - [Kanban Board](#-kanban-board)
   - [Quick Actions](#-quick-actions)
 - [Development](#development)
@@ -50,6 +51,7 @@
 - GitHub CLI (`gh`) - authenticated
 - Claude Code (for Claude provider) - authenticated via `claude login`
 - ChatGPT/Codex account (for Codex provider)
+- Linear API key (optional, only if using Linear issue intake)
 
 ### Option 1: Run with npx (Recommended)
 
@@ -123,13 +125,15 @@ npx factory-factory@latest serve [options]
 
 Options:
   -p, --port <port>           Frontend port (default: 3000)
-  --backend-port <port>       Backend port (default: 3001)
+  --backend-port <port>       Backend port in --dev mode (default: 3001)
   -d, --database-path <path>  SQLite database path (default: ~/factory-factory/data.db)
   --host <host>               Host to bind to (default: localhost)
   --dev                       Development mode with hot reloading
   --no-open                   Don't open browser automatically
   -v, --verbose               Enable verbose logging
 ```
+
+In production mode (`ff serve` without `--dev`), Factory Factory serves frontend and API on a single port.
 
 ```bash
 # Start a public Cloudflare tunnel (starts server + tunnel)
@@ -187,6 +191,7 @@ ff proxy --private
 3. **Create your first workspace:**
    - Open the web UI (automatically opens at http://localhost:3000)
    - Configure your project with a local git repository
+   - Optional: in Admin, choose an issue provider per project (GitHub Issues or Linear Issues)
    - Click "New Workspace" to create your first isolated worktree
    - Start chatting with your selected ACP provider (CLAUDE or CODEX)
 
@@ -238,8 +243,8 @@ Project (repository configuration)
 - **ACP runtime:** Each session runs through ACP (`@agentclientprotocol/sdk`) and negotiates provider capabilities (models/modes/config options) at runtime
 - **Persistent sessions:** Resume and review previous conversations
 - **Terminal access:** Full PTY terminal per workspace
-- **GitHub integration:** Import issues, track PR state, automatic PR progression via Ratchet
-- **Kanban board:** Visual project management with GitHub issue intake
+- **Issue tracking integration:** Use GitHub or Linear as the per-project issue provider
+- **Kanban board:** Visual project management with provider-specific issue intake
 
 ## Feature Highlights
 
@@ -262,11 +267,21 @@ Seamless integration with GitHub via the authenticated `gh` CLI.
 - **Linked workspaces:** Issues are automatically linked to their workspaces (prevents duplicates)
 - **Kanban intake:** GitHub Issues column shows issues assigned to `@me` for easy triage
 
+### 📐 Linear Integration
+
+Configure Linear as the issue provider per project in Admin settings.
+
+- **Per-project provider:** Choose GitHub Issues or Linear Issues per project
+- **Secure API key storage:** Linear API keys are encrypted at rest in project issue tracker config
+- **Team-scoped intake:** Kanban intake uses your assigned Linear issues for the configured team
+- **Linked workspaces:** Starting from a Linear issue stores `linearIssueId`, `linearIssueIdentifier`, and `linearIssueUrl`
+- **State sync:** Linear issues are best-effort transitioned when work starts and when PRs merge
+
 ### 📋 Kanban Board
 
 Real-time visual project management with automatic column placement.
 
-- **Smart columns:** GitHub Issues → Working → Waiting → Done
+- **Smart columns:** Issues intake (GitHub Issues or Linear Issues) → Working → Waiting → Done
 - **Auto-categorization:**
   - **Working:** Provisioning, new, failed, or actively running sessions
   - **Waiting:** Idle workspaces that have completed at least one session
@@ -297,6 +312,7 @@ This design enables seamless parallel workflows, but you should understand:
 - ✅ Only use with repositories you trust
 - ✅ Review changes carefully before merging PRs
 - ✅ Keep your GitHub authentication secure
+- ✅ Keep Linear API keys scoped and rotated if using Linear integration
 - ✅ Monitor Ratchet auto-fix behavior in Admin settings
 - ✅ Consider running in a VM or container for untrusted code
 
@@ -339,8 +355,9 @@ claude --version        # Verify installation
 # Run migrations manually
 ff db:migrate
 
-# Reset database (⚠️ destroys all data)
-ff db:reset
+# Optional reset (⚠️ destroys all local data; creates a backup first)
+mv ~/factory-factory/data.db ~/factory-factory/data.db.bak
+ff db:migrate
 
 # View database in Prisma Studio
 ff db:studio
@@ -356,7 +373,7 @@ ff serve --verbose
 
 Or specify custom ports:
 ```bash
-ff serve --port 8080 --backend-port 8081
+ff serve --dev --port 8080 --backend-port 8081
 ```
 
 ### Common Issues

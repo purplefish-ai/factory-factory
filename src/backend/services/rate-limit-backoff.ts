@@ -1,3 +1,4 @@
+import { toError } from '@/backend/lib/error-utils';
 import type { createLogger } from './logger.service';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -80,7 +81,7 @@ export class RateLimitBackoff {
       return true;
     }
 
-    logger.error(`${serviceName} check failed for workspace`, error as Error, {
+    logger.error(`${serviceName} check failed for workspace`, toError(error), {
       workspaceId: context.workspaceId,
       prUrl: context.prUrl,
     });

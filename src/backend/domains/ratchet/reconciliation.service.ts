@@ -1,3 +1,4 @@
+import { toError } from '@/backend/lib/error-utils';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
@@ -55,7 +56,7 @@ class ReconciliationService {
       // Track the cleanup promise so we can wait for it during shutdown
       const cleanupPromise = this.cleanupOrphans()
         .catch((err) => {
-          logger.error('Periodic orphan cleanup failed', err as Error);
+          logger.error('Periodic orphan cleanup failed', toError(err));
         })
         .finally(() => {
           if (this.cleanupInProgress === cleanupPromise) {
@@ -115,7 +116,7 @@ class ReconciliationService {
             initStartedAt: workspace.initStartedAt,
           });
         } catch (error) {
-          logger.error('Failed to mark stale workspace as failed', error as Error, {
+          logger.error('Failed to mark stale workspace as failed', toError(error), {
             workspaceId: workspace.id,
           });
         }
@@ -129,7 +130,7 @@ class ReconciliationService {
             workspaceId: workspace.id,
           });
         } catch (error) {
-          logger.error('Failed to initialize workspace', error as Error, {
+          logger.error('Failed to initialize workspace', toError(error), {
             workspaceId: workspace.id,
           });
         }

@@ -222,32 +222,34 @@ export class EventCoalescer {
 // Module-level state
 // ---------------------------------------------------------------------------
 
-let activeCoalescer: EventCoalescer | null = null;
-let pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
-let runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
-let eventCollectorSessionServices: EventCollectorSessionServices = defaultSessionServices;
-let listenerSessionDomainService: EventCollectorSessionServices['sessionDomainService'] | null =
-  null;
+class EventCollectorState {
+  activeCoalescer: EventCoalescer | null = null;
+  pendingRequestChangedHandler: ((event: PendingRequestChangedEvent) => void) | null = null;
+  runtimeChangedHandler: ((event: { sessionId: string }) => void) | null = null;
+  eventCollectorSessionServices: EventCollectorSessionServices = defaultSessionServices;
+  listenerSessionDomainService: EventCollectorSessionServices['sessionDomainService'] | null = null;
+}
 
 async function refreshWorkspaceSessionSummaries(
+  state: EventCollectorState,
   coalescer: EventCoalescer,
   workspaceId: string,
   source: string,
   options?: { includeWorking?: boolean }
 ): Promise<void> {
   try {
-    if (activeCoalescer !== coalescer) {
+    if (state.activeCoalescer !== coalescer) {
       return;
     }
     const sessions =
-      await eventCollectorSessionServices.sessionDataService.findAgentSessionsByWorkspaceId(
+      await state.eventCollectorSessionServices.sessionDataService.findAgentSessionsByWorkspaceId(
         workspaceId
       );
-    if (activeCoalescer !== coalescer) {
+    if (state.activeCoalescer !== coalescer) {
       return;
     }
     const sessionSummaries = buildWorkspaceSessionSummaries(sessions, (sessionId) =>
-      eventCollectorSessionServices.sessionService.getRuntimeSnapshot(sessionId)
+      state.eventCollectorSessionServices.sessionService.getRuntimeSnapshot(sessionId)
     );
     coalescer.enqueue(
       workspaceId,
@@ -269,31 +271,32 @@ async function refreshWorkspaceSessionSummaries(
 }
 
 async function refreshWorkspacePendingRequestType(
+  state: EventCollectorState,
   coalescer: EventCoalescer,
   sessionId: string,
   source: string
 ): Promise<void> {
   try {
-    if (activeCoalescer !== coalescer) {
+    if (state.activeCoalescer !== coalescer) {
       return;
     }
     const session =
-      await eventCollectorSessionServices.sessionDataService.findAgentSessionById(sessionId);
-    if (!session || activeCoalescer !== coalescer) {
+      await state.eventCollectorSessionServices.sessionDataService.findAgentSessionById(sessionId);
+    if (!session || state.activeCoalescer !== coalescer) {
       return;
     }
 
     const sessions =
-      await eventCollectorSessionServices.sessionDataService.findAgentSessionsByWorkspaceId(
+      await state.eventCollectorSessionServices.sessionDataService.findAgentSessionsByWorkspaceId(
         session.workspaceId
       );
-    if (activeCoalescer !== coalescer) {
+    if (state.activeCoalescer !== coalescer) {
       return;
     }
 
     const pendingRequestType = computePendingRequestType(
       sessions.map((s) => s.id),
-      eventCollectorSessionServices.chatEventForwarderService.getAllPendingRequests()
+      state.eventCollectorSessionServices.chatEventForwarderService.getAllPendingRequests()
     );
     coalescer.enqueue(session.workspaceId, { pendingRequestType }, source);
   } catch (error) {
@@ -305,20 +308,21 @@ async function refreshWorkspacePendingRequestType(
 }
 
 async function refreshWorkspaceSessionSummariesForSession(
+  state: EventCollectorState,
   coalescer: EventCoalescer,
   sessionId: string,
   source: string
 ): Promise<void> {
   try {
-    if (activeCoalescer !== coalescer) {
+    if (state.activeCoalescer !== coalescer) {
       return;
     }
     const session =
-      await eventCollectorSessionServices.sessionDataService.findAgentSessionById(sessionId);
-    if (!session || activeCoalescer !== coalescer) {
+      await state.eventCollectorSessionServices.sessionDataService.findAgentSessionById(sessionId);
+    if (!session || state.activeCoalescer !== coalescer) {
       return;
     }
-    await refreshWorkspaceSessionSummaries(coalescer, session.workspaceId, source, {
+    await refreshWorkspaceSessionSummaries(state, coalescer, session.workspaceId, source, {
       includeWorking: true,
     });
   } catch (error) {
@@ -363,28 +367,29 @@ async function handleLinearIssueCompletedOnMerge(workspaceId: string): Promise<v
  *
  * Must be called AFTER configureDomainBridges() in server startup.
  */
-export function configureEventCollector(
+function configureEventCollectorWithState(
+  state: EventCollectorState,
   services: Partial<EventCollectorSessionServices> = {}
 ): void {
   const previousSessionDomainService =
-    listenerSessionDomainService ?? eventCollectorSessionServices.sessionDomainService;
+    state.listenerSessionDomainService ?? state.eventCollectorSessionServices.sessionDomainService;
 
   // Guard against duplicate listeners across repeated configure calls.
-  if (pendingRequestChangedHandler) {
-    previousSessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
-    pendingRequestChangedHandler = null;
+  if (state.pendingRequestChangedHandler) {
+    previousSessionDomainService.off('pending_request_changed', state.pendingRequestChangedHandler);
+    state.pendingRequestChangedHandler = null;
   }
-  if (runtimeChangedHandler) {
-    previousSessionDomainService.off('runtime_changed', runtimeChangedHandler);
-    runtimeChangedHandler = null;
+  if (state.runtimeChangedHandler) {
+    previousSessionDomainService.off('runtime_changed', state.runtimeChangedHandler);
+    state.runtimeChangedHandler = null;
   }
 
-  eventCollectorSessionServices = {
+  state.eventCollectorSessionServices = {
     ...defaultSessionServices,
     ...services,
   };
   const coalescer = new EventCoalescer(workspaceSnapshotStore);
-  activeCoalescer = coalescer;
+  state.activeCoalescer = coalescer;
   const lastIdlePrRefreshByWorkspace = new Map<string, number>();
 
   const refreshPrSnapshotOnIdle = (workspaceId: string): void => {
@@ -503,6 +508,7 @@ export function configureEventCollector(
     'session_activity_changed',
     ({ workspaceId }: { workspaceId: string; sessionId: string; isWorking: boolean }) => {
       void refreshWorkspaceSessionSummaries(
+        state,
         coalescer,
         workspaceId,
         'event:session_activity_changed',
@@ -514,28 +520,43 @@ export function configureEventCollector(
   // 9. Prime session summaries on startup so fresh clients have tab runtime
   // state before the first activity transition or reconciliation tick.
   for (const workspaceId of workspaceSnapshotStore.getAllWorkspaceIds()) {
-    void refreshWorkspaceSessionSummaries(coalescer, workspaceId, 'event:collector_startup', {
-      includeWorking: true,
-    });
+    void refreshWorkspaceSessionSummaries(
+      state,
+      coalescer,
+      workspaceId,
+      'event:collector_startup',
+      {
+        includeWorking: true,
+      }
+    );
   }
 
   // 10. Pending interactive request transitions (set/clear)
-  pendingRequestChangedHandler = ({ sessionId }) => {
-    void refreshWorkspacePendingRequestType(coalescer, sessionId, 'event:pending_request_changed');
+  state.pendingRequestChangedHandler = ({ sessionId }) => {
+    void refreshWorkspacePendingRequestType(
+      state,
+      coalescer,
+      sessionId,
+      'event:pending_request_changed'
+    );
   };
-  eventCollectorSessionServices.sessionDomainService.on(
+  state.eventCollectorSessionServices.sessionDomainService.on(
     'pending_request_changed',
-    pendingRequestChangedHandler
+    state.pendingRequestChangedHandler
   );
-  runtimeChangedHandler = ({ sessionId }) => {
+  state.runtimeChangedHandler = ({ sessionId }) => {
     void refreshWorkspaceSessionSummariesForSession(
+      state,
       coalescer,
       sessionId,
       'event:session_runtime_changed'
     );
   };
-  eventCollectorSessionServices.sessionDomainService.on('runtime_changed', runtimeChangedHandler);
-  listenerSessionDomainService = eventCollectorSessionServices.sessionDomainService;
+  state.eventCollectorSessionServices.sessionDomainService.on(
+    'runtime_changed',
+    state.runtimeChangedHandler
+  );
+  state.listenerSessionDomainService = state.eventCollectorSessionServices.sessionDomainService;
 
   logger.info('Event collector configured with 10 event subscriptions');
 }
@@ -548,23 +569,51 @@ export function configureEventCollector(
  * Flush all pending coalesced updates and release the coalescer.
  * Called during server shutdown before domain services stop.
  */
-export function stopEventCollector(): void {
+function stopEventCollectorWithState(state: EventCollectorState): void {
   const sessionDomainService =
-    listenerSessionDomainService ?? eventCollectorSessionServices.sessionDomainService;
+    state.listenerSessionDomainService ?? state.eventCollectorSessionServices.sessionDomainService;
 
-  if (pendingRequestChangedHandler) {
-    sessionDomainService.off('pending_request_changed', pendingRequestChangedHandler);
-    pendingRequestChangedHandler = null;
+  if (state.pendingRequestChangedHandler) {
+    sessionDomainService.off('pending_request_changed', state.pendingRequestChangedHandler);
+    state.pendingRequestChangedHandler = null;
   }
-  if (runtimeChangedHandler) {
-    sessionDomainService.off('runtime_changed', runtimeChangedHandler);
-    runtimeChangedHandler = null;
+  if (state.runtimeChangedHandler) {
+    sessionDomainService.off('runtime_changed', state.runtimeChangedHandler);
+    state.runtimeChangedHandler = null;
   }
-  listenerSessionDomainService = null;
+  state.listenerSessionDomainService = null;
 
-  if (activeCoalescer) {
-    activeCoalescer.flushAll();
-    activeCoalescer = null;
+  if (state.activeCoalescer) {
+    state.activeCoalescer.flushAll();
+    state.activeCoalescer = null;
     logger.info('Event collector stopped');
   }
+}
+
+export class EventCollectorOrchestrator {
+  private readonly state = new EventCollectorState();
+
+  configure(services: Partial<EventCollectorSessionServices> = {}): void {
+    configureEventCollectorWithState(this.state, services);
+  }
+
+  stop(): void {
+    stopEventCollectorWithState(this.state);
+  }
+}
+
+export function createEventCollectorOrchestrator(): EventCollectorOrchestrator {
+  return new EventCollectorOrchestrator();
+}
+
+const defaultEventCollectorOrchestrator = createEventCollectorOrchestrator();
+
+export function configureEventCollector(
+  services: Partial<EventCollectorSessionServices> = {}
+): void {
+  defaultEventCollectorOrchestrator.configure(services);
+}
+
+export function stopEventCollector(): void {
+  defaultEventCollectorOrchestrator.stop();
 }

@@ -82,7 +82,7 @@ vi.mock('@/backend/domains/session/logging/acp-trace-logger.service', () => ({
   },
 }));
 
-import type { AcpProcessHandle } from '@/backend/domains/session/acp';
+import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/domains/session/acp';
 import { acpRuntimeManager } from '@/backend/domains/session/acp';
 import { sessionPromptBuilder } from './session.prompt-builder';
 import { sessionRepository } from './session.repository';
@@ -311,7 +311,7 @@ describe('SessionService', () => {
     await sessionService.getOrCreateSessionClient('session-1');
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onAcpEvent: (id: string, event: unknown) => void;
+      onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
     };
     acpHandlers.onAcpEvent('session-1', {
       type: 'acp_session_update',
@@ -369,16 +369,19 @@ describe('SessionService', () => {
     await sessionService.getOrCreateSessionClient('session-1');
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onAcpEvent: (id: string, event: unknown) => void;
+      onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
     };
 
     expect(() =>
-      acpHandlers.onAcpEvent('session-1', {
-        type: 'acp_session_update',
-        update: {
-          sessionUpdate: 'user_message_chunk',
-        },
-      })
+      acpHandlers.onAcpEvent(
+        'session-1',
+        unsafeCoerce<AcpRuntimeEvent>({
+          type: 'acp_session_update',
+          update: {
+            sessionUpdate: 'user_message_chunk',
+          },
+        })
+      )
     ).not.toThrow();
 
     expect(injectUserMessageSpy).not.toHaveBeenCalled();
@@ -443,7 +446,7 @@ describe('SessionService', () => {
       await sessionService.getOrCreateSessionClient('session-1');
 
       const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-        onAcpEvent: (id: string, event: unknown) => void;
+        onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
       };
       acpHandlers.onAcpEvent('session-1', {
         type: 'acp_session_update',
@@ -506,7 +509,7 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(true);
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onAcpEvent: (id: string, event: unknown) => void;
+      onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
     };
     acpHandlers.onAcpEvent('session-1', {
       type: 'acp_session_update',

@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import treeKill from 'tree-kill';
+import { toError } from '@/backend/lib/error-utils';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -139,7 +140,7 @@ export class RunScriptService {
         workspace.worktreePath
       );
     } catch (error) {
-      return this.handleStartError(workspaceId, error as Error);
+      return this.handleStartError(workspaceId, toError(error));
     }
   }
 
@@ -166,7 +167,7 @@ export class RunScriptService {
     // Handle process exit
     childProcess.on('exit', (code, signal) => {
       void this.handleProcessExit(workspaceId, childProcess, pid, code, signal).catch((error) => {
-        logger.error('Failed to handle run script exit', error as Error, {
+        logger.error('Failed to handle run script exit', toError(error), {
           workspaceId,
           pid,
           code,
@@ -425,7 +426,7 @@ export class RunScriptService {
           await runScriptStateMachine.markFailed(workspaceId);
         }
       } catch (stateError) {
-        logger.error('Failed to transition to FAILED state', stateError as Error, {
+        logger.error('Failed to transition to FAILED state', toError(stateError), {
           workspaceId,
         });
       }
@@ -522,8 +523,9 @@ export class RunScriptService {
 
       return { success: true };
     } catch (error) {
-      logger.error('Failed to stop run script', error as Error, { workspaceId });
-      return { success: false, error: (error as Error).message };
+      const normalizedError = toError(error);
+      logger.error('Failed to stop run script', normalizedError, { workspaceId });
+      return { success: false, error: normalizedError.message };
     }
   }
 
@@ -645,7 +647,7 @@ export class RunScriptService {
         });
       });
     } catch (error) {
-      logger.error('Failed to run cleanup script', error as Error, { workspaceId });
+      logger.error('Failed to run cleanup script', toError(error), { workspaceId });
     }
   }
 
@@ -949,7 +951,7 @@ export class RunScriptService {
         try {
           await this.stopRunScript(workspaceId);
         } catch (error) {
-          logger.error('Failed to stop run script during cleanup', error as Error, {
+          logger.error('Failed to stop run script during cleanup', toError(error), {
             workspaceId,
           });
         }

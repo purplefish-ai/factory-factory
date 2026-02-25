@@ -14,6 +14,7 @@ import type { IPty } from 'node-pty';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { toError } from '@/backend/lib/error-utils';
 import {
   type SetupTerminalMessageInput,
   SetupTerminalMessageSchema,
@@ -168,7 +169,7 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
               break;
           }
         } catch (error) {
-          const err = error as Error;
+          const err = toError(error);
           logger.error('Error in setup terminal', err);
           sendSocketError(ws, err.message);
         }

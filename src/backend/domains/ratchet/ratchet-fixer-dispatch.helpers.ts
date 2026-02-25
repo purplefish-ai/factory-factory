@@ -1,3 +1,4 @@
+import { toError } from '@/backend/lib/error-utils';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { RatchetSessionBridge } from './bridges';
@@ -72,7 +73,7 @@ export async function triggerRatchetFixer(params: {
     return { type: 'ERROR', error: result.error };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error('Failed to trigger ratchet fixer', error as Error, {
+    logger.error('Failed to trigger ratchet fixer', toError(error), {
       workspaceId: workspace.id,
     });
     return { type: 'ERROR', error: errorMessage };

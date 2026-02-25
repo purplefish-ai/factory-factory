@@ -1,6 +1,7 @@
 import { readdir, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { toError } from '@/backend/lib/error-utils';
 import {
   compareFilesByRelevance,
   type FileEntry,
@@ -86,7 +87,7 @@ export const workspaceFilesRouter = router({
 
         return { files, hasWorktree: true };
       } catch (error) {
-        logger.error('listAllFiles error', error as Error, {
+        logger.error('listAllFiles error', toError(error), {
           workspaceId: input.workspaceId,
         });
         throw error;
@@ -163,7 +164,7 @@ export const workspaceFilesRouter = router({
 
         return { entries, hasWorktree: true };
       } catch (error) {
-        logger.error('listFiles error', error as Error, {
+        logger.error('listFiles error', toError(error), {
           workspaceId: input.workspaceId,
           fullPath,
           errorCode: (error as NodeJS.ErrnoException).code,

@@ -5,6 +5,7 @@
  * Supports macOS, Linux, and Windows.
  */
 
+import { toError } from '@/backend/lib/error-utils';
 import { execCommand, sendLinuxNotification, sendMacNotification } from '@/backend/lib/shell';
 import { configService, type NotificationConfig } from './config.service';
 import { createLogger } from './logger.service';
@@ -62,7 +63,7 @@ async function sendMacOSNotificationLocal(
     await sendMacNotification(title, message, soundEnabled ? 'Glass' : undefined);
     logger.debug('macOS notification sent', { title });
   } catch (error) {
-    logger.error('Failed to send macOS notification', error as Error, { title });
+    logger.error('Failed to send macOS notification', toError(error), { title });
     throw error;
   }
 }
@@ -82,7 +83,7 @@ async function sendLinuxNotificationLocal(title: string, message: string): Promi
     } catch {
       logger.error(
         'Failed to send Linux notification (notify-send and zenity unavailable)',
-        error as Error,
+        toError(error),
         { title }
       );
       throw error;
@@ -124,7 +125,7 @@ async function sendWindowsNotification(title: string, message: string): Promise<
     await execCommand('powershell', ['-Command', psScript]);
     logger.debug('Windows notification sent', { title });
   } catch (error) {
-    logger.error('Failed to send Windows notification', error as Error, { title });
+    logger.error('Failed to send Windows notification', toError(error), { title });
     throw error;
   }
 }
@@ -181,7 +182,7 @@ async function playSound(soundFile?: string): Promise<void> {
         logger.debug('Sound playback not supported', { platform });
     }
   } catch (error) {
-    logger.error('Failed to play sound', error as Error);
+    logger.error('Failed to play sound', toError(error));
     // Don't throw - sound is optional
   }
 }
@@ -267,7 +268,7 @@ class NotificationService {
       logger.debug('Notification sent', { title });
       return { sent: true };
     } catch (error) {
-      logger.error('Failed to send notification', error as Error, { title });
+      logger.error('Failed to send notification', toError(error), { title });
       return { sent: false, reason: 'error' };
     }
   }

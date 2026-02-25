@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Project, Workspace } from '@prisma-gen/client';
+import { toError } from '@/backend/lib/error-utils';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
@@ -132,7 +133,7 @@ class StartupScriptService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       await this.workspace.markFailed(workspace.id, errorMessage);
-      logger.error('Startup script execution error', error as Error, {
+      logger.error('Startup script execution error', toError(error), {
         workspaceId: workspace.id,
       });
 

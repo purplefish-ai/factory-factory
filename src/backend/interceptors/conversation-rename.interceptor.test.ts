@@ -52,7 +52,10 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { conversationRenameInterceptor } from './conversation-rename.interceptor';
+import {
+  conversationRenameInterceptor,
+  createConversationRenameInterceptor,
+} from './conversation-rename.interceptor';
 
 const context: InterceptorContext = {
   sessionId: 'session-1',
@@ -158,5 +161,16 @@ describe('conversationRenameInterceptor', () => {
 
     setIntervalSpy.mockRestore();
     clearIntervalSpy.mockRestore();
+  });
+
+  it('factory instances keep processed-session state isolated', async () => {
+    const interceptorA = createConversationRenameInterceptor();
+    const interceptorB = createConversationRenameInterceptor();
+
+    await interceptorA.onToolComplete?.(event, context);
+    await interceptorA.onToolComplete?.(event, context);
+    await interceptorB.onToolComplete?.(event, context);
+
+    expect(mockSessionInterceptorBridge.sendSessionMessage).toHaveBeenCalledTimes(2);
   });
 });
