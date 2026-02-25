@@ -31,7 +31,10 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { prePushRenameInterceptor } from './pre-push-rename.interceptor';
+import {
+  createPrePushRenameInterceptor,
+  prePushRenameInterceptor,
+} from './pre-push-rename.interceptor';
 
 const context: InterceptorContext = {
   sessionId: 'session-1',
@@ -157,5 +160,19 @@ describe('prePushRenameInterceptor', () => {
     });
 
     expect(mockGitCommand).toHaveBeenCalled();
+  });
+
+  it('factory instances do not share renamed workspace state', async () => {
+    const interceptorA = createPrePushRenameInterceptor();
+    const interceptorB = createPrePushRenameInterceptor();
+    const event = createEvent({
+      input: { command: 'git push -u origin HEAD' },
+    });
+    const isolatedContext = { ...context, workspaceId: 'ws-factory-isolated' };
+
+    await interceptorA.onToolStart!(event, isolatedContext);
+    await interceptorB.onToolStart!(event, isolatedContext);
+
+    expect(mockGitCommand).toHaveBeenCalledTimes(2);
   });
 });

@@ -14,16 +14,16 @@ import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 const logger = createLogger('pre-push-rename');
 const GIT_PUSH_REGEX = /\bgit\s+push\b/;
 
-// Track workspaces that have already been renamed to avoid duplicate renames
-const renamedWorkspaces = new Set<string>();
+class PrePushRenameInterceptor implements ToolInterceptor {
+  readonly name = 'pre-push-rename';
+  readonly tools = '*';
 
-export const prePushRenameInterceptor: ToolInterceptor = {
-  name: 'pre-push-rename',
-  tools: '*',
+  // Track workspaces that have already been renamed to avoid duplicate renames.
+  private renamedWorkspaces = new Set<string>();
 
   stop(): void {
-    renamedWorkspaces.clear();
-  },
+    this.renamedWorkspaces.clear();
+  }
 
   async onToolStart(event: ToolEvent, context: InterceptorContext): Promise<void> {
     let renameCompleted = false;
@@ -35,7 +35,7 @@ export const prePushRenameInterceptor: ToolInterceptor = {
       }
 
       // Skip if already renamed this workspace
-      if (renamedWorkspaces.has(context.workspaceId)) {
+      if (this.renamedWorkspaces.has(context.workspaceId)) {
         return;
       }
 
@@ -55,7 +55,7 @@ export const prePushRenameInterceptor: ToolInterceptor = {
       });
 
       // Mark immediately to prevent races from parallel tool calls
-      renamedWorkspaces.add(context.workspaceId);
+      this.renamedWorkspaces.add(context.workspaceId);
 
       const project = await projectManagementService.findById(workspace.projectId);
       const newBranchName = generateBranchName({
@@ -68,7 +68,7 @@ export const prePushRenameInterceptor: ToolInterceptor = {
           workspaceId: context.workspaceId,
           workspaceName: workspace.name,
         });
-        renamedWorkspaces.delete(context.workspaceId);
+        this.renamedWorkspaces.delete(context.workspaceId);
         return;
       }
 
@@ -86,7 +86,7 @@ export const prePushRenameInterceptor: ToolInterceptor = {
           stderr: result.stderr,
         });
         // Remove from set so it can be retried
-        renamedWorkspaces.delete(context.workspaceId);
+        this.renamedWorkspaces.delete(context.workspaceId);
         return;
       }
 
@@ -102,12 +102,18 @@ export const prePushRenameInterceptor: ToolInterceptor = {
       });
     } catch (error) {
       if (!renameCompleted) {
-        renamedWorkspaces.delete(context.workspaceId);
+        this.renamedWorkspaces.delete(context.workspaceId);
       }
       logger.error('Error in pre-push rename interceptor', {
         workspaceId: context.workspaceId,
         error,
       });
     }
-  },
-};
+  }
+}
+
+export function createPrePushRenameInterceptor(): ToolInterceptor {
+  return new PrePushRenameInterceptor();
+}
+
+export const prePushRenameInterceptor = createPrePushRenameInterceptor();

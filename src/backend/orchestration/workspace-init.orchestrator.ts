@@ -24,30 +24,51 @@ import { executeStartupScriptPipeline } from './workspace-init-script-pipeline';
 const logger = createLogger('workspace-init-orchestrator');
 const initialAttachmentsSchema = AttachmentSchema.array();
 
-// Module-level cached GitHub username (cross-domain logic: caches githubCLIService result)
-let cachedGitHubUsername: {
+type CachedGitHubUsernameEntry = {
   value: string | null;
   fetchedAtMs: number;
   expiresAtMs: number;
-} | null = null;
+};
 
-async function getCachedGitHubUsername(): Promise<string | null> {
-  const nowMs = Date.now();
-  if (
-    cachedGitHubUsername &&
-    nowMs >= cachedGitHubUsername.fetchedAtMs &&
-    nowMs < cachedGitHubUsername.expiresAtMs
-  ) {
-    return cachedGitHubUsername.value;
+class GitHubUsernameCache {
+  private cachedEntry: CachedGitHubUsernameEntry | null = null;
+
+  constructor(
+    private readonly githubService: Pick<typeof githubCLIService, 'getAuthenticatedUsername'>
+  ) {}
+
+  async getCachedUsername(): Promise<string | null> {
+    const nowMs = Date.now();
+    if (
+      this.cachedEntry &&
+      nowMs >= this.cachedEntry.fetchedAtMs &&
+      nowMs < this.cachedEntry.expiresAtMs
+    ) {
+      return this.cachedEntry.value;
+    }
+
+    const value = await this.githubService.getAuthenticatedUsername();
+    this.cachedEntry = {
+      value: value ?? null,
+      fetchedAtMs: nowMs,
+      expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
+    };
+    return this.cachedEntry.value;
   }
 
-  const value = await githubCLIService.getAuthenticatedUsername();
-  cachedGitHubUsername = {
-    value: value ?? null,
-    fetchedAtMs: nowMs,
-    expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
-  };
-  return cachedGitHubUsername.value;
+  clear(): void {
+    this.cachedEntry = null;
+  }
+}
+
+const gitHubUsernameCache = new GitHubUsernameCache(githubCLIService);
+
+function getCachedGitHubUsername(): Promise<string | null> {
+  return gitHubUsernameCache.getCachedUsername();
+}
+
+export function clearWorkspaceInitOrchestratorStateForTests(): void {
+  gitHubUsernameCache.clear();
 }
 
 async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {

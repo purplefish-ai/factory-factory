@@ -7,18 +7,24 @@ import type { ServerInstance } from '@/backend/types/server-instance';
  * like the actual port the server is running on.
  */
 
-let serverInstance: ServerInstance | null = null;
+export class ServerInstanceService {
+  private serverInstance: ServerInstance | null = null;
 
-export const serverInstanceService = {
   setInstance(instance: ServerInstance): void {
-    serverInstance = instance;
-  },
+    this.serverInstance = instance;
+  }
 
   getInstance(): ServerInstance | null {
-    return serverInstance;
-  },
+    return this.serverInstance;
+  }
 
   getPort(): number | null {
-    return serverInstance?.getPort() ?? null;
-  },
-};
+    return this.serverInstance?.getPort() ?? null;
+  }
+}
+
+export function createServerInstanceService(): ServerInstanceService {
+  return new ServerInstanceService();
+}
+
+export const serverInstanceService = createServerInstanceService();

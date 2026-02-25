@@ -32,7 +32,11 @@ vi.mock('@/backend/services/logger.service', () => ({
 }));
 
 // Import after mocks are set up
-import { generateBranchName, prePrRenameInterceptor } from './pre-pr-rename.interceptor';
+import {
+  createPrePrRenameInterceptor,
+  generateBranchName,
+  prePrRenameInterceptor,
+} from './pre-pr-rename.interceptor';
 
 const context: InterceptorContext = {
   sessionId: 'session-1',
@@ -359,6 +363,20 @@ describe('prePrRenameInterceptor', () => {
         }
       )
     ).resolves.toBeUndefined();
+  });
+
+  it('factory instances do not share renamed workspace state', async () => {
+    const interceptorA = createPrePrRenameInterceptor();
+    const interceptorB = createPrePrRenameInterceptor();
+    const event = createEvent({
+      input: { command: 'gh pr create --title "test"' },
+    });
+    const isolatedContext = { ...context, workspaceId: 'ws-prepr-factory-isolated' };
+
+    await interceptorA.onToolStart!(event, isolatedContext);
+    await interceptorB.onToolStart!(event, isolatedContext);
+
+    expect(mockGitCommand).toHaveBeenCalledTimes(2);
   });
 });
 
