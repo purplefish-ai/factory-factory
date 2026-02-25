@@ -876,6 +876,76 @@ describe('AcpRuntimeManager', () => {
 
       expect(manager.getClient('session-1')).toBe(restartedHandle);
     });
+
+    it('preserves in-flight pending creation when stale stop exit fires', async () => {
+      const firstChild = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      // SIGTERM marks process as no longer running but delays exit event.
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal) {
+          firstChild.killed = true;
+        }
+        return true;
+      });
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.waitFor(() => {
+        expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM');
+      });
+
+      const secondChild = createMockChildProcess();
+      mockSpawn.mockReturnValueOnce(secondChild);
+
+      let resolveSecondInit!: (value: {
+        protocolVersion: number;
+        agentCapabilities: Record<string, unknown>;
+        agentInfo: { name: string };
+      }) => void;
+      mockInitialize.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecondInit = resolve;
+          })
+      );
+
+      const pendingRestart = manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalledTimes(2);
+      });
+
+      const pendingBeforeStaleExit = manager.getPendingClient('session-1');
+      expect(pendingBeforeStaleExit).toBeDefined();
+
+      firstChild.exitCode = 0;
+      firstChild.emit('exit', 0, null);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(manager.getPendingClient('session-1')).toBe(pendingBeforeStaleExit);
+
+      resolveSecondInit({
+        protocolVersion: 1,
+        agentCapabilities: {},
+        agentInfo: { name: 'test' },
+      });
+
+      const restartedHandle = await pendingRestart;
+      expect(restartedHandle.child).toBe(secondChild);
+
+      await stopPromise;
+    });
   });
 
   describe('sendPrompt', () => {

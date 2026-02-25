@@ -769,12 +769,13 @@ export class AcpRuntimeManager {
       if (current?.child === child) {
         this.sessions.delete(sessionId);
       }
-      this.pendingCreation.delete(sessionId);
 
       if (this.stoppingInProgress.has(sessionId)) {
         logger.debug('Skipping exit handler - stop in progress', { sessionId, code });
         return;
       }
+
+      this.pendingCreation.delete(sessionId);
 
       if (handlers.onExit) {
         try {
