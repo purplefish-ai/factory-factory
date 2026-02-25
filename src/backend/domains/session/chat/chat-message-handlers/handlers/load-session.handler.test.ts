@@ -275,6 +275,7 @@ describe('createLoadSessionHandler', () => {
     await pendingHandle;
 
     expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+    expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-race-1', 'none');
   });
 
   it('marks Claude history hydration as none when JSONL file is not found', async () => {
