@@ -7,6 +7,7 @@ const HANDLER_FILES = [
   'src/backend/routers/websocket/terminal.handler.ts',
   'src/backend/routers/websocket/dev-logs.handler.ts',
   'src/backend/routers/websocket/post-run-logs.handler.ts',
+  'src/backend/routers/websocket/setup-terminal.handler.ts',
   'src/backend/routers/websocket/snapshots.handler.ts',
 ] as const;
 
@@ -25,6 +26,8 @@ describe('websocket handlers context injection', () => {
       'utf8'
     );
 
-    expect(source).not.toMatch(/handle(Chat|Terminal|DevLogs|PostRunLogs|Snapshots)Upgrade/);
+    expect(source).not.toMatch(
+      /handle(Chat|Terminal|DevLogs|PostRunLogs|SetupTerminal|Snapshots)Upgrade/
+    );
   });
 });
