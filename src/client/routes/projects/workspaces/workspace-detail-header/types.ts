@@ -1,5 +1,8 @@
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
-import type { useSessionManagement, useWorkspaceData } from '../use-workspace-detail';
+import type {
+  useSessionManagement,
+  useWorkspaceData,
+} from '@/client/routes/projects/workspaces/use-workspace-detail';
 
 export type WorkspaceHeaderWorkspace = NonNullable<
   ReturnType<typeof useWorkspaceData>['workspace']

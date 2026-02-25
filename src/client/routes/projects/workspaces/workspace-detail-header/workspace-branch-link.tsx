@@ -1,9 +1,9 @@
 import { Github } from 'lucide-react';
 import { trpc } from '@/client/lib/trpc';
+import { encodeGitHubTreeRef } from '@/client/routes/projects/workspaces/github-branch-url';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { encodeGitHubTreeRef } from '../github-branch-url';
 import type { WorkspaceHeaderWorkspace } from './types';
 
 export function WorkspaceBranchLink({

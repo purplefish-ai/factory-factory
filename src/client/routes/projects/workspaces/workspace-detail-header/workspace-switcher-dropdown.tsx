@@ -52,6 +52,22 @@ export function WorkspaceSwitcherDropdown({
     void navigate(`/projects/${projectSlug}/workspaces/${workspaceId}`);
   };
 
+  const handleOpenPr = (workspace: ServerWorkspace) => {
+    const prUrl = workspace.prUrl;
+    if (!prUrl) {
+      return;
+    }
+    window.open(prUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleOpenIssue = (workspace: ServerWorkspace) => {
+    const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
+    if (!issueUrl) {
+      return;
+    }
+    window.open(issueUrl, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <Select value={currentWorkspaceId} onValueChange={handleValueChange}>
       <SelectTrigger
@@ -82,20 +98,8 @@ export function WorkspaceSwitcherDropdown({
             >
               <WorkspaceItemContent
                 workspace={workspace}
-                onOpenPr={() => {
-                  const prUrl = workspace.prUrl;
-                  if (!prUrl) {
-                    return;
-                  }
-                  window.open(prUrl, '_blank', 'noopener,noreferrer');
-                }}
-                onOpenIssue={() => {
-                  const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
-                  if (!issueUrl) {
-                    return;
-                  }
-                  window.open(issueUrl, '_blank', 'noopener,noreferrer');
-                }}
+                onOpenPr={() => handleOpenPr(workspace)}
+                onOpenIssue={() => handleOpenIssue(workspace)}
               />
             </SelectItem>
           ))}
@@ -112,20 +116,8 @@ export function WorkspaceSwitcherDropdown({
             >
               <WorkspaceItemContent
                 workspace={workspace}
-                onOpenPr={() => {
-                  const prUrl = workspace.prUrl;
-                  if (!prUrl) {
-                    return;
-                  }
-                  window.open(prUrl, '_blank', 'noopener,noreferrer');
-                }}
-                onOpenIssue={() => {
-                  const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
-                  if (!issueUrl) {
-                    return;
-                  }
-                  window.open(issueUrl, '_blank', 'noopener,noreferrer');
-                }}
+                onOpenPr={() => handleOpenPr(workspace)}
+                onOpenIssue={() => handleOpenIssue(workspace)}
               />
             </SelectItem>
           ))}
@@ -142,20 +134,8 @@ export function WorkspaceSwitcherDropdown({
             >
               <WorkspaceItemContent
                 workspace={workspace}
-                onOpenPr={() => {
-                  const prUrl = workspace.prUrl;
-                  if (!prUrl) {
-                    return;
-                  }
-                  window.open(prUrl, '_blank', 'noopener,noreferrer');
-                }}
-                onOpenIssue={() => {
-                  const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
-                  if (!issueUrl) {
-                    return;
-                  }
-                  window.open(issueUrl, '_blank', 'noopener,noreferrer');
-                }}
+                onOpenPr={() => handleOpenPr(workspace)}
+                onOpenIssue={() => handleOpenIssue(workspace)}
               />
             </SelectItem>
           ))}
@@ -172,20 +152,8 @@ export function WorkspaceSwitcherDropdown({
             >
               <WorkspaceItemContent
                 workspace={workspace}
-                onOpenPr={() => {
-                  const prUrl = workspace.prUrl;
-                  if (!prUrl) {
-                    return;
-                  }
-                  window.open(prUrl, '_blank', 'noopener,noreferrer');
-                }}
-                onOpenIssue={() => {
-                  const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
-                  if (!issueUrl) {
-                    return;
-                  }
-                  window.open(issueUrl, '_blank', 'noopener,noreferrer');
-                }}
+                onOpenPr={() => handleOpenPr(workspace)}
+                onOpenIssue={() => handleOpenIssue(workspace)}
               />
             </SelectItem>
           ))}
