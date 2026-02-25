@@ -118,9 +118,19 @@ async function hydrateProviderHistoryIfNeeded(
       return;
     }
 
-    const refreshedTranscriptCount = sessionDomainService.getTranscriptSnapshot(sessionId).length;
-    if (refreshedTranscriptCount > 0) {
+    const latestTranscriptCount = sessionDomainService.getTranscriptSnapshot(sessionId).length;
+    if (latestTranscriptCount > 0) {
       sessionDomainService.markHistoryHydrated(sessionId, 'none');
+      logger.debug(
+        'Skipping provider JSONL history replace because transcript is no longer empty',
+        {
+          sessionId,
+          provider: dbSession.provider,
+          providerSessionId: dbSession.providerSessionId,
+          transcriptCount: latestTranscriptCount,
+          loadDurationMs: Date.now() - loadStart,
+        }
+      );
       return;
     }
 

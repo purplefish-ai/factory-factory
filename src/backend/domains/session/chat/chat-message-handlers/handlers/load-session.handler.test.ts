@@ -214,25 +214,25 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
-  it('does not replace transcript if new messages arrive during history load', async () => {
+  it('does not replace transcript when messages arrive while history load is in flight', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
       status: 'IDLE',
       model: 'claude-sonnet-4-5',
-      providerSessionId: 'provider-session-1',
+      providerSessionId: 'provider-session-race',
       workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
     });
     mocks.isHistoryHydrated.mockReturnValue(false);
 
-    type LoadedHistoryResult = { status: 'loaded'; filePath: string; history: unknown[] };
-    let resolveLoad!: (value: LoadedHistoryResult) => void;
-    const loadPromise = new Promise<LoadedHistoryResult>((resolve) => {
-      resolveLoad = resolve;
+    let resolveHistoryLoad:
+      | ((value: Awaited<ReturnType<typeof mocks.loadClaudeSessionHistory>>) => void)
+      | undefined;
+    const historyLoadPromise = new Promise<
+      Awaited<ReturnType<typeof mocks.loadClaudeSessionHistory>>
+    >((resolve) => {
+      resolveHistoryLoad = resolve;
     });
-    mocks.loadClaudeSessionHistory.mockReturnValue(loadPromise);
-
-    let transcriptSnapshot: unknown[] = [];
-    mocks.getTranscriptSnapshot.mockImplementation(() => transcriptSnapshot);
+    mocks.loadClaudeSessionHistory.mockReturnValue(historyLoadPromise);
 
     const handler = createLoadSessionHandler({
       getClientCreator: () => null,
@@ -240,30 +240,39 @@ describe('createLoadSessionHandler', () => {
       setManualDispatchResume: vi.fn(),
     });
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
-    const pendingLoad = handler({
+    const pendingHandle = handler({
       ws: ws as never,
-      sessionId: 'session-1',
+      sessionId: 'session-race-1',
       workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
-    await Promise.resolve();
-    await Promise.resolve();
-    transcriptSnapshot = [{ id: 'msg-during-load' }];
+    await vi.waitFor(() => {
+      expect(mocks.loadClaudeSessionHistory).toHaveBeenCalledTimes(1);
+    });
 
-    resolveLoad({
+    mocks.getTranscriptSnapshot.mockReturnValue([
+      {
+        id: 'msg-during-load',
+        source: 'user',
+        text: 'arrived while loading',
+        timestamp: '2026-02-14T00:00:10.000Z',
+      },
+    ]);
+
+    resolveHistoryLoad?.({
       status: 'loaded',
-      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-1.jsonl',
+      filePath: '/tmp/.claude/projects/-tmp-worktree/provider-session-race.jsonl',
       history: [
         {
-          type: 'user',
-          content: 'historical message',
+          type: 'assistant',
+          content: 'historical reply',
           timestamp: '2026-02-14T00:00:00.000Z',
         },
       ],
     });
 
-    await pendingLoad;
+    await pendingHandle;
 
     expect(mocks.replaceTranscript).not.toHaveBeenCalled();
   });
