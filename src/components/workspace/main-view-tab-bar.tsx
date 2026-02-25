@@ -1,4 +1,4 @@
-import { Camera, FileCode, FileDiff, Plus } from 'lucide-react';
+import { Archive, Camera, FileCode, FileDiff, Plus } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabButton } from '@/components/ui/tab-button';
@@ -10,6 +10,7 @@ import {
 } from '@/lib/session-provider-selection';
 import { cn } from '@/lib/utils';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
+import { ClosedSessionsDropdown } from './closed-sessions-dropdown';
 import { QuickActionsMenu } from './quick-actions-menu';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
 import {
@@ -44,6 +45,8 @@ function getTabIcon(type: MainViewTab['type']) {
       return FileDiff;
     case 'screenshot':
       return Camera;
+    case 'closed-session':
+      return Archive;
   }
 }
 
@@ -180,6 +183,7 @@ function SessionTabItem({
 
 interface MainViewTabBarProps {
   className?: string;
+  workspaceId: string;
   sessions?: Session[];
   currentSessionId?: string | null;
   sessionSummariesById?: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
@@ -187,6 +191,7 @@ interface MainViewTabBarProps {
   onCreateSession?: () => void;
   onCloseSession?: (sessionId: string) => void;
   onQuickAction?: (name: string, prompt: string) => void;
+  onSelectClosedSession?: (sessionId: string) => void;
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
@@ -196,6 +201,7 @@ interface MainViewTabBarProps {
 
 export function MainViewTabBar({
   className,
+  workspaceId,
   sessions,
   currentSessionId,
   sessionSummariesById,
@@ -203,6 +209,7 @@ export function MainViewTabBar({
   onCreateSession,
   onCloseSession,
   onQuickAction,
+  onSelectClosedSession,
   disabled,
   maxSessions,
   selectedProvider,
@@ -305,6 +312,16 @@ export function MainViewTabBar({
               }
             }}
             disabled={isButtonDisabled}
+          />
+        </div>
+      )}
+
+      {onSelectClosedSession && (
+        <div className="ml-0.5 shrink-0">
+          <ClosedSessionsDropdown
+            workspaceId={workspaceId}
+            onSelectClosedSession={onSelectClosedSession}
+            disabled={disabled}
           />
         </div>
       )}

@@ -6,6 +6,7 @@ import type { SessionProviderValue } from '@/lib/session-provider-selection';
 import { MainViewContent } from './main-view-content';
 import { MainViewTabBar } from './main-view-tab-bar';
 import type { WorkspaceSessionRuntimeSummary } from './session-tab-runtime';
+import { useWorkspacePanel } from './workspace-panel-context';
 
 // =============================================================================
 // Types
@@ -63,6 +64,7 @@ export function WorkspaceContentView({
   setSelectedProvider,
 }: WorkspaceContentViewProps) {
   const hasNoSessions = sessions && sessions.length === 0;
+  const { openTab } = useWorkspacePanel();
 
   // Always show tab bar (with "+" button), but render empty state content when no sessions exist
   return (
@@ -70,6 +72,7 @@ export function WorkspaceContentView({
       {/* Tab bar - flex-shrink-0 ensures it stays visible */}
       <div className="border-b flex-shrink-0">
         <MainViewTabBar
+          workspaceId={workspaceId}
           sessions={sessions}
           currentSessionId={selectedSessionId}
           sessionSummariesById={sessionSummariesById}
@@ -77,6 +80,10 @@ export function WorkspaceContentView({
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
           onQuickAction={onQuickAction}
+          onSelectClosedSession={(sessionId) => {
+            // Use a generic label - the tab will show the archive icon
+            openTab('closed-session', sessionId, 'History');
+          }}
           disabled={isCreatingSession || isDeletingSession || !hasWorktreePath}
           maxSessions={maxSessions}
           selectedProvider={selectedProvider}
