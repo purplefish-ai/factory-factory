@@ -33,12 +33,14 @@ interface SetupTerminalState {
 }
 
 type SetupTerminalLogger = ReturnType<AppContext['services']['createLogger']>;
+type SetupTerminalConfigService = AppContext['services']['configService'];
 
 function handleCreate(
   ws: WebSocket,
   message: Extract<SetupTerminalMessageInput, { type: 'create' }>,
   state: SetupTerminalState,
-  logger: SetupTerminalLogger
+  logger: SetupTerminalLogger,
+  configService: SetupTerminalConfigService
 ): void {
   if (state.pty) {
     ws.send(JSON.stringify({ type: 'error', message: 'Terminal already exists' }));
@@ -48,7 +50,7 @@ function handleCreate(
   const cols = message.cols ?? 80;
   const rows = message.rows ?? 24;
   const cwd = homedir() || tmpdir();
-  const shellPath = process.env.SHELL || '/bin/bash';
+  const shellPath = configService.getShellPath();
 
   logger.info('Creating setup terminal', { cwd, shell: shellPath, cols, rows });
 
@@ -59,7 +61,7 @@ function handleCreate(
     rows,
     cwd,
     env: {
-      ...process.env,
+      ...configService.getChildProcessEnv(),
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
     },
@@ -131,6 +133,7 @@ function sendSocketError(ws: WebSocket, message: string): void {
 
 export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
   const logger = appContext.services.createLogger('setup-terminal-handler');
+  const { configService } = appContext.services;
 
   return function handleSetupTerminalUpgrade(
     request: IncomingMessage,
@@ -156,7 +159,7 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
 
           switch (message.type) {
             case 'create':
-              handleCreate(ws, message, state, logger);
+              handleCreate(ws, message, state, logger, configService);
               break;
             case 'input':
               handleInput(message, state);

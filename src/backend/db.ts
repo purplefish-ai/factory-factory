@@ -3,7 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { PrismaClient } from '@prisma-gen/client';
-import { getDatabasePath } from './lib/env';
+import { configService } from './services/config.service';
 
 declare global {
   var prismaGlobal: PrismaClient | undefined;
@@ -30,7 +30,7 @@ function ensureDatabaseDirectory(dbPath: string): void {
 }
 
 function createPrismaClient(): PrismaClient {
-  const databasePath = getDatabasePath();
+  const databasePath = configService.getDatabasePath();
 
   // Ensure directory exists
   ensureDatabaseDirectory(databasePath);
@@ -47,7 +47,7 @@ function createPrismaClient(): PrismaClient {
 
 export const prisma = globalForPrisma.prismaGlobal ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production') {
+if (!configService.isProduction()) {
   globalForPrisma.prismaGlobal = prisma;
 }
 
@@ -55,5 +55,5 @@ if (process.env.NODE_ENV !== 'production') {
  * Get the current database path (useful for logging/debugging)
  */
 export function getCurrentDatabasePath(): string {
-  return getDatabasePath();
+  return configService.getDatabasePath();
 }

@@ -63,6 +63,7 @@ vi.mock('@/backend/services/logger.service', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   }),
+  getCurrentProcessEnv: () => ({ ...process.env }),
 }));
 
 // ---- Imports (after mocks) ----

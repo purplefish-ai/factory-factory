@@ -37,6 +37,7 @@ interface LoggerConfig {
   includeTimestamp: boolean;
   serviceName: string;
 }
+type LoggerEnv = ReturnType<typeof LoggerEnvSchema.parse>;
 
 /**
  * Get log level priority (lower = more severe)
@@ -117,10 +118,22 @@ function safeStringify(obj: unknown): string {
 let _logFileStream: WriteStream | null = null;
 let _logFilePath: string | null = null;
 
+function parseLoggerEnv(): LoggerEnv {
+  return LoggerEnvSchema.parse(process.env);
+}
+
+export function getCurrentProcessEnv(): NodeJS.ProcessEnv {
+  return { ...process.env };
+}
+
+function resolveBaseDir(env: LoggerEnv): string {
+  return env.BASE_DIR ? expandEnvVars(env.BASE_DIR) : join(homedir(), 'factory-factory');
+}
+
 function initLogFileStream(): WriteStream | null {
   try {
-    const rawBaseDir = process.env.BASE_DIR;
-    const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), 'factory-factory');
+    const env = parseLoggerEnv();
+    const baseDir = resolveBaseDir(env);
     const logsDir = join(baseDir, 'logs');
     if (!existsSync(logsDir)) {
       mkdirSync(logsDir, { recursive: true });
@@ -150,8 +163,8 @@ export function getLogFilePath(): string {
   if (_logFilePath) {
     return _logFilePath;
   }
-  const rawBaseDir = process.env.BASE_DIR;
-  const baseDir = rawBaseDir ? expandEnvVars(rawBaseDir) : join(homedir(), 'factory-factory');
+  const env = parseLoggerEnv();
+  const baseDir = resolveBaseDir(env);
   return join(baseDir, 'logs', 'server.log');
 }
 
@@ -159,7 +172,7 @@ export function getLogFilePath(): string {
  * Get default configuration from environment
  */
 function getDefaultConfig(): LoggerConfig {
-  const env = LoggerEnvSchema.parse(process.env);
+  const env = parseLoggerEnv();
 
   return {
     level: env.LOG_LEVEL,

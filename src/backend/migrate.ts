@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
+import { configService } from './services/config.service';
 
 export interface MigrationOptions {
   databasePath: string;
@@ -341,8 +342,8 @@ export function runMigrations(options: MigrationOptions): void {
 // Check if this module is being run directly (not imported)
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
-  const databasePath = process.env.DATABASE_PATH;
-  const migrationsPath = process.env.MIGRATIONS_PATH;
+  const databasePath = configService.getDatabasePathFromEnv();
+  const migrationsPath = configService.getMigrationsPath();
 
   if (!databasePath) {
     writeStderr('DATABASE_PATH environment variable is required');

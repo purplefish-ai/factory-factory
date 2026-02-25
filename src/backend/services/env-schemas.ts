@@ -61,6 +61,7 @@ export const LoggerEnvSchema = z.object({
   LOG_LEVEL: z.preprocess(toLowerString, LogLevelSchema).catch('info'),
   SERVICE_NAME: z.preprocess(toTrimmedString, z.string().min(1)).catch('factoryfactory'),
   NODE_ENV: z.preprocess(toLowerString, NodeEnvSchema).catch('development'),
+  BASE_DIR: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
 });
 
 export const ConfigEnvSchema = z.object({
@@ -95,7 +96,10 @@ export const ConfigEnvSchema = z.object({
   WS_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional(),
   FRONTEND_STATIC_PATH: z.preprocess(toTrimmedString, z.string()).optional(),
   BACKEND_PORT: PositiveIntEnvSchema.catch(3001),
+  BACKEND_HOST: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
+  SHELL: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   DATABASE_PATH: z.preprocess(toTrimmedString, z.string()).optional(),
+  MIGRATIONS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   HEALTH_CHECK_INTERVAL_MS: PositiveIntEnvSchema.catch(300_000),
   MAX_SESSIONS_PER_WORKSPACE: PositiveIntEnvSchema.catch(5),
   DEBUG_CHAT_WS: z.preprocess(parseBoolean, z.boolean()).catch(false),

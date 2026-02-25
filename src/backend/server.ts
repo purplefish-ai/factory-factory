@@ -77,7 +77,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
   const logger = createLogger('server');
   const REQUESTED_PORT = requestedPort ?? configService.getBackendPort();
-  const REQUESTED_HOST = process.env.BACKEND_HOST?.trim() || undefined;
+  const REQUESTED_HOST = configService.getBackendHost();
   const ENDPOINT_HOST = REQUESTED_HOST ?? 'localhost';
   let actualPort: number = REQUESTED_PORT;
 

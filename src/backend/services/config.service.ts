@@ -101,11 +101,15 @@ interface SystemConfig {
 
   // Server settings
   backendPort: number;
+  backendHost?: string;
   nodeEnv: 'development' | 'production' | 'test';
   webConcurrency?: number;
+  shellPath: string;
 
   // Database (SQLite)
   databasePath: string;
+  databasePathFromEnv?: string;
+  migrationsPath?: string;
 
   // Default session profile
   defaultSessionProfile: SessionProfile;
@@ -266,6 +270,8 @@ function loadSystemConfig(): SystemConfig {
   const nodeEnv = env.NODE_ENV;
   const debugLogDir = join(baseDir, 'debug');
   const acpTraceLogsEnabled = env.ACP_TRACE_LOGS_ENABLED ?? nodeEnv === 'development';
+  const databasePathFromEnv = env.DATABASE_PATH ? expandEnvVars(env.DATABASE_PATH) : undefined;
+  const migrationsPath = env.MIGRATIONS_PATH ? expandEnvVars(env.MIGRATIONS_PATH) : undefined;
 
   const config: SystemConfig = {
     // Directory paths
@@ -280,11 +286,15 @@ function loadSystemConfig(): SystemConfig {
 
     // Server settings
     backendPort: env.BACKEND_PORT,
+    backendHost: env.BACKEND_HOST,
     nodeEnv,
     webConcurrency: env.WEB_CONCURRENCY,
+    shellPath: env.SHELL ?? '/bin/bash',
 
     // Database (SQLite - defaults to ~/factory-factory/data.db)
-    databasePath: env.DATABASE_PATH ?? join(baseDir, 'data.db'),
+    databasePath: databasePathFromEnv ?? join(baseDir, 'data.db'),
+    databasePathFromEnv,
+    migrationsPath,
 
     // Default session profile
     defaultSessionProfile: buildDefaultSessionProfile(env),
@@ -408,6 +418,20 @@ class ConfigService {
   }
 
   /**
+   * Get backend server host override (if configured)
+   */
+  getBackendHost(): string | undefined {
+    return this.config.backendHost;
+  }
+
+  /**
+   * Get shell path used for spawning terminal subprocesses
+   */
+  getShellPath(): string {
+    return this.config.shellPath;
+  }
+
+  /**
    * Get base directory for all FactoryFactory data
    */
   getBaseDir(): string {
@@ -461,6 +485,27 @@ class ConfigService {
    */
   getDatabasePath(): string {
     return this.config.databasePath;
+  }
+
+  /**
+   * Get DATABASE_PATH when explicitly configured in env
+   */
+  getDatabasePathFromEnv(): string | undefined {
+    return this.config.databasePathFromEnv;
+  }
+
+  /**
+   * Get migrations path (if configured)
+   */
+  getMigrationsPath(): string | undefined {
+    return this.config.migrationsPath;
+  }
+
+  /**
+   * Get a copy of the current process environment for child process spawning
+   */
+  getChildProcessEnv(): NodeJS.ProcessEnv {
+    return { ...process.env };
   }
 
   /**
