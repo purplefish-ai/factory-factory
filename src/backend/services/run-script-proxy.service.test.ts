@@ -1,5 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
+import { createConnection } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { authenticateRequest } from '@/shared/proxy-utils';
 import { configService } from './config.service';
 
 const mockStartCloudflaredTunnel = vi.hoisted(() => vi.fn());
@@ -52,6 +54,46 @@ function createChildProcess(pid = 1234): ChildProcess {
     exitCode: null,
     kill: vi.fn(),
   } as unknown as ChildProcess;
+}
+
+function sendRawHttpRequest(params: { port: number; rawRequest: string }): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: '127.0.0.1', port: params.port });
+    let response = '';
+    let resolved = false;
+
+    socket.setEncoding('utf8');
+    socket.on('connect', () => {
+      socket.write(params.rawRequest);
+    });
+    socket.on('data', (chunk) => {
+      response += chunk;
+      if (!response.includes('\r\n\r\n')) {
+        return;
+      }
+
+      resolved = true;
+      socket.destroy();
+      resolve(response);
+    });
+    socket.on('error', (error) => {
+      if (!resolved) {
+        reject(error);
+      }
+    });
+    socket.on('close', () => {
+      if (resolved) {
+        return;
+      }
+      reject(new Error('Socket closed before full response was received'));
+    });
+  });
+}
+
+function parseStatusCode(rawHttpResponse: string): number {
+  const firstLine = rawHttpResponse.split('\r\n')[0] ?? '';
+  const match = firstLine.match(/^HTTP\/1\.1\s+(\d{3})/);
+  return Number(match?.[1] ?? 0);
 }
 
 describe('RunScriptProxyService', () => {
@@ -122,6 +164,81 @@ describe('RunScriptProxyService', () => {
       (service as unknown as RunScriptProxyService).ensureTunnel('w2', 3001)
     ).resolves.toBeNull();
     expect(mockStartCloudflaredTunnel).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for malformed HTTP paths when auth parsing throws unexpectedly', async () => {
+    const service = new RunScriptProxyService();
+    vi.mocked(authenticateRequest).mockImplementation(() => {
+      throw new TypeError('Invalid URL');
+    });
+
+    let statusCode = 0;
+    mockStartCloudflaredTunnel.mockImplementationOnce(
+      async ({ targetUrl }: { targetUrl: string }) => {
+        const authProxyPort = Number(new URL(targetUrl).port);
+        const response = await sendRawHttpRequest({
+          port: authProxyPort,
+          rawRequest: [
+            'GET /\\\\ HTTP/1.1',
+            `Host: 127.0.0.1:${authProxyPort}`,
+            'Connection: close',
+            '',
+            '',
+          ].join('\r\n'),
+        });
+        statusCode = parseStatusCode(response);
+        return {
+          publicUrl: 'https://abc.trycloudflare.com',
+          proc: createChildProcess(),
+        };
+      }
+    );
+
+    await expect(service.ensureTunnel('ws-malformed-http', 3000)).resolves.toMatch(
+      /^https:\/\/abc\.trycloudflare\.com\?token=/
+    );
+    expect(statusCode).toBe(400);
+
+    await service.stopTunnel('ws-malformed-http');
+  });
+
+  it('returns 400 for malformed upgrade paths when auth parsing throws unexpectedly', async () => {
+    const service = new RunScriptProxyService();
+    vi.mocked(authenticateRequest).mockImplementation(() => {
+      throw new TypeError('Invalid URL');
+    });
+
+    let statusCode = 0;
+    mockStartCloudflaredTunnel.mockImplementationOnce(
+      async ({ targetUrl }: { targetUrl: string }) => {
+        const authProxyPort = Number(new URL(targetUrl).port);
+        const response = await sendRawHttpRequest({
+          port: authProxyPort,
+          rawRequest: [
+            'GET /\\\\ HTTP/1.1',
+            `Host: 127.0.0.1:${authProxyPort}`,
+            'Connection: Upgrade',
+            'Upgrade: websocket',
+            'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
+            'Sec-WebSocket-Version: 13',
+            '',
+            '',
+          ].join('\r\n'),
+        });
+        statusCode = parseStatusCode(response);
+        return {
+          publicUrl: 'https://abc.trycloudflare.com',
+          proc: createChildProcess(),
+        };
+      }
+    );
+
+    await expect(service.ensureTunnel('ws-malformed-upgrade', 3000)).resolves.toMatch(
+      /^https:\/\/abc\.trycloudflare\.com\?token=/
+    );
+    expect(statusCode).toBe(400);
+
+    await service.stopTunnel('ws-malformed-upgrade');
   });
 
   it('cleanup stops all active tunnels', async () => {
