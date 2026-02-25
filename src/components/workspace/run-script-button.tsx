@@ -75,10 +75,10 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-6 w-6 md:h-8 md:w-8"
               onClick={() => setSetupPanelOpen(true)}
             >
-              <Play className="h-4 w-4 text-green-600 fill-green-600" />
+              <Play className="h-3 w-3 text-green-600 fill-green-600 md:h-4 md:w-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>Setup dev server</TooltipContent>
@@ -128,16 +128,16 @@ export function RunScriptButton({ workspaceId }: RunScriptButtonProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-6 w-6 md:h-8 md:w-8"
                   onClick={handleClick}
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3 w-3 animate-spin md:h-4 md:w-4" />
                   ) : isRunning ? (
-                    <Square className="h-4 w-4 text-destructive fill-destructive" />
+                    <Square className="h-3 w-3 text-destructive fill-destructive md:h-4 md:w-4" />
                   ) : (
-                    <Play className="h-4 w-4 text-green-600 fill-green-600" />
+                    <Play className="h-3 w-3 text-green-600 fill-green-600 md:h-4 md:w-4" />
                   )}
                 </Button>
               </TooltipTrigger>

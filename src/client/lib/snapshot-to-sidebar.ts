@@ -159,7 +159,13 @@ export function mapSnapshotEntryToServerWorkspace(
   existing?: Partial<
     Pick<
       ServerWorkspace,
-      'githubIssueNumber' | 'linearIssueId' | 'stateComputedAt' | 'snapshotComputedAt'
+      | 'githubIssueNumber'
+      | 'githubIssueUrl'
+      | 'linearIssueId'
+      | 'linearIssueIdentifier'
+      | 'linearIssueUrl'
+      | 'stateComputedAt'
+      | 'snapshotComputedAt'
     >
   >
 ): ServerWorkspace {
@@ -189,6 +195,9 @@ export function mapSnapshotEntryToServerWorkspace(
     snapshotComputedAt: entry.computedAt,
     // Preserved from cache (not in snapshot data)
     githubIssueNumber: (existing?.githubIssueNumber as number | null) ?? null,
+    githubIssueUrl: (existing?.githubIssueUrl as string | null) ?? null,
     linearIssueId: (existing?.linearIssueId as string | null) ?? null,
+    linearIssueIdentifier: (existing?.linearIssueIdentifier as string | null) ?? null,
+    linearIssueUrl: (existing?.linearIssueUrl as string | null) ?? null,
   };
 }

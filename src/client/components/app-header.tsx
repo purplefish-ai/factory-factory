@@ -15,7 +15,7 @@ function SidebarToggleButton() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 shrink-0"
+          className="h-8 w-8 shrink-0 md:h-9 md:w-9"
           aria-label="Toggle sidebar"
           onClick={toggleSidebar}
         >
@@ -31,7 +31,7 @@ export function AppHeader() {
   const { title, setRightSlot, setLeftStartSlot, setLeftExtraSlot } = useAppHeaderContext();
 
   return (
-    <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)]">
+    <header className="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 border-b bg-background px-2 min-h-12 pt-[env(safe-area-inset-top)] md:gap-x-2">
       <SidebarToggleButton />
       <div ref={setLeftStartSlot} className="contents" />
       <div className="flex min-w-0 flex-1 items-center gap-2">
