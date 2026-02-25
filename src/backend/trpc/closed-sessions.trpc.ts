@@ -2,8 +2,8 @@ import { readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { prisma } from '@/backend/db';
-import type { ClosedSessionTranscript } from '@/backend/domains/session/lifecycle/closed-session-persistence.service';
+import type { ClosedSessionTranscript } from '@/backend/domains/session';
+import { sessionDataService } from '@/backend/domains/session';
 import { publicProcedure, router } from './trpc';
 
 export const closedSessionsRouter = router({
@@ -20,22 +20,10 @@ export const closedSessionsRouter = router({
     .query(async ({ input }) => {
       const { workspaceId, limit = 20 } = input;
 
-      const closedSessions = await prisma.closedSession.findMany({
-        where: { workspaceId },
-        orderBy: { completedAt: 'desc' },
-        take: limit,
-        select: {
-          id: true,
-          sessionId: true,
-          name: true,
-          workflow: true,
-          provider: true,
-          model: true,
-          startedAt: true,
-          completedAt: true,
-          // Don't include transcriptPath in list view for performance
-        },
-      });
+      const closedSessions = await sessionDataService.findClosedSessionsByWorkspaceId(
+        workspaceId,
+        limit
+      );
 
       return closedSessions;
     }),
@@ -44,17 +32,7 @@ export const closedSessionsRouter = router({
    * Get a specific closed session with its full transcript
    */
   getTranscript: publicProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
-    const closedSession = await prisma.closedSession.findUnique({
-      where: { id: input.id },
-      include: {
-        workspace: {
-          select: {
-            id: true,
-            worktreePath: true,
-          },
-        },
-      },
-    });
+    const closedSession = await sessionDataService.findClosedSessionByIdWithWorkspace(input.id);
 
     if (!closedSession) {
       throw new TRPCError({
@@ -97,16 +75,7 @@ export const closedSessionsRouter = router({
    * Delete a closed session and its transcript file
    */
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    const closedSession = await prisma.closedSession.findUnique({
-      where: { id: input.id },
-      include: {
-        workspace: {
-          select: {
-            worktreePath: true,
-          },
-        },
-      },
-    });
+    const closedSession = await sessionDataService.findClosedSessionByIdWithWorkspace(input.id);
 
     if (!closedSession) {
       throw new TRPCError({
@@ -116,9 +85,7 @@ export const closedSessionsRouter = router({
     }
 
     // Delete from database first
-    await prisma.closedSession.delete({
-      where: { id: input.id },
-    });
+    await sessionDataService.deleteClosedSession(input.id);
 
     // Best-effort delete transcript file (don't throw if it fails)
     if (closedSession.workspace.worktreePath) {

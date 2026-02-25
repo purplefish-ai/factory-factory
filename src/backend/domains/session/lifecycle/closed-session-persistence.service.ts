@@ -1,8 +1,8 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionProvider } from '@prisma-gen/client';
-import { prisma } from '@/backend/db';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
+import { closedSessionAccessor } from '@/backend/resource_accessors/closed-session.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type { ChatMessage } from '@/shared/acp-protocol';
 
@@ -104,18 +104,16 @@ class ClosedSessionPersistenceService {
       });
 
       // Store metadata in database
-      await prisma.closedSession.create({
-        data: {
-          workspaceId,
-          sessionId,
-          name,
-          workflow,
-          provider,
-          model,
-          transcriptPath: relativePath,
-          startedAt,
-          completedAt: new Date(),
-        },
+      await closedSessionAccessor.create({
+        workspaceId,
+        sessionId,
+        name,
+        workflow,
+        provider,
+        model,
+        transcriptPath: relativePath,
+        startedAt,
+        completedAt: new Date(),
       });
 
       logger.info('Persisted closed session', {
