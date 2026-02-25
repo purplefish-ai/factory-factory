@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
       - name: Generate Prisma client
         run: pnpm db:generate
 
@@ -61,6 +64,9 @@ jobs:
 
       - name: Run TypeScript check
         run: pnpm typecheck
+
+      - name: Check Codex app-server schema drift
+        run: pnpm check:codex-schema
 
   build:
     name: Build
