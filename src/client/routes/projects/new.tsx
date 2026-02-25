@@ -28,7 +28,7 @@ export default function NewProjectPage() {
   useAppHeader({ title: 'New Project' });
 
   const navigate = useNavigate();
-  const [source, setSource] = useState<ProjectSource>('local');
+  const [source, setSource] = useState<ProjectSource>('github');
 
   // Local path state
   const [repoPath, setRepoPath] = useState('');
