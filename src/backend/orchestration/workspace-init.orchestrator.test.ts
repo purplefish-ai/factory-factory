@@ -112,7 +112,10 @@ import { workspaceAccessor } from '@/backend/resource_accessors/workspace.access
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
-import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
+import {
+  clearWorkspaceInitOrchestratorStateForTests,
+  initializeWorkspaceWorktree,
+} from './workspace-init.orchestrator';
 
 // --- Test Helpers ---
 
@@ -193,6 +196,7 @@ function setupHappyPath() {
 describe('initializeWorkspaceWorktree', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearWorkspaceInitOrchestratorStateForTests();
   });
 
   describe('provisioning gate', () => {
@@ -410,6 +414,19 @@ describe('initializeWorkspaceWorktree', () => {
       // and getCachedGitHubUsername is never called
       expect(gitOpsService.createWorktreeFromExistingBranch).toHaveBeenCalled();
       expect(gitOpsService.createWorktree).not.toHaveBeenCalled();
+    });
+
+    it('refreshes GitHub username after cache clear lifecycle call', async () => {
+      setupHappyPath();
+      vi.mocked(githubCLIService.getAuthenticatedUsername)
+        .mockResolvedValueOnce('first-user')
+        .mockResolvedValueOnce('second-user');
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+      clearWorkspaceInitOrchestratorStateForTests();
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(githubCLIService.getAuthenticatedUsername).toHaveBeenCalledTimes(2);
     });
   });
 
