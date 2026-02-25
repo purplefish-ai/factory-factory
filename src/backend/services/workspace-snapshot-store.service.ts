@@ -205,14 +205,21 @@ export interface SnapshotRemovedEvent {
 // Field-to-group mapping
 // ---------------------------------------------------------------------------
 
-const WORKSPACE_FIELDS = ['name', 'status', 'createdAt', 'branchName', 'hasHadSessions'] as const;
+const WORKSPACE_FIELDS = [
+  'projectId',
+  'name',
+  'status',
+  'createdAt',
+  'branchName',
+  'hasHadSessions',
+] as const;
 const PR_FIELDS = ['prUrl', 'prNumber', 'prState', 'prCiStatus', 'prUpdatedAt'] as const;
 const SESSION_FIELDS = ['isWorking', 'pendingRequestType', 'sessionSummaries'] as const;
 const RATCHET_FIELDS = ['ratchetEnabled', 'ratchetState'] as const;
 const RUN_SCRIPT_FIELDS = ['runScriptStatus'] as const;
 const RECONCILIATION_FIELDS = ['gitStats', 'lastActivityAt'] as const;
 
-type SnapshotField = Exclude<keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry, 'projectId'>;
+type SnapshotField = keyof SnapshotUpdateInput & keyof WorkspaceSnapshotEntry;
 
 type FieldGroupMapping = {
   group: SnapshotFieldGroup;
@@ -256,6 +263,7 @@ function createDefaultFieldTimestamps(): Record<SnapshotFieldGroup, number> {
 export class WorkspaceSnapshotStore extends EventEmitter {
   private entries = new Map<string, WorkspaceSnapshotEntry>();
   private projectIndex = new Map<string, Set<string>>();
+  private rawSessionIsWorkingByWorkspaceId = new Map<string, boolean>();
   private deriveFns: SnapshotDerivationFns | null = null;
 
   private assignField<K extends SnapshotField>(
@@ -292,6 +300,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * Create a new default snapshot entry for a workspace.
    */
   private createDefaultEntry(workspaceId: string, projectId: string): WorkspaceSnapshotEntry {
+    this.rawSessionIsWorkingByWorkspaceId.set(workspaceId, false);
     return {
       workspaceId,
       projectId,
@@ -333,17 +342,23 @@ export class WorkspaceSnapshotStore extends EventEmitter {
     entry: WorkspaceSnapshotEntry,
     update: SnapshotUpdateInput,
     ts: number
-  ): void {
+  ): boolean {
+    let merged = false;
     for (const mapping of FIELD_GROUP_MAPPINGS) {
       const hasFieldsInGroup = mapping.fields.some((field) => update[field] !== undefined);
       if (!hasFieldsInGroup || ts <= entry.fieldTimestamps[mapping.group]) {
         continue;
       }
+      merged = true;
       entry.fieldTimestamps[mapping.group] = ts;
       for (const field of mapping.fields) {
         this.assignField(entry, update, field);
       }
+      if (mapping.group === 'session' && update.isWorking !== undefined) {
+        this.rawSessionIsWorkingByWorkspaceId.set(entry.workspaceId, update.isWorking);
+      }
     }
+    return merged;
   }
 
   /**
@@ -351,6 +366,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * derivation functions.
    */
   private recomputeDerivedState(entry: WorkspaceSnapshotEntry): void {
+    const sessionIsWorking = this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId) ?? false;
     const flowState = this.derive.deriveFlowState({
       prUrl: entry.prUrl,
       prState: entry.prState,
@@ -367,7 +383,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         prCiStatus: entry.prCiStatus,
         ratchetState: entry.ratchetState,
         hasHadSessions: entry.hasHadSessions,
-        sessionIsWorking: entry.isWorking,
+        sessionIsWorking,
         flowState,
       },
       {
@@ -376,6 +392,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       }
     );
 
+    entry.isWorking = derivedState.isWorking;
     entry.flowPhase = derivedState.flowPhase;
     entry.ciObservation = derivedState.ciObservation;
     entry.ratchetButtonAnimated = derivedState.ratchetButtonAnimated;
@@ -413,7 +430,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * Insert or update a workspace snapshot entry.
    *
    * Field-level timestamp merging ensures concurrent updates preserve the
-   * newest data per field group. Derived state is recomputed after every update.
+   * newest data per field group. Stale updates are ignored and do not emit.
    */
   upsert(
     workspaceId: string,
@@ -423,6 +440,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   ): void {
     const ts = timestamp ?? Date.now();
     let entry = this.entries.get(workspaceId);
+    const isNewEntry = entry === undefined;
     const oldProjectId = entry?.projectId;
 
     if (!entry) {
@@ -434,13 +452,13 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       entry = this.createDefaultEntry(workspaceId, update.projectId);
     }
 
-    // Update projectId if provided
-    if (update.projectId !== undefined) {
-      entry.projectId = update.projectId;
-    }
-
     // Field-level timestamp merge
-    this.mergeFieldGroups(entry, update, ts);
+    const didMerge = this.mergeFieldGroups(entry, update, ts);
+
+    if (!(isNewEntry || didMerge)) {
+      logger.debug('Snapshot update ignored (stale/no-op)', { workspaceId, source });
+      return;
+    }
 
     // Recompute derived state from raw fields
     this.recomputeDerivedState(entry);
@@ -476,6 +494,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
 
     // Delete from entries map
     this.entries.delete(workspaceId);
+    this.rawSessionIsWorkingByWorkspaceId.delete(workspaceId);
 
     // Remove from project index
     const projectSet = this.projectIndex.get(entry.projectId);
@@ -546,6 +565,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   clear(): void {
     this.entries.clear();
     this.projectIndex.clear();
+    this.rawSessionIsWorkingByWorkspaceId.clear();
     logger.info('Snapshot store cleared');
   }
 }
