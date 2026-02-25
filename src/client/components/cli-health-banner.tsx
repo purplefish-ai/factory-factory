@@ -24,7 +24,7 @@ interface CliHealthForBanner {
   github: { isInstalled: boolean; isAuthenticated: boolean };
 }
 
-function collectIssues(health: CliHealthForBanner): HealthIssue[] {
+export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
   const issues: HealthIssue[] = [];
 
   if (!health.claude.isInstalled) {
@@ -69,6 +69,141 @@ function collectIssues(health: CliHealthForBanner): HealthIssue[] {
   }
 
   return issues;
+}
+
+function renderIssueActions(
+  issue: HealthIssue,
+  isUpgrading: boolean,
+  onUpgrade: (provider: 'CLAUDE' | 'CODEX') => void
+) {
+  return (
+    <>
+      {issue.link && (
+        <a
+          href={issue.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-warning underline hover:text-warning/80"
+        >
+          {issue.linkLabel ?? 'Install'}
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
+      {issue.upgradeProvider && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 border-warning/40 px-2 text-xs text-warning hover:bg-warning/10"
+          onClick={() => {
+            if (issue.upgradeProvider) {
+              onUpgrade(issue.upgradeProvider);
+            }
+          }}
+          disabled={isUpgrading}
+        >
+          {isUpgrading ? 'Upgrading...' : 'Upgrade now'}
+        </Button>
+      )}
+    </>
+  );
+}
+
+export function CLIHealthBannerContent({
+  issues,
+  isRefetching,
+  isUpgrading,
+  onRecheck,
+  onDismiss,
+  onUpgrade,
+}: {
+  issues: HealthIssue[];
+  isRefetching: boolean;
+  isUpgrading: boolean;
+  onRecheck: () => void;
+  onDismiss: () => void;
+  onUpgrade: (provider: 'CLAUDE' | 'CODEX') => void;
+}) {
+  return (
+    <div className="border-b border-warning/20 bg-warning/10 py-2 pl-3 pr-2 sm:px-4 sm:py-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+          <AlertTriangle className="mt-0.5 hidden h-5 w-5 shrink-0 text-warning sm:block" />
+          <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
+            <div className="flex items-center gap-2 sm:hidden">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+              <p className="min-w-0 flex-1 text-xs font-medium text-warning-foreground dark:text-warning">
+                Some features require additional setup
+              </p>
+              <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5 sm:hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRecheck}
+                  disabled={isRefetching || isUpgrading}
+                  className="h-7 px-2 text-warning hover:bg-warning/20"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+                  <span className="sr-only">Recheck</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onDismiss}
+                  className="h-7 w-7 text-warning hover:bg-warning/20"
+                >
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Dismiss</span>
+                </Button>
+              </div>
+            </div>
+            <p className="hidden text-sm font-medium text-warning-foreground dark:text-warning sm:block">
+              Some features require additional setup
+            </p>
+            <ul className="space-y-1 sm:space-y-1.5">
+              {issues.map((issue) => (
+                <li
+                  key={issue.title}
+                  className="text-xs leading-snug text-foreground/85 sm:text-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-medium">{issue.title}</span>
+                    <div className="flex flex-wrap items-center gap-2 sm:hidden">
+                      {renderIssueActions(issue, isUpgrading, onUpgrade)}
+                    </div>
+                  </div>
+                  <span className="hidden sm:inline">: {issue.description}</span>
+                  <span className="ml-1.5 hidden items-center gap-2 sm:inline-flex">
+                    {renderIssueActions(issue, isUpgrading, onUpgrade)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+        <div className="hidden items-center gap-2 self-start sm:flex">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRecheck}
+            disabled={isRefetching || isUpgrading}
+            className="h-8 px-2 text-warning hover:bg-warning/20"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+            <span className="ml-1.5">Recheck</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onDismiss}
+            className="h-8 w-8 text-warning hover:bg-warning/20"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Dismiss</span>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -124,73 +259,13 @@ export function CLIHealthBanner() {
   }
 
   return (
-    <div className="border-b border-warning/20 bg-warning/10 px-4 py-3">
-      <div>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-warning" />
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-warning-foreground dark:text-warning">
-                Some features require additional setup
-              </p>
-              <ul className="space-y-1.5">
-                {issues.map((issue) => (
-                  <li key={issue.title} className="text-sm text-foreground/80">
-                    <span className="font-medium">{issue.title}:</span> {issue.description}
-                    {issue.link && (
-                      <a
-                        href={issue.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-1.5 inline-flex items-center gap-1 text-warning underline hover:text-warning/80"
-                      >
-                        {issue.linkLabel ?? 'Install'}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                    {issue.upgradeProvider && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="ml-2 h-6 border-warning/40 px-2 text-xs text-warning hover:bg-warning/10"
-                        onClick={() =>
-                          upgradeProviderCli.mutate({
-                            provider: issue.upgradeProvider as 'CLAUDE' | 'CODEX',
-                          })
-                        }
-                        disabled={upgradeProviderCli.isPending}
-                      >
-                        {upgradeProviderCli.isPending ? 'Upgrading...' : 'Upgrade now'}
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => refetch()}
-              disabled={isRefetching || upgradeProviderCli.isPending}
-              className="h-8 text-warning hover:bg-warning/20"
-            >
-              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
-              Recheck
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setDismissed(true)}
-              className="h-8 w-8 text-warning hover:bg-warning/20"
-            >
-              <X className="h-4 w-4" />
-              <span className="sr-only">Dismiss</span>
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <CLIHealthBannerContent
+      issues={issues}
+      isRefetching={isRefetching}
+      isUpgrading={upgradeProviderCli.isPending}
+      onRecheck={() => refetch()}
+      onDismiss={() => setDismissed(true)}
+      onUpgrade={(provider) => upgradeProviderCli.mutate({ provider })}
+    />
   );
 }
