@@ -92,7 +92,6 @@ function getAcpProcessorState() {
   return (
     sessionService as unknown as {
       acpEventProcessor: {
-        acpStreamState: Map<string, unknown>;
         pendingAcpToolCalls: Map<string, Map<string, unknown>>;
         sessionToWorkspace: Map<string, string>;
         sessionToWorkingDir: Map<string, string>;
@@ -110,7 +109,6 @@ describe('SessionService', () => {
     mockClearRatchetActiveSessionIfMatching.mockReset();
     mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
-    acpProcessor.acpStreamState.clear();
     acpProcessor.pendingAcpToolCalls.clear();
     acpProcessor.sessionToWorkspace.clear();
     acpProcessor.sessionToWorkingDir.clear();
@@ -601,81 +599,6 @@ describe('SessionService', () => {
       })
     );
     expect(mockNotifyToolComplete).toHaveBeenCalledTimes(1);
-  });
-
-  it('accumulates assistant thinking chunks into one persisted message order', () => {
-    const acpProcessor = getAcpProcessorState();
-    const allocateOrderSpy = vi.spyOn(sessionDomainService, 'allocateOrder').mockReturnValue(41);
-    const upsertClaudeEventSpy = vi.spyOn(sessionDomainService, 'upsertClaudeEvent');
-    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
-    const appendClaudeEventSpy = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
-
-    try {
-      acpProcessor.handleAcpDelta('session-1', {
-        type: 'agent_message',
-        data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan' }],
-          },
-        },
-      });
-
-      acpProcessor.handleAcpDelta('session-1', {
-        type: 'agent_message',
-        data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: ' next' }],
-          },
-        },
-      });
-
-      expect(allocateOrderSpy).toHaveBeenCalledTimes(1);
-      expect(upsertClaudeEventSpy).toHaveBeenNthCalledWith(
-        1,
-        'session-1',
-        {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan' }],
-          },
-        },
-        41
-      );
-      expect(upsertClaudeEventSpy).toHaveBeenNthCalledWith(
-        2,
-        'session-1',
-        {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan next' }],
-          },
-        },
-        41
-      );
-      expect(emitDeltaSpy).toHaveBeenNthCalledWith(2, 'session-1', {
-        type: 'agent_message',
-        data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan next' }],
-          },
-        },
-        order: 41,
-      });
-      expect(appendClaudeEventSpy).not.toHaveBeenCalled();
-    } finally {
-      allocateOrderSpy.mockRestore();
-      upsertClaudeEventSpy.mockRestore();
-      emitDeltaSpy.mockRestore();
-      appendClaudeEventSpy.mockRestore();
-    }
   });
 
   it('creates client from preloaded session without re-querying session row', async () => {
