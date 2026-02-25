@@ -19,6 +19,18 @@ function getConfig(): NotificationConfig {
 }
 
 /**
+ * Escape XML text content to keep toast payload valid and safe.
+ */
+function escapeXmlText(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
  * Check if we're currently in quiet hours
  */
 function isQuietHours(config: NotificationConfig): boolean {
@@ -82,31 +94,30 @@ async function sendLinuxNotificationLocal(title: string, message: string): Promi
  * Send Windows notification using PowerShell
  */
 async function sendWindowsNotification(title: string, message: string): Promise<void> {
-  // Escape for PowerShell single quotes
-  const escapedTitle = title.replace(/'/g, "''");
-  const escapedMessage = message.replace(/'/g, "''");
+  const escapedTitle = escapeXmlText(title);
+  const escapedMessage = escapeXmlText(message);
 
-  const psScript = `
-    [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-    [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-    [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-
-    $template = @"
-    <toast>
-        <visual>
-            <binding template="ToastText02">
-                <text id="1">${escapedTitle}</text>
-                <text id="2">${escapedMessage}</text>
-            </binding>
-        </visual>
-    </toast>
-"@
-
-    $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-    $xml.LoadXml($template)
-    $toast = New-Object Windows.UI.Notifications.ToastNotification $xml
-    [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("FactoryFactory").Show($toast)
-  `.replace(/\n/g, ' ');
+  const psScript = [
+    '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null',
+    '[Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null',
+    '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null',
+    '',
+    "$template = @'",
+    '<toast>',
+    '    <visual>',
+    '        <binding template="ToastText02">',
+    `            <text id="1">${escapedTitle}</text>`,
+    `            <text id="2">${escapedMessage}</text>`,
+    '        </binding>',
+    '    </visual>',
+    '</toast>',
+    "'@",
+    '',
+    '$xml = New-Object Windows.Data.Xml.Dom.XmlDocument',
+    '$xml.LoadXml($template)',
+    '$toast = New-Object Windows.UI.Notifications.ToastNotification $xml',
+    '[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("FactoryFactory").Show($toast)',
+  ].join('\n');
 
   try {
     // Use spawn with array args for safety
