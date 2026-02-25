@@ -37,6 +37,12 @@ function writeUnauthorizedResponse(
   res.end(invalidToken ? 'Invalid auth token' : 'Authentication required');
 }
 
+function writeBadRequestResponse(res: import('node:http').ServerResponse): void {
+  res.statusCode = 400;
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.end('Bad request');
+}
+
 function isCommandNotFoundError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
@@ -52,13 +58,22 @@ function createTokenAuthProxy(params: {
   const activeSockets = new Set<Socket>();
 
   const server = createHttpServer((req, res) => {
-    const auth = authenticateRequest({
-      req,
-      cookieSecret,
-      authToken: params.authToken,
-      sessionCookieName: SESSION_COOKIE_NAME,
-      tokenQueryParam: TOKEN_QUERY_PARAM,
-    });
+    let auth: ReturnType<typeof authenticateRequest>;
+    try {
+      auth = authenticateRequest({
+        req,
+        cookieSecret,
+        authToken: params.authToken,
+        sessionCookieName: SESSION_COOKIE_NAME,
+        tokenQueryParam: TOKEN_QUERY_PARAM,
+      });
+    } catch (error) {
+      logger.warn('Rejected malformed HTTP request for run-script proxy', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      writeBadRequestResponse(res);
+      return;
+    }
 
     if (!auth.authenticated) {
       writeUnauthorizedResponse(res, auth.invalidToken);
@@ -87,13 +102,23 @@ function createTokenAuthProxy(params: {
   });
 
   server.on('upgrade', (req, socket, head) => {
-    const auth = authenticateRequest({
-      req,
-      cookieSecret,
-      authToken: params.authToken,
-      sessionCookieName: SESSION_COOKIE_NAME,
-      tokenQueryParam: TOKEN_QUERY_PARAM,
-    });
+    let auth: ReturnType<typeof authenticateRequest>;
+    try {
+      auth = authenticateRequest({
+        req,
+        cookieSecret,
+        authToken: params.authToken,
+        sessionCookieName: SESSION_COOKIE_NAME,
+        tokenQueryParam: TOKEN_QUERY_PARAM,
+      });
+    } catch (error) {
+      logger.warn('Rejected malformed upgrade request for run-script proxy', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
 
     if (!auth.authenticated) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
