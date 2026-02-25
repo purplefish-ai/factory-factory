@@ -903,11 +903,15 @@ export class AcpRuntimeManager {
   async stopClient(sessionId: string): Promise<void> {
     if (this.stoppingInProgress.has(sessionId)) {
       logger.debug('ACP session stop already in progress', { sessionId });
+      this.creationLocks.delete(sessionId);
+      this.lockRefCounts.delete(sessionId);
       return;
     }
 
     const handle = this.sessions.get(sessionId);
     if (!handle) {
+      this.creationLocks.delete(sessionId);
+      this.lockRefCounts.delete(sessionId);
       return;
     }
 
@@ -956,6 +960,8 @@ export class AcpRuntimeManager {
       if (current === handle) {
         this.sessions.delete(sessionId);
       }
+      this.creationLocks.delete(sessionId);
+      this.lockRefCounts.delete(sessionId);
     }
   }
 

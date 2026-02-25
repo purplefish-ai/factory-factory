@@ -698,6 +698,35 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('stopClient', () => {
+    it('removes creation lock bookkeeping for session during stop', async () => {
+      const child = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const internalManager = manager as unknown as {
+        creationLocks: Map<string, unknown>;
+        lockRefCounts: Map<string, number>;
+      };
+      internalManager.creationLocks.set('session-1', vi.fn());
+      internalManager.lockRefCounts.set('session-1', 3);
+
+      child.kill = vi.fn(() => {
+        child.exitCode = 0;
+        child.emit('exit', 0, null);
+        return true;
+      });
+
+      await manager.stopClient('session-1');
+
+      expect(internalManager.creationLocks.has('session-1')).toBe(false);
+      expect(internalManager.lockRefCounts.has('session-1')).toBe(false);
+    });
+
     it('sends SIGTERM, waits grace period, cleans up references', async () => {
       const child = setupSuccessfulSpawn();
 
