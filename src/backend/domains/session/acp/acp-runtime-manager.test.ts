@@ -67,6 +67,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 
 // ---- Imports (after mocks) ----
 
+import type { AcpEventCallback } from './acp-client-handler';
 import { AcpClientHandler } from './acp-client-handler';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
 import { AcpRuntimeManager } from './acp-runtime-manager';
@@ -1304,6 +1305,36 @@ describe('AcpRuntimeManager', () => {
 });
 
 describe('AcpClientHandler', () => {
+  it('AcpEventCallback is a discriminated ACP runtime event union', () => {
+    const onEvent: AcpEventCallback = (_sessionId, event) => {
+      if (event.type === 'acp_session_update') {
+        expect(event.update.sessionUpdate).toBe('agent_message_chunk');
+        return;
+      }
+
+      expect(event.type).toBe('acp_permission_request');
+      expect(event.params.toolCall.toolCallId).toBe('tc-1');
+    };
+
+    onEvent('test-session', {
+      type: 'acp_session_update',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Hello' },
+      },
+    });
+
+    onEvent('test-session', {
+      type: 'acp_permission_request',
+      requestId: 'req-1',
+      params: {
+        sessionId: 'provider-session-1',
+        toolCall: { toolCallId: 'tc-1', title: 'Write file' },
+        options: [{ optionId: 'allow-1', kind: 'allow_once', name: 'Allow once' }],
+      },
+    });
+  });
+
   it('sessionUpdate emits logs through onLog callback', async () => {
     const onEvent = vi.fn();
     const onLog = vi.fn();
