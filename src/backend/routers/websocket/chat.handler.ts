@@ -214,6 +214,20 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         workingDir,
       };
       chatConnectionService.register(connectionId, connectionInfo);
+      let inFlightMessageCount = 0;
+      let disconnected = false;
+
+      const clearSessionIfDisconnectedAndInactive = (): void => {
+        if (!disconnected || inFlightMessageCount > 0 || !dbSessionId) {
+          return;
+        }
+        if (
+          !sessionService.isSessionRunning(dbSessionId) &&
+          chatConnectionService.countConnectionsViewingSession(dbSessionId) === 0
+        ) {
+          sessionDomainService.clearSession(dbSessionId);
+        }
+      };
 
       if (DEBUG_CHAT_WS) {
         const viewingCount = chatConnectionService.countConnectionsViewingSession(dbSessionId);
@@ -227,6 +241,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       // Session hydration is handled by explicit load_session from the client.
 
       ws.on('message', async (data) => {
+        inFlightMessageCount += 1;
         try {
           const message = parseChatMessage(connectionId, data);
           if (!message) {
@@ -240,6 +255,9 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         } catch (error) {
           logger.error('Error handling chat message', error as Error);
           sendChatError(ws, dbSessionId, 'Invalid message format');
+        } finally {
+          inFlightMessageCount = Math.max(0, inFlightMessageCount - 1);
+          clearSessionIfDisconnectedAndInactive();
         }
       });
 
@@ -259,13 +277,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             sessionFileLogger.closeSession(dbSessionId);
           }
           chatConnectionService.unregister(connectionId);
-          if (
-            dbSessionId &&
-            !sessionService.isSessionRunning(dbSessionId) &&
-            chatConnectionService.countConnectionsViewingSession(dbSessionId) === 0
-          ) {
-            sessionDomainService.clearSession(dbSessionId);
-          }
+          disconnected = true;
+          clearSessionIfDisconnectedAndInactive();
         }
       });
 
