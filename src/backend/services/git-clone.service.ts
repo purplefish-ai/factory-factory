@@ -13,6 +13,12 @@ export interface GithubRepo {
 
 export type ExistingCloneStatus = 'valid_repo' | 'not_repo' | 'not_exists';
 
+const GITHUB_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+
+function isValidGithubPathSegment(segment: string): boolean {
+  return GITHUB_PATH_SEGMENT_PATTERN.test(segment);
+}
+
 /**
  * Parse a GitHub HTTPS URL into owner and repo.
  * Accepts: https://github.com/owner/repo or https://github.com/owner/repo.git
@@ -22,7 +28,14 @@ export function parseGithubUrl(url: string): GithubRepo | null {
   if (!match) {
     return null;
   }
-  return { owner: match[1] as string, repo: match[2] as string };
+
+  const owner = match[1] as string;
+  const repo = match[2] as string;
+  if (!(isValidGithubPathSegment(owner) && isValidGithubPathSegment(repo))) {
+    return null;
+  }
+
+  return { owner, repo };
 }
 
 class GitCloneService {
@@ -42,11 +55,16 @@ class GitCloneService {
     }
 
     const result = await gitCommand(['rev-parse', '--git-dir'], clonePath);
-    if (result.code === 0) {
-      return 'valid_repo';
+    if (result.code !== 0) {
+      return 'not_repo';
     }
 
-    return 'not_repo';
+    const cdupResult = await gitCommand(['rev-parse', '--show-cdup'], clonePath);
+    if (cdupResult.code !== 0) {
+      return 'not_repo';
+    }
+
+    return cdupResult.stdout.trim() === '' ? 'valid_repo' : 'not_repo';
   }
 
   /**
