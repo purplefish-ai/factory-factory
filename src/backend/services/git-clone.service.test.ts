@@ -24,36 +24,75 @@ vi.mock('./logger.service', () => ({
 import { gitCloneService, parseGithubUrl } from './git-clone.service';
 
 describe('parseGithubUrl', () => {
-  it('parses a valid GitHub URL', () => {
+  it('parses a valid GitHub HTTPS URL', () => {
     expect(parseGithubUrl('https://github.com/purplefish-ai/factory-factory')).toEqual({
       owner: 'purplefish-ai',
       repo: 'factory-factory',
     });
   });
 
-  it('parses a valid GitHub URL with .git suffix', () => {
+  it('parses a valid GitHub HTTPS URL with .git suffix', () => {
     expect(parseGithubUrl('https://github.com/purplefish-ai/factory-factory.git')).toEqual({
       owner: 'purplefish-ai',
       repo: 'factory-factory',
     });
   });
 
-  it('rejects traversal owner path segment', () => {
+  it('parses a valid GitHub SSH URL', () => {
+    expect(parseGithubUrl('git@github.com:purplefish-ai/factory-factory')).toEqual({
+      owner: 'purplefish-ai',
+      repo: 'factory-factory',
+    });
+  });
+
+  it('parses a valid GitHub SSH URL with .git suffix', () => {
+    expect(parseGithubUrl('git@github.com:purplefish-ai/factory-factory.git')).toEqual({
+      owner: 'purplefish-ai',
+      repo: 'factory-factory',
+    });
+  });
+
+  it('parses a valid GitHub SSH URL with trailing slash', () => {
+    expect(parseGithubUrl('git@github.com:purplefish-ai/factory-factory-cloud.git/')).toEqual({
+      owner: 'purplefish-ai',
+      repo: 'factory-factory-cloud',
+    });
+  });
+
+  it('rejects traversal owner path segment in HTTPS URL', () => {
     expect(parseGithubUrl('https://github.com/../src')).toBeNull();
   });
 
-  it('rejects traversal repo path segment', () => {
+  it('rejects traversal repo path segment in HTTPS URL', () => {
     expect(parseGithubUrl('https://github.com/purplefish-ai/..')).toBeNull();
   });
 
-  it('rejects dot-only segments', () => {
+  it('rejects traversal owner path segment in SSH URL', () => {
+    expect(parseGithubUrl('git@github.com:../src')).toBeNull();
+  });
+
+  it('rejects traversal repo path segment in SSH URL', () => {
+    expect(parseGithubUrl('git@github.com:purplefish-ai/..')).toBeNull();
+  });
+
+  it('rejects dot-only segments in HTTPS URL', () => {
     expect(parseGithubUrl('https://github.com/./repo')).toBeNull();
     expect(parseGithubUrl('https://github.com/owner/.')).toBeNull();
   });
 
-  it('rejects invalid characters in owner/repo segments', () => {
+  it('rejects dot-only segments in SSH URL', () => {
+    expect(parseGithubUrl('git@github.com:./repo')).toBeNull();
+    expect(parseGithubUrl('git@github.com:owner/.')).toBeNull();
+  });
+
+  it('rejects invalid characters in owner/repo segments in HTTPS URL', () => {
     expect(parseGithubUrl('https://github.com/owner name/repo')).toBeNull();
     expect(parseGithubUrl('https://github.com/owner/repo name')).toBeNull();
+  });
+
+  it('rejects invalid characters in owner/repo segments in SSH URL', () => {
+    expect(parseGithubUrl('git@github.com:owner name/repo')).toBeNull();
+    expect(parseGithubUrl('git@github.com:owner/repo name')).toBeNull();
   });
 });
 

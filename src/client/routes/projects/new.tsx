@@ -17,7 +17,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 type ProjectSource = 'local' | 'github';
 
 function parseGithubUrl(url: string): { owner: string; repo: string } | null {
-  const match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  // Try HTTPS format first
+  let match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+
+  // Try SSH format if HTTPS didn't match
+  if (!match) {
+    match = url.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  }
+
   if (!match) {
     return null;
   }
@@ -140,7 +147,9 @@ export default function NewProjectPage() {
       return;
     }
     if (!parsedRepo) {
-      setGithubError('Invalid GitHub URL. Expected format: https://github.com/owner/repo');
+      setGithubError(
+        'Invalid GitHub URL. Use HTTPS (https://github.com/owner/repo) or SSH (git@github.com:owner/repo) format'
+      );
       return;
     }
     const trimmedScript = githubStartupScript.trim();

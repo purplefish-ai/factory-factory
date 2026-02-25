@@ -336,7 +336,13 @@ export const projectRouter = router({
   createFromGithub: publicProcedure
     .input(
       z.object({
-        githubUrl: z.string().url('Must be a valid URL'),
+        githubUrl: z
+          .string()
+          .min(1, 'GitHub URL is required')
+          .refine(
+            (url) => parseGithubUrl(url) !== null,
+            'Invalid GitHub URL. Use HTTPS (https://github.com/owner/repo) or SSH (git@github.com:owner/repo) format'
+          ),
         startupScriptCommand: z.string().optional(),
         startupScriptPath: z.string().optional(),
         startupScriptTimeout: z.number().min(1).max(3600).optional(),
@@ -350,10 +356,13 @@ export const projectRouter = router({
         throw new Error('Cannot specify both startupScriptCommand and startupScriptPath');
       }
 
-      // Parse the GitHub URL
+      // Parse the GitHub URL (already validated by Zod)
       const parsed = parseGithubUrl(input.githubUrl);
       if (!parsed) {
-        throw new Error('Invalid GitHub URL. Expected format: https://github.com/owner/repo');
+        // Should never happen due to Zod validation, but keeping for type safety
+        throw new Error(
+          'Invalid GitHub URL. Use HTTPS (https://github.com/owner/repo) or SSH (git@github.com:owner/repo) format'
+        );
       }
 
       // Compute clone destination
@@ -368,7 +377,7 @@ export const projectRouter = router({
       }
 
       if (existingStatus === 'not_exists') {
-        // Clone the repo
+        // Clone the repo (git clone handles both HTTPS and SSH URLs)
         const cloneResult = await gitCloneService.clone(input.githubUrl, clonePath);
         if (!cloneResult.success) {
           throw new Error(`Failed to clone repository: ${cloneResult.error}`);

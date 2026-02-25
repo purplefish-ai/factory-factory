@@ -20,11 +20,20 @@ function isValidGithubPathSegment(segment: string): boolean {
 }
 
 /**
- * Parse a GitHub HTTPS URL into owner and repo.
- * Accepts: https://github.com/owner/repo or https://github.com/owner/repo.git
+ * Parse a GitHub URL into owner and repo.
+ * Accepts:
+ * - HTTPS: https://github.com/owner/repo or https://github.com/owner/repo.git
+ * - SSH: git@github.com:owner/repo or git@github.com:owner/repo.git
  */
 export function parseGithubUrl(url: string): GithubRepo | null {
-  const match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  // Try HTTPS format first
+  let match = url.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+
+  // Try SSH format if HTTPS didn't match
+  if (!match) {
+    match = url.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  }
+
   if (!match) {
     return null;
   }
@@ -70,6 +79,7 @@ class GitCloneService {
   /**
    * Clone a GitHub repo to the specified destination.
    * Creates parent directories as needed.
+   * Accepts both HTTPS and SSH URLs (git handles both formats).
    */
   async clone(
     url: string,
