@@ -765,13 +765,17 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers
   ): void {
     child.on('exit', async (code) => {
-      this.sessions.delete(sessionId);
-      this.pendingCreation.delete(sessionId);
+      const current = this.sessions.get(sessionId);
+      if (current?.child === child) {
+        this.sessions.delete(sessionId);
+      }
 
       if (this.stoppingInProgress.has(sessionId)) {
         logger.debug('Skipping exit handler - stop in progress', { sessionId, code });
         return;
       }
+
+      this.pendingCreation.delete(sessionId);
 
       if (handlers.onExit) {
         try {
@@ -947,7 +951,10 @@ export class AcpRuntimeManager {
       }
     } finally {
       this.stoppingInProgress.delete(sessionId);
-      this.sessions.delete(sessionId);
+      const current = this.sessions.get(sessionId);
+      if (current === handle) {
+        this.sessions.delete(sessionId);
+      }
     }
   }
 
