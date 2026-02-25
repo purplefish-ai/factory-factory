@@ -874,3 +874,38 @@ describe('RunScriptService.getRunScriptStatus', () => {
     await expect(service.getRunScriptStatus('ws-1')).rejects.toThrow('Workspace not found');
   });
 });
+
+describe('RunScriptService.evictWorkspaceBuffers', () => {
+  type BufferEvictionCapable = {
+    outputBuffers: Map<string, string>;
+    outputListeners: Map<string, Set<(data: string) => void>>;
+    postRunOutputBuffers: Map<string, string>;
+    postRunOutputListeners: Map<string, Set<(data: string) => void>>;
+    evictWorkspaceBuffers: (workspaceId: string) => void;
+  };
+
+  it('evicts output and listener buffers for an archived workspace only', () => {
+    const service = new RunScriptService() as unknown as BufferEvictionCapable;
+    service.outputBuffers.set('ws-1', 'main logs');
+    service.postRunOutputBuffers.set('ws-1', 'postRun logs');
+    service.outputListeners.set('ws-1', new Set([vi.fn()]));
+    service.postRunOutputListeners.set('ws-1', new Set([vi.fn()]));
+
+    service.outputBuffers.set('ws-2', 'keep');
+    service.postRunOutputBuffers.set('ws-2', 'keep');
+    service.outputListeners.set('ws-2', new Set([vi.fn()]));
+    service.postRunOutputListeners.set('ws-2', new Set([vi.fn()]));
+
+    service.evictWorkspaceBuffers('ws-1');
+
+    expect(service.outputBuffers.has('ws-1')).toBe(false);
+    expect(service.postRunOutputBuffers.has('ws-1')).toBe(false);
+    expect(service.outputListeners.has('ws-1')).toBe(false);
+    expect(service.postRunOutputListeners.has('ws-1')).toBe(false);
+
+    expect(service.outputBuffers.has('ws-2')).toBe(true);
+    expect(service.postRunOutputBuffers.has('ws-2')).toBe(true);
+    expect(service.outputListeners.has('ws-2')).toBe(true);
+    expect(service.postRunOutputListeners.has('ws-2')).toBe(true);
+  });
+});
