@@ -34,6 +34,18 @@ function createTestContext(worktreeBaseDir: string) {
 
   const chatConnectionService = {
     values: vi.fn(() => connections.values()),
+    countConnectionsViewingSession: vi.fn((dbSessionId: string | null) => {
+      if (!dbSessionId) {
+        return 0;
+      }
+      let count = 0;
+      for (const info of connections.values()) {
+        if (info.dbSessionId === dbSessionId) {
+          count++;
+        }
+      }
+      return count;
+    }),
     get: vi.fn((connectionId: string) => connections.get(connectionId)),
     register: vi.fn(
       (
@@ -74,6 +86,10 @@ function createTestContext(worktreeBaseDir: string) {
         getOrCreateClient: vi.fn(),
         getOrCreateSessionClient: vi.fn(async () => ({})),
         getSessionOptions: vi.fn(),
+        isSessionRunning: vi.fn(() => false),
+      },
+      sessionDomainService: {
+        clearSession: vi.fn(),
       },
     },
   } as unknown as AppContext;
@@ -85,6 +101,8 @@ function createTestContext(worktreeBaseDir: string) {
     chatEventForwarderService: appContext.services.chatEventForwarderService,
     logger,
     sessionFileLogger: appContext.services.sessionFileLogger,
+    sessionDomainService: appContext.services.sessionDomainService,
+    sessionService: appContext.services.sessionService,
     connections,
   };
 }
@@ -175,6 +193,117 @@ describe('createChatUpgradeHandler', () => {
     ws.emit('close');
     expect(chatConnectionService.unregister).toHaveBeenCalledWith('conn-1');
     expect(sessionFileLogger.closeSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('clears in-memory state when the last viewer disconnects from a stopped session', () => {
+    const { appContext, chatConnectionService, sessionDomainService, sessionService } =
+      createTestContext(tempRootDir);
+    const handler = createChatUpgradeHandler(appContext);
+    vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+
+    const ws = new MockWebSocket();
+    const wss = {
+      handleUpgrade: vi.fn(
+        (
+          _request: IncomingMessage,
+          _socket: Duplex,
+          _head: Buffer,
+          callback: (socket: WebSocket) => void
+        ) => callback(ws as unknown as WebSocket)
+      ),
+    } as unknown as WebSocketServer;
+
+    const request = {} as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
+
+    handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+    expect(chatConnectionService.register).toHaveBeenCalledWith(
+      'conn-1',
+      expect.objectContaining({ dbSessionId: 'session-1' })
+    );
+
+    ws.emit('close');
+
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('does not clear in-memory state when the disconnected session is still running', () => {
+    const { appContext, sessionDomainService, sessionService } = createTestContext(tempRootDir);
+    const handler = createChatUpgradeHandler(appContext);
+    vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
+
+    const ws = new MockWebSocket();
+    const wss = {
+      handleUpgrade: vi.fn(
+        (
+          _request: IncomingMessage,
+          _socket: Duplex,
+          _head: Buffer,
+          callback: (socket: WebSocket) => void
+        ) => callback(ws as unknown as WebSocket)
+      ),
+    } as unknown as WebSocketServer;
+
+    const request = {} as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
+
+    handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+    ws.emit('close');
+
+    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+  });
+
+  it('waits for in-flight message handling before clearing disconnected session state', async () => {
+    const { appContext, chatMessageHandlerService, sessionDomainService, sessionService } =
+      createTestContext(tempRootDir);
+    const handler = createChatUpgradeHandler(appContext);
+    vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+
+    let releaseMessage: (() => void) | undefined;
+    const messageHandled = new Promise<void>((resolve) => {
+      releaseMessage = resolve;
+    });
+    vi.mocked(chatMessageHandlerService.handleMessage).mockImplementation(async () => {
+      await messageHandled;
+    });
+
+    const ws = new MockWebSocket();
+    const wss = {
+      handleUpgrade: vi.fn(
+        (
+          _request: IncomingMessage,
+          _socket: Duplex,
+          _head: Buffer,
+          callback: (socket: WebSocket) => void
+        ) => callback(ws as unknown as WebSocket)
+      ),
+    } as unknown as WebSocketServer;
+
+    const request = {} as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
+
+    handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+
+    ws.emit('message', JSON.stringify({ type: 'load_session' }));
+    await Promise.resolve();
+
+    ws.emit('close');
+    expect(sessionDomainService.clearSession).not.toHaveBeenCalled();
+
+    if (!releaseMessage) {
+      throw new Error('Expected message release callback');
+    }
+    releaseMessage();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sessionDomainService.clearSession).toHaveBeenCalledWith('session-1');
   });
 
   it('replaces existing connection with the same id and avoids unregister race on stale close', () => {
