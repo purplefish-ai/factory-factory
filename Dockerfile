@@ -61,6 +61,7 @@ WORKDIR /app
 # Runtime system dependencies + cloudflared for tunnel + GitHub CLI
 # python3, make, g++ are needed so workspace `pnpm install` can compile
 # native modules (node-pty has no Linux prebuilds)
+# uv, pip, pipx, virtualenv for Python development in agent workspaces
 RUN apk add --no-cache \
     git \
     bash \
@@ -70,6 +71,8 @@ RUN apk add --no-cache \
     libc6-compat \
     libstdc++ \
     python3 \
+    py3-pip \
+    py3-virtualenv \
     make \
     g++ \
     github-cli \
@@ -85,7 +88,11 @@ RUN apk add --no-cache \
      esac \
   && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" \
        -o /usr/local/bin/cloudflared \
-  && chmod +x /usr/local/bin/cloudflared
+  && chmod +x /usr/local/bin/cloudflared \
+  && curl -LsSf https://astral.sh/uv/install.sh | sh \
+  && mv /root/.cargo/bin/uv /usr/local/bin/uv \
+  && pip3 install --no-cache-dir pipx \
+  && python3 -m pipx ensurepath
 
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
@@ -109,7 +116,7 @@ COPY --from=builder /app/prisma/generated ./prisma/generated
 RUN mkdir -p /data
 
 ENV NODE_ENV=production
-ENV PATH="/app/node_modules/.bin:${PATH}"
+ENV PATH="/app/node_modules/.bin:/root/.local/bin:${PATH}"
 ENV BACKEND_PORT=3000
 ENV DATABASE_PATH=/data/data.db
 ENV BASE_DIR=/data
