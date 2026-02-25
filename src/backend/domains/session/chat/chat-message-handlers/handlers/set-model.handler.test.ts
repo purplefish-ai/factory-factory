@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChatMessageHandlerSessionService } from '@/backend/domains/session/chat/chat-message-handlers/types';
 
 const mocks = vi.hoisted(() => ({
   setSessionModel: vi.fn(),
@@ -6,17 +7,20 @@ const mocks = vi.hoisted(() => ({
   getChatBarCapabilities: vi.fn(),
 }));
 
-vi.mock('@/backend/domains/session/lifecycle/session.service', () => ({
-  sessionService: {
-    setSessionModel: mocks.setSessionModel,
-    setSessionReasoningEffort: mocks.setSessionReasoningEffort,
-    getChatBarCapabilities: mocks.getChatBarCapabilities,
-  },
-}));
-
 import { createSetModelHandler } from './set-model.handler';
 
 describe('createSetModelHandler', () => {
+  const deps: { sessionService: ChatMessageHandlerSessionService } = {
+    sessionService: {
+      isSessionRunning: vi.fn(),
+      sendSessionMessage: vi.fn(),
+      respondToAcpPermission: vi.fn(),
+      setSessionModel: mocks.setSessionModel,
+      setSessionReasoningEffort: mocks.setSessionReasoningEffort,
+      getChatBarCapabilities: mocks.getChatBarCapabilities,
+    },
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.setSessionModel.mockResolvedValue(undefined);
@@ -35,7 +39,7 @@ describe('createSetModelHandler', () => {
   });
 
   it('applies model and reasoning effort when provided', async () => {
-    const handler = createSetModelHandler();
+    const handler = createSetModelHandler(deps);
     const ws = {
       send: vi.fn(),
     };
@@ -73,7 +77,7 @@ describe('createSetModelHandler', () => {
   });
 
   it('does not update reasoning effort when field is omitted', async () => {
-    const handler = createSetModelHandler();
+    const handler = createSetModelHandler(deps);
     const ws = {
       send: vi.fn(),
     };
@@ -95,7 +99,7 @@ describe('createSetModelHandler', () => {
   });
 
   it('sends websocket error when model update fails', async () => {
-    const handler = createSetModelHandler();
+    const handler = createSetModelHandler(deps);
     const ws = {
       send: vi.fn(),
     };

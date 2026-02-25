@@ -1,13 +1,19 @@
 import { DEBUG_CHAT_WS } from '@/backend/domains/session/chat/chat-message-handlers/constants';
-import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
-import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
+import type {
+  ChatMessageHandler,
+  ChatMessageHandlerSessionService,
+} from '@/backend/domains/session/chat/chat-message-handlers/types';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SetModelMessage } from '@/shared/websocket';
 import { sendWebSocketError } from './utils';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createSetModelHandler(): ChatMessageHandler<SetModelMessage> {
+export function createSetModelHandler(deps: {
+  sessionService: ChatMessageHandlerSessionService;
+}): ChatMessageHandler<SetModelMessage> {
+  const { sessionService } = deps;
+
   return async ({ ws, sessionId, message }) => {
     try {
       await sessionService.setSessionModel(sessionId, message.model);

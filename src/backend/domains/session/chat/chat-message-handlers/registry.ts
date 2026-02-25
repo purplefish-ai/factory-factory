@@ -23,16 +23,22 @@ export type ChatMessageHandlerRegistry = {
 export function createChatMessageHandlerRegistry(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandlerRegistry {
+  if (!deps.sessionService) {
+    throw new Error('sessionService dependency is required for chat message handlers');
+  }
+
+  const sessionDeps = { sessionService: deps.sessionService };
+
   return {
     start: createStartHandler(deps),
-    user_input: createUserInputHandler(),
+    user_input: createUserInputHandler(sessionDeps),
     queue_message: createQueueMessageHandler(deps),
     remove_queued_message: createRemoveQueuedMessageHandler(),
     resume_queued_messages: createResumeQueuedMessagesHandler(deps),
     stop: createStopHandler(deps),
     load_session: createLoadSessionHandler(deps),
-    permission_response: createPermissionResponseHandler(),
-    set_model: createSetModelHandler(),
+    permission_response: createPermissionResponseHandler(sessionDeps),
+    set_model: createSetModelHandler(sessionDeps),
     set_thinking_budget: createSetThinkingBudgetHandler(),
     set_config_option: createSetConfigOptionHandler(),
   };
