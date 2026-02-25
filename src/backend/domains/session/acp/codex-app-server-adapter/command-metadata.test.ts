@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildCommandApprovalScopeKey, resolveCommandDisplay } from './command-metadata';
 
+function parseScopeKey(scopeKey: string | null, cwd: string): unknown {
+  expect(scopeKey).toBeTruthy();
+  const prefix = `cwd=${cwd}|`;
+  expect(scopeKey?.startsWith(prefix)).toBe(true);
+  return JSON.parse(scopeKey!.slice(prefix.length));
+}
+
 describe('command-metadata', () => {
   it('parses escaped quotes in quoted command arguments', () => {
     const parsed = resolveCommandDisplay({
@@ -60,8 +67,49 @@ describe('command-metadata', () => {
       cwd: '/tmp/workspace',
     });
 
-    expect(scopeKey).toBe(
-      'cwd=/tmp/workspace|cd src -> /tmp/workspace/src && [cwd=/tmp/workspace/src] rg TODO README.md'
-    );
+    expect(parseScopeKey(scopeKey, '/tmp/workspace')).toEqual([
+      {
+        type: 'cd',
+        target: 'src',
+        resolvedCwd: '/tmp/workspace/src',
+        separator: '&&',
+      },
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace/src',
+        tokens: ['rg', 'TODO', 'README.md'],
+        separator: null,
+      },
+    ]);
+  });
+
+  it('builds distinct scope keys for quoted single arg vs split args', () => {
+    const quotedScopeKey = buildCommandApprovalScopeKey({
+      command: 'rm "file 1 file 2"',
+      cwd: '/tmp/workspace',
+    });
+    const splitScopeKey = buildCommandApprovalScopeKey({
+      command: 'rm file 1 file 2',
+      cwd: '/tmp/workspace',
+    });
+
+    expect(quotedScopeKey).toBeTruthy();
+    expect(splitScopeKey).toBeTruthy();
+    expect(quotedScopeKey).not.toBe(splitScopeKey);
+  });
+
+  it('builds distinct scope keys for different chain operators', () => {
+    const andScopeKey = buildCommandApprovalScopeKey({
+      command: 'cat README.md && cat package.json',
+      cwd: '/tmp/workspace',
+    });
+    const orScopeKey = buildCommandApprovalScopeKey({
+      command: 'cat README.md || cat package.json',
+      cwd: '/tmp/workspace',
+    });
+
+    expect(andScopeKey).toBeTruthy();
+    expect(orScopeKey).toBeTruthy();
+    expect(andScopeKey).not.toBe(orScopeKey);
   });
 });

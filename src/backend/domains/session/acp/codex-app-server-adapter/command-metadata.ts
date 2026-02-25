@@ -9,10 +9,16 @@ type CommandDisplayContext = {
   cwd: string;
   locations: Array<{ path: string }>;
   isShellMeta: boolean;
+  chainSeparator: string | null;
+};
+
+type CommandChainPart = {
+  command: string;
+  separator: string | null;
 };
 
 type CommandChainSplitState = {
-  parts: string[];
+  parts: CommandChainPart[];
   current: string;
   quote: '"' | "'" | null;
   escaped: boolean;
@@ -104,10 +110,13 @@ function normalizeLocationPath(pathToken: string, cwd: string): string {
   return `${base}/${pathToken}`;
 }
 
-function pushCommandChainPart(state: CommandChainSplitState): void {
+function pushCommandChainPart(
+  state: CommandChainSplitState,
+  separator: string | null = null
+): void {
   const trimmed = state.current.trim();
   if (trimmed.length > 0) {
-    state.parts.push(trimmed);
+    state.parts.push({ command: trimmed, separator });
   }
   state.current = '';
 }
@@ -172,11 +181,11 @@ function consumeCommandChainSeparator(
   if (separatorLength <= 0) {
     return 0;
   }
-  pushCommandChainPart(state);
+  pushCommandChainPart(state, command.slice(index, index + separatorLength));
   return separatorLength;
 }
 
-function splitCommandChain(command: string): string[] {
+function splitCommandChain(command: string): CommandChainPart[] {
   const state: CommandChainSplitState = {
     parts: [],
     current: '',
@@ -231,7 +240,7 @@ function buildCommandDisplayContexts(
   const contexts: CommandDisplayContext[] = [];
   const segments = splitCommandChain(command);
   for (const segment of segments) {
-    const tokens = tokenizeCommand(segment);
+    const tokens = tokenizeCommand(segment.command);
     if (tokens.length === 0) {
       continue;
     }
@@ -246,13 +255,14 @@ function buildCommandDisplayContexts(
     const commandPath = pathArg ? normalizeLocationPath(pathArg, cwd) : null;
     const locations = commandPath ? [{ path: commandPath }] : [];
     contexts.push({
-      command: segment,
+      command: segment.command,
       firstCommand,
       nonFlagArgs,
       pathArg,
       cwd,
       locations,
       isShellMeta: SHELL_META_COMMANDS.has(firstCommand),
+      chainSeparator: segment.separator,
     });
   }
 
@@ -339,10 +349,6 @@ function normalizeCwdForScope(cwd: string): string {
   return cwd;
 }
 
-function normalizeScopeToken(token: string): string {
-  return token.replace(/\s+/g, ' ').trim();
-}
-
 export function buildCommandApprovalScopeKey(params: {
   command: string | null;
   cwd: string;
@@ -353,34 +359,54 @@ export function buildCommandApprovalScopeKey(params: {
   }
 
   let scopeCwd = normalizeCwdForScope(params.cwd);
-  const segments: string[] = [];
+  const segments: Array<
+    | {
+        type: 'cd';
+        target: string | null;
+        resolvedCwd: string | null;
+        separator: string | null;
+      }
+    | {
+        type: 'cmd';
+        cwd: string;
+        tokens: string[];
+        separator: string | null;
+      }
+  > = [];
   for (const context of contexts) {
     if (context.firstCommand === 'cd') {
-      const rawTarget = context.nonFlagArgs[0];
-      const target = rawTarget ? normalizeScopeToken(rawTarget) : '';
-      if (target.length > 0) {
+      const target = context.nonFlagArgs[0] ?? null;
+      if (target && target.length > 0) {
         scopeCwd = normalizeCwdForScope(normalizeLocationPath(target, scopeCwd));
-        segments.push(`cd ${target} -> ${scopeCwd}`);
+        segments.push({
+          type: 'cd',
+          target,
+          resolvedCwd: scopeCwd,
+          separator: context.chainSeparator,
+        });
       } else {
-        segments.push('cd');
+        segments.push({
+          type: 'cd',
+          target: null,
+          resolvedCwd: null,
+          separator: context.chainSeparator,
+        });
       }
       continue;
     }
 
-    const args = context.nonFlagArgs.map(normalizeScopeToken).filter((arg) => arg.length > 0);
-    const normalized = normalizeScopeToken([context.firstCommand, ...args].join(' '));
-    if (normalized.length === 0) {
-      continue;
-    }
-    segments.push(`[cwd=${scopeCwd}] ${normalized}`);
+    const args = context.nonFlagArgs.filter((arg) => arg.length > 0);
+    segments.push({
+      type: 'cmd',
+      cwd: scopeCwd,
+      tokens: [context.firstCommand, ...args],
+      separator: context.chainSeparator,
+    });
   }
 
-  const normalizedSegments = segments
-    .map(normalizeScopeToken)
-    .filter((segment) => segment.length > 0);
-  if (normalizedSegments.length === 0) {
+  if (segments.length === 0) {
     return null;
   }
 
-  return `cwd=${normalizeCwdForScope(params.cwd)}|${normalizedSegments.join(' && ')}`;
+  return `cwd=${normalizeCwdForScope(params.cwd)}|${JSON.stringify(segments)}`;
 }
