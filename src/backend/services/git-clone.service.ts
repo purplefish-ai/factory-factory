@@ -79,6 +79,7 @@ class GitCloneService {
   /**
    * Clone a GitHub repo to the specified destination.
    * Creates parent directories as needed.
+   * Accepts both HTTPS and SSH URLs (git handles both formats).
    */
   async clone(
     url: string,
