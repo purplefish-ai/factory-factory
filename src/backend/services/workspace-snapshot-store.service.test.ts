@@ -301,6 +301,29 @@ describe('WorkspaceSnapshotStore', () => {
       // Same timestamp is not newer, so original values preserved
       expect(entry!.name).toBe('original');
     });
+
+    it('stale projectId updates do not overwrite newer project index state', () => {
+      store.upsert('ws-1', makeUpdate({ projectId: 'proj-A' }), 'test', 100);
+      store.upsert('ws-1', { projectId: 'proj-B' }, 'test', 200);
+
+      const versionAfterFreshUpdate = store.getByWorkspaceId('ws-1')!.version;
+
+      // Older workspace-group update must be ignored entirely.
+      store.upsert('ws-1', { projectId: 'proj-A' }, 'test', 150);
+
+      const entry = store.getByWorkspaceId('ws-1');
+      const inProjectA = store
+        .getByProjectId('proj-A')
+        .find((workspace) => workspace.workspaceId === 'ws-1');
+      const inProjectB = store
+        .getByProjectId('proj-B')
+        .find((workspace) => workspace.workspaceId === 'ws-1');
+
+      expect(entry!.projectId).toBe('proj-B');
+      expect(entry!.version).toBe(versionAfterFreshUpdate);
+      expect(inProjectA).toBeUndefined();
+      expect(inProjectB).toBeDefined();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -398,7 +421,32 @@ describe('WorkspaceSnapshotStore', () => {
       const entry = store.getByWorkspaceId('ws-1');
       // Flow state returns isWorking=true (prUrl set + PENDING)
       // Effective isWorking = session(false) OR flow(true) = true
+      expect(entry!.isWorking).toBe(true);
       expect(entry!.kanbanColumn).toBe('WORKING');
+    });
+
+    it('does not latch flow-derived isWorking across PR-only updates', () => {
+      store.upsert(
+        'ws-1',
+        makeUpdate({
+          isWorking: false,
+          prUrl: 'https://github.com/org/repo/pull/1',
+          prCiStatus: 'PENDING',
+        }),
+        'test',
+        100
+      );
+
+      // Initial effective isWorking is true because flow is active.
+      expect(store.getByWorkspaceId('ws-1')!.isWorking).toBe(true);
+
+      store.upsert('ws-1', { prCiStatus: 'SUCCESS' }, 'test', 200);
+
+      // Session signal remains false, so effective isWorking should clear.
+      const entry = store.getByWorkspaceId('ws-1');
+      expect(entry!.isWorking).toBe(false);
+      expect(entry!.sidebarStatus.activityState).toBe('IDLE');
+      expect(entry!.kanbanColumn).toBe('WAITING');
     });
 
     it('ratchetButtonAnimated reflects flow state', () => {
@@ -542,6 +590,23 @@ describe('WorkspaceSnapshotStore', () => {
       store.upsert('ws-1', makeUpdate(), 'test', 300);
 
       expect(handler).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not emit or bump version when stale update is fully ignored', () => {
+      const handler = vi.fn();
+      store.on(SNAPSHOT_CHANGED, handler);
+
+      store.upsert('ws-1', makeUpdate({ name: 'fresh' }), 'test', 200);
+      const entryBeforeStaleUpdate = store.getByWorkspaceId('ws-1');
+
+      store.upsert('ws-1', { name: 'stale' }, 'test', 100);
+
+      const entryAfterStaleUpdate = store.getByWorkspaceId('ws-1');
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(entryAfterStaleUpdate!.name).toBe('fresh');
+      expect(entryAfterStaleUpdate!.version).toBe(entryBeforeStaleUpdate!.version);
+      expect(entryAfterStaleUpdate!.source).toBe(entryBeforeStaleUpdate!.source);
+      expect(entryAfterStaleUpdate!.computedAt).toBe(entryBeforeStaleUpdate!.computedAt);
     });
   });
 
