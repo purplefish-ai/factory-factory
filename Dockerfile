@@ -73,6 +73,7 @@ RUN apk add --no-cache \
     python3 \
     py3-pip \
     py3-virtualenv \
+    py3-pipx \
     make \
     g++ \
     github-cli \
@@ -93,7 +94,6 @@ RUN apk add --no-cache \
   && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh \
   && UV_UNMANAGED_INSTALL="/usr/local/bin" sh /tmp/uv-install.sh \
   && rm /tmp/uv-install.sh \
-  && pip3 install --no-cache-dir pipx \
   && python3 -m pipx ensurepath
 
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
