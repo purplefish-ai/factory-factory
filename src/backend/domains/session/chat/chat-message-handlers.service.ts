@@ -105,6 +105,7 @@ class ChatMessageHandlerService {
   }
 
   private handlerRegistry = createChatMessageHandlerRegistry({
+    sessionService,
     getClientCreator: () => this.clientCreator,
     tryDispatchNextMessage: this.tryDispatchNextMessage.bind(this),
     setManualDispatchResume: this.setManualDispatchResume.bind(this),

@@ -1,12 +1,18 @@
-import type { ChatMessageHandler } from '@/backend/domains/session/chat/chat-message-handlers/types';
-import { sessionService } from '@/backend/domains/session/lifecycle/session.service';
+import type {
+  ChatMessageHandler,
+  ChatMessageHandlerSessionService,
+} from '@/backend/domains/session/chat/chat-message-handlers/types';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');
 
-export function createUserInputHandler(): ChatMessageHandler<UserInputMessage> {
+export function createUserInputHandler(deps: {
+  sessionService: ChatMessageHandlerSessionService;
+}): ChatMessageHandler<UserInputMessage> {
+  const { sessionService } = deps;
+
   return ({ ws, sessionId, message }) => {
     const rawContent = message.content || message.text;
     if (!rawContent) {
