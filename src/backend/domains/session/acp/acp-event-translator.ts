@@ -107,11 +107,10 @@ export class AcpEventTranslator {
       {
         type: 'agent_message',
         data: {
-          type: 'stream_event',
-          event: {
-            type: 'content_block_delta',
-            index: 0,
-            delta: { type: 'thinking_delta', thinking: text },
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'thinking', thinking: text }],
           },
         },
       },
