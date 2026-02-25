@@ -1,6 +1,7 @@
-import type { SessionConfigOption, SessionUpdate } from '@agentclientprotocol/sdk';
+import type { SessionConfigOption } from '@agentclientprotocol/sdk';
 import {
   AcpEventTranslator,
+  type AcpRuntimeEvent,
   type AcpRuntimeEventHandlers,
   type AcpRuntimeManager,
 } from '@/backend/domains/session/acp';
@@ -74,14 +75,9 @@ export class AcpEventProcessor {
 
     return {
       permissionBridge,
-      onAcpEvent: (sid: string, event: unknown) => {
-        const typed = event as { type: string };
-
-        if (typed.type === 'acp_session_update') {
-          const { update } = event as {
-            type: string;
-            update: SessionUpdate;
-          };
+      onAcpEvent: (sid: string, event: AcpRuntimeEvent) => {
+        if (event.type === 'acp_session_update') {
+          const { update } = event;
           if (
             update.sessionUpdate === 'user_message_chunk' &&
             'content' in update &&
@@ -109,7 +105,7 @@ export class AcpEventProcessor {
           return;
         }
 
-        if (typed.type === 'acp_permission_request') {
+        if (event.type === 'acp_permission_request') {
           this.sessionPermissionService.handlePermissionRequest(sid, event);
         }
       },
