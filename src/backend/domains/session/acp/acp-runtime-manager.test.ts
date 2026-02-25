@@ -698,6 +698,44 @@ describe('AcpRuntimeManager', () => {
   });
 
   describe('stopClient', () => {
+    it('keeps creation lock bookkeeping when stop is already in progress', async () => {
+      const child = setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      const internalManager = manager as unknown as {
+        creationLocks: Map<string, unknown>;
+        lockRefCounts: Map<string, number>;
+      };
+      internalManager.creationLocks.set('session-1', vi.fn());
+      internalManager.lockRefCounts.set('session-1', 3);
+
+      child.kill = vi.fn(() => {
+        setTimeout(() => {
+          child.exitCode = 0;
+          child.emit('exit', 0, null);
+        }, 10);
+        return true;
+      });
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.waitFor(() => {
+        expect(manager.isStopInProgress('session-1')).toBe(true);
+      });
+
+      await manager.stopClient('session-1');
+
+      expect(internalManager.creationLocks.has('session-1')).toBe(true);
+      expect(internalManager.lockRefCounts.has('session-1')).toBe(true);
+
+      await stopPromise;
+    });
+
     it('sends SIGTERM, waits grace period, cleans up references', async () => {
       const child = setupSuccessfulSpawn();
 
@@ -935,6 +973,12 @@ describe('AcpRuntimeManager', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(manager.getPendingClient('session-1')).toBe(pendingBeforeStaleExit);
+      const internalManager = manager as unknown as {
+        creationLocks: Map<string, unknown>;
+        lockRefCounts: Map<string, number>;
+      };
+      expect(internalManager.creationLocks.has('session-1')).toBe(true);
+      expect(internalManager.lockRefCounts.get('session-1')).toBeGreaterThan(0);
 
       resolveSecondInit({
         protocolVersion: 1,
