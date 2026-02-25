@@ -73,6 +73,23 @@ export class ChatConnectionService {
   }
 
   /**
+   * Count active connections currently viewing a specific DB session.
+   */
+  countConnectionsViewingSession(dbSessionId: string | null): number {
+    if (!dbSessionId) {
+      return 0;
+    }
+
+    let count = 0;
+    for (const info of this.connections.values()) {
+      if (info.dbSessionId === dbSessionId) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  /**
    * Forward a message to all connections viewing a specific session.
    * Optionally excludes a specific WebSocket (e.g., the sender).
    */

@@ -151,8 +151,11 @@ export class SessionService {
             error: error instanceof Error ? error.message : String(error),
           });
         } finally {
-          this.clearSessionStoreIfInactive(sid, 'runtime_exit');
-          acpTraceLogger.closeSession(sid);
+          try {
+            this.clearSessionStoreIfInactive(sid, 'runtime_exit');
+          } finally {
+            acpTraceLogger.closeSession(sid);
+          }
         }
       },
       onError: (sid: string, error: Error) => {
@@ -417,12 +420,15 @@ export class SessionService {
         );
       }
 
-      this.clearSessionStoreIfInactive(sessionId, 'manual_stop');
-      logger.info('ACP session stopped', {
-        sessionId,
-        ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
-      });
-      acpTraceLogger.closeSession(sessionId);
+      try {
+        this.clearSessionStoreIfInactive(sessionId, 'manual_stop');
+        logger.info('ACP session stopped', {
+          sessionId,
+          ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
+        });
+      } finally {
+        acpTraceLogger.closeSession(sessionId);
+      }
     }
   }
 
@@ -527,20 +533,14 @@ export class SessionService {
     await this.workspaceBridge.clearRatchetActiveSessionIfMatching(workspaceId, sessionId);
   }
 
-  private hasSessionViewers(sessionId: string): boolean {
-    for (const info of chatConnectionService.values()) {
-      if (info.dbSessionId === sessionId) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   private clearSessionStoreIfInactive(
     sessionId: string,
     reason: 'manual_stop' | 'runtime_exit'
   ): void {
-    if (this.runtimeManager.isSessionRunning(sessionId) || this.hasSessionViewers(sessionId)) {
+    if (
+      this.runtimeManager.isSessionRunning(sessionId) ||
+      chatConnectionService.countConnectionsViewingSession(sessionId) > 0
+    ) {
       return;
     }
     this.sessionDomainService.clearSession(sessionId);

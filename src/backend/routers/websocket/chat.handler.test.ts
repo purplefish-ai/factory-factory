@@ -34,6 +34,18 @@ function createTestContext(worktreeBaseDir: string) {
 
   const chatConnectionService = {
     values: vi.fn(() => connections.values()),
+    countConnectionsViewingSession: vi.fn((dbSessionId: string | null) => {
+      if (!dbSessionId) {
+        return 0;
+      }
+      let count = 0;
+      for (const info of connections.values()) {
+        if (info.dbSessionId === dbSessionId) {
+          count++;
+        }
+      }
+      return count;
+    }),
     get: vi.fn((connectionId: string) => connections.get(connectionId)),
     register: vi.fn(
       (

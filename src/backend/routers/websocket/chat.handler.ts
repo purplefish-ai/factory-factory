@@ -126,20 +126,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return realPath;
   }
 
-  function countConnectionsViewingSession(dbSessionId: string | null): number {
-    if (!dbSessionId) {
-      return 0;
-    }
-
-    let viewingCount = 0;
-    for (const info of chatConnectionService.values()) {
-      if (info.dbSessionId === dbSessionId) {
-        viewingCount++;
-      }
-    }
-    return viewingCount;
-  }
-
   function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
     const rawMessage: unknown = JSON.parse(toMessageString(data));
     const parseResult = ChatMessageSchema.safeParse(rawMessage);
@@ -230,7 +216,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       chatConnectionService.register(connectionId, connectionInfo);
 
       if (DEBUG_CHAT_WS) {
-        const viewingCount = countConnectionsViewingSession(dbSessionId);
+        const viewingCount = chatConnectionService.countConnectionsViewingSession(dbSessionId);
         logger.info('[Chat WS] Connection registered', {
           connectionId,
           dbSessionId,
@@ -276,7 +262,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           if (
             dbSessionId &&
             !sessionService.isSessionRunning(dbSessionId) &&
-            countConnectionsViewingSession(dbSessionId) === 0
+            chatConnectionService.countConnectionsViewingSession(dbSessionId) === 0
           ) {
             sessionDomainService.clearSession(dbSessionId);
           }
