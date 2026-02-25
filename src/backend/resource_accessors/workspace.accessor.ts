@@ -442,24 +442,34 @@ class WorkspaceAccessor {
    * Truncates from the beginning if output exceeds maxSize to prevent unbounded growth.
    */
   async appendInitOutput(id: string, output: string, maxSize = 50 * 1024): Promise<void> {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id },
-      select: { initOutput: true },
-    });
+    const truncationMarker = '[...truncated...]\n';
+    const markerLength = truncationMarker.length;
+    const now = new Date();
+    const updatedRows = await prisma.$executeRaw`
+      UPDATE "Workspace"
+      SET "initOutput" = CASE
+        WHEN length(COALESCE("initOutput", '') || ${output}) <= ${maxSize}
+          THEN COALESCE("initOutput", '') || ${output}
+        WHEN ${maxSize} <= ${markerLength}
+          THEN substr(${truncationMarker}, 1, ${maxSize})
+        ELSE ${truncationMarker} || substr(
+          COALESCE("initOutput", '') || ${output},
+          -(${maxSize} - ${markerLength})
+        )
+      END,
+      "updatedAt" = ${now}
+      WHERE "id" = ${id}
+    `;
 
-    let newOutput = (workspace?.initOutput ?? '') + output;
-
-    // Truncate from the beginning if too large
-    if (newOutput.length > maxSize) {
-      const truncationMarker = '[...truncated...]\n';
-      const keepSize = maxSize - truncationMarker.length;
-      newOutput = `${truncationMarker}${newOutput.slice(-keepSize)}`;
+    if (Number(updatedRows) === 0) {
+      const existing = await prisma.workspace.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!existing) {
+        throw new Error(`Workspace not found: ${id}`);
+      }
     }
-
-    await prisma.workspace.update({
-      where: { id },
-      data: { initOutput: newOutput },
-    });
   }
 
   /**

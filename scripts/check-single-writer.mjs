@@ -65,7 +65,6 @@ const workspaceMutationRules = {
   },
   markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
   clearRatchetActiveSession: { type: 'static', fields: ['ratchetActiveSessionId'] },
-  appendInitOutput: { type: 'static', fields: ['initOutput'] },
   clearInitOutput: { type: 'static', fields: ['initOutput'] },
 };
 
