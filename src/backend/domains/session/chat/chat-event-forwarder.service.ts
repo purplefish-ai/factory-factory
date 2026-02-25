@@ -13,6 +13,7 @@
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { SessionWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
+import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import { chatConnectionService } from './chat-connection.service';
@@ -115,7 +116,7 @@ class ChatEventForwarderService {
           try {
             info.ws.send(message);
           } catch (error) {
-            logger.error('Failed to send workspace notification', error as Error);
+            logger.error('Failed to send workspace notification', toError(error));
           }
         }
       }

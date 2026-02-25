@@ -19,6 +19,7 @@ import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { ConnectionInfo } from '@/backend/domains/session';
+import { toError } from '@/backend/lib/error-utils';
 import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
 import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
@@ -253,7 +254,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           }
           await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir ?? '', message);
         } catch (error) {
-          logger.error('Error handling chat message', error as Error);
+          logger.error('Error handling chat message', toError(error));
           sendChatError(ws, dbSessionId, 'Invalid message format');
         } finally {
           inFlightMessageCount = Math.max(0, inFlightMessageCount - 1);

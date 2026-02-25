@@ -24,6 +24,7 @@ import { type AppContext, createAppContext } from './app-context';
 import { prisma } from './db';
 import { reconciliationService } from './domains/ratchet';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
+import { toError } from './lib/error-utils';
 import {
   createCorsMiddleware,
   createRequestLoggerMiddleware,
@@ -326,7 +327,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           try {
             await reconciliationService.cleanupOrphans();
           } catch (error) {
-            logger.error('Failed to cleanup orphan sessions on startup', error as Error);
+            logger.error('Failed to cleanup orphan sessions on startup', toError(error));
           }
 
           // Reconcile workspaces that may have been left in inconsistent states
@@ -334,7 +335,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           try {
             await reconciliationService.reconcile();
           } catch (error) {
-            logger.error('Failed to reconcile workspaces on startup', error as Error);
+            logger.error('Failed to reconcile workspaces on startup', toError(error));
           }
 
           sessionFileLogger.cleanupOldLogs();

@@ -1,3 +1,4 @@
+import { toError } from '@/backend/lib/error-utils';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { configService } from '@/backend/services/config.service';
@@ -111,7 +112,7 @@ class FixerSessionService {
       return this.dispatchAcquiredSession(input, acquisitionResult);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Failed to acquire and dispatch fixer session', error as Error, {
+      logger.error('Failed to acquire and dispatch fixer session', toError(error), {
         workspaceId,
         workflow,
       });

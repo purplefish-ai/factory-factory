@@ -14,6 +14,7 @@
 
 import 'dotenv/config';
 import { createAppContext } from './app-context';
+import { toError } from './lib/error-utils';
 import { createServer } from './server';
 
 const appContext = createAppContext();
@@ -26,7 +27,7 @@ const serverInstance = createServer(undefined, appContext);
 appContext.services.serverInstanceService.setInstance(serverInstance);
 
 serverInstance.start().catch((error) => {
-  logger.error('Failed to start server', error as Error);
+  logger.error('Failed to start server', toError(error));
   process.exit(1);
 });
 

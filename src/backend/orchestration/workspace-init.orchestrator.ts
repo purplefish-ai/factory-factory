@@ -7,6 +7,7 @@ import {
 } from '@/backend/domains/session';
 import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
 import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
+import { toError } from '@/backend/lib/error-utils';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
@@ -80,7 +81,7 @@ async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
     }
     return true;
   } catch (error) {
-    logger.error('Failed to start provisioning', error as Error, { workspaceId });
+    logger.error('Failed to start provisioning', toError(error), { workspaceId });
     return false;
   }
 }
@@ -109,7 +110,7 @@ async function readFactoryConfigSafe(
     }
     return factoryConfig;
   } catch (error) {
-    logger.error('Failed to parse factory-factory.json', error as Error, {
+    logger.error('Failed to parse factory-factory.json', toError(error), {
       workspaceId,
     });
     return null;
@@ -908,7 +909,7 @@ export async function initializeWorkspaceWorktree(
     // Ensure any eager session start attempt has settled before cleanup so we
     // do not race stopWorkspaceSessions() with a late startSession() call.
     await agentSessionPromise;
-    await handleWorkspaceInitFailure(workspaceId, error as Error);
+    await handleWorkspaceInitFailure(workspaceId, toError(error));
   } finally {
     if (worktreeCreated) {
       await worktreeLifecycleService.clearInitMode(workspaceId);
