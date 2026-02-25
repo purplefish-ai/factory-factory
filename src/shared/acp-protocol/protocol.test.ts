@@ -53,6 +53,39 @@ describe('assistant renderability guards', () => {
     ).toBe(true);
   });
 
+  it('persists assistant message with image-only content', () => {
+    expect(
+      shouldPersistAgentMessage({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'Zm9v',
+              },
+            } as AgentContentItem,
+          ],
+        },
+      })
+    ).toBe(true);
+  });
+
+  it('persists assistant message with string content', () => {
+    expect(
+      shouldPersistAgentMessage({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: 'Hello world',
+        },
+      })
+    ).toBe(true);
+  });
+
   it('persists stream tool_use content_block_start without initial input', () => {
     expect(
       shouldPersistAgentMessage({
