@@ -13,6 +13,7 @@ import {
   sessionDomainService,
 } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
+import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
   AgentContentItem,
@@ -28,6 +29,7 @@ import {
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
 import { AcpEventProcessor } from './acp-event-processor';
+import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import {
   type PersistAcpConfigSnapshotParams,
   SessionConfigService,
@@ -142,6 +144,9 @@ export class SessionService {
 
           await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sid);
           if (session.workflow === 'ratchet') {
+            // Persist transcript before deletion
+            await this.persistRatchetTranscript(sid, session);
+
             await this.repository.deleteSession(sid);
             logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
           }
@@ -545,6 +550,50 @@ export class SessionService {
     }
     this.sessionDomainService.clearSession(sessionId);
     logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
+  }
+
+  private async persistRatchetTranscript(
+    sessionId: string,
+    session: AgentSessionRecord
+  ): Promise<void> {
+    if (!this.workspaceBridge) {
+      logger.warn('Cannot persist ratchet transcript: no workspace bridge', { sessionId });
+      return;
+    }
+
+    try {
+      // Get transcript from in-memory store
+      const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
+
+      // Get workspace to find worktree path
+      const workspace = await workspaceAccessor.findById(session.workspaceId);
+      if (!workspace?.worktreePath) {
+        logger.warn('Cannot persist ratchet transcript: no worktree path', {
+          sessionId,
+          workspaceId: session.workspaceId,
+        });
+        return;
+      }
+
+      // Persist to disk
+      await closedSessionPersistenceService.persistClosedSession({
+        sessionId,
+        workspaceId: session.workspaceId,
+        worktreePath: workspace.worktreePath,
+        name: session.name,
+        workflow: session.workflow,
+        provider: session.provider,
+        model: session.model,
+        startedAt: session.createdAt,
+        messages: transcript,
+      });
+    } catch (error) {
+      // Log but don't throw - we don't want to block deletion if persistence fails
+      logger.error('Failed to persist ratchet transcript', error as Error, {
+        sessionId,
+        workspaceId: session.workspaceId,
+      });
+    }
   }
 
   /**

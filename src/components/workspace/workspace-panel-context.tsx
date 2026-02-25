@@ -28,8 +28,9 @@ export type BottomPanelTab = 'terminal' | 'dev-logs' | 'post-run-logs' | 'setup-
 
 export interface MainViewTab {
   id: string;
-  type: 'chat' | 'file' | 'diff' | 'screenshot';
+  type: 'chat' | 'file' | 'diff' | 'screenshot' | 'closed-session';
   path?: string; // for file/diff tabs
+  closedSessionId?: string; // for closed-session tabs
   label: string;
 }
 
@@ -415,25 +416,31 @@ export function WorkspacePanelProvider({ workspaceId, children }: WorkspacePanel
 
   const openTab = useCallback(
     (type: MainViewTab['type'], path?: string, label?: string) => {
-      // For file/diff tabs, check if one with the same path already exists
-      if (path) {
-        const existing = tabs.find((tab) => tab.type === type && tab.path === path);
-        if (existing) {
-          setActiveTabId(existing.id);
-          return;
+      // Check for existing tab
+      const existing = tabs.find((tab) => {
+        if (type === 'closed-session' && path) {
+          return tab.type === 'closed-session' && tab.closedSessionId === path;
         }
+        if ((type === 'file' || type === 'diff') && path) {
+          return tab.type === type && tab.path === path;
+        }
+        return false;
+      });
+
+      if (existing) {
+        setActiveTabId(existing.id);
+        return;
       }
 
-      // Generate a unique ID for the new tab
+      // Create new tab
       const id = `${type}-${path ?? Date.now()}`;
-
-      // Generate label if not provided
       const tabLabel = label ?? (path ? (path.split('/').pop() ?? path) : type);
 
       const newTab: MainViewTab = {
         id,
         type,
-        path,
+        path: type === 'file' || type === 'diff' ? path : undefined,
+        closedSessionId: type === 'closed-session' ? path : undefined,
         label: tabLabel,
       };
 

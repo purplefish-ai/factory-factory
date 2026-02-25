@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 
+import { ClosedSessionTranscriptView } from './closed-session-transcript-view';
 import { DiffViewer } from './diff-viewer';
 import { FileViewer } from './file-viewer';
 import { ScreenshotViewerTab } from './screenshot-viewer-tab';
@@ -25,6 +26,8 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
   const filePath = activeTab?.type === 'file' ? activeTab.path : undefined;
   const diffPath = activeTab?.type === 'diff' ? activeTab.path : undefined;
   const screenshotPath = activeTab?.type === 'screenshot' ? activeTab.path : undefined;
+  const closedSessionId =
+    activeTab?.type === 'closed-session' ? activeTab.closedSessionId : undefined;
   const activeTabKey = activeTab?.id;
 
   return (
@@ -45,6 +48,7 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
           tabId={activeTabKey}
         />
       )}
+      {closedSessionId && <ClosedSessionTranscriptView sessionId={closedSessionId} />}
     </div>
   );
 }

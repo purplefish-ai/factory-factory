@@ -24,6 +24,7 @@ export { sessionDataService } from './data/session-data.service';
 export { sessionProviderResolverService } from './data/session-provider-resolver.service';
 export type { SessionInterceptorBridge } from './interceptor.bridge';
 export { sessionInterceptorBridge } from './interceptor.bridge';
+export type { ClosedSessionTranscript } from './lifecycle/closed-session-persistence.service';
 export { sessionPromptBuilder } from './lifecycle/session.prompt-builder';
 export { sessionRepository } from './lifecycle/session.repository';
 // Session lifecycle (start/stop/create)

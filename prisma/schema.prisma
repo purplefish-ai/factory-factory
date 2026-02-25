@@ -184,6 +184,7 @@ model Workspace {
   ratchetSessionProvider WorkspaceProviderSelection @default(WORKSPACE_DEFAULT)
   agentSessions       AgentSession[]
   terminalSessions    TerminalSession[]
+  closedSessions      ClosedSession[]
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
@@ -258,6 +259,26 @@ model TerminalSession {
 
   @@index([workspaceId])
   @@index([status])
+}
+
+model ClosedSession {
+  id              String          @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  sessionId       String          // Original AgentSession ID
+  name            String?
+  workflow        String          // "ratchet", "ci-fix", etc.
+  provider        SessionProvider
+  model           String
+
+  transcriptPath  String          // Relative path to transcript JSON file
+
+  startedAt       DateTime
+  completedAt     DateTime        @default(now())
+
+  @@index([workspaceId])
+  @@index([completedAt])
 }
 
 model UserSettings {

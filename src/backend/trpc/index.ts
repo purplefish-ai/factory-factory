@@ -1,4 +1,5 @@
 import { adminRouter } from './admin.trpc';
+import { closedSessionsRouter } from './closed-sessions.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
 import { githubRouter } from './github.trpc';
 import { linearRouter } from './linear.trpc';
@@ -15,6 +16,7 @@ export const appRouter = router({
   admin: adminRouter,
   workspace: workspaceRouter,
   session: sessionRouter,
+  closedSessions: closedSessionsRouter,
   prReview: prReviewRouter,
   userSettings: userSettingsRouter,
   github: githubRouter,

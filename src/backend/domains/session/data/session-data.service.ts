@@ -3,6 +3,11 @@ import {
   type AgentSessionRecord,
   agentSessionAccessor,
 } from '@/backend/resource_accessors/agent-session.accessor';
+import {
+  type ClosedSessionRecord,
+  type ClosedSessionWithWorkspace,
+  closedSessionAccessor,
+} from '@/backend/resource_accessors/closed-session.accessor';
 import { terminalSessionAccessor } from '@/backend/resource_accessors/terminal-session.accessor';
 import type { SessionStatus } from '@/shared/core';
 
@@ -57,6 +62,23 @@ class SessionDataService {
 
   findAgentSessionsWithPid(): Promise<AgentSessionRecord[]> {
     return agentSessionAccessor.findWithPid();
+  }
+
+  // Closed sessions
+
+  findClosedSessionsByWorkspaceId(
+    workspaceId: string,
+    limit: number
+  ): Promise<ClosedSessionRecord[]> {
+    return closedSessionAccessor.findByWorkspaceId(workspaceId, limit);
+  }
+
+  findClosedSessionByIdWithWorkspace(id: string): Promise<ClosedSessionWithWorkspace | null> {
+    return closedSessionAccessor.findByIdWithWorkspace(id);
+  }
+
+  deleteClosedSession(id: string): Promise<ClosedSessionRecord> {
+    return closedSessionAccessor.delete(id);
   }
 
   // Terminal sessions
