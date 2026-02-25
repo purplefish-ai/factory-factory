@@ -75,7 +75,8 @@ describe('CLIHealthBannerContent', () => {
 
     expect(markup).toContain('sm:flex-row');
     expect(markup).toContain('hidden sm:inline');
-    expect(markup).toContain('sr-only sm:not-sr-only');
+    expect(markup).toContain('sm:hidden');
+    expect(markup).toContain('hidden items-center gap-2 self-start sm:flex');
     expect(markup).toContain('Recheck');
     expect(markup).toContain('Dismiss');
     expect(markup).toContain('Upgrade now');

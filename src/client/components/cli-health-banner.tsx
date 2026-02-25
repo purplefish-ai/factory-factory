@@ -124,12 +124,39 @@ export function CLIHealthBannerContent({
   onUpgrade: (provider: 'CLAUDE' | 'CODEX') => void;
 }) {
   return (
-    <div className="border-b border-warning/20 bg-warning/10 px-3 py-2 sm:px-4 sm:py-3">
+    <div className="border-b border-warning/20 bg-warning/10 py-2 pl-3 pr-2 sm:px-4 sm:py-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning sm:h-5 sm:w-5" />
-          <div className="min-w-0 space-y-1.5 sm:space-y-2">
-            <p className="text-xs font-medium text-warning-foreground dark:text-warning sm:text-sm">
+          <AlertTriangle className="mt-0.5 hidden h-5 w-5 shrink-0 text-warning sm:block" />
+          <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
+            <div className="flex items-center gap-2 sm:hidden">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+              <p className="min-w-0 flex-1 text-xs font-medium text-warning-foreground dark:text-warning">
+                Some features require additional setup
+              </p>
+              <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5 sm:hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRecheck}
+                  disabled={isRefetching || isUpgrading}
+                  className="h-7 px-2 text-warning hover:bg-warning/20"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
+                  <span className="sr-only">Recheck</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onDismiss}
+                  className="h-7 w-7 text-warning hover:bg-warning/20"
+                >
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Dismiss</span>
+                </Button>
+              </div>
+            </div>
+            <p className="hidden text-sm font-medium text-warning-foreground dark:text-warning sm:block">
               Some features require additional setup
             </p>
             <ul className="space-y-1 sm:space-y-1.5">
@@ -138,11 +165,13 @@ export function CLIHealthBannerContent({
                   key={issue.title}
                   className="text-xs leading-snug text-foreground/85 sm:text-sm"
                 >
-                  <span className="font-medium">{issue.title}</span>
-                  <span className="hidden sm:inline">: {issue.description}</span>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 sm:hidden">
-                    {renderIssueActions(issue, isUpgrading, onUpgrade)}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-medium">{issue.title}</span>
+                    <div className="flex flex-wrap items-center gap-2 sm:hidden">
+                      {renderIssueActions(issue, isUpgrading, onUpgrade)}
+                    </div>
                   </div>
+                  <span className="hidden sm:inline">: {issue.description}</span>
                   <span className="ml-1.5 hidden items-center gap-2 sm:inline-flex">
                     {renderIssueActions(issue, isUpgrading, onUpgrade)}
                   </span>
@@ -151,22 +180,22 @@ export function CLIHealthBannerContent({
             </ul>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 self-end sm:self-start sm:gap-2">
+        <div className="hidden items-center gap-2 self-start sm:flex">
           <Button
             variant="ghost"
             size="sm"
             onClick={onRecheck}
             disabled={isRefetching || isUpgrading}
-            className="h-7 px-2 text-warning hover:bg-warning/20 sm:h-8"
+            className="h-8 px-2 text-warning hover:bg-warning/20"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isRefetching ? 'animate-spin' : ''}`} />
-            <span className="sr-only sm:not-sr-only sm:ml-1.5">Recheck</span>
+            <span className="ml-1.5">Recheck</span>
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={onDismiss}
-            className="h-7 w-7 text-warning hover:bg-warning/20 sm:h-8 sm:w-8"
+            className="h-8 w-8 text-warning hover:bg-warning/20"
           >
             <X className="h-4 w-4" />
             <span className="sr-only">Dismiss</span>
