@@ -274,6 +274,25 @@ describe('resource accessors integration', () => {
       expect(reloaded.initOutput?.startsWith('[...truncated...]\n')).toBe(true);
     });
 
+    it('preserves all chunks across concurrent init output appends', async () => {
+      const project = await createProjectFixture();
+      const workspace = await createWorkspaceFixture(project.id);
+      const chunks = Array.from({ length: 40 }, (_, index) => `chunk-${index}\n`);
+
+      await Promise.all(
+        chunks.map((chunk) => workspaceAccessor.appendInitOutput(workspace.id, chunk, 10 * 1024))
+      );
+
+      const reloaded = await workspaceAccessor.findRawByIdOrThrow(workspace.id);
+      const output = reloaded.initOutput ?? '';
+
+      expect(output.length).toBeGreaterThan(0);
+      expect(output.startsWith('[...truncated...]\n')).toBe(false);
+      for (const chunk of chunks) {
+        expect(output.includes(chunk)).toBe(true);
+      }
+    });
+
     it('clears ratchet active session only when session id matches', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id, {
