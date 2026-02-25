@@ -425,6 +425,30 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.kanbanColumn).toBe('WORKING');
     });
 
+    it('does not latch flow-derived isWorking across PR-only updates', () => {
+      store.upsert(
+        'ws-1',
+        makeUpdate({
+          isWorking: false,
+          prUrl: 'https://github.com/org/repo/pull/1',
+          prCiStatus: 'PENDING',
+        }),
+        'test',
+        100
+      );
+
+      // Initial effective isWorking is true because flow is active.
+      expect(store.getByWorkspaceId('ws-1')!.isWorking).toBe(true);
+
+      store.upsert('ws-1', { prCiStatus: 'SUCCESS' }, 'test', 200);
+
+      // Session signal remains false, so effective isWorking should clear.
+      const entry = store.getByWorkspaceId('ws-1');
+      expect(entry!.isWorking).toBe(false);
+      expect(entry!.sidebarStatus.activityState).toBe('IDLE');
+      expect(entry!.kanbanColumn).toBe('WAITING');
+    });
+
     it('ratchetButtonAnimated reflects flow state', () => {
       store.upsert(
         'ws-1',

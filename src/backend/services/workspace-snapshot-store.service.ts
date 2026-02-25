@@ -263,6 +263,7 @@ function createDefaultFieldTimestamps(): Record<SnapshotFieldGroup, number> {
 export class WorkspaceSnapshotStore extends EventEmitter {
   private entries = new Map<string, WorkspaceSnapshotEntry>();
   private projectIndex = new Map<string, Set<string>>();
+  private rawSessionIsWorkingByWorkspaceId = new Map<string, boolean>();
   private deriveFns: SnapshotDerivationFns | null = null;
 
   private assignField<K extends SnapshotField>(
@@ -299,6 +300,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * Create a new default snapshot entry for a workspace.
    */
   private createDefaultEntry(workspaceId: string, projectId: string): WorkspaceSnapshotEntry {
+    this.rawSessionIsWorkingByWorkspaceId.set(workspaceId, false);
     return {
       workspaceId,
       projectId,
@@ -352,6 +354,9 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       for (const field of mapping.fields) {
         this.assignField(entry, update, field);
       }
+      if (mapping.group === 'session' && update.isWorking !== undefined) {
+        this.rawSessionIsWorkingByWorkspaceId.set(entry.workspaceId, update.isWorking);
+      }
     }
     return merged;
   }
@@ -361,6 +366,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
    * derivation functions.
    */
   private recomputeDerivedState(entry: WorkspaceSnapshotEntry): void {
+    const sessionIsWorking = this.rawSessionIsWorkingByWorkspaceId.get(entry.workspaceId) ?? false;
     const flowState = this.derive.deriveFlowState({
       prUrl: entry.prUrl,
       prState: entry.prState,
@@ -377,7 +383,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
         prCiStatus: entry.prCiStatus,
         ratchetState: entry.ratchetState,
         hasHadSessions: entry.hasHadSessions,
-        sessionIsWorking: entry.isWorking,
+        sessionIsWorking,
         flowState,
       },
       {
@@ -488,6 +494,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
 
     // Delete from entries map
     this.entries.delete(workspaceId);
+    this.rawSessionIsWorkingByWorkspaceId.delete(workspaceId);
 
     // Remove from project index
     const projectSet = this.projectIndex.get(entry.projectId);
@@ -558,6 +565,7 @@ export class WorkspaceSnapshotStore extends EventEmitter {
   clear(): void {
     this.entries.clear();
     this.projectIndex.clear();
+    this.rawSessionIsWorkingByWorkspaceId.clear();
     logger.info('Snapshot store cleared');
   }
 }
