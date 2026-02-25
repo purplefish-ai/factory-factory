@@ -35,6 +35,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     configService,
     createLogger,
     sessionFileLogger,
+    sessionDomainService,
     sessionService,
   } = appContext.services;
 
@@ -272,6 +273,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             sessionFileLogger.closeSession(dbSessionId);
           }
           chatConnectionService.unregister(connectionId);
+          if (
+            dbSessionId &&
+            !sessionService.isSessionRunning(dbSessionId) &&
+            countConnectionsViewingSession(dbSessionId) === 0
+          ) {
+            sessionDomainService.clearSession(dbSessionId);
+          }
         }
       });
 

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -744,6 +745,38 @@ describe('SessionService', () => {
     await sessionService.stopSession('session-1');
 
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
+  });
+
+  it('clears in-memory session state after manual stop when no clients are connected', async () => {
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
+
+    await sessionService.stopSession('session-clear');
+
+    expect(clearSessionSpy).toHaveBeenCalledWith('session-clear');
+  });
+
+  it('keeps in-memory session state after manual stop when clients are connected', async () => {
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
+
+    const connectionId = 'conn-active-session';
+    chatConnectionService.register(connectionId, {
+      ws: {} as never,
+      dbSessionId: 'session-active',
+      workingDir: null,
+    });
+    try {
+      await sessionService.stopSession('session-active');
+    } finally {
+      chatConnectionService.unregister(connectionId);
+    }
+
+    expect(clearSessionSpy).not.toHaveBeenCalled();
   });
 
   it('marks workspace session idle during manual stop', async () => {

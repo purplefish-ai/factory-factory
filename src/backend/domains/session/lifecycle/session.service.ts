@@ -6,6 +6,7 @@ import type {
 } from '@/backend/domains/session/acp';
 import { type AcpRuntimeEventHandlers, acpRuntimeManager } from '@/backend/domains/session/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/domains/session/bridges';
+import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import {
   type SessionDomainService,
@@ -150,6 +151,7 @@ export class SessionService {
             error: error instanceof Error ? error.message : String(error),
           });
         } finally {
+          this.clearSessionStoreIfInactive(sid, 'runtime_exit');
           acpTraceLogger.closeSession(sid);
         }
       },
@@ -415,6 +417,7 @@ export class SessionService {
         );
       }
 
+      this.clearSessionStoreIfInactive(sessionId, 'manual_stop');
       logger.info('ACP session stopped', {
         sessionId,
         ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
@@ -522,6 +525,26 @@ export class SessionService {
     }
 
     await this.workspaceBridge.clearRatchetActiveSessionIfMatching(workspaceId, sessionId);
+  }
+
+  private hasSessionViewers(sessionId: string): boolean {
+    for (const info of chatConnectionService.values()) {
+      if (info.dbSessionId === sessionId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private clearSessionStoreIfInactive(
+    sessionId: string,
+    reason: 'manual_stop' | 'runtime_exit'
+  ): void {
+    if (this.runtimeManager.isSessionRunning(sessionId) || this.hasSessionViewers(sessionId)) {
+      return;
+    }
+    this.sessionDomainService.clearSession(sessionId);
+    logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
   }
 
   /**
