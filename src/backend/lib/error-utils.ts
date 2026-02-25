@@ -5,7 +5,3 @@ export function toError(error: unknown): Error {
 
   return new Error(String(error));
 }
-
-export function toErrorMessage(error: unknown): string {
-  return toError(error).message;
-}
