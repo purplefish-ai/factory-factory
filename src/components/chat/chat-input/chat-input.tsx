@@ -1,4 +1,4 @@
-import { Brain, ImagePlus, Loader2, Send, SlidersHorizontal, Square } from 'lucide-react';
+import { Brain, ImagePlus, Loader2, MapIcon, Send, SlidersHorizontal, Square } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachmentPreview } from '@/components/chat/attachment-preview';
@@ -171,6 +171,7 @@ interface LeftControlsVisibility {
   showModelSelector: boolean;
   showReasoningSelector: boolean;
   showThinkingToggle: boolean;
+  showPlanModeToggle: boolean;
   showAttachments: boolean;
   showUsageIndicator: boolean;
 }
@@ -185,6 +186,7 @@ function deriveLeftControlsVisibility(
   const showReasoningSelector =
     capabilities?.reasoning.enabled === true && (capabilities.reasoning.options.length ?? 0) > 0;
   const showThinkingToggle = capabilities?.thinking.enabled === true;
+  const showPlanModeToggle = capabilities?.planMode.enabled === true;
   const showAttachments =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
   const showUsageIndicator =
@@ -210,6 +212,7 @@ function deriveLeftControlsVisibility(
     showModelSelector,
     showReasoningSelector,
     showThinkingToggle,
+    showPlanModeToggle,
     showAttachments,
     showUsageIndicator,
   };
@@ -266,20 +269,24 @@ const ProviderIndicator = memo(function ProviderIndicator({
 
 const ModeToggles = memo(function ModeToggles({
   showThinkingToggle,
+  showPlanModeToggle,
   settings,
   onThinkingChange,
+  onPlanModeChange,
   running,
   modLabel,
   modifierHeld,
 }: {
   showThinkingToggle: boolean;
+  showPlanModeToggle: boolean;
   settings?: ChatSettings;
   onThinkingChange: (enabled: boolean) => void;
+  onPlanModeChange: (enabled: boolean) => void;
   running: boolean;
   modLabel: string;
   modifierHeld: boolean;
 }) {
-  if (!showThinkingToggle) {
+  if (!(showThinkingToggle || showPlanModeToggle)) {
     return null;
   }
 
@@ -294,6 +301,18 @@ const ModeToggles = memo(function ModeToggles({
           label="Extended thinking mode"
           ariaLabel="Toggle thinking mode"
           shortcut={`${modLabel}+Shift+T`}
+          showShortcut={modifierHeld}
+        />
+      )}
+      {showPlanModeToggle && (
+        <SettingsToggle
+          pressed={settings?.planModeEnabled ?? false}
+          onPressedChange={onPlanModeChange}
+          disabled={running}
+          icon={MapIcon}
+          label="Planning mode"
+          ariaLabel="Toggle planning mode"
+          shortcut={`${modLabel}+Shift+P`}
           showShortcut={modifierHeld}
         />
       )}
@@ -362,8 +381,10 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
   reasoningOptions,
   onReasoningChange,
   showThinkingToggle,
+  showPlanModeToggle,
   settings,
   onThinkingChange,
+  onPlanModeChange,
   hasAcpConfigOptions,
   acpConfigOptions,
   onSetConfigOption,
@@ -380,8 +401,10 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
   reasoningOptions: ChatBarCapabilities['reasoning']['options'];
   onReasoningChange: (effort: string) => void;
   showThinkingToggle: boolean;
+  showPlanModeToggle: boolean;
   settings?: ChatSettings;
   onThinkingChange: (enabled: boolean) => void;
+  onPlanModeChange: (enabled: boolean) => void;
   hasAcpConfigOptions: boolean;
   acpConfigOptions?: AcpConfigOption[] | null;
   onSetConfigOption?: (configId: string, value: string) => void;
@@ -394,6 +417,7 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
     showModelSelector ||
     showReasoningSelector ||
     showThinkingToggle ||
+    showPlanModeToggle ||
     showUsageIndicator;
 
   if (!hasAnyControls) {
@@ -478,6 +502,19 @@ const MobileSettingsSheet = memo(function MobileSettingsSheet({
                   />
                 </div>
               )}
+              {showPlanModeToggle && (
+                <div className="flex items-center justify-between gap-2 rounded-md border p-2">
+                  <span className="text-sm text-muted-foreground">Planning mode</span>
+                  <SettingsToggle
+                    pressed={settings?.planModeEnabled ?? false}
+                    onPressedChange={onPlanModeChange}
+                    disabled={running}
+                    icon={MapIcon}
+                    label="Planning mode"
+                    ariaLabel="Toggle planning mode"
+                  />
+                </div>
+              )}
             </>
           )}
           {showUsageIndicator && tokenStats && (
@@ -497,6 +534,7 @@ interface LeftControlsProps {
   onModelChange: (model: string) => void;
   onReasoningChange: (effort: string) => void;
   onThinkingChange: (enabled: boolean) => void;
+  onPlanModeChange: (enabled: boolean) => void;
   running: boolean;
   modLabel: string;
   modifierHeld: boolean;
@@ -519,6 +557,7 @@ interface LeftControlsViewState {
   showModelSelector: boolean;
   showReasoningSelector: boolean;
   showThinkingToggle: boolean;
+  showPlanModeToggle: boolean;
   showAttachments: boolean;
   showUsageIndicator: boolean;
   hasModeToggles: boolean;
@@ -538,6 +577,7 @@ const MobileLeftControls = memo(function MobileLeftControls({
     onModelChange,
     onReasoningChange,
     onThinkingChange,
+    onPlanModeChange,
     running,
     modLabel,
     modifierHeld,
@@ -567,8 +607,10 @@ const MobileLeftControls = memo(function MobileLeftControls({
         reasoningOptions={capabilities?.reasoning.options ?? []}
         onReasoningChange={onReasoningChange}
         showThinkingToggle={view.showThinkingToggle}
+        showPlanModeToggle={view.showPlanModeToggle}
         settings={settings}
         onThinkingChange={onThinkingChange}
+        onPlanModeChange={onPlanModeChange}
         hasAcpConfigOptions={view.hasAcpConfigOptions}
         acpConfigOptions={acpConfigOptions}
         onSetConfigOption={onSetConfigOption}
@@ -611,6 +653,7 @@ const DesktopLeftControls = memo(function DesktopLeftControls({
     onModelChange,
     onReasoningChange,
     onThinkingChange,
+    onPlanModeChange,
     running,
     modLabel,
     modifierHeld,
@@ -670,8 +713,10 @@ const DesktopLeftControls = memo(function DesktopLeftControls({
           )}
           <ModeToggles
             showThinkingToggle={view.showThinkingToggle}
+            showPlanModeToggle={view.showPlanModeToggle}
             settings={settings}
             onThinkingChange={onThinkingChange}
+            onPlanModeChange={onPlanModeChange}
             running={running}
             modLabel={modLabel}
             modifierHeld={modifierHeld}
@@ -708,7 +753,7 @@ const LeftControls = memo(function LeftControls(props: LeftControlsProps) {
   const view = deriveLeftControlsVisibility(props.settings, props.capabilities, props.tokenStats);
   const viewState: LeftControlsViewState = {
     ...view,
-    hasModeToggles: view.showThinkingToggle,
+    hasModeToggles: view.showThinkingToggle || view.showPlanModeToggle,
     hasAcpConfigOptions:
       props.acpConfigOptions != null &&
       props.acpConfigOptions.length > 0 &&
@@ -1005,6 +1050,7 @@ export const ChatInput = memo(function ChatInput({
             onModelChange={actions.handleModelChange}
             onReasoningChange={actions.handleReasoningChange}
             onThinkingChange={actions.handleThinkingChange}
+            onPlanModeChange={actions.handlePlanModeChange}
             running={running}
             modLabel={modLabel}
             modifierHeld={modifierHeld}
