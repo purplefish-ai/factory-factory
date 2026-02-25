@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockExecCommand = vi.hoisted(() => vi.fn());
 const mockSendLinuxNotification = vi.hoisted(() => vi.fn());
@@ -29,6 +29,8 @@ vi.mock('./logger.service', () => ({
 import { notificationService } from './notification.service';
 
 describe('notificationService', () => {
+  const originalPlatform = process.platform;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetNotificationConfig.mockReturnValue({
@@ -44,6 +46,12 @@ describe('notificationService', () => {
       soundFile: undefined,
       quietHoursStart: undefined,
       quietHoursEnd: undefined,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform,
     });
   });
 
@@ -141,6 +149,36 @@ describe('notificationService', () => {
         pushEnabled: false,
         soundEnabled: false,
       })
+    );
+  });
+
+  it('builds a safe PowerShell toast script on Windows', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    mockExecCommand.mockResolvedValue({ stdout: '', stderr: '', code: 0 });
+
+    await expect(
+      notificationService.notify(
+        `Danger $(Get-Process) & <tag> "double" 'single'`,
+        `Body $(Invoke-Expression "calc") & <xml> "quote" 'apos'`
+      )
+    ).resolves.toEqual({ sent: true });
+
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
+    const [command, args] = mockExecCommand.mock.calls[0] as [string, string[]];
+    const script = args[1];
+
+    expect(command).toBe('powershell');
+    expect(args[0]).toBe('-Command');
+    expect(script).toContain("$template = @'");
+    expect(script).toContain("'@");
+    expect(script).not.toContain('@"');
+    expect(script).toContain('\n');
+    expect(script).not.toContain("''single''");
+    expect(script).toContain(
+      'Danger $(Get-Process) &amp; &lt;tag&gt; &quot;double&quot; &apos;single&apos;'
+    );
+    expect(script).toContain(
+      'Body $(Invoke-Expression &quot;calc&quot;) &amp; &lt;xml&gt; &quot;quote&quot; &apos;apos&apos;'
     );
   });
 });
