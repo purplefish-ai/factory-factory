@@ -89,8 +89,10 @@ RUN apk add --no-cache \
   && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}" \
        -o /usr/local/bin/cloudflared \
   && chmod +x /usr/local/bin/cloudflared \
-  && curl -LsSf https://astral.sh/uv/install.sh | sh \
-  && mv /root/.cargo/bin/uv /usr/local/bin/uv \
+  && UV_VERSION="0.10.6" \
+  && curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/uv-install.sh \
+  && UV_UNMANAGED_INSTALL="/usr/local/bin" sh /tmp/uv-install.sh \
+  && rm /tmp/uv-install.sh \
   && pip3 install --no-cache-dir pipx \
   && python3 -m pipx ensurepath
 
