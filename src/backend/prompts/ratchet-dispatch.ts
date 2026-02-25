@@ -35,29 +35,37 @@ Do not push merge-only updates. If you only merged main and did not fix CI or re
 
 Do not ask for confirmation.`;
 
-let cachedTemplate: string | null = null;
+class RatchetDispatchTemplateCache {
+  private cachedTemplate: string | null = null;
 
-function getTemplate(): string {
-  if (cachedTemplate !== null) {
-    return cachedTemplate;
+  getTemplate(): string {
+    if (this.cachedTemplate !== null) {
+      return this.cachedTemplate;
+    }
+
+    try {
+      const template = readFileSync(DISPATCH_PROMPT_PATH, 'utf-8').trim();
+      if (!template) {
+        throw new Error('Ratchet dispatch prompt template is empty');
+      }
+      this.cachedTemplate = template;
+      return this.cachedTemplate;
+    } catch (error) {
+      logger.error('Failed to load ratchet dispatch prompt template; using fallback', {
+        path: DISPATCH_PROMPT_PATH,
+        error: String(error),
+      });
+      this.cachedTemplate = FALLBACK_TEMPLATE;
+      return this.cachedTemplate;
+    }
   }
 
-  try {
-    const template = readFileSync(DISPATCH_PROMPT_PATH, 'utf-8').trim();
-    if (!template) {
-      throw new Error('Ratchet dispatch prompt template is empty');
-    }
-    cachedTemplate = template;
-    return cachedTemplate;
-  } catch (error) {
-    logger.error('Failed to load ratchet dispatch prompt template; using fallback', {
-      path: DISPATCH_PROMPT_PATH,
-      error: String(error),
-    });
-    cachedTemplate = FALLBACK_TEMPLATE;
-    return cachedTemplate;
+  clear(): void {
+    this.cachedTemplate = null;
   }
 }
+
+const templateCache = new RatchetDispatchTemplateCache();
 
 export interface ReviewCommentForPrompt {
   author: string;
@@ -86,12 +94,13 @@ export function buildRatchetDispatchPrompt(
   reviewComments: ReviewCommentForPrompt[] = []
 ): string {
   const comments = formatReviewComments(reviewComments);
-  return getTemplate()
+  return templateCache
+    .getTemplate()
     .replaceAll('{{PR_URL}}', () => prUrl)
     .replaceAll('{{PR_NUMBER}}', () => String(prNumber))
     .replaceAll('{{REVIEW_COMMENTS}}', () => comments);
 }
 
 export function clearRatchetDispatchPromptCache(): void {
-  cachedTemplate = null;
+  templateCache.clear();
 }

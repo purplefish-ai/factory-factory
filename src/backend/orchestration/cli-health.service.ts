@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { z } from 'zod';
 import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/domains/github';
+import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 
@@ -134,8 +135,14 @@ class CLIHealthService {
         health,
       };
     } catch (error) {
-      const err = error as Error & { stderr?: string; stdout?: string };
-      const details = [err.message, err.stderr, err.stdout].filter(Boolean).join('\n');
+      const normalizedError = toError(error);
+      const output =
+        typeof error === 'object' && error !== null
+          ? (error as { stderr?: unknown; stdout?: unknown })
+          : {};
+      const stderr = typeof output.stderr === 'string' ? output.stderr : undefined;
+      const stdout = typeof output.stdout === 'string' ? output.stdout : undefined;
+      const details = [normalizedError.message, stderr, stdout].filter(Boolean).join('\n');
       throw new Error(
         `Failed to upgrade ${provider === 'CLAUDE' ? 'Claude' : 'Codex'} CLI via npm: ${details}`
       );

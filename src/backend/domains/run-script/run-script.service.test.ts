@@ -70,6 +70,7 @@ import { RunScriptService } from './run-script.service';
 type ExitHandlerCapable = {
   handleProcessExit: (
     workspaceId: string,
+    childProcess: { pid: number },
     pid: number,
     code: number | null,
     signal: string | null
@@ -112,7 +113,7 @@ describe('RunScriptService.handleProcessExit', () => {
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
 
-    await service.handleProcessExit('ws-1', 12_345, 0, null);
+    await service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 0, null);
 
     expect(mockFindById).toHaveBeenCalledWith('ws-1');
     expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
@@ -126,10 +127,31 @@ describe('RunScriptService.handleProcessExit', () => {
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
 
-    await expect(service.handleProcessExit('ws-1', 12_345, 1, 'SIGTERM')).resolves.toBe(undefined);
+    await expect(
+      service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 1, 'SIGTERM')
+    ).resolves.toBe(undefined);
     expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
     expect(mockMarkCompleted).not.toHaveBeenCalled();
     expect(mockMarkFailed).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale process exits when a newer process is tracked', async () => {
+    const service = new RunScriptService() as unknown as ExitHandlerCapable & {
+      runningProcesses: Map<string, { pid: number }>;
+      outputListeners: Map<string, Set<(data: string) => void>>;
+    };
+    const activeProcess = { pid: 22_222 };
+    service.runningProcesses.set('ws-1', activeProcess);
+    service.outputListeners.set('ws-1', new Set([(data: string) => data]));
+
+    const staleProcess = { pid: 11_111 };
+    await service.handleProcessExit('ws-1', staleProcess, 11_111, 0, null);
+
+    expect(service.runningProcesses.get('ws-1')).toBe(activeProcess);
+    expect(service.outputListeners.has('ws-1')).toBe(true);
+    expect(mockMarkCompleted).not.toHaveBeenCalled();
+    expect(mockMarkFailed).not.toHaveBeenCalled();
+    expect(mockStopTunnel).not.toHaveBeenCalled();
   });
 });
 
@@ -414,6 +436,60 @@ describe('RunScriptService.stopRunScript', () => {
     expect(mockTreeKill).toHaveBeenCalledWith(12_345, 'SIGTERM', expect.any(Function));
     expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
   });
+
+  it('waits for tracked process exit before completing STOPPING', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      runScriptStatus: 'RUNNING',
+      runScriptPid: 12_345,
+      runScriptCleanupCommand: null,
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: null,
+    });
+    mockBeginStopping.mockResolvedValue(undefined);
+    mockCompleteStopping.mockResolvedValue(undefined);
+
+    let exitHandler: ((code: number | null, signal: string | null) => void) | undefined;
+    const mockProcess: {
+      pid: number;
+      exitCode: number | null;
+      once: (event: string, handler: (code: number | null, signal: string | null) => void) => void;
+      off: (event: string, handler: (code: number | null, signal: string | null) => void) => void;
+    } = {
+      pid: 12_345,
+      exitCode: null,
+      once: vi.fn(
+        (event: string, handler: (code: number | null, signal: string | null) => void) => {
+          if (event === 'exit') {
+            exitHandler = handler;
+          }
+        }
+      ),
+      off: vi.fn(),
+    };
+
+    const service = new RunScriptService();
+    (service as unknown as StopHandlerCapable).runningProcesses.set('ws-1', mockProcess as never);
+
+    const stopPromise = service.stopRunScript('ws-1');
+    const resultBeforeExit = await Promise.race([
+      stopPromise.then(() => 'resolved'),
+      new Promise<'pending'>((resolve) => {
+        setTimeout(() => resolve('pending'), 0);
+      }),
+    ]);
+
+    expect(resultBeforeExit).toBe('pending');
+    expect(mockCompleteStopping).not.toHaveBeenCalled();
+
+    mockProcess.exitCode = 0;
+    exitHandler?.(0, null);
+
+    const result = await stopPromise;
+
+    expect(result).toEqual({ success: true });
+    expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
+  });
 });
 
 describe('RunScriptService.handleProcessExit edge cases', () => {
@@ -426,7 +502,7 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
     mockMarkCompleted.mockResolvedValue(undefined);
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
-    await service.handleProcessExit('ws-1', 12_345, 0, null);
+    await service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 0, null);
 
     expect(mockMarkCompleted).toHaveBeenCalledWith('ws-1');
     expect(mockMarkFailed).not.toHaveBeenCalled();
@@ -437,7 +513,7 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
     mockMarkFailed.mockResolvedValue(undefined);
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
-    await service.handleProcessExit('ws-1', 12_345, 1, null);
+    await service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 1, null);
 
     expect(mockMarkFailed).toHaveBeenCalledWith('ws-1');
     expect(mockMarkCompleted).not.toHaveBeenCalled();
@@ -448,7 +524,7 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
     mockMarkFailed.mockResolvedValue(undefined);
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
-    await service.handleProcessExit('ws-1', 12_345, null, 'SIGKILL');
+    await service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, null, 'SIGKILL');
 
     expect(mockMarkFailed).toHaveBeenCalledWith('ws-1');
   });
@@ -457,7 +533,7 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
     mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'IDLE' });
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
-    await service.handleProcessExit('ws-1', 12_345, 0, null);
+    await service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 0, null);
 
     expect(mockMarkCompleted).not.toHaveBeenCalled();
     expect(mockMarkFailed).not.toHaveBeenCalled();
@@ -468,7 +544,7 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
     mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'COMPLETED' });
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
-    await service.handleProcessExit('ws-1', 12_345, 0, null);
+    await service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 0, null);
 
     expect(mockMarkCompleted).not.toHaveBeenCalled();
     expect(mockMarkFailed).not.toHaveBeenCalled();
@@ -478,7 +554,7 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
     mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'FAILED' });
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
-    await service.handleProcessExit('ws-1', 12_345, 1, null);
+    await service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 1, null);
 
     expect(mockMarkCompleted).not.toHaveBeenCalled();
     expect(mockMarkFailed).not.toHaveBeenCalled();
@@ -489,7 +565,9 @@ describe('RunScriptService.handleProcessExit edge cases', () => {
     mockMarkCompleted.mockRejectedValue(new Error('CAS conflict'));
 
     const service = new RunScriptService() as unknown as ExitHandlerCapable;
-    await expect(service.handleProcessExit('ws-1', 12_345, 0, null)).resolves.toBeUndefined();
+    await expect(
+      service.handleProcessExit('ws-1', { pid: 12_345 }, 12_345, 0, null)
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -794,5 +872,40 @@ describe('RunScriptService.getRunScriptStatus', () => {
 
     const service = new RunScriptService();
     await expect(service.getRunScriptStatus('ws-1')).rejects.toThrow('Workspace not found');
+  });
+});
+
+describe('RunScriptService.evictWorkspaceBuffers', () => {
+  type BufferEvictionCapable = {
+    outputBuffers: Map<string, string>;
+    outputListeners: Map<string, Set<(data: string) => void>>;
+    postRunOutputBuffers: Map<string, string>;
+    postRunOutputListeners: Map<string, Set<(data: string) => void>>;
+    evictWorkspaceBuffers: (workspaceId: string) => void;
+  };
+
+  it('evicts output and listener buffers for an archived workspace only', () => {
+    const service = new RunScriptService() as unknown as BufferEvictionCapable;
+    service.outputBuffers.set('ws-1', 'main logs');
+    service.postRunOutputBuffers.set('ws-1', 'postRun logs');
+    service.outputListeners.set('ws-1', new Set([vi.fn()]));
+    service.postRunOutputListeners.set('ws-1', new Set([vi.fn()]));
+
+    service.outputBuffers.set('ws-2', 'keep');
+    service.postRunOutputBuffers.set('ws-2', 'keep');
+    service.outputListeners.set('ws-2', new Set([vi.fn()]));
+    service.postRunOutputListeners.set('ws-2', new Set([vi.fn()]));
+
+    service.evictWorkspaceBuffers('ws-1');
+
+    expect(service.outputBuffers.has('ws-1')).toBe(false);
+    expect(service.postRunOutputBuffers.has('ws-1')).toBe(false);
+    expect(service.outputListeners.has('ws-1')).toBe(false);
+    expect(service.postRunOutputListeners.has('ws-1')).toBe(false);
+
+    expect(service.outputBuffers.has('ws-2')).toBe(true);
+    expect(service.postRunOutputBuffers.has('ws-2')).toBe(true);
+    expect(service.outputListeners.has('ws-2')).toBe(true);
+    expect(service.postRunOutputListeners.has('ws-2')).toBe(true);
   });
 });

@@ -256,4 +256,33 @@ describe('ChatConnectionService', () => {
       expect(ws2.send).toHaveBeenCalledWith(JSON.stringify(message));
     });
   });
+
+  describe('session viewer counting', () => {
+    it('counts only connections viewing the target session', () => {
+      const sessionAConn1 = new MockWebSocket() as unknown as WebSocket;
+      const sessionAConn2 = new MockWebSocket() as unknown as WebSocket;
+      const sessionBConn = new MockWebSocket() as unknown as WebSocket;
+
+      chatConnectionService.register('conn-a1', {
+        ws: sessionAConn1,
+        dbSessionId: 'session-a',
+        workingDir: '/test/a',
+      });
+      chatConnectionService.register('conn-a2', {
+        ws: sessionAConn2,
+        dbSessionId: 'session-a',
+        workingDir: '/test/a',
+      });
+      chatConnectionService.register('conn-b1', {
+        ws: sessionBConn,
+        dbSessionId: 'session-b',
+        workingDir: '/test/b',
+      });
+
+      expect(chatConnectionService.countConnectionsViewingSession('session-a')).toBe(2);
+      expect(chatConnectionService.countConnectionsViewingSession('session-b')).toBe(1);
+      expect(chatConnectionService.countConnectionsViewingSession('session-c')).toBe(0);
+      expect(chatConnectionService.countConnectionsViewingSession(null)).toBe(0);
+    });
+  });
 });

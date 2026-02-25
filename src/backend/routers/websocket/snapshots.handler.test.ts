@@ -9,7 +9,11 @@ import type {
   SnapshotChangedEvent,
   SnapshotRemovedEvent,
 } from '@/backend/services/workspace-snapshot-store.service';
-import { createSnapshotsUpgradeHandler, snapshotConnections } from './snapshots.handler';
+import {
+  createSnapshotsUpgradeHandler,
+  resetSnapshotsHandlerStateForTests,
+  snapshotConnections,
+} from './snapshots.handler';
 
 // ============================================================================
 // Mocks
@@ -133,6 +137,7 @@ describe('createSnapshotsUpgradeHandler', () => {
   afterEach(() => {
     // Clean up connection map between tests
     snapshotConnections.clear();
+    resetSnapshotsHandlerStateForTests();
   });
 
   it('sends full snapshot on connect', () => {

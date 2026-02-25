@@ -182,6 +182,18 @@ describe('TerminalService', () => {
     it('returns false when workspace does not exist', () => {
       expect(service.destroyTerminal('unknown-ws', 'nonexistent')).toBe(false);
     });
+
+    it('clears retained output buffer contents before destroying terminal', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+      onDataCallback?.('A'.repeat(16 * 1024));
+      const instance = service.getTerminal('ws-1', terminalId);
+      expect(instance?.outputBuffer.length).toBe(16 * 1024);
+
+      service.destroyTerminal('ws-1', terminalId);
+
+      // Instance references can outlive map membership; clear to release memory eagerly.
+      expect(instance?.outputBuffer).toBe('');
+    });
   });
 
   // =========================================================================

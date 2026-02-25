@@ -6,6 +6,7 @@ import type {
 } from '@/backend/domains/session/acp';
 import { type AcpRuntimeEventHandlers, acpRuntimeManager } from '@/backend/domains/session/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/domains/session/bridges';
+import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import {
   type SessionDomainService,
@@ -150,7 +151,11 @@ export class SessionService {
             error: error instanceof Error ? error.message : String(error),
           });
         } finally {
-          acpTraceLogger.closeSession(sid);
+          try {
+            this.clearSessionStoreIfInactive(sid, 'runtime_exit');
+          } finally {
+            acpTraceLogger.closeSession(sid);
+          }
         }
       },
       onError: (sid: string, error: Error) => {
@@ -415,11 +420,15 @@ export class SessionService {
         );
       }
 
-      logger.info('ACP session stopped', {
-        sessionId,
-        ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
-      });
-      acpTraceLogger.closeSession(sessionId);
+      try {
+        this.clearSessionStoreIfInactive(sessionId, 'manual_stop');
+        logger.info('ACP session stopped', {
+          sessionId,
+          ...(stopClientFailed ? { runtimeStopFailed: true } : {}),
+        });
+      } finally {
+        acpTraceLogger.closeSession(sessionId);
+      }
     }
   }
 
@@ -522,6 +531,20 @@ export class SessionService {
     }
 
     await this.workspaceBridge.clearRatchetActiveSessionIfMatching(workspaceId, sessionId);
+  }
+
+  private clearSessionStoreIfInactive(
+    sessionId: string,
+    reason: 'manual_stop' | 'runtime_exit'
+  ): void {
+    if (
+      this.runtimeManager.isSessionRunning(sessionId) ||
+      chatConnectionService.countConnectionsViewingSession(sessionId) > 0
+    ) {
+      return;
+    }
+    this.sessionDomainService.clearSession(sessionId);
+    logger.debug('Cleared inactive in-memory session state', { sessionId, reason });
   }
 
   /**

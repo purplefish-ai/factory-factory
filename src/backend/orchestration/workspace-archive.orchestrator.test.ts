@@ -53,6 +53,7 @@ const services = unsafeCoerce<ArchiveWorkspaceDependencies>({
   },
   runScriptService: {
     stopRunScript: vi.fn(),
+    evictWorkspaceBuffers: vi.fn(),
   },
   sessionService: {
     stopWorkspaceSessions: vi.fn(),
@@ -90,6 +91,7 @@ describe('archiveWorkspace', () => {
     vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
       unsafeCoerce({ success: true } as const)
     );
+    vi.mocked(services.runScriptService.evictWorkspaceBuffers).mockReturnValue(undefined);
     vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockReturnValue(undefined);
   });
 
@@ -149,6 +151,7 @@ describe('archiveWorkspace', () => {
 
       expect(workspaceStateMachine.startArchivingWithSourceStatus).toHaveBeenCalledWith('ws-1');
       expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
+      expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
     });
 
     it('returns the archived workspace', async () => {

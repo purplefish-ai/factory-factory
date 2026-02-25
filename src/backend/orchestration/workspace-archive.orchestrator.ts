@@ -20,6 +20,7 @@ export type ArchiveWorkspaceDependencies = {
   };
   runScriptService: {
     stopRunScript(workspaceId: string): Promise<{ success: boolean; error?: string }>;
+    evictWorkspaceBuffers(workspaceId: string): void;
   };
   sessionService: {
     stopWorkspaceSessions(workspaceId: string): Promise<void>;
@@ -137,6 +138,7 @@ export async function archiveWorkspace(
     }
 
     const archivedWorkspace = await workspaceStateMachine.markArchived(workspace.id);
+    runScriptService.evictWorkspaceBuffers(workspace.id);
 
     // Handle associated GitHub issue after successful archive
     await handleGitHubIssueOnArchive(workspace, services);

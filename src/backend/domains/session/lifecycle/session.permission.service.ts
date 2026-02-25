@@ -1,15 +1,9 @@
-import { AcpPermissionBridge } from '@/backend/domains/session/acp';
+import { AcpPermissionBridge, type AcpPermissionRequestEvent } from '@/backend/domains/session/acp';
 import type { SessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AskUserQuestion } from '@/shared/acp-protocol';
 import { extractPlanText } from '@/shared/acp-protocol/plan-content';
 import { isUserQuestionRequest } from '@/shared/pending-request-types';
-
-type PermissionRequestEvent = {
-  type: string;
-  requestId: string;
-  params: import('@agentclientprotocol/sdk').RequestPermissionRequest;
-};
 
 export type SessionPermissionServiceDependencies = {
   sessionDomainService?: SessionDomainService;
@@ -53,8 +47,8 @@ export class SessionPermissionService {
     return bridge.resolvePermission(requestId, optionId, answers);
   }
 
-  handlePermissionRequest(sessionId: string, event: unknown): void {
-    const { requestId, params } = event as PermissionRequestEvent;
+  handlePermissionRequest(sessionId: string, event: AcpPermissionRequestEvent): void {
+    const { requestId, params } = event;
     const toolName = params.toolCall.title ?? 'ACP Tool';
     const toolInput = (params.toolCall.rawInput as Record<string, unknown>) ?? {};
     const acpOptions = params.options.map((option) => ({

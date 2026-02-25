@@ -39,6 +39,7 @@ interface UseChatInputActionsReturn {
   handleModelChange: (model: string) => void;
   handleReasoningChange: (effort: string) => void;
   handleThinkingChange: (pressed: boolean) => void;
+  handlePlanModeChange: (pressed: boolean) => void;
   supportedImageTypes: readonly string[];
 }
 
@@ -130,6 +131,7 @@ export function useChatInputActions({
 }: UseChatInputActionsOptions): UseChatInputActionsReturn {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const thinkingEnabled = capabilities?.thinking.enabled === true;
+  const planModeEnabled = capabilities?.planMode.enabled === true;
   const imageAttachmentsEnabled =
     capabilities?.attachments.enabled === true && capabilities.attachments.kinds.includes('image');
   const modelSelectorEnabled = capabilities?.model.enabled === true;
@@ -166,6 +168,17 @@ export function useChatInputActions({
           onCloseSlashMenu?.();
           onCloseFileMentionMenu?.();
           sendFromInput(event.currentTarget);
+        },
+      },
+      {
+        key: 'p',
+        mod: true,
+        shift: true,
+        alt: false,
+        action: () => {
+          if (!running && planModeEnabled) {
+            onSettingsChange?.({ planModeEnabled: !settings?.planModeEnabled });
+          }
         },
       },
       {
@@ -223,8 +236,10 @@ export function useChatInputActions({
       running,
       sendFromInput,
       settings?.thinkingEnabled,
+      settings?.planModeEnabled,
       stopping,
       thinkingEnabled,
+      planModeEnabled,
       imageAttachmentsEnabled,
     ]
   );
@@ -347,6 +362,15 @@ export function useChatInputActions({
     [thinkingEnabled, onSettingsChange]
   );
 
+  const handlePlanModeChange = useCallback(
+    (pressed: boolean) => {
+      if (planModeEnabled) {
+        onSettingsChange?.({ planModeEnabled: pressed });
+      }
+    },
+    [planModeEnabled, onSettingsChange]
+  );
+
   const handleReasoningChange = useCallback(
     (effort: string) => {
       if (reasoningSelectorEnabled && reasoningValues.has(effort)) {
@@ -366,6 +390,7 @@ export function useChatInputActions({
     handleModelChange,
     handleReasoningChange,
     handleThinkingChange,
+    handlePlanModeChange,
     supportedImageTypes: SUPPORTED_IMAGE_TYPES,
   };
 }

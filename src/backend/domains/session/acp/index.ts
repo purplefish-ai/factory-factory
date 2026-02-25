@@ -3,6 +3,11 @@ export { AcpClientHandler } from './acp-client-handler';
 export { AcpEventTranslator } from './acp-event-translator';
 export { AcpPermissionBridge } from './acp-permission-bridge';
 export { AcpProcessHandle } from './acp-process-handle';
+export type {
+  AcpPermissionRequestEvent,
+  AcpRuntimeEvent,
+  AcpSessionUpdateEvent,
+} from './acp-runtime-events';
 export type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
 export {
   AcpRuntimeManager,

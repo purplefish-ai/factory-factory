@@ -7,6 +7,7 @@ import {
 } from '@/backend/domains/session';
 import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
 import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
+import { toError } from '@/backend/lib/error-utils';
 import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
@@ -24,30 +25,51 @@ import { executeStartupScriptPipeline } from './workspace-init-script-pipeline';
 const logger = createLogger('workspace-init-orchestrator');
 const initialAttachmentsSchema = AttachmentSchema.array();
 
-// Module-level cached GitHub username (cross-domain logic: caches githubCLIService result)
-let cachedGitHubUsername: {
+type CachedGitHubUsernameEntry = {
   value: string | null;
   fetchedAtMs: number;
   expiresAtMs: number;
-} | null = null;
+};
 
-async function getCachedGitHubUsername(): Promise<string | null> {
-  const nowMs = Date.now();
-  if (
-    cachedGitHubUsername &&
-    nowMs >= cachedGitHubUsername.fetchedAtMs &&
-    nowMs < cachedGitHubUsername.expiresAtMs
-  ) {
-    return cachedGitHubUsername.value;
+class GitHubUsernameCache {
+  private cachedEntry: CachedGitHubUsernameEntry | null = null;
+
+  constructor(
+    private readonly githubService: Pick<typeof githubCLIService, 'getAuthenticatedUsername'>
+  ) {}
+
+  async getCachedUsername(): Promise<string | null> {
+    const nowMs = Date.now();
+    if (
+      this.cachedEntry &&
+      nowMs >= this.cachedEntry.fetchedAtMs &&
+      nowMs < this.cachedEntry.expiresAtMs
+    ) {
+      return this.cachedEntry.value;
+    }
+
+    const value = await this.githubService.getAuthenticatedUsername();
+    this.cachedEntry = {
+      value: value ?? null,
+      fetchedAtMs: nowMs,
+      expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
+    };
+    return this.cachedEntry.value;
   }
 
-  const value = await githubCLIService.getAuthenticatedUsername();
-  cachedGitHubUsername = {
-    value: value ?? null,
-    fetchedAtMs: nowMs,
-    expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
-  };
-  return cachedGitHubUsername.value;
+  clear(): void {
+    this.cachedEntry = null;
+  }
+}
+
+const gitHubUsernameCache = new GitHubUsernameCache(githubCLIService);
+
+function getCachedGitHubUsername(): Promise<string | null> {
+  return gitHubUsernameCache.getCachedUsername();
+}
+
+export function clearWorkspaceInitOrchestratorStateForTests(): void {
+  gitHubUsernameCache.clear();
 }
 
 async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
@@ -59,7 +81,7 @@ async function startProvisioningOrLog(workspaceId: string): Promise<boolean> {
     }
     return true;
   } catch (error) {
-    logger.error('Failed to start provisioning', error as Error, { workspaceId });
+    logger.error('Failed to start provisioning', toError(error), { workspaceId });
     return false;
   }
 }
@@ -88,7 +110,7 @@ async function readFactoryConfigSafe(
     }
     return factoryConfig;
   } catch (error) {
-    logger.error('Failed to parse factory-factory.json', error as Error, {
+    logger.error('Failed to parse factory-factory.json', toError(error), {
       workspaceId,
     });
     return null;
@@ -887,7 +909,7 @@ export async function initializeWorkspaceWorktree(
     // Ensure any eager session start attempt has settled before cleanup so we
     // do not race stopWorkspaceSessions() with a late startSession() call.
     await agentSessionPromise;
-    await handleWorkspaceInitFailure(workspaceId, error as Error);
+    await handleWorkspaceInitFailure(workspaceId, toError(error));
   } finally {
     if (worktreeCreated) {
       await worktreeLifecycleService.clearInitMode(workspaceId);

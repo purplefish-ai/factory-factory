@@ -7,8 +7,9 @@ import type {
 } from '@agentclientprotocol/sdk';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
+import type { AcpRuntimeEvent } from './acp-runtime-events';
 
-export type AcpEventCallback = (sessionId: string, event: unknown) => void;
+export type AcpEventCallback = (sessionId: string, event: AcpRuntimeEvent) => void;
 export type AcpLogCallback = (sessionId: string, payload: Record<string, unknown>) => void;
 
 const logger = createLogger('acp-client-handler');

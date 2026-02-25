@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - `src/backend/`: Express + tRPC server, WebSocket handlers, and resource accessors
-- `src/backend/domains/`: Domain modules (session, workspace, github, ratchet, terminal, run-script). The session domain manages ACP agent runtimes, chat services, event translation, and permission handling.
+- `src/backend/domains/`: Domain modules (session, workspace, github, linear, ratchet, terminal, run-script). The session domain manages ACP agent runtimes, chat services, event translation, and permission handling.
 - `src/backend/orchestration/`: Cross-domain coordination layer (bridges, workspace init/archive)
 - `src/backend/services/`: Infrastructure-only services (logger, config, scheduler, port, health, etc.)
 - `src/client/`: React UI (routes/pages, plus client-specific hooks/components/lib; router in `src/client/router.tsx`)
@@ -30,7 +30,7 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Prefer existing patterns and directory conventions; keep backend logic in `src/backend/` and UI in `src/client/`.
 
 ## Backend Domain Module Pattern
-- **6 domains:** session, workspace, github, ratchet, terminal, run-script (all in `src/backend/domains/`). The session domain contains subdirectories: acp/ (runtime manager, process handles, event translation, permissions), lifecycle/ (session service, hydrator), chat/ (message handling, event forwarding), data/ (session data readers/helpers), store/ (in-memory state + transcript/state machines), logging/.
+- **7 domains:** session, workspace, github, linear, ratchet, terminal, run-script (all in `src/backend/domains/`). The session domain contains subdirectories: acp/ (runtime manager, process handles, event translation, permissions), lifecycle/ (session service, hydrator), chat/ (message handling, event forwarding), data/ (session data readers/helpers), store/ (in-memory state + transcript/state machines), logging/.
 - Each domain has an `index.ts` barrel file as the sole public API
 - Consumers must import from barrel (`@/backend/domains/session`), never from internal paths
 - Domains never import from sibling domains (enforced by dependency-cruiser `no-cross-domain-imports` rule)
@@ -68,8 +68,9 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - The app can run commands without manual approval in some modes; review changes carefully before merging.
 
 ## Feature Notes (Keep Docs Current)
-- **Auto-Fix (Ratchet):** Automatically watches pull requests and dispatches agents to fix issues (1-minute check cadence). When a PR has failing CI or review comments, creates a fixer session to address them. PR states: `IDLE` / `CI_RUNNING` / `CI_FAILED` / `REVIEW_PENDING` / `READY` / `MERGED`. Workspace-level toggle controls whether auto-fix is active. Admin setting controls default for new workspaces created from GitHub issues.
-- **GitHub integration:** Uses local `gh` auth; issue fetch supports workspace issue picker (`listIssuesForWorkspace`) and Kanban intake column (`listIssuesForProject`, assigned to `@me`). Starting from an issue should create a linked workspace (`githubIssueNumber`, `githubIssueUrl`).
-- **Kanban model:** UI has `ISSUES` + DB columns `WORKING`, `WAITING`, `DONE`. Column state is derived, not manually set; READY workspaces with no prior sessions are intentionally hidden, and archived workspaces preserve cached pre-archive column.
+- **Auto-Fix (Ratchet):** Automatically watches pull requests and dispatches agents to fix issues (1-minute check cadence). When a PR has failing CI or review comments, creates a fixer session to address them. PR states: `IDLE` / `CI_RUNNING` / `CI_FAILED` / `REVIEW_PENDING` / `READY` / `MERGED`. Workspace-level toggle controls whether auto-fix is active. Admin setting controls the default ratchet state for new workspaces.
+- **GitHub integration:** Uses local `gh` auth; issue fetch supports workspace issue picker (`listIssuesForWorkspace`) and Kanban intake (`listIssuesForProject`, assigned to `@me`). Starting from an issue creates a linked workspace (`githubIssueNumber`, `githubIssueUrl`).
+- **Linear integration:** Per-project issue provider can be set to Linear with encrypted API key + team selection. Kanban intake uses Linear issues assigned to the configured viewer. Starting from an issue creates a linked workspace (`linearIssueId`, `linearIssueIdentifier`, `linearIssueUrl`) and workspace lifecycle events best-effort sync issue state in Linear.
+- **Kanban model:** UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`) plus DB columns `WORKING`, `WAITING`, `DONE`. Column state is derived, not manually set; READY workspaces with no prior sessions are intentionally hidden, and archived workspaces preserve cached pre-archive column.
 - **Quick actions:** Workspace quick actions are markdown-driven from `prompts/quick-actions/` (frontmatter metadata + prompt body). Agent quick actions create follow-up sessions and auto-send prompt content when session is ready.
 - **ACP Runtime:** All agent sessions use the Agent Client Protocol (ACP) via `@agentclientprotocol/sdk`. CLAUDE sessions spawn `claude-code-acp`; CODEX sessions spawn Factory Factory's internal `codex-app-server-acp` adapter, both over stdio JSON-RPC. Session init/load is fail-fast and requires provider `configOptions` with model/mode categories. Permission requests present multi-option selection (`allow_once`, `allow_always`, `deny_once`, `deny_always`) and are bridged through ACP permission response handlers.

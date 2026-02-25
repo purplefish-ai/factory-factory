@@ -16,9 +16,10 @@ import type { IncomingMessage } from 'node:http';
 import { resolve } from 'node:path';
 import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
-import { type AppContext, createAppContext } from '@/backend/app-context';
+import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import type { ConnectionInfo } from '@/backend/domains/session';
+import { toError } from '@/backend/lib/error-utils';
 import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
 import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
@@ -35,6 +36,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     configService,
     createLogger,
     sessionFileLogger,
+    sessionDomainService,
     sessionService,
   } = appContext.services;
 
@@ -125,20 +127,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     return realPath;
   }
 
-  function countConnectionsViewingSession(dbSessionId: string | null): number {
-    if (!dbSessionId) {
-      return 0;
-    }
-
-    let viewingCount = 0;
-    for (const info of chatConnectionService.values()) {
-      if (info.dbSessionId === dbSessionId) {
-        viewingCount++;
-      }
-    }
-    return viewingCount;
-  }
-
   function parseChatMessage(connectionId: string, data: unknown): ChatMessageInput | null {
     const rawMessage: unknown = JSON.parse(toMessageString(data));
     const parseResult = ChatMessageSchema.safeParse(rawMessage);
@@ -227,9 +215,23 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         workingDir,
       };
       chatConnectionService.register(connectionId, connectionInfo);
+      let inFlightMessageCount = 0;
+      let disconnected = false;
+
+      const clearSessionIfDisconnectedAndInactive = (): void => {
+        if (!disconnected || inFlightMessageCount > 0 || !dbSessionId) {
+          return;
+        }
+        if (
+          !sessionService.isSessionRunning(dbSessionId) &&
+          chatConnectionService.countConnectionsViewingSession(dbSessionId) === 0
+        ) {
+          sessionDomainService.clearSession(dbSessionId);
+        }
+      };
 
       if (DEBUG_CHAT_WS) {
-        const viewingCount = countConnectionsViewingSession(dbSessionId);
+        const viewingCount = chatConnectionService.countConnectionsViewingSession(dbSessionId);
         logger.info('[Chat WS] Connection registered', {
           connectionId,
           dbSessionId,
@@ -240,6 +242,7 @@ export function createChatUpgradeHandler(appContext: AppContext) {
       // Session hydration is handled by explicit load_session from the client.
 
       ws.on('message', async (data) => {
+        inFlightMessageCount += 1;
         try {
           const message = parseChatMessage(connectionId, data);
           if (!message) {
@@ -251,8 +254,11 @@ export function createChatUpgradeHandler(appContext: AppContext) {
           }
           await chatMessageHandlerService.handleMessage(ws, dbSessionId, workingDir ?? '', message);
         } catch (error) {
-          logger.error('Error handling chat message', error as Error);
+          logger.error('Error handling chat message', toError(error));
           sendChatError(ws, dbSessionId, 'Invalid message format');
+        } finally {
+          inFlightMessageCount = Math.max(0, inFlightMessageCount - 1);
+          clearSessionIfDisconnectedAndInactive();
         }
       });
 
@@ -272,6 +278,8 @@ export function createChatUpgradeHandler(appContext: AppContext) {
             sessionFileLogger.closeSession(dbSessionId);
           }
           chatConnectionService.unregister(connectionId);
+          disconnected = true;
+          clearSessionIfDisconnectedAndInactive();
         }
       });
 
@@ -288,12 +296,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     });
   };
 }
-
-export const handleChatUpgrade = createChatUpgradeHandler(createAppContext());
-
-// ============================================================================
-// Re-exports for external usage
-// ============================================================================
 
 export type { ConnectionInfo } from '@/backend/domains/session';
 export type { ChatMessageInput } from '@/backend/schemas/websocket';

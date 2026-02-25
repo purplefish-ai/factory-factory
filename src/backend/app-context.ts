@@ -29,7 +29,10 @@ import { configService } from './services/config.service';
 import { createLogger } from './services/logger.service';
 import { findAvailablePort } from './services/port.service';
 import { rateLimiter } from './services/rate-limiter.service';
-import { serverInstanceService } from './services/server-instance.service';
+import {
+  createServerInstanceService,
+  type ServerInstanceService,
+} from './services/server-instance.service';
 
 export type AppServices = {
   acpRuntimeManager: typeof acpRuntimeManager;
@@ -47,7 +50,7 @@ export type AppServices = {
   runScriptService: RunScriptService;
   runScriptStateMachine: typeof runScriptStateMachine;
   schedulerService: typeof schedulerService;
-  serverInstanceService: typeof serverInstanceService;
+  serverInstanceService: ServerInstanceService;
   acpTraceLogger: AcpTraceLogger;
   sessionFileLogger: SessionFileLogger;
   sessionService: typeof sessionService;
@@ -100,7 +103,7 @@ export function createServices(overrides: Partial<AppServices> = {}): AppService
     runScriptService: overrides.runScriptService ?? defaultRunScriptService,
     runScriptStateMachine,
     schedulerService,
-    serverInstanceService,
+    serverInstanceService: overrides.serverInstanceService ?? createServerInstanceService(),
     acpTraceLogger,
     sessionFileLogger,
     sessionService: resolvedSessionService,

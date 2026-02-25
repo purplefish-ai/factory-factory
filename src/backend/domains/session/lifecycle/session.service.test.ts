@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
@@ -6,6 +7,7 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 const mockNotifyToolStart = vi.fn();
 const mockNotifyToolComplete = vi.fn();
 const mockClearRatchetActiveSessionIfMatching = vi.fn();
+const mockAcpTraceLoggerCloseSession = vi.fn();
 
 vi.mock('@/backend/services/logger.service', () => ({
   createLogger: () => ({
@@ -73,7 +75,14 @@ vi.mock('./session.prompt-builder', () => ({
   },
 }));
 
-import type { AcpProcessHandle } from '@/backend/domains/session/acp';
+vi.mock('@/backend/domains/session/logging/acp-trace-logger.service', () => ({
+  acpTraceLogger: {
+    log: vi.fn(),
+    closeSession: (...args: unknown[]) => mockAcpTraceLoggerCloseSession(...args),
+  },
+}));
+
+import type { AcpProcessHandle, AcpRuntimeEvent } from '@/backend/domains/session/acp';
 import { acpRuntimeManager } from '@/backend/domains/session/acp';
 import { sessionPromptBuilder } from './session.prompt-builder';
 import { sessionRepository } from './session.repository';
@@ -83,7 +92,6 @@ function getAcpProcessorState() {
   return (
     sessionService as unknown as {
       acpEventProcessor: {
-        acpStreamState: Map<string, unknown>;
         pendingAcpToolCalls: Map<string, Map<string, unknown>>;
         sessionToWorkspace: Map<string, string>;
         sessionToWorkingDir: Map<string, string>;
@@ -99,8 +107,8 @@ describe('SessionService', () => {
     mockNotifyToolStart.mockReset();
     mockNotifyToolComplete.mockReset();
     mockClearRatchetActiveSessionIfMatching.mockReset();
+    mockAcpTraceLoggerCloseSession.mockReset();
     const acpProcessor = getAcpProcessorState();
-    acpProcessor.acpStreamState.clear();
     acpProcessor.pendingAcpToolCalls.clear();
     acpProcessor.sessionToWorkspace.clear();
     acpProcessor.sessionToWorkingDir.clear();
@@ -303,7 +311,7 @@ describe('SessionService', () => {
     await sessionService.getOrCreateSessionClient('session-1');
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onAcpEvent: (id: string, event: unknown) => void;
+      onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
     };
     acpHandlers.onAcpEvent('session-1', {
       type: 'acp_session_update',
@@ -361,16 +369,19 @@ describe('SessionService', () => {
     await sessionService.getOrCreateSessionClient('session-1');
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onAcpEvent: (id: string, event: unknown) => void;
+      onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
     };
 
     expect(() =>
-      acpHandlers.onAcpEvent('session-1', {
-        type: 'acp_session_update',
-        update: {
-          sessionUpdate: 'user_message_chunk',
-        },
-      })
+      acpHandlers.onAcpEvent(
+        'session-1',
+        unsafeCoerce<AcpRuntimeEvent>({
+          type: 'acp_session_update',
+          update: {
+            sessionUpdate: 'user_message_chunk',
+          },
+        })
+      )
     ).not.toThrow();
 
     expect(injectUserMessageSpy).not.toHaveBeenCalled();
@@ -435,7 +446,7 @@ describe('SessionService', () => {
       await sessionService.getOrCreateSessionClient('session-1');
 
       const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-        onAcpEvent: (id: string, event: unknown) => void;
+        onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
       };
       acpHandlers.onAcpEvent('session-1', {
         type: 'acp_session_update',
@@ -498,7 +509,7 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(true);
 
     const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
-      onAcpEvent: (id: string, event: unknown) => void;
+      onAcpEvent: (id: string, event: AcpRuntimeEvent) => void;
     };
     acpHandlers.onAcpEvent('session-1', {
       type: 'acp_session_update',
@@ -593,81 +604,6 @@ describe('SessionService', () => {
     expect(mockNotifyToolComplete).toHaveBeenCalledTimes(1);
   });
 
-  it('accumulates assistant thinking chunks into one persisted message order', () => {
-    const acpProcessor = getAcpProcessorState();
-    const allocateOrderSpy = vi.spyOn(sessionDomainService, 'allocateOrder').mockReturnValue(41);
-    const upsertClaudeEventSpy = vi.spyOn(sessionDomainService, 'upsertClaudeEvent');
-    const emitDeltaSpy = vi.spyOn(sessionDomainService, 'emitDelta');
-    const appendClaudeEventSpy = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
-
-    try {
-      acpProcessor.handleAcpDelta('session-1', {
-        type: 'agent_message',
-        data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan' }],
-          },
-        },
-      });
-
-      acpProcessor.handleAcpDelta('session-1', {
-        type: 'agent_message',
-        data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: ' next' }],
-          },
-        },
-      });
-
-      expect(allocateOrderSpy).toHaveBeenCalledTimes(1);
-      expect(upsertClaudeEventSpy).toHaveBeenNthCalledWith(
-        1,
-        'session-1',
-        {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan' }],
-          },
-        },
-        41
-      );
-      expect(upsertClaudeEventSpy).toHaveBeenNthCalledWith(
-        2,
-        'session-1',
-        {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan next' }],
-          },
-        },
-        41
-      );
-      expect(emitDeltaSpy).toHaveBeenNthCalledWith(2, 'session-1', {
-        type: 'agent_message',
-        data: {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'thinking', thinking: 'Plan next' }],
-          },
-        },
-        order: 41,
-      });
-      expect(appendClaudeEventSpy).not.toHaveBeenCalled();
-    } finally {
-      allocateOrderSpy.mockRestore();
-      upsertClaudeEventSpy.mockRestore();
-      emitDeltaSpy.mockRestore();
-      appendClaudeEventSpy.mockRestore();
-    }
-  });
-
   it('creates client from preloaded session without re-querying session row', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -744,6 +680,38 @@ describe('SessionService', () => {
     await sessionService.stopSession('session-1');
 
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
+  });
+
+  it('clears in-memory session state after manual stop when no clients are connected', async () => {
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
+
+    await sessionService.stopSession('session-clear');
+
+    expect(clearSessionSpy).toHaveBeenCalledWith('session-clear');
+  });
+
+  it('keeps in-memory session state after manual stop when clients are connected', async () => {
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    const clearSessionSpy = vi.spyOn(sessionDomainService, 'clearSession');
+
+    const connectionId = 'conn-active-session';
+    chatConnectionService.register(connectionId, {
+      ws: {} as never,
+      dbSessionId: 'session-active',
+      workingDir: null,
+    });
+    try {
+      await sessionService.stopSession('session-active');
+    } finally {
+      chatConnectionService.unregister(connectionId);
+    }
+
+    expect(clearSessionSpy).not.toHaveBeenCalled();
   });
 
   it('marks workspace session idle during manual stop', async () => {
@@ -1195,6 +1163,85 @@ describe('SessionService', () => {
       status: SessionStatus.COMPLETED,
     });
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('closes ACP trace session even when stop cleanup throws', async () => {
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+        workflow: 'default',
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockImplementation(() => {
+      throw new Error('isSessionRunning failed');
+    });
+
+    await expect(sessionService.stopSession('session-1')).rejects.toThrow(
+      'isSessionRunning failed'
+    );
+
+    expect(mockAcpTraceLoggerCloseSession).toHaveBeenCalledWith('session-1');
+  });
+
+  it('closes ACP trace session even when runtime-exit cleanup throws', async () => {
+    const session = unsafeCoerce<
+      NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
+    >({
+      id: 'session-2',
+      workspaceId: 'workspace-1',
+      status: SessionStatus.IDLE,
+      workflow: 'default',
+      model: 'sonnet',
+      provider: 'CLAUDE',
+      providerSessionId: null,
+    });
+
+    const workspace = unsafeCoerce<Awaited<ReturnType<typeof sessionRepository.getWorkspaceById>>>({
+      id: 'workspace-1',
+      worktreePath: '/tmp/work',
+      branchName: 'fix-branch',
+      isAutoGeneratedBranch: false,
+      name: 'Workspace A',
+      description: null,
+      projectId: 'project-1',
+    });
+
+    const acpHandle = unsafeCoerce<AcpProcessHandle>({
+      getPid: vi.fn().mockReturnValue(789),
+      isPromptInFlight: false,
+      configOptions: [],
+    });
+
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(session);
+    vi.mocked(sessionRepository.getWorkspaceById).mockResolvedValue(workspace);
+    vi.mocked(sessionRepository.markWorkspaceHasHadSessions).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue(session);
+    vi.mocked(sessionPromptBuilder.shouldInjectBranchRename).mockReturnValue(false);
+    vi.mocked(sessionPromptBuilder.buildSystemPrompt).mockReturnValue({
+      workflowPrompt: undefined,
+      systemPrompt: undefined,
+      injectedBranchRename: false,
+    });
+    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
+
+    await sessionService.startSession('session-2');
+
+    const acpHandlers = vi.mocked(acpRuntimeManager.getOrCreateClient).mock.calls[0]![2] as {
+      onExit: (id: string, exitCode: number | null) => Promise<void>;
+    };
+
+    vi.mocked(acpRuntimeManager.isSessionRunning).mockImplementation(() => {
+      throw new Error('isSessionRunning failed');
+    });
+
+    await expect(acpHandlers.onExit('session-2', 0)).rejects.toThrow('isSessionRunning failed');
+
+    expect(mockAcpTraceLoggerCloseSession).toHaveBeenCalledWith('session-2');
   });
 
   it('updates DB status when ACP client is created', async () => {
