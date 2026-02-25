@@ -44,7 +44,10 @@ export interface ServerWorkspace {
   sidebarStatus?: WorkspaceSidebarStatus;
   pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
   githubIssueNumber?: number | null;
+  githubIssueUrl?: string | null;
   linearIssueId?: string | null;
+  linearIssueIdentifier?: string | null;
+  linearIssueUrl?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {

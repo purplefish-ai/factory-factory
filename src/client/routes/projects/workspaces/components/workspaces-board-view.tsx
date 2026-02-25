@@ -27,8 +27,8 @@ function BoardHeaderSlot({
           onProjectChange={onProjectChange}
           onCurrentProjectSelect={onCurrentProjectSelect}
           projects={projects}
+          showLeadingSlash
           triggerId="header-project-select"
-          projectButtonClassName="h-7 w-auto max-w-[10rem] gap-1 border-0 bg-transparent px-1 text-xs font-normal text-muted-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:text-sm"
         />
       </HeaderLeftStartSlot>
       <HeaderRightSlot>

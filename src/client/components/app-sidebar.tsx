@@ -1,4 +1,4 @@
-import { CircleDot, GitBranch, GitPullRequest, Plus, Settings, X } from 'lucide-react';
+import { CircleDot, GitPullRequest, Plus, Settings, X } from 'lucide-react';
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
@@ -40,10 +40,9 @@ import {
   persistSidebarWidth,
 } from './app-sidebar-resize';
 import { Logo } from './logo';
-import { PendingRequestBadge } from './pending-request-badge';
 import { ThemeToggle } from './theme-toggle';
+import { WorkspaceItemContent } from './workspace-item-content';
 import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
-import { WorkspaceStatusIcon } from './workspace-status-icon';
 
 type NavigationData = ReturnType<typeof useAppNavigationData>;
 
@@ -60,16 +59,6 @@ function SidebarWorkspaceItem({
   projectSlug: string;
   isActive: boolean;
 }) {
-  const showBranch = Boolean(workspace.branchName);
-  const showPR =
-    workspace.prState !== 'NONE' &&
-    workspace.prState != null &&
-    workspace.prNumber != null &&
-    workspace.prUrl != null;
-  const showStats =
-    workspace.gitStats && (workspace.gitStats.additions > 0 || workspace.gitStats.deletions > 0);
-  const hasMetaRow = showBranch || showPR || showStats;
-
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -81,61 +70,19 @@ function SidebarWorkspaceItem({
         )}
       >
         <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
-          <div className="flex flex-col gap-0.5 min-w-0 w-full">
-            {/* Top row: status icon + name */}
-            <div className="flex items-center gap-2 min-w-0">
-              <WorkspaceStatusIcon
-                pendingRequestType={workspace.pendingRequestType}
-                isWorking={workspace.isWorking}
-              />
-              <span className="truncate text-sm">{workspace.name}</span>
-            </div>
-
-            {/* Meta row: branch, LOC diff, PR link — grid for column alignment */}
-            {hasMetaRow && (
-              <div className="grid grid-cols-[1fr_auto_3rem] items-center gap-x-2 pl-[calc(0.5rem+8px)] text-[11px] text-muted-foreground min-w-0">
-                <span className="flex items-center gap-1 min-w-0 truncate">
-                  {showBranch && (
-                    <>
-                      <GitBranch className="h-2.5 w-2.5 shrink-0" />
-                      <span className="font-mono truncate">{workspace.branchName}</span>
-                    </>
-                  )}
-                </span>
-                <span className="flex items-center gap-1 shrink-0 justify-end">
-                  {showStats && workspace.gitStats && (
-                    <>
-                      <span className="text-green-600">+{workspace.gitStats.additions}</span>
-                      <span className="text-red-600">-{workspace.gitStats.deletions}</span>
-                    </>
-                  )}
-                </span>
-                <span className="shrink-0 justify-self-end">
-                  {showPR && (
-                    <button
-                      type="button"
-                      className="flex items-center gap-0.5 hover:text-foreground"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
-                      }}
-                    >
-                      <GitPullRequest className="h-2.5 w-2.5" />
-                      <span>#{workspace.prNumber}</span>
-                    </button>
-                  )}
-                </span>
-              </div>
-            )}
-
-            {/* Pending request badge */}
-            {workspace.pendingRequestType && (
-              <div className="pl-[calc(0.5rem+8px)]">
-                <PendingRequestBadge type={workspace.pendingRequestType} size="xs" />
-              </div>
-            )}
-          </div>
+          <WorkspaceItemContent
+            workspace={workspace}
+            onOpenPr={() => {
+              window.open(workspace.prUrl as string, '_blank', 'noopener,noreferrer');
+            }}
+            onOpenIssue={() => {
+              const issueUrl = workspace.githubIssueUrl ?? workspace.linearIssueUrl;
+              if (!issueUrl) {
+                return;
+              }
+              window.open(issueUrl, '_blank', 'noopener,noreferrer');
+            }}
+          />
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>

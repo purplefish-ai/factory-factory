@@ -53,6 +53,10 @@ export function mapSnapshotEntryToKanbanWorkspace(
     description: existing?.description ?? null,
     initErrorMessage: existing?.initErrorMessage ?? null,
     githubIssueNumber: existing?.githubIssueNumber ?? null,
+    githubIssueUrl: existing?.githubIssueUrl ?? null,
+    linearIssueId: existing?.linearIssueId ?? null,
+    linearIssueIdentifier: existing?.linearIssueIdentifier ?? null,
+    linearIssueUrl: existing?.linearIssueUrl ?? null,
     stateComputedAt: existing?.stateComputedAt ?? null,
   };
 }
