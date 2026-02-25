@@ -158,6 +158,29 @@ describe('result dedup', () => {
     ).toBe(true);
   });
 
+  it('suppresses duplicate result when assistant content is a string', () => {
+    expect(
+      shouldSuppressDuplicateResultMessage(
+        [
+          {
+            id: 'm2',
+            source: 'agent',
+            message: {
+              type: 'assistant',
+              message: { role: 'assistant', content: 'final answer' },
+            },
+            timestamp: '2026-02-08T00:00:01.000Z',
+            order: 1,
+          },
+        ],
+        {
+          type: 'result',
+          result: { text: 'final answer' },
+        }
+      )
+    ).toBe(true);
+  });
+
   it('keeps result when structured payload has no extractable text', () => {
     expect(
       shouldSuppressDuplicateResultMessage(transcript, {

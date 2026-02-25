@@ -3,12 +3,18 @@ import type { TextContent } from './content';
 import type { AgentMessage, ChatMessage } from './messages';
 
 function extractTextForResultDedup(message: AgentMessage): string {
-  if (message.type === 'assistant' && message.message && Array.isArray(message.message.content)) {
-    return message.message.content
-      .filter((item): item is TextContent => item.type === 'text')
-      .map((item) => item.text)
-      .join('')
-      .trim();
+  if (message.type === 'assistant' && message.message) {
+    if (typeof message.message.content === 'string') {
+      return message.message.content.trim();
+    }
+
+    if (Array.isArray(message.message.content)) {
+      return message.message.content
+        .filter((item): item is TextContent => item.type === 'text')
+        .map((item) => item.text)
+        .join('')
+        .trim();
+    }
   }
 
   if (
