@@ -7,6 +7,7 @@ import {
   workspaceStateMachine,
   worktreeLifecycleService,
 } from '@/backend/domains/workspace';
+import { toError } from '@/backend/lib/error-utils';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { createLogger } from '@/backend/services/logger.service';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
@@ -88,7 +89,7 @@ export const workspaceInitRouter = router({
         }).catch((error) => {
           logger.error(
             'Unexpected error during background workspace initialization',
-            error as Error,
+            toError(error),
             {
               workspaceId: workspace.id,
             }

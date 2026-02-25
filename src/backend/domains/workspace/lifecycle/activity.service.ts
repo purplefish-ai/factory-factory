@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { toError } from '@/backend/lib/error-utils';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 
@@ -40,7 +41,7 @@ class WorkspaceActivityService extends EventEmitter {
           finishedAt,
         });
       } catch (error) {
-        logger.error('Failed to process workspace idle event', error as Error, { workspaceId });
+        logger.error('Failed to process workspace idle event', toError(error), { workspaceId });
       }
     });
   }

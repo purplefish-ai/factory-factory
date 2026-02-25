@@ -7,6 +7,7 @@
 
 import pLimit from 'p-limit';
 import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
+import { toError } from '@/backend/lib/error-utils';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
   SERVICE_CONCURRENCY,
@@ -41,10 +42,10 @@ class SchedulerService {
 
       this.syncInProgress = Promise.all([
         this.syncPRStatuses().catch((err) => {
-          logger.error('PR sync batch failed', err as Error);
+          logger.error('PR sync batch failed', toError(err));
         }),
         this.discoverNewPRs().catch((err) => {
-          logger.error('PR discovery batch failed', err as Error);
+          logger.error('PR discovery batch failed', toError(err));
         }),
       ]).finally(() => {
         this.syncInProgress = null;
@@ -235,7 +236,7 @@ class SchedulerService {
 
       return { success: true };
     } catch (error) {
-      logger.error('PR sync failed for workspace', error as Error, { workspaceId, prUrl });
+      logger.error('PR sync failed for workspace', toError(error), { workspaceId, prUrl });
       return { success: false, reason: 'error' };
     }
   }

@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { toError } from '@/backend/lib/error-utils';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type { GitHubKanbanBridge } from './bridges';
@@ -167,7 +168,7 @@ class PRSnapshotService extends EventEmitter {
         },
       };
     } catch (error) {
-      logger.error('Failed to attach PR and refresh snapshot', error as Error, {
+      logger.error('Failed to attach PR and refresh snapshot', toError(error), {
         workspaceId,
         prUrl,
       });
@@ -223,7 +224,7 @@ class PRSnapshotService extends EventEmitter {
         },
       };
     } catch (error) {
-      logger.error('Failed to refresh PR snapshot', error as Error, { workspaceId });
+      logger.error('Failed to refresh PR snapshot', toError(error), { workspaceId });
       return { success: false, reason: 'error' };
     }
   }

@@ -9,6 +9,7 @@
 
 import { EventEmitter } from 'node:events';
 import pLimit from 'p-limit';
+import { toError } from '@/backend/lib/error-utils';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
   SERVICE_CONCURRENCY,
@@ -153,7 +154,7 @@ class RatchetService extends EventEmitter {
         await this.checkAllWorkspaces();
         this.backoff.resetIfCleanCycle(logger, 'Ratchet');
       } catch (err) {
-        logger.error('Ratchet check failed', err as Error);
+        logger.error('Ratchet check failed', toError(err));
       }
 
       if (!this.isShuttingDown) {
@@ -479,7 +480,7 @@ class RatchetService extends EventEmitter {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Error processing workspace in ratchet', error as Error, {
+      logger.error('Error processing workspace in ratchet', toError(error), {
         workspaceId: workspace.id,
       });
       const action: RatchetAction = { type: 'ERROR', error: errorMessage };

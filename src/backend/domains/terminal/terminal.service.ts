@@ -14,6 +14,7 @@
 import { createRequire } from 'node:module';
 import type { IPty } from 'node-pty';
 import pidusage from 'pidusage';
+import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('terminal');
@@ -210,7 +211,7 @@ export class TerminalService {
       // Runtime require allows graceful fallback when the native module isn't installed.
       return require('node-pty') as typeof import('node-pty');
     } catch (error) {
-      logger.error('node-pty not available', error as Error);
+      logger.error('node-pty not available', toError(error));
       throw new Error('node-pty is not installed. Please run: pnpm add node-pty');
     }
   }
