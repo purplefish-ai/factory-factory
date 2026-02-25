@@ -222,7 +222,13 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // WebSocket Upgrade Handler
   // ============================================================================
   server.on('upgrade', (request, socket, head) => {
-    const url = new URL(request.url || '', `http://${request.headers.host}`);
+    let url: URL;
+    try {
+      url = new URL(request.url || '', `http://${request.headers.host}`);
+    } catch {
+      socket.destroy();
+      return;
+    }
 
     if (url.pathname === '/chat') {
       chatUpgradeHandler(request, socket, head, url, wss, wsAliveMap);
