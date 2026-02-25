@@ -38,6 +38,21 @@ export interface AuthenticationCheck {
   sanitizedPath: string;
 }
 
+function parseProxyRequestUrl(rawUrl: string): URL | null {
+  try {
+    return new URL(rawUrl, 'http://proxy.local');
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeParsedPathWithoutToken(parsedUrl: URL, tokenQueryParam: string): string {
+  const sanitizedUrl = new URL(parsedUrl.toString());
+  sanitizedUrl.searchParams.delete(tokenQueryParam);
+  const search = sanitizedUrl.searchParams.toString();
+  return `${sanitizedUrl.pathname}${search ? `?${search}` : ''}`;
+}
+
 export function signValue(value: string, secret: Buffer): string {
   return createHmac('sha256', secret).update(value).digest('hex');
 }
@@ -119,10 +134,12 @@ export function sanitizePathWithoutToken(
   rawUrl: string,
   tokenQueryParam = DEFAULT_TOKEN_QUERY_PARAM
 ): string {
-  const parsed = new URL(rawUrl, 'http://proxy.local');
-  parsed.searchParams.delete(tokenQueryParam);
-  const search = parsed.searchParams.toString();
-  return `${parsed.pathname}${search ? `?${search}` : ''}`;
+  const parsed = parseProxyRequestUrl(rawUrl);
+  if (!parsed) {
+    return '/';
+  }
+
+  return sanitizeParsedPathWithoutToken(parsed, tokenQueryParam);
 }
 
 export function toSafeRedirectPath(path: string): string {
@@ -150,8 +167,17 @@ export function authenticateRequest(params: {
 }): AuthenticationCheck {
   const tokenQueryParam = params.tokenQueryParam ?? DEFAULT_TOKEN_QUERY_PARAM;
   const rawUrl = params.req.url || '/';
-  const parsed = new URL(rawUrl, 'http://proxy.local');
-  const sanitizedPath = sanitizePathWithoutToken(rawUrl, tokenQueryParam);
+  const parsed = parseProxyRequestUrl(rawUrl);
+  if (!parsed) {
+    return {
+      authenticated: false,
+      viaToken: false,
+      invalidToken: false,
+      sanitizedPath: '/',
+    };
+  }
+
+  const sanitizedPath = sanitizeParsedPathWithoutToken(parsed, tokenQueryParam);
   const cookies = parseCookieHeader(params.req.headers.cookie);
   const session = cookies[params.sessionCookieName];
   const hasValidSession = verifySessionValue(session, params.cookieSecret);
