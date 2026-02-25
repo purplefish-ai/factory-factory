@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
+import { WorkspaceDetailHeaderSlot } from '@/client/routes/projects/workspaces/workspace-detail-header';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
@@ -19,7 +20,6 @@ import {
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
 import type { ChatContentProps } from './workspace-detail-chat-content';
-import { WorkspaceDetailHeaderSlot } from './workspace-detail-header';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
 function areRuntimeStatesEqual(
