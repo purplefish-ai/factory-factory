@@ -60,6 +60,7 @@ export interface AssistantRenderableContentLike {
   type?: string;
   text?: string;
   thinking?: string;
+  source?: unknown;
   id?: string;
   name?: string;
   input?: unknown;
@@ -89,6 +90,9 @@ export function isRenderableAssistantContentItem(item: AssistantRenderableConten
       typeof item.tool_use_id === 'string' &&
       (typeof item.content === 'string' || Array.isArray(item.content))
     );
+  }
+  if (item.type === 'image') {
+    return isImageContent(item as { type: 'image'; source?: unknown });
   }
   return false;
 }
@@ -124,6 +128,9 @@ export function shouldPersistAgentMessage(agentMsg: AgentMessage): boolean {
 
   if (agentMsg.type === 'assistant') {
     const content = agentMsg.message?.content;
+    if (typeof content === 'string') {
+      return content.length > 0;
+    }
     return Array.isArray(content) && hasRenderableAssistantContent(content);
   }
 

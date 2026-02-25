@@ -53,6 +53,39 @@ describe('assistant renderability guards', () => {
     ).toBe(true);
   });
 
+  it('persists assistant message with image-only content', () => {
+    expect(
+      shouldPersistAgentMessage({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'Zm9v',
+              },
+            } as AgentContentItem,
+          ],
+        },
+      })
+    ).toBe(true);
+  });
+
+  it('persists assistant message with string content', () => {
+    expect(
+      shouldPersistAgentMessage({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: 'Hello world',
+        },
+      })
+    ).toBe(true);
+  });
+
   it('persists stream tool_use content_block_start without initial input', () => {
     expect(
       shouldPersistAgentMessage({
@@ -122,6 +155,29 @@ describe('result dedup', () => {
         type: 'result',
         result: { text: 'final answer' },
       })
+    ).toBe(true);
+  });
+
+  it('suppresses duplicate result when assistant content is a string', () => {
+    expect(
+      shouldSuppressDuplicateResultMessage(
+        [
+          {
+            id: 'm2',
+            source: 'agent',
+            message: {
+              type: 'assistant',
+              message: { role: 'assistant', content: 'final answer' },
+            },
+            timestamp: '2026-02-08T00:00:01.000Z',
+            order: 1,
+          },
+        ],
+        {
+          type: 'result',
+          result: { text: 'final answer' },
+        }
+      )
     ).toBe(true);
   });
 
