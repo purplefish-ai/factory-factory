@@ -92,22 +92,7 @@ export function isRenderableAssistantContentItem(item: AssistantRenderableConten
     );
   }
   if (item.type === 'image') {
-    const source = item.source;
-    if (typeof source !== 'object' || source === null) {
-      return false;
-    }
-
-    const imageSource = source as {
-      type?: unknown;
-      media_type?: unknown;
-      data?: unknown;
-    };
-
-    return (
-      imageSource.type === 'base64' &&
-      typeof imageSource.media_type === 'string' &&
-      typeof imageSource.data === 'string'
-    );
+    return isImageContent(item as { type: 'image'; source?: unknown });
   }
   return false;
 }
