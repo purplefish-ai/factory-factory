@@ -28,17 +28,17 @@ export function ClosedSessionsDropdown({
 }: ClosedSessionsDropdownProps) {
   const [open, setOpen] = useState(false);
 
-  const { data: closedSessions, isLoading } = trpc.closedSessions.list.useQuery(
-    {
-      workspaceId,
-      limit: 20,
-    },
-    {
-      enabled: open, // Only fetch when dropdown is opened
-    }
-  );
+  const { data: closedSessions, isLoading } = trpc.closedSessions.list.useQuery({
+    workspaceId,
+    limit: 20,
+  });
 
   const hasClosedSessions = closedSessions && closedSessions.length > 0;
+
+  // Don't render the button if there are no closed sessions
+  if (!(isLoading || hasClosedSessions)) {
+    return null;
+  }
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
