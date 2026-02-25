@@ -444,6 +444,7 @@ class WorkspaceAccessor {
   async appendInitOutput(id: string, output: string, maxSize = 50 * 1024): Promise<void> {
     const truncationMarker = '[...truncated...]\n';
     const markerLength = truncationMarker.length;
+    const now = new Date();
     const updatedRows = await prisma.$executeRaw`
       UPDATE "Workspace"
       SET "initOutput" = CASE
@@ -455,7 +456,8 @@ class WorkspaceAccessor {
           COALESCE("initOutput", '') || ${output},
           -(${maxSize} - ${markerLength})
         )
-      END
+      END,
+      "updatedAt" = ${now}
       WHERE "id" = ${id}
     `;
 
