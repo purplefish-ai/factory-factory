@@ -13,8 +13,10 @@ import type {
   HistoryMessage,
 } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
+import type { SessionRuntimeState } from '@/shared/session-runtime';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionConfigService } from './session.config.service';
+import { toErrorMessage } from './session.error-message';
 import { SessionLifecycleService } from './session.lifecycle.service';
 import { SessionPermissionService } from './session.permission.service';
 import type { SessionPromptBuilder } from './session.prompt-builder';
@@ -28,16 +30,6 @@ const logger = createLogger('session');
 type SessionPermissionMode = 'bypassPermissions' | 'plan';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'object') {
-    return JSON.stringify(error);
-  }
-  return String(error);
-}
 
 export type SessionServiceDependencies = {
   repository?: SessionRepository;
@@ -362,7 +354,7 @@ export class SessionService {
     );
   }
 
-  getRuntimeSnapshot(sessionId: string) {
+  getRuntimeSnapshot(sessionId: string): SessionRuntimeState {
     return this.lifecycleService.getRuntimeSnapshot(sessionId);
   }
 

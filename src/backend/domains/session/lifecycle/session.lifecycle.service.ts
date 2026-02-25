@@ -24,6 +24,7 @@ import type {
   PersistAcpConfigSnapshotParams,
   SessionConfigService,
 } from './session.config.service';
+import { toErrorMessage } from './session.error-message';
 import type { SessionPermissionService } from './session.permission.service';
 import type { SessionPromptBuilder } from './session.prompt-builder';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
@@ -827,14 +828,4 @@ export class SessionLifecycleService {
       workspaceId: workspace.id,
     };
   }
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'object') {
-    return JSON.stringify(error);
-  }
-  return String(error);
 }
