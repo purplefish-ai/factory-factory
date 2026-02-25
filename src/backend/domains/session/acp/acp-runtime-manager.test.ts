@@ -176,7 +176,7 @@ function setupSuccessfulSpawn() {
   mockInitialize.mockResolvedValue({
     protocolVersion: 1,
     agentCapabilities: { loadSession: {} },
-    agentInfo: { name: 'claude-code-acp' },
+    agentInfo: { name: 'claude-agent-acp' },
   });
   mockNewSession.mockResolvedValue({
     sessionId: 'provider-session-123',
@@ -342,13 +342,13 @@ describe('AcpRuntimeManager', () => {
         expect(mockSpawn).toHaveBeenCalledTimes(1);
       });
 
-      const spawnError = Object.assign(new Error('spawn claude-code-acp ENOENT'), {
+      const spawnError = Object.assign(new Error('spawn claude-agent-acp ENOENT'), {
         code: 'ENOENT',
       });
       child.emit('error', spawnError);
 
       await expect(createPromise).rejects.toThrow(
-        /Failed to spawn ACP adapter ".*": spawn claude-code-acp ENOENT/
+        /Failed to spawn ACP adapter ".*": spawn claude-agent-acp ENOENT/
       );
       expect(handlers.onError).toHaveBeenCalledWith('session-1', expect.any(Error));
     });
@@ -405,7 +405,7 @@ describe('AcpRuntimeManager', () => {
       mockInitialize.mockResolvedValue({
         protocolVersion: 1,
         agentCapabilities: { loadSession: {} },
-        agentInfo: { name: 'claude-code-acp' },
+        agentInfo: { name: 'claude-agent-acp' },
       });
       mockNewSession.mockImplementation(
         () =>
