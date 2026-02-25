@@ -114,6 +114,16 @@ async function hydrateProviderHistoryIfNeeded(
 
   if (loadResult.status === 'loaded') {
     sessionDomainService.clearHistoryRetryCooldown(sessionId);
+    if (sessionDomainService.isHistoryHydrated(sessionId)) {
+      return;
+    }
+
+    const refreshedTranscriptCount = sessionDomainService.getTranscriptSnapshot(sessionId).length;
+    if (refreshedTranscriptCount > 0) {
+      sessionDomainService.markHistoryHydrated(sessionId, 'none');
+      return;
+    }
+
     const transcript = buildTranscriptFromHistory(loadResult.history);
     sessionDomainService.replaceTranscript(sessionId, transcript, { historySource: 'jsonl' });
     logger.debug('Hydrated provider transcript from JSONL history', {
