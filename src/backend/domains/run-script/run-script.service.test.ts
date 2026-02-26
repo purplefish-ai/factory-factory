@@ -1,8 +1,11 @@
+import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 
+const mockSpawn = vi.fn();
 const mockTreeKill = vi.fn();
 const mockFindById = vi.fn();
+const mockStart = vi.fn();
 const mockBeginStopping = vi.fn();
 const mockCompleteStopping = vi.fn();
 const mockMarkCompleted = vi.fn();
@@ -10,12 +13,17 @@ const mockMarkFailed = vi.fn();
 const mockMarkRunning = vi.fn();
 const mockReset = vi.fn();
 const mockVerifyRunning = vi.fn();
+const mockFindFreePort = vi.fn();
 const mockEnsureTunnel = vi.fn();
 const mockStopTunnel = vi.fn();
 const mockGetTunnelUrl = vi.fn();
 const mockCleanupTunnels = vi.fn();
 const mockCleanupTunnelsSync = vi.fn();
 const mockReconcileWorkspaceCommandCache = vi.fn();
+
+vi.mock('node:child_process', () => ({
+  spawn: (...args: unknown[]) => mockSpawn(...args),
+}));
 
 vi.mock('tree-kill', () => ({
   default: (...args: unknown[]) => mockTreeKill(...args),
@@ -29,6 +37,7 @@ vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
 
 vi.mock('./run-script-state-machine.service', () => ({
   runScriptStateMachine: {
+    start: (...args: unknown[]) => mockStart(...args),
     beginStopping: (...args: unknown[]) => mockBeginStopping(...args),
     completeStopping: (...args: unknown[]) => mockCompleteStopping(...args),
     markCompleted: (...args: unknown[]) => mockMarkCompleted(...args),
@@ -36,6 +45,12 @@ vi.mock('./run-script-state-machine.service', () => ({
     markRunning: (...args: unknown[]) => mockMarkRunning(...args),
     reset: (...args: unknown[]) => mockReset(...args),
     verifyRunning: (...args: unknown[]) => mockVerifyRunning(...args),
+  },
+}));
+
+vi.mock('@/backend/services/port-allocation.service', () => ({
+  PortAllocationService: {
+    findFreePort: (...args: unknown[]) => mockFindFreePort(...args),
   },
 }));
 
@@ -66,6 +81,28 @@ vi.mock('@/backend/services/run-script-config-persistence.service', () => ({
 }));
 
 import { RunScriptService } from './run-script.service';
+
+class FakeChildProcess extends EventEmitter {
+  pid: number | undefined;
+  exitCode: number | null = null;
+  killed = false;
+  stdout = new EventEmitter();
+  stderr = new EventEmitter();
+  kill = vi.fn(() => {
+    this.killed = true;
+    return true;
+  });
+
+  constructor(pid: number | undefined) {
+    super();
+    this.pid = pid;
+  }
+}
+
+const flushMicrotasks = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
 
 type ExitHandlerCapable = {
   handleProcessExit: (
@@ -152,6 +189,274 @@ describe('RunScriptService.handleProcessExit', () => {
     expect(mockMarkCompleted).not.toHaveBeenCalled();
     expect(mockMarkFailed).not.toHaveBeenCalled();
     expect(mockStopTunnel).not.toHaveBeenCalled();
+  });
+});
+
+describe('RunScriptService.startRunScript', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStart.mockResolvedValue(true);
+    mockFindFreePort.mockResolvedValue(5173);
+    mockReconcileWorkspaceCommandCache.mockImplementation((input: { workspace: unknown }) => {
+      const workspace = input.workspace as {
+        runScriptCommand: string | null;
+        runScriptPostRunCommand: string | null;
+        runScriptCleanupCommand: string | null;
+      };
+      return {
+        runScriptCommand: workspace.runScriptCommand,
+        runScriptPostRunCommand: workspace.runScriptPostRunCommand,
+        runScriptCleanupCommand: workspace.runScriptCleanupCommand,
+      };
+    });
+    mockSpawn.mockImplementation(() => new FakeChildProcess(12_345));
+  });
+
+  it('returns error when workspace is missing', async () => {
+    mockFindById.mockResolvedValue(null);
+
+    const service = new RunScriptService();
+    const result = await service.startRunScript('ws-missing');
+
+    expect(result).toEqual({ success: false, error: 'Workspace not found' });
+  });
+
+  it('returns error when worktree path is missing', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: null,
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: null,
+    });
+
+    const service = new RunScriptService();
+    const result = await service.startRunScript('ws-1');
+
+    expect(result).toEqual({ success: false, error: 'Workspace worktree not initialized' });
+  });
+
+  it('returns error when workspace has no run script command', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptCommand: null,
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: null,
+    });
+
+    const service = new RunScriptService();
+    const result = await service.startRunScript('ws-1');
+
+    expect(result).toEqual({
+      success: false,
+      error: 'No run script configured for this workspace',
+    });
+  });
+
+  it('returns running metadata when state machine reports script already running', async () => {
+    mockFindById
+      .mockResolvedValueOnce({
+        id: 'ws-1',
+        worktreePath: '/tmp/ws-1',
+        runScriptCommand: 'pnpm dev',
+        runScriptPostRunCommand: null,
+        runScriptCleanupCommand: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'ws-1',
+        runScriptPid: 9876,
+        runScriptPort: 4123,
+      });
+    mockStart.mockResolvedValue(false);
+
+    const service = new RunScriptService();
+    const result = await service.startRunScript('ws-1');
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Run script is already running',
+      pid: 9876,
+      port: 4123,
+    });
+  });
+
+  it('allocates port, substitutes command, and transitions to running', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptCommand: 'pnpm dev --port {port}',
+      runScriptPostRunCommand: 'cloudflared --url http://localhost:{port}',
+      runScriptCleanupCommand: null,
+    });
+
+    const service = new RunScriptService() as unknown as {
+      startRunScript: (
+        workspaceId: string
+      ) => Promise<{ success: boolean; port?: number; pid?: number }>;
+      getOutputBuffer: (workspaceId: string) => string;
+      transitionToRunning: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number,
+        port: number | undefined,
+        runScriptPostRunCommand?: string | null,
+        worktreePath?: string | null
+      ) => Promise<{ success: boolean; port?: number; pid?: number }>;
+    };
+    const transitionSpy = vi.spyOn(service, 'transitionToRunning').mockResolvedValue({
+      success: true,
+      pid: 12_345,
+      port: 5173,
+    });
+
+    const result = await service.startRunScript('ws-1');
+
+    expect(mockFindFreePort).toHaveBeenCalledTimes(1);
+    expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'pnpm dev --port 5173'], {
+      cwd: '/tmp/ws-1',
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(transitionSpy).toHaveBeenCalledWith(
+      'ws-1',
+      expect.objectContaining({ pid: 12_345 }),
+      12_345,
+      5173,
+      'cloudflared --url http://localhost:{port}',
+      '/tmp/ws-1'
+    );
+    expect(result).toEqual({ success: true, pid: 12_345, port: 5173 });
+    expect(service.getOutputBuffer('ws-1')).toContain('Starting pnpm dev --port 5173');
+  });
+
+  it('handles spawn without pid and marks STARTING state as failed', async () => {
+    mockFindById
+      .mockResolvedValueOnce({
+        id: 'ws-1',
+        worktreePath: '/tmp/ws-1',
+        runScriptCommand: 'pnpm dev',
+        runScriptPostRunCommand: null,
+        runScriptCleanupCommand: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'ws-1',
+        runScriptStatus: 'STARTING',
+      });
+    mockSpawn.mockImplementation(() => new FakeChildProcess(undefined));
+
+    const service = new RunScriptService();
+    const result = await service.startRunScript('ws-1');
+
+    expect(result).toEqual({ success: false, error: 'Failed to spawn run script process' });
+    expect(mockMarkFailed).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('does not mark failed for RunScriptStateMachineError start races', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      worktreePath: '/tmp/ws-1',
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: null,
+    });
+    const raceError = new Error('CAS failed');
+    raceError.name = 'RunScriptStateMachineError';
+    mockStart.mockRejectedValue(raceError);
+
+    const service = new RunScriptService();
+    const result = await service.startRunScript('ws-1');
+
+    expect(result).toEqual({ success: false, error: 'CAS failed' });
+    expect(mockMarkFailed).not.toHaveBeenCalled();
+  });
+});
+
+describe('RunScriptService.registerProcessHandlers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('captures stdout/stderr output and handles spawn errors', async () => {
+    mockMarkFailed.mockResolvedValue(undefined);
+    const service = new RunScriptService() as unknown as {
+      registerProcessHandlers: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number
+      ) => void;
+      appendOutput: (workspaceId: string, output: string) => void;
+      runningProcesses: Map<string, FakeChildProcess>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    service.runningProcesses.set('ws-1', childProcess);
+    const appendSpy = vi.spyOn(service, 'appendOutput');
+
+    service.registerProcessHandlers('ws-1', childProcess, 12_345);
+
+    childProcess.stdout.emit('data', Buffer.from('stdout chunk'));
+    childProcess.stderr.emit('data', Buffer.from('stderr chunk'));
+    childProcess.stdout.emit('error', new Error('stdout stream failed'));
+    childProcess.stderr.emit('error', new Error('stderr stream failed'));
+    childProcess.emit('error', new Error('spawn failed'));
+    await flushMicrotasks();
+
+    expect(appendSpy).toHaveBeenNthCalledWith(1, 'ws-1', 'stdout chunk');
+    expect(appendSpy).toHaveBeenNthCalledWith(2, 'ws-1', 'stderr chunk');
+    expect(service.runningProcesses.has('ws-1')).toBe(false);
+    expect(mockMarkFailed).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('swallows markFailed errors from spawn error handler', async () => {
+    mockMarkFailed.mockRejectedValue(new Error('state moved'));
+    const service = new RunScriptService() as unknown as {
+      registerProcessHandlers: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number
+      ) => void;
+      runningProcesses: Map<string, FakeChildProcess>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    service.runningProcesses.set('ws-1', childProcess);
+
+    service.registerProcessHandlers('ws-1', childProcess, 12_345);
+    childProcess.emit('error', new Error('spawn failed'));
+    await flushMicrotasks();
+
+    expect(service.runningProcesses.has('ws-1')).toBe(false);
+    expect(mockMarkFailed).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('swallows exit-handler failures when handleProcessExit rejects', async () => {
+    const service = new RunScriptService() as unknown as {
+      registerProcessHandlers: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number
+      ) => void;
+      handleProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number,
+        code: number | null,
+        signal: string | null
+      ) => Promise<void>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    vi.spyOn(service, 'handleProcessExit').mockRejectedValue(new Error('exit handler failed'));
+
+    service.registerProcessHandlers('ws-1', childProcess, 12_345);
+    childProcess.emit('exit', 1, 'SIGTERM');
+    await flushMicrotasks();
+
+    expect(service.handleProcessExit).toHaveBeenCalledWith(
+      'ws-1',
+      childProcess,
+      12_345,
+      1,
+      'SIGTERM'
+    );
   });
 });
 
@@ -907,5 +1212,656 @@ describe('RunScriptService.evictWorkspaceBuffers', () => {
     expect(service.postRunOutputBuffers.has('ws-2')).toBe(true);
     expect(service.outputListeners.has('ws-2')).toBe(true);
     expect(service.postRunOutputListeners.has('ws-2')).toBe(true);
+  });
+});
+
+describe('RunScriptService.postRun output helpers', () => {
+  it('appends postRun output and notifies postRun listeners', () => {
+    const service = new RunScriptService() as unknown as {
+      appendPostRunOutput: (workspaceId: string, output: string) => void;
+      subscribeToPostRunOutput: (
+        workspaceId: string,
+        listener: (data: string) => void
+      ) => () => void;
+      getPostRunOutputBuffer: (workspaceId: string) => string;
+    };
+    const listener = vi.fn();
+    const unsubscribe = service.subscribeToPostRunOutput('ws-1', listener);
+
+    service.appendPostRunOutput('ws-1', 'hello');
+    expect(listener).toHaveBeenCalledWith('hello');
+    expect(service.getPostRunOutputBuffer('ws-1')).toContain('hello');
+
+    unsubscribe();
+    service.appendPostRunOutput('ws-1', 'again');
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('truncates oversized postRun buffers and returns empty for unknown workspaces', () => {
+    const service = new RunScriptService() as unknown as {
+      appendPostRunOutput: (workspaceId: string, output: string) => void;
+      getPostRunOutputBuffer: (workspaceId: string) => string;
+    };
+    service.appendPostRunOutput('ws-1', 'x'.repeat(450 * 1024));
+    service.appendPostRunOutput('ws-1', 'y'.repeat(200 * 1024));
+
+    const buffer = service.getPostRunOutputBuffer('ws-1');
+    expect(buffer.length).toBe(500 * 1024);
+    expect(buffer.endsWith('y'.repeat(200 * 1024))).toBe(true);
+    expect(service.getPostRunOutputBuffer('unknown')).toBe('');
+  });
+});
+
+describe('RunScriptService.transition/start helper methods', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns tunnel URL when process is still active after tunnel starts', async () => {
+    mockEnsureTunnel.mockResolvedValue('https://example.trycloudflare.com');
+    const service = new RunScriptService() as unknown as {
+      ensureTunnelForActiveProcess: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number,
+        port: number
+      ) => Promise<string | null>;
+      runningProcesses: Map<string, FakeChildProcess>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    service.runningProcesses.set('ws-1', childProcess);
+
+    await expect(
+      service.ensureTunnelForActiveProcess('ws-1', childProcess, 12_345, 5173)
+    ).resolves.toBe('https://example.trycloudflare.com');
+    expect(mockStopTunnel).not.toHaveBeenCalled();
+  });
+
+  it('handles markRunning races for completed/failed states', async () => {
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'COMPLETED' });
+    const service = new RunScriptService() as unknown as {
+      handleMarkRunningRace: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number,
+        port: number | undefined,
+        markRunningError: unknown
+      ) => Promise<{ success: boolean; port?: number; pid?: number; error?: string }>;
+    };
+
+    const result = await service.handleMarkRunningRace(
+      'ws-1',
+      new FakeChildProcess(12_345),
+      12_345,
+      5173,
+      new Error('CAS failed')
+    );
+
+    expect(result).toEqual({ success: true, port: 5173, pid: 12_345 });
+  });
+
+  it('kills orphaned process when stop wins markRunning race', async () => {
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'IDLE' });
+    const service = new RunScriptService() as unknown as {
+      handleMarkRunningRace: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number,
+        port: number | undefined,
+        markRunningError: unknown
+      ) => Promise<{ success: boolean; port?: number; pid?: number; error?: string }>;
+      runningProcesses: Map<string, FakeChildProcess>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    childProcess.kill.mockImplementation(() => {
+      throw new Error('already exited');
+    });
+    service.runningProcesses.set('ws-1', childProcess);
+
+    const result = await service.handleMarkRunningRace(
+      'ws-1',
+      childProcess,
+      12_345,
+      undefined,
+      new Error('CAS failed')
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Run script was stopped before it could start',
+    });
+    expect(service.runningProcesses.has('ws-1')).toBe(false);
+  });
+
+  it('rethrows markRunning race errors for unexpected states', async () => {
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'RUNNING' });
+    const service = new RunScriptService() as unknown as {
+      handleMarkRunningRace: (
+        workspaceId: string,
+        childProcess: FakeChildProcess,
+        pid: number,
+        port: number | undefined,
+        markRunningError: unknown
+      ) => Promise<unknown>;
+    };
+    const markRunningError = new Error('unexpected');
+
+    await expect(
+      service.handleMarkRunningRace(
+        'ws-1',
+        new FakeChildProcess(12_345),
+        12_345,
+        undefined,
+        markRunningError
+      )
+    ).rejects.toThrow(markRunningError);
+  });
+
+  it('marks failed from handleStartError when workspace is still STARTING', async () => {
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'STARTING' });
+    mockMarkFailed.mockResolvedValue(undefined);
+    const service = new RunScriptService() as unknown as {
+      handleStartError: (
+        workspaceId: string,
+        error: Error
+      ) => Promise<{ success: boolean; error?: string }>;
+    };
+
+    const result = await service.handleStartError('ws-1', new Error('bad start'));
+
+    expect(result).toEqual({ success: false, error: 'bad start' });
+    expect(mockMarkFailed).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('swallows markFailed errors inside handleStartError', async () => {
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'STARTING' });
+    mockMarkFailed.mockRejectedValue(new Error('db conflict'));
+    const service = new RunScriptService() as unknown as {
+      handleStartError: (
+        workspaceId: string,
+        error: Error
+      ) => Promise<{ success: boolean; error?: string }>;
+    };
+
+    await expect(service.handleStartError('ws-1', new Error('bad start'))).resolves.toEqual({
+      success: false,
+      error: 'bad start',
+    });
+  });
+});
+
+describe('RunScriptService.cleanup/postRun internals', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) => callback(null)
+    );
+  });
+
+  it('runs cleanup script with substituted port and handles stream errors', async () => {
+    const cleanupProcess = new FakeChildProcess(55_555);
+    mockSpawn.mockReturnValue(cleanupProcess);
+    const service = new RunScriptService() as unknown as {
+      runCleanupScript: (
+        workspaceId: string,
+        workspace: {
+          runScriptCleanupCommand: string;
+          worktreePath: string;
+          runScriptPort: number | null;
+        }
+      ) => Promise<void>;
+    };
+
+    const promise = service.runCleanupScript('ws-1', {
+      runScriptCleanupCommand: 'echo cleanup {port}',
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: 3000,
+    });
+    cleanupProcess.stdout.emit('error', new Error('stdout fail'));
+    cleanupProcess.stderr.emit('error', new Error('stderr fail'));
+    cleanupProcess.emit('exit', 0);
+    await promise;
+
+    expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'echo cleanup 3000'], {
+      cwd: '/tmp/ws-1',
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  });
+
+  it('resolves cleanup script when process emits error', async () => {
+    const cleanupProcess = new FakeChildProcess(55_555);
+    mockSpawn.mockReturnValue(cleanupProcess);
+    const service = new RunScriptService() as unknown as {
+      runCleanupScript: (
+        workspaceId: string,
+        workspace: {
+          runScriptCleanupCommand: string;
+          worktreePath: string;
+          runScriptPort: number | null;
+        }
+      ) => Promise<void>;
+    };
+
+    const promise = service.runCleanupScript('ws-1', {
+      runScriptCleanupCommand: 'echo cleanup',
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: null,
+    });
+    cleanupProcess.emit('error', new Error('cleanup crashed'));
+    await promise;
+  });
+
+  it('times out cleanup scripts and sends SIGTERM', async () => {
+    vi.useFakeTimers();
+    const cleanupProcess = new FakeChildProcess(55_555);
+    mockSpawn.mockReturnValue(cleanupProcess);
+    const service = new RunScriptService() as unknown as {
+      runCleanupScript: (
+        workspaceId: string,
+        workspace: {
+          runScriptCleanupCommand: string;
+          worktreePath: string;
+          runScriptPort: number | null;
+        }
+      ) => Promise<void>;
+    };
+
+    const promise = service.runCleanupScript('ws-1', {
+      runScriptCleanupCommand: 'echo cleanup',
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: null,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    await promise;
+
+    expect(cleanupProcess.kill).toHaveBeenCalledWith('SIGTERM');
+    vi.useRealTimers();
+  });
+
+  it('swallows cleanup spawn exceptions', async () => {
+    mockSpawn.mockImplementation(() => {
+      throw new Error('spawn exploded');
+    });
+    const service = new RunScriptService() as unknown as {
+      runCleanupScript: (
+        workspaceId: string,
+        workspace: {
+          runScriptCleanupCommand: string;
+          worktreePath: string;
+          runScriptPort: number | null;
+        }
+      ) => Promise<void>;
+    };
+
+    await expect(
+      service.runCleanupScript('ws-1', {
+        runScriptCleanupCommand: 'echo cleanup',
+        worktreePath: '/tmp/ws-1',
+        runScriptPort: null,
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it('spawns postRun process, captures output, and cleans map on exit', async () => {
+    const postRunProcess = new FakeChildProcess(88_888);
+    mockSpawn.mockReturnValue(postRunProcess);
+    const service = new RunScriptService() as unknown as {
+      spawnPostRunScript: (
+        workspaceId: string,
+        runScriptPostRunCommand: string,
+        worktreePath: string,
+        port: number | undefined
+      ) => Promise<void>;
+      postRunProcesses: Map<string, FakeChildProcess>;
+      getPostRunOutputBuffer: (workspaceId: string) => string;
+    };
+
+    await service.spawnPostRunScript('ws-1', 'echo postrun {port}', '/tmp/ws-1', 3000);
+    expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'echo postrun 3000'], {
+      cwd: '/tmp/ws-1',
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(service.postRunProcesses.get('ws-1')).toBe(postRunProcess);
+
+    postRunProcess.stdout.emit('data', Buffer.from('post stdout'));
+    postRunProcess.stderr.emit('data', Buffer.from('post stderr'));
+    postRunProcess.stdout.emit('error', new Error('stdout fail'));
+    postRunProcess.stderr.emit('error', new Error('stderr fail'));
+    expect(service.getPostRunOutputBuffer('ws-1')).toContain('post stdout');
+    expect(service.getPostRunOutputBuffer('ws-1')).toContain('post stderr');
+
+    postRunProcess.emit('exit', 0, null);
+    expect(service.postRunProcesses.has('ws-1')).toBe(false);
+  });
+
+  it('removes postRun process from map on spawn error', async () => {
+    const postRunProcess = new FakeChildProcess(88_888);
+    mockSpawn.mockReturnValue(postRunProcess);
+    const service = new RunScriptService() as unknown as {
+      spawnPostRunScript: (
+        workspaceId: string,
+        runScriptPostRunCommand: string,
+        worktreePath: string,
+        port: number | undefined
+      ) => Promise<void>;
+      postRunProcesses: Map<string, FakeChildProcess>;
+    };
+
+    await service.spawnPostRunScript('ws-1', 'echo postrun', '/tmp/ws-1', undefined);
+    expect(service.postRunProcesses.has('ws-1')).toBe(true);
+
+    postRunProcess.emit('error', new Error('spawn failed'));
+    expect(service.postRunProcesses.has('ws-1')).toBe(false);
+  });
+
+  it('returns early when postRun process cannot provide a pid', async () => {
+    mockSpawn.mockReturnValue(new FakeChildProcess(undefined));
+    const service = new RunScriptService() as unknown as {
+      spawnPostRunScript: (
+        workspaceId: string,
+        runScriptPostRunCommand: string,
+        worktreePath: string,
+        port: number | undefined
+      ) => Promise<void>;
+      postRunProcesses: Map<string, FakeChildProcess>;
+    };
+
+    await service.spawnPostRunScript('ws-1', 'echo postrun', '/tmp/ws-1', undefined);
+    expect(service.postRunProcesses.has('ws-1')).toBe(false);
+  });
+
+  it('warns and still clears map when tree-kill postRun fails unexpectedly', async () => {
+    const epermError = new Error('Operation not permitted') as NodeJS.ErrnoException;
+    epermError.code = 'EPERM';
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) =>
+        callback(epermError)
+    );
+    const service = new RunScriptService() as unknown as {
+      killPostRunProcess: (workspaceId: string) => Promise<void>;
+      postRunProcesses: Map<string, FakeChildProcess>;
+    };
+    service.postRunProcesses.set('ws-1', new FakeChildProcess(88_888));
+
+    await service.killPostRunProcess('ws-1');
+
+    expect(service.postRunProcesses.has('ws-1')).toBe(false);
+  });
+});
+
+describe('RunScriptService.stop-flow helper methods', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) => callback(null)
+    );
+  });
+
+  it('rethrows beginStopping errors when fresh status is not terminal', async () => {
+    mockBeginStopping.mockRejectedValue(new Error('CAS failed'));
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'RUNNING' });
+    const service = new RunScriptService() as unknown as {
+      attemptBeginStopping: (workspaceId: string) => Promise<boolean>;
+    };
+
+    await expect(service.attemptBeginStopping('ws-1')).rejects.toThrow('CAS failed');
+  });
+
+  it('rethrows completeStopping errors when workspace is not IDLE', async () => {
+    mockCompleteStopping.mockRejectedValue(new Error('CAS failed'));
+    mockFindById.mockResolvedValue({ id: 'ws-1', runScriptStatus: 'RUNNING' });
+    const service = new RunScriptService() as unknown as {
+      completeStoppingAfterStop: (workspaceId: string) => Promise<void>;
+    };
+
+    await expect(service.completeStoppingAfterStop('ws-1')).rejects.toThrow('CAS failed');
+  });
+
+  it('kills orphaned terminal child process and swallows reset races', async () => {
+    mockReset.mockRejectedValue(new Error('already reset'));
+    const service = new RunScriptService() as unknown as {
+      handleTerminalStateStop: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined
+      ) => Promise<{ success: boolean }>;
+      runningProcesses: Map<string, FakeChildProcess>;
+    };
+    const orphan = new FakeChildProcess(99_999);
+    orphan.kill.mockImplementation(() => {
+      throw new Error('already dead');
+    });
+    service.runningProcesses.set('ws-1', orphan);
+
+    const result = await service.handleTerminalStateStop('ws-1', orphan);
+
+    expect(result).toEqual({ success: true });
+    expect(service.runningProcesses.has('ws-1')).toBe(false);
+  });
+
+  it('returns when killProcessTree has no target pid', async () => {
+    const service = new RunScriptService() as unknown as {
+      killProcessTree: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+
+    await expect(service.killProcessTree('ws-1', undefined, null)).resolves.toBeUndefined();
+    expect(mockTreeKill).not.toHaveBeenCalled();
+  });
+
+  it('handles ESRCH errors during tree-kill in killProcessTree', async () => {
+    const esrchError = new Error('No such process') as NodeJS.ErrnoException;
+    esrchError.code = 'ESRCH';
+    mockTreeKill.mockImplementation(
+      (_pid: number, _signal: string, callback: (error: Error | null) => void) =>
+        callback(esrchError)
+    );
+    const service = new RunScriptService() as unknown as {
+      killProcessTree: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+      runningProcesses: Map<string, FakeChildProcess>;
+    };
+    const running = new FakeChildProcess(12_345);
+    service.runningProcesses.set('ws-1', running);
+
+    await service.killProcessTree('ws-1', running, null);
+    expect(service.runningProcesses.has('ws-1')).toBe(false);
+  });
+});
+
+describe('RunScriptService.waitForProcessExit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns immediately when no process is provided', async () => {
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+
+    await expect(service.waitForProcessExit('ws-1', undefined, 12_345)).resolves.toBeUndefined();
+  });
+
+  it('returns when process already has exitCode', async () => {
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    childProcess.exitCode = 0;
+
+    await expect(service.waitForProcessExit('ws-1', childProcess, 12_345)).resolves.toBeUndefined();
+  });
+
+  it('returns when child process does not expose once/off', async () => {
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: { pid: number; exitCode: number | null },
+        pid: number | null
+      ) => Promise<void>;
+    };
+
+    await expect(
+      service.waitForProcessExit('ws-1', { pid: 12_345, exitCode: null }, 12_345)
+    ).resolves.toBeUndefined();
+  });
+
+  it('resolves when wait listener receives process error event', async () => {
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+
+    const waitPromise = service.waitForProcessExit('ws-1', childProcess, 12_345);
+    childProcess.emit('error', new Error('process stream error'));
+    await expect(waitPromise).resolves.toBeUndefined();
+  });
+
+  it('resolves on timeout while waiting for process exit', async () => {
+    vi.useFakeTimers();
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+
+    const waitPromise = service.waitForProcessExit('ws-1', childProcess, 12_345);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(waitPromise).resolves.toBeUndefined();
+    vi.useRealTimers();
+  });
+
+  it('resolves immediately when exitCode flips after listeners are attached', async () => {
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    const onceSpy = vi.spyOn(childProcess, 'once');
+    onceSpy.mockImplementation(((event: string, listener: (...args: unknown[]) => void) => {
+      EventEmitter.prototype.once.call(childProcess, event, listener);
+      childProcess.exitCode = 0;
+      return childProcess;
+    }) as typeof childProcess.once);
+
+    await expect(service.waitForProcessExit('ws-1', childProcess, 12_345)).resolves.toBeUndefined();
+  });
+});
+
+describe('RunScriptService.cleanup + shutdown handlers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('continues cleanup when one stopRunScript call rejects', async () => {
+    const service = new RunScriptService() as unknown as {
+      runningProcesses: Map<string, FakeChildProcess>;
+      postRunProcesses: Map<string, FakeChildProcess>;
+      stopRunScript: (workspaceId: string) => Promise<{ success: boolean }>;
+      cleanup: () => Promise<void>;
+    };
+    service.runningProcesses.set('ws-1', new FakeChildProcess(1));
+    service.runningProcesses.set('ws-2', new FakeChildProcess(2));
+    service.postRunProcesses.set('ws-1', new FakeChildProcess(11));
+    vi.spyOn(service, 'stopRunScript')
+      .mockResolvedValueOnce({ success: true })
+      .mockRejectedValueOnce(new Error('failed to stop'));
+    mockCleanupTunnels.mockResolvedValue(undefined);
+
+    await service.cleanup();
+
+    expect(service.stopRunScript).toHaveBeenCalledWith('ws-1');
+    expect(service.stopRunScript).toHaveBeenCalledWith('ws-2');
+    expect(service.runningProcesses.size).toBe(0);
+    expect(service.postRunProcesses.size).toBe(0);
+    expect(mockCleanupTunnels).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers shutdown handlers once and runs cleanup hooks', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const processOnSpy = vi.spyOn(process, 'on').mockImplementation(((
+      event: string,
+      handler: (...args: unknown[]) => unknown
+    ) => {
+      handlers.set(event, handler);
+      return process;
+    }) as typeof process.on);
+
+    const service = new RunScriptService() as unknown as {
+      registerShutdownHandlers: () => void;
+      cleanup: () => Promise<void>;
+      cleanupSync: () => void;
+    };
+    const cleanupSpy = vi.spyOn(service, 'cleanup').mockResolvedValue(undefined);
+    const cleanupSyncSpy = vi.spyOn(service, 'cleanupSync').mockImplementation(() => undefined);
+
+    service.registerShutdownHandlers();
+    service.registerShutdownHandlers();
+    expect(processOnSpy).toHaveBeenCalledTimes(3);
+
+    await (handlers.get('SIGINT') as () => Promise<void>)();
+    await flushMicrotasks();
+    await (handlers.get('SIGINT') as () => Promise<void>)();
+    await flushMicrotasks();
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+
+    const secondService = new RunScriptService() as unknown as {
+      registerShutdownHandlers: () => void;
+      cleanupSync: () => void;
+    };
+    const secondCleanupSyncSpy = vi
+      .spyOn(secondService, 'cleanupSync')
+      .mockImplementation(() => undefined);
+    secondService.registerShutdownHandlers();
+    (handlers.get('exit') as () => void)();
+
+    expect(cleanupSyncSpy).toHaveBeenCalledTimes(0);
+    expect(secondCleanupSyncSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs SIGTERM cleanup and skips second invocation after shutdown begins', async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    vi.spyOn(process, 'on').mockImplementation(((
+      event: string,
+      handler: (...args: unknown[]) => unknown
+    ) => {
+      handlers.set(event, handler);
+      return process;
+    }) as typeof process.on);
+    const service = new RunScriptService() as unknown as {
+      registerShutdownHandlers: () => void;
+      cleanup: () => Promise<void>;
+    };
+    const cleanupSpy = vi.spyOn(service, 'cleanup').mockResolvedValue(undefined);
+    service.registerShutdownHandlers();
+
+    await (handlers.get('SIGTERM') as () => Promise<void>)();
+    await (handlers.get('SIGTERM') as () => Promise<void>)();
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
   });
 });
