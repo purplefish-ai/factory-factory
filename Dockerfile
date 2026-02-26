@@ -119,15 +119,15 @@ RUN mkdir -p /data
 
 ENV NODE_ENV=production
 ENV PATH="/app/node_modules/.bin:/root/.local/bin:${PATH}"
-ENV BACKEND_PORT=3000
+ENV BACKEND_PORT=7001
 ENV DATABASE_PATH=/data/data.db
 ENV BASE_DIR=/data
 ENV WORKTREE_BASE_DIR=/data/worktrees
 
-EXPOSE 3000
+EXPOSE 7001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD curl -f http://localhost:7001/health || exit 1
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

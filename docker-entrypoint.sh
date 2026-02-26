@@ -35,10 +35,10 @@ if ! docker info >/dev/null 2>&1; then
   echo "Warning: Docker daemon not ready after 30s. Continuing without Docker."
 fi
 
-PORT="${BACKEND_PORT:-3000}"
+PORT="${BACKEND_PORT:-7001}"
 
 # Start the Factory Factory server in the background
-node dist/src/cli/index.js serve --host 0.0.0.0 --no-open &
+node dist/src/cli/index.js serve --host 0.0.0.0 --port "${BACKEND_PORT:-7001}" --no-open &
 SERVER_PID=$!
 
 # Wait for the server to become healthy
