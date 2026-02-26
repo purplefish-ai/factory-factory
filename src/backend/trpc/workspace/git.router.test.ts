@@ -41,15 +41,17 @@ vi.mock('@/backend/lib/git-helpers', async (importOriginal) => {
 import { workspaceGitRouter } from './git.trpc';
 
 function createCaller() {
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+
   return workspaceGitRouter.createCaller({
     appContext: {
       services: {
-        createLogger: () => ({
-          debug: vi.fn(),
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        }),
+        createLogger: () => logger,
       },
     },
   } as never);
@@ -77,6 +79,41 @@ describe('workspaceGitRouter', () => {
     });
   });
 
+  it('throws when git status fails and handles empty unstaged workspace result', async () => {
+    const caller = createCaller();
+    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
+      workspace: { id: 'w1' },
+      worktreePath: '/repo',
+    });
+    mockGitCommand.mockResolvedValueOnce({
+      code: 1,
+      stdout: '',
+      stderr: 'fatal',
+    });
+
+    await expect(caller.getGitStatus({ workspaceId: 'w1' })).rejects.toThrow(
+      'Git status failed: fatal'
+    );
+
+    mockGetWorkspaceWithWorktree.mockResolvedValueOnce(null);
+    await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).resolves.toEqual({
+      files: [],
+    });
+
+    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
+      workspace: { id: 'w1' },
+      worktreePath: '/repo',
+    });
+    mockGitCommand.mockResolvedValueOnce({
+      code: 1,
+      stdout: '',
+      stderr: 'status failed',
+    });
+    await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).rejects.toThrow(
+      'Git status failed: status failed'
+    );
+  });
+
   it('parses git status and unstaged changes', async () => {
     mockGetWorkspaceWithWorktree.mockResolvedValue({
       workspace: { id: 'w1' },
@@ -98,6 +135,122 @@ describe('workspaceGitRouter', () => {
     });
     await expect(caller.getUnstagedChanges({ workspaceId: 'w1' })).resolves.toEqual({
       files: [{ path: 'README.md', status: 'M', staged: false }],
+    });
+  });
+
+  it('handles diff-vs-main missing workspace/no-worktree and parses status lines', async () => {
+    const caller = createCaller();
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce(null);
+    await expect(caller.getDiffVsMain({ workspaceId: 'missing' })).rejects.toThrow(
+      'Workspace not found: missing'
+    );
+
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce({
+      id: 'w1',
+      worktreePath: null,
+      project: { defaultBranch: 'main' },
+    });
+    await expect(caller.getDiffVsMain({ workspaceId: 'w1' })).resolves.toEqual({
+      added: [],
+      modified: [],
+      deleted: [],
+      noMergeBase: false,
+    });
+
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce({
+      id: 'w2',
+      worktreePath: '/repo',
+      project: {},
+    });
+    mockGetMergeBase.mockResolvedValueOnce('merge-base-sha');
+    mockGitCommand.mockResolvedValueOnce({
+      code: 0,
+      stdout: 'A\tnew.ts\nM\tmod.ts\nD\tgone.ts\nR100\told.ts\tnew.ts\nbad-line\n',
+      stderr: '',
+    });
+    await expect(caller.getDiffVsMain({ workspaceId: 'w2' })).resolves.toEqual({
+      added: [{ path: 'new.ts', status: 'added' }],
+      modified: [{ path: 'mod.ts', status: 'modified' }],
+      deleted: [{ path: 'gone.ts', status: 'deleted' }],
+      noMergeBase: false,
+    });
+
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValueOnce({
+      id: 'w3',
+      worktreePath: '/repo',
+      project: { defaultBranch: 'main' },
+    });
+    mockGetMergeBase.mockResolvedValueOnce('merge-base-sha');
+    mockGitCommand.mockResolvedValueOnce({
+      code: 1,
+      stdout: '',
+      stderr: 'diff failed',
+    });
+    await expect(caller.getDiffVsMain({ workspaceId: 'w3' })).rejects.toThrow(
+      'Git diff failed: diff failed'
+    );
+  });
+
+  it('handles unpushed-files branches for upstream and diff failures', async () => {
+    const caller = createCaller();
+
+    mockGetWorkspaceWithWorktree.mockResolvedValueOnce(null);
+    await expect(caller.getUnpushedFiles({ workspaceId: 'missing' })).resolves.toEqual({
+      files: [],
+      hasUpstream: false,
+    });
+
+    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
+      workspace: { id: 'w1' },
+      worktreePath: '/repo',
+    });
+    mockGitCommand.mockResolvedValueOnce({
+      code: 0,
+      stdout: '\n',
+      stderr: '',
+    });
+    await expect(caller.getUnpushedFiles({ workspaceId: 'w1' })).resolves.toEqual({
+      files: [],
+      hasUpstream: false,
+    });
+
+    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
+      workspace: { id: 'w2' },
+      worktreePath: '/repo',
+    });
+    mockGitCommand
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: 'origin/main\n',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        code: 1,
+        stdout: '',
+        stderr: 'cannot diff',
+      });
+    await expect(caller.getUnpushedFiles({ workspaceId: 'w2' })).rejects.toThrow(
+      'Git diff failed: cannot diff'
+    );
+
+    mockGetWorkspaceWithWorktree.mockResolvedValueOnce({
+      workspace: { id: 'w3' },
+      worktreePath: '/repo',
+    });
+    mockGitCommand
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: 'origin/main\n',
+        stderr: '',
+      })
+      .mockResolvedValueOnce({
+        code: 0,
+        stdout: 'src/a.ts\n\nsrc/b.ts\n',
+        stderr: '',
+      });
+    await expect(caller.getUnpushedFiles({ workspaceId: 'w3' })).resolves.toEqual({
+      files: ['src/a.ts', 'src/b.ts'],
+      hasUpstream: true,
     });
   });
 
@@ -145,5 +298,63 @@ describe('workspaceGitRouter', () => {
     const diff = await caller.getFileDiff({ workspaceId: 'w1', filePath });
     expect(diff.diff).toContain('new file mode 100644');
     expect(diff.diff).toContain(`+++ b/${filePath}`);
+  });
+
+  it('handles getFileDiff validation, read failures, direct success, and git errors', async () => {
+    const caller = createCaller();
+    const filePath = 'src/main.ts';
+
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
+      workspace: { id: 'w1', project: { defaultBranch: 'main' } },
+      worktreePath: '/repo',
+    });
+    mockIsPathSafe.mockResolvedValueOnce(false);
+    await expect(caller.getFileDiff({ workspaceId: 'w1', filePath })).rejects.toThrow(
+      'Invalid file path'
+    );
+
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
+      workspace: { id: 'w2', project: { defaultBranch: 'main' } },
+      worktreePath: '/repo',
+    });
+    mockIsPathSafe.mockResolvedValueOnce(true);
+    mockGetMergeBase.mockResolvedValueOnce('base-sha');
+    mockGitCommand
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' })
+      .mockResolvedValueOnce({ code: 0, stdout: '', stderr: '' });
+    await expect(caller.getFileDiff({ workspaceId: 'w2', filePath })).resolves.toEqual({
+      diff: '',
+    });
+
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
+      workspace: { id: 'w3', project: null },
+      worktreePath: '/repo',
+    });
+    mockIsPathSafe.mockResolvedValueOnce(true);
+    mockGetMergeBase.mockResolvedValueOnce(null);
+    mockGitCommand.mockResolvedValueOnce({
+      code: 0,
+      stdout: 'diff --git a/src/main.ts b/src/main.ts\n',
+      stderr: '',
+    });
+    await expect(caller.getFileDiff({ workspaceId: 'w3', filePath })).resolves.toEqual({
+      diff: 'diff --git a/src/main.ts b/src/main.ts\n',
+    });
+    expect(mockGitCommand).toHaveBeenCalledWith(['diff', 'HEAD', '--', filePath], '/repo');
+
+    mockGetWorkspaceWithProjectAndWorktreeOrThrow.mockResolvedValueOnce({
+      workspace: { id: 'w4', project: { defaultBranch: 'main' } },
+      worktreePath: '/repo',
+    });
+    mockIsPathSafe.mockResolvedValueOnce(true);
+    mockGetMergeBase.mockResolvedValueOnce('base-sha');
+    mockGitCommand.mockResolvedValueOnce({
+      code: 1,
+      stdout: '',
+      stderr: 'broken diff',
+    });
+    await expect(caller.getFileDiff({ workspaceId: 'w4', filePath })).rejects.toThrow(
+      'Git diff failed: broken diff'
+    );
   });
 });
