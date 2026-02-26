@@ -11,7 +11,7 @@ services:
     privileged: true
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-7001}:3000"
     volumes:
       - data:/data
       - ./tunnel-info:/app/tunnel-info
@@ -21,7 +21,7 @@ services:
       - BASE_DIR=/data
       - WORKTREE_BASE_DIR=/data/worktrees
       - BACKEND_PORT=3000
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:7001}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - CLOUD_MODE=${CLOUD_MODE:-cloudflare}
     healthcheck:
