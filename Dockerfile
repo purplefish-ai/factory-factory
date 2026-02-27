@@ -117,6 +117,9 @@ COPY --from=builder /app/prisma/generated ./prisma/generated
 # Create data directory
 RUN mkdir -p /data
 
+# Create execution space folder
+RUN mkdir -p /execution_space_folder
+
 ENV NODE_ENV=production
 ENV PATH="/app/node_modules/.bin:/root/.local/bin:${PATH}"
 ENV BACKEND_PORT=7001
