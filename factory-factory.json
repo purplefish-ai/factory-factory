@@ -2,6 +2,6 @@
   "scripts": {
     "setup": "pnpm install",
     "run": "pnpm dev",
-    "postRun": "while [ ! -f .factory-factory-port ]; do sleep 0.5; done; cloudflared tunnel --url http://localhost:$(cat .factory-factory-port)"
+    "postRun": "while [ ! -f .factory-factory-port ]; do sleep 0.5; done; cloudflared tunnel --protocol http2 --url http://localhost:$(cat .factory-factory-port)"
   }
 }
