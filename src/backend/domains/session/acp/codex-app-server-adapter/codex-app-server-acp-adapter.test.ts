@@ -2592,4 +2592,260 @@ describe('CodexAppServerAcpAdapter', () => {
       })
     );
   });
+
+  it('serializes non-text prompt blocks before turn/start', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_prompt_blocks', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_prompt_blocks', status: 'completed' },
+    });
+
+    await adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [
+        { type: 'text', text: 'Start' },
+        { type: 'resource_link', uri: 'file:///tmp/readme.md', name: 'README' } as never,
+        {
+          type: 'resource',
+          resource: { uri: 'file:///tmp/note.txt', mimeType: 'text/plain', text: 'resource text' },
+        } as never,
+        {
+          type: 'resource',
+          resource: { uri: 'file:///tmp/blob.bin', blob: 'AAE=' },
+        } as never,
+        { type: 'image', mimeType: 'image/png', data: 'abcd' } as never,
+        { type: 'custom_block', value: 1 } as never,
+      ],
+    });
+
+    const turnStartCall = getCodexRequestCalls(codex, 'turn/start').at(-1);
+    expect(turnStartCall).toBeDefined();
+    const input = ((turnStartCall?.[1] ?? {}) as { input?: Array<{ text: string }> }).input ?? [];
+    const serialized = input.map((entry) => entry.text).join('\n');
+
+    expect(serialized).toContain('[ACP_RESOURCE_LINK uri="file:///tmp/readme.md" name="README"]');
+    expect(serialized).toContain('[ACP_RESOURCE uri="file:///tmp/note.txt" mime="text/plain"]');
+    expect(serialized).toContain('[ACP_RESOURCE uri="file:///tmp/blob.bin" mime="unknown"]');
+    expect(serialized).toContain('[ACP_IMAGE mime="image/png" bytes=4]');
+    expect(serialized).toContain('{"type":"custom_block","value":1}');
+  });
+
+  it('handles plan approval when no non-plan collaboration mode is available', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex, {
+      collaborationModes: [{ name: 'Plan', mode: 'plan' }],
+    });
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_plan_only', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const created = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    const session = (
+      adapter as unknown as {
+        sessions: Map<
+          string,
+          {
+            defaults: { collaborationMode: string };
+          }
+        >;
+      }
+    ).sessions.get(created.sessionId);
+    if (!session) {
+      throw new Error('expected session');
+    }
+    session.defaults.collaborationMode = 'plan';
+
+    await (
+      adapter as unknown as {
+        maybeRequestPlanApproval: (
+          session: unknown,
+          item: unknown,
+          turnId: string,
+          completedPlanToolCall: { toolCallId: string; kind: string; title: string; locations: [] }
+        ) => Promise<void>;
+      }
+    ).maybeRequestPlanApproval(
+      session,
+      {
+        type: 'plan',
+        id: 'item_plan_only',
+        plan: { markdown: '## Plan only mode' },
+      },
+      'turn_plan_only',
+      { toolCallId: 'item_plan_only', kind: 'think', title: 'plan', locations: [] }
+    );
+
+    const updates = (connection.sessionUpdate as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => call[0].update
+    );
+    expect(
+      updates.some(
+        (update) =>
+          update.sessionUpdate === 'tool_call_update' &&
+          update.status === 'failed' &&
+          String(update.rawOutput).includes('no non-plan collaboration mode')
+      )
+    ).toBe(true);
+    expect(connection.requestPermission).not.toHaveBeenCalled();
+  });
+
+  it('merges MCP server configs across threads and namespaces conflicting entries', () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    const mcpByThread = (
+      adapter as unknown as {
+        mcpServersByThreadId: Map<string, Record<string, unknown>>;
+      }
+    ).mcpServersByThreadId;
+    mcpByThread.set('thread_a', {
+      shared: { enabled: true, command: 'server-a', args: [] },
+      collision: { enabled: true, command: 'server-collision-a', args: [] },
+      empty: undefined,
+    });
+    mcpByThread.set('thread_b', {
+      shared: { enabled: true, command: 'server-a', args: [] },
+      collision: { enabled: true, command: 'server-collision-b', args: [] },
+    });
+
+    const merged = (
+      adapter as unknown as {
+        buildMergedMcpServersConfig: () => Record<string, unknown>;
+      }
+    ).buildMergedMcpServersConfig();
+
+    expect(merged).toEqual(
+      expect.objectContaining({
+        shared: { enabled: true, command: 'server-a', args: [] },
+        collision: { enabled: true, command: 'server-collision-a', args: [] },
+        collision__thread_b: { enabled: true, command: 'server-collision-b', args: [] },
+      })
+    );
+    expect(merged).not.toHaveProperty('empty');
+  });
+
+  it('restores previous thread MCP config when apply write fails', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    const mcpByThread = (
+      adapter as unknown as {
+        mcpServersByThreadId: Map<string, Record<string, unknown>>;
+      }
+    ).mcpServersByThreadId;
+    const previousConfig = { old: { enabled: true, command: 'old-server', args: [] } };
+    mcpByThread.set('thread_restore', previousConfig);
+
+    vi.spyOn(
+      adapter as unknown as {
+        writeMergedMcpServersConfig: () => Promise<void>;
+      },
+      'writeMergedMcpServersConfig'
+    ).mockRejectedValueOnce(new Error('write failed'));
+
+    await expect(
+      (
+        adapter as unknown as {
+          applyMcpServers: (threadId: string, mcpServers: McpServer[]) => Promise<void>;
+        }
+      ).applyMcpServers('thread_restore', [
+        { name: 'new', command: 'new-server', args: [], env: [] },
+      ])
+    ).rejects.toThrow('write failed');
+
+    expect(mcpByThread.get('thread_restore')).toEqual(previousConfig);
+  });
+
+  it('builds tool call state for file, MCP, web search, and unknown types', () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+    const session = {
+      cwd: '/tmp/workspace',
+    };
+
+    const fileCall = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'fileChange',
+        id: 'item_file',
+        changes: [{ path: 'src/app.ts' }],
+      },
+      'turn_file'
+    ) as { title: string; locations: Array<{ path: string }> };
+
+    const mcpCall = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'mcpToolCall',
+        id: 'item_mcp',
+        server: 'docs',
+        tool: 'search',
+      },
+      'turn_mcp'
+    ) as { title: string };
+
+    const webCall = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'webSearch',
+        id: 'item_web',
+      },
+      'turn_web'
+    ) as { title: string };
+
+    const unknown = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'unknown',
+        id: 'item_unknown',
+      },
+      'turn_unknown'
+    );
+
+    expect(fileCall.title).toBe('fileChange');
+    expect(fileCall.locations).toEqual([{ path: 'src/app.ts' }]);
+    expect(mcpCall.title).toBe('mcpToolCall:docs/search');
+    expect(webCall.title).toBe('webSearch');
+    expect(unknown).toBeNull();
+  });
 });
