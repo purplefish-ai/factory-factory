@@ -48,6 +48,11 @@ COPY . .
 
 # Build everything: core workspace, backend TS, frontend Vite SPA, prompts
 ENV NODE_ENV=production
+# Use relative asset paths so the app works behind a reverse proxy with a path prefix.
+# Relative paths (./assets/...) resolve correctly regardless of the proxy mount point,
+# whereas root-absolute paths (/assets/...) cause 404s for <link rel="preload"> tags
+# that the browser fires before JS runs.
+ENV VITE_BASE_PATH=./
 RUN pnpm build
 
 

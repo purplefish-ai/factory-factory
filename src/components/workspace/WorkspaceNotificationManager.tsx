@@ -63,7 +63,7 @@ export function WorkspaceNotificationManager() {
  */
 function playNotificationSound(): void {
   try {
-    const audio = new Audio('/sounds/workspace-complete.mp3');
+    const audio = new Audio(`${import.meta.env.BASE_URL}sounds/workspace-complete.mp3`);
     // Set a reasonable volume
     audio.volume = 0.5;
     // Play the sound (browsers may block autoplay, so we catch errors)
@@ -110,7 +110,7 @@ function showNotification(workspaceName: string, sessionCount: number): void {
 
   new Notification(`Workspace Ready: ${workspaceName}`, {
     body: message,
-    icon: '/favicon.ico',
+    icon: `${import.meta.env.BASE_URL}favicon.svg`,
     tag: `workspace-complete-${workspaceName}`, // Prevents duplicates
     requireInteraction: false,
   });

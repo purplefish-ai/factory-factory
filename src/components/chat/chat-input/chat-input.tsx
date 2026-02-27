@@ -225,14 +225,14 @@ function getProviderLogo(provider: ChatBarCapabilities['provider'] | null): {
 } {
   if (provider === 'CODEX') {
     return {
-      light: '/logos/codex-light.svg',
-      dark: '/logos/codex-dark.svg',
+      light: `${import.meta.env.BASE_URL}logos/codex-light.svg`,
+      dark: `${import.meta.env.BASE_URL}logos/codex-dark.svg`,
       alt: 'Codex',
     };
   }
   return {
-    light: '/logos/claude-light.svg',
-    dark: '/logos/claude-dark.svg',
+    light: `${import.meta.env.BASE_URL}logos/claude-light.svg`,
+    dark: `${import.meta.env.BASE_URL}logos/claude-dark.svg`,
     alt: 'Claude',
   };
 }
