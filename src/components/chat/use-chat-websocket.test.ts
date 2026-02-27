@@ -9,7 +9,12 @@
  * clears the guard when a matching response is received.
  */
 import { describe, expect, it } from 'vitest';
-import { evaluateHydrationBatch, parseHydrationBatch } from './use-chat-websocket-hydration';
+import {
+  evaluateHydrationBatch,
+  parseHydrationBatch,
+  scheduleConnectLoadingStart,
+  shouldScheduleConnectLoading,
+} from './use-chat-websocket-hydration';
 
 // Helper type to simulate the guard state
 interface GuardState {
@@ -37,6 +42,37 @@ function createHandleMessage(guardState: GuardState) {
 }
 
 describe('useChatWebSocket hydration guard logic', () => {
+  describe('connect loading strategy', () => {
+    it('schedules loading when session has not hydrated yet', () => {
+      expect(shouldScheduleConnectLoading(false)).toBe(true);
+    });
+
+    it('does not schedule loading when session already hydrated', () => {
+      expect(shouldScheduleConnectLoading(true)).toBe(false);
+    });
+
+    it('debounces loading start and allows cancellation', () => {
+      let startCount = 0;
+      const cancel = scheduleConnectLoadingStart({
+        hasHydratedSession: false,
+        onLoadingStart: () => {
+          startCount += 1;
+        },
+        debounceMs: 25,
+      });
+
+      expect(startCount).toBe(0);
+      cancel();
+
+      return new Promise<void>((resolve) => {
+        setTimeout(() => {
+          expect(startCount).toBe(0);
+          resolve();
+        }, 35);
+      });
+    });
+  });
+
   describe('handleMessage hydration guard', () => {
     it('should clear guard when session_snapshot has matching loadRequestId', () => {
       const guardState: GuardState = {

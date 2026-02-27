@@ -22,7 +22,11 @@ import type {
   ToolProgressInfo,
 } from './reducer';
 import { useChatState } from './use-chat-state';
-import { evaluateHydrationBatch, parseHydrationBatch } from './use-chat-websocket-hydration';
+import {
+  evaluateHydrationBatch,
+  parseHydrationBatch,
+  scheduleConnectLoadingStart,
+} from './use-chat-websocket-hydration';
 
 const LOAD_SESSION_RETRY_TIMEOUT_MS = 10_000;
 
@@ -153,12 +157,19 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   const currentLoadRequestIdRef = useRef<string | null>(null);
   const currentLoadGenerationRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelConnectLoadingRef = useRef<(() => void) | null>(null);
+  const hydratedSessionIdRef = useRef<string | null>(null);
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
       loadTimeoutRef.current = null;
     }
+  }, []);
+
+  const clearConnectLoadingTimeout = useCallback(() => {
+    cancelConnectLoadingRef.current?.();
+    cancelConnectLoadingRef.current = null;
   }, []);
 
   const scheduleLoadRetry = useCallback(
@@ -200,35 +211,46 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
           // do not overwrite newer in-memory state.
           return;
         }
+        if (dbSessionId) {
+          hydratedSessionIdRef.current = dbSessionId;
+        }
         if (decision === 'match') {
           currentLoadRequestIdRef.current = null;
           clearLoadTimeout();
+          clearConnectLoadingTimeout();
         }
       }
       chat.handleMessage(data);
     },
-    [chat.handleMessage, clearLoadTimeout]
+    [chat.handleMessage, clearConnectLoadingTimeout, clearLoadTimeout, dbSessionId]
   );
 
   // Handle connection established - request session data and available sessions
   const handleConnected = useCallback(() => {
-    // Dispatch loading state to prevent flicker while replaying events
-    chat.dispatch({ type: 'SESSION_LOADING_START' });
+    const hasHydratedSession = dbSessionId !== null && hydratedSessionIdRef.current === dbSessionId;
+    clearConnectLoadingTimeout();
+    cancelConnectLoadingRef.current = scheduleConnectLoadingStart({
+      hasHydratedSession,
+      onLoadingStart: () => {
+        chat.dispatch({ type: 'SESSION_LOADING_START' });
+      },
+    });
     const loadGeneration = currentLoadGenerationRef.current + 1;
     currentLoadGenerationRef.current = loadGeneration;
     const loadRequestId = `load-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     currentLoadRequestIdRef.current = loadRequestId;
     scheduleLoadRetry(loadGeneration, loadRequestId);
     sendRef.current({ type: 'load_session', loadRequestId }); // Hydrates via snapshot or replay batch
-  }, [chat.dispatch, scheduleLoadRetry]);
+  }, [chat.dispatch, clearConnectLoadingTimeout, dbSessionId, scheduleLoadRetry]);
 
   // Handle disconnection - clear loading state to avoid stuck spinner
   const handleDisconnected = useCallback(() => {
     currentLoadRequestIdRef.current = null;
     currentLoadGenerationRef.current += 1;
     clearLoadTimeout();
+    clearConnectLoadingTimeout();
     chat.dispatch({ type: 'SESSION_LOADING_END' });
-  }, [chat.dispatch, clearLoadTimeout]);
+  }, [chat.dispatch, clearConnectLoadingTimeout, clearLoadTimeout]);
 
   // Ensure pending load timers cannot fire after unmount.
   useEffect(() => {
@@ -236,8 +258,9 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
       currentLoadRequestIdRef.current = null;
       currentLoadGenerationRef.current += 1;
       clearLoadTimeout();
+      clearConnectLoadingTimeout();
     };
-  }, [clearLoadTimeout]);
+  }, [clearConnectLoadingTimeout, clearLoadTimeout]);
 
   // Set up transport with callbacks
   const transport = useWebSocketTransport({
