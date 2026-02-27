@@ -7,11 +7,11 @@ import { defineConfig } from 'vite';
 const backendUrl = process.env.BACKEND_URL || 'http://localhost:3000';
 
 // Base path for Vite asset URLs.
-// - Default './' uses relative paths, required for reverse proxy deployments where the app
-//   is served under a deep path prefix (e.g. /machine/<id>/api/port/<portId>/).
-// - Set VITE_BASE_PATH='/' for root-served deployments to avoid issues with hard-refresh
-//   on deep routes (where relative paths resolve against the current URL path).
-const basePath = process.env.VITE_BASE_PATH || './';
+// - Default '/' uses absolute paths, required for deep route hard-refresh to work correctly
+//   (relative paths would resolve against the current URL path, e.g. /projects/123/assets/).
+// - Set VITE_BASE_PATH='./' for reverse proxy deployments where the app is served under a
+//   deep path prefix (e.g. /machine/<id>/api/port/<portId>/).
+const basePath = process.env.VITE_BASE_PATH || '/';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
