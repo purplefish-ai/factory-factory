@@ -22,6 +22,7 @@ export default defineConfig({
     outDir: 'dist/client',
     chunkSizeWarningLimit: 5000,
   },
+  base: './',
   server: {
     allowedHosts: 'all',
     proxy: {

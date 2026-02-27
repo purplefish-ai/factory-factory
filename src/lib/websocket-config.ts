@@ -40,7 +40,9 @@ export function getReconnectDelay(attempt: number): number {
 
 /**
  * Constructs a WebSocket URL for the given endpoint with query parameters.
- * Uses wss:// when the page is served over HTTPS, ws:// otherwise.
+ * Uses a root-absolute path (e.g. '/chat?...') so the proxy's monkey-patched
+ * WebSocket constructor can intercept and prepend the proxy path prefix.
+ * Hardcoding ws://host bypasses the proxy tunnel entirely.
  * In development, Vite proxies WebSocket connections to the backend.
  * In production, the backend serves both HTTP and WebSocket on the same port.
  * @param endpoint - The WebSocket endpoint path (e.g., '/chat', '/agent-activity')
@@ -50,9 +52,6 @@ export function buildWebSocketUrl(
   endpoint: string,
   params: Record<string, string | undefined>
 ): string {
-  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:3000';
-  const protocol =
-    typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) {
@@ -60,5 +59,5 @@ export function buildWebSocketUrl(
     }
   }
   const queryString = query.toString();
-  return `${protocol}//${host}${endpoint}?${queryString}`;
+  return `${endpoint}?${queryString}`;
 }
