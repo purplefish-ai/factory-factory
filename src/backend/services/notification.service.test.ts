@@ -142,6 +142,112 @@ describe('notificationService', () => {
     notifySpy.mockRestore();
   });
 
+  it('suppresses overnight quiet hours window', async () => {
+    const hour = new Date().getHours();
+    notificationService.updateConfig({
+      pushEnabled: true,
+      quietHoursStart: hour,
+      quietHoursEnd: (hour + 23) % 24,
+    });
+
+    await expect(notificationService.notify('Overnight', 'Quiet')).resolves.toEqual({
+      sent: false,
+      reason: 'quiet_hours',
+    });
+  });
+
+  it('falls back to zenity on Linux when notify-send is unavailable', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    notificationService.updateConfig({ soundEnabled: false, pushEnabled: true });
+    mockSendLinuxNotification.mockRejectedValueOnce(new Error('notify-send missing'));
+    mockExecCommand.mockResolvedValueOnce({ stdout: '', stderr: '', code: 0 });
+
+    await expect(
+      notificationService.notify('Linux', 'Fallback', { playSound: false })
+    ).resolves.toEqual({
+      sent: true,
+    });
+
+    expect(mockExecCommand).toHaveBeenCalledWith('zenity', [
+      '--notification',
+      '--text=Linux: Fallback',
+    ]);
+  });
+
+  it('plays Linux sound via aplay when paplay fails and custom sound file is configured', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    notificationService.updateConfig({
+      pushEnabled: true,
+      soundEnabled: true,
+      soundFile: '/tmp/custom.wav',
+    });
+    mockSendLinuxNotification.mockResolvedValueOnce(undefined);
+    mockExecCommand
+      .mockRejectedValueOnce(new Error('paplay failed'))
+      .mockResolvedValueOnce({ stdout: '', stderr: '', code: 0 });
+
+    await expect(notificationService.notify('Linux', 'Sound path')).resolves.toEqual({
+      sent: true,
+    });
+
+    expect(mockExecCommand).toHaveBeenNthCalledWith(1, 'paplay', ['/tmp/custom.wav']);
+    expect(mockExecCommand).toHaveBeenNthCalledWith(2, 'aplay', ['/tmp/custom.wav']);
+  });
+
+  it('keeps notifications successful on Linux when paplay fails without custom sound file', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    notificationService.updateConfig({
+      pushEnabled: true,
+      soundEnabled: true,
+      soundFile: undefined,
+    });
+    mockSendLinuxNotification.mockResolvedValueOnce(undefined);
+    mockExecCommand.mockRejectedValueOnce(new Error('paplay failed'));
+
+    await expect(notificationService.notify('Linux', 'No custom sound')).resolves.toEqual({
+      sent: true,
+    });
+
+    expect(mockExecCommand).toHaveBeenCalledTimes(1);
+    expect(mockExecCommand).toHaveBeenCalledWith('paplay', [
+      '/usr/share/sounds/freedesktop/stereo/complete.oga',
+    ]);
+  });
+
+  it('covers helper message variants and generic notify', async () => {
+    const notifySpy = vi.spyOn(notificationService, 'notify').mockResolvedValue({ sent: true });
+
+    await notificationService.notifyTaskComplete('Task no PR');
+    await notificationService.notifyEpicComplete(
+      'Epic with PR',
+      'https://github.com/acme/repo/pull/2'
+    );
+    await notificationService.notifyCriticalError('codex');
+    await notificationService.notifyHuman('Ping', 'Pong');
+    await notificationService.notifyWorkspaceComplete('Workspace B', 'w2', 1);
+
+    expect(notifySpy).toHaveBeenCalledWith(
+      'Task Complete: Task no PR',
+      'Task completed successfully'
+    );
+    expect(notifySpy).toHaveBeenCalledWith(
+      'Epic Complete: Epic with PR',
+      'All tasks finished\nEpic PR: https://github.com/acme/repo/pull/2\nReady for your review'
+    );
+    expect(notifySpy).toHaveBeenCalledWith(
+      'CRITICAL: Agent Error',
+      'codex crashed\nCheck logs for details',
+      { forceSend: true }
+    );
+    expect(notifySpy).toHaveBeenCalledWith('Ping', 'Pong');
+    expect(notifySpy).toHaveBeenCalledWith(
+      'Workspace Ready: Workspace B',
+      'Agent finished and is ready for your attention'
+    );
+
+    notifySpy.mockRestore();
+  });
+
   it('updates and returns config snapshots', () => {
     notificationService.updateConfig({ pushEnabled: false, soundEnabled: false });
     expect(notificationService.getConfig()).toEqual(

@@ -1009,4 +1009,265 @@ describe('GitHubCLIService', () => {
       expect(result.version).toBe('3.1.2');
     });
   });
+
+  describe('higher-level service methods', () => {
+    it('fetches and computes PR state summary', async () => {
+      const getStatusSpy = vi.spyOn(githubCLIService, 'getPRStatus').mockResolvedValue({
+        number: 77,
+        state: 'OPEN',
+        isDraft: false,
+        reviewDecision: 'REVIEW_REQUIRED',
+        mergedAt: null,
+        updatedAt: '2026-02-01T00:00:00Z',
+        statusCheckRollup: [{ status: 'COMPLETED', conclusion: 'SUCCESS' }],
+      });
+
+      const result = await githubCLIService.fetchAndComputePRState(
+        'https://github.com/o/r/pull/77'
+      );
+
+      expect(result).toEqual({
+        prState: 'OPEN',
+        prNumber: 77,
+        prReviewState: 'REVIEW_REQUIRED',
+        prCiStatus: 'SUCCESS',
+      });
+
+      getStatusSpy.mockRestore();
+    });
+
+    it('returns null from fetchAndComputePRState when PR cannot be fetched', async () => {
+      const getStatusSpy = vi.spyOn(githubCLIService, 'getPRStatus').mockResolvedValue(null);
+      await expect(
+        githubCLIService.fetchAndComputePRState('https://github.com/o/r/pull/99')
+      ).resolves.toBeNull();
+      getStatusSpy.mockRestore();
+    });
+
+    it('lists review requests and enriches with per-PR details', async () => {
+      mockExecFile
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify([
+            {
+              number: 12,
+              title: 'Fix bug',
+              url: 'https://github.com/o/r/pull/12',
+              repository: { nameWithOwner: 'o/r' },
+              author: { login: 'alice' },
+              createdAt: '2026-01-10T00:00:00Z',
+              isDraft: false,
+            },
+          ]),
+          stderr: '',
+        })
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            reviewDecision: 'APPROVED',
+            additions: 10,
+            deletions: 3,
+            changedFiles: 2,
+          }),
+          stderr: '',
+        });
+
+      await expect(githubCLIService.listReviewRequests()).resolves.toEqual([
+        {
+          number: 12,
+          title: 'Fix bug',
+          url: 'https://github.com/o/r/pull/12',
+          repository: { nameWithOwner: 'o/r' },
+          author: { login: 'alice' },
+          createdAt: '2026-01-10T00:00:00Z',
+          isDraft: false,
+          reviewDecision: 'APPROVED',
+          additions: 10,
+          deletions: 3,
+          changedFiles: 2,
+        },
+      ]);
+    });
+
+    it('falls back to default details when per-PR detail lookup fails', async () => {
+      mockExecFile
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify([
+            {
+              number: 13,
+              title: 'Fallback test',
+              url: 'https://github.com/o/r/pull/13',
+              repository: { nameWithOwner: 'o/r' },
+              author: { login: 'bob' },
+              createdAt: '2026-01-11T00:00:00Z',
+              isDraft: true,
+            },
+          ]),
+          stderr: '',
+        })
+        .mockRejectedValueOnce(new Error('gh pr view failed'));
+
+      await expect(githubCLIService.listReviewRequests()).resolves.toEqual([
+        {
+          number: 13,
+          title: 'Fallback test',
+          url: 'https://github.com/o/r/pull/13',
+          repository: { nameWithOwner: 'o/r' },
+          author: { login: 'bob' },
+          createdAt: '2026-01-11T00:00:00Z',
+          isDraft: true,
+          reviewDecision: null,
+          additions: 0,
+          deletions: 0,
+          changedFiles: 0,
+        },
+      ]);
+    });
+
+    it('approves PR and logs failures with contextual error', async () => {
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
+      await expect(githubCLIService.approvePR('o', 'r', 22)).resolves.toBeUndefined();
+
+      mockExecFile.mockRejectedValueOnce(new Error('approval denied'));
+      await expect(githubCLIService.approvePR('o', 'r', 22)).rejects.toThrow(
+        'Failed to approve PR: approval denied'
+      );
+    });
+
+    it('gets PR diff and maps failures', async () => {
+      mockExecFile.mockResolvedValueOnce({ stdout: 'diff --git a b', stderr: '' });
+      await expect(githubCLIService.getPRDiff('o/r', 8)).resolves.toBe('diff --git a b');
+
+      mockExecFile.mockRejectedValueOnce(new Error('diff failed'));
+      await expect(githubCLIService.getPRDiff('o/r', 8)).rejects.toThrow(
+        'Failed to fetch PR diff: diff failed'
+      );
+    });
+
+    it('submits PR reviews for each action and includes body for comment-like actions', async () => {
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
+      await expect(githubCLIService.submitReview('o/r', 5, 'approve')).resolves.toBeUndefined();
+      await expect(
+        githubCLIService.submitReview('o/r', 5, 'request-changes', 'Needs changes')
+      ).resolves.toBeUndefined();
+      await expect(
+        githubCLIService.submitReview('o/r', 5, 'comment', 'Looks good')
+      ).resolves.toBeUndefined();
+
+      expect(mockExecFile).toHaveBeenNthCalledWith(
+        1,
+        'gh',
+        ['pr', 'review', '5', '--repo', 'o/r', '--approve'],
+        expect.objectContaining({ timeout: expect.any(Number) })
+      );
+      expect(mockExecFile).toHaveBeenNthCalledWith(
+        2,
+        'gh',
+        ['pr', 'review', '5', '--repo', 'o/r', '--request-changes', '--body', 'Needs changes'],
+        expect.objectContaining({ timeout: expect.any(Number) })
+      );
+      expect(mockExecFile).toHaveBeenNthCalledWith(
+        3,
+        'gh',
+        ['pr', 'review', '5', '--repo', 'o/r', '--comment', '--body', 'Looks good'],
+        expect.objectContaining({ timeout: expect.any(Number) })
+      );
+
+      mockExecFile.mockRejectedValueOnce(new Error('review failed'));
+      await expect(githubCLIService.submitReview('o/r', 5, 'approve')).rejects.toThrow(
+        'Failed to submit review: review failed'
+      );
+    });
+
+    it('lists issues with assignee filter and raises mapped errors', async () => {
+      mockExecFile.mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          {
+            number: 1,
+            title: 'Issue 1',
+            body: 'body',
+            url: 'https://github.com/o/r/issues/1',
+            state: 'OPEN',
+            createdAt: '2026-02-01T00:00:00Z',
+            author: { login: 'alice' },
+          },
+        ]),
+        stderr: '',
+      });
+
+      await expect(
+        githubCLIService.listIssues('o', 'r', { limit: 20, assignee: '@me' })
+      ).resolves.toEqual([
+        {
+          number: 1,
+          title: 'Issue 1',
+          body: 'body',
+          url: 'https://github.com/o/r/issues/1',
+          state: 'OPEN',
+          createdAt: '2026-02-01T00:00:00Z',
+          author: { login: 'alice' },
+        },
+      ]);
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'gh',
+        expect.arrayContaining(['--assignee', '@me']),
+        expect.objectContaining({ timeout: expect.any(Number) })
+      );
+
+      mockExecFile.mockRejectedValueOnce(new Error('issue list failed'));
+      await expect(githubCLIService.listIssues('o', 'r')).rejects.toThrow(
+        'Failed to list issues: issue list failed'
+      );
+    });
+
+    it('adds PR and issue comments and maps write failures', async () => {
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
+      await expect(githubCLIService.addPRComment('o/r', 2, 'hello')).resolves.toBeUndefined();
+      await expect(githubCLIService.addIssueComment('o', 'r', 3, 'hello')).resolves.toBeUndefined();
+
+      mockExecFile.mockRejectedValueOnce(new Error('pr comment failed'));
+      await expect(githubCLIService.addPRComment('o/r', 2, 'hello')).rejects.toThrow(
+        'Failed to add PR comment: pr comment failed'
+      );
+
+      mockExecFile.mockRejectedValueOnce(new Error('issue comment failed'));
+      await expect(githubCLIService.addIssueComment('o', 'r', 3, 'hello')).rejects.toThrow(
+        'Failed to add issue comment: issue comment failed'
+      );
+    });
+
+    it('gets and closes issues with success and error branches', async () => {
+      mockExecFile.mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          number: 7,
+          title: 'Issue 7',
+          body: 'details',
+          url: 'https://github.com/o/r/issues/7',
+          state: 'OPEN',
+          createdAt: '2026-02-01T00:00:00Z',
+          author: { login: 'alice' },
+        }),
+        stderr: '',
+      });
+      await expect(githubCLIService.getIssue('o', 'r', 7)).resolves.toEqual({
+        number: 7,
+        title: 'Issue 7',
+        body: 'details',
+        url: 'https://github.com/o/r/issues/7',
+        state: 'OPEN',
+        createdAt: '2026-02-01T00:00:00Z',
+        author: { login: 'alice' },
+      });
+
+      mockExecFile.mockRejectedValueOnce(new Error('issue lookup failed'));
+      await expect(githubCLIService.getIssue('o', 'r', 7)).resolves.toBeNull();
+
+      mockExecFile.mockResolvedValueOnce({ stdout: '', stderr: '' });
+      await expect(githubCLIService.closeIssue('o', 'r', 7)).resolves.toBeUndefined();
+
+      mockExecFile.mockRejectedValueOnce(new Error('issue close failed'));
+      await expect(githubCLIService.closeIssue('o', 'r', 7)).rejects.toThrow(
+        'Failed to close issue: issue close failed'
+      );
+    });
+  });
 });
