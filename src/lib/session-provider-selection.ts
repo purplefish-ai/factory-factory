@@ -1,13 +1,19 @@
-export type SessionProviderValue = 'CLAUDE' | 'CODEX';
+export type SessionProviderValue = 'CLAUDE' | 'CODEX' | 'OPENCODE';
 export type NewSessionProviderSelection = SessionProviderValue | 'WORKSPACE_DEFAULT';
 
 export const EXPLICIT_SESSION_PROVIDER_OPTIONS = [
   { value: 'CLAUDE', label: 'Claude' },
   { value: 'CODEX', label: 'Codex' },
+  { value: 'OPENCODE', label: 'Opencode' },
 ] as const;
 
 export function resolveProviderSelection(value: unknown): NewSessionProviderSelection {
-  if (value === 'CLAUDE' || value === 'CODEX' || value === 'WORKSPACE_DEFAULT') {
+  if (
+    value === 'CLAUDE' ||
+    value === 'CODEX' ||
+    value === 'OPENCODE' ||
+    value === 'WORKSPACE_DEFAULT'
+  ) {
     return value;
   }
   return 'WORKSPACE_DEFAULT';
@@ -23,14 +29,27 @@ export function resolveEffectiveSessionProvider(
   workspaceDefaultProvider: unknown,
   userDefaultProvider: unknown
 ): SessionProviderValue {
-  if (workspaceDefaultProvider === 'CLAUDE' || workspaceDefaultProvider === 'CODEX') {
+  if (
+    workspaceDefaultProvider === 'CLAUDE' ||
+    workspaceDefaultProvider === 'CODEX' ||
+    workspaceDefaultProvider === 'OPENCODE'
+  ) {
     return workspaceDefaultProvider;
   }
-  return userDefaultProvider === 'CODEX' ? 'CODEX' : 'CLAUDE';
+  if (userDefaultProvider === 'CODEX' || userDefaultProvider === 'OPENCODE') {
+    return userDefaultProvider;
+  }
+  return 'CLAUDE';
 }
 
 export function getSessionProviderLabel(provider: SessionProviderValue): string {
-  return provider === 'CODEX' ? 'Codex' : 'Claude';
+  if (provider === 'CODEX') {
+    return 'Codex';
+  }
+  if (provider === 'OPENCODE') {
+    return 'Opencode';
+  }
+  return 'Claude';
 }
 
 export function getWorkspaceDefaultOptionLabel(

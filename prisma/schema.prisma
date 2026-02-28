@@ -32,6 +32,7 @@ enum SessionStatus {
 enum SessionProvider {
   CLAUDE
   CODEX
+  OPENCODE
 }
 
 enum SessionPermissionPreset {
@@ -44,6 +45,7 @@ enum WorkspaceProviderSelection {
   WORKSPACE_DEFAULT
   CLAUDE
   CODEX
+  OPENCODE
 }
 
 enum PRState {

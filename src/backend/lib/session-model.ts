@@ -5,6 +5,7 @@ const CLAUDE_MODEL_ALIASES = new Set(['opus', 'sonnet', 'haiku']);
 const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
   CLAUDE: 'sonnet',
   CODEX: 'default',
+  OPENCODE: 'default',
 };
 
 function isClaudeModel(model: string): boolean {
@@ -37,7 +38,7 @@ export function normalizeSessionModelForProvider(
     return undefined;
   }
 
-  if (provider === 'CODEX') {
+  if (provider !== 'CLAUDE') {
     if (isClaudeModel(normalized)) {
       return undefined;
     }

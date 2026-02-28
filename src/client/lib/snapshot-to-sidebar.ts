@@ -38,7 +38,7 @@ const WorkspaceSessionSummarySchema = z.object({
   name: z.string().nullable(),
   workflow: z.string().nullable(),
   model: z.string().nullable(),
-  provider: z.enum(['CLAUDE', 'CODEX']).optional(),
+  provider: z.enum(['CLAUDE', 'CODEX', 'OPENCODE']).optional(),
   persistedStatus: z.nativeEnum(SessionStatus),
   runtimePhase: z.enum(['loading', 'starting', 'running', 'idle', 'stopping', 'error']),
   processState: z.enum(['unknown', 'alive', 'stopped']),

@@ -1,4 +1,4 @@
-export type AcpProvider = 'CLAUDE' | 'CODEX';
+export type AcpProvider = 'CLAUDE' | 'CODEX' | 'OPENCODE';
 
 export interface AcpClientOptions {
   provider: AcpProvider;

@@ -7,7 +7,7 @@ interface SessionLike {
   name: string | null;
   workflow: string | null;
   model: string | null;
-  provider?: 'CLAUDE' | 'CODEX';
+  provider?: 'CLAUDE' | 'CODEX' | 'OPENCODE';
   status: DbSessionStatus;
 }
 

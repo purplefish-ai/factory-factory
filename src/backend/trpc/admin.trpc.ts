@@ -150,15 +150,21 @@ export const adminRouter = router({
    * Upgrade a provider CLI via npm global install and return refreshed health.
    */
   upgradeProviderCLI: publicProcedure
-    .input(z.object({ provider: z.enum(['CLAUDE', 'CODEX']) }))
+    .input(z.object({ provider: z.enum(['CLAUDE', 'CODEX', 'OPENCODE']) }))
     .mutation(async ({ ctx, input }) => {
       try {
         const result = await ctx.appContext.services.cliHealthService.upgradeProviderCLI(
           input.provider
         );
+        const providerLabel =
+          input.provider === 'CLAUDE'
+            ? 'Claude'
+            : input.provider === 'CODEX'
+              ? 'Codex'
+              : 'Opencode';
         return {
           ...result,
-          message: `${input.provider === 'CLAUDE' ? 'Claude' : 'Codex'} CLI upgraded successfully.`,
+          message: `${providerLabel} CLI upgraded successfully.`,
         };
       } catch (error) {
         throw new TRPCError({

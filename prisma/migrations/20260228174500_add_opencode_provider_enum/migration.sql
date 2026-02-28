@@ -1,0 +1,2 @@
+-- Add OPENCODE as a supported session provider.
+-- SQLite stores enum fields as TEXT, so no table rewrite is required.

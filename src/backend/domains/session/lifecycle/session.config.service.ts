@@ -12,7 +12,7 @@ import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
 
-type SessionProvider = 'CLAUDE' | 'CODEX';
+type SessionProvider = 'CLAUDE' | 'CODEX' | 'OPENCODE';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 type StoredAcpConfigSnapshot = {
   provider: SessionProvider;
@@ -137,7 +137,7 @@ export class SessionConfigService {
     session: AgentSessionRecord,
     handle: AcpProcessHandle
   ): Promise<void> {
-    if (handle.provider !== 'CODEX') {
+    if (!(handle.provider === 'CODEX' || handle.provider === 'OPENCODE')) {
       return;
     }
 
@@ -329,10 +329,10 @@ export class SessionConfigService {
       );
     }
 
-    if (session.provider === 'CODEX') {
+    if (session.provider === 'CODEX' || session.provider === 'OPENCODE') {
       return {
         ...EMPTY_CHAT_BAR_CAPABILITIES,
-        provider: 'CODEX',
+        provider: session.provider,
       };
     }
 
@@ -520,7 +520,7 @@ export class SessionConfigService {
     executionModeOption: SessionConfigOption | undefined
   ): string | null {
     if (
-      provider !== 'CODEX' ||
+      (provider !== 'CODEX' && provider !== 'OPENCODE') ||
       workflow !== 'ratchet' ||
       startupModePreset !== 'non_interactive' ||
       !executionModeOption
@@ -685,9 +685,9 @@ export class SessionConfigService {
       ? String(modelOption.currentValue)
       : (fallbackModel ?? undefined);
     const modelOptions = this.buildModelOptions(modelOption, selectedModel);
-    const isCodexProvider = provider === 'CODEX';
+    const isCodexLikeProvider = provider === 'CODEX' || provider === 'OPENCODE';
     const reasoningOptions =
-      isCodexProvider && thoughtOption
+      isCodexLikeProvider && thoughtOption
         ? this.getSelectOptions(thoughtOption).map((option) => ({
             value: option.value,
             label: option.name ?? option.value,
@@ -696,7 +696,7 @@ export class SessionConfigService {
         : [];
     const reasoningValues = new Set(reasoningOptions.map((option) => option.value));
     const selectedReasoning =
-      isCodexProvider &&
+      isCodexLikeProvider &&
       thoughtOption?.currentValue &&
       typeof thoughtOption.currentValue === 'string' &&
       reasoningValues.has(thoughtOption.currentValue)
@@ -725,10 +725,10 @@ export class SessionConfigService {
         ...(selectedReasoning ? { selected: selectedReasoning } : {}),
       },
       thinking: {
-        enabled: !isCodexProvider && !!thoughtOption,
+        enabled: !isCodexLikeProvider && !!thoughtOption,
       },
       planMode: { enabled: planModeEnabled },
-      attachments: isCodexProvider
+      attachments: isCodexLikeProvider
         ? { enabled: false, kinds: [] }
         : { enabled: true, kinds: ['image', 'text'] },
       slashCommands: { enabled: false },
@@ -852,7 +852,7 @@ export class SessionConfigService {
     const configOptions = candidate.configOptions;
     const observedModelId = candidate.observedModelId;
 
-    if (provider !== 'CLAUDE' && provider !== 'CODEX') {
+    if (provider !== 'CLAUDE' && provider !== 'CODEX' && provider !== 'OPENCODE') {
       return null;
     }
     if (typeof providerSessionId !== 'string' || providerSessionId.length === 0) {

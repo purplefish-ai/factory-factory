@@ -29,7 +29,7 @@ interface Session {
   name: string | null;
   workflow?: string | null;
   status: DbSessionStatus;
-  provider?: 'CLAUDE' | 'CODEX';
+  provider?: 'CLAUDE' | 'CODEX' | 'OPENCODE';
 }
 
 // =============================================================================
@@ -259,7 +259,9 @@ export function MainViewTabBar({
           <Select
             value={selectedProvider}
             onValueChange={(value) => {
-              setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
+              if (value === 'CLAUDE' || value === 'CODEX' || value === 'OPENCODE') {
+                setSelectedProvider(value);
+              }
             }}
             disabled={isButtonDisabled}
           >

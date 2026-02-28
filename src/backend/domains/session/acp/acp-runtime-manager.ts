@@ -594,6 +594,7 @@ export class AcpRuntimeManager {
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
     const isCodex = options.provider === 'CODEX';
+    const isOpencode = options.provider === 'OPENCODE';
     const spawnCommand: SpawnCommand = options.adapterBinaryPath
       ? {
           command: options.adapterBinaryPath,
@@ -602,16 +603,27 @@ export class AcpRuntimeManager {
         }
       : isCodex
         ? resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint)
-        : (() => {
-            const binaryName = 'claude-agent-acp';
-            const packageName = '@zed-industries/claude-agent-acp';
-            const binaryPath = resolveAcpBinary(packageName, binaryName);
-            return {
-              command: binaryPath,
-              args: [],
-              commandLabel: binaryPath,
-            };
-          })();
+        : isOpencode
+          ? (() => {
+              const binaryName = 'opencode';
+              const packageName = 'opencode-ai';
+              const binaryPath = resolveAcpBinary(packageName, binaryName);
+              return {
+                command: binaryPath,
+                args: ['acp'],
+                commandLabel: `${binaryPath} acp`,
+              };
+            })()
+          : (() => {
+              const binaryName = 'claude-agent-acp';
+              const packageName = '@zed-industries/claude-agent-acp';
+              const binaryPath = resolveAcpBinary(packageName, binaryName);
+              return {
+                command: binaryPath,
+                args: [],
+                commandLabel: binaryPath,
+              };
+            })();
 
     logger.info('Spawning ACP subprocess', {
       sessionId,

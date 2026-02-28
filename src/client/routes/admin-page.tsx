@@ -487,7 +487,7 @@ function ChatProviderDefaultsSection() {
         <Select
           value={currentProvider}
           onValueChange={(value) => {
-            if (value === 'CLAUDE' || value === 'CODEX') {
+            if (value === 'CLAUDE' || value === 'CODEX' || value === 'OPENCODE') {
               updateSettings.mutate({ defaultSessionProvider: value });
             }
           }}
@@ -499,6 +499,7 @@ function ChatProviderDefaultsSection() {
           <SelectContent>
             <SelectItem value="CLAUDE">Claude</SelectItem>
             <SelectItem value="CODEX">Codex</SelectItem>
+            <SelectItem value="OPENCODE">Opencode</SelectItem>
           </SelectContent>
         </Select>
         <ProviderCliWarning provider={currentProvider} />

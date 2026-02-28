@@ -223,6 +223,13 @@ function getProviderLogo(provider: ChatBarCapabilities['provider'] | null): {
   dark: string;
   alt: string;
 } {
+  if (provider === 'OPENCODE') {
+    return {
+      light: `${import.meta.env.BASE_URL}logos/opencode-light.svg`,
+      dark: `${import.meta.env.BASE_URL}logos/opencode-dark.svg`,
+      alt: 'Opencode',
+    };
+  }
   if (provider === 'CODEX') {
     return {
       light: `${import.meta.env.BASE_URL}logos/codex-light.svg`,

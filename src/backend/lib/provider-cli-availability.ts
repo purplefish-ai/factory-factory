@@ -10,10 +10,21 @@ export interface ProviderCliHealthStatus {
     isAuthenticated?: boolean;
     error?: string;
   };
+  opencode?: {
+    isInstalled: boolean;
+    isAuthenticated?: boolean;
+    error?: string;
+  };
 }
 
 function getProviderLabel(provider: SessionProvider): string {
-  return provider === 'CODEX' ? 'Codex' : 'Claude';
+  if (provider === 'CODEX') {
+    return 'Codex';
+  }
+  if (provider === 'OPENCODE') {
+    return 'Opencode';
+  }
+  return 'Claude';
 }
 
 export function getProviderBlockingIssue(
@@ -23,6 +34,17 @@ export function getProviderBlockingIssue(
   if (provider === 'CLAUDE') {
     if (!health.claude.isInstalled) {
       return health.claude.error ?? 'Claude CLI is not installed.';
+    }
+    return null;
+  }
+
+  if (provider === 'OPENCODE') {
+    const opencodeHealth = health.opencode;
+    if (!opencodeHealth?.isInstalled) {
+      return opencodeHealth?.error ?? 'Opencode CLI is not installed.';
+    }
+    if (opencodeHealth.isAuthenticated === false) {
+      return opencodeHealth.error ?? 'Opencode CLI is not authenticated.';
     }
     return null;
   }

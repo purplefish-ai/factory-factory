@@ -130,6 +130,14 @@ function codexOptions(): AcpClientOptions {
   };
 }
 
+function opencodeOptions(): AcpClientOptions {
+  return {
+    provider: 'OPENCODE',
+    workingDir: '/tmp/workspace',
+    sessionId: 'test-session-1',
+  };
+}
+
 function defaultHandlers(): AcpRuntimeEventHandlers {
   return {
     onSessionId: vi.fn().mockResolvedValue(undefined),
@@ -280,6 +288,31 @@ describe('AcpRuntimeManager', () => {
         expect(spawnArgs[1]).toContain('--tsconfig');
         expect((spawnArgs[1] as string[]).some((arg) => arg.endsWith('tsconfig.json'))).toBe(true);
       }
+      expect(spawnArgs[2]).toMatchObject({
+        cwd: '/tmp/workspace',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: false,
+      });
+    });
+
+    it('spawns OPENCODE provider using `opencode acp` command', async () => {
+      setupSuccessfulSpawn();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        opencodeOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      const spawnArgs = mockSpawn.mock.calls[0]!;
+      expect(spawnArgs[1]).toEqual(['acp']);
+      expect(typeof spawnArgs[0]).toBe('string');
+      expect(spawnArgs[0] as string).toContain('opencode');
+      expect((spawnArgs[2] as { env?: Record<string, string> }).env?.DOTENV_CONFIG_QUIET).toBe(
+        undefined
+      );
       expect(spawnArgs[2]).toMatchObject({
         cwd: '/tmp/workspace',
         stdio: ['pipe', 'pipe', 'pipe'],

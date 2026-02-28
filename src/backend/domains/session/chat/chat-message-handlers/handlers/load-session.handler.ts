@@ -70,7 +70,11 @@ async function hydrateProviderHistoryIfNeeded(
   sessionId: string,
   dbSession: NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>
 ): Promise<void> {
-  if (dbSession.provider !== 'CLAUDE' && dbSession.provider !== 'CODEX') {
+  if (
+    dbSession.provider !== 'CLAUDE' &&
+    dbSession.provider !== 'CODEX' &&
+    dbSession.provider !== 'OPENCODE'
+  ) {
     return;
   }
 
@@ -206,7 +210,7 @@ async function enqueueInitialMessageIfPresent(
 
 async function sendCachedSlashCommandsIfNeeded(
   sessionId: string,
-  provider: 'CLAUDE' | 'CODEX'
+  provider: 'CLAUDE' | 'CODEX' | 'OPENCODE'
 ): Promise<void> {
   const cached = await slashCommandCacheService.getCachedCommands(provider);
   if (!cached || cached.length === 0) {

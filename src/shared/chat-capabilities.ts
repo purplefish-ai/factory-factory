@@ -1,4 +1,4 @@
-export type ChatProvider = 'CLAUDE' | 'CODEX';
+export type ChatProvider = 'CLAUDE' | 'CODEX' | 'OPENCODE';
 const DEFAULT_CLAUDE_THINKING_BUDGET = 10_000;
 
 export interface ChatModelOption {

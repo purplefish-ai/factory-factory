@@ -115,16 +115,26 @@ function createCaller() {
       forceRefresh,
       allHealthy: true,
     })),
-    upgradeProviderCLI: vi.fn(async (provider: 'CLAUDE' | 'CODEX') => ({
+    upgradeProviderCLI: vi.fn(async (provider: 'CLAUDE' | 'CODEX' | 'OPENCODE') => ({
       provider,
-      packageName: provider === 'CLAUDE' ? '@anthropic-ai/claude-code' : '@openai/codex',
+      packageName:
+        provider === 'CLAUDE'
+          ? '@anthropic-ai/claude-code'
+          : provider === 'CODEX'
+            ? '@openai/codex'
+            : 'opencode-ai',
       command: `npm install -g ${
-        provider === 'CLAUDE' ? '@anthropic-ai/claude-code' : '@openai/codex'
+        provider === 'CLAUDE'
+          ? '@anthropic-ai/claude-code'
+          : provider === 'CODEX'
+            ? '@openai/codex'
+            : 'opencode-ai'
       }`,
       output: 'ok',
       health: {
         claude: { isInstalled: true },
         codex: { isInstalled: true, isAuthenticated: true },
+        opencode: { isInstalled: true, isAuthenticated: true },
         github: { isInstalled: true, isAuthenticated: true },
         allHealthy: true,
       },

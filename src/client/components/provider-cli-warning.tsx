@@ -12,84 +12,122 @@ const PROVIDER_INFO = {
     label: 'Codex',
     installUrl: 'https://developers.openai.com/codex/app-server/',
   },
+  OPENCODE: {
+    label: 'Opencode',
+    installUrl: 'https://opencode.ai',
+  },
 } as const;
 
-function getWarning(
-  provider: 'CLAUDE' | 'CODEX',
-  health: {
-    claude: {
-      isInstalled: boolean;
-      version?: string;
-      latestVersion?: string;
-      isOutdated?: boolean;
-    };
-    codex: {
-      isInstalled: boolean;
-      isAuthenticated?: boolean;
-      version?: string;
-      latestVersion?: string;
-      isOutdated?: boolean;
-    };
-  }
-): {
+type Provider = 'CLAUDE' | 'CODEX' | 'OPENCODE';
+type ProviderWarning = {
   title: string;
   description: string;
   linkLabel?: string;
   linkUrl?: string;
   canUpgrade?: boolean;
-} | null {
+};
+
+type ProviderHealth = {
+  claude: {
+    isInstalled: boolean;
+    version?: string;
+    latestVersion?: string;
+    isOutdated?: boolean;
+  };
+  codex: {
+    isInstalled: boolean;
+    isAuthenticated?: boolean;
+    version?: string;
+    latestVersion?: string;
+    isOutdated?: boolean;
+  };
+  opencode?: {
+    isInstalled: boolean;
+    isAuthenticated?: boolean;
+    version?: string;
+    latestVersion?: string;
+    isOutdated?: boolean;
+  };
+};
+
+function buildInstallWarning(provider: Provider): ProviderWarning {
   const info = PROVIDER_INFO[provider];
+  return {
+    title: `${info.label} CLI is not installed`,
+    description: `Install the ${info.label} CLI to use this provider.`,
+    linkLabel: 'Install',
+    linkUrl: info.installUrl,
+  };
+}
 
-  if (provider === 'CLAUDE') {
-    if (!health.claude.isInstalled) {
-      return {
-        title: `${info.label} CLI is not installed`,
-        description: `Install the ${info.label} CLI to use this provider.`,
-        linkLabel: 'Install',
-        linkUrl: info.installUrl,
-      };
-    }
-    if (health.claude.isOutdated) {
-      const installed = health.claude.version ?? 'unknown';
-      const latest = health.claude.latestVersion ?? 'latest';
-      return {
-        title: `${info.label} CLI is out of date`,
-        description: `Installed ${installed}; latest is ${latest}. Upgrade to avoid compatibility issues.`,
-        linkLabel: 'Upgrade',
-        linkUrl: info.installUrl,
-        canUpgrade: true,
-      };
-    }
-    return null;
+function buildOutdatedWarning(
+  provider: Provider,
+  version?: string,
+  latestVersion?: string
+): ProviderWarning {
+  const info = PROVIDER_INFO[provider];
+  const installed = version ?? 'unknown';
+  const latest = latestVersion ?? 'latest';
+  return {
+    title: `${info.label} CLI is out of date`,
+    description: `Installed ${installed}; latest is ${latest}. Upgrade to avoid compatibility issues.`,
+    linkLabel: 'Upgrade',
+    linkUrl: info.installUrl,
+    canUpgrade: true,
+  };
+}
+
+function getClaudeWarning(health: ProviderHealth): ProviderWarning | null {
+  if (!health.claude.isInstalled) {
+    return buildInstallWarning('CLAUDE');
   }
+  if (health.claude.isOutdated) {
+    return buildOutdatedWarning('CLAUDE', health.claude.version, health.claude.latestVersion);
+  }
+  return null;
+}
 
-  // Codex
+function getCodexWarning(health: ProviderHealth): ProviderWarning | null {
   if (!health.codex.isInstalled) {
-    return {
-      title: `${info.label} CLI is not installed`,
-      description: `Install the ${info.label} CLI to use this provider.`,
-      linkLabel: 'Install',
-      linkUrl: info.installUrl,
-    };
+    return buildInstallWarning('CODEX');
   }
   if (health.codex.isAuthenticated === false) {
     return {
-      title: `${info.label} CLI is not authenticated`,
+      title: 'Codex CLI is not authenticated',
       description: 'Run `codex login` in your terminal to authenticate.',
     };
   }
   if (health.codex.isOutdated) {
-    const installed = health.codex.version ?? 'unknown';
-    const latest = health.codex.latestVersion ?? 'latest';
-    return {
-      title: `${info.label} CLI is out of date`,
-      description: `Installed ${installed}; latest is ${latest}. Upgrade to avoid compatibility issues.`,
-      linkLabel: 'Upgrade',
-      linkUrl: info.installUrl,
-      canUpgrade: true,
-    };
+    return buildOutdatedWarning('CODEX', health.codex.version, health.codex.latestVersion);
   }
   return null;
+}
+
+function getOpencodeWarning(health: ProviderHealth): ProviderWarning | null {
+  const opencode = health.opencode;
+  if (!opencode?.isInstalled) {
+    return buildInstallWarning('OPENCODE');
+  }
+  if (opencode.isAuthenticated === false) {
+    return {
+      title: 'Opencode CLI is not authenticated',
+      description: 'Run `opencode auth login` in your terminal to authenticate.',
+    };
+  }
+  if (opencode.isOutdated) {
+    return buildOutdatedWarning('OPENCODE', opencode.version, opencode.latestVersion);
+  }
+  return null;
+}
+
+const PROVIDER_WARNING_RESOLVERS = {
+  CLAUDE: getClaudeWarning,
+  CODEX: getCodexWarning,
+  OPENCODE: getOpencodeWarning,
+} as const;
+
+function getWarning(provider: Provider, health: ProviderHealth): ProviderWarning | null {
+  return PROVIDER_WARNING_RESOLVERS[provider](health);
 }
 
 /**
@@ -97,7 +135,7 @@ function getWarning(
  * is not installed or not authenticated.
  * Shares the checkCLIHealth query cache with CLIHealthBanner.
  */
-export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' }) {
+export function ProviderCliWarning({ provider }: { provider: 'CLAUDE' | 'CODEX' | 'OPENCODE' }) {
   const utils = trpc.useUtils();
   const upgradeProviderCli = trpc.admin.upgradeProviderCLI.useMutation({
     onSuccess: (result) => {

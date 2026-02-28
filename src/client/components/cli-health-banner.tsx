@@ -9,12 +9,19 @@ interface HealthIssue {
   description: string;
   link?: string;
   linkLabel?: string;
-  upgradeProvider?: 'CLAUDE' | 'CODEX';
+  upgradeProvider?: 'CLAUDE' | 'CODEX' | 'OPENCODE';
 }
 
 interface CliHealthForBanner {
   claude: { isInstalled: boolean; isOutdated?: boolean; version?: string; latestVersion?: string };
   codex: {
+    isInstalled: boolean;
+    isAuthenticated?: boolean;
+    isOutdated?: boolean;
+    version?: string;
+    latestVersion?: string;
+  };
+  opencode?: {
     isInstalled: boolean;
     isAuthenticated?: boolean;
     isOutdated?: boolean;
@@ -68,13 +75,27 @@ export function collectIssues(health: CliHealthForBanner): HealthIssue[] {
     });
   }
 
+  if (
+    health.opencode?.isInstalled &&
+    health.opencode.isAuthenticated &&
+    health.opencode.isOutdated
+  ) {
+    issues.push({
+      title: 'Opencode CLI out of date',
+      description: `Installed ${health.opencode.version ?? 'unknown'}; latest is ${health.opencode.latestVersion ?? 'latest'}.`,
+      link: 'https://opencode.ai',
+      linkLabel: 'Upgrade',
+      upgradeProvider: 'OPENCODE',
+    });
+  }
+
   return issues;
 }
 
 function renderIssueActions(
   issue: HealthIssue,
   isUpgrading: boolean,
-  onUpgrade: (provider: 'CLAUDE' | 'CODEX') => void
+  onUpgrade: (provider: 'CLAUDE' | 'CODEX' | 'OPENCODE') => void
 ) {
   return (
     <>
@@ -121,7 +142,7 @@ export function CLIHealthBannerContent({
   isUpgrading: boolean;
   onRecheck: () => void;
   onDismiss: () => void;
-  onUpgrade: (provider: 'CLAUDE' | 'CODEX') => void;
+  onUpgrade: (provider: 'CLAUDE' | 'CODEX' | 'OPENCODE') => void;
 }) {
   return (
     <div className="border-b border-warning/20 bg-warning/10 py-2 pl-3 pr-2 sm:px-4 sm:py-3">

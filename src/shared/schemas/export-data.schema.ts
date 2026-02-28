@@ -35,9 +35,9 @@ const CIStatus = z.enum(enumValues(CoreCIStatus));
 const KanbanColumn = z.enum(enumValues(CoreKanbanColumn));
 const RatchetState = z.enum(enumValues(CoreRatchetState));
 const SessionStatus = z.enum(enumValues(CoreSessionStatus));
-const SessionProvider = z.enum(['CLAUDE', 'CODEX']);
+const SessionProvider = z.enum(['CLAUDE', 'CODEX', 'OPENCODE']);
 const SessionPermissionPreset = z.enum(['STRICT', 'RELAXED', 'YOLO']);
-const WorkspaceProviderSelection = z.enum(['WORKSPACE_DEFAULT', 'CLAUDE', 'CODEX']);
+const WorkspaceProviderSelection = z.enum(['WORKSPACE_DEFAULT', 'CLAUDE', 'CODEX', 'OPENCODE']);
 
 const exportedProjectSchema = z.object({
   id: z.string(),

@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 const logger = createLogger('cli-health');
 const CLAUDE_CLI_NPM_PACKAGE = '@anthropic-ai/claude-code';
 const CODEX_CLI_NPM_PACKAGE = '@openai/codex';
+const OPENCODE_CLI_NPM_PACKAGE = 'opencode-ai';
 
 export interface ClaudeCLIHealthStatus {
   isInstalled: boolean;
@@ -29,15 +30,25 @@ export interface CodexCLIHealthStatus {
   error?: string;
 }
 
+export interface OpencodeCLIHealthStatus {
+  isInstalled: boolean;
+  isAuthenticated?: boolean;
+  version?: string;
+  latestVersion?: string;
+  isOutdated?: boolean;
+  error?: string;
+}
+
 export interface CLIHealthStatus {
   claude: ClaudeCLIHealthStatus;
   codex: CodexCLIHealthStatus;
+  opencode?: OpencodeCLIHealthStatus;
   github: GitHubCLIHealthStatus;
   allHealthy: boolean;
 }
 
 export interface CLIUpgradeResult {
-  provider: 'CLAUDE' | 'CODEX';
+  provider: 'CLAUDE' | 'CODEX' | 'OPENCODE';
   packageName: string;
   command: string;
   output: string;
@@ -47,7 +58,7 @@ export interface CLIUpgradeResult {
 /**
  * Service for checking CLI dependencies health.
  * Checks that required CLIs (Claude, GitHub) are installed and configured.
- * Codex is reported separately as an optional capability.
+ * Codex and Opencode are reported separately as optional capabilities.
  */
 class CLIHealthService {
   private cachedStatus: CLIHealthStatus | null = null;
@@ -110,11 +121,17 @@ class CLIHealthService {
     };
   }
 
-  private getProviderUpgradePackage(provider: 'CLAUDE' | 'CODEX'): string {
-    return provider === 'CLAUDE' ? CLAUDE_CLI_NPM_PACKAGE : CODEX_CLI_NPM_PACKAGE;
+  private getProviderUpgradePackage(provider: 'CLAUDE' | 'CODEX' | 'OPENCODE'): string {
+    if (provider === 'CLAUDE') {
+      return CLAUDE_CLI_NPM_PACKAGE;
+    }
+    if (provider === 'CODEX') {
+      return CODEX_CLI_NPM_PACKAGE;
+    }
+    return OPENCODE_CLI_NPM_PACKAGE;
   }
 
-  async upgradeProviderCLI(provider: 'CLAUDE' | 'CODEX'): Promise<CLIUpgradeResult> {
+  async upgradeProviderCLI(provider: 'CLAUDE' | 'CODEX' | 'OPENCODE'): Promise<CLIUpgradeResult> {
     const packageName = this.getProviderUpgradePackage(provider);
     const args = ['install', '-g', packageName];
 
@@ -143,9 +160,9 @@ class CLIHealthService {
       const stderr = typeof output.stderr === 'string' ? output.stderr : undefined;
       const stdout = typeof output.stdout === 'string' ? output.stdout : undefined;
       const details = [normalizedError.message, stderr, stdout].filter(Boolean).join('\n');
-      throw new Error(
-        `Failed to upgrade ${provider === 'CLAUDE' ? 'Claude' : 'Codex'} CLI via npm: ${details}`
-      );
+      const providerLabel =
+        provider === 'CLAUDE' ? 'Claude' : provider === 'CODEX' ? 'Codex' : 'Opencode';
+      throw new Error(`Failed to upgrade ${providerLabel} CLI via npm: ${details}`);
     }
   }
 
@@ -240,6 +257,65 @@ class CLIHealthService {
   }
 
   /**
+   * Check if Opencode CLI is installed and authenticated.
+   * Uses `opencode --version` for installation and `opencode auth list` for auth.
+   */
+  async checkOpencodeCLI(): Promise<OpencodeCLIHealthStatus> {
+    try {
+      const { stdout } = await execFileAsync('opencode', ['--version'], {
+        timeout: SERVICE_TIMEOUT_MS.codexCliVersionCheck,
+      });
+      const version = stdout.trim().split('\n')[0];
+      const versionFreshnessPromise = this.buildVersionFreshness({
+        installedVersion: version,
+        packageName: OPENCODE_CLI_NPM_PACKAGE,
+      });
+
+      try {
+        const { stdout: authStdout } = await execFileAsync('opencode', ['auth', 'list'], {
+          timeout: SERVICE_TIMEOUT_MS.codexCliAuthCheck,
+        });
+        const credentialCountMatch = authStdout.match(/\b(\d+)\s+credentials?\b/i);
+        const credentialCount = Number.parseInt(credentialCountMatch?.[1] ?? '0', 10);
+        const isAuthenticated = Number.isFinite(credentialCount) && credentialCount > 0;
+        const versionFreshness = await versionFreshnessPromise;
+        return {
+          isInstalled: true,
+          isAuthenticated,
+          version,
+          ...versionFreshness,
+          ...(isAuthenticated
+            ? {}
+            : {
+                error:
+                  'Opencode CLI is not authenticated. Run `opencode auth login` to authenticate.',
+              }),
+        };
+      } catch {
+        const versionFreshness = await versionFreshnessPromise;
+        return {
+          isInstalled: true,
+          isAuthenticated: false,
+          version,
+          ...versionFreshness,
+          error: 'Opencode CLI is not authenticated. Run `opencode auth login` to authenticate.',
+        };
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const isNotFound = message.toLowerCase().includes('enoent') || message.includes('not found');
+
+      return {
+        isInstalled: false,
+        isAuthenticated: false,
+        error: isNotFound
+          ? 'Opencode CLI is not installed. Install via `npm install -g opencode-ai`.'
+          : `Failed to check Opencode CLI: ${message}`,
+      };
+    }
+  }
+
+  /**
    * Check health of all required CLIs.
    * Results are cached for CACHE_TTL_MS to avoid excessive process spawning.
    */
@@ -258,15 +334,17 @@ class CLIHealthService {
     logger.debug('Checking CLI health...');
 
     // Run checks in parallel
-    const [claude, codex, github] = await Promise.all([
+    const [claude, codex, opencode, github] = await Promise.all([
       this.checkClaudeCLI(),
       this.checkCodexCLI(),
+      this.checkOpencodeCLI(),
       githubCLIService.checkHealth(),
     ]);
 
     const status: CLIHealthStatus = {
       claude,
       codex,
+      opencode,
       github,
       allHealthy:
         claude.isInstalled &&
@@ -283,6 +361,7 @@ class CLIHealthService {
       logger.warn('CLI health check found issues', {
         claudeInstalled: claude.isInstalled,
         codexInstalled: codex.isInstalled,
+        opencodeInstalled: opencode.isInstalled,
         githubInstalled: github.isInstalled,
         githubAuthenticated: github.isAuthenticated,
       });

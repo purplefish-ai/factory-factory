@@ -41,7 +41,7 @@ function toCommandInfoArray(value: unknown): CommandInfo[] | null {
   return commands.length > 0 ? normalizeCommands(commands) : null;
 }
 
-type SessionProvider = 'CLAUDE' | 'CODEX';
+type SessionProvider = 'CLAUDE' | 'CODEX' | 'OPENCODE';
 type CachedSlashCommandsByProvider = Partial<Record<SessionProvider, CommandInfo[]>>;
 
 function toProviderCommandMap(value: unknown): CachedSlashCommandsByProvider | null {
@@ -51,7 +51,7 @@ function toProviderCommandMap(value: unknown): CachedSlashCommandsByProvider | n
 
   const map: CachedSlashCommandsByProvider = {};
   const record = value as Record<string, unknown>;
-  for (const provider of ['CLAUDE', 'CODEX'] as const) {
+  for (const provider of ['CLAUDE', 'CODEX', 'OPENCODE'] as const) {
     const commands = toCommandInfoArray(record[provider]);
     if (commands) {
       map[provider] = commands;

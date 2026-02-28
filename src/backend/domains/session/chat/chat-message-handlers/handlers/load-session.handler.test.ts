@@ -565,6 +565,63 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
+  it('hydrates OPENCODE transcript from JSONL history', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'OPENCODE',
+      status: 'IDLE',
+      model: 'openai/gpt-5',
+      providerSessionId: 'opencode-provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(false);
+    mocks.loadCodexSessionHistory.mockResolvedValue({
+      status: 'loaded',
+      filePath:
+        '/tmp/.codex/sessions/2026/02/14/rollout-2026-02-14T00-00-00-opencode-provider-session-1.jsonl',
+      history: [
+        {
+          type: 'user',
+          content: 'hello from opencode',
+          timestamp: '2026-02-14T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-opencode-1',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session', loadRequestId: 'load-opencode-1' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
+      providerSessionId: 'opencode-provider-session-1',
+      workingDir: '/tmp/worktree',
+    });
+    expect(mocks.replaceTranscript).toHaveBeenCalledWith(
+      'session-opencode-1',
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'user',
+          text: 'hello from opencode',
+        }),
+      ]),
+      { historySource: 'jsonl' }
+    );
+    expect(mocks.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-opencode-1',
+        loadRequestId: 'load-opencode-1',
+      })
+    );
+  });
+
   it('emits config options using fallback-aware session service method', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',

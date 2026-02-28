@@ -321,8 +321,8 @@ export function useSessionManagement({
   const handleNewChat = useCallback(() => {
     const name = getNextChatName();
     const provider = selectedProvider;
-    // Only pass the Claude model selection for Claude sessions; Codex uses its own model defaults.
-    const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
+    // Only pass model selection for Claude sessions; ACP-native providers manage their own defaults.
+    const model = provider === 'CLAUDE' ? selectedModel || undefined : undefined;
 
     createSession.mutate(
       {
@@ -367,7 +367,7 @@ export function useSessionManagement({
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
       const provider = selectedProvider;
-      const model = provider === 'CODEX' ? undefined : selectedModel || undefined;
+      const model = provider === 'CLAUDE' ? selectedModel || undefined : undefined;
       const previousSessionId = selectedDbSessionId;
       createSession.mutate(
         { workspaceId, workflow: 'followup', name, model, provider, initialMessage: prompt },

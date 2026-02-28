@@ -19,4 +19,9 @@ describe('resolveExplicitSessionProvider', () => {
     const selectedProvider: NewSessionProviderSelection = 'CODEX';
     expect(resolveExplicitSessionProvider(selectedProvider)).toBe('CODEX');
   });
+
+  it('returns explicit Opencode provider', () => {
+    const selectedProvider: NewSessionProviderSelection = 'OPENCODE';
+    expect(resolveExplicitSessionProvider(selectedProvider)).toBe('OPENCODE');
+  });
 });

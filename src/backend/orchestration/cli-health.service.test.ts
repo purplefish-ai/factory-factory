@@ -179,6 +179,7 @@ describe('cliHealthService', () => {
     const refreshed = {
       claude: { isInstalled: true, isAuthenticated: true, version: '1.0.0' },
       codex: { isInstalled: true, isAuthenticated: true, version: '0.5.0' },
+      opencode: { isInstalled: true, isAuthenticated: true, version: '1.0.0' },
       github: { isInstalled: true, isAuthenticated: true, version: '2.0.0' },
       allHealthy: true,
     };
@@ -222,6 +223,11 @@ describe('cliHealthService', () => {
       isAuthenticated: false,
       version: 'codex 0.5.0',
     });
+    const checkOpencodeSpy = vi.spyOn(cliHealthService, 'checkOpencodeCLI').mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: false,
+      version: 'opencode 1.0.0',
+    });
     mockGithubCheckHealth.mockResolvedValue({
       isInstalled: true,
       isAuthenticated: true,
@@ -234,6 +240,7 @@ describe('cliHealthService', () => {
     expect(first).toBe(second);
     expect(checkClaudeSpy).toHaveBeenCalledTimes(1);
     expect(checkCodexSpy).toHaveBeenCalledTimes(1);
+    expect(checkOpencodeSpy).toHaveBeenCalledTimes(1);
     expect(mockGithubCheckHealth).toHaveBeenCalledTimes(1);
     expect(first.allHealthy).toBe(true);
   });
@@ -247,6 +254,11 @@ describe('cliHealthService', () => {
     vi.spyOn(cliHealthService, 'checkCodexCLI').mockResolvedValue({
       isInstalled: false,
       isAuthenticated: false,
+    });
+    vi.spyOn(cliHealthService, 'checkOpencodeCLI').mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: true,
+      version: '1.0.0',
     });
     mockGithubCheckHealth.mockResolvedValue({
       isInstalled: true,
