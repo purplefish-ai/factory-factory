@@ -544,6 +544,48 @@ function extractPairedToolCalls(toolMessages: ChatMessage[]): PairedToolCall[] {
 }
 
 /**
+ * Scans backward from `startIndex` to find the nearest non-result agent message
+ * with text, stopping at user message boundaries. Returns its trimmed text or null.
+ */
+function findPrecedingAgentText(messages: ChatMessage[], startIndex: number): string | null {
+  for (let i = startIndex - 1; i >= 0; i -= 1) {
+    const prev = messages[i];
+    if (!prev) {
+      continue;
+    }
+    if (prev.source === 'user') {
+      return null;
+    }
+    if (prev.source !== 'agent' || !prev.message || prev.message.type === 'result') {
+      continue;
+    }
+    const text = extractTextFromMessage(prev.message).trim();
+    return text || null;
+  }
+  return null;
+}
+
+/**
+ * Filters out result messages whose text duplicates the preceding assistant message.
+ * Acts as a rendering-level safety net: even if the store-level dedup in
+ * shouldSuppressDuplicateResultMessage misses an edge case, the duplicate
+ * result won't be rendered.
+ */
+export function filterDuplicateResultMessages(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((msg, index) => {
+    if (msg.source !== 'agent' || !msg.message || msg.message.type !== 'result') {
+      return true;
+    }
+    const resultText = extractTextFromMessage(msg.message).trim();
+    if (!resultText) {
+      return true;
+    }
+    const precedingText = findPrecedingAgentText(messages, index);
+    return precedingText !== resultText;
+  });
+}
+
+/**
  * Groups adjacent tool_use and tool_result messages together.
  * Returns a mixed array of regular messages and tool sequences.
  * Each tool_use is paired with its corresponding tool_result for unified rendering.

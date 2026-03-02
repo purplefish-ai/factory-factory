@@ -189,4 +189,53 @@ describe('result dedup', () => {
       })
     ).toBe(false);
   });
+
+  it('treats a previous result message as a turn boundary', () => {
+    const multiTurnTranscript: ChatMessage[] = [
+      {
+        id: 'm1',
+        source: 'agent',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'answer 1' }] },
+        },
+        timestamp: '2026-02-08T00:00:00.000Z',
+        order: 0,
+      },
+      {
+        id: 'm2',
+        source: 'agent',
+        message: { type: 'result', result: { text: 'answer 1' } },
+        timestamp: '2026-02-08T00:00:01.000Z',
+        order: 1,
+      },
+      {
+        id: 'm3',
+        source: 'agent',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'answer 2' }] },
+        },
+        timestamp: '2026-02-08T00:00:02.000Z',
+        order: 2,
+      },
+    ];
+
+    // Result matching current turn's assistant text should be suppressed
+    expect(
+      shouldSuppressDuplicateResultMessage(multiTurnTranscript, {
+        type: 'result',
+        result: { text: 'answer 2' },
+      })
+    ).toBe(true);
+
+    // Result matching a previous turn's text should NOT be suppressed
+    // because the earlier result message acts as a turn boundary
+    expect(
+      shouldSuppressDuplicateResultMessage(multiTurnTranscript, {
+        type: 'result',
+        result: { text: 'answer 1' },
+      })
+    ).toBe(false);
+  });
 });

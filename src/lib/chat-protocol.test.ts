@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentMessage, ChatMessage } from '@/lib/chat-protocol';
-import { groupAdjacentToolCalls, isReasoningToolCall, isToolSequence } from '@/lib/chat-protocol';
+import {
+  filterDuplicateResultMessages,
+  groupAdjacentToolCalls,
+  isReasoningToolCall,
+  isToolSequence,
+} from '@/lib/chat-protocol';
 
 function createToolUseMessage(params: {
   id: string;
@@ -162,5 +167,71 @@ describe('isReasoningToolCall', () => {
     expect(isReasoningToolCall('Bash', 'oops')).toBe(false);
     expect(isReasoningToolCall('Bash', 123)).toBe(false);
     expect(isReasoningToolCall('Bash', ['reasoning'])).toBe(false);
+  });
+});
+
+describe('filterDuplicateResultMessages', () => {
+  function makeUser(order: number): ChatMessage {
+    return {
+      id: `user-${order}`,
+      source: 'user',
+      text: 'hello',
+      timestamp: '2026-02-16T00:00:00.000Z',
+      order,
+    };
+  }
+
+  function makeAssistant(text: string, order: number): ChatMessage {
+    return {
+      id: `assistant-${order}`,
+      source: 'agent',
+      message: {
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text }] },
+      },
+      timestamp: '2026-02-16T00:00:00.000Z',
+      order,
+    };
+  }
+
+  function makeResult(text: string, order: number): ChatMessage {
+    return {
+      id: `result-${order}`,
+      source: 'agent',
+      message: { type: 'result', result: text },
+      timestamp: '2026-02-16T00:00:00.000Z',
+      order,
+    };
+  }
+
+  it('filters result that duplicates preceding assistant text', () => {
+    const messages = [makeUser(0), makeAssistant('hello', 1), makeResult('hello', 2)];
+    const filtered = filterDuplicateResultMessages(messages);
+    expect(filtered).toHaveLength(2);
+    expect(filtered.map((m) => m.id)).toEqual(['user-0', 'assistant-1']);
+  });
+
+  it('keeps result with different text than preceding assistant', () => {
+    const messages = [makeUser(0), makeAssistant('hello', 1), makeResult('goodbye', 2)];
+    const filtered = filterDuplicateResultMessages(messages);
+    expect(filtered).toHaveLength(3);
+  });
+
+  it('keeps result with empty text (metadata-only)', () => {
+    const messages = [makeUser(0), makeAssistant('hello', 1), makeResult('', 2)];
+    const filtered = filterDuplicateResultMessages(messages);
+    expect(filtered).toHaveLength(3);
+  });
+
+  it('keeps result when there is no preceding assistant', () => {
+    const messages = [makeUser(0), makeResult('hello', 1)];
+    const filtered = filterDuplicateResultMessages(messages);
+    expect(filtered).toHaveLength(2);
+  });
+
+  it('does not look past a user message boundary', () => {
+    const messages = [makeAssistant('hello', 0), makeUser(1), makeResult('hello', 2)];
+    const filtered = filterDuplicateResultMessages(messages);
+    expect(filtered).toHaveLength(3);
   });
 });
