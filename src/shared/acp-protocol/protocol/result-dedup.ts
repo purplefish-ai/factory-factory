@@ -104,8 +104,13 @@ export function shouldSuppressDuplicateResultMessage(
       return false;
     }
 
-    if (candidate.source !== 'agent' || !candidate.message || candidate.message.type === 'result') {
+    if (candidate.source !== 'agent' || !candidate.message) {
       continue;
+    }
+    // A previous result message marks the end of an earlier turn — stop scanning
+    // so we only dedupe within the current turn's content.
+    if (candidate.message.type === 'result') {
+      return false;
     }
 
     const existingText = extractTextForResultDedup(candidate.message);
