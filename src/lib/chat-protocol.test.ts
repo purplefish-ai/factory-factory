@@ -234,4 +234,19 @@ describe('filterDuplicateResultMessages', () => {
     const filtered = filterDuplicateResultMessages(messages);
     expect(filtered).toHaveLength(3);
   });
+
+  it('does not look past a result message boundary (previous turn)', () => {
+    const messages = [
+      makeAssistant('hello', 0),
+      makeResult('hello', 1),
+      makeAssistant('world', 2),
+      makeResult('hello', 3),
+    ];
+    const filtered = filterDuplicateResultMessages(messages);
+    // result at order 1 is a dup of assistant at order 0 → filtered
+    // result at order 3 text "hello" does NOT match assistant at order 2 "world",
+    // and the scan must not cross the result boundary at order 1 to reach assistant at order 0
+    expect(filtered).toHaveLength(3);
+    expect(filtered.map((m) => m.id)).toEqual(['assistant-0', 'assistant-2', 'result-3']);
+  });
 });

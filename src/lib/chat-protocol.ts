@@ -556,8 +556,11 @@ function findPrecedingAgentText(messages: ChatMessage[], startIndex: number): st
     if (prev.source === 'user') {
       return null;
     }
-    if (prev.source !== 'agent' || !prev.message || prev.message.type === 'result') {
+    if (prev.source !== 'agent' || !prev.message) {
       continue;
+    }
+    if (prev.message.type === 'result') {
+      return null;
     }
     const text = extractTextFromMessage(prev.message).trim();
     return text || null;
