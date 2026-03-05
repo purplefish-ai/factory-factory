@@ -58,6 +58,14 @@ vi.mock('@/components/workspace/dev-server-setup-panel', () => ({
   DevServerSetupPanel: () => null,
 }));
 
+vi.mock('@/components/project/onboarding-cli-health', () => ({
+  OnboardingCliHealth: () => createElement('div', null, 'CLI Health'),
+}));
+
+vi.mock('@/components/project/setup-terminal-modal', () => ({
+  SetupTerminalModal: () => null,
+}));
+
 vi.mock('./admin/index', () => ({
   ApiUsageSection: () => createElement('section', null, 'API Usage'),
   ProcessesSection: () => createElement('section', null, 'Processes'),
@@ -105,6 +113,7 @@ vi.mock('@/client/lib/trpc', () => {
       },
       admin: {
         getServerInfo: { useQuery: () => ({ data: { backendPort: 3001 }, isLoading: false }) },
+        checkCLIHealth: { useQuery: () => ({ data: null, refetch: vi.fn() }) },
         triggerRatchetCheck: { useMutation: () => mutation },
         getSystemStats: {
           useQuery: () => ({

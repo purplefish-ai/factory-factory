@@ -166,13 +166,14 @@ export function TerminalInstance({
   }, []);
 
   return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: xterm.js handles keyboard input via its own hidden textarea
-    // biome-ignore lint/a11y/noStaticElementInteractions: terminal container delegates interaction to xterm.js internals
     <div
       ref={containerRef}
+      role="application"
+      aria-label="Terminal"
       className={className}
       style={{ width: '100%', height: '100%' }}
       onClick={handleClick}
+      onKeyDown={handleClick}
     />
   );
 }
