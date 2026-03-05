@@ -1,7 +1,7 @@
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 // =============================================================================
 // Types
@@ -159,5 +159,20 @@ export function TerminalInstance({
     }
   }, [isActive]);
 
-  return <div ref={containerRef} className={className} style={{ width: '100%', height: '100%' }} />;
+  // Click-to-focus: ensure clicking anywhere in the terminal area focuses the
+  // hidden textarea so keyboard input is captured by xterm.js
+  const handleClick = useCallback(() => {
+    terminalRef.current?.focus();
+  }, []);
+
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: xterm.js handles keyboard input via its own hidden textarea
+    // biome-ignore lint/a11y/noStaticElementInteractions: terminal container delegates interaction to xterm.js internals
+    <div
+      ref={containerRef}
+      className={className}
+      style={{ width: '100%', height: '100%' }}
+      onClick={handleClick}
+    />
+  );
 }
