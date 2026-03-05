@@ -45,7 +45,15 @@ export default defineConfig({
         target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },
+      '/setup-terminal': {
+        target: backendUrl.replace(/^http/, 'ws'),
+        ws: true,
+      },
       '/dev-logs': {
+        target: backendUrl.replace(/^http/, 'ws'),
+        ws: true,
+      },
+      '/post-run-logs': {
         target: backendUrl.replace(/^http/, 'ws'),
         ws: true,
       },
