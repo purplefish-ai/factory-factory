@@ -115,6 +115,8 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       isRunScriptProxyEnabled: () => options.isRunScriptProxyEnabled ?? false,
       getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
       getAppVersion: () => 'test-version',
+      getDatabasePath: () => '/tmp/test.db',
+      getDatabasePathFromEnv: () => undefined,
     },
     createLogger: () => logger,
     findAvailablePort: vi.fn(async () => requestedPortResult),
