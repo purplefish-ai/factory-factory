@@ -302,6 +302,11 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // ============================================================================
   return {
     async start(): Promise<string> {
+      logger.info('Database path', {
+        path: configService.getDatabasePath(),
+        source: configService.getDatabasePathFromEnv() ? 'DATABASE_PATH env var' : 'default',
+      });
+
       actualPort = await findAvailablePort(REQUESTED_PORT);
       if (actualPort !== REQUESTED_PORT) {
         logger.warn('Requested port in use, using alternative', {
