@@ -89,9 +89,13 @@ function resolveAcpBinary(packageName: string, binaryName: string): string {
     // to find the nearest node_modules and try to locate the package directly.
     const found = findPackageJsonByWalkUp(__dirname, packageName);
     if (found) {
-      const resolved = extractBinPath(found, binaryName);
-      if (resolved) {
-        return resolved;
+      try {
+        const resolved = extractBinPath(found, binaryName);
+        if (resolved) {
+          return resolved;
+        }
+      } catch {
+        // Ignore; fall through to PATH fallback below.
       }
     }
     logger.debug('Could not resolve binary via package.json, falling back to PATH', {
