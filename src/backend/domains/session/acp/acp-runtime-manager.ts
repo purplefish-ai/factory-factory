@@ -40,6 +40,37 @@ export type AcpRuntimeEventHandlers = {
   permissionBridge?: AcpPermissionBridge;
 };
 
+/** Extract the bin entrypoint path from a package.json's bin field. */
+function extractBinPath(packageJsonPath: string, binaryName: string): string | undefined {
+  const pkg = require(packageJsonPath) as {
+    bin?: string | Record<string, string | undefined>;
+  };
+  const relative =
+    typeof pkg.bin === 'string'
+      ? pkg.bin
+      : typeof pkg.bin?.[binaryName] === 'string'
+        ? pkg.bin[binaryName]
+        : undefined;
+  return relative ? join(dirname(packageJsonPath), relative) : undefined;
+}
+
+/**
+ * Walk up from startDir looking for node_modules/<packageName>/package.json.
+ * Used as a fallback when require.resolve fails (e.g. broken pnpm symlinks
+ * after Docker multi-stage COPY).
+ */
+function findPackageJsonByWalkUp(startDir: string, packageName: string): string | undefined {
+  let dir = startDir;
+  while (dir !== dirname(dir)) {
+    const candidate = join(dir, 'node_modules', packageName, 'package.json');
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+    dir = dirname(dir);
+  }
+  return undefined;
+}
+
 /**
  * Resolves the full path to an ACP adapter binary by finding its package
  * directory and reading the bin field from package.json.
@@ -48,20 +79,21 @@ export type AcpRuntimeEventHandlers = {
 function resolveAcpBinary(packageName: string, binaryName: string): string {
   try {
     const packageJsonPath = require.resolve(`${packageName}/package.json`);
-    const packageDir = dirname(packageJsonPath);
-    const pkg = require(packageJsonPath) as {
-      bin?: string | Record<string, string | undefined>;
-    };
-    const binPath =
-      typeof pkg.bin === 'string'
-        ? pkg.bin
-        : typeof pkg.bin?.[binaryName] === 'string'
-          ? pkg.bin[binaryName]
-          : undefined;
-    if (binPath) {
-      return join(packageDir, binPath);
+    const resolved = extractBinPath(packageJsonPath, binaryName);
+    if (resolved) {
+      return resolved;
     }
   } catch {
+    // require.resolve can fail when pnpm symlinks break (e.g. Docker COPY
+    // between multi-stage builds flattens symlinks). Walk up from this file
+    // to find the nearest node_modules and try to locate the package directly.
+    const found = findPackageJsonByWalkUp(__dirname, packageName);
+    if (found) {
+      const resolved = extractBinPath(found, binaryName);
+      if (resolved) {
+        return resolved;
+      }
+    }
     logger.debug('Could not resolve binary via package.json, falling back to PATH', {
       packageName,
       binaryName,
