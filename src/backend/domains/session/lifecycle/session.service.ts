@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk';
 import type { AcpRuntimeManager } from '@/backend/domains/session/acp';
 import { acpRuntimeManager } from '@/backend/domains/session/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/domains/session/bridges';
@@ -195,9 +195,11 @@ export class SessionService {
   sendSessionMessage(sessionId: string, content: string | AgentContentItem[]): Promise<void> {
     const acpClient = this.runtimeManager.getClient(sessionId);
     if (acpClient) {
-      const normalizedText =
-        typeof content === 'string' ? content : this.normalizeContentToText(content);
-      return this.sendAcpMessage(sessionId, normalizedText).then(
+      const prompt: ContentBlock[] =
+        typeof content === 'string'
+          ? [{ type: 'text', text: content }]
+          : this.toContentBlocks(content, acpClient.supportsImages());
+      return this.sendAcpMessage(sessionId, prompt).then(
         () => {
           // Prompt completed successfully -- no action needed
         },
@@ -215,34 +217,41 @@ export class SessionService {
   }
 
   /**
-   * Normalize AgentContentItem[] to a plain text string for ACP.
+   * Convert internal AgentContentItem[] to ACP ContentBlock[].
    */
-  private normalizeContentToText(content: AgentContentItem[]): string {
-    const chunks: string[] = [];
+  private toContentBlocks(content: AgentContentItem[], supportsImages: boolean): ContentBlock[] {
+    const blocks: ContentBlock[] = [];
     for (const item of content) {
       switch (item.type) {
         case 'text':
-          chunks.push(item.text);
+          blocks.push({ type: 'text', text: item.text });
           break;
         case 'thinking':
-          chunks.push(item.thinking);
+          blocks.push({ type: 'text', text: item.thinking });
           break;
         case 'image':
-          chunks.push('[Image attachment omitted for this provider]');
+          if (supportsImages) {
+            blocks.push({
+              type: 'image',
+              data: item.source.data,
+              mimeType: item.source.media_type,
+            });
+          } else {
+            blocks.push({ type: 'text', text: '[Image: not supported by this provider]' });
+          }
           break;
         case 'tool_result':
           if (typeof item.content === 'string') {
-            chunks.push(item.content);
+            blocks.push({ type: 'text', text: item.content });
           } else {
-            chunks.push(JSON.stringify(item.content));
+            blocks.push({ type: 'text', text: JSON.stringify(item.content) });
           }
           break;
         default:
           break;
       }
     }
-
-    return chunks.join('\n\n');
+    return blocks;
   }
 
   /**
@@ -250,7 +259,7 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  async sendAcpMessage(sessionId: string, content: string): Promise<string> {
+  async sendAcpMessage(sessionId: string, prompt: ContentBlock[]): Promise<string> {
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     // Scope orphan detection to each prompt turn.
     this.acpEventProcessor.beginPromptTurn(sessionId);
@@ -267,7 +276,7 @@ export class SessionService {
     }
 
     try {
-      const result = await this.runtimeManager.sendPrompt(sessionId, content);
+      const result = await this.runtimeManager.sendPrompt(sessionId, prompt);
       this.acpEventProcessor.finalizeOrphanedToolCalls(
         sessionId,
         `stop_reason:${result.stopReason}`

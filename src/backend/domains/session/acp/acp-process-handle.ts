@@ -28,6 +28,13 @@ export class AcpProcessHandle {
     this.createdAt = new Date();
   }
 
+  supportsImages(): boolean {
+    const caps = this.agentCapabilities?.promptCapabilities;
+    return (
+      typeof caps === 'object' && caps !== null && (caps as Record<string, unknown>).image === true
+    );
+  }
+
   isRunning(): boolean {
     return this.child.exitCode === null && !this.child.killed;
   }

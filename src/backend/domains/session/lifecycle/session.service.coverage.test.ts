@@ -139,9 +139,9 @@ describe('SessionService coverage wrappers', () => {
     expect(sendAcpMessageSpy).not.toHaveBeenCalled();
   });
 
-  it('normalizes content blocks to text when sending through ACP', async () => {
+  it('converts content blocks to ACP ContentBlock[] with image support', async () => {
     const { service, runtimeManager } = createServiceWithPatchedInternals();
-    runtimeManager.getClient.mockReturnValue({ id: 'client' });
+    runtimeManager.getClient.mockReturnValue({ id: 'client', supportsImages: () => true });
     const sendAcpMessageSpy = vi
       .spyOn(service, 'sendAcpMessage')
       .mockResolvedValue('end_turn' as never);
@@ -149,27 +149,42 @@ describe('SessionService coverage wrappers', () => {
     await service.sendSessionMessage('session-1', [
       { type: 'text', text: 'hello' },
       { type: 'thinking', thinking: 'analyzing' },
-      { type: 'image', mimeType: 'image/png', data: 'abc' } as never,
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc' } },
       { type: 'tool_result', content: 'tool output' },
       { type: 'tool_result', content: { ok: true } },
       { type: 'unsupported' } as never,
     ] as never);
 
-    expect(sendAcpMessageSpy).toHaveBeenCalledWith(
-      'session-1',
-      [
-        'hello',
-        'analyzing',
-        '[Image attachment omitted for this provider]',
-        'tool output',
-        '{"ok":true}',
-      ].join('\n\n')
-    );
+    expect(sendAcpMessageSpy).toHaveBeenCalledWith('session-1', [
+      { type: 'text', text: 'hello' },
+      { type: 'text', text: 'analyzing' },
+      { type: 'image', data: 'abc', mimeType: 'image/png' },
+      { type: 'text', text: 'tool output' },
+      { type: 'text', text: '{"ok":true}' },
+    ]);
+  });
+
+  it('falls back to text placeholder for images when provider lacks support', async () => {
+    const { service, runtimeManager } = createServiceWithPatchedInternals();
+    runtimeManager.getClient.mockReturnValue({ id: 'client', supportsImages: () => false });
+    const sendAcpMessageSpy = vi
+      .spyOn(service, 'sendAcpMessage')
+      .mockResolvedValue('end_turn' as never);
+
+    await service.sendSessionMessage('session-1', [
+      { type: 'text', text: 'hello' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc' } },
+    ] as never);
+
+    expect(sendAcpMessageSpy).toHaveBeenCalledWith('session-1', [
+      { type: 'text', text: 'hello' },
+      { type: 'text', text: '[Image: not supported by this provider]' },
+    ]);
   });
 
   it('swallows sendAcpMessage errors to keep websocket flow alive', async () => {
     const { service, runtimeManager } = createServiceWithPatchedInternals();
-    runtimeManager.getClient.mockReturnValue({ id: 'client' });
+    runtimeManager.getClient.mockReturnValue({ id: 'client', supportsImages: () => false });
     vi.spyOn(service, 'sendAcpMessage').mockRejectedValue(new Error('prompt failed'));
 
     await expect(service.sendSessionMessage('session-1', 'hello')).resolves.toBeUndefined();

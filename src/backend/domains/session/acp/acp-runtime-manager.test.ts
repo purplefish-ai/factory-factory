@@ -1008,7 +1008,7 @@ describe('AcpRuntimeManager', () => {
 
       expect(handle.isPromptInFlight).toBe(false);
 
-      const result = await manager.sendPrompt('session-1', 'Hello world');
+      const result = await manager.sendPrompt('session-1', [{ type: 'text', text: 'Hello world' }]);
 
       expect(mockPrompt).toHaveBeenCalledWith({
         sessionId: 'provider-session-123',
@@ -1029,14 +1029,16 @@ describe('AcpRuntimeManager', () => {
         defaultContext()
       );
 
-      await expect(manager.sendPrompt('session-1', 'Hello')).rejects.toThrow('prompt failed');
+      await expect(
+        manager.sendPrompt('session-1', [{ type: 'text', text: 'Hello' }])
+      ).rejects.toThrow('prompt failed');
       expect(handle.isPromptInFlight).toBe(false);
     });
 
     it('throws if no session found', async () => {
-      await expect(manager.sendPrompt('nonexistent', 'Hello')).rejects.toThrow(
-        'No ACP session found'
-      );
+      await expect(
+        manager.sendPrompt('nonexistent', [{ type: 'text', text: 'Hello' }])
+      ).rejects.toThrow('No ACP session found');
     });
   });
 
