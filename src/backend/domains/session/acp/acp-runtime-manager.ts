@@ -5,6 +5,7 @@ import { Readable, Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import {
   ClientSideConnection,
+  type ContentBlock,
   type LoadSessionResponse,
   ndJsonStream,
   PROTOCOL_VERSION,
@@ -968,7 +969,7 @@ export class AcpRuntimeManager {
     }
   }
 
-  async sendPrompt(sessionId: string, content: string): Promise<{ stopReason: string }> {
+  async sendPrompt(sessionId: string, prompt: ContentBlock[]): Promise<{ stopReason: string }> {
     const handle = this.sessions.get(sessionId);
     if (!handle) {
       throw new Error(`No ACP session found for sessionId: ${sessionId}`);
@@ -978,7 +979,7 @@ export class AcpRuntimeManager {
     try {
       const result = await handle.connection.prompt({
         sessionId: handle.providerSessionId,
-        prompt: [{ type: 'text', text: content }],
+        prompt,
       });
       handle.isPromptInFlight = false;
       return { stopReason: result.stopReason };

@@ -1332,7 +1332,7 @@ describe('SessionService', () => {
       .spyOn(sessionDomainService, 'appendClaudeEvent')
       .mockReturnValue(77);
 
-    await sessionService.sendAcpMessage('session-1', 'hello');
+    await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
 
     expect(emitDeltaSpy).toHaveBeenCalledWith(
       'session-1',
@@ -1365,7 +1365,7 @@ describe('SessionService', () => {
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' } as never);
     const appendClaudeEventSpy = vi.spyOn(sessionDomainService, 'appendClaudeEvent');
 
-    await sessionService.sendAcpMessage('session-1', 'hello');
+    await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
 
     expect(appendClaudeEventSpy).not.toHaveBeenCalled();
   });
@@ -1379,7 +1379,7 @@ describe('SessionService', () => {
         stopReason: 'end_turn',
       } as never);
 
-      await sessionService.sendAcpMessage('session-1', 'hello');
+      await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
 
       expect(onPromptTurnComplete).not.toHaveBeenCalled();
       await vi.runOnlyPendingTimersAsync();
@@ -1400,7 +1400,7 @@ describe('SessionService', () => {
       vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
       vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
 
-      await sessionService.sendAcpMessage('session-1', 'hello');
+      await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
       await sessionService.stopSession('session-1');
 
       await vi.runOnlyPendingTimersAsync();
@@ -1419,7 +1419,9 @@ describe('SessionService', () => {
         stopReason: 'end_turn',
       } as never);
 
-      await expect(sessionService.sendAcpMessage('session-1', 'hello')).resolves.toBe('end_turn');
+      await expect(
+        sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
+      ).resolves.toBe('end_turn');
       await vi.runOnlyPendingTimersAsync();
       expect(onPromptTurnComplete).toHaveBeenCalledWith('session-1');
     } finally {
