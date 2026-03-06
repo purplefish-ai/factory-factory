@@ -69,6 +69,22 @@ export class SessionService {
       sessionDomainService: this.sessionDomainService,
       sessionPermissionService: this.sessionPermissionService,
       sessionConfigService: this.sessionConfigService,
+      onToolCallTimeout: (sessionId, toolUseId, toolName) => {
+        // this.lifecycleService is assigned below; the callback fires lazily so it is safe.
+        // Guard: if a prior timeout (or other cause) already triggered a stop, skip the
+        // duplicate call to avoid noisy error logs from concurrent timeout timers.
+        if (!this.runtimeManager.isSessionRunning(sessionId)) {
+          return;
+        }
+        this.lifecycleService.stopSession(sessionId).catch((err: unknown) => {
+          logger.error('Failed to stop session after tool call timeout', {
+            sessionId,
+            toolUseId,
+            toolName,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      },
     });
     this.promptTurnCompletionService = new SessionPromptTurnCompletionService();
     this.retryService = new SessionRetryService();

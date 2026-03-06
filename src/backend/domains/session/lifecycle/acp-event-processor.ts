@@ -25,11 +25,15 @@ type PendingAcpToolCall = {
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
 
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 600_000; // 10 minutes
+
 export type AcpEventProcessorDependencies = {
   runtimeManager: AcpRuntimeManager;
   sessionDomainService: SessionDomainService;
   sessionPermissionService: SessionPermissionService;
   sessionConfigService: SessionConfigService;
+  onToolCallTimeout: (sessionId: string, toolUseId: string, toolName: string) => void;
+  toolCallTimeoutMs?: number;
 };
 
 export class AcpEventProcessor {
@@ -38,6 +42,14 @@ export class AcpEventProcessor {
   private readonly sessionPermissionService: SessionPermissionService;
   private readonly sessionConfigService: SessionConfigService;
   private readonly acpEventTranslator = new AcpEventTranslator(logger);
+  private readonly onToolCallTimeout: (
+    sessionId: string,
+    toolUseId: string,
+    toolName: string
+  ) => void;
+  private readonly toolCallTimeoutMs: number;
+  /** Per-session, per-tool-call timers. Cleared on completion or session teardown. */
+  private readonly toolCallTimers = new Map<string, Map<string, ReturnType<typeof setTimeout>>>();
 
   /** Per-session text accumulation state for ACP streaming (reuses order so frontend upserts). */
   readonly acpStreamState = new Map<string, { textOrder: number; accText: string }>();
@@ -58,6 +70,8 @@ export class AcpEventProcessor {
     this.sessionDomainService = options.sessionDomainService;
     this.sessionPermissionService = options.sessionPermissionService;
     this.sessionConfigService = options.sessionConfigService;
+    this.onToolCallTimeout = options.onToolCallTimeout;
+    this.toolCallTimeoutMs = options.toolCallTimeoutMs ?? DEFAULT_TOOL_CALL_TIMEOUT_MS;
   }
 
   createRuntimeEventHandler(
@@ -140,6 +154,7 @@ export class AcpEventProcessor {
 
   clearPendingToolCalls(sessionId: string): void {
     this.pendingAcpToolCalls.delete(sessionId);
+    this.clearAllToolCallTimers(sessionId);
   }
 
   clearSessionState(sessionId: string): void {
@@ -524,6 +539,8 @@ export class AcpEventProcessor {
       toolInput: Record<string, unknown>;
     }
   ): void {
+    this.startToolCallTimer(sessionId, tool.toolUseId, tool.toolName);
+
     const context = this.getInterceptorContext(sessionId);
     if (!context) {
       return;
@@ -544,6 +561,8 @@ export class AcpEventProcessor {
     isError: boolean,
     pending: PendingAcpToolCall | undefined
   ): void {
+    this.clearToolCallTimer(sessionId, toolUseId);
+
     const context = this.getInterceptorContext(sessionId);
     if (!context) {
       return;
@@ -569,5 +588,56 @@ export class AcpEventProcessor {
       return;
     }
     this.suppressAcpReplayForSession.delete(sessionId);
+  }
+
+  private startToolCallTimer(sid: string, toolUseId: string, toolName: string): void {
+    let sessionTimers = this.toolCallTimers.get(sid);
+    if (!sessionTimers) {
+      sessionTimers = new Map();
+      this.toolCallTimers.set(sid, sessionTimers);
+    }
+    // Clear any pre-existing timer for this toolUseId (defensive)
+    const existing = sessionTimers.get(toolUseId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    const timer = setTimeout(() => {
+      this.toolCallTimers.get(sid)?.delete(toolUseId);
+      logger.warn('Tool call timed out', {
+        sessionId: sid,
+        toolUseId,
+        toolName,
+        timeoutMs: this.toolCallTimeoutMs,
+      });
+      this.onToolCallTimeout(sid, toolUseId, toolName);
+    }, this.toolCallTimeoutMs);
+    timer.unref();
+    sessionTimers.set(toolUseId, timer);
+  }
+
+  private clearToolCallTimer(sid: string, toolUseId: string): void {
+    const sessionTimers = this.toolCallTimers.get(sid);
+    if (!sessionTimers) {
+      return;
+    }
+    const timer = sessionTimers.get(toolUseId);
+    if (timer) {
+      clearTimeout(timer);
+      sessionTimers.delete(toolUseId);
+    }
+    if (sessionTimers.size === 0) {
+      this.toolCallTimers.delete(sid);
+    }
+  }
+
+  private clearAllToolCallTimers(sid: string): void {
+    const sessionTimers = this.toolCallTimers.get(sid);
+    if (!sessionTimers) {
+      return;
+    }
+    for (const timer of sessionTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.toolCallTimers.delete(sid);
   }
 }
