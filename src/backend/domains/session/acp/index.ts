@@ -15,6 +15,7 @@ export {
 } from './acp-runtime-manager';
 export {
   CodexAppServerAcpAdapter,
+  fetchCodexModelCatalogFromAppServer,
   runCodexAppServerAcpAdapter,
 } from './codex-app-server-adapter';
 export type { AcpClientOptions, AcpProvider, AcpSessionState } from './types';
