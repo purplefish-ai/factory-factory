@@ -1,6 +1,10 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
-import type { AcpProcessHandle, AcpRuntimeManager } from '@/backend/domains/session/acp';
+import {
+  type AcpProcessHandle,
+  type AcpRuntimeManager,
+  fetchCodexModelCatalogFromAppServer,
+} from '@/backend/domains/session/acp';
 import type { SessionDomainService } from '@/backend/domains/session/session-domain.service';
 import { sessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
@@ -11,9 +15,15 @@ import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/
 import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');
+const CODEX_MODEL_CATALOG_CACHE_TTL_MS = 30_000;
 
 type SessionProvider = 'CLAUDE' | 'CODEX';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
+type CodexModelEntry = Awaited<ReturnType<typeof fetchCodexModelCatalogFromAppServer>>[number];
+type CachedCodexModelCatalog = {
+  fetchedAtMs: number;
+  models: CodexModelEntry[];
+};
 type StoredAcpConfigSnapshot = {
   provider: SessionProvider;
   providerSessionId: string;
@@ -39,6 +49,8 @@ export class SessionConfigService {
   private readonly repository: SessionRepository;
   private readonly runtimeManager: AcpRuntimeManager;
   private readonly sessionDomainService: SessionDomainService;
+  private cachedCodexModelCatalog: CachedCodexModelCatalog | null = null;
+  private codexModelCatalogRequest: Promise<CodexModelEntry[] | null> | null = null;
 
   constructor(options: SessionConfigServiceDependencies) {
     this.repository = options.repository;
@@ -227,8 +239,25 @@ export class SessionConfigService {
     }
 
     const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
-    if (cachedSnapshot && cachedSnapshot.provider === session.provider) {
-      return [...cachedSnapshot.configOptions];
+    const snapshotConfigOptions =
+      cachedSnapshot && cachedSnapshot.provider === session.provider
+        ? [...cachedSnapshot.configOptions]
+        : [];
+
+    if (session.provider === 'CODEX') {
+      const refreshedCodexOptions = await this.refreshCodexFallbackConfigOptionsFromAppServer({
+        sessionId,
+        session,
+        cachedSnapshot,
+        configOptions: snapshotConfigOptions,
+      });
+      if (refreshedCodexOptions.length > 0) {
+        return refreshedCodexOptions;
+      }
+    }
+
+    if (snapshotConfigOptions.length > 0) {
+      return snapshotConfigOptions;
     }
 
     return [];
@@ -321,19 +350,38 @@ export class SessionConfigService {
     }
 
     const cachedSnapshot = this.extractAcpConfigSnapshot(session.providerMetadata);
+    if (session.provider === 'CODEX') {
+      const snapshotConfigOptions =
+        cachedSnapshot && cachedSnapshot.provider === 'CODEX'
+          ? [...cachedSnapshot.configOptions]
+          : [];
+      const refreshedCodexOptions = await this.refreshCodexFallbackConfigOptionsFromAppServer({
+        sessionId,
+        session,
+        cachedSnapshot,
+        configOptions: snapshotConfigOptions,
+      });
+
+      if (refreshedCodexOptions.length > 0) {
+        return this.buildCapabilitiesFromConfigOptions(
+          'CODEX',
+          refreshedCodexOptions,
+          cachedSnapshot?.observedModelId ?? session.model
+        );
+      }
+
+      return {
+        ...EMPTY_CHAT_BAR_CAPABILITIES,
+        provider: 'CODEX',
+      };
+    }
+
     if (cachedSnapshot && cachedSnapshot.provider === session.provider) {
       return this.buildCapabilitiesFromConfigOptions(
         session.provider,
         cachedSnapshot.configOptions,
         cachedSnapshot.observedModelId
       );
-    }
-
-    if (session.provider === 'CODEX') {
-      return {
-        ...EMPTY_CHAT_BAR_CAPABILITIES,
-        provider: 'CODEX',
-      };
     }
 
     return EMPTY_CHAT_BAR_CAPABILITIES;
@@ -666,6 +714,234 @@ export class SessionConfigService {
     }
 
     return nextConfigOptions;
+  }
+
+  private async refreshCodexFallbackConfigOptionsFromAppServer(params: {
+    sessionId: string;
+    session: AgentSessionRecord;
+    cachedSnapshot: StoredAcpConfigSnapshot | null;
+    configOptions: SessionConfigOption[];
+  }): Promise<SessionConfigOption[]> {
+    const modelCatalog = await this.getCodexModelCatalogFromAppServer();
+    if (!modelCatalog || modelCatalog.length === 0) {
+      return params.configOptions;
+    }
+
+    const nextConfigOptions = this.buildCodexConfigOptionsWithModelCatalog(
+      params.configOptions,
+      modelCatalog,
+      params.cachedSnapshot?.observedModelId ?? params.session.model
+    );
+
+    if (
+      params.cachedSnapshot &&
+      params.cachedSnapshot.provider === 'CODEX' &&
+      JSON.stringify(params.cachedSnapshot.configOptions) !== JSON.stringify(nextConfigOptions)
+    ) {
+      await this.persistAcpConfigSnapshot(params.sessionId, {
+        provider: 'CODEX',
+        providerSessionId: params.cachedSnapshot.providerSessionId,
+        configOptions: nextConfigOptions,
+        existingMetadata: params.session.providerMetadata,
+      });
+    }
+
+    return nextConfigOptions;
+  }
+
+  private buildCodexConfigOptionsWithModelCatalog(
+    existingConfigOptions: SessionConfigOption[],
+    modelCatalog: CodexModelEntry[],
+    fallbackModel?: string
+  ): SessionConfigOption[] {
+    if (modelCatalog.length === 0) {
+      return existingConfigOptions;
+    }
+
+    const nextConfigOptions = [...existingConfigOptions];
+    const resolvedModelValue = this.upsertCodexModelOption(
+      nextConfigOptions,
+      modelCatalog,
+      fallbackModel
+    );
+    if (!resolvedModelValue) {
+      return existingConfigOptions;
+    }
+
+    this.upsertCodexReasoningOption(nextConfigOptions, modelCatalog, resolvedModelValue);
+    return nextConfigOptions;
+  }
+
+  private upsertCodexModelOption(
+    configOptions: SessionConfigOption[],
+    modelCatalog: CodexModelEntry[],
+    fallbackModel?: string
+  ): string | null {
+    const modelOptionIndex = configOptions.findIndex((option) => option.category === 'model');
+    const existingModelOption =
+      modelOptionIndex >= 0 ? (configOptions[modelOptionIndex] ?? null) : null;
+    const currentModelValue =
+      this.readConfigOptionCurrentValue(existingModelOption) ??
+      this.toNonEmptyString(fallbackModel);
+    const resolvedModelValue = this.resolveCodexModelValue(currentModelValue, modelCatalog);
+    if (!resolvedModelValue) {
+      return null;
+    }
+
+    const normalizedModelOption: SessionConfigOption = {
+      id: existingModelOption?.id ?? 'model',
+      category: 'model',
+      name: existingModelOption?.name ?? 'Model',
+      type: 'select',
+      currentValue: resolvedModelValue,
+      options: modelCatalog.map((model) => ({
+        value: model.id,
+        name: model.displayName,
+        ...(model.description ? { description: model.description } : {}),
+      })),
+    };
+
+    if (modelOptionIndex >= 0) {
+      configOptions[modelOptionIndex] = normalizedModelOption;
+    } else {
+      configOptions.push(normalizedModelOption);
+    }
+
+    return resolvedModelValue;
+  }
+
+  private upsertCodexReasoningOption(
+    configOptions: SessionConfigOption[],
+    modelCatalog: CodexModelEntry[],
+    selectedModelId: string
+  ): void {
+    const reasoningOptionIndex = this.findReasoningOptionIndex(configOptions);
+    const existingReasoningOption =
+      reasoningOptionIndex >= 0 ? (configOptions[reasoningOptionIndex] ?? null) : null;
+    const selectedModel = modelCatalog.find((model) => model.id === selectedModelId);
+    const reasoningCatalog = (selectedModel?.supportedReasoningEfforts ?? []).filter(
+      (entry) => entry.reasoningEffort.trim().length > 0
+    );
+
+    if (reasoningCatalog.length === 0) {
+      if (reasoningOptionIndex >= 0) {
+        configOptions.splice(reasoningOptionIndex, 1);
+      }
+      return;
+    }
+
+    const reasoningSelectOptions = reasoningCatalog.map((entry) => ({
+      value: entry.reasoningEffort,
+      name: entry.reasoningEffort,
+      ...(entry.description ? { description: entry.description } : {}),
+    }));
+    const resolvedReasoningValue =
+      this.resolveCodexReasoningValue(
+        this.readConfigOptionCurrentValue(existingReasoningOption),
+        selectedModel?.defaultReasoningEffort,
+        reasoningSelectOptions.map((entry) => entry.value)
+      ) ?? reasoningSelectOptions[0]?.value;
+
+    if (!resolvedReasoningValue) {
+      if (reasoningOptionIndex >= 0) {
+        configOptions.splice(reasoningOptionIndex, 1);
+      }
+      return;
+    }
+
+    const normalizedReasoningOption: SessionConfigOption = {
+      id: existingReasoningOption?.id ?? 'reasoning_effort',
+      category: existingReasoningOption?.category ?? 'thought_level',
+      name: existingReasoningOption?.name ?? 'Reasoning Effort',
+      type: 'select',
+      currentValue: resolvedReasoningValue,
+      options: reasoningSelectOptions,
+    };
+
+    if (reasoningOptionIndex >= 0) {
+      configOptions[reasoningOptionIndex] = normalizedReasoningOption;
+    } else {
+      configOptions.push(normalizedReasoningOption);
+    }
+  }
+
+  private findReasoningOptionIndex(configOptions: SessionConfigOption[]): number {
+    return configOptions.findIndex(
+      (option) =>
+        option.id === 'reasoning_effort' ||
+        option.category === 'thought_level' ||
+        option.category === 'reasoning'
+    );
+  }
+
+  private resolveCodexModelValue(
+    currentModelValue: string | null,
+    modelCatalog: CodexModelEntry[]
+  ): string | null {
+    if (currentModelValue && modelCatalog.some((model) => model.id === currentModelValue)) {
+      return currentModelValue;
+    }
+    return modelCatalog.find((model) => model.isDefault)?.id ?? modelCatalog[0]?.id ?? null;
+  }
+
+  private resolveCodexReasoningValue(
+    currentReasoningValue: string | null,
+    defaultReasoningValue: string | undefined,
+    reasoningValues: string[]
+  ): string | null {
+    const values = new Set(reasoningValues);
+    if (currentReasoningValue && values.has(currentReasoningValue)) {
+      return currentReasoningValue;
+    }
+    if (defaultReasoningValue && values.has(defaultReasoningValue)) {
+      return defaultReasoningValue;
+    }
+    return reasoningValues[0] ?? null;
+  }
+
+  private readConfigOptionCurrentValue(option: SessionConfigOption | null): string | null {
+    if (!option) {
+      return null;
+    }
+    return this.toNonEmptyString(option.currentValue);
+  }
+
+  private toNonEmptyString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value : null;
+  }
+
+  private async getCodexModelCatalogFromAppServer(): Promise<CodexModelEntry[] | null> {
+    const now = Date.now();
+    if (
+      this.cachedCodexModelCatalog &&
+      now - this.cachedCodexModelCatalog.fetchedAtMs < CODEX_MODEL_CATALOG_CACHE_TTL_MS
+    ) {
+      return this.cachedCodexModelCatalog.models;
+    }
+
+    if (this.codexModelCatalogRequest !== null) {
+      return await this.codexModelCatalogRequest;
+    }
+
+    this.codexModelCatalogRequest = (async () => {
+      try {
+        const modelCatalog = await fetchCodexModelCatalogFromAppServer();
+        this.cachedCodexModelCatalog = {
+          fetchedAtMs: Date.now(),
+          models: modelCatalog,
+        };
+        return modelCatalog;
+      } catch (error) {
+        logger.warn('Failed to refresh Codex model catalog from app-server fallback', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      } finally {
+        this.codexModelCatalogRequest = null;
+      }
+    })();
+
+    return await this.codexModelCatalogRequest;
   }
 
   private buildCapabilitiesFromConfigOptions(

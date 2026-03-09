@@ -14,6 +14,7 @@ const DEFAULT_ALLOWLISTED_FILES = new Set([
   'src/backend/domains/terminal/terminal.service.ts',
   'src/backend/domains/run-script/startup-script.service.ts',
   'src/backend/domains/session/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts',
+  'src/backend/domains/session/acp/codex-app-server-adapter/codex-model-catalog-loader.ts',
   'src/backend/domains/session/data/codex-session-history-loader.service.ts',
   'src/backend/domains/session/store/file-lock.service.ts',
 ]);

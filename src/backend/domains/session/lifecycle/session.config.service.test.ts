@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AcpProcessHandle } from '@/backend/domains/session/acp';
+import {
+  type AcpProcessHandle,
+  fetchCodexModelCatalogFromAppServer,
+} from '@/backend/domains/session/acp';
 import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
@@ -17,6 +20,10 @@ vi.mock('@/backend/resource_accessors/user-settings.accessor', () => ({
   userSettingsAccessor: {
     get: vi.fn(),
   },
+}));
+
+vi.mock('@/backend/domains/session/acp', () => ({
+  fetchCodexModelCatalogFromAppServer: vi.fn(),
 }));
 
 describe('SessionConfigService', () => {
@@ -40,6 +47,7 @@ describe('SessionConfigService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchCodexModelCatalogFromAppServer).mockResolvedValue([]);
 
     repository.getSessionById.mockResolvedValue(
       unsafeCoerce({
@@ -272,6 +280,115 @@ describe('SessionConfigService', () => {
 
     expect(capabilities.provider).toBe('CODEX');
     expect(capabilities.model.enabled).toBe(false);
+  });
+
+  it('refreshes cached CODEX model config options from codex app-server', async () => {
+    vi.mocked(fetchCodexModelCatalogFromAppServer).mockResolvedValue([
+      {
+        id: 'gpt-5.4-codex',
+        displayName: 'GPT-5.4 Codex',
+        description: 'Latest',
+        defaultReasoningEffort: 'high',
+        supportedReasoningEfforts: [
+          { reasoningEffort: 'medium', description: 'Balanced' },
+          { reasoningEffort: 'high', description: 'Thorough' },
+        ],
+        inputModalities: ['text'],
+        isDefault: true,
+      },
+      {
+        id: 'gpt-5.3-codex',
+        displayName: 'GPT-5.3 Codex',
+        description: 'Prior',
+        defaultReasoningEffort: 'medium',
+        supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }],
+        inputModalities: ['text'],
+        isDefault: false,
+      },
+    ]);
+    repository.getSessionById.mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-codex',
+        provider: 'CODEX',
+        model: 'gpt-5.3-codex',
+        providerMetadata: {
+          acpConfigSnapshot: {
+            provider: 'CODEX',
+            providerSessionId: 'sess_125',
+            capturedAt: '2026-02-15T00:00:00.000Z',
+            configOptions: [
+              {
+                id: 'model',
+                name: 'Model',
+                type: 'select',
+                category: 'model',
+                currentValue: 'gpt-5.3-codex',
+                options: [{ value: 'gpt-5.2-codex', name: 'GPT-5.2 Codex' }],
+              },
+              {
+                id: 'reasoning_effort',
+                name: 'Reasoning Effort',
+                type: 'select',
+                category: 'thought_level',
+                currentValue: 'high',
+                options: [{ value: 'high', name: 'High' }],
+              },
+            ],
+          },
+        },
+      })
+    );
+
+    const configOptions = await service.getSessionConfigOptionsWithFallback('session-codex');
+    const modelOption = configOptions.find((option) => option.category === 'model');
+    const reasoningOption = configOptions.find((option) => option.id === 'reasoning_effort');
+
+    expect(fetchCodexModelCatalogFromAppServer).toHaveBeenCalledTimes(1);
+    expect(modelOption?.currentValue).toBe('gpt-5.3-codex');
+    expect(modelOption?.options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: 'gpt-5.4-codex', name: 'GPT-5.4 Codex' }),
+        expect.objectContaining({ value: 'gpt-5.3-codex', name: 'GPT-5.3 Codex' }),
+      ])
+    );
+    expect(reasoningOption?.currentValue).toBe('medium');
+  });
+
+  it('uses codex app-server model catalog for CODEX fallback capabilities', async () => {
+    vi.mocked(fetchCodexModelCatalogFromAppServer).mockResolvedValue([
+      {
+        id: 'gpt-5.4-codex',
+        displayName: 'GPT-5.4 Codex',
+        description: 'Latest',
+        defaultReasoningEffort: 'high',
+        supportedReasoningEfforts: [
+          { reasoningEffort: 'medium', description: 'Balanced' },
+          { reasoningEffort: 'high', description: 'Thorough' },
+        ],
+        inputModalities: ['text'],
+        isDefault: true,
+      },
+    ]);
+    repository.getSessionById.mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-codex',
+        provider: 'CODEX',
+        model: 'default',
+        providerMetadata: null,
+      })
+    );
+
+    const capabilities = await service.getChatBarCapabilities('session-codex');
+
+    expect(fetchCodexModelCatalogFromAppServer).toHaveBeenCalledTimes(1);
+    expect(capabilities.provider).toBe('CODEX');
+    expect(capabilities.model.enabled).toBe(true);
+    expect(capabilities.model.selected).toBe('gpt-5.4-codex');
+    expect(capabilities.model.options).toEqual([
+      { value: 'gpt-5.4-codex', label: 'GPT-5.4 Codex' },
+    ]);
+    expect(capabilities.reasoning.enabled).toBe(true);
+    expect(capabilities.reasoning.selected).toBe('high');
   });
 
   it('derives CODEX model/reasoning/plan-mode capabilities from cached ACP config options', async () => {
