@@ -1,7 +1,8 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, FileCode, Loader2 } from 'lucide-react';
-import { memo, useCallback, useRef } from 'react';
+import { AlertCircle, ChevronDown, ChevronRight, FileCode, Folder, Loader2 } from 'lucide-react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 
+import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
@@ -215,3 +216,386 @@ export function ScrollableChangeSections({
     </ScrollArea>
   );
 }
+
+// =============================================================================
+// Change Tree View
+// =============================================================================
+
+export interface ChangeTreeNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  /** Present for actual changed items. Undefined for virtual directory nodes (inferred from file paths). */
+  entry?: ChangeListEntry;
+  children: ChangeTreeNode[];
+}
+
+/**
+ * Build a tree from a flat list of change entries.
+ * - Paths ending with '/' are git-reported untracked directories (rendered as folder nodes).
+ * - Other paths are files grouped under virtual directory nodes derived from their path segments.
+ * - All directories start expanded by default.
+ */
+export function buildChangeTree(entries: ChangeListEntry[]): ChangeTreeNode[] {
+  const root: ChangeTreeNode[] = [];
+  // Maps a directory path to its children array (for virtual dirs only)
+  const dirChildrenMap = new Map<string, ChangeTreeNode[]>();
+
+  function ensureVirtualDirChain(dirPath: string): ChangeTreeNode[] {
+    const existing = dirChildrenMap.get(dirPath);
+    if (existing) {
+      return existing;
+    }
+    const lastSlash = dirPath.lastIndexOf('/');
+    const parentList = lastSlash === -1 ? root : ensureVirtualDirChain(dirPath.slice(0, lastSlash));
+    const name = lastSlash === -1 ? dirPath : dirPath.slice(lastSlash + 1);
+    const node: ChangeTreeNode = { name, path: dirPath, type: 'directory', children: [] };
+    dirChildrenMap.set(dirPath, node.children);
+    parentList.push(node);
+    return node.children;
+  }
+
+  for (const entry of entries) {
+    const { path } = entry;
+    // Git reports untracked directories with a trailing slash (e.g. "newfolder/")
+    const isGitDir = path.endsWith('/');
+    const normalPath = isGitDir ? path.slice(0, -1) : path;
+    const lastSlash = normalPath.lastIndexOf('/');
+    const name = lastSlash === -1 ? normalPath : normalPath.slice(lastSlash + 1);
+    const parentList =
+      lastSlash === -1 ? root : ensureVirtualDirChain(normalPath.slice(0, lastSlash));
+
+    parentList.push({
+      name,
+      path: normalPath,
+      type: isGitDir ? 'directory' : 'file',
+      entry,
+      children: [],
+    });
+  }
+
+  // Sort each level: directories before files, then alphabetically
+  function sortNodes(nodes: ChangeTreeNode[]): void {
+    nodes.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === 'directory' ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    for (const node of nodes) {
+      if (node.children.length > 0) {
+        sortNodes(node.children);
+      }
+    }
+  }
+  sortNodes(root);
+
+  return root;
+}
+
+interface FlatChangeItem {
+  node: ChangeTreeNode;
+  depth: number;
+  isExpanded: boolean;
+}
+
+function flattenChangeTree(
+  nodes: ChangeTreeNode[],
+  depth: number,
+  collapsedDirs: Set<string>,
+  result: FlatChangeItem[] = []
+): FlatChangeItem[] {
+  for (const node of nodes) {
+    const isExpanded =
+      node.type === 'directory' && node.children.length > 0 && !collapsedDirs.has(node.path);
+    result.push({ node, depth, isExpanded });
+    if (isExpanded) {
+      flattenChangeTree(node.children, depth + 1, collapsedDirs, result);
+    }
+  }
+  return result;
+}
+
+/**
+ * Recursively renders the contents of a git-reported untracked directory.
+ * Fetches children via listFiles and renders them as untracked file/dir items.
+ */
+function UntrackedDirContents({
+  workspaceId,
+  dirPath,
+  depth,
+  onFileClick,
+}: {
+  workspaceId: string;
+  dirPath: string;
+  depth: number;
+  onFileClick: (path: string) => void;
+}) {
+  const { data, isLoading } = trpc.workspace.listFiles.useQuery(
+    { workspaceId, path: dirPath },
+    { staleTime: 20_000, refetchOnWindowFocus: false }
+  );
+
+  if (isLoading) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground"
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      >
+        <Loader2 className="h-3 w-3 animate-spin" />
+        <span>Loading…</span>
+      </div>
+    );
+  }
+
+  const entries = data?.entries ?? [];
+  return (
+    <>
+      {entries.map((entry) =>
+        entry.type === 'directory' ? (
+          <UntrackedSubDir
+            key={entry.path}
+            name={entry.name}
+            dirPath={entry.path}
+            depth={depth}
+            workspaceId={workspaceId}
+            onFileClick={onFileClick}
+          />
+        ) : (
+          <div key={entry.path} style={{ paddingLeft: `${depth * 12}px` }}>
+            <FileChangeItem
+              path={entry.path}
+              kind="untracked"
+              statusCode="?"
+              showDirPath={false}
+              onClick={() => onFileClick(entry.path)}
+            />
+          </div>
+        )
+      )}
+    </>
+  );
+}
+
+/** A sub-directory inside an untracked directory — expandable, starts expanded. */
+function UntrackedSubDir({
+  name,
+  dirPath,
+  depth,
+  workspaceId,
+  onFileClick,
+}: {
+  name: string;
+  dirPath: string;
+  depth: number;
+  workspaceId: string;
+  onFileClick: (path: string) => void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(true);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setIsExpanded((v) => !v)}
+        className={cn(
+          'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
+          'hover:bg-muted/50 rounded-md transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        )}
+        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        title={`Untracked: ${dirPath}`}
+      >
+        {isExpanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        )}
+        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1 truncate font-medium">{name}</span>
+      </button>
+      {isExpanded && (
+        <UntrackedDirContents
+          workspaceId={workspaceId}
+          dirPath={dirPath}
+          depth={depth + 1}
+          onFileClick={onFileClick}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A git-reported untracked directory (path ending with '/') — expands via listFiles. */
+const GitReportedDirRow = memo(function GitReportedDirRow({
+  node,
+  depth,
+  workspaceId,
+  onFileClick,
+}: {
+  node: ChangeTreeNode;
+  depth: number;
+  workspaceId: string;
+  onFileClick: (path: string) => void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setIsExpanded((v) => !v)}
+        className={cn(
+          'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
+          'hover:bg-muted/50 rounded-md transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+        )}
+        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        title={`Untracked: ${node.path}`}
+      >
+        {isExpanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        )}
+        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1 truncate font-medium">{node.name}</span>
+        {node.entry && (
+          <span className="text-xs font-mono uppercase text-muted-foreground">
+            {node.entry.statusCode ?? '?'}
+          </span>
+        )}
+      </button>
+      {isExpanded && (
+        <UntrackedDirContents
+          workspaceId={workspaceId}
+          dirPath={node.path}
+          depth={depth + 1}
+          onFileClick={onFileClick}
+        />
+      )}
+    </div>
+  );
+});
+
+interface ChangeTreeItemRowProps {
+  node: ChangeTreeNode;
+  depth: number;
+  isExpanded: boolean;
+  onToggle: (path: string) => void;
+  onFileClick: (path: string) => void;
+  workspaceId?: string;
+  indicatorLabel?: string;
+}
+
+const ChangeTreeItemRow = memo(function ChangeTreeItemRow({
+  node,
+  depth,
+  isExpanded,
+  onToggle,
+  onFileClick,
+  workspaceId,
+  indicatorLabel,
+}: ChangeTreeItemRowProps) {
+  if (node.type === 'file' && node.entry) {
+    return (
+      <div style={{ paddingLeft: `${depth * 12}px` }}>
+        <FileChangeItem
+          path={node.path}
+          kind={node.entry.kind}
+          statusCode={node.entry.statusCode}
+          showIndicatorDot={node.entry.showIndicatorDot}
+          indicatorLabel={indicatorLabel}
+          showDirPath={false}
+          onClick={() => onFileClick(node.path)}
+        />
+      </div>
+    );
+  }
+
+  // Git-reported untracked directory: delegate to self-contained component that fetches children
+  const isGitReported = !!node.entry;
+  if (isGitReported && workspaceId) {
+    return (
+      <GitReportedDirRow
+        node={node}
+        depth={depth}
+        workspaceId={workspaceId}
+        onFileClick={onFileClick}
+      />
+    );
+  }
+
+  // Virtual directory (inferred from file paths) — uses parent's expand/collapse state
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(node.path)}
+      className={cn(
+        'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left',
+        'hover:bg-muted/50 rounded-md transition-colors',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+      )}
+      style={{ paddingLeft: `${depth * 12 + 4}px` }}
+      title={node.path}
+    >
+      {isExpanded ? (
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      ) : (
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+      )}
+      <Folder className="h-4 w-4 shrink-0 text-brand" />
+      <span className="flex-1 truncate font-medium">{node.name}</span>
+    </button>
+  );
+});
+
+interface ChangeTreeViewProps {
+  entries: ChangeListEntry[];
+  onFileClick: (path: string) => void;
+  className?: string;
+  indicatorLabel?: string;
+  workspaceId?: string;
+}
+
+export const ChangeTreeView = memo(function ChangeTreeView({
+  entries,
+  onFileClick,
+  className = 'space-y-0.5',
+  indicatorLabel,
+  workspaceId,
+}: ChangeTreeViewProps) {
+  const tree = useMemo(() => buildChangeTree(entries), [entries]);
+  // Track collapsed dirs (all start expanded — only explicitly collapsed ones are stored)
+  const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
+
+  const toggleDir = useCallback((path: string) => {
+    setCollapsedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  const flatItems = useMemo(() => flattenChangeTree(tree, 0, collapsedDirs), [tree, collapsedDirs]);
+
+  return (
+    <div className={className}>
+      {flatItems.map(({ node, depth, isExpanded }) => (
+        <ChangeTreeItemRow
+          key={node.path}
+          node={node}
+          depth={depth}
+          isExpanded={isExpanded}
+          onToggle={toggleDir}
+          onFileClick={onFileClick}
+          workspaceId={workspaceId}
+          indicatorLabel={indicatorLabel}
+        />
+      ))}
+    </div>
+  );
+});

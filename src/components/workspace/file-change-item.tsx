@@ -76,6 +76,8 @@ interface FileChangeItemProps {
   statusCode?: string;
   showIndicatorDot?: boolean;
   indicatorLabel?: string;
+  /** When false, hides the directory path suffix (used in tree view where dir context is shown by parent rows) */
+  showDirPath?: boolean;
 }
 
 export const FileChangeItem = memo(function FileChangeItem({
@@ -85,6 +87,7 @@ export const FileChangeItem = memo(function FileChangeItem({
   statusCode,
   showIndicatorDot = false,
   indicatorLabel = 'Staged or not pushed to remote',
+  showDirPath = true,
 }: FileChangeItemProps) {
   const statusColor = getStatusColorClass(kind);
   const fileName = path.split('/').pop() ?? path;
@@ -104,7 +107,9 @@ export const FileChangeItem = memo(function FileChangeItem({
       <span className={statusColor}>{getStatusIcon(kind)}</span>
       <span className="flex-1 truncate">
         <span className="font-medium">{fileName}</span>
-        {dirPath && <span className="text-muted-foreground ml-1 text-xs">{dirPath}</span>}
+        {showDirPath && dirPath && (
+          <span className="text-muted-foreground ml-1 text-xs">{dirPath}</span>
+        )}
       </span>
       {showIndicatorDot && (
         <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" title={indicatorLabel} />

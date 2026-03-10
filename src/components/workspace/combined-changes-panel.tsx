@@ -3,13 +3,12 @@ import { trpc } from '@/client/lib/trpc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import {
-  ChangeList,
   type ChangeListEntry,
+  ChangeTreeView,
   PanelEmptyState,
   PanelErrorState,
   PanelLoadingState,
   useOpenDiffTab,
-  VirtualizedChangeList,
 } from './change-panel-shared';
 import { fileChangeKindFromDiffStatus, fileChangeKindFromGitStatus } from './file-change-item';
 
@@ -37,6 +36,7 @@ interface CombinedChangesContentProps {
   indicatorLabel: string;
   partialDataWarning?: string;
   onFileClick: (path: string) => void;
+  workspaceId: string;
 }
 
 const EMPTY_DIFF_SNAPSHOT = {
@@ -182,6 +182,7 @@ function CombinedChangesContent({
   indicatorLabel,
   partialDataWarning,
   onFileClick,
+  workspaceId,
 }: CombinedChangesContentProps) {
   if (entries.length === 0) {
     if (noMergeBase) {
@@ -211,12 +212,14 @@ function CombinedChangesContent({
         {(noMergeBase || hasIndicatorEntries || partialDataWarning) && (
           <div className="p-2 border-b">{decorators}</div>
         )}
-        <VirtualizedChangeList
-          entries={entries}
-          onFileClick={onFileClick}
-          className="flex-1"
-          indicatorLabel={indicatorLabel}
-        />
+        <div className="flex-1 overflow-auto p-2">
+          <ChangeTreeView
+            entries={entries}
+            onFileClick={onFileClick}
+            indicatorLabel={indicatorLabel}
+            workspaceId={workspaceId}
+          />
+        </div>
       </div>
     );
   }
@@ -225,7 +228,12 @@ function CombinedChangesContent({
     <ScrollArea className="h-full">
       <div className="p-2 space-y-2">
         {decorators}
-        <ChangeList entries={entries} onFileClick={onFileClick} indicatorLabel={indicatorLabel} />
+        <ChangeTreeView
+          entries={entries}
+          onFileClick={onFileClick}
+          indicatorLabel={indicatorLabel}
+          workspaceId={workspaceId}
+        />
       </div>
     </ScrollArea>
   );
@@ -290,6 +298,7 @@ export function CombinedChangesPanel({ workspaceId }: CombinedChangesPanelProps)
       indicatorLabel={indicatorLabel}
       partialDataWarning={partialDataWarning}
       onFileClick={openDiffTab}
+      workspaceId={workspaceId}
     />
   );
 }
