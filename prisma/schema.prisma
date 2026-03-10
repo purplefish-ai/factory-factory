@@ -302,6 +302,8 @@ model UserSettings {
   // Ratchet Settings (unified PR progression)
   ratchetEnabled            Boolean  @default(false)  // Default for new GitHub-issue-created workspaces
   defaultSessionProvider    SessionProvider @default(CLAUDE)
+  defaultClaudeModel        String @default("sonnet")
+  defaultCodexModel         String @default("default")
   defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
   ratchetPermissions        SessionPermissionPreset @default(YOLO) // Default execution-mode preset for ratchet sessions
 

@@ -2,7 +2,7 @@ import type { SessionProvider } from '@prisma-gen/client';
 
 const CLAUDE_MODEL_ALIASES = new Set(['opus', 'sonnet', 'haiku']);
 
-const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
+export const DEFAULT_SESSION_MODEL_BY_PROVIDER: Record<SessionProvider, string> = {
   CLAUDE: 'sonnet',
   CODEX: 'default',
 };
@@ -58,9 +58,12 @@ export function normalizeSessionModelForProvider(
 
 export function resolveSessionModelForProvider(
   model: string | null | undefined,
-  provider: SessionProvider
+  provider: SessionProvider,
+  fallbackModel?: string | null
 ): string {
   return (
-    normalizeSessionModelForProvider(model, provider) ?? DEFAULT_SESSION_MODEL_BY_PROVIDER[provider]
+    normalizeSessionModelForProvider(model, provider) ??
+    normalizeSessionModelForProvider(fallbackModel, provider) ??
+    DEFAULT_SESSION_MODEL_BY_PROVIDER[provider]
   );
 }

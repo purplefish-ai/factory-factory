@@ -80,6 +80,8 @@ vi.mock('@/client/lib/trpc', () => {
     preferredIde: 'cursor',
     customIdeCommand: null,
     defaultSessionProvider: 'CLAUDE',
+    defaultClaudeModel: 'sonnet',
+    defaultCodexModel: 'default',
     defaultWorkspacePermissions: 'STRICT',
     ratchetEnabled: false,
     ratchetPermissions: 'YOLO',

@@ -1,6 +1,7 @@
 import { type AgentSession, Prisma, type SessionProvider } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
 import { resolveSessionModelForProvider } from '@/backend/lib/session-model';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { SessionStatus } from '@/shared/core';
 
 export type AgentSessionRecord = AgentSession;
@@ -65,15 +66,25 @@ export interface AgentSessionAccessor {
 }
 
 class PrismaAgentSessionAccessor implements AgentSessionAccessor {
-  create(data: CreateAgentSessionInput): Promise<AgentSessionRecord> {
-    const provider = data.provider ?? 'CLAUDE';
+  private async getConfiguredDefaultModel(provider: SessionProvider): Promise<string> {
+    const settings = await userSettingsAccessor.get();
+    return resolveSessionModelForProvider(
+      undefined,
+      provider,
+      provider === 'CLAUDE' ? settings.defaultClaudeModel : settings.defaultCodexModel
+    );
+  }
 
-    return prisma.agentSession.create({
+  async create(data: CreateAgentSessionInput): Promise<AgentSessionRecord> {
+    const provider = data.provider ?? 'CLAUDE';
+    const fallbackModel = await this.getConfiguredDefaultModel(provider);
+
+    return await prisma.agentSession.create({
       data: {
         workspaceId: data.workspaceId,
         name: data.name,
         workflow: data.workflow,
-        model: resolveSessionModelForProvider(data.model, provider),
+        model: resolveSessionModelForProvider(data.model, provider, fallbackModel),
         provider,
         providerProjectPath: data.providerProjectPath ?? null,
       },
@@ -159,64 +170,65 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
 
   acquireFixerSession(input: AcquireFixerAgentSessionInput): Promise<FixerAgentSessionAcquisition> {
     const provider = input.provider ?? 'CLAUDE';
+    return this.getConfiguredDefaultModel(provider).then((fallbackModel) =>
+      prisma.$transaction(async (tx) => {
+        const existingSession = await tx.agentSession.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            workflow: input.workflow,
+            provider,
+            status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
 
-    return prisma.$transaction(async (tx) => {
-      const existingSession = await tx.agentSession.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          workflow: input.workflow,
-          provider,
-          status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+        if (existingSession) {
+          return {
+            outcome: 'existing' as const,
+            sessionId: existingSession.id,
+            status: existingSession.status,
+          };
+        }
 
-      if (existingSession) {
+        const allSessions = await tx.agentSession.findMany({
+          where: { workspaceId: input.workspaceId },
+          select: { id: true },
+        });
+
+        if (allSessions.length >= input.maxSessions) {
+          return { outcome: 'limit_reached' as const };
+        }
+
+        const recentSession = await tx.agentSession.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            workflow: { not: input.workflow },
+            provider,
+          },
+          orderBy: { updatedAt: 'desc' },
+          select: { model: true },
+        });
+
+        const model = resolveSessionModelForProvider(recentSession?.model, provider, fallbackModel);
+
+        const newSession = await tx.agentSession.create({
+          data: {
+            workspaceId: input.workspaceId,
+            workflow: input.workflow,
+            name: input.sessionName,
+            model,
+            status: SessionStatus.IDLE,
+            provider,
+            providerProjectPath: input.providerProjectPath,
+          },
+        });
+
         return {
-          outcome: 'existing' as const,
-          sessionId: existingSession.id,
-          status: existingSession.status,
+          outcome: 'created' as const,
+          sessionId: newSession.id,
         };
-      }
-
-      const allSessions = await tx.agentSession.findMany({
-        where: { workspaceId: input.workspaceId },
-        select: { id: true },
-      });
-
-      if (allSessions.length >= input.maxSessions) {
-        return { outcome: 'limit_reached' as const };
-      }
-
-      const recentSession = await tx.agentSession.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          workflow: { not: input.workflow },
-          provider,
-        },
-        orderBy: { updatedAt: 'desc' },
-        select: { model: true },
-      });
-
-      const model = resolveSessionModelForProvider(recentSession?.model, provider);
-
-      const newSession = await tx.agentSession.create({
-        data: {
-          workspaceId: input.workspaceId,
-          workflow: input.workflow,
-          name: input.sessionName,
-          model,
-          status: SessionStatus.IDLE,
-          provider,
-          providerProjectPath: input.providerProjectPath,
-        },
-      });
-
-      return {
-        outcome: 'created' as const,
-        sessionId: newSession.id,
-      };
-    });
+      })
+    );
   }
 }
 

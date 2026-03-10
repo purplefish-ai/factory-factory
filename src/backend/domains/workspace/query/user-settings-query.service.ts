@@ -13,6 +13,8 @@ class UserSettingsQueryService {
     notificationSoundPath?: string | null;
     ratchetEnabled?: boolean;
     defaultSessionProvider?: 'CLAUDE' | 'CODEX';
+    defaultClaudeModel?: string;
+    defaultCodexModel?: string;
     defaultWorkspacePermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
     ratchetPermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
   }): Promise<UserSettings> {
