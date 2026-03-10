@@ -142,6 +142,8 @@ const exportedUserSettingsSchema = z.object({
   notificationSoundPath: z.string().nullable(),
   ratchetEnabled: z.boolean(),
   defaultSessionProvider: SessionProvider,
+  defaultClaudeModel: z.string().optional().default('sonnet'),
+  defaultCodexModel: z.string().optional().default('default'),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
   ratchetPermissions: SessionPermissionPreset.optional().default('YOLO'),
 });

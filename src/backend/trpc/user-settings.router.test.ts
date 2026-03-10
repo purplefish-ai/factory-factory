@@ -31,14 +31,34 @@ describe('userSettingsRouter', () => {
   });
 
   it('gets and updates settings', async () => {
-    mockGet.mockResolvedValue({ preferredIde: 'cursor', customIdeCommand: null });
-    mockUpdate.mockResolvedValue({ preferredIde: 'vscode', customIdeCommand: null });
+    mockGet.mockResolvedValue({
+      preferredIde: 'cursor',
+      customIdeCommand: null,
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'default',
+    });
+    mockUpdate.mockResolvedValue({
+      preferredIde: 'vscode',
+      customIdeCommand: null,
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'default',
+    });
 
     const caller = createCaller();
-    await expect(caller.get()).resolves.toEqual({ preferredIde: 'cursor', customIdeCommand: null });
+    await expect(caller.get()).resolves.toEqual({
+      preferredIde: 'cursor',
+      customIdeCommand: null,
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'default',
+    });
     await expect(
       caller.update({ preferredIde: 'vscode', playSoundOnComplete: true })
-    ).resolves.toEqual({ preferredIde: 'vscode', customIdeCommand: null });
+    ).resolves.toEqual({
+      preferredIde: 'vscode',
+      customIdeCommand: null,
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'default',
+    });
 
     expect(mockUpdate).toHaveBeenCalledWith({ preferredIde: 'vscode', playSoundOnComplete: true });
   });
@@ -48,6 +68,34 @@ describe('userSettingsRouter', () => {
     await expect(caller.update({ preferredIde: 'custom' })).rejects.toThrow(
       'Custom IDE command is required when using custom IDE'
     );
+  });
+
+  it('passes provider default model updates through to the query service', async () => {
+    mockUpdate.mockResolvedValue({
+      preferredIde: 'cursor',
+      customIdeCommand: null,
+      defaultClaudeModel: 'Opus',
+      defaultCodexModel: 'gpt-5-codex',
+    });
+
+    const caller = createCaller();
+
+    await expect(
+      caller.update({
+        defaultClaudeModel: 'Opus',
+        defaultCodexModel: 'gpt-5-codex',
+      })
+    ).resolves.toEqual({
+      preferredIde: 'cursor',
+      customIdeCommand: null,
+      defaultClaudeModel: 'Opus',
+      defaultCodexModel: 'gpt-5-codex',
+    });
+
+    expect(mockUpdate).toHaveBeenCalledWith({
+      defaultClaudeModel: 'Opus',
+      defaultCodexModel: 'gpt-5-codex',
+    });
   });
 
   it('tests custom command and validates command format', async () => {

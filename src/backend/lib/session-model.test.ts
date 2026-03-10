@@ -35,4 +35,10 @@ describe('resolveSessionModelForProvider', () => {
     expect(resolveSessionModelForProvider('opus', 'CODEX')).toBe('default');
     expect(resolveSessionModelForProvider('gpt-5', 'CLAUDE')).toBe('sonnet');
   });
+
+  it('uses provider-compatible fallback models before built-in defaults', () => {
+    expect(resolveSessionModelForProvider(undefined, 'CLAUDE', 'opus')).toBe('opus');
+    expect(resolveSessionModelForProvider(undefined, 'CODEX', 'gpt-5-codex')).toBe('gpt-5-codex');
+    expect(resolveSessionModelForProvider(undefined, 'CLAUDE', 'gpt-5')).toBe('sonnet');
+  });
 });

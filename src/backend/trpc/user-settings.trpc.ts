@@ -44,6 +44,8 @@ export const userSettingsRouter = router({
         ratchetEnabled: z.boolean().optional(),
         // Session provider defaults
         defaultSessionProvider: z.nativeEnum(SessionProvider).optional(),
+        defaultClaudeModel: z.string().trim().min(1, 'Claude model cannot be empty').optional(),
+        defaultCodexModel: z.string().trim().min(1, 'Codex model cannot be empty').optional(),
         // Permission preset defaults
         defaultWorkspacePermissions: z.nativeEnum(SessionPermissionPreset).optional(),
         ratchetPermissions: z.nativeEnum(SessionPermissionPreset).optional(),

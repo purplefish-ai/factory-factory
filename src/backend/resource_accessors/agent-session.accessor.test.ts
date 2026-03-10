@@ -8,6 +8,7 @@ const mockFindUnique = vi.fn();
 const mockFindMany = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
+const mockUserSettingsGet = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -18,6 +19,13 @@ vi.mock('@/backend/db', () => ({
       update: (...args: unknown[]) => mockUpdate(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
     },
+    $transaction: vi.fn(),
+  },
+}));
+
+vi.mock('@/backend/resource_accessors/user-settings.accessor', () => ({
+  userSettingsAccessor: {
+    get: (...args: unknown[]) => mockUserSettingsGet(...args),
   },
 }));
 
@@ -26,6 +34,10 @@ import { agentSessionAccessor } from './agent-session.accessor';
 describe('agentSessionAccessor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUserSettingsGet.mockResolvedValue({
+      defaultClaudeModel: 'opus',
+      defaultCodexModel: 'gpt-5-codex',
+    });
   });
 
   it('create applies default provider and model resolution', async () => {
@@ -41,7 +53,7 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         name: undefined,
         workflow: 'user',
-        model: resolveSessionModelForProvider(undefined, 'CLAUDE'),
+        model: resolveSessionModelForProvider(undefined, 'CLAUDE', 'opus'),
         provider: 'CLAUDE',
         providerProjectPath: null,
       },
@@ -65,7 +77,7 @@ describe('agentSessionAccessor', () => {
         workspaceId: 'workspace-1',
         name: 'Chat 1',
         workflow: 'ratchet-fixer',
-        model: resolveSessionModelForProvider('gpt-5-codex', 'CODEX'),
+        model: resolveSessionModelForProvider('gpt-5-codex', 'CODEX', 'gpt-5-codex'),
         provider: 'CODEX',
         providerProjectPath: '/tmp/workspace',
       },

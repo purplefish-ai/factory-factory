@@ -450,6 +450,8 @@ function IdeSettingsSection() {
 function ChatProviderDefaultsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
+  const [localClaudeModel, setLocalClaudeModel] = useState('sonnet');
+  const [localCodexModel, setLocalCodexModel] = useState('default');
   const updateSettings = trpc.userSettings.update.useMutation({
     onSuccess: () => {
       toast.success('Chat defaults updated');
@@ -459,6 +461,11 @@ function ChatProviderDefaultsSection() {
       toast.error(`Failed to update chat defaults: ${error.message}`);
     },
   });
+
+  useEffect(() => {
+    setLocalClaudeModel(settings?.defaultClaudeModel ?? 'sonnet');
+    setLocalCodexModel(settings?.defaultCodexModel ?? 'default');
+  }, [settings?.defaultClaudeModel, settings?.defaultCodexModel]);
 
   if (isLoading) {
     return (
@@ -475,7 +482,39 @@ function ChatProviderDefaultsSection() {
   }
 
   const currentProvider = settings?.defaultSessionProvider ?? 'CLAUDE';
+  const currentClaudeModel = settings?.defaultClaudeModel ?? 'sonnet';
+  const currentCodexModel = settings?.defaultCodexModel ?? 'default';
   const currentWorkspacePermissions = settings?.defaultWorkspacePermissions ?? 'STRICT';
+  const modelSettingsByProvider = {
+    CLAUDE: {
+      fallbackValue: 'sonnet',
+      currentValue: currentClaudeModel,
+      localValue: localClaudeModel,
+      setLocalValue: setLocalClaudeModel,
+      buildPayload: (model: string) => ({ defaultClaudeModel: model }),
+    },
+    CODEX: {
+      fallbackValue: 'default',
+      currentValue: currentCodexModel,
+      localValue: localCodexModel,
+      setLocalValue: setLocalCodexModel,
+      buildPayload: (model: string) => ({ defaultCodexModel: model }),
+    },
+  } as const;
+
+  const saveDefaultModel = (provider: 'CLAUDE' | 'CODEX', value: string) => {
+    const providerSettings = modelSettingsByProvider[provider];
+    const normalizedValue = value.trim() || providerSettings.fallbackValue;
+
+    if (normalizedValue === providerSettings.currentValue) {
+      if (providerSettings.localValue !== providerSettings.currentValue) {
+        providerSettings.setLocalValue(providerSettings.currentValue);
+      }
+      return;
+    }
+
+    updateSettings.mutate(providerSettings.buildPayload(normalizedValue));
+  };
 
   return (
     <Card>
@@ -505,6 +544,50 @@ function ChatProviderDefaultsSection() {
           </SelectContent>
         </Select>
         <ProviderCliWarning provider={currentProvider} />
+        <div className="grid gap-3 pt-1 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="default-claude-model">Default Claude model</Label>
+            <Input
+              id="default-claude-model"
+              value={localClaudeModel}
+              onChange={(event) => setLocalClaudeModel(event.target.value)}
+              onBlur={() => saveDefaultModel('CLAUDE', localClaudeModel)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  saveDefaultModel('CLAUDE', localClaudeModel);
+                }
+              }}
+              placeholder="sonnet"
+              disabled={updateSettings.isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Claude aliases like <code className="rounded bg-muted px-1">sonnet</code> and{' '}
+              <code className="rounded bg-muted px-1">opus</code> are supported.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="default-codex-model">Default Codex model</Label>
+            <Input
+              id="default-codex-model"
+              value={localCodexModel}
+              onChange={(event) => setLocalCodexModel(event.target.value)}
+              onBlur={() => saveDefaultModel('CODEX', localCodexModel)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  saveDefaultModel('CODEX', localCodexModel);
+                }
+              }}
+              placeholder="default"
+              disabled={updateSettings.isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use any Codex model id, for example{' '}
+              <code className="rounded bg-muted px-1">gpt-5-codex</code>.
+            </p>
+          </div>
+        </div>
         <div className="space-y-2 pt-1">
           <Label htmlFor="workspace-permissions">Default permissions for new workspaces</Label>
           <Select

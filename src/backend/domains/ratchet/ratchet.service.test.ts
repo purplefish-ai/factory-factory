@@ -105,6 +105,8 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       cachedSlashCommands: null,
       ratchetEnabled: false,
       defaultSessionProvider: 'CLAUDE',
+      defaultClaudeModel: 'sonnet',
+      defaultCodexModel: 'default',
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
