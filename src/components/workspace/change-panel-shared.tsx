@@ -604,6 +604,12 @@ export const ChangeTreeView = memo(function ChangeTreeView({
     estimateSize: () => 32,
     overscan: 10,
     enabled: virtualized,
+    measureElement: virtualized
+      ? (el: Element) => {
+          // Measure actual height for rows with dynamic content (e.g. expanded GitReportedDirRow)
+          return el.getBoundingClientRect().height;
+        }
+      : undefined,
   });
 
   if (virtualized) {
@@ -623,6 +629,8 @@ export const ChangeTreeView = memo(function ChangeTreeView({
             return (
               <div
                 key={virtualItem.key}
+                ref={virtualizer.measureElement}
+                data-index={virtualItem.index}
                 style={{
                   position: 'absolute',
                   top: 0,
