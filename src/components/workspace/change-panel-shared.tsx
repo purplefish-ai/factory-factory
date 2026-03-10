@@ -331,7 +331,7 @@ function UntrackedDirContents({
   depth: number;
   onFileClick: (path: string) => void;
 }) {
-  const { data, isLoading } = trpc.workspace.listFiles.useQuery(
+  const { data, isLoading, isError } = trpc.workspace.listFiles.useQuery(
     { workspaceId, path: dirPath },
     { staleTime: 20_000, refetchOnWindowFocus: false }
   );
@@ -344,6 +344,18 @@ function UntrackedDirContents({
       >
         <Loader2 className="h-3 w-3 animate-spin" />
         <span>Loading…</span>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-1 text-xs text-destructive"
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      >
+        <AlertCircle className="h-3 w-3 shrink-0" />
+        <span>Failed to load directory contents</span>
       </div>
     );
   }
@@ -555,6 +567,8 @@ interface ChangeTreeViewProps {
   className?: string;
   indicatorLabel?: string;
   workspaceId?: string;
+  /** When true, virtualizes the flattened tree rows for large change sets. */
+  virtualized?: boolean;
 }
 
 export const ChangeTreeView = memo(function ChangeTreeView({
@@ -563,6 +577,7 @@ export const ChangeTreeView = memo(function ChangeTreeView({
   className = 'space-y-0.5',
   indicatorLabel,
   workspaceId,
+  virtualized = false,
 }: ChangeTreeViewProps) {
   const tree = useMemo(() => buildChangeTree(entries), [entries]);
   // Track collapsed dirs (all start expanded — only explicitly collapsed ones are stored)
@@ -581,6 +596,57 @@ export const ChangeTreeView = memo(function ChangeTreeView({
   }, []);
 
   const flatItems = useMemo(() => flattenChangeTree(tree, 0, collapsedDirs), [tree, collapsedDirs]);
+
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: flatItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 32,
+    overscan: 10,
+    enabled: virtualized,
+  });
+
+  if (virtualized) {
+    return (
+      <div ref={parentRef} className="h-full overflow-auto">
+        <div
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            position: 'relative',
+          }}
+        >
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const item = flatItems[virtualItem.index];
+            if (!item) {
+              return null;
+            }
+            return (
+              <div
+                key={virtualItem.key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                <ChangeTreeItemRow
+                  node={item.node}
+                  depth={item.depth}
+                  isExpanded={item.isExpanded}
+                  onToggle={toggleDir}
+                  onFileClick={onFileClick}
+                  workspaceId={workspaceId}
+                  indicatorLabel={indicatorLabel}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={className}>

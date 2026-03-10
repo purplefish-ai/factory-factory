@@ -212,12 +212,13 @@ function CombinedChangesContent({
         {(noMergeBase || hasIndicatorEntries || partialDataWarning) && (
           <div className="p-2 border-b">{decorators}</div>
         )}
-        <div className="flex-1 overflow-auto p-2">
+        <div className="flex-1 min-h-0 p-2">
           <ChangeTreeView
             entries={entries}
             onFileClick={onFileClick}
             indicatorLabel={indicatorLabel}
             workspaceId={workspaceId}
+            virtualized
           />
         </div>
       </div>
