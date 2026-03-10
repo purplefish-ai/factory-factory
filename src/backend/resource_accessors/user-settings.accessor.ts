@@ -5,10 +5,7 @@ import type {
   UserSettings,
 } from '@prisma-gen/client';
 import { prisma } from '@/backend/db';
-import {
-  normalizeSessionModelForProvider,
-  resolveSessionModelForProvider,
-} from '@/backend/lib/session-model';
+import { normalizeSessionModelForProvider } from '@/backend/lib/session-model';
 import { workspaceOrderMapSchema } from '@/shared/schemas/persisted-stores.schema';
 
 interface UpdateUserSettingsInput {
@@ -69,15 +66,6 @@ class UserSettingsAccessor {
   async getDefaultSessionProvider(): Promise<SessionProvider> {
     const settings = await this.get();
     return settings.defaultSessionProvider;
-  }
-
-  async getDefaultSessionModel(provider: SessionProvider): Promise<string> {
-    const settings = await this.get();
-    return resolveSessionModelForProvider(
-      undefined,
-      provider,
-      provider === 'CLAUDE' ? settings.defaultClaudeModel : settings.defaultCodexModel
-    );
   }
 
   /**
