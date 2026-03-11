@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { serviceNames } from '@/backend/services/registry';
 
 // Mock logger (standard pattern)
 vi.mock('./logger.service', () => ({
@@ -48,6 +49,10 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     lastActivityAt: null,
     ...overrides,
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ---------------------------------------------------------------------------
@@ -641,8 +646,10 @@ describe('WorkspaceSnapshotStore', () => {
         'workspace-snapshot-store.service.ts'
       );
       const content = fs.readFileSync(serviceFilePath, 'utf-8');
-      const forbiddenServiceCapsuleImport =
-        /@\/backend\/services\/(workspace|session|github|linear|ratchet|terminal|run-script)(?:\/|['"])/;
+      const serviceCapsulePattern = serviceNames.map(escapeRegExp).join('|');
+      const forbiddenServiceCapsuleImport = new RegExp(
+        `@/backend/services/(?:${serviceCapsulePattern})(?:/|['"])`
+      );
 
       // Check only actual import lines, not comments
       const importLines = content.split('\n').filter((line) => /^\s*import\s/.test(line));
