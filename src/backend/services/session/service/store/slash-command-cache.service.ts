@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma-gen/client';
-import { userSettingsAccessor } from '@/backend/services/settings';
 import { createLogger } from '@/backend/services/logger.service';
+import { userSettingsAccessor } from '@/backend/services/settings';
 import type { CommandInfo } from '@/shared/acp-protocol';
 
 const logger = createLogger('slash-command-cache');

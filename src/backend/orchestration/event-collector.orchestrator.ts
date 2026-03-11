@@ -17,11 +17,16 @@
  */
 
 import {
+  buildWorkspaceSessionSummaries,
+  hasWorkingSessionSummary,
+} from '@/backend/lib/session-summaries';
+import {
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
   prSnapshotService,
 } from '@/backend/services/github';
 import { linearStateSyncService } from '@/backend/services/linear';
+import { createLogger } from '@/backend/services/logger.service';
 import {
   RATCHET_STATE_CHANGED,
   RATCHET_TOGGLED,
@@ -47,11 +52,6 @@ import {
   workspaceActivityService,
   workspaceStateMachine,
 } from '@/backend/services/workspace';
-import {
-  buildWorkspaceSessionSummaries,
-  hasWorkingSessionSummary,
-} from '@/backend/lib/session-summaries';
-import { createLogger } from '@/backend/services/logger.service';
 import {
   type SnapshotUpdateInput,
   workspaceSnapshotStore,

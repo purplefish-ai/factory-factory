@@ -18,14 +18,14 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { configService } from '@/backend/services/config.service';
 import { SERVICE_INTERVAL_MS, SERVICE_TTL_SECONDS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
+import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
+import { summarizeZodIssues } from '@/backend/services/session/service/zod-issue-summary';
 import type { PersistedLockStore } from '@/shared/schemas/persisted-stores.schema';
 import { persistedLockStoreSchema } from '@/shared/schemas/persisted-stores.schema';
-import { agentSessionAccessor } from '../../resources/agent-session.accessor';
 
 const logger = createLogger('file-lock');
 

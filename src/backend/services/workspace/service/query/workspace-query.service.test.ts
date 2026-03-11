@@ -22,7 +22,7 @@ const mockReadConfig = vi.fn();
 const mockGetWorkspaceGitStats = vi.fn();
 const mockSyncWorkspaceCommandsFromWorktreeConfig = vi.fn();
 
-vi.mock('../../resources/workspace.accessor', () => ({
+vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
     findByProjectIdWithSessions: (...args: unknown[]) => mockFindByProjectIdWithSessions(...args),
     findByProjectId: (...args: unknown[]) => mockFindByProjectId(...args),
@@ -32,7 +32,7 @@ vi.mock('../../resources/workspace.accessor', () => ({
   },
 }));
 
-vi.mock('../../resources/project.accessor', () => ({
+vi.mock('@/backend/services/workspace/resources/project.accessor', () => ({
   projectAccessor: {
     findById: (...args: unknown[]) => mockProjectFindById(...args),
   },

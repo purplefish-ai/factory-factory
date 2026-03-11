@@ -1,6 +1,6 @@
 import type { SessionProvider } from '@prisma-gen/client';
-import { agentSessionAccessor } from '@/backend/services/session';
 import type { createLogger } from '@/backend/services/logger.service';
+import { agentSessionAccessor } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import type { RatchetAction, WorkspaceWithPR } from './ratchet.types';

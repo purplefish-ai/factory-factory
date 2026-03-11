@@ -1,3 +1,5 @@
+import { createLogger } from '@/backend/services/logger.service';
+import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
   AcpClientOptions,
   AcpProcessHandle,
@@ -9,7 +11,6 @@ import { chatConnectionService } from '@/backend/services/session/service/chat/c
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
-import { createLogger } from '@/backend/services/logger.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import { SessionStatus } from '@/shared/core';
@@ -17,7 +18,6 @@ import {
   createInitialSessionRuntimeState,
   type SessionRuntimeState,
 } from '@/shared/session-runtime';
-import type { AgentSessionRecord } from '../../resources/agent-session.accessor';
 import type { AcpEventProcessor } from './acp-event-processor';
 import { closedSessionPersistenceService } from './closed-session-persistence.service';
 import type {

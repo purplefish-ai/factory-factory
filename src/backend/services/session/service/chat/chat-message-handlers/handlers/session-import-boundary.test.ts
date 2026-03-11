@@ -15,7 +15,11 @@ describe('session handler import boundary', () => {
     const source = readFileSync(join(handlersDir, fileName), 'utf8');
 
     expect(source).not.toContain("from '@/backend/services/session'");
-    expect(source).not.toContain("from '@/backend/services/session/service/lifecycle/session.service'");
-    expect(source).not.toContain("from '@/backend/services/session/service/session-domain.service'");
+    expect(source).not.toContain(
+      "from '@/backend/services/session/service/lifecycle/session.service'"
+    );
+    expect(source).not.toContain(
+      "from '@/backend/services/session/service/session-domain.service'"
+    );
   });
 });

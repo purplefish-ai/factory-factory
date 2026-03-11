@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { isPathSafe } from '@/backend/lib/file-helpers';
 import { getMergeBase, parseGitStatusOutput } from '@/backend/lib/git-helpers';
 import { gitCommand } from '@/backend/lib/shell';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import {
   getWorkspaceWithProjectAndWorktreeOrThrow,

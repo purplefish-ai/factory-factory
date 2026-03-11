@@ -1,12 +1,4 @@
 import pLimit from 'p-limit';
-import type {
-  WorkspaceGitHubBridge,
-  WorkspacePRSnapshotBridge,
-  WorkspaceSessionBridge,
-} from '@/backend/services/workspace/service/bridges';
-import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
-import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
-import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import {
   assembleWorkspaceDerivedState,
   DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
@@ -15,10 +7,18 @@ import { FactoryConfigService } from '@/backend/services/factory-config.service'
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
+import { projectAccessor } from '@/backend/services/workspace/resources/project.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
+import type {
+  WorkspaceGitHubBridge,
+  WorkspacePRSnapshotBridge,
+  WorkspaceSessionBridge,
+} from '@/backend/services/workspace/service/bridges';
+import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
+import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
+import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
-import { projectAccessor } from '../../resources/project.accessor';
-import { workspaceAccessor } from '../../resources/workspace.accessor';
 
 const logger = createLogger('workspace-query');
 

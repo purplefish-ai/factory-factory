@@ -10,9 +10,9 @@ import { access, constants } from 'node:fs/promises';
 import path from 'node:path';
 import type { Project, Workspace } from '@prisma-gen/client';
 import { toError } from '@/backend/lib/error-utils';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import { SERVICE_LIMITS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import type { RunScriptWorkspaceBridge } from './bridges';
 
 const logger = createLogger('startup-script');

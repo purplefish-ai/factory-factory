@@ -1,8 +1,8 @@
 import { toError } from '@/backend/lib/error-utils';
-import { agentSessionAccessor } from '@/backend/services/session';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { agentSessionAccessor } from '@/backend/services/session';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetSessionBridge } from './bridges';
 import { ratchetProviderResolverService } from './ratchet-provider-resolver.service';

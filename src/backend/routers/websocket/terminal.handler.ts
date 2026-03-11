@@ -10,10 +10,10 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import { sessionDataService } from '@/backend/services/session';
-import { workspaceDataService } from '@/backend/services/workspace';
 import { toError } from '@/backend/lib/error-utils';
 import { type TerminalMessageInput, TerminalMessageSchema } from '@/backend/schemas/websocket';
+import { sessionDataService } from '@/backend/services/session';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { toMessageString } from './message-utils';
 import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 

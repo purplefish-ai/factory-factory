@@ -1,3 +1,4 @@
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
@@ -8,7 +9,6 @@ import {
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { createLogger } from '@/backend/services/logger.service';
 import type { StartMessageInput } from '@/shared/websocket';
 
 const logger = createLogger('chat-message-handlers');

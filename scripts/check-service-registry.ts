@@ -2,14 +2,20 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-import { prismaModelNames, type ServiceName, serviceRegistry } from '../src/backend/services/registry';
+import {
+  prismaModelNames,
+  type ServiceName,
+  serviceRegistry,
+} from '../src/backend/services/registry';
 
 const rootDir = process.cwd();
 const servicesRoot = path.join(rootDir, 'src/backend/services');
 const schemaPath = path.join(rootDir, 'prisma/schema.prisma');
 const infraServiceFileNames = new Set(
   readdirSync(servicesRoot, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')))
+    .filter(
+      (entry) => entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
+    )
     .map((entry) => entry.name.replace(/\.(ts|tsx)$/u, ''))
 );
 
@@ -159,7 +165,9 @@ function getFromService(relativePath: string): ServiceName | null {
   return serviceName;
 }
 
-function parseServiceImport(moduleSpecifier: string): { toServiceName: string; toSubpath: string } | null {
+function parseServiceImport(
+  moduleSpecifier: string
+): { toServiceName: string; toSubpath: string } | null {
   const toMatch = moduleSpecifier.match(/^@\/backend\/services\/([^/]+)(?:\/(.*))?$/);
   if (!toMatch) {
     return null;

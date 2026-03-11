@@ -6,7 +6,7 @@ const mockUpdate = vi.hoisted(() => vi.fn());
 const mockDeriveRuntimeState = vi.hoisted(() => vi.fn());
 const mockDeriveFlowStateFromWorkspace = vi.hoisted(() => vi.fn());
 
-vi.mock('../../resources/workspace.accessor', () => ({
+vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
   workspaceAccessor: {
     findById: (...args: unknown[]) => mockFindById(...args),
     update: (...args: unknown[]) => mockUpdate(...args),

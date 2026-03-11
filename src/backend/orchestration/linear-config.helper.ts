@@ -3,8 +3,8 @@
  * Used by orchestrators that need to call Linear API methods.
  */
 
-import { workspaceAccessor } from '@/backend/services/workspace';
 import { cryptoService } from '@/backend/services/crypto.service';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
 
 export function getDecryptedLinearConfig(

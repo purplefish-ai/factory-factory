@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import { createLogger } from '@/backend/services/logger.service';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import type { GitHubKanbanBridge } from './bridges';
 import { githubCLIService } from './github-cli.service';
 

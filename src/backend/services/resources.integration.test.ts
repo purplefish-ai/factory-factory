@@ -38,21 +38,21 @@ beforeAll(async () => {
   db = await createIntegrationDatabase();
   prisma = db.prisma;
 
-  ({ workspaceAccessor } = await vi.importActual<
-    typeof import('@/backend/services/workspace')
-  >('@/backend/services/workspace'));
-  ({ projectAccessor } = await vi.importActual<
-    typeof import('@/backend/services/workspace')
-  >('@/backend/services/workspace'));
-  ({ agentSessionAccessor } = await vi.importActual<
-    typeof import('@/backend/services/session')
-  >('@/backend/services/session'));
+  ({ workspaceAccessor } = await vi.importActual<typeof import('@/backend/services/workspace')>(
+    '@/backend/services/workspace'
+  ));
+  ({ projectAccessor } = await vi.importActual<typeof import('@/backend/services/workspace')>(
+    '@/backend/services/workspace'
+  ));
+  ({ agentSessionAccessor } = await vi.importActual<typeof import('@/backend/services/session')>(
+    '@/backend/services/session'
+  ));
   ({ terminalSessionAccessor } = await vi.importActual<
     typeof import('@/backend/services/terminal')
   >('@/backend/services/terminal'));
-  ({ userSettingsAccessor } = await vi.importActual<
-    typeof import('@/backend/services/settings')
-  >('@/backend/services/settings'));
+  ({ userSettingsAccessor } = await vi.importActual<typeof import('@/backend/services/settings')>(
+    '@/backend/services/settings'
+  ));
   ({ decisionLogAccessor } = await vi.importActual<
     typeof import('@/backend/services/decision-log')
   >('@/backend/services/decision-log'));

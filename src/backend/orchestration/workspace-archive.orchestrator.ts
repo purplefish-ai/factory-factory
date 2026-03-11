@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
 import { createLogger } from '@/backend/services/logger.service';
+import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
 import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-archive-orchestrator');

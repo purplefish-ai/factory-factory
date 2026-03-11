@@ -1,3 +1,5 @@
+import { createLogger } from '@/backend/services/logger.service';
+import { agentSessionAccessor } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
@@ -9,10 +11,8 @@ import { sessionService } from '@/backend/services/session/service/lifecycle/ses
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
-import { createLogger } from '@/backend/services/logger.service';
 import { MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import type { LoadSessionMessage } from '@/shared/websocket';
-import { agentSessionAccessor } from '../../../../resources/agent-session.accessor';
 
 const logger = createLogger('load-session-handler');
 const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;

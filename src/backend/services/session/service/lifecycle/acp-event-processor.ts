@@ -1,4 +1,7 @@
 import type { SessionConfigOption } from '@agentclientprotocol/sdk';
+import { interceptorRegistry } from '@/backend/interceptors/registry';
+import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
+import { createLogger } from '@/backend/services/logger.service';
 import {
   AcpEventTranslator,
   type AcpRuntimeEvent,
@@ -8,9 +11,6 @@ import {
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import { sessionFileLogger } from '@/backend/services/session/service/logging/session-file-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { interceptorRegistry } from '@/backend/interceptors/registry';
-import type { InterceptorContext, ToolEvent } from '@/backend/interceptors/types';
-import { createLogger } from '@/backend/services/logger.service';
 import type { AgentMessage, SessionDeltaEvent } from '@/shared/acp-protocol';
 import type { SessionConfigService } from './session.config.service';
 import type { SessionPermissionService } from './session.permission.service';

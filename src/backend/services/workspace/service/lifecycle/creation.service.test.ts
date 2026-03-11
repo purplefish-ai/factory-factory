@@ -1,19 +1,19 @@
 import type { UserSettings, Workspace } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as worktreeLifecycleServiceModule from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
-import * as userSettingsAccessorModule from '@/backend/services/settings';
 import * as gitOpsServiceModule from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
+import * as userSettingsAccessorModule from '@/backend/services/settings';
+import * as projectAccessorModule from '@/backend/services/workspace/resources/project.accessor';
+import * as workspaceAccessorModule from '@/backend/services/workspace/resources/workspace.accessor';
+import * as worktreeLifecycleServiceModule from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
-import * as projectAccessorModule from '../../resources/project.accessor';
-import * as workspaceAccessorModule from '../../resources/workspace.accessor';
 import { WorkspaceCreationService, type WorkspaceCreationSource } from './creation.service';
 
 type Logger = ReturnType<typeof createLogger>;
 
 // Mock dependencies
-vi.mock('../../resources/project.accessor');
-vi.mock('../../resources/workspace.accessor');
+vi.mock('@/backend/services/workspace/resources/project.accessor');
+vi.mock('@/backend/services/workspace/resources/workspace.accessor');
 vi.mock('@/backend/services/settings');
 vi.mock('@/backend/services/git-ops.service');
 vi.mock('@/backend/services/workspace/service/worktree/worktree-lifecycle.service');
@@ -444,6 +444,5 @@ describe('WorkspaceCreationService', () => {
         );
       });
     });
-
   });
 });

@@ -7,11 +7,8 @@
 
 import type { Prisma } from '@prisma-gen/client';
 import type { z } from 'zod';
-import {
-  type DataBackupTransactionClient,
-  dataBackupAccessor,
-} from '@/backend/services/settings';
 import { createLogger } from '@/backend/services/logger.service';
+import { type DataBackupTransactionClient, dataBackupAccessor } from '@/backend/services/settings';
 import type {
   ExportData,
   exportedAgentSessionSchema,

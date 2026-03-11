@@ -1,4 +1,7 @@
-import { AcpPermissionBridge, type AcpPermissionRequestEvent } from '@/backend/services/session/service/acp';
+import {
+  AcpPermissionBridge,
+  type AcpPermissionRequestEvent,
+} from '@/backend/services/session/service/acp';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { AskUserQuestion } from '@/shared/acp-protocol';

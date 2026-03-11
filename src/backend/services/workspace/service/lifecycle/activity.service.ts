@@ -8,7 +8,7 @@
 import { EventEmitter } from 'node:events';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
-import { workspaceAccessor } from '../../resources/workspace.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 
 const logger = createLogger('workspace-activity');
 

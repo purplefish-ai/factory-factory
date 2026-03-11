@@ -11,10 +11,10 @@
  */
 
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import type { SessionWorkspaceBridge } from '@/backend/services/session/service/bridges';
-import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { toError } from '@/backend/lib/error-utils';
 import { createLogger } from '@/backend/services/logger.service';
+import type { SessionWorkspaceBridge } from '@/backend/services/session/service/bridges';
+import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { PendingInteractiveRequest } from '@/shared/pending-request-types';
 import { chatConnectionService } from './chat-connection.service';
 

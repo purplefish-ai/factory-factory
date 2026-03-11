@@ -5,7 +5,6 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppContext } from '@/backend/app-context';
 import { prisma } from '@/backend/db';
-import { reconciliationService } from '@/backend/services/ratchet';
 import { startInterceptors, stopInterceptors } from '@/backend/interceptors';
 import { configureDomainBridges } from '@/backend/orchestration/domain-bridges.orchestrator';
 import {
@@ -16,6 +15,7 @@ import {
   configureSnapshotReconciliation,
   snapshotReconciliationService,
 } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
+import { reconciliationService } from '@/backend/services/ratchet';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const handlers = vi.hoisted(() => ({

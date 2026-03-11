@@ -2,12 +2,12 @@ import type { SessionProvider, TerminalSession } from '@prisma-gen/client';
 import {
   type AgentSessionRecord,
   agentSessionAccessor,
-} from '../../resources/agent-session.accessor';
+} from '@/backend/services/session/resources/agent-session.accessor';
 import {
   type ClosedSessionRecord,
   type ClosedSessionWithWorkspace,
   closedSessionAccessor,
-} from '../../resources/closed-session.accessor';
+} from '@/backend/services/session/resources/closed-session.accessor';
 import { terminalSessionAccessor } from '@/backend/services/terminal';
 import type { SessionStatus } from '@/shared/core';
 

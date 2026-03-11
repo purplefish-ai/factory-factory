@@ -1,17 +1,7 @@
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { ratchetService } from '@/backend/services/ratchet';
-import { sessionDataService, sessionProviderResolverService, sessionService } from '@/backend/services/session';
-import {
-  computeKanbanColumn,
-  deriveWorkspaceFlowStateFromWorkspace,
-  WorkspaceCreationService,
-  workspaceDataService,
-  workspaceQueryService,
-} from '@/backend/services/workspace';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
-import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
@@ -19,6 +9,20 @@ import {
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
+import { ratchetService } from '@/backend/services/ratchet';
+import {
+  sessionDataService,
+  sessionProviderResolverService,
+  sessionService,
+} from '@/backend/services/session';
+import {
+  computeKanbanColumn,
+  deriveWorkspaceFlowStateFromWorkspace,
+  WorkspaceCreationService,
+  workspaceDataService,
+  workspaceQueryService,
+} from '@/backend/services/workspace';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -176,7 +180,10 @@ export const workspaceRouter = router({
       defaultSessionProvider =
         await sessionProviderResolverService.resolveProviderForWorkspaceCreation(explicitProvider);
       const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
-      const providerUnavailableMessage = getProviderUnavailableMessage(defaultSessionProvider, cliHealth);
+      const providerUnavailableMessage = getProviderUnavailableMessage(
+        defaultSessionProvider,
+        cliHealth
+      );
       if (providerUnavailableMessage) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',

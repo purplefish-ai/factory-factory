@@ -19,15 +19,14 @@
 
 import { isDeepStrictEqual } from 'node:util';
 import pLimit from 'p-limit';
-import { chatEventForwarderService, sessionService } from '@/backend/services/session';
-import { computePendingRequestType } from '@/backend/services/workspace';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,
 } from '@/backend/lib/session-summaries';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { chatEventForwarderService, sessionService } from '@/backend/services/session';
+import { computePendingRequestType, workspaceAccessor } from '@/backend/services/workspace';
 import {
   type SnapshotUpdateInput,
   type WorkspaceSnapshotEntry,

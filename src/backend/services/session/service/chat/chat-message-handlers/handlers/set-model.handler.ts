@@ -1,9 +1,9 @@
+import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type {
   ChatMessageHandler,
   ChatMessageHandlerSessionService,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { createLogger } from '@/backend/services/logger.service';
 import type { SetModelMessage } from '@/shared/websocket';
 import { sendWebSocketError } from './utils';
 

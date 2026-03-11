@@ -38,10 +38,10 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
+import { configService } from '@/backend/services/config.service';
 import { agentSessionAccessor } from '@/backend/services/session';
 import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
-import { configService } from '@/backend/services/config.service';
 import { fixerSessionService } from './fixer-session.service';
 
 const mockSessionBridge: RatchetSessionBridge = {

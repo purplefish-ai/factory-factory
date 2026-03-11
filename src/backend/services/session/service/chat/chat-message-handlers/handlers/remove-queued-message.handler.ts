@@ -1,7 +1,7 @@
+import { createLogger } from '@/backend/services/logger.service';
 import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
 import type { ChatMessageHandler } from '@/backend/services/session/service/chat/chat-message-handlers/types';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { createLogger } from '@/backend/services/logger.service';
 import { MessageState } from '@/shared/acp-protocol';
 import type { RemoveQueuedMessageInput } from '@/shared/websocket';
 

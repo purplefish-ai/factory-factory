@@ -1,5 +1,7 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
 import type { SessionPermissionPreset } from '@prisma-gen/client';
+import { createLogger } from '@/backend/services/logger.service';
+import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import {
   type AcpProcessHandle,
   type AcpRuntimeManager,
@@ -8,10 +10,8 @@ import {
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
-import { createLogger } from '@/backend/services/logger.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
 import { type ChatBarCapabilities, EMPTY_CHAT_BAR_CAPABILITIES } from '@/shared/chat-capabilities';
-import type { AgentSessionRecord } from '../../resources/agent-session.accessor';
 import type { SessionRepository } from './session.repository';
 
 const logger = createLogger('session');

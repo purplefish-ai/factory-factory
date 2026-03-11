@@ -88,19 +88,22 @@ vi.mock('@/shared/acp-protocol', () => ({
 
 // --- Imports (after mocks) ---
 
+import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { gitOpsService } from '@/backend/services/git-ops.service';
 import { githubCLIService } from '@/backend/services/github';
 import { startupScriptService } from '@/backend/services/run-script';
+import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import {
+  agentSessionAccessor,
   chatMessageHandlerService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
-import { agentSessionAccessor } from '@/backend/services/session';
-import { workspaceAccessor } from '@/backend/services/workspace';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { gitOpsService } from '@/backend/services/git-ops.service';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
+import {
+  workspaceAccessor,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/services/workspace';
 import {
   clearWorkspaceInitOrchestratorStateForTests,
   initializeWorkspaceWorktree,

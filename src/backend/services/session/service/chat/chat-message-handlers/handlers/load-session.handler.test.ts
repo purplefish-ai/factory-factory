@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   tryDispatchNextMessage: vi.fn(),
 }));
 
-vi.mock('../../../../resources/agent-session.accessor', () => ({
+vi.mock('@/backend/services/session/resources/agent-session.accessor', () => ({
   agentSessionAccessor: {
     findById: mocks.findById,
   },

@@ -1,12 +1,24 @@
 // Domain imports (from barrel files)
+
+// Orchestration and infrastructure imports
+import { cliHealthService } from './orchestration/cli-health.service';
+import { schedulerService } from './orchestration/scheduler.service';
+import { configService } from './services/config.service';
 import { githubCLIService } from './services/github';
+import { createLogger } from './services/logger.service';
+import { findAvailablePort } from './services/port.service';
 import { ratchetService } from './services/ratchet';
+import { rateLimiter } from './services/rate-limiter.service';
 import {
   createRunScriptService,
   type RunScriptService,
   runScriptStateMachine,
   startupScriptService,
 } from './services/run-script';
+import {
+  createServerInstanceService,
+  type ServerInstanceService,
+} from './services/server-instance.service';
 import {
   type AcpTraceLogger,
   acpRuntimeManager,
@@ -22,17 +34,6 @@ import {
 } from './services/session';
 import { terminalService } from './services/terminal';
 import { kanbanStateService, workspaceStateMachine } from './services/workspace';
-// Orchestration and infrastructure imports
-import { cliHealthService } from './orchestration/cli-health.service';
-import { schedulerService } from './orchestration/scheduler.service';
-import { configService } from './services/config.service';
-import { createLogger } from './services/logger.service';
-import { findAvailablePort } from './services/port.service';
-import { rateLimiter } from './services/rate-limiter.service';
-import {
-  createServerInstanceService,
-  type ServerInstanceService,
-} from './services/server-instance.service';
 
 export type AppServices = {
   acpRuntimeManager: typeof acpRuntimeManager;

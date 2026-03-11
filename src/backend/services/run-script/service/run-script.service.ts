@@ -1,7 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import treeKill from 'tree-kill';
 import { toError } from '@/backend/lib/error-utils';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { PortAllocationService } from '@/backend/services/port-allocation.service';
@@ -10,6 +9,7 @@ import {
   runScriptConfigPersistenceService,
 } from '@/backend/services/run-script-config-persistence.service';
 import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import { runScriptStateMachine } from './run-script-state-machine.service';
 
 const logger = createLogger('run-script-service');

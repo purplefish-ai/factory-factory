@@ -1,8 +1,8 @@
 import { toError } from '@/backend/lib/error-utils';
-import { terminalSessionAccessor } from '@/backend/services/terminal';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
+import { terminalSessionAccessor } from '@/backend/services/terminal';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import type { RatchetWorkspaceBridge } from './bridges';
 

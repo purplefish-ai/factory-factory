@@ -10,7 +10,6 @@
 import { EventEmitter } from 'node:events';
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import {
   SERVICE_CONCURRENCY,
   SERVICE_INTERVAL_MS,
@@ -18,6 +17,7 @@ import {
 } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
 import type {

@@ -1,8 +1,8 @@
+import { createLogger } from '@/backend/services/logger.service';
 import type {
   ChatMessageHandler,
   ChatMessageHandlerSessionService,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { createLogger } from '@/backend/services/logger.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { UserInputMessage } from '@/shared/websocket';
 

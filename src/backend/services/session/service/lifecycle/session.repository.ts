@@ -1,10 +1,9 @@
 import type { Project, Workspace } from '@prisma-gen/client';
-import { projectAccessor } from '@/backend/services/workspace';
-import { workspaceAccessor } from '@/backend/services/workspace';
 import {
   type AgentSessionRecord,
   agentSessionAccessor,
-} from '../../resources/agent-session.accessor';
+} from '@/backend/services/session/resources/agent-session.accessor';
+import { projectAccessor, workspaceAccessor } from '@/backend/services/workspace';
 
 type SessionAccessor = {
   findById(id: string): Promise<AgentSessionRecord | null>;

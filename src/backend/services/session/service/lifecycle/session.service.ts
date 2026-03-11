@@ -1,10 +1,11 @@
 import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk';
+import { createLogger } from '@/backend/services/logger.service';
+import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { createLogger } from '@/backend/services/logger.service';
 import type {
   AgentContentItem,
   AgentMessage,
@@ -13,7 +14,6 @@ import type {
 } from '@/shared/acp-protocol';
 import type { ChatBarCapabilities } from '@/shared/chat-capabilities';
 import type { SessionRuntimeState } from '@/shared/session-runtime';
-import type { AgentSessionRecord } from '../../resources/agent-session.accessor';
 import { AcpEventProcessor } from './acp-event-processor';
 import { SessionConfigService } from './session.config.service';
 import { toErrorMessage } from './session.error-message';

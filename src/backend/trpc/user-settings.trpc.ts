@@ -6,8 +6,8 @@
 
 import { SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
 import { z } from 'zod';
-import { userSettingsQueryService } from '@/backend/services/workspace';
 import { execCommand } from '@/backend/lib/shell';
+import { userSettingsQueryService } from '@/backend/services/workspace';
 import { publicProcedure, router } from './trpc';
 
 export const userSettingsRouter = router({
