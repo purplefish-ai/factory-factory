@@ -13,13 +13,16 @@ const HANDLERS = [
 describe('session handler import boundary', () => {
   test.each(HANDLERS)('%s does not import directly from session domain internals', (fileName) => {
     const source = readFileSync(join(handlersDir, fileName), 'utf8');
-
-    expect(source).not.toContain("from '@/backend/services/session'");
-    expect(source).not.toContain(
-      "from '@/backend/services/session/service/lifecycle/session.service'"
+    const importSpecifiers = Array.from(source.matchAll(/from\s+['"]([^'"]+)['"]/g)).map(
+      (match) => match[1]
     );
-    expect(source).not.toContain(
-      "from '@/backend/services/session/service/session-domain.service'"
+
+    expect(importSpecifiers).not.toContain('@/backend/services/session');
+    expect(importSpecifiers).not.toContain(
+      '@/backend/services/session/service/lifecycle/session.service'
+    );
+    expect(importSpecifiers).not.toContain(
+      '@/backend/services/session/service/session-domain.service'
     );
   });
 });
