@@ -2,8 +2,8 @@ import { readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import type { ClosedSessionTranscript } from '@/backend/domains/session';
-import { sessionDataService } from '@/backend/domains/session';
+import type { ClosedSessionTranscript } from '@/backend/services/session';
+import { sessionDataService } from '@/backend/services/session';
 import { publicProcedure, router } from './trpc';
 
 export const closedSessionsRouter = router({

@@ -1,15 +1,15 @@
-import { githubCLIService } from '@/backend/domains/github';
-import { linearClientService, linearStateSyncService } from '@/backend/domains/linear';
+import { githubCLIService } from '@/backend/services/github';
+import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import {
   chatMessageHandlerService,
   sessionDomainService,
   sessionService,
-} from '@/backend/domains/session';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
+} from '@/backend/services/session';
+import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
 import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
 import { toError } from '@/backend/lib/error-utils';
-import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import { agentSessionAccessor } from '@/backend/services/session';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';

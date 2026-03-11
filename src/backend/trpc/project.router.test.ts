@@ -25,7 +25,7 @@ const mockGetClonePath = vi.hoisted(() => vi.fn());
 const mockCheckExistingClone = vi.hoisted(() => vi.fn());
 const mockCloneRepo = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   projectManagementService: mockProjectManagementService,
 }));
 

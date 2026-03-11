@@ -4,89 +4,9 @@ module.exports = {
     {
       name: 'no-circular',
       severity: 'error',
-      comment:
-        'Circular dependencies cause subtle runtime issues and make the codebase harder to reason about',
+      comment: 'Circular dependencies cause subtle runtime issues and make the codebase harder to reason about',
       from: {},
-      to: {
-        circular: true,
-      },
-    },
-    {
-      name: 'no-accessors-importing-application-layers',
-      severity: 'error',
-      comment:
-        'Resource accessors should remain pure data access and not depend on application/domain layers',
-      from: { path: '^src/backend/resource_accessors' },
-      to: {
-        path: '^src/backend/(domains|orchestration|routers|trpc|agents|services)/',
-      },
-    },
-    {
-      name: 'no-services-importing-domains',
-      severity: 'error',
-      comment:
-        'Infrastructure services must not depend on domain modules. Move domain logic into domains/ or orchestration/',
-      from: { path: '^src/backend/services' },
-      to: { path: '^src/backend/domains' },
-    },
-    {
-      name: 'no-services-importing-accessors',
-      severity: 'error',
-      comment:
-        'Infrastructure services must not depend on resource accessors. Data access should live in domains or orchestration',
-      from: { path: '^src/backend/services' },
-      to: { path: '^src/backend/resource_accessors' },
-    },
-    {
-      name: 'no-services-importing-agents',
-      severity: 'error',
-      comment: 'Services should not depend on agents - agents should depend on services',
-      from: { path: '^src/backend/services' },
-      to: { path: '^src/backend/agents' },
-    },
-    {
-      name: 'no-services-importing-routers',
-      severity: 'error',
-      comment: 'Services should not depend on routers - routers should depend on services',
-      from: { path: '^src/backend/services' },
-      to: { path: '^src/backend/routers' },
-    },
-    {
-      name: 'no-lib-importing-application-layers',
-      severity: 'error',
-      comment:
-        'Backend lib helpers should remain low-level and must not depend on domains, orchestration, routers, agents, or accessors',
-      from: { path: '^src/backend/lib' },
-      to: {
-        path: '^src/backend/(domains|orchestration|routers|trpc|agents|resource_accessors)/',
-      },
-    },
-    {
-      name: 'no-lib-importing-services-without-allowlist',
-      severity: 'error',
-      comment:
-        'Backend lib helpers should avoid service coupling. If a lib helper needs a service dependency, add an explicit allowlist entry.',
-      from: {
-        path: '^src/backend/lib',
-        pathNot:
-          '^src/backend/lib/(file-lock-mutex|session-summaries)\\.ts$|^src/backend/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/services/' },
-    },
-    {
-      name: 'no-mcp-routers-importing-agents',
-      severity: 'error',
-      // task.mcp.ts is exempted because it's the MCP endpoint for managing agent
-      // lifecycle itself (startWorker, killWorkerAndCleanup). Unlike other MCP tools
-      // that provide capabilities TO agents, task.mcp.ts provides control OVER agents.
-      // This is fundamentally different - it's agent management, not agent capability.
-      comment:
-        'MCP routers should not import agent logic directly (except task.mcp.ts for worker lifecycle)',
-      from: {
-        path: '^src/backend/routers/mcp',
-        pathNot: '^src/backend/routers/mcp/task\\.mcp\\.ts$',
-      },
-      to: { path: '^src/backend/agents' },
+      to: { circular: true },
     },
     {
       name: 'no-frontend-importing-backend',
@@ -98,6 +18,16 @@ module.exports = {
         pathNot: '^src/client/lib/trpc\\.ts$',
       },
       to: { path: '^src/backend' },
+    },
+    {
+      name: 'frontend-trpc-only-imports-backend-trpc',
+      severity: 'error',
+      comment: 'src/client/lib/trpc.ts may only import backend tRPC types, not other backend modules',
+      from: { path: '^src/client/lib/trpc\\.ts$' },
+      to: {
+        path: '^src/backend/',
+        pathNot: '^src/backend/trpc/',
+      },
     },
     {
       name: 'no-importing-legacy-shared-claude-protocol',
@@ -126,91 +56,172 @@ module.exports = {
     {
       name: 'no-importing-backend-services-barrel',
       severity: 'error',
-      comment:
-        'Import from concrete service modules, not services/index.',
+      comment: 'Import from concrete service modules, not services/index.',
       from: { path: '^src/' },
       to: { path: '^src/backend/services/index\\.ts$' },
     },
     {
       name: 'no-importing-backend-orchestration-barrel',
       severity: 'error',
-      comment:
-        'Import concrete orchestration modules directly, not orchestration/index.',
+      comment: 'Import concrete orchestration modules directly, not orchestration/index.',
       from: { path: '^src/' },
       to: { path: '^src/backend/orchestration/index\\.ts$' },
     },
     {
-      name: 'no-importing-resource-accessors-index-barrel',
+      name: 'no-lib-importing-app-layers',
       severity: 'error',
       comment:
-        'Import concrete resource accessor modules directly, not resource_accessors/index.',
-      from: { path: '^src/' },
-      to: { path: '^src/backend/resource_accessors/index\\.ts$' },
-    },
-    {
-      name: 'frontend-trpc-only-imports-backend-trpc',
-      severity: 'error',
-      comment: 'src/client/lib/trpc.ts may only import backend tRPC types, not other backend modules',
-      from: { path: '^src/client/lib/trpc\\.ts$' },
+        'Backend lib helpers should remain low-level and must not depend on orchestration, routers, agents, or service internals',
+      from: { path: '^src/backend/lib' },
       to: {
-        path: '^src/backend/',
-        pathNot: '^src/backend/trpc/',
+        path: '^src/backend/(orchestration|routers|trpc|agents|services/[^/]+/(service|resources))/',
       },
     },
     {
-      name: 'no-trpc-importing-accessors',
-      severity: 'error',
-      comment: 'tRPC routers should use services, not access data directly via resource accessors',
-      from: { path: '^src/backend/trpc' },
-      to: { path: '^src/backend/resource_accessors' },
-    },
-    {
-      name: 'only-domains-or-orchestration-import-accessors',
+      name: 'no-lib-importing-services-without-allowlist',
       severity: 'error',
       comment:
-        'Resource accessors are data-layer internals and may only be imported by domains and orchestration',
+        'Backend lib helpers should avoid service coupling. If a lib helper needs a service dependency, add an explicit allowlist entry.',
+      from: {
+        path: '^src/backend/lib',
+        pathNot:
+          '^src/backend/lib/(file-lock-mutex|session-summaries)\\.ts$|^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/services/' },
+    },
+    {
+      name: 'only-service-resources-import-db',
+      severity: 'error',
+      comment: 'Database client should be imported only by service resources',
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/(domains/|orchestration/|resource_accessors/)|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/(db\\.ts|server\\.ts|services/[^/]+/resources/)|^src/backend/.*\\.test\\.ts$',
       },
-      to: { path: '^src/backend/resource_accessors/' },
+      to: { path: '^src/backend/db\\.ts$' },
     },
     {
-      name: 'no-direct-claude-session-accessor-imports',
+      name: 'no-trpc-importing-service-internals',
       severity: 'error',
-      comment:
-        'Use agent-session.accessor at call sites; keep claude-session accessor behind that alias during migration.',
+      comment: 'tRPC routers must import service barrels, not service internals.',
+      from: { path: '^src/backend/trpc/' },
+      to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
+    },
+    {
+      name: 'no-orchestration-importing-service-internals',
+      severity: 'error',
+      comment: 'Orchestration must import service barrels only.',
+      from: { path: '^src/backend/orchestration/' },
+      to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
+    },
+    {
+      name: 'only-service-layers-import-service-resources',
+      severity: 'error',
+      comment: 'Service resources are data-layer internals.',
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/resource_accessors/(claude-session|agent-session)\\.accessor\\.ts$|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/services/[^/]+/(index\\.ts|service/|resources/)|^src/backend/.*\\.test\\.ts$',
       },
-      to: { path: '^src/backend/resource_accessors/claude-session\\.accessor\\.ts$' },
+      to: { path: '^src/backend/services/[^/]+/resources/' },
+    },
+    {
+      name: 'no-cross-service-resource-imports',
+      severity: 'error',
+      comment: 'Service business logic must not import another service\'s resources.',
+      from: { path: '^src/backend/services/([^/]+)/service/' },
+      to: {
+        path: '^src/backend/services/([^/]+)/resources/',
+        pathNot: '^src/backend/services/$1/resources/',
+      },
+    },
+    {
+      name: 'no-service-resources-importing-app-layers',
+      severity: 'error',
+      comment: 'Resources must remain pure data access and not depend on service/trpc/router/orchestration layers.',
+      from: { path: '^src/backend/services/[^/]+/resources/' },
+      to: { path: '^src/backend/(services/[^/]+/service|orchestration|routers|trpc|agents)/' },
+    },
+    {
+      name: 'no-cross-service-internal-imports',
+      severity: 'error',
+      comment: 'Cross-service imports must go through service barrels only.',
+      from: { path: '^src/backend/services/([^/]+)/' },
+      to: {
+        path: '^src/backend/services/([^/]+)/(?!index\\.ts$).+',
+        pathNot: '^src/backend/services/$1/',
+      },
+    },
+    {
+      name: 'no-deep-service-imports',
+      severity: 'error',
+      comment: 'External consumers must import from service barrels only.',
+      from: {
+        path: '^src/backend',
+        pathNot: '^src/backend/services/([^/]+)/|^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/services/[^/]+/(?!index\\.ts$).+' },
+    },
+    {
+      name: 'no-services-importing-transport-layers',
+      severity: 'error',
+      comment: 'Services should not depend on routers or tRPC transport layers.',
+      from: { path: '^src/backend/services/' },
+      to: { path: '^src/backend/(routers|trpc)/' },
     },
     {
       name: 'session-model-import-boundary',
       severity: 'error',
       comment:
-        'Session-model normalization is provider/session-specific and should only be consumed by the session domain and resource accessors.',
+        'Session-model normalization is provider/session-specific and should only be consumed by session internals/resources and user settings persistence.',
       from: {
         path: '^src/backend',
         pathNot:
-          '^src/backend/(domains/session/|resource_accessors/)|^src/backend/lib/session-model\\.ts$|^src/backend/.*\\.test\\.ts$',
+          '^src/backend/services/session/(service/|resources/)|^src/backend/services/settings/resources/user-settings\\.accessor\\.ts$|^src/backend/lib/session-model\\.ts$|^src/backend/.*\\.test\\.ts$',
       },
       to: { path: '^src/backend/lib/session-model\\.ts$' },
     },
     {
-      name: 'only-allowlisted-orchestration-import-accessors',
+      name: 'session-runtime-import-boundary',
       severity: 'error',
       comment:
-        'Orchestration accessor imports must stay explicit and minimal. Add new files here only with clear rationale.',
+        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session acp/lifecycle entry points.',
       from: {
-        path: '^src/backend/orchestration/',
+        path: '^src/backend/services/session/service/',
         pathNot:
-          '^src/backend/orchestration/(workspace-init\\.orchestrator|snapshot-reconciliation\\.orchestrator|scheduler\\.service|health\\.service|decision-log-query\\.service|data-backup\\.service|linear-config\\.helper|types)\\.ts$|^src/backend/orchestration/.*\\.test\\.ts$',
+          '^src/backend/services/session/service/(acp/|runtime/|lifecycle/)|^src/backend/services/session/(index\\.ts|service/index\\.ts)$|^src/backend/.*\\.test\\.ts$',
       },
-      to: { path: '^src/backend/resource_accessors/' },
+      to: { path: '^src/backend/services/session/service/runtime/' },
+    },
+    {
+      name: 'acp-no-external-imports',
+      severity: 'error',
+      comment:
+        'ACP internals must stay isolated from app code; only ACP internals and the logger service are allowed.',
+      from: {
+        path: '^src/backend/services/session/service/acp/',
+        pathNot: '^src/backend/services/session/service/acp/.*\\.test\\.ts$',
+      },
+      to: {
+        path: '^src/',
+        pathNot:
+          '^src/backend/services/session/service/acp/|^src/backend/services/session/service/acp$|^src/backend/services/logger.service.ts$',
+      },
+    },
+    {
+      name: 'codex-app-server-adapter-self-contained',
+      severity: 'error',
+      comment:
+        'Codex app-server ACP adapter must be self-contained and must not import from outside its own directory.',
+      from: {
+        path: '^src/backend/services/session/service/acp/codex-app-server-adapter/',
+        pathNot:
+          '^src/backend/services/session/service/acp/codex-app-server-adapter/.*\\.test\\.ts$',
+      },
+      to: {
+        path: '^src/',
+        pathNot: '^src/backend/services/session/service/acp/codex-app-server-adapter/',
+      },
     },
     {
       name: 'no-shared-importing-app-layers',
@@ -223,160 +234,9 @@ module.exports = {
     {
       name: 'no-backend-importing-ui-layers',
       severity: 'error',
-      comment: 'Backend domain/application layers should not depend on UI modules',
+      comment: 'Backend layers should not depend on UI modules',
       from: { path: '^src/backend' },
       to: { path: '^src/(client|frontend|components)' },
-    },
-    {
-      name: 'only-session-domain-imports-session-store',
-      severity: 'error',
-      comment:
-        'Session transcript/store internals are single-writer infrastructure and may only be imported by the session domain layer',
-      from: {
-        path: '^src/backend',
-        pathNot:
-          '^src/backend/domains/session/|^src/backend/services/session-store\\.service\\.ts$|^src/backend/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/services/session-store\\.service\\.ts$' },
-    },
-    {
-      name: 'session-runtime-import-boundary',
-      severity: 'error',
-      comment:
-        'Session runtime managers are internal lifecycle infrastructure and may only be imported by session acp/lifecycle entry points.',
-      from: {
-        path: '^src/backend/domains/session/',
-        pathNot:
-          '^src/backend/domains/session/(acp/|runtime/|lifecycle/)|^src/backend/domains/session/index\\.ts$|^src/backend/domains/session/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/domains/session/runtime/' },
-    },
-    {
-      name: 'acp-no-external-imports',
-      severity: 'error',
-      comment:
-        'ACP internals must stay isolated from app code; only ACP internals and the logger service are allowed.',
-      from: {
-        path: '^src/backend/domains/session/acp/',
-        pathNot: '^src/backend/domains/session/acp/.*\\.test\\.ts$',
-      },
-      to: {
-        path: '^src/',
-        pathNot:
-          '^src/backend/domains/session/acp/|^src/backend/domains/session/acp$|^src/backend/services/logger.service.ts$',
-      },
-    },
-    {
-      name: 'codex-app-server-adapter-self-contained',
-      severity: 'error',
-      comment:
-        'Codex app-server ACP adapter must be self-contained and must not import from outside its own directory.',
-      from: {
-        path: '^src/backend/domains/session/acp/codex-app-server-adapter/',
-        pathNot: '^src/backend/domains/session/acp/codex-app-server-adapter/.*\\.test\\.ts$',
-      },
-      to: {
-        path: '^src/',
-        pathNot: '^src/backend/domains/session/acp/codex-app-server-adapter/',
-      },
-    },
-    {
-      name: 'no-cross-domain-imports',
-      severity: 'error',
-      comment:
-        'Domain modules must not import from sibling domains directly. ' +
-        'Cross-domain coordination goes through the orchestration layer (Phase 8).',
-      from: { path: '^src/backend/domains/([^/]+)/' },
-      to: {
-        path: '^src/backend/domains/([^/]+)/',
-        pathNot: '^src/backend/domains/$1/',
-      },
-    },
-    {
-      name: 'no-deep-domain-imports',
-      severity: 'error',
-      comment:
-        'External consumers must import from domain barrel files (domains/{name}/), ' +
-        'not from internal paths (domains/{name}/subfolder/). ' +
-        'This keeps domain internals encapsulated.',
-      from: {
-        path: '^src/backend',
-        pathNot: '^src/backend/domains/([^/]+)/',
-      },
-      to: {
-        path: '^src/backend/domains/[^/]+/.+/',
-      },
-    },
-    {
-      name: 'no-orchestration-importing-domain-internals',
-      severity: 'error',
-      comment:
-        'Orchestration must import domains through barrels only (domains/{name}/index.ts), ' +
-        'not through domain internals.',
-      from: { path: '^src/backend/orchestration/' },
-      to: {
-        path: '^src/backend/domains/[^/]+/(?!index\\.ts$).+',
-      },
-    },
-    {
-      name: 'no-non-barrel-domain-root-imports',
-      severity: 'error',
-      comment:
-        'External consumers must use domain barrels. Imports like domains/{name}/foo.ts are internal-only.',
-      from: {
-        path: '^(src|electron)/',
-        pathNot: '^src/backend/domains/([^/]+)/',
-      },
-      to: {
-        path: '^src/backend/domains/[^/]+/(?!index\\.ts$)[^/]+\\.ts$',
-      },
-    },
-    {
-      name: 'no-domains-importing-orchestration',
-      severity: 'error',
-      comment:
-        'Domain modules must not import from orchestration layer. ' +
-        'Orchestration coordinates domains, not the other way around.',
-      from: {
-        path: '^src/backend/domains/',
-        pathNot: '\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/orchestration/' },
-    },
-    {
-      name: 'no-domains-importing-routers',
-      severity: 'error',
-      comment:
-        'Domain modules must not import from routers or tRPC layer. ' +
-        'Routers depend on domains, not the other way around.',
-      from: { path: '^src/backend/domains/' },
-      to: { path: '^src/backend/(routers|trpc)/' },
-    },
-    {
-      name: 'no-domains-importing-agents',
-      severity: 'error',
-      comment:
-        'Domain modules must not import from agents. ' +
-        'Agents depend on domains, not the other way around.',
-      from: { path: '^src/backend/domains/' },
-      to: { path: '^src/backend/agents/' },
-    },
-    {
-      name: 'only-accessors-import-db',
-      severity: 'error',
-      comment: 'Database client should be imported only by resource accessors',
-      from: {
-        path: '^src/backend',
-        pathNot: '^src/backend/(db\\.ts|server\\.ts|resource_accessors/)|^src/backend/.*\\.test\\.ts$',
-      },
-      to: { path: '^src/backend/db\\.ts$' },
-    },
-    {
-      name: 'no-routers-importing-accessors',
-      severity: 'error',
-      comment: 'Routers should use services, not access data directly via resource accessors',
-      from: { path: '^src/backend/routers' },
-      to: { path: '^src/backend/resource_accessors' },
     },
   ],
   options: {

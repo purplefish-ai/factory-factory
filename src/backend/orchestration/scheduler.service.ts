@@ -6,9 +6,9 @@
  */
 
 import pLimit from 'p-limit';
-import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
+import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import { toError } from '@/backend/lib/error-utils';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import { workspaceAccessor } from '@/backend/services/workspace';
 import {
   SERVICE_CONCURRENCY,
   SERVICE_INTERVAL_MS,

@@ -5,7 +5,7 @@ const mockGetUserSettings = vi.hoisted(() => vi.fn());
 const mockCheckIdeAvailable = vi.hoisted(() => vi.fn());
 const mockOpenPathInIde = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findById: (...args: unknown[]) => mockFindById(...args),
   },

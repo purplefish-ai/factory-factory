@@ -6,7 +6,7 @@
 
 import { SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
 import { z } from 'zod';
-import { userSettingsQueryService } from '@/backend/domains/workspace';
+import { userSettingsQueryService } from '@/backend/services/workspace';
 import { execCommand } from '@/backend/lib/shell';
 import { publicProcedure, router } from './trpc';
 

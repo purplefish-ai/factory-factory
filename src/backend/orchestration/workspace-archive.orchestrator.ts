@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
+import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
 import { createLogger } from '@/backend/services/logger.service';
 import type { WorkspaceWithProject } from './types';
 

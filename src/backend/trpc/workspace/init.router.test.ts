@@ -10,13 +10,13 @@ const mockSetInitMode = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceInitPolicy = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/run-script', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: {
     runStartupScript: (...args: unknown[]) => mockRunStartupScript(...args),
   },
 }));
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
     findById: (...args: unknown[]) => mockFindById(...args),

@@ -5,8 +5,8 @@
  */
 
 import { z } from 'zod';
-import { githubCLIService } from '@/backend/domains/github';
-import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
+import { githubCLIService } from '@/backend/services/github';
+import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
 import { publicProcedure, router } from './trpc';
 
 export const githubRouter = router({

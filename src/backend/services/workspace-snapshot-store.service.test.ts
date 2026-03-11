@@ -635,7 +635,7 @@ describe('WorkspaceSnapshotStore', () => {
   // ARCH-02: No domain imports
   // -------------------------------------------------------------------------
   describe('ARCH-02: No domain imports', () => {
-    it('service file has zero imports from @/backend/domains/', () => {
+    it('service file has zero imports from @/backend/services/', () => {
       const serviceFilePath = path.resolve(
         import.meta.dirname,
         'workspace-snapshot-store.service.ts'
@@ -646,7 +646,7 @@ describe('WorkspaceSnapshotStore', () => {
       const importLines = content.split('\n').filter((line) => /^\s*import\s/.test(line));
 
       for (const line of importLines) {
-        expect(line).not.toContain('@/backend/domains/');
+        expect(line).not.toContain('@/backend/services/');
       }
     });
   });

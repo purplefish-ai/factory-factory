@@ -6,13 +6,13 @@ const mockListMyIssues = vi.hoisted(() => vi.fn());
 const mockGetIssue = vi.hoisted(() => vi.fn());
 const mockDecrypt = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   projectManagementService: {
     findById: (...args: unknown[]) => mockFindProjectById(...args),
   },
 }));
 
-vi.mock('@/backend/domains/linear', () => ({
+vi.mock('@/backend/services/linear', () => ({
   linearClientService: {
     validateKeyAndListTeams: (...args: unknown[]) => mockValidateKeyAndListTeams(...args),
     listMyIssues: (...args: unknown[]) => mockListMyIssues(...args),

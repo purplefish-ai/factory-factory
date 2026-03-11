@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { userSettingsQueryService, workspaceDataService } from '@/backend/domains/workspace';
+import { userSettingsQueryService, workspaceDataService } from '@/backend/services/workspace';
 import { checkIdeAvailable, openPathInIde } from '@/backend/lib/ide-helpers';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
 

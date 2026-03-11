@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { linearClientService } from '@/backend/domains/linear';
-import { projectManagementService } from '@/backend/domains/workspace';
+import { linearClientService } from '@/backend/services/linear';
+import { projectManagementService } from '@/backend/services/workspace';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router } from './trpc';

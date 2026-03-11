@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const OUTPUT_ROOT = resolve('src/backend/domains/session/acp/codex-app-server-adapter/schemas');
+const OUTPUT_ROOT = resolve('src/backend/services/session/service/acp/codex-app-server-adapter/schemas');
 const TS_OUT = resolve(OUTPUT_ROOT, 'ts');
 const JSON_SCHEMA_OUT = resolve(OUTPUT_ROOT, 'json-schema');
 

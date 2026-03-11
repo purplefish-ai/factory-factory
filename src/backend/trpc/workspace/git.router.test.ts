@@ -12,7 +12,7 @@ const mockGitCommand = vi.hoisted(() => vi.fn());
 const mockGetMergeBase = vi.hoisted(() => vi.fn());
 const mockIsPathSafe = vi.hoisted(() => vi.fn(async () => true));
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
 }));
 

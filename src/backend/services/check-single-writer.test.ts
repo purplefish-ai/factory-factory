@@ -8,7 +8,7 @@ describe('check-single-writer', () => {
   const tempDirs: string[] = [];
   const checkerScriptPath = path.join(process.cwd(), 'scripts/check-single-writer.mjs');
   const accessorSource = readFileSync(
-    path.join(process.cwd(), 'src/backend/resource_accessors/workspace.accessor.ts'),
+    path.join(process.cwd(), 'src/backend/services/workspace/resources/workspace.accessor.ts'),
     'utf8'
   );
 
@@ -23,7 +23,7 @@ describe('check-single-writer', () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'single-writer-'));
     tempDirs.push(tempRoot);
 
-    const accessorDir = path.join(tempRoot, 'src/backend/resource_accessors');
+    const accessorDir = path.join(tempRoot, 'src/backend/services/workspace/resources');
     mkdirSync(accessorDir, { recursive: true });
     writeFileSync(path.join(accessorDir, 'workspace.accessor.ts'), accessorSource);
 
@@ -51,7 +51,7 @@ describe('check-single-writer', () => {
   it('flags unauthorized ratchet field writes via clearRatchetActiveSession mutator', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/domains/session/lifecycle/session.service.ts',
+        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
         content: `
           async function clearFromSession(workspaceAccessor) {
             await workspaceAccessor.clearRatchetActiveSession('ws', 'session');
@@ -71,7 +71,7 @@ describe('check-single-writer', () => {
   it('allows ratchet-owned clearRatchetActiveSession writes', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/domains/ratchet/ratchet.service.ts',
+        relPath: 'src/backend/services/ratchet/service/ratchet.service.ts',
         content: `
           async function clearFromRatchet(workspaceAccessor) {
             await workspaceAccessor.clearRatchetActiveSession('ws', 'session');
@@ -88,7 +88,7 @@ describe('check-single-writer', () => {
   it('checks ownership for updateMany payload mutators', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/domains/session/lifecycle/session.service.ts',
+        relPath: 'src/backend/services/session/service/lifecycle/session.service.ts',
         content: `
           async function transition(workspaceAccessor) {
             await workspaceAccessor.transitionWithCas('ws', 'READY', { ratchetState: 'IDLE' });
@@ -106,7 +106,7 @@ describe('check-single-writer', () => {
   it('analyzes this.workspaces mutator calls without crashing', () => {
     const tempRoot = createTempBackend([
       {
-        relPath: 'src/backend/domains/session/lifecycle/session.repository.ts',
+        relPath: 'src/backend/services/session/service/lifecycle/session.repository.ts',
         content: `
           class SessionRepository {
             workspaces;
@@ -136,7 +136,7 @@ describe('check-single-writer', () => {
     const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'single-writer-'));
     tempDirs.push(tempRoot);
 
-    const accessorDir = path.join(tempRoot, 'src/backend/resource_accessors');
+    const accessorDir = path.join(tempRoot, 'src/backend/services/workspace/resources');
     mkdirSync(accessorDir, { recursive: true });
 
     const accessorWithNewMutator = accessorSource.replace(
@@ -155,7 +155,7 @@ export const workspaceAccessor = new WorkspaceAccessor();
     );
 
     writeFileSync(path.join(accessorDir, 'workspace.accessor.ts'), accessorWithNewMutator);
-    const sessionDir = path.join(tempRoot, 'src/backend/domains/session/lifecycle');
+    const sessionDir = path.join(tempRoot, 'src/backend/services/session/lifecycle');
     mkdirSync(sessionDir, { recursive: true });
     writeFileSync(path.join(sessionDir, 'session.service.ts'), 'export const marker = "noop";\n');
 

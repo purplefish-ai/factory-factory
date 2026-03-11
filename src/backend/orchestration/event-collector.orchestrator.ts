@@ -20,33 +20,33 @@ import {
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
   prSnapshotService,
-} from '@/backend/domains/github';
-import { linearStateSyncService } from '@/backend/domains/linear';
+} from '@/backend/services/github';
+import { linearStateSyncService } from '@/backend/services/linear';
 import {
   RATCHET_STATE_CHANGED,
   RATCHET_TOGGLED,
   type RatchetStateChangedEvent,
   type RatchetToggledEvent,
   ratchetService,
-} from '@/backend/domains/ratchet';
+} from '@/backend/services/ratchet';
 import {
   RUN_SCRIPT_STATUS_CHANGED,
   type RunScriptStatusChangedEvent,
   runScriptStateMachine,
-} from '@/backend/domains/run-script';
+} from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   sessionDataService,
   sessionDomainService,
   sessionService,
-} from '@/backend/domains/session';
+} from '@/backend/services/session';
 import {
   computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
   workspaceStateMachine,
-} from '@/backend/domains/workspace';
+} from '@/backend/services/workspace';
 import {
   buildWorkspaceSessionSummaries,
   hasWorkingSessionSummary,

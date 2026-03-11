@@ -9,7 +9,7 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { config } from 'dotenv';
 import open from 'open';
-import { runCodexAppServerAcpAdapter } from '@/backend/domains/session';
+import { runCodexAppServerAcpAdapter } from '@/backend/services/session';
 import { runMigrations as runDbMigrations } from '@/backend/migrate';
 import { createLogger, getLogFilePath } from '@/backend/services/logger.service';
 import { runProxyCommand } from './proxy';

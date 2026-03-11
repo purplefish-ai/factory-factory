@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { projectManagementService } from '@/backend/domains/workspace';
+import { projectManagementService } from '@/backend/services/workspace';
 import { compareFilesByRelevance, listFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';

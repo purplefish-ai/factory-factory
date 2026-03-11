@@ -22,7 +22,7 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import { type AppContext, createAppContext } from './app-context';
 import { prisma } from './db';
-import { reconciliationService } from './domains/ratchet';
+import { reconciliationService } from './services/ratchet';
 import { registerInterceptors, startInterceptors, stopInterceptors } from './interceptors';
 import { toError } from './lib/error-utils';
 import {

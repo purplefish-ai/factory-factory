@@ -5,7 +5,7 @@
  * before the first remote push so only meaningful branch names are published.
  */
 
-import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
+import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
 import { gitCommand } from '@/backend/lib/shell';
 import { createLogger } from '@/backend/services/logger.service';
 import { extractMatchingCommand, generateBranchName } from './branch-rename.utils';

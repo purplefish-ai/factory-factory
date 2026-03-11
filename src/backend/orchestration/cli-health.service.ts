@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { z } from 'zod';
-import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/domains/github';
+import { type GitHubCLIHealthStatus, githubCLIService } from '@/backend/services/github';
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_CACHE_TTL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';

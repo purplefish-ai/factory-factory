@@ -3,7 +3,7 @@ import type { InterceptorContext, ToolEvent } from './types';
 
 const mockAttachAndRefreshPR = vi.fn();
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   prSnapshotService: {
     attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),
   },

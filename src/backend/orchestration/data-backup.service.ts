@@ -10,7 +10,7 @@ import type { z } from 'zod';
 import {
   type DataBackupTransactionClient,
   dataBackupAccessor,
-} from '@/backend/resource_accessors/data-backup.accessor';
+} from '@/backend/services/settings';
 import { createLogger } from '@/backend/services/logger.service';
 import type {
   ExportData,

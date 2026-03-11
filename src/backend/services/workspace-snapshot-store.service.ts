@@ -9,7 +9,7 @@
  * All subsequent phases (event collection, reconciliation, WebSocket transport,
  * client integration) build on this store.
  *
- * ARCH-02: Zero imports from @/backend/domains/ — derivation functions are
+ * ARCH-02: Zero imports from @/backend/services/ — derivation functions are
  * injected via configure() at startup through the orchestration layer.
  */
 

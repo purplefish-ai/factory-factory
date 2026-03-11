@@ -8,7 +8,7 @@
  * Domain services never import each other; they receive capabilities via bridges.
  */
 
-import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
+import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import {
   fixerSessionService,
   type RatchetGitHubBridge,
@@ -16,14 +16,14 @@ import {
   type RatchetSessionBridge,
   ratchetService,
   reconciliationService,
-} from '@/backend/domains/ratchet';
-import { startupScriptService } from '@/backend/domains/run-script';
+} from '@/backend/services/ratchet';
+import { startupScriptService } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   chatMessageHandlerService,
   sessionDomainService,
   sessionService,
-} from '@/backend/domains/session';
+} from '@/backend/services/session';
 import {
   computeKanbanColumn,
   deriveWorkspaceFlowState,
@@ -33,7 +33,7 @@ import {
   workspaceActivityService,
   workspaceQueryService,
   workspaceStateMachine,
-} from '@/backend/domains/workspace';
+} from '@/backend/services/workspace';
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
