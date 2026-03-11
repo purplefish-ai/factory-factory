@@ -155,7 +155,7 @@ export const workspaceAccessor = new WorkspaceAccessor();
     );
 
     writeFileSync(path.join(accessorDir, 'workspace.accessor.ts'), accessorWithNewMutator);
-    const sessionDir = path.join(tempRoot, 'src/backend/services/session/lifecycle');
+    const sessionDir = path.join(tempRoot, 'src/backend/services/session/service/lifecycle');
     mkdirSync(sessionDir, { recursive: true });
     writeFileSync(path.join(sessionDir, 'session.service.ts'), 'export const marker = "noop";\n');
 
