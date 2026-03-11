@@ -170,6 +170,13 @@ module.exports = {
       to: { path: '^src/backend/(routers|trpc)/' },
     },
     {
+      name: 'no-services-importing-agents',
+      severity: 'error',
+      comment: 'Services should not depend on agent orchestration internals.',
+      from: { path: '^src/backend/services/' },
+      to: { path: '^src/backend/agents/' },
+    },
+    {
       name: 'session-model-import-boundary',
       severity: 'error',
       comment:

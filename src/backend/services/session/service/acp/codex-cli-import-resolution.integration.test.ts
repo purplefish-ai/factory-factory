@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../');
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../../');
 const CLI_ENTRYPOINT = join(REPO_ROOT, 'src', 'cli', 'index.ts');
 const REPO_TSCONFIG = join(REPO_ROOT, 'tsconfig.json');
 const TSX_BIN = join(
@@ -62,6 +62,29 @@ function createWorkspaceWithConflictingAlias(): string {
   return workspaceRoot;
 }
 
+function spawnCodexCli(
+  workspaceRoot: string,
+  args: string[],
+  timeoutMs = 10_000
+): ReturnType<typeof spawnSync> {
+  return spawnSync(TSX_BIN, args, {
+    cwd: workspaceRoot,
+    encoding: 'utf8',
+    timeout: timeoutMs,
+  });
+}
+
+function spawnCodexCliWithRetry(
+  workspaceRoot: string,
+  args: string[]
+): ReturnType<typeof spawnSync> {
+  let result = spawnCodexCli(workspaceRoot, args, 10_000);
+  if (result.status === null) {
+    result = spawnCodexCli(workspaceRoot, args, 30_000);
+  }
+  return result;
+}
+
 describe('CODEX CLI import resolution', () => {
   afterEach(() => {
     for (const dir of tempDirs.splice(0)) {
@@ -71,14 +94,20 @@ describe('CODEX CLI import resolution', () => {
 
   it('handles alias conflicts without explicit tsconfig across tsx environments', () => {
     const workspaceRoot = createWorkspaceWithConflictingAlias();
-    const result = spawnSync(TSX_BIN, [CLI_ENTRYPOINT, 'internal', 'codex-app-server-acp'], {
-      cwd: workspaceRoot,
-      encoding: 'utf8',
-      timeout: 10_000,
-    });
+    const result = spawnCodexCliWithRetry(workspaceRoot, [
+      CLI_ENTRYPOINT,
+      'internal',
+      'codex-app-server-acp',
+    ]);
     const stderr = String(result.stderr ?? '');
 
-    expect([0, 1]).toContain(result.status ?? 1);
+    if (result.status === null) {
+      throw new Error(
+        `Unpinned-tsconfig CLI run exited without status (signal=${String(result.signal ?? 'none')}). stderr: ${stderr}`
+      );
+    }
+
+    expect([0, 1]).toContain(result.status);
 
     if (result.status === 1) {
       expect(stderr).toMatch(/does not provide an export named|ERR_MODULE_NOT_FOUND/);
@@ -92,19 +121,22 @@ describe('CODEX CLI import resolution', () => {
 
   it('avoids the import crash when tsconfig is pinned to repo root', () => {
     const workspaceRoot = createWorkspaceWithConflictingAlias();
-    const result = spawnSync(
-      TSX_BIN,
-      ['--tsconfig', REPO_TSCONFIG, CLI_ENTRYPOINT, 'internal', 'codex-app-server-acp'],
-      {
-        cwd: workspaceRoot,
-        encoding: 'utf8',
-        timeout: 10_000,
-      }
-    );
+    const result = spawnCodexCliWithRetry(workspaceRoot, [
+      '--tsconfig',
+      REPO_TSCONFIG,
+      CLI_ENTRYPOINT,
+      'internal',
+      'codex-app-server-acp',
+    ]);
     const stderr = String(result.stderr ?? '');
 
-    // Exit code can be null when the process hits timeout under heavy test load.
-    expect([0, null]).toContain(result.status);
+    if (result.status === null) {
+      throw new Error(
+        `Pinned-tsconfig CLI run exited without status (signal=${String(result.signal ?? 'none')}). stderr: ${stderr}`
+      );
+    }
+
+    expect(result.status).toBe(0);
     expect(stderr).not.toContain('does not provide an export named');
     expect(stderr).not.toContain('SyntaxError');
   });
