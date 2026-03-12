@@ -124,9 +124,13 @@ export class SessionLifecycleService {
 
     const startupModePreset = options?.startupModePreset;
 
-    const handle = await this.getOrCreateAcpSessionClient(sessionId, {}, session);
+    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
+      sessionId,
+      {},
+      session
+    );
     await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
-    await this.applyConfiguredPermissionPreset(sessionId, session, handle);
+    await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
 
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
     if (initialPrompt) {
@@ -237,9 +241,13 @@ export class SessionLifecycleService {
     }
 
     const hadClient = !!this.runtimeManager.getClient(sessionId);
-    const handle = await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
+    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
+      sessionId,
+      options ?? {},
+      session
+    );
     if (!hadClient) {
-      await this.applyConfiguredPermissionPreset(sessionId, session, handle);
+      await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
     }
 
     return handle;
@@ -250,9 +258,13 @@ export class SessionLifecycleService {
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
     const hadClient = !!this.runtimeManager.getClient(session.id);
-    const handle = await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
+    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
+      session.id,
+      options ?? {},
+      session
+    );
     if (!hadClient) {
-      await this.applyConfiguredPermissionPreset(session.id, session, handle);
+      await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
     }
 
     return handle;
@@ -422,7 +434,8 @@ export class SessionLifecycleService {
     options?: {
       model?: string;
     },
-    session?: AgentSessionRecord
+    session?: AgentSessionRecord,
+    permissionPreset?: PermissionPreset
   ): Promise<AcpProcessHandle> {
     const sessionContext = await this.loadSessionContext(sessionId, session);
     if (!sessionContext) {
@@ -438,8 +451,6 @@ export class SessionLifecycleService {
     const handlers = this.setupAcpEventHandler(sessionId);
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
     this.acpEventProcessor.setReplaySuppression(sessionId, shouldSuppressReplay);
-
-    const permissionPreset = await this.resolvePermissionPreset(session);
 
     const clientOptions: AcpClientOptions = {
       provider: session?.provider ?? 'CLAUDE',
@@ -519,9 +530,15 @@ export class SessionLifecycleService {
   private async applyConfiguredPermissionPreset(
     sessionId: string,
     session: AgentSessionRecord,
-    handle: AcpProcessHandle
+    handle: AcpProcessHandle,
+    permissionPreset?: PermissionPreset
   ): Promise<void> {
-    await this.sessionConfigService.applyConfiguredPermissionPreset(sessionId, session, handle);
+    await this.sessionConfigService.applyConfiguredPermissionPreset(
+      sessionId,
+      session,
+      handle,
+      permissionPreset
+    );
   }
 
   private finalizeOrphanedToolCallsOnStop(sessionId: string): void {
@@ -693,7 +710,7 @@ export class SessionLifecycleService {
       model?: string;
     },
     session: AgentSessionRecord
-  ): Promise<AcpProcessHandle> {
+  ): Promise<{ handle: AcpProcessHandle; resolvedPreset?: PermissionPreset }> {
     const existingAcp = this.runtimeManager.getClient(sessionId);
     if (existingAcp) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -702,7 +719,7 @@ export class SessionLifecycleService {
         activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
         updatedAt: new Date().toISOString(),
       });
-      return existingAcp;
+      return { handle: existingAcp };
     }
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -712,9 +729,11 @@ export class SessionLifecycleService {
       updatedAt: new Date().toISOString(),
     });
 
+    const resolvedPreset = await this.resolvePermissionPreset(session);
+
     let handle: AcpProcessHandle;
     try {
-      handle = await this.createAcpClient(sessionId, options, session);
+      handle = await this.createAcpClient(sessionId, options, session, resolvedPreset);
     } catch (error) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
@@ -737,7 +756,7 @@ export class SessionLifecycleService {
       updatedAt: new Date().toISOString(),
     });
 
-    return handle;
+    return { handle, resolvedPreset };
   }
 
   private async persistAcpConfigSnapshot(

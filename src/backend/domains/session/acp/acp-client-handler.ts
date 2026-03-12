@@ -65,19 +65,30 @@ export class AcpClientHandler implements Client {
 
     // Auto-approve when configured (YOLO/RELAXED permission preset)
     if (this.autoApprovePolicy === 'all') {
-      logger.debug('Auto-approving permission request per configured preset', {
-        sessionId: this.sessionId,
-        toolCallId: params.toolCall.toolCallId,
-      });
       const allowOption = params.options.find(
         (o) => o.kind === 'allow_always' || o.kind === 'allow_once'
       );
-      return Promise.resolve({
-        outcome: {
-          outcome: 'selected',
-          optionId: allowOption?.optionId ?? params.options[0]?.optionId ?? 'unknown',
-        },
-      });
+      if (allowOption) {
+        logger.debug('Auto-approving permission request per configured preset', {
+          sessionId: this.sessionId,
+          toolCallId: params.toolCall.toolCallId,
+        });
+        return Promise.resolve({
+          outcome: {
+            outcome: 'selected',
+            optionId: allowOption.optionId,
+          },
+        });
+      }
+      // No allow option available; fall through to interactive permission bridge
+      logger.warn(
+        'Auto-approve enabled but no allow option found; deferring to permission bridge',
+        {
+          sessionId: this.sessionId,
+          toolCallId: params.toolCall.toolCallId,
+          availableOptions: params.options.map((o) => o.kind),
+        }
+      );
     }
 
     if (!this.permissionBridge) {
