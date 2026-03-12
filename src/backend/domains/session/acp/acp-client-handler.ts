@@ -12,6 +12,9 @@ import type { AcpRuntimeEvent } from './acp-runtime-events';
 export type AcpEventCallback = (sessionId: string, event: AcpRuntimeEvent) => void;
 export type AcpLogCallback = (sessionId: string, payload: Record<string, unknown>) => void;
 
+/** Controls whether permission requests are auto-approved without user interaction. */
+export type AutoApprovePolicy = 'none' | 'all';
+
 const logger = createLogger('acp-client-handler');
 
 export class AcpClientHandler implements Client {
@@ -19,17 +22,20 @@ export class AcpClientHandler implements Client {
   private readonly onEvent: AcpEventCallback;
   private readonly permissionBridge: AcpPermissionBridge | null;
   private readonly onLog: AcpLogCallback | null;
+  private readonly autoApprovePolicy: AutoApprovePolicy;
 
   constructor(
     sessionId: string,
     onEvent: AcpEventCallback,
     permissionBridge?: AcpPermissionBridge,
-    onLog?: AcpLogCallback
+    onLog?: AcpLogCallback,
+    autoApprovePolicy?: AutoApprovePolicy
   ) {
     this.sessionId = sessionId;
     this.onEvent = onEvent;
     this.permissionBridge = permissionBridge ?? null;
     this.onLog = onLog ?? null;
+    this.autoApprovePolicy = autoApprovePolicy ?? 'none';
   }
 
   sessionUpdate(params: SessionNotification): Promise<void> {
@@ -56,6 +62,23 @@ export class AcpClientHandler implements Client {
       toolCallId: params.toolCall.toolCallId,
       options: params.options.map((o) => ({ optionId: o.optionId, kind: o.kind, name: o.name })),
     });
+
+    // Auto-approve when configured (YOLO/RELAXED permission preset)
+    if (this.autoApprovePolicy === 'all') {
+      logger.debug('Auto-approving permission request per configured preset', {
+        sessionId: this.sessionId,
+        toolCallId: params.toolCall.toolCallId,
+      });
+      const allowOption = params.options.find(
+        (o) => o.kind === 'allow_always' || o.kind === 'allow_once'
+      );
+      return Promise.resolve({
+        outcome: {
+          outcome: 'selected',
+          optionId: allowOption?.optionId ?? params.options[0]?.optionId ?? 'unknown',
+        },
+      });
+    }
 
     if (!this.permissionBridge) {
       // Fallback for non-interactive contexts; production paths should inject permissionBridge.

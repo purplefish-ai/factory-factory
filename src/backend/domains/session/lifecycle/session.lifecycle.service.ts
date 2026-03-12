@@ -3,12 +3,14 @@ import type {
   AcpProcessHandle,
   AcpRuntimeEventHandlers,
   AcpRuntimeManager,
+  PermissionPreset,
 } from '@/backend/domains/session/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
@@ -34,7 +36,6 @@ import type { SessionRetryService } from './session.retry.service';
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
-type SessionPermissionMode = 'bypassPermissions' | 'plan';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 
 type SessionContext = {
@@ -47,7 +48,6 @@ type SessionContext = {
 
 type GetOrCreateSessionClientOptions = {
   thinkingEnabled?: boolean;
-  permissionMode?: SessionPermissionMode;
   model?: string;
   reasoningEffort?: string;
 };
@@ -123,18 +123,10 @@ export class SessionLifecycleService {
     }
 
     const startupModePreset = options?.startupModePreset;
-    const startupPermissionMode: SessionPermissionMode =
-      startupModePreset === 'plan' ? 'plan' : 'bypassPermissions';
 
-    const handle = await this.getOrCreateAcpSessionClient(
-      sessionId,
-      { permissionMode: startupPermissionMode },
-      session
-    );
+    const handle = await this.getOrCreateAcpSessionClient(sessionId, {}, session);
     await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
-    if (!session.providerSessionId) {
-      await this.applyConfiguredPermissionPreset(sessionId, session, handle);
-    }
+    await this.applyConfiguredPermissionPreset(sessionId, session, handle);
 
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
     if (initialPrompt) {
@@ -246,7 +238,7 @@ export class SessionLifecycleService {
 
     const hadClient = !!this.runtimeManager.getClient(sessionId);
     const handle = await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
-    if (!(hadClient || session.providerSessionId)) {
+    if (!hadClient) {
       await this.applyConfiguredPermissionPreset(sessionId, session, handle);
     }
 
@@ -259,7 +251,7 @@ export class SessionLifecycleService {
   ): Promise<unknown> {
     const hadClient = !!this.runtimeManager.getClient(session.id);
     const handle = await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
-    if (!(hadClient || session.providerSessionId)) {
+    if (!hadClient) {
       await this.applyConfiguredPermissionPreset(session.id, session, handle);
     }
 
@@ -429,7 +421,6 @@ export class SessionLifecycleService {
     sessionId: string,
     options?: {
       model?: string;
-      permissionMode?: SessionPermissionMode;
     },
     session?: AgentSessionRecord
   ): Promise<AcpProcessHandle> {
@@ -448,12 +439,14 @@ export class SessionLifecycleService {
     const shouldSuppressReplay = this.shouldSuppressReplayDuringAcpResume(sessionId, session);
     this.acpEventProcessor.setReplaySuppression(sessionId, shouldSuppressReplay);
 
+    const permissionPreset = await this.resolvePermissionPreset(session);
+
     const clientOptions: AcpClientOptions = {
       provider: session?.provider ?? 'CLAUDE',
       workingDir: sessionContext.workingDir,
       model: options?.model ?? sessionContext.model,
       systemPrompt: sessionContext.systemPrompt,
-      permissionMode: options?.permissionMode ?? 'bypassPermissions',
+      permissionPreset,
       sessionId,
       resumeProviderSessionId: session?.providerSessionId ?? undefined,
     };
@@ -698,7 +691,6 @@ export class SessionLifecycleService {
     sessionId: string,
     options: {
       model?: string;
-      permissionMode?: SessionPermissionMode;
     },
     session: AgentSessionRecord
   ): Promise<AcpProcessHandle> {
@@ -827,5 +819,23 @@ export class SessionLifecycleService {
       model: session.model,
       workspaceId: workspace.id,
     };
+  }
+
+  private async resolvePermissionPreset(
+    session: AgentSessionRecord | undefined
+  ): Promise<PermissionPreset> {
+    const fallback: PermissionPreset = session?.workflow === 'ratchet' ? 'YOLO' : 'STRICT';
+    try {
+      const settings = await userSettingsAccessor.get();
+      return session?.workflow === 'ratchet'
+        ? settings.ratchetPermissions
+        : settings.defaultWorkspacePermissions;
+    } catch (error) {
+      logger.warn('Failed loading user permission preset; using default', {
+        workflow: session?.workflow,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return fallback;
+    }
   }
 }

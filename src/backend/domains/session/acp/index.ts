@@ -18,4 +18,4 @@ export {
   fetchCodexModelCatalogFromAppServer,
   runCodexAppServerAcpAdapter,
 } from './codex-app-server-adapter';
-export type { AcpClientOptions, AcpProvider, AcpSessionState } from './types';
+export type { AcpClientOptions, AcpProvider, AcpSessionState, PermissionPreset } from './types';

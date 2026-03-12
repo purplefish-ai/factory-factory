@@ -149,10 +149,6 @@ export class SessionConfigService {
     session: AgentSessionRecord,
     handle: AcpProcessHandle
   ): Promise<void> {
-    if (handle.provider !== 'CODEX') {
-      return;
-    }
-
     const executionModeOption = handle.configOptions.find(
       (option) => option.id === 'execution_mode' || option.category === 'permission'
     );

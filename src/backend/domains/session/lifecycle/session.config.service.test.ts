@@ -796,4 +796,100 @@ describe('SessionConfigService', () => {
       '["on-failure","workspace-write"]'
     );
   });
+
+  it('applies configured permission preset for CLAUDE sessions that expose permission config', async () => {
+    vi.mocked(userSettingsAccessor.get).mockResolvedValue(
+      unsafeCoerce({
+        ratchetPermissions: 'YOLO',
+        defaultWorkspacePermissions: 'YOLO',
+      })
+    );
+
+    const handle = unsafeCoerce<AcpProcessHandle>({
+      provider: 'CLAUDE',
+      providerSessionId: 'provider-claude-1',
+      configOptions: [
+        {
+          id: 'execution_mode',
+          name: 'Execution Mode',
+          type: 'select',
+          category: 'permission',
+          currentValue: '["on-request","workspace-write"]',
+          options: [
+            {
+              value: '["on-request","workspace-write"]',
+              name: 'On Request',
+            },
+            {
+              value: '["never","danger-full-access"]',
+              name: 'YOLO',
+            },
+          ],
+        },
+      ],
+    });
+
+    runtimeManager.setConfigOption.mockResolvedValue([
+      {
+        id: 'execution_mode',
+        name: 'Execution Mode',
+        type: 'select',
+        category: 'permission',
+        currentValue: '["never","danger-full-access"]',
+        options: [
+          {
+            value: '["on-request","workspace-write"]',
+            name: 'On Request',
+          },
+          {
+            value: '["never","danger-full-access"]',
+            name: 'YOLO',
+          },
+        ],
+      },
+    ]);
+
+    await service.applyConfiguredPermissionPreset(
+      'session-1',
+      unsafeCoerce({
+        id: 'session-1',
+        workflow: 'default',
+      }),
+      handle
+    );
+
+    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
+      'session-1',
+      'execution_mode',
+      '["never","danger-full-access"]'
+    );
+  });
+
+  it('no-ops gracefully for CLAUDE sessions without permission config option', async () => {
+    const handle = unsafeCoerce<AcpProcessHandle>({
+      provider: 'CLAUDE',
+      providerSessionId: 'provider-claude-1',
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          type: 'select',
+          category: 'model',
+          currentValue: 'sonnet',
+          options: [{ value: 'sonnet', name: 'Sonnet' }],
+        },
+      ],
+    });
+
+    await service.applyConfiguredPermissionPreset(
+      'session-1',
+      unsafeCoerce({
+        id: 'session-1',
+        workflow: 'default',
+      }),
+      handle
+    );
+
+    expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
+  });
 });
