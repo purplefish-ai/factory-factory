@@ -140,6 +140,33 @@ export class SessionLifecycleService {
     logger.info('Session started', { sessionId, provider: session.provider });
   }
 
+  async restartSession(sessionId: string, sendSessionMessage: SendSessionMessage): Promise<void> {
+    const isRunning = this.runtimeManager.isSessionRunning(sessionId);
+    const isStopInProgress = this.runtimeManager.isStopInProgress(sessionId);
+
+    if (isStopInProgress) {
+      // A stop is already under way; starting now would throw "Session is currently being stopped".
+      throw new Error(
+        'Cannot restart: session is currently being stopped. Please try again shortly.'
+      );
+    }
+
+    if (isRunning) {
+      try {
+        await this.stopSession(sessionId, { cleanupTransientRatchetSession: false });
+      } catch (error) {
+        logger.warn('Error stopping session during restart; continuing with start', {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    await this.startSession(sessionId, sendSessionMessage, {
+      initialPrompt: 'Continue with the task.',
+    });
+    logger.info('Session restarted', { sessionId });
+  }
+
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
     this.promptTurnCompletionService.clearSession(sessionId);
     const session = await this.loadSessionForStop(sessionId);

@@ -155,6 +155,15 @@ export const sessionRouter = router({
       return sessionDataService.findAgentSessionById(input.id);
     }),
 
+  // Restart a session (stop if running, then start with context resumption)
+  restartSession: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { sessionService } = ctx.appContext.services;
+      await sessionService.restartSession(input.id);
+      return sessionDataService.findAgentSessionById(input.id);
+    }),
+
   // Delete a session
   deleteSession: publicProcedure
     .input(z.object({ id: z.string() }))

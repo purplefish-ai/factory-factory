@@ -133,6 +133,12 @@ export class SessionService {
     await this.lifecycleService.stopSession(sessionId, options);
   }
 
+  async restartSession(sessionId: string): Promise<void> {
+    await this.lifecycleService.restartSession(sessionId, (id, content) =>
+      this.sendSessionMessage(id, content)
+    );
+  }
+
   async stopWorkspaceSessions(workspaceId: string): Promise<void> {
     await this.lifecycleService.stopWorkspaceSessions(workspaceId);
   }

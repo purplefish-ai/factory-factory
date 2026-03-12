@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { trpc } from '@/client/lib/trpc';
 import { useWebSocketTransport } from '@/hooks/use-websocket-transport';
 import type {
   ChatMessage,
@@ -93,6 +94,7 @@ export interface UseChatWebSocketReturn {
   // Actions
   sendMessage: (text: string) => void;
   stopChat: () => void;
+  restartSession: () => void;
   clearChat: () => void;
   approvePermission: (requestId: string, allow: boolean, optionId?: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string | string[]>) => void;
@@ -273,6 +275,14 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
   // Wire up the send function to the transport
   sendRef.current = transport.send;
 
+  const { mutate: restartSessionMutate } = trpc.session.restartSession.useMutation();
+  const restartSession = useCallback(() => {
+    if (!dbSessionId) {
+      return;
+    }
+    restartSessionMutate({ id: dbSessionId });
+  }, [dbSessionId, restartSessionMutate]);
+
   return {
     // State from chat
     messages: chat.messages,
@@ -303,6 +313,7 @@ export function useChatWebSocket(options: UseChatWebSocketOptions): UseChatWebSo
     // Actions from chat
     sendMessage: chat.sendMessage,
     stopChat: chat.stopChat,
+    restartSession,
     clearChat: chat.clearChat,
     approvePermission: chat.approvePermission,
     answerQuestion: chat.answerQuestion,

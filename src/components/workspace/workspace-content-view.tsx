@@ -25,6 +25,7 @@ interface WorkspaceContentViewProps {
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
+  onRestartSession?: () => void;
   onQuickAction?: (name: string, prompt: string) => void;
   children: ReactNode;
   /** Maximum sessions allowed per workspace */
@@ -56,6 +57,7 @@ export function WorkspaceContentView({
   onSelectSession,
   onCreateSession,
   onCloseSession,
+  onRestartSession,
   onQuickAction,
   children,
   maxSessions,
@@ -79,6 +81,7 @@ export function WorkspaceContentView({
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}
+          onRestartSession={onRestartSession}
           onQuickAction={onQuickAction}
           onSelectClosedSession={(sessionId) => {
             // Use a generic label - the tab will show the archive icon
