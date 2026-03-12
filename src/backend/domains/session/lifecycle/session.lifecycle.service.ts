@@ -3,12 +3,14 @@ import type {
   AcpProcessHandle,
   AcpRuntimeEventHandlers,
   AcpRuntimeManager,
+  PermissionPreset,
 } from '@/backend/domains/session/acp';
 import type { SessionLifecycleWorkspaceBridge } from '@/backend/domains/session/bridges';
 import { chatConnectionService } from '@/backend/domains/session/chat/chat-connection.service';
 import { acpTraceLogger } from '@/backend/domains/session/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/domains/session/session-domain.service';
 import type { AgentSessionRecord } from '@/backend/resource_accessors/agent-session.accessor';
+import { userSettingsAccessor } from '@/backend/resource_accessors/user-settings.accessor';
 import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionDeltaEvent } from '@/shared/acp-protocol';
@@ -34,7 +36,6 @@ import type { SessionRetryService } from './session.retry.service';
 const logger = createLogger('session');
 const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
-type SessionPermissionMode = 'bypassPermissions' | 'plan';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 
 type SessionContext = {
@@ -47,7 +48,6 @@ type SessionContext = {
 
 type GetOrCreateSessionClientOptions = {
   thinkingEnabled?: boolean;
-  permissionMode?: SessionPermissionMode;
   model?: string;
   reasoningEffort?: string;
 };
@@ -123,18 +123,14 @@ export class SessionLifecycleService {
     }
 
     const startupModePreset = options?.startupModePreset;
-    const startupPermissionMode: SessionPermissionMode =
-      startupModePreset === 'plan' ? 'plan' : 'bypassPermissions';
 
-    const handle = await this.getOrCreateAcpSessionClient(
+    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
       sessionId,
-      { permissionMode: startupPermissionMode },
+      {},
       session
     );
     await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
-    if (!session.providerSessionId) {
-      await this.applyConfiguredPermissionPreset(sessionId, session, handle);
-    }
+    await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
 
     const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
     if (initialPrompt) {
@@ -245,9 +241,13 @@ export class SessionLifecycleService {
     }
 
     const hadClient = !!this.runtimeManager.getClient(sessionId);
-    const handle = await this.getOrCreateAcpSessionClient(sessionId, options ?? {}, session);
-    if (!(hadClient || session.providerSessionId)) {
-      await this.applyConfiguredPermissionPreset(sessionId, session, handle);
+    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
+      sessionId,
+      options ?? {},
+      session
+    );
+    if (!hadClient) {
+      await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
     }
 
     return handle;
@@ -258,9 +258,13 @@ export class SessionLifecycleService {
     options?: GetOrCreateSessionClientOptions
   ): Promise<unknown> {
     const hadClient = !!this.runtimeManager.getClient(session.id);
-    const handle = await this.getOrCreateAcpSessionClient(session.id, options ?? {}, session);
-    if (!(hadClient || session.providerSessionId)) {
-      await this.applyConfiguredPermissionPreset(session.id, session, handle);
+    const { handle, resolvedPreset } = await this.getOrCreateAcpSessionClient(
+      session.id,
+      options ?? {},
+      session
+    );
+    if (!hadClient) {
+      await this.applyConfiguredPermissionPreset(session.id, session, handle, resolvedPreset);
     }
 
     return handle;
@@ -429,9 +433,9 @@ export class SessionLifecycleService {
     sessionId: string,
     options?: {
       model?: string;
-      permissionMode?: SessionPermissionMode;
     },
-    session?: AgentSessionRecord
+    session?: AgentSessionRecord,
+    permissionPreset?: PermissionPreset
   ): Promise<AcpProcessHandle> {
     const sessionContext = await this.loadSessionContext(sessionId, session);
     if (!sessionContext) {
@@ -453,7 +457,7 @@ export class SessionLifecycleService {
       workingDir: sessionContext.workingDir,
       model: options?.model ?? sessionContext.model,
       systemPrompt: sessionContext.systemPrompt,
-      permissionMode: options?.permissionMode ?? 'bypassPermissions',
+      permissionPreset,
       sessionId,
       resumeProviderSessionId: session?.providerSessionId ?? undefined,
     };
@@ -526,9 +530,15 @@ export class SessionLifecycleService {
   private async applyConfiguredPermissionPreset(
     sessionId: string,
     session: AgentSessionRecord,
-    handle: AcpProcessHandle
+    handle: AcpProcessHandle,
+    permissionPreset?: PermissionPreset
   ): Promise<void> {
-    await this.sessionConfigService.applyConfiguredPermissionPreset(sessionId, session, handle);
+    await this.sessionConfigService.applyConfiguredPermissionPreset(
+      sessionId,
+      session,
+      handle,
+      permissionPreset
+    );
   }
 
   private finalizeOrphanedToolCallsOnStop(sessionId: string): void {
@@ -698,10 +708,9 @@ export class SessionLifecycleService {
     sessionId: string,
     options: {
       model?: string;
-      permissionMode?: SessionPermissionMode;
     },
     session: AgentSessionRecord
-  ): Promise<AcpProcessHandle> {
+  ): Promise<{ handle: AcpProcessHandle; resolvedPreset?: PermissionPreset }> {
     const existingAcp = this.runtimeManager.getClient(sessionId);
     if (existingAcp) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -710,7 +719,7 @@ export class SessionLifecycleService {
         activity: existingAcp.isPromptInFlight ? 'WORKING' : 'IDLE',
         updatedAt: new Date().toISOString(),
       });
-      return existingAcp;
+      return { handle: existingAcp };
     }
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -720,9 +729,11 @@ export class SessionLifecycleService {
       updatedAt: new Date().toISOString(),
     });
 
+    const resolvedPreset = await this.resolvePermissionPreset(session);
+
     let handle: AcpProcessHandle;
     try {
-      handle = await this.createAcpClient(sessionId, options, session);
+      handle = await this.createAcpClient(sessionId, options, session, resolvedPreset);
     } catch (error) {
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
@@ -745,7 +756,7 @@ export class SessionLifecycleService {
       updatedAt: new Date().toISOString(),
     });
 
-    return handle;
+    return { handle, resolvedPreset };
   }
 
   private async persistAcpConfigSnapshot(
@@ -827,5 +838,23 @@ export class SessionLifecycleService {
       model: session.model,
       workspaceId: workspace.id,
     };
+  }
+
+  private async resolvePermissionPreset(
+    session: AgentSessionRecord | undefined
+  ): Promise<PermissionPreset> {
+    const fallback: PermissionPreset = session?.workflow === 'ratchet' ? 'YOLO' : 'STRICT';
+    try {
+      const settings = await userSettingsAccessor.get();
+      return session?.workflow === 'ratchet'
+        ? settings.ratchetPermissions
+        : settings.defaultWorkspacePermissions;
+    } catch (error) {
+      logger.warn('Failed loading user permission preset; using default', {
+        workflow: session?.workflow,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return fallback;
+    }
   }
 }
