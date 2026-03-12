@@ -36,10 +36,20 @@ export function MainViewContent({ workspaceId, children, className }: MainViewCo
           This prevents unmounting/remounting which causes state loss. */}
       <div className={cn('h-full', !showChat && 'hidden')}>{children}</div>
       {filePath && activeTabKey && (
-        <FileViewer workspaceId={workspaceId} filePath={filePath} tabId={activeTabKey} />
+        <FileViewer
+          key={activeTabKey}
+          workspaceId={workspaceId}
+          filePath={filePath}
+          tabId={activeTabKey}
+        />
       )}
       {diffPath && activeTabKey && (
-        <DiffViewer workspaceId={workspaceId} filePath={diffPath} tabId={activeTabKey} />
+        <DiffViewer
+          key={activeTabKey}
+          workspaceId={workspaceId}
+          filePath={diffPath}
+          tabId={activeTabKey}
+        />
       )}
       {screenshotPath && activeTabKey && (
         <ScreenshotViewerTab
