@@ -17,7 +17,7 @@ When an agent gets stuck or crashes, users have no dedicated action to recover i
 | Question | Decision |
 |---|---|
 | Placement | Far right of the session tab bar |
-| Always visible | Yes — never hidden, never disabled |
+| Always visible | Yes — never hidden; disabled when the parent tab bar is disabled (e.g., while a restart is in progress) |
 | Restart behavior | Stop the current session silently, then restart the same session (reuses stored `providerSessionId` for context resumption) |
 | Force-stop | Silent — no confirmation dialog |
 | Initial prompt | Default: `"Continue with the task."` |
@@ -78,7 +78,7 @@ The safest way to sequence these atomically is a dedicated backend `restartSessi
 **`src/components/chat/session-tab-bar.tsx`**
 - Add optional prop `onRestartSession?: () => void`
 - Render a `<Button variant="ghost" size="sm">` with `<RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Restart</Button>` at the far right of the tab bar (after the `+` button)
-- Button is always rendered (never conditionally hidden or disabled)
+- Button is always rendered (never conditionally hidden); accepts `disabled` prop from the tab bar for consistency with other controls
 
 **`src/client/routes/projects/workspaces/workspace-detail-view.tsx`**
 - Add `onRestartSession` to `SessionTabsProps` interface and pass it through to wherever `SessionTabBar` is rendered
