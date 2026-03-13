@@ -212,6 +212,17 @@ export const workspaceRouter = router({
     return workspace;
   }),
 
+  // Rename a workspace
+  rename: publicProcedure
+    .input(z.object({ id: z.string(), name: z.string().min(1).max(255) }))
+    .mutation(async ({ input }) => {
+      const workspace = await workspaceDataService.findById(input.id);
+      if (!workspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      }
+      return workspaceDataService.rename(input.id, input.name.trim());
+    }),
+
   // Toggle workspace-level ratcheting
   toggleRatcheting: publicProcedure
     .input(
