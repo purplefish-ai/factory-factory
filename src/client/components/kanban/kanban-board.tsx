@@ -59,6 +59,7 @@ export function KanbanBoard() {
     refetch,
     toggleWorkspaceRatcheting,
     togglingWorkspaceId,
+    renameWorkspace,
     archiveWorkspace,
     bulkArchiveColumn,
     isBulkArchiving,
@@ -244,6 +245,7 @@ export function KanbanBoard() {
               onBulkArchive={() => handleBulkArchive(activeColumn.id)}
               isBulkArchiving={isBulkArchiving}
               onOpenQuickChat={openQuickChat}
+              onRename={renameWorkspace}
             />
           )}
         </div>
@@ -291,6 +293,7 @@ export function KanbanBoard() {
               onBulkArchive={() => handleBulkArchive(column.id)}
               isBulkArchiving={isBulkArchiving}
               onOpenQuickChat={openQuickChat}
+              onRename={renameWorkspace}
             />
           );
         })}

@@ -1,6 +1,15 @@
-import { MoreHorizontal, Settings2 } from 'lucide-react';
-import { useState } from 'react';
+import { MoreHorizontal, Pencil, Settings2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,6 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ArchiveActionButton } from './archive-action-button';
 import { OpenDevAppAction } from './open-dev-app-action';
@@ -36,6 +46,44 @@ export function WorkspaceHeaderOverflowMenu({
   onArchiveRequest: () => void;
 }) {
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const utils = trpc.useUtils();
+  const renameMutation = trpc.workspace.rename.useMutation({
+    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+  });
+
+  const handleRenameOpen = () => {
+    setRenameValue(workspace.name);
+    setRenameOpen(true);
+    requestAnimationFrame(() => {
+      inputRef.current?.select();
+    });
+  };
+
+  const handleRenameSubmit = async () => {
+    const trimmed = renameValue.trim();
+    if (renameMutation.isPending) {
+      return;
+    }
+    if (!trimmed || trimmed === workspace.name) {
+      setRenameOpen(false);
+      return;
+    }
+    try {
+      await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
+      setRenameOpen(false);
+      await Promise.all([
+        utils.workspace.get.invalidate({ id: workspaceId }),
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId }),
+        utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId }),
+      ]);
+    } catch {
+      // onError handles user feedback via toast
+    }
+  };
 
   return (
     <>
@@ -46,6 +94,40 @@ export function WorkspaceHeaderOverflowMenu({
         onOpenChange={setProviderSettingsOpen}
         showTrigger={false}
       />
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Rename workspace</DialogTitle>
+          </DialogHeader>
+          <Input
+            ref={inputRef}
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                if (!renameMutation.isPending) {
+                  void handleRenameSubmit();
+                }
+              } else if (e.key === 'Escape') {
+                setRenameOpen(false);
+              }
+            }}
+            placeholder="Workspace name"
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleRenameSubmit()}
+              disabled={!renameValue.trim() || renameMutation.isPending}
+            >
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -64,6 +146,17 @@ export function WorkspaceHeaderOverflowMenu({
         </Tooltip>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              requestAnimationFrame(() => {
+                handleRenameOpen();
+              });
+            }}
+          >
+            <Pencil className="h-4 w-4" />
+            Rename workspace
+          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();

@@ -34,6 +34,10 @@ class WorkspaceDataService {
     });
   }
 
+  rename(id: string, name: string) {
+    return workspaceAccessor.update(id, { name });
+  }
+
   setRunScriptCommands(
     id: string,
     runScriptCommand: string | null,

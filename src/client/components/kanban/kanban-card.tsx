@@ -5,9 +5,10 @@ import {
   GitBranch,
   GitPullRequest,
   MessageSquare,
+  Pencil,
   Play,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { PendingRequestBadge } from '@/client/components/pending-request-badge';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
@@ -43,6 +44,7 @@ interface KanbanCardProps {
   isTogglePending?: boolean;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   onOpenQuickChat?: (workspaceId: string) => void;
+  onRename?: (workspaceId: string, name: string) => Promise<void>;
 }
 
 function CardStatusIndicator({
@@ -171,6 +173,7 @@ function CardTitleIcons({
   onToggleRatcheting,
   onArchive,
   onOpenQuickChat,
+  onStartEdit,
 }: {
   workspace: WorkspaceWithKanban;
   ratchetEnabled: boolean;
@@ -180,6 +183,7 @@ function CardTitleIcons({
   onToggleRatcheting?: (workspaceId: string, enabled: boolean) => void;
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   onOpenQuickChat?: (workspaceId: string) => void;
+  onStartEdit?: () => void;
 }) {
   const showQuickChat =
     !isArchived &&
@@ -188,6 +192,25 @@ function CardTitleIcons({
     onOpenQuickChat;
   return (
     <div className="flex items-center gap-1.5 shrink-0">
+      {onStartEdit && !isArchived && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onStartEdit();
+              }}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Rename workspace</TooltipContent>
+        </Tooltip>
+      )}
       {showQuickChat && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -266,12 +289,23 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     ratchetState: workspace.ratchetState ?? null,
   });
   const sessionRuntimeError = findWorkspaceSessionRuntimeError(workspace.sessionSummaries)?.message;
+  const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
+  const showCi = sidebarStatus.ciState !== 'NONE';
+  const showBranch = Boolean(workspace.branchName);
+  const showPendingRequest = workspace.pendingRequestType;
+  const hasMetadata =
+    showSetup || showCi || showBranch || showPR || showPendingRequest || !!sessionRuntimeError;
   return {
     showPR,
     isArchived,
     ratchetEnabled,
     sidebarStatus,
     sessionRuntimeError: sessionRuntimeError ?? null,
+    showSetup,
+    showCi,
+    showBranch,
+    showPendingRequest,
+    hasMetadata,
   };
 }
 
@@ -282,15 +316,57 @@ export function KanbanCard({
   isTogglePending = false,
   onArchive,
   onOpenQuickChat,
+  onRename,
 }: KanbanCardProps) {
-  const { showPR, isArchived, ratchetEnabled, sidebarStatus, sessionRuntimeError } =
-    deriveCardState(workspace);
-  const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
-  const showCi = sidebarStatus.ciState !== 'NONE';
-  const showBranch = Boolean(workspace.branchName);
-  const showPendingRequest = workspace.pendingRequestType;
-  const hasMetadata =
-    showSetup || showCi || showBranch || showPR || showPendingRequest || !!sessionRuntimeError;
+  const {
+    showPR,
+    isArchived,
+    ratchetEnabled,
+    sidebarStatus,
+    sessionRuntimeError,
+    showSetup,
+    showCi,
+    showBranch,
+    showPendingRequest,
+    hasMetadata,
+  } = deriveCardState(workspace);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(workspace.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEdit = () => {
+    if (isEditing) {
+      return;
+    }
+    setEditValue(workspace.name);
+    setIsEditing(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  };
+
+  const handleSaveRename = async () => {
+    if (!isEditing) {
+      return;
+    }
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === workspace.name || !onRename) {
+      setIsEditing(false);
+      return;
+    }
+    try {
+      await onRename(workspace.id, trimmed);
+      setIsEditing(false);
+    } catch {
+      // Error is surfaced by the mutation's onError handler
+      setIsEditing(false);
+      setEditValue(workspace.name);
+    }
+  };
+
+  const handleCancelRename = () => {
+    setIsEditing(false);
+    setEditValue(workspace.name);
+  };
 
   return (
     <Link to={`/projects/${projectSlug}/workspaces/${workspace.id}`}>
@@ -306,9 +382,33 @@ export function KanbanCard({
       >
         <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
-              {workspace.name}
-            </CardTitle>
+            {isEditing ? (
+              <input
+                ref={inputRef}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleCancelRename();
+                  }
+                  e.stopPropagation();
+                }}
+                onBlur={() => void handleSaveRename()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                className="flex-1 min-w-0 text-sm font-medium leading-tight bg-transparent border-b border-primary outline-none"
+              />
+            ) : (
+              <CardTitle className="text-sm font-medium leading-tight line-clamp-2">
+                {workspace.name}
+              </CardTitle>
+            )}
             <CardTitleIcons
               workspace={workspace}
               ratchetEnabled={ratchetEnabled}
@@ -318,6 +418,7 @@ export function KanbanCard({
               onToggleRatcheting={onToggleRatcheting}
               onArchive={onArchive}
               onOpenQuickChat={onOpenQuickChat}
+              onStartEdit={onRename ? handleStartEdit : undefined}
             />
           </div>
         </CardHeader>
