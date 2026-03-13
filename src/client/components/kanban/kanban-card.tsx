@@ -336,6 +336,9 @@ export function KanbanCard({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleStartEdit = () => {
+    if (isEditing) {
+      return;
+    }
     setEditValue(workspace.name);
     setIsEditing(true);
     setTimeout(() => inputRef.current?.select(), 0);
@@ -346,14 +349,17 @@ export function KanbanCard({
       return;
     }
     const trimmed = editValue.trim();
-    setIsEditing(false);
-    if (trimmed && trimmed !== workspace.name && onRename) {
-      try {
-        await onRename(workspace.id, trimmed);
-      } catch {
-        // Error is surfaced by the mutation's onError handler
-        setEditValue(workspace.name);
-      }
+    if (!trimmed || trimmed === workspace.name || !onRename) {
+      setIsEditing(false);
+      return;
+    }
+    try {
+      await onRename(workspace.id, trimmed);
+      setIsEditing(false);
+    } catch {
+      // Error is surfaced by the mutation's onError handler
+      setIsEditing(false);
+      setEditValue(workspace.name);
     }
   };
 
@@ -412,7 +418,7 @@ export function KanbanCard({
               onToggleRatcheting={onToggleRatcheting}
               onArchive={onArchive}
               onOpenQuickChat={onOpenQuickChat}
-              onStartEdit={!isEditing && onRename ? handleStartEdit : undefined}
+              onStartEdit={onRename ? handleStartEdit : undefined}
             />
           </div>
         </CardHeader>
