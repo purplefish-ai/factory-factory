@@ -65,17 +65,24 @@ export function WorkspaceHeaderOverflowMenu({
 
   const handleRenameSubmit = async () => {
     const trimmed = renameValue.trim();
+    if (renameMutation.isPending) {
+      return;
+    }
     if (!trimmed || trimmed === workspace.name) {
       setRenameOpen(false);
       return;
     }
-    await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
-    await Promise.all([
-      utils.workspace.get.invalidate({ id: workspaceId }),
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId }),
-      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId }),
-    ]);
-    setRenameOpen(false);
+    try {
+      await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
+      await Promise.all([
+        utils.workspace.get.invalidate({ id: workspaceId }),
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId }),
+        utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId }),
+      ]);
+      setRenameOpen(false);
+    } catch {
+      // onError handles user feedback via toast
+    }
   };
 
   return (
@@ -99,7 +106,9 @@ export function WorkspaceHeaderOverflowMenu({
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                void handleRenameSubmit();
+                if (!renameMutation.isPending) {
+                  void handleRenameSubmit();
+                }
               } else if (e.key === 'Escape') {
                 setRenameOpen(false);
               }
