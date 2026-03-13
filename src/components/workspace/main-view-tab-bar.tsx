@@ -353,10 +353,11 @@ export function MainViewTabBar({
               <button
                 type="button"
                 onClick={onRestartSession}
+                disabled={disabled}
                 className={cn(
                   'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium',
                   'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
-                  'transition-colors'
+                  'transition-colors disabled:pointer-events-none disabled:opacity-50'
                 )}
                 aria-label="Restart agent"
               >
