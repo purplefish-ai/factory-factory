@@ -367,7 +367,7 @@ export function KanbanCard({
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     e.currentTarget.blur();
                   } else if (e.key === 'Escape') {

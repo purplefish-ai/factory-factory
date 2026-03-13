@@ -104,7 +104,7 @@ export function WorkspaceHeaderOverflowMenu({
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 if (!renameMutation.isPending) {
                   void handleRenameSubmit();
