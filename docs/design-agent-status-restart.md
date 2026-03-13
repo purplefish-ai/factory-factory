@@ -50,7 +50,7 @@ The safest way to sequence these atomically is a dedicated backend `restartSessi
 
 ### Session tab bar component
 
-`src/components/chat/session-tab-bar.tsx` already accepts callback props (`onSelectSession`, `onCreateSession`, `onCloseSession`). Adding `onRestartSession` follows the same pattern. The `+` new-session button is currently the rightmost element — the Restart button goes after it.
+`src/components/workspace/main-view-tab-bar.tsx` already accepts callback props (`onSelectSession`, `onCreateSession`, `onCloseSession`). Adding `onRestartSession` follows the same pattern. The `+` new-session button is currently the rightmost element — the Restart button goes after it.
 
 ---
 
@@ -60,7 +60,8 @@ The safest way to sequence these atomically is a dedicated backend `restartSessi
 
 **`src/backend/domains/session/lifecycle/session.lifecycle.service.ts`**
 - Add `restartSession(sessionId, sendSessionMessage)`:
-  1. Try `stopSession(sessionId, { cleanupTransientRatchetSession: false })`, catching any error
+  0. Guard: check `isStopInProgress(sessionId)` — if true, throw immediately (`"Cannot restart: session is currently being stopped"`)
+  1. If session is running, try `stopSession(sessionId, { cleanupTransientRatchetSession: false })`, catching any error
   2. Call `startSession(sessionId, sendSessionMessage, { initialPrompt: 'Continue with the task.' })`
 
 **`src/backend/domains/session/lifecycle/session.service.ts`**
@@ -75,7 +76,7 @@ The safest way to sequence these atomically is a dedicated backend `restartSessi
 - Add `trpc.session.restartSession.useMutation()`
 - Expose `restartSession: () => void` that calls the mutation with the current `sessionId`
 
-**`src/components/chat/session-tab-bar.tsx`**
+**`src/components/workspace/main-view-tab-bar.tsx`**
 - Add optional prop `onRestartSession?: () => void`
 - Render a `<Button variant="ghost" size="sm">` with `<RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Restart</Button>` at the far right of the tab bar (after the `+` button)
 - Button is always rendered (never conditionally hidden); accepts `disabled` prop from the tab bar for consistency with other controls
@@ -101,7 +102,7 @@ workspace-detail-container
   └── sessionTabs.onRestartSession = restartSession
 
 WorkspaceDetailView → WorkspaceContentView
-  └── SessionTabBar
+  └── MainViewTabBar
         ├── [Session 1] [Session 2] [+]   (existing)
         └── [↺ Restart]                   ← NEW (far right, always visible)
 ```
@@ -131,7 +132,7 @@ User clicks "Restart"
 | `src/backend/domains/session/lifecycle/session.service.ts` | Expose `restartSession()` publicly |
 | `src/backend/trpc/session.trpc.ts` | Add `restartSession` procedure |
 | `src/components/chat/use-chat-websocket.ts` | Add `restartSession` mutation + expose from hook |
-| `src/components/chat/session-tab-bar.tsx` | Add `onRestartSession` prop + Restart button UI |
+| `src/components/workspace/main-view-tab-bar.tsx` | Add `onRestartSession` prop + Restart button UI |
 | `src/client/routes/projects/workspaces/workspace-detail-view.tsx` | Add `onRestartSession` to `SessionTabsProps` |
-| `src/components/workspace/workspace-content-view.tsx` | Thread `onRestartSession` to `SessionTabBar` |
+| `src/components/workspace/workspace-content-view.tsx` | Thread `onRestartSession` to `MainViewTabBar` |
 | `src/client/routes/projects/workspaces/workspace-detail-container.tsx` | Connect `restartSession` from hook to view props |
