@@ -74,12 +74,12 @@ export function WorkspaceHeaderOverflowMenu({
     }
     try {
       await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
+      setRenameOpen(false);
       await Promise.all([
         utils.workspace.get.invalidate({ id: workspaceId }),
         utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId }),
         utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId }),
       ]);
-      setRenameOpen(false);
     } catch {
       // onError handles user feedback via toast
     }
