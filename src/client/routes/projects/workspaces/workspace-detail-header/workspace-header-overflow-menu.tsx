@@ -1,5 +1,6 @@
 import { MoreHorizontal, Pencil, Settings2 } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,7 +51,9 @@ export function WorkspaceHeaderOverflowMenu({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const utils = trpc.useUtils();
-  const renameMutation = trpc.workspace.rename.useMutation();
+  const renameMutation = trpc.workspace.rename.useMutation({
+    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+  });
 
   const handleRenameOpen = () => {
     setRenameValue(workspace.name);

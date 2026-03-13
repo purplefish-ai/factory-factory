@@ -327,10 +327,18 @@ export function KanbanCard({
   };
 
   const handleSaveRename = async () => {
+    if (!isEditing) {
+      return;
+    }
     const trimmed = editValue.trim();
     setIsEditing(false);
     if (trimmed && trimmed !== workspace.name && onRename) {
-      await onRename(workspace.id, trimmed);
+      try {
+        await onRename(workspace.id, trimmed);
+      } catch {
+        // Error is surfaced by the mutation's onError handler
+        setEditValue(workspace.name);
+      }
     }
   };
 
@@ -361,7 +369,7 @@ export function KanbanCard({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    void handleSaveRename();
+                    e.currentTarget.blur();
                   } else if (e.key === 'Escape') {
                     e.preventDefault();
                     handleCancelRename();

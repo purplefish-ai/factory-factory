@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -141,7 +142,9 @@ export function KanbanProvider({
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
-  const renameMutation = trpc.workspace.rename.useMutation();
+  const renameMutation = trpc.workspace.rename.useMutation({
+    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+  });
   const archiveMutation = trpc.workspace.archive.useMutation();
   const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
