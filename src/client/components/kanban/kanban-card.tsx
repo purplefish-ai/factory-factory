@@ -289,12 +289,23 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     ratchetState: workspace.ratchetState ?? null,
   });
   const sessionRuntimeError = findWorkspaceSessionRuntimeError(workspace.sessionSummaries)?.message;
+  const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
+  const showCi = sidebarStatus.ciState !== 'NONE';
+  const showBranch = Boolean(workspace.branchName);
+  const showPendingRequest = workspace.pendingRequestType;
+  const hasMetadata =
+    showSetup || showCi || showBranch || showPR || showPendingRequest || !!sessionRuntimeError;
   return {
     showPR,
     isArchived,
     ratchetEnabled,
     sidebarStatus,
     sessionRuntimeError: sessionRuntimeError ?? null,
+    showSetup,
+    showCi,
+    showBranch,
+    showPendingRequest,
+    hasMetadata,
   };
 }
 
@@ -307,14 +318,18 @@ export function KanbanCard({
   onOpenQuickChat,
   onRename,
 }: KanbanCardProps) {
-  const { showPR, isArchived, ratchetEnabled, sidebarStatus, sessionRuntimeError } =
-    deriveCardState(workspace);
-  const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
-  const showCi = sidebarStatus.ciState !== 'NONE';
-  const showBranch = Boolean(workspace.branchName);
-  const showPendingRequest = workspace.pendingRequestType;
-  const hasMetadata =
-    showSetup || showCi || showBranch || showPR || showPendingRequest || !!sessionRuntimeError;
+  const {
+    showPR,
+    isArchived,
+    ratchetEnabled,
+    sidebarStatus,
+    sessionRuntimeError,
+    showSetup,
+    showCi,
+    showBranch,
+    showPendingRequest,
+    hasMetadata,
+  } = deriveCardState(workspace);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(workspace.name);
@@ -397,7 +412,7 @@ export function KanbanCard({
               onToggleRatcheting={onToggleRatcheting}
               onArchive={onArchive}
               onOpenQuickChat={onOpenQuickChat}
-              onStartEdit={onRename ? handleStartEdit : undefined}
+              onStartEdit={!isEditing && onRename ? handleStartEdit : undefined}
             />
           </div>
         </CardHeader>

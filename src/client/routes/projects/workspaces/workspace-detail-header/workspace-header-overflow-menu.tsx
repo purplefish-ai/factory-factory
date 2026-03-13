@@ -95,7 +95,7 @@ export function WorkspaceHeaderOverflowMenu({
         showTrigger={false}
       />
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Rename workspace</DialogTitle>
           </DialogHeader>
