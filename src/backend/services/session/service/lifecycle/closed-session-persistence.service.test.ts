@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeFileAtomic } from '@/backend/lib/atomic-file';
 import { closedSessionAccessor } from '@/backend/services/session/resources/closed-session.accessor';
@@ -15,6 +16,10 @@ vi.mock('@/backend/services/logger.service', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   }),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  mkdir: vi.fn(),
 }));
 
 vi.mock('@/backend/lib/atomic-file');
@@ -38,6 +43,7 @@ const createInput = (
 describe('closedSessionPersistenceService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(mkdir).mockResolvedValue(undefined);
     vi.mocked(writeFileAtomic).mockResolvedValue(undefined);
     vi.mocked(closedSessionAccessor.create).mockResolvedValue(
       unsafeCoerce({
@@ -53,6 +59,7 @@ describe('closedSessionPersistenceService', () => {
 
     expect(writeFileAtomic).not.toHaveBeenCalled();
     expect(closedSessionAccessor.create).not.toHaveBeenCalled();
+    expect(mkdir).not.toHaveBeenCalled();
   });
 
   it('rethrows file write errors so callers can handle failures', async () => {
@@ -61,6 +68,9 @@ describe('closedSessionPersistenceService', () => {
     await expect(
       closedSessionPersistenceService.persistClosedSession(createInput())
     ).rejects.toThrow('Disk full');
+    expect(mkdir).toHaveBeenCalledWith('/tmp/work/.context/closed-sessions', {
+      recursive: true,
+    });
     expect(closedSessionAccessor.create).not.toHaveBeenCalled();
   });
 
@@ -70,6 +80,9 @@ describe('closedSessionPersistenceService', () => {
     await expect(
       closedSessionPersistenceService.persistClosedSession(createInput())
     ).rejects.toThrow('DB locked');
+    expect(mkdir).toHaveBeenCalledWith('/tmp/work/.context/closed-sessions', {
+      recursive: true,
+    });
     expect(writeFileAtomic).toHaveBeenCalledTimes(1);
   });
 });
