@@ -255,9 +255,19 @@ describe('projectRouter', () => {
       startupScriptCommand: null,
       startupScriptPath: null,
     });
-    mockProjectManagementService.update.mockResolvedValue({ id: 'p1', ok: true });
+    mockProjectManagementService.update.mockResolvedValue({
+      id: 'p1',
+      issueTrackerConfig: {
+        linear: {
+          apiKey: 'enc:lin-api-key',
+          teamId: 'team-1',
+          teamName: 'Platform',
+          viewerName: 'Martina',
+        },
+      },
+    });
 
-    await caller.update({
+    const updatedProject = await caller.update({
       id: 'p1',
       issueProvider: IssueProvider.LINEAR,
       issueTrackerConfig: {
@@ -269,6 +279,19 @@ describe('projectRouter', () => {
         },
       },
     });
+
+    expect(updatedProject).toEqual({
+      id: 'p1',
+      issueTrackerConfig: {
+        linear: {
+          teamId: 'team-1',
+          teamName: 'Platform',
+          viewerName: 'Martina',
+          hasApiKey: true,
+        },
+      },
+    });
+    expect(updatedProject.issueTrackerConfig?.linear).not.toHaveProperty('apiKey');
 
     expect(mockEncrypt).toHaveBeenCalledWith('lin-api-key');
     expect(mockProjectManagementService.update).toHaveBeenCalledWith(
