@@ -218,6 +218,20 @@ Summarize what should be fixed before merge.`,
     );
   });
 
+  it('propagates invalid factory-factory.json errors instead of silently using defaults', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'quick-actions-invalid-config-'));
+    cleanupDirs.push(repoDir);
+
+    writeFileSync(join(repoDir, 'factory-factory.json'), '{ invalid json', 'utf8');
+
+    await expect(
+      listQuickActionsForRepo({
+        repoPath: repoDir,
+        surface: 'chatBar',
+      })
+    ).rejects.toThrow(/Invalid JSON/);
+  });
+
   it('rejects repo quick action paths that escape the repository through symlinks', async () => {
     const repoDir = mkdtempSync(join(tmpdir(), 'quick-actions-symlink-repo-'));
     const externalDir = mkdtempSync(join(tmpdir(), 'quick-actions-symlink-external-'));
@@ -446,5 +460,79 @@ Updated chat action.`,
         content: 'Updated chat action.',
       }),
     ]);
+  });
+
+  it('preserves the other surface when disabling an action without an explicit surface', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'quick-actions-surface-disable-'));
+    cleanupDirs.push(repoDir);
+
+    mkdirSync(join(repoDir, '.factory-factory/actions'), { recursive: true });
+    writeFileSync(
+      join(repoDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          quickActions: {
+            includeDefaults: false,
+            actions: [
+              {
+                id: 'shared',
+                path: '.factory-factory/actions/shared-session.md',
+                surface: 'sessionBar',
+              },
+              {
+                id: 'shared',
+                path: '.factory-factory/actions/shared-chat.md',
+                surface: 'chatBar',
+              },
+              {
+                id: 'shared',
+                mode: 'sendPrompt',
+                enabled: false,
+              },
+            ],
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/shared-session.md'),
+      `---
+name: Shared Session
+surface: sessionBar
+---
+Session action.`,
+      'utf8'
+    );
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/shared-chat.md'),
+      `---
+name: Shared Chat
+surface: chatBar
+---
+Original chat action.`,
+      'utf8'
+    );
+
+    const sessionBarActions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'sessionBar',
+    });
+    const chatBarActions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'chatBar',
+    });
+
+    expect(sessionBarActions).toEqual([
+      expect.objectContaining({
+        id: 'shared',
+        surface: 'sessionBar',
+        content: 'Session action.',
+      }),
+    ]);
+    expect(chatBarActions).toEqual([]);
   });
 });

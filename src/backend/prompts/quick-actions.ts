@@ -277,6 +277,23 @@ function defaultSurfaceForMode(mode: QuickActionMode): QuickActionSurface {
   return mode === 'sendPrompt' ? 'chatBar' : 'sessionBar';
 }
 
+function resolveEntrySurface(params: {
+  entry: QuickActionConfigEntry;
+  loadedFromRepo?: {
+    surface?: QuickActionSurface;
+    mode?: QuickActionMode;
+  } | null;
+  existing?: Pick<QuickAction, 'surface' | 'mode'>;
+}): QuickActionSurface | undefined {
+  const modeCandidate = params.entry.mode ?? params.loadedFromRepo?.mode ?? params.existing?.mode;
+  return (
+    params.entry.surface ??
+    params.loadedFromRepo?.surface ??
+    params.existing?.surface ??
+    (modeCandidate ? defaultSurfaceForMode(modeCandidate) : undefined)
+  );
+}
+
 function normalizeModeForSurface(params: {
   repoPath: string;
   id: string;
@@ -343,6 +360,39 @@ function findActionById(
   return undefined;
 }
 
+function buildResolvedAction(params: {
+  repoPath: string;
+  id: string;
+  entry: QuickActionConfigEntry;
+  resolvedSurface: QuickActionSurface;
+  loadedFromRepo: ParsedQuickActionMarkdown | null;
+  existing?: QuickAction;
+}): QuickAction {
+  const resolvedMode: QuickActionMode =
+    params.entry.mode ??
+    params.loadedFromRepo?.mode ??
+    params.existing?.mode ??
+    defaultModeForSurface(params.resolvedSurface);
+  const normalizedMode = normalizeModeForSurface({
+    repoPath: params.repoPath,
+    id: params.id,
+    surface: params.resolvedSurface,
+    mode: resolvedMode,
+  });
+
+  return {
+    id: params.id,
+    name: params.loadedFromRepo?.name ?? params.existing?.name ?? params.id,
+    description: params.loadedFromRepo?.description ?? params.existing?.description ?? '',
+    icon: params.entry.icon ?? params.loadedFromRepo?.icon ?? params.existing?.icon,
+    content: params.loadedFromRepo?.content ?? params.existing?.content ?? '',
+    surface: params.resolvedSurface,
+    mode: normalizedMode,
+    pinned:
+      params.entry.pinned ?? params.loadedFromRepo?.pinned ?? params.existing?.pinned ?? false,
+  };
+}
+
 function sortResolvedActions(
   actions: QuickAction[],
   configuredOrder: Map<string, number>
@@ -401,8 +451,9 @@ async function applyConfiguredEntry(params: {
     return;
   }
 
+  const resolvedSurfaceForDisabledEntry = resolveEntrySurface({ entry });
   if (entry.enabled === false) {
-    deleteActionsById(actionMap, id, entry.surface);
+    deleteActionsById(actionMap, id, resolvedSurfaceForDisabledEntry);
     return;
   }
 
@@ -414,12 +465,11 @@ async function applyConfiguredEntry(params: {
         idOverride: id,
       })
     : null;
-  const modeCandidate = entry.mode ?? loadedFromRepo?.mode ?? existing?.mode;
-  const resolvedSurface: QuickActionSurface =
-    entry.surface ??
-    loadedFromRepo?.surface ??
-    existing?.surface ??
-    (modeCandidate ? defaultSurfaceForMode(modeCandidate) : 'sessionBar');
+  const resolvedSurface = resolveEntrySurface({
+    entry,
+    loadedFromRepo,
+    existing,
+  });
 
   if (!(existing || loadedFromRepo)) {
     logger.warn('Skipping quick action override because id was not found and no path provided', {
@@ -429,24 +479,15 @@ async function applyConfiguredEntry(params: {
     return;
   }
 
-  const resolvedMode: QuickActionMode =
-    entry.mode ?? loadedFromRepo?.mode ?? existing?.mode ?? defaultModeForSurface(resolvedSurface);
-  const normalizedMode = normalizeModeForSurface({
+  const surface = resolvedSurface ?? 'sessionBar';
+  const resolvedAction = buildResolvedAction({
     repoPath,
     id,
-    surface: resolvedSurface,
-    mode: resolvedMode,
+    entry,
+    resolvedSurface: surface,
+    loadedFromRepo,
+    existing,
   });
-  const resolvedAction: QuickAction = {
-    id,
-    name: loadedFromRepo?.name ?? existing?.name ?? id,
-    description: loadedFromRepo?.description ?? existing?.description ?? '',
-    icon: entry.icon ?? loadedFromRepo?.icon ?? existing?.icon,
-    content: loadedFromRepo?.content ?? existing?.content ?? '',
-    surface: resolvedSurface,
-    mode: normalizedMode,
-    pinned: entry.pinned ?? loadedFromRepo?.pinned ?? existing?.pinned ?? false,
-  };
 
   if (resolvedAction.content.trim().length === 0) {
     logger.warn('Skipping quick action with empty content', {
@@ -456,9 +497,9 @@ async function applyConfiguredEntry(params: {
     return;
   }
 
-  configuredOrder.set(makeActionKey(resolvedSurface, id), index);
-  deleteActionsById(actionMap, id, resolvedSurface);
-  actionMap.set(makeActionKey(resolvedSurface, id), resolvedAction);
+  configuredOrder.set(makeActionKey(surface, id), index);
+  deleteActionsById(actionMap, id, surface);
+  actionMap.set(makeActionKey(surface, id), resolvedAction);
 }
 
 async function resolveQuickActions(params: {
@@ -509,15 +550,7 @@ export async function listQuickActionsForRepo(params: {
   repoPath: string;
   surface?: QuickActionSurface;
 }): Promise<QuickAction[]> {
-  let config: FactoryConfig | null = null;
-  try {
-    config = await FactoryConfigService.readConfig(params.repoPath);
-  } catch (error) {
-    logger.warn('Failed to parse factory-factory.json for quick actions, using defaults', {
-      repoPath: params.repoPath,
-      error: String(error),
-    });
-  }
+  const config = await FactoryConfigService.readConfig(params.repoPath);
   return await resolveQuickActions({
     repoPath: params.repoPath,
     factoryConfig: config,

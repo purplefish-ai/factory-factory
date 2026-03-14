@@ -188,6 +188,15 @@ describe('runScriptConfigPersistenceService', () => {
     ).rejects.toThrow(/Invalid JSON/);
 
     expect(readFileSync(join(repoDir, 'factory-factory.json'), 'utf8')).toBe('{ invalid json');
+    expect(
+      FactoryConfigSchema.parse(
+        JSON.parse(readFileSync(join(workspaceDir, 'factory-factory.json'), 'utf8'))
+      )
+    ).toEqual({
+      scripts: {
+        run: 'pnpm old-dev',
+      },
+    });
   });
 
   it('syncs command cache after manual factory-factory.json edits', async () => {

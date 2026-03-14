@@ -79,12 +79,25 @@ class RunScriptConfigPersistenceService {
     persistWorkspaceCommands: PersistWorkspaceCommands;
   }): Promise<RunScriptCommandCache> {
     const existingWorktreeConfig = await FactoryConfigService.readConfig(input.worktreePath);
+    const existingRepoConfig = input.projectRepoPath
+      ? await FactoryConfigService.readConfig(input.projectRepoPath)
+      : null;
 
     const mergedWorktreeConfig = FactoryConfigService.mergeConfig(
       existingWorktreeConfig,
       input.config
     );
     const worktreeConfigContent = JSON.stringify(mergedWorktreeConfig, null, 2);
+    const repoConfigContent = input.projectRepoPath
+      ? JSON.stringify(
+          FactoryConfigService.mergeConfig(
+            existingRepoConfig ?? existingWorktreeConfig,
+            input.config
+          ),
+          null,
+          2
+        )
+      : null;
 
     await writeFile(
       join(input.worktreePath, FACTORY_CONFIG_FILENAME),
@@ -92,15 +105,7 @@ class RunScriptConfigPersistenceService {
       'utf-8'
     );
 
-    if (input.projectRepoPath) {
-      const existingRepoConfig = await FactoryConfigService.readConfig(input.projectRepoPath);
-
-      const mergedRepoConfig = FactoryConfigService.mergeConfig(
-        existingRepoConfig ?? existingWorktreeConfig,
-        input.config
-      );
-      const repoConfigContent = JSON.stringify(mergedRepoConfig, null, 2);
-
+    if (input.projectRepoPath && repoConfigContent) {
       await writeFile(
         join(input.projectRepoPath, FACTORY_CONFIG_FILENAME),
         repoConfigContent,
