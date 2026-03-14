@@ -282,7 +282,11 @@ export const projectRouter = router({
         };
       }
 
-      return projectManagementService.update(id, updates);
+      const project = await projectManagementService.update(id, updates);
+      return {
+        ...project,
+        issueTrackerConfig: sanitizeIssueTrackerConfig(project.issueTrackerConfig),
+      };
     }),
 
   // Archive a project (soft delete)

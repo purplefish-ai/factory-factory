@@ -891,7 +891,7 @@ export class SessionConfigService {
 
   private resolveCodexReasoningValue(
     currentReasoningValue: string | null,
-    defaultReasoningValue: string | undefined,
+    defaultReasoningValue: string | null | undefined,
     reasoningValues: string[]
   ): string | null {
     const values = new Set(reasoningValues);
