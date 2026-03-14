@@ -303,6 +303,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       initialPrompt: '',
       startupModePreset: 'non_interactive',
     });
+    expect(mocks.clearTerminalPid).toHaveBeenCalledWith('term-default');
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.markFailed).toHaveBeenCalled();
   });

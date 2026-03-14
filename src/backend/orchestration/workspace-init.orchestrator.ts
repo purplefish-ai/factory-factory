@@ -139,6 +139,15 @@ async function handleWorkspaceInitFailure(
         error: destroyError instanceof Error ? destroyError.message : String(destroyError),
       });
     }
+    try {
+      await sessionDataService.clearTerminalPid(autoCreatedTerminalId);
+    } catch (clearPidError) {
+      logger.warn('Failed to clear default terminal PID after init failure', {
+        workspaceId,
+        terminalId: autoCreatedTerminalId,
+        error: clearPidError instanceof Error ? clearPidError.message : String(clearPidError),
+      });
+    }
   }
   try {
     await sessionService.stopWorkspaceSessions(workspaceId);
