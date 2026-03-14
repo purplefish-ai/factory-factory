@@ -42,6 +42,7 @@ vi.mock('@/backend/services/session', () => ({
 vi.mock('@/backend/services/terminal', () => ({
   terminalService: {
     createTerminal: vi.fn(),
+    destroyTerminal: vi.fn(),
     getTerminalsForWorkspace: vi.fn(),
     onExit: vi.fn(),
   },
@@ -202,6 +203,7 @@ function setupHappyPath() {
     terminalId: 'term-default',
     pid: 12_345,
   });
+  vi.mocked(terminalService.destroyTerminal).mockReturnValue(true);
   vi.mocked(terminalService.getTerminalsForWorkspace).mockReturnValue([]);
   vi.mocked(terminalService.onExit).mockImplementation(() => vi.fn());
   return workspace;
@@ -338,6 +340,23 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(terminalService.createTerminal).not.toHaveBeenCalled();
       expect(sessionDataService.createTerminalSession).not.toHaveBeenCalled();
+    });
+
+    it('destroys the spawned terminal when session persistence fails', async () => {
+      setupHappyPath();
+      vi.mocked(sessionDataService.createTerminalSession).mockRejectedValue(
+        new Error('db unavailable')
+      );
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(terminalService.createTerminal).toHaveBeenCalledWith({
+        workspaceId: WORKSPACE_ID,
+        workingDir: '/worktrees/workspace-ws-1',
+      });
+      expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
+      expect(terminalService.onExit).not.toHaveBeenCalled();
+      expect(workspaceStateMachine.markReady).toHaveBeenCalledWith(WORKSPACE_ID);
     });
   });
 

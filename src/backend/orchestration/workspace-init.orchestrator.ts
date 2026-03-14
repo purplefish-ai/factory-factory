@@ -807,11 +807,16 @@ async function startDefaultTerminal(
       workingDir: worktreePath,
     });
 
-    await sessionDataService.createTerminalSession({
-      workspaceId,
-      name: terminalId,
-      pid,
-    });
+    try {
+      await sessionDataService.createTerminalSession({
+        workspaceId,
+        name: terminalId,
+        pid,
+      });
+    } catch (error) {
+      terminalService.destroyTerminal(workspaceId, terminalId);
+      throw error;
+    }
 
     let unsubscribeExit: (() => void) | null = null;
     unsubscribeExit = terminalService.onExit(terminalId, () => {
