@@ -138,6 +138,78 @@ describe('FileLockMutex', () => {
     }
   });
 
+  it('does not treat an active lock as stale while heartbeat is updating mtime', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'heartbeat.lock');
+
+    const holder = new FileLockMutex({
+      heartbeatIntervalMs: 100,
+    });
+    const contender = new FileLockMutex({
+      acquireTimeoutMs: 100,
+      postTimeoutWaitMs: 1200,
+      initialRetryDelayMs: 5,
+      maxRetryDelayMs: 10,
+      maxStaleRetries: 2,
+      staleThresholdMs: 1000,
+    });
+
+    try {
+      const releaseHolder = await holder.acquire(lockPath);
+
+      await expect(contender.acquire(lockPath)).rejects.toBeInstanceOf(FileLockTimeoutError);
+      expect(await exists(lockPath)).toBe(true);
+
+      await releaseHolder();
+      expect(await exists(lockPath)).toBe(false);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it('clamps staleThresholdMs so zero does not allow lock stealing', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'zero-threshold.lock');
+    const holder = new FileLockMutex();
+    const contender = new FileLockMutex({
+      acquireTimeoutMs: 20,
+      postTimeoutWaitMs: 40,
+      initialRetryDelayMs: 5,
+      maxRetryDelayMs: 10,
+      maxStaleRetries: 1,
+      staleThresholdMs: 0,
+    });
+
+    try {
+      const releaseHolder = await holder.acquire(lockPath);
+      await expect(contender.acquire(lockPath)).rejects.toBeInstanceOf(FileLockTimeoutError);
+      await releaseHolder();
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not derive stale threshold from acquireTimeoutMs', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'timeout-zero-default-threshold.lock');
+    const holder = new FileLockMutex();
+    const contender = new FileLockMutex({
+      acquireTimeoutMs: 0,
+      postTimeoutWaitMs: 30,
+      initialRetryDelayMs: 5,
+      maxRetryDelayMs: 10,
+      maxStaleRetries: 1,
+    });
+
+    try {
+      const releaseHolder = await holder.acquire(lockPath);
+      await expect(contender.acquire(lockPath)).rejects.toBeInstanceOf(FileLockTimeoutError);
+      await releaseHolder();
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
   it('does not unlink a replaced lock file on release', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
     const lockPath = path.join(baseDir, 'replaced.lock');

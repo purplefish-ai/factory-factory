@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from 'node:fs/promises';
+import { lstat, readdir, readlink, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { LIB_LIMITS } from './constants';
 
@@ -24,6 +24,63 @@ export async function pathExists(targetPath: string): Promise<boolean> {
  * Maximum file size to read (1MB).
  */
 export const MAX_FILE_SIZE = LIB_LIMITS.maxFileReadBytes;
+
+const isErrnoCode = (error: unknown, code: string): boolean =>
+  (error as NodeJS.ErrnoException).code === code;
+
+const isWithinPath = (targetPath: string, rootPath: string): boolean =>
+  targetPath === rootPath || targetPath.startsWith(rootPath + path.sep);
+
+const resolveSymlinkTargetPath = async (candidatePath: string): Promise<string | null> => {
+  let candidateStats: Awaited<ReturnType<typeof lstat>>;
+
+  try {
+    candidateStats = await lstat(candidatePath);
+  } catch (error) {
+    if (isErrnoCode(error, 'ENOENT')) {
+      return null;
+    }
+    throw error;
+  }
+
+  if (!candidateStats.isSymbolicLink()) {
+    return null;
+  }
+
+  const linkTarget = await readlink(candidatePath);
+  return path.resolve(path.dirname(candidatePath), linkTarget);
+};
+
+const resolveParentPath = (candidatePath: string, error: unknown): string => {
+  const parentPath = path.dirname(candidatePath);
+  if (parentPath === candidatePath) {
+    throw error;
+  }
+  return parentPath;
+};
+
+const resolveNearestExistingPath = async (targetPath: string): Promise<string> => {
+  let candidatePath = targetPath;
+  const visitedPaths = new Set<string>();
+
+  while (true) {
+    if (visitedPaths.has(candidatePath)) {
+      throw new Error(`Detected symlink resolution loop for path: ${candidatePath}`);
+    }
+    visitedPaths.add(candidatePath);
+
+    try {
+      return await realpath(candidatePath);
+    } catch (error) {
+      if (!isErrnoCode(error, 'ENOENT')) {
+        throw error;
+      }
+
+      const symlinkTargetPath = await resolveSymlinkTargetPath(candidatePath);
+      candidatePath = symlinkTargetPath ?? resolveParentPath(candidatePath, error);
+    }
+  }
+};
 
 /**
  * Validate that a file path doesn't escape the worktree directory.
@@ -52,29 +109,6 @@ export async function isPathSafe(worktreePath: string, filePath: string): Promis
   if (!fullPath.startsWith(normalizedWorktree + path.sep) && fullPath !== normalizedWorktree) {
     return false;
   }
-
-  const isWithinPath = (targetPath: string, rootPath: string) =>
-    targetPath === rootPath || targetPath.startsWith(rootPath + path.sep);
-
-  const resolveNearestExistingPath = async (targetPath: string): Promise<string> => {
-    let candidatePath = targetPath;
-
-    while (true) {
-      try {
-        return await realpath(candidatePath);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
-        }
-
-        const parentPath = path.dirname(candidatePath);
-        if (parentPath === candidatePath) {
-          throw error;
-        }
-        candidatePath = parentPath;
-      }
-    }
-  };
 
   // Resolve symlinks and verify the path (or nearest existing parent) stays within worktree.
   try {

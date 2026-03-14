@@ -1,9 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { app } from 'electron';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Server instance interface matching what createServer() returns
@@ -72,24 +70,21 @@ export class ServerManager {
     // Dynamic import is required here because we must set environment variables
     // BEFORE importing the backend modules (they read env vars at load time)
     console.log('[electron] Running database migrations...');
-    const migratePath = join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      '..',
+    const backendDistPath = join(
+      process.resourcesPath,
+      'app.asar.unpacked',
       'dist',
       'src',
-      'backend',
-      'migrate.js'
+      'backend'
     );
+    const migratePath = join(backendDistPath, 'migrate.js');
     const migrateModule = await this.dynamicImport<{
       runMigrations: (opts: {
         databasePath: string;
         migrationsPath: string;
         log?: (msg: string) => void;
       }) => void;
-    }>(migratePath);
+    }>(this.toModuleImportSpecifier(migratePath));
     migrateModule.runMigrations({
       databasePath,
       migrationsPath,
@@ -98,20 +93,10 @@ export class ServerManager {
 
     // Import and start the backend server
     console.log('[electron] Starting backend server...');
-    const serverPath = join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      '..',
-      'dist',
-      'src',
-      'backend',
-      'server.js'
-    );
+    const serverPath = join(backendDistPath, 'server.js');
     const serverModule = await this.dynamicImport<{
       createServer: () => ServerInstance;
-    }>(serverPath);
+    }>(this.toModuleImportSpecifier(serverPath));
     this.serverInstance = serverModule.createServer();
 
     const url = await this.serverInstance.start();
@@ -151,5 +136,13 @@ export class ServerManager {
    */
   private dynamicImport<T>(modulePath: string): Promise<T> {
     return import(modulePath) as Promise<T>;
+  }
+
+  /**
+   * Convert filesystem paths to file URLs for ESM dynamic import compatibility,
+   * including Windows absolute paths.
+   */
+  private toModuleImportSpecifier(modulePath: string): string {
+    return pathToFileURL(modulePath).href;
   }
 }

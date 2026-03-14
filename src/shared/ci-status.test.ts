@@ -43,14 +43,13 @@ describe('ci-status', () => {
     );
   });
 
-  it('returns PASSING when all checks are complete and non-failing', () => {
+  it('returns UNKNOWN when all checks are complete but non-success', () => {
     expect(
       deriveCiVisualStateFromChecks([
-        { conclusion: 'SUCCESS', status: 'COMPLETED' },
         { conclusion: 'NEUTRAL', status: 'COMPLETED' },
         { conclusion: 'CANCELLED', status: 'COMPLETED' },
       ])
-    ).toBe('PASSING');
+    ).toBe('UNKNOWN');
   });
 
   it('derives canonical CI status from check rollup', () => {
@@ -72,7 +71,15 @@ describe('ci-status', () => {
         { status: 'COMPLETED', conclusion: 'NEUTRAL' },
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
       ])
-    ).toBe('SUCCESS');
+    ).toBe('UNKNOWN');
+  });
+
+  it('handles lowercase status and conclusion values', () => {
+    expect(deriveCiStatusFromCheckRollup([{ status: 'in_progress' }])).toBe('PENDING');
+
+    expect(deriveCiStatusFromCheckRollup([{ status: 'completed', conclusion: 'failure' }])).toBe(
+      'FAILURE'
+    );
   });
 
   it('derives UNKNOWN for unrecognized completed outcomes', () => {
