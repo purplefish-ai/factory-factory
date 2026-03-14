@@ -5,7 +5,7 @@
  * Repositories can override/add actions through factory-factory.json quickActions config.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { z } from 'zod';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
@@ -236,11 +236,11 @@ function isPathWithinRepo(repoPath: string, actionPath: string): boolean {
   return rel === '' || !(rel.startsWith('..') || isAbsolute(rel));
 }
 
-function loadRepoAction(params: {
+async function loadRepoAction(params: {
   repoPath: string;
   actionPath: string;
   idOverride?: string;
-}): ParsedQuickActionMarkdown | null {
+}): Promise<ParsedQuickActionMarkdown | null> {
   if (!isPathWithinRepo(params.repoPath, params.actionPath)) {
     logger.warn('Ignoring quick action path outside repository', {
       repoPath: params.repoPath,
@@ -251,7 +251,7 @@ function loadRepoAction(params: {
 
   const fullPath = resolve(params.repoPath, params.actionPath);
   try {
-    const content = readFileSync(fullPath, 'utf-8');
+    const content = await readFile(fullPath, 'utf-8');
     const fallbackId =
       params.actionPath.split('/').pop()?.replace(/\.md$/i, '') ?? params.actionPath;
     const parsed = parseQuickActionFile(fullPath, content, params.idOverride ?? fallbackId);
@@ -390,13 +390,13 @@ function seedDefaultActions(params: {
   }
 }
 
-function applyConfiguredEntry(params: {
+async function applyConfiguredEntry(params: {
   repoPath: string;
   index: number;
   entry: QuickActionConfigEntry;
   actionMap: Map<string, QuickAction>;
   configuredOrder: Map<string, number>;
-}): void {
+}): Promise<void> {
   const { repoPath, index, entry, actionMap, configuredOrder } = params;
   const id = normalizeIdFromEntry(entry);
   if (!id) {
@@ -407,7 +407,7 @@ function applyConfiguredEntry(params: {
 
   const existing = findActionById(actionMap, id, entry.surface);
   const loadedFromRepo = entry.path
-    ? loadRepoAction({
+    ? await loadRepoAction({
         repoPath,
         actionPath: entry.path,
         idOverride: id,
@@ -464,11 +464,11 @@ function applyConfiguredEntry(params: {
   actionMap.set(makeActionKey(resolvedSurface, id), resolvedAction);
 }
 
-function resolveQuickActions(params: {
+async function resolveQuickActions(params: {
   repoPath: string;
   factoryConfig: FactoryConfig | null;
   surface?: QuickActionSurface;
-}): QuickAction[] {
+}): Promise<QuickAction[]> {
   const config = params.factoryConfig?.quickActions;
   const actionMap = new Map<string, QuickAction>();
   const configuredOrder = new Map<string, number>();
@@ -479,7 +479,7 @@ function resolveQuickActions(params: {
   });
 
   for (const [index, entry] of (config?.actions ?? []).entries()) {
-    applyConfiguredEntry({
+    await applyConfiguredEntry({
       repoPath: params.repoPath,
       index,
       entry,
@@ -521,7 +521,7 @@ export async function listQuickActionsForRepo(params: {
       error: String(error),
     });
   }
-  return resolveQuickActions({
+  return await resolveQuickActions({
     repoPath: params.repoPath,
     factoryConfig: config,
     surface: params.surface,

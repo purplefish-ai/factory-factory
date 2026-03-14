@@ -5,14 +5,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import { sessionDataService } from '@/backend/domains/session';
-import { workspaceDataService } from '@/backend/domains/workspace';
+import { sessionDataService } from '@/backend/services/session';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { createTerminalUpgradeHandler, terminalConnections } from './terminal.handler';
 
 const mockClearTerminalPid = vi.fn();
 
-vi.mock('@/backend/domains/session', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/domains/session')>();
+vi.mock('@/backend/services/session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/session')>();
   return {
     ...actual,
     sessionDataService: {
@@ -23,8 +23,8 @@ vi.mock('@/backend/domains/session', async (importOriginal) => {
   };
 });
 
-vi.mock('@/backend/domains/workspace', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/backend/domains/workspace')>();
+vi.mock('@/backend/services/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
   return {
     ...actual,
     workspaceDataService: {

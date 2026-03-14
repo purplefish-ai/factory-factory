@@ -17,41 +17,41 @@
  */
 
 import {
+  buildWorkspaceSessionSummaries,
+  hasWorkingSessionSummary,
+} from '@/backend/lib/session-summaries';
+import {
   PR_SNAPSHOT_UPDATED,
   type PRSnapshotUpdatedEvent,
   prSnapshotService,
-} from '@/backend/domains/github';
-import { linearStateSyncService } from '@/backend/domains/linear';
+} from '@/backend/services/github';
+import { linearStateSyncService } from '@/backend/services/linear';
+import { createLogger } from '@/backend/services/logger.service';
 import {
   RATCHET_STATE_CHANGED,
   RATCHET_TOGGLED,
   type RatchetStateChangedEvent,
   type RatchetToggledEvent,
   ratchetService,
-} from '@/backend/domains/ratchet';
+} from '@/backend/services/ratchet';
 import {
   RUN_SCRIPT_STATUS_CHANGED,
   type RunScriptStatusChangedEvent,
   runScriptStateMachine,
-} from '@/backend/domains/run-script';
+} from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   sessionDataService,
   sessionDomainService,
   sessionService,
-} from '@/backend/domains/session';
+} from '@/backend/services/session';
 import {
   computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
   type WorkspaceStateChangedEvent,
   workspaceActivityService,
   workspaceStateMachine,
-} from '@/backend/domains/workspace';
-import {
-  buildWorkspaceSessionSummaries,
-  hasWorkingSessionSummary,
-} from '@/backend/lib/session-summaries';
-import { createLogger } from '@/backend/services/logger.service';
+} from '@/backend/services/workspace';
 import {
   type SnapshotUpdateInput,
   workspaceSnapshotStore,
@@ -111,6 +111,31 @@ const defaultSessionServices: EventCollectorSessionServices = {
   sessionDomainService,
   sessionService,
 };
+
+function shouldRefreshRatchetForPrSwitch(
+  previousSnapshot: ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>,
+  event: PRSnapshotUpdatedEvent
+): boolean {
+  if (!previousSnapshot) {
+    return false;
+  }
+
+  const hadPreviouslyLinkedPr =
+    previousSnapshot.prNumber !== null || previousSnapshot.prUrl !== null;
+  if (!hadPreviouslyLinkedPr) {
+    return false;
+  }
+
+  const prNumberChanged =
+    previousSnapshot.prNumber !== null && previousSnapshot.prNumber !== event.prNumber;
+  const prUrlChanged =
+    previousSnapshot.prUrl !== null &&
+    event.prUrl !== undefined &&
+    event.prUrl !== null &&
+    previousSnapshot.prUrl !== event.prUrl;
+
+  return prNumberChanged || prUrlChanged;
+}
 
 /**
  * Per-workspace coalescing buffer that accumulates SnapshotUpdateInput fields
@@ -436,6 +461,8 @@ function configureEventCollectorWithState(
 
   // 2. PR snapshot updates
   prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+    const previousSnapshot = workspaceSnapshotStore.getByWorkspaceId(event.workspaceId);
+    const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
     const snapshotUpdate: SnapshotUpdateInput = {
       ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
       prNumber: event.prNumber,
@@ -446,6 +473,15 @@ function configureEventCollectorWithState(
     coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
       immediate: true,
     });
+
+    if (shouldRefreshRatchet) {
+      void ratchetService.checkWorkspaceById(event.workspaceId).catch((error) => {
+        logger.warn('Failed immediate ratchet refresh after PR switch', {
+          workspaceId: event.workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
 
     // Transition linked Linear issue to completed when PR is merged
     if (event.prState === 'MERGED') {

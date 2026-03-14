@@ -31,11 +31,12 @@ const mockComputeKanbanColumn = vi.hoisted(() => vi.fn());
 const mockSetWorkspaceRatcheting = vi.hoisted(() => vi.fn());
 const mockCheckWorkspaceById = vi.hoisted(() => vi.fn());
 const mockSessionRuntimeSnapshot = vi.hoisted(() => vi.fn());
+const mockCreateAgentSession = vi.hoisted(() => vi.fn());
 const mockResolveProviderForWorkspaceCreation = vi.hoisted(() =>
   vi.fn(async (_explicitProvider?: unknown) => 'CLAUDE')
 );
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
   workspaceQueryService: mockWorkspaceQueryService,
   deriveWorkspaceFlowStateFromWorkspace: (...args: unknown[]) => mockDeriveFlowState(...args),
@@ -45,9 +46,12 @@ vi.mock('@/backend/domains/workspace', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionService: {
     getRuntimeSnapshot: (...args: unknown[]) => mockSessionRuntimeSnapshot(...args),
+  },
+  sessionDataService: {
+    createAgentSession: (...args: unknown[]) => mockCreateAgentSession(...args),
   },
   sessionProviderResolverService: {
     resolveProviderForWorkspaceCreation: (explicitProvider?: unknown) =>
@@ -55,7 +59,7 @@ vi.mock('@/backend/domains/session', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/ratchet', () => ({
+vi.mock('@/backend/services/ratchet', () => ({
   ratchetService: {
     setWorkspaceRatcheting: (...args: unknown[]) => mockSetWorkspaceRatcheting(...args),
     checkWorkspaceById: (...args: unknown[]) => mockCheckWorkspaceById(...args),
@@ -165,6 +169,7 @@ describe('workspaceRouter', () => {
     mockHasWorkingSessionSummary.mockReturnValue(false);
     mockDeriveWorkspaceSidebarStatus.mockReturnValue({ activityState: 'IDLE', ciState: 'NONE' });
     mockComputeKanbanColumn.mockReturnValue('WAITING');
+    mockCreateAgentSession.mockResolvedValue({ id: 'session-1' });
   });
 
   it('lists workspaces and returns enriched workspace details', async () => {
@@ -199,7 +204,7 @@ describe('workspaceRouter', () => {
 
   it('creates, toggles, and archives workspaces', async () => {
     const { caller } = createCaller();
-    mockWorkspaceCreationCreate.mockResolvedValue({ workspace: { id: 'w-created' } });
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
     mockWorkspaceDataService.findById.mockResolvedValue({ id: 'w-created' });
     mockArchiveWorkspace.mockResolvedValue({ archived: true });
 
@@ -217,6 +222,13 @@ describe('workspaceRouter', () => {
       branchName: 'feature/x',
       useExistingBranch: false,
     });
+    expect(mockCreateAgentSession).toHaveBeenCalledWith({
+      workspaceId: 'w-created',
+      workflow: 'followup',
+      name: 'Chat 1',
+      provider: 'CLAUDE',
+      providerProjectPath: null,
+    });
 
     await expect(
       caller.toggleRatcheting({ workspaceId: 'w-created', enabled: true })
@@ -231,7 +243,7 @@ describe('workspaceRouter', () => {
 
   it('passes initial attachments through manual workspace creation', async () => {
     const { caller } = createCaller();
-    mockWorkspaceCreationCreate.mockResolvedValue({ workspace: { id: 'w-created' } });
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
 
     const initialAttachments = [
       {
@@ -262,7 +274,7 @@ describe('workspaceRouter', () => {
 
   it('passes startup mode preset through manual workspace creation', async () => {
     const { caller } = createCaller();
-    mockWorkspaceCreationCreate.mockResolvedValue({ workspace: { id: 'w-created' } });
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
 
     await caller.create({
       type: 'MANUAL',

@@ -8,7 +8,7 @@ const mockFindPRForBranch = vi.fn();
 const mockRefreshWorkspace = vi.fn();
 const mockAttachAndRefreshPR = vi.fn();
 
-vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     findNeedingPRSync: () => mockFindNeedingPRSync(),
     findNeedingPRDiscovery: () => mockFindNeedingPRDiscovery(),
@@ -16,7 +16,7 @@ vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
     findPRForBranch: (...args: unknown[]) => mockFindPRForBranch(...args),
   },

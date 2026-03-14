@@ -5,12 +5,16 @@ import { isBinaryContent, isPathSafe, pathExists } from './file-helpers';
 
 // Mock fs/promises
 vi.mock('node:fs/promises', () => ({
+  lstat: vi.fn(),
+  readlink: vi.fn(),
   realpath: vi.fn(),
   stat: vi.fn(),
 }));
 
-import { realpath, stat } from 'node:fs/promises';
+import { lstat, readlink, realpath, stat } from 'node:fs/promises';
 
+const mockedLstat = vi.mocked(lstat);
+const mockedReadlink = vi.mocked(readlink);
 const mockedRealpath = vi.mocked(realpath);
 const mockedStat = vi.mocked(stat);
 const createErrno = (code: string): NodeJS.ErrnoException => {
@@ -38,9 +42,38 @@ describe('file-helpers', () => {
 
   describe('isPathSafe', () => {
     const worktreePath = '/home/user/project';
+    const resolvedWorktreePath = path.resolve(worktreePath);
+    const createSymlinkStats = (): Awaited<ReturnType<typeof lstat>> =>
+      ({ isSymbolicLink: () => true }) as Awaited<ReturnType<typeof lstat>>;
+    const mockRealpathWithMap = (entries: [string, string][]) => {
+      const lookup = new Map(entries);
+      mockedRealpath.mockImplementation((targetPath) => {
+        const resolvedPath = lookup.get(String(targetPath));
+        if (resolvedPath !== undefined) {
+          return Promise.resolve(resolvedPath);
+        }
+        return Promise.reject(createErrno('ENOENT'));
+      });
+    };
+    const mockBrokenSymlink = (linkPath: string, linkTarget: string) => {
+      mockedLstat.mockImplementation((targetPath) => {
+        if (targetPath === linkPath) {
+          return Promise.resolve(createSymlinkStats());
+        }
+        return Promise.reject(createErrno('ENOENT'));
+      });
+      mockedReadlink.mockImplementation((targetPath) => {
+        if (targetPath === linkPath) {
+          return Promise.resolve(linkTarget);
+        }
+        return Promise.reject(createErrno('ENOENT'));
+      });
+    };
 
     beforeEach(() => {
       vi.clearAllMocks();
+      mockedLstat.mockImplementation(() => Promise.reject(createErrno('ENOENT')));
+      mockedReadlink.mockImplementation(() => Promise.reject(createErrno('ENOENT')));
     });
 
     afterEach(() => {
@@ -210,6 +243,33 @@ describe('file-helpers', () => {
 
         const result = await isPathSafe(worktreePath, 'link/deep/newfile.ts');
         expect(result).toBe(false);
+      });
+
+      it('should reject broken symlink targets that resolve outside worktree', async () => {
+        const brokenLinkPath = path.resolve(worktreePath, 'broken-link');
+        const outsideTarget = '/tmp/external/escape-success.txt';
+
+        mockBrokenSymlink(brokenLinkPath, outsideTarget);
+        mockRealpathWithMap([
+          [resolvedWorktreePath, resolvedWorktreePath],
+          ['/tmp/external', '/tmp/external'],
+        ]);
+
+        const result = await isPathSafe(worktreePath, 'broken-link');
+        expect(result).toBe(false);
+      });
+
+      it('should allow broken symlink targets that stay within worktree', async () => {
+        const brokenLinkPath = path.resolve(worktreePath, 'broken-link');
+
+        mockBrokenSymlink(brokenLinkPath, 'src/new-file.ts');
+        mockRealpathWithMap([
+          [resolvedWorktreePath, resolvedWorktreePath],
+          [path.resolve(worktreePath, 'src'), path.resolve(worktreePath, 'src')],
+        ]);
+
+        const result = await isPathSafe(worktreePath, 'broken-link');
+        expect(result).toBe(true);
       });
 
       it('should handle worktree path that is itself a symlink', async () => {

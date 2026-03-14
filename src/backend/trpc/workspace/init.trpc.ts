@@ -1,15 +1,15 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { startupScriptService } from '@/backend/domains/run-script';
+import { toError } from '@/backend/lib/error-utils';
+import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { createLogger } from '@/backend/services/logger.service';
+import { startupScriptService } from '@/backend/services/run-script';
 import {
   getWorkspaceInitPolicy,
   workspaceDataService,
   workspaceStateMachine,
   worktreeLifecycleService,
-} from '@/backend/domains/workspace';
-import { toError } from '@/backend/lib/error-utils';
-import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
-import { createLogger } from '@/backend/services/logger.service';
+} from '@/backend/services/workspace';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
 
 const logger = createLogger('workspace-init-trpc');

@@ -1,12 +1,12 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { projectManagementService } from '@/backend/domains/workspace';
 import { compareFilesByRelevance, listFilesRecursive } from '@/backend/lib/file-helpers';
 import { gitCommandC } from '@/backend/lib/shell';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitCloneService, parseGithubUrl } from '@/backend/services/git-clone.service';
+import { projectManagementService } from '@/backend/services/workspace';
 import { IssueProvider } from '@/shared/core/enums';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 import {
@@ -328,13 +328,7 @@ export const projectRouter = router({
         existingConfig = null;
       }
 
-      const mergedConfig = {
-        scripts: input.config.scripts,
-        quickActions:
-          input.config.quickActions === undefined
-            ? existingConfig?.quickActions
-            : input.config.quickActions,
-      };
+      const mergedConfig = FactoryConfigService.mergeConfig(existingConfig, input.config);
       const configContent = JSON.stringify(mergedConfig, null, 2);
       await writeFile(join(project.repoPath, 'factory-factory.json'), configContent, 'utf-8');
 

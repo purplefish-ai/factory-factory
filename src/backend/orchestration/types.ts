@@ -1,4 +1,4 @@
-import type { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
+import type { workspaceAccessor } from '@/backend/services/workspace';
 
 /**
  * A workspace record that includes its associated project, with both guaranteed present.

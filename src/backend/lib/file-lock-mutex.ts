@@ -7,6 +7,10 @@ const DEFAULT_LOCK_ACQUIRE_TIMEOUT_MS = 5000;
 const DEFAULT_LOCK_RETRY_DELAY_MS = 50;
 const DEFAULT_LOCK_MAX_RETRY_DELAY_MS = 500;
 const DEFAULT_LOCK_MAX_STALE_RETRIES = 3;
+const DEFAULT_LOCK_STALE_THRESHOLD_MS = 60 * 60 * 1000;
+const MIN_LOCK_STALE_THRESHOLD_MS = 1000;
+const DEFAULT_LOCK_HEARTBEAT_INTERVAL_MS = 10_000;
+const MIN_LOCK_HEARTBEAT_INTERVAL_MS = 100;
 
 export interface FileLockMutexOptions {
   acquireTimeoutMs: number;
@@ -15,6 +19,7 @@ export interface FileLockMutexOptions {
   maxRetryDelayMs: number;
   maxStaleRetries: number;
   staleThresholdMs: number;
+  heartbeatIntervalMs: number;
 }
 
 export class FileLockTimeoutError extends Error {
@@ -29,6 +34,21 @@ export class FileLockMutex {
 
   constructor(options: Partial<FileLockMutexOptions> = {}) {
     const acquireTimeoutMs = options.acquireTimeoutMs ?? DEFAULT_LOCK_ACQUIRE_TIMEOUT_MS;
+    const staleThresholdMs = Math.max(
+      options.staleThresholdMs ?? DEFAULT_LOCK_STALE_THRESHOLD_MS,
+      MIN_LOCK_STALE_THRESHOLD_MS
+    );
+    const heartbeatIntervalUpperBoundMs = Math.max(
+      MIN_LOCK_HEARTBEAT_INTERVAL_MS,
+      Math.floor(staleThresholdMs / 3)
+    );
+    const heartbeatIntervalMs = Math.max(
+      MIN_LOCK_HEARTBEAT_INTERVAL_MS,
+      Math.min(
+        options.heartbeatIntervalMs ?? DEFAULT_LOCK_HEARTBEAT_INTERVAL_MS,
+        heartbeatIntervalUpperBoundMs
+      )
+    );
 
     this.options = {
       acquireTimeoutMs,
@@ -36,7 +56,8 @@ export class FileLockMutex {
       initialRetryDelayMs: options.initialRetryDelayMs ?? DEFAULT_LOCK_RETRY_DELAY_MS,
       maxRetryDelayMs: options.maxRetryDelayMs ?? DEFAULT_LOCK_MAX_RETRY_DELAY_MS,
       maxStaleRetries: options.maxStaleRetries ?? DEFAULT_LOCK_MAX_STALE_RETRIES,
-      staleThresholdMs: options.staleThresholdMs ?? acquireTimeoutMs * 5,
+      staleThresholdMs,
+      heartbeatIntervalMs,
     };
   }
 
@@ -48,7 +69,8 @@ export class FileLockMutex {
     while (true) {
       try {
         const fileHandle = await fs.open(lockPath, 'wx');
-        return this.createLockCleanup(fileHandle, lockPath);
+        const stopHeartbeat = this.startLockHeartbeat(fileHandle, lockPath);
+        return this.createLockCleanup(fileHandle, lockPath, stopHeartbeat);
       } catch (error) {
         const resolution = await this.resolveAcquireContention({
           error,
@@ -112,7 +134,11 @@ export class FileLockMutex {
     };
   }
 
-  private createLockCleanup(fileHandle: fs.FileHandle, lockPath: string): () => Promise<void> {
+  private createLockCleanup(
+    fileHandle: fs.FileHandle,
+    lockPath: string,
+    stopHeartbeat: () => Promise<void>
+  ): () => Promise<void> {
     let released = false;
 
     return async () => {
@@ -121,6 +147,7 @@ export class FileLockMutex {
       }
       released = true;
 
+      await stopHeartbeat();
       const handleIno = await this.getInodeAndClose(fileHandle, lockPath);
       if (handleIno === undefined) {
         return;
@@ -179,6 +206,48 @@ export class FileLockMutex {
       logger.warn('Failed to stat lock file during cleanup', {
         lockPath,
         error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private startLockHeartbeat(fileHandle: fs.FileHandle, lockPath: string): () => Promise<void> {
+    let stopping = false;
+    let heartbeatInFlight = Promise.resolve();
+
+    const heartbeatTimer = setInterval(() => {
+      heartbeatInFlight = heartbeatInFlight.then(async () => {
+        if (stopping) {
+          return;
+        }
+
+        await this.touchLockHeartbeat(fileHandle, lockPath);
+      });
+    }, this.options.heartbeatIntervalMs);
+
+    heartbeatTimer.unref?.();
+
+    return async () => {
+      stopping = true;
+      clearInterval(heartbeatTimer);
+      await heartbeatInFlight;
+    };
+  }
+
+  private async touchLockHeartbeat(fileHandle: fs.FileHandle, lockPath: string): Promise<void> {
+    const now = new Date();
+
+    try {
+      await fileHandle.utimes(now, now);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if (code === 'EBADF' || code === 'ENOENT') {
+        return;
+      }
+
+      logger.warn('Failed to update lock heartbeat', {
+        lockPath,
+        error: error instanceof Error ? error.message : String(error),
+        code,
       });
     }
   }

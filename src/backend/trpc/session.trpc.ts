@@ -1,10 +1,10 @@
 import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { sessionDataService, sessionProviderResolverService } from '@/backend/domains/session';
-import { workspaceDataService } from '@/backend/domains/workspace';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import { getQuickActionForRepo, listQuickActionsForRepo } from '@/backend/prompts/quick-actions';
+import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
 import { publicProcedure, router } from './trpc';
 

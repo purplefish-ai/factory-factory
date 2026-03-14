@@ -10,32 +10,26 @@ import { basename, join } from 'node:path';
 
 /**
  * Expand environment variables in a string.
- * Handles $VAR and ${VAR} syntax, including $USER.
+ * Handles $VAR and ${VAR} syntax.
  *
  * @example
  * expandEnvVars('$HOME/data') // '/Users/john/data'
  * expandEnvVars('${USER}') // 'john'
  */
-export function expandEnvVars(value: string, depth = 0): string {
-  // Prevent infinite recursion from circular env var references
-  const MAX_DEPTH = 10;
-  if (depth >= MAX_DEPTH) {
-    return value;
-  }
-
-  // Replace $USER with actual home directory username (cross-platform)
-  let result = value.replace(/\$USER|\$\{USER\}/g, basename(homedir()) || 'user');
-
-  // Replace other environment variables
-  result = result.replace(/\$\{?([A-Z_][A-Z0-9_]*)\}?/gi, (match, varName) => {
+export function expandEnvVars(value: string, _depth = 0): string {
+  return value.replace(/\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)/gi, (match, braced, bare) => {
+    const varName = braced || bare;
     const envValue = process.env[varName];
     if (envValue !== undefined) {
-      return expandEnvVars(envValue, depth + 1);
+      return envValue;
     }
+
+    if (varName.toUpperCase() === 'USER') {
+      return basename(homedir()) || 'user';
+    }
+
     return match;
   });
-
-  return result;
 }
 
 /**

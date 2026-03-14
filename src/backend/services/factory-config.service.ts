@@ -50,6 +50,21 @@ export class FactoryConfigService {
   }
 
   /**
+   * Merge a partial config update onto an existing config while preserving
+   * unspecified top-level keys.
+   */
+  static mergeConfig(
+    existingConfig: FactoryConfig | null,
+    incomingConfig: FactoryConfig
+  ): FactoryConfig {
+    return {
+      ...(existingConfig ?? {}),
+      ...incomingConfig,
+      scripts: incomingConfig.scripts,
+    };
+  }
+
+  /**
    * Replace {port} placeholder in script with actual port number
    */
   static substitutePort(script: string, port: number): string {

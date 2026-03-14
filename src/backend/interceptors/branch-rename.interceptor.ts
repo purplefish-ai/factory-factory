@@ -5,10 +5,10 @@
  * and updates the workspace with the new branch name when detected.
  */
 
-import { workspaceDataService } from '@/backend/domains/workspace';
 import { gitCommand } from '@/backend/lib/shell';
 import { extractInputValue, isString } from '@/backend/schemas/tool-inputs.schema';
 import { createLogger } from '@/backend/services/logger.service';
+import { workspaceDataService } from '@/backend/services/workspace';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 
 const logger = createLogger('branch-rename');

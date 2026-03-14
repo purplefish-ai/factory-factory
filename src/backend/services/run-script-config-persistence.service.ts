@@ -47,19 +47,6 @@ function commandsEqual(a: RunScriptCommandCache, b: RunScriptCommandCache): bool
   );
 }
 
-function mergeFactoryConfig(
-  existingConfig: FactoryConfig | null,
-  incomingConfig: FactoryConfig
-): FactoryConfig {
-  return {
-    scripts: incomingConfig.scripts,
-    quickActions:
-      incomingConfig.quickActions === undefined
-        ? existingConfig?.quickActions
-        : incomingConfig.quickActions,
-  };
-}
-
 class RunScriptConfigPersistenceService {
   async syncWorkspaceCommandsFromFactoryConfig(input: {
     workspaceId: string;
@@ -98,7 +85,7 @@ class RunScriptConfigPersistenceService {
       existingConfig = null;
     }
 
-    const mergedConfig = mergeFactoryConfig(existingConfig, input.config);
+    const mergedConfig = FactoryConfigService.mergeConfig(existingConfig, input.config);
     const configContent = JSON.stringify(mergedConfig, null, 2);
 
     await writeFile(join(input.worktreePath, FACTORY_CONFIG_FILENAME), configContent, 'utf-8');

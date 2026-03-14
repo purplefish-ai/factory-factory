@@ -51,7 +51,7 @@ vi.mock('@/backend/orchestration/decision-log-query.service', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
     findAgentSessionsByIds: mockFindAgentSessionsByIds,
     findAgentSessionsWithPid: mockFindAgentSessionsWithPid,
@@ -59,7 +59,7 @@ vi.mock('@/backend/domains/session', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findByIdsWithProject: mockFindWorkspacesByIdsWithProject,
   },

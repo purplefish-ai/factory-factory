@@ -26,7 +26,7 @@ const mockGetClonePath = vi.hoisted(() => vi.fn());
 const mockCheckExistingClone = vi.hoisted(() => vi.fn());
 const mockCloneRepo = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   projectManagementService: mockProjectManagementService,
 }));
 
@@ -43,6 +43,10 @@ vi.mock('@/backend/services/crypto.service', () => ({
 vi.mock('@/backend/services/factory-config.service', () => ({
   FactoryConfigService: {
     readConfig: (...args: unknown[]) => mockReadConfig(...args),
+    mergeConfig: (existingConfig: Record<string, unknown> | null, incomingConfig: unknown) => ({
+      ...(existingConfig ?? {}),
+      ...(incomingConfig as Record<string, unknown>),
+    }),
   },
 }));
 
@@ -398,6 +402,8 @@ describe('projectRouter', () => {
     );
     expect(written.scripts.run).toBe('pnpm dev');
     expect(written.quickActions?.includeDefaults).toBe(false);
+    expect(written.quickActions?.actions).toHaveLength(1);
+    expect(written.quickActions?.actions?.[0]?.id).toBe('review');
   });
 
   it('returns exists=true for checkFactoryConfig and throws when save target is missing', async () => {

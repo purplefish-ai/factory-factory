@@ -154,4 +154,56 @@ describe('FactoryConfigService', () => {
       expect(result).toEqual({ exists: true });
     });
   });
+
+  describe('mergeConfig', () => {
+    it('preserves unspecified top-level keys from the existing config', () => {
+      const merged = FactoryConfigService.mergeConfig(
+        {
+          scripts: { run: 'pnpm old-dev' },
+          quickActions: {
+            includeDefaults: false,
+            actions: [{ id: 'review', path: '.factory-factory/actions/review.md' }],
+          },
+        },
+        {
+          scripts: { run: 'pnpm dev' },
+        }
+      );
+
+      expect(merged).toEqual({
+        scripts: { run: 'pnpm dev' },
+        quickActions: {
+          includeDefaults: false,
+          actions: [{ id: 'review', path: '.factory-factory/actions/review.md' }],
+        },
+      });
+    });
+
+    it('replaces top-level keys provided by the incoming config', () => {
+      const merged = FactoryConfigService.mergeConfig(
+        {
+          scripts: { run: 'pnpm old-dev' },
+          quickActions: {
+            includeDefaults: false,
+            actions: [{ id: 'review', path: '.factory-factory/actions/review.md' }],
+          },
+        },
+        {
+          scripts: { run: 'pnpm dev' },
+          quickActions: {
+            includeDefaults: true,
+            actions: [{ id: 'ship', path: '.factory-factory/actions/ship.md' }],
+          },
+        }
+      );
+
+      expect(merged).toEqual({
+        scripts: { run: 'pnpm dev' },
+        quickActions: {
+          includeDefaults: true,
+          actions: [{ id: 'ship', path: '.factory-factory/actions/ship.md' }],
+        },
+      });
+    });
+  });
 });

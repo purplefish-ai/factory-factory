@@ -6,9 +6,9 @@
  * so the rename completes before the network-bound `gh pr create` executes.
  */
 
-import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
 import { gitCommand } from '@/backend/lib/shell';
 import { createLogger } from '@/backend/services/logger.service';
+import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
 import { extractMatchingCommand, generateBranchName } from './branch-rename.utils';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 

@@ -93,6 +93,8 @@ describe('runScriptConfigPersistenceService', () => {
     );
     expect(workspaceConfig.scripts.run).toBe('pnpm dev');
     expect(workspaceConfig.quickActions?.includeDefaults).toBe(false);
+    expect(workspaceConfig.quickActions?.actions).toHaveLength(1);
+    expect(workspaceConfig.quickActions?.actions?.[0]?.id).toBe('review');
   });
 
   it('syncs command cache after manual factory-factory.json edits', async () => {

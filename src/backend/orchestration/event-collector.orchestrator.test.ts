@@ -25,14 +25,14 @@ function createMockStore(): MockStore {
 
 // --- Module mocks ---
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn() },
   workspaceActivityService: { on: vi.fn() },
   computePendingRequestType: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
   prSnapshotService: {
     on: vi.fn(),
@@ -40,18 +40,18 @@ vi.mock('@/backend/domains/github', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/ratchet', () => ({
+vi.mock('@/backend/services/ratchet', () => ({
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
   RATCHET_TOGGLED: 'ratchet_toggled',
-  ratchetService: { on: vi.fn() },
+  ratchetService: { on: vi.fn(), checkWorkspaceById: vi.fn().mockResolvedValue(null) },
 }));
 
-vi.mock('@/backend/domains/run-script', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   RUN_SCRIPT_STATUS_CHANGED: 'run_script_status_changed',
   runScriptStateMachine: { on: vi.fn() },
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
     findAgentSessionById: vi.fn().mockResolvedValue({ id: 's-1', workspaceId: 'ws-1' }),
     findAgentSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
@@ -91,19 +91,19 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { prSnapshotService } from '@/backend/domains/github';
-import { ratchetService } from '@/backend/domains/ratchet';
-import { runScriptStateMachine } from '@/backend/domains/run-script';
+import { prSnapshotService } from '@/backend/services/github';
+import { ratchetService } from '@/backend/services/ratchet';
+import { runScriptStateMachine } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   sessionDataService,
   sessionDomainService,
-} from '@/backend/domains/session';
+} from '@/backend/services/session';
 import {
   computePendingRequestType,
   workspaceActivityService,
   workspaceStateMachine,
-} from '@/backend/domains/workspace';
+} from '@/backend/services/workspace';
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 
 import {
@@ -596,6 +596,116 @@ describe('configureEventCollector', () => {
       },
       'event:pr_snapshot_updated'
     );
+  });
+
+  it('triggers immediate ratchet recompute when PR identity changes', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('still triggers ratchet recompute when store mutates snapshot during immediate upsert', () => {
+    const existingSnapshot: { projectId: string; prNumber: number | null; prUrl: string | null } = {
+      projectId: 'proj-1',
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
+    };
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue(
+      existingSnapshot as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>
+    );
+    vi.mocked(workspaceSnapshotStore.upsert).mockImplementation((_, update) => {
+      if (update.prNumber !== undefined) {
+        existingSnapshot.prNumber = update.prNumber;
+      }
+      if (update.prUrl !== undefined) {
+        existingSnapshot.prUrl = update.prUrl;
+      }
+    });
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('does not trigger immediate ratchet recompute when PR identity is unchanged', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+      prNumber: 42,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'SUCCESS',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
   });
 
   it('ratchet_toggled updates ratchetEnabled and ratchetState immediately', () => {

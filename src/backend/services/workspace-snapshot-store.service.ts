@@ -9,8 +9,10 @@
  * All subsequent phases (event collection, reconciliation, WebSocket transport,
  * client integration) build on this store.
  *
- * ARCH-02: Zero imports from @/backend/domains/ — derivation functions are
- * injected via configure() at startup through the orchestration layer.
+ * ARCH-02: Zero imports from service capsules (for example,
+ * @/backend/services/workspace or @/backend/services/session) — derivation
+ * functions are injected via configure() at startup through the orchestration
+ * layer.
  */
 
 import { EventEmitter } from 'node:events';

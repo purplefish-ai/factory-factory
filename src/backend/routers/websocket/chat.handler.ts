@@ -18,9 +18,9 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import type { ConnectionInfo } from '@/backend/domains/session';
 import { toError } from '@/backend/lib/error-utils';
 import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
+import type { ConnectionInfo } from '@/backend/services/session';
 import { toMessageString } from './message-utils';
 import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
 
@@ -296,5 +296,5 @@ export function createChatUpgradeHandler(appContext: AppContext) {
   };
 }
 
-export type { ConnectionInfo } from '@/backend/domains/session';
 export type { ChatMessageInput } from '@/backend/schemas/websocket';
+export type { ConnectionInfo } from '@/backend/services/session';

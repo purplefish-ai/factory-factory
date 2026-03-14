@@ -29,13 +29,13 @@ const mockWorkspaceDataService = vi.hoisted(() => ({
 const mockListQuickActionsForRepo = vi.hoisted(() => vi.fn());
 const mockGetQuickActionForRepo = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionDataService: mockSessionDataService,
   sessionDomainService: mockSessionDomainService,
   sessionProviderResolverService: mockSessionProviderResolverService,
 }));
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
 }));
 

@@ -4,7 +4,7 @@ const mockSetBranchName = vi.hoisted(() => vi.fn());
 const mockGitCommand = vi.hoisted(() => vi.fn());
 const mockExtractInputValue = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     setBranchName: (...args: unknown[]) => mockSetBranchName(...args),
   },

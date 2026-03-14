@@ -15,11 +15,11 @@ const mockProjectManagementService = vi.hoisted(() => ({
   findById: vi.fn(),
 }));
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   githubCLIService: mockGithubCLIService,
 }));
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
   projectManagementService: mockProjectManagementService,
 }));
