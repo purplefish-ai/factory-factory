@@ -50,6 +50,50 @@ describe('FactoryConfigService', () => {
       expect(config).toEqual(configContent);
     });
 
+    it('should parse quick action configuration', async () => {
+      const configContent = {
+        scripts: {
+          run: 'npm start',
+        },
+        quickActions: {
+          includeDefaults: {
+            sessionBar: true,
+            chatBar: false,
+          },
+          actions: [
+            {
+              id: 'review',
+              path: '.factory-factory/actions/review.md',
+              pinned: true,
+              icon: 'eye',
+            },
+          ],
+        },
+      };
+
+      await writeFile(join(testDir, 'factory-factory.json'), JSON.stringify(configContent));
+
+      const config = await FactoryConfigService.readConfig(testDir);
+      expect(config).toEqual(configContent);
+    });
+
+    it('defaults scripts to empty object when omitted', async () => {
+      const configContent = {
+        quickActions: {
+          includeDefaults: false,
+          actions: [{ id: 'review', path: '.factory-factory/actions/review.md' }],
+        },
+      };
+
+      await writeFile(join(testDir, 'factory-factory.json'), JSON.stringify(configContent));
+
+      const config = await FactoryConfigService.readConfig(testDir);
+      expect(config).toEqual({
+        scripts: {},
+        quickActions: configContent.quickActions,
+      });
+    });
+
     it('should throw error on invalid JSON', async () => {
       await writeFile(join(testDir, 'factory-factory.json'), 'invalid json {');
 
@@ -59,6 +103,26 @@ describe('FactoryConfigService', () => {
     it('should throw error on invalid schema', async () => {
       const invalidConfig = {
         scripts: 'not an object',
+      };
+
+      await writeFile(join(testDir, 'factory-factory.json'), JSON.stringify(invalidConfig));
+
+      await expect(FactoryConfigService.readConfig(testDir)).rejects.toThrow(/Invalid schema/);
+    });
+
+    it('should throw error when quick action surface and mode are incompatible', async () => {
+      const invalidConfig = {
+        scripts: {},
+        quickActions: {
+          actions: [
+            {
+              id: 'review-inline',
+              path: '.factory-factory/actions/review-inline.md',
+              surface: 'chatBar',
+              mode: 'newSession',
+            },
+          ],
+        },
       };
 
       await writeFile(join(testDir, 'factory-factory.json'), JSON.stringify(invalidConfig));

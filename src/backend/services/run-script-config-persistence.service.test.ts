@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 
 const mockPersistWorkspaceCommands = vi.hoisted(() => vi.fn());
 
@@ -57,6 +58,41 @@ describe('runScriptConfigPersistenceService', () => {
       runScriptPostRunCommand: 'cloudflared tunnel --url http://localhost:{port}',
       runScriptCleanupCommand: 'pkill node',
     });
+  });
+
+  it('preserves quickActions when writing scripts-only updates', async () => {
+    writeFileSync(
+      join(workspaceDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          scripts: { run: 'pnpm old-dev' },
+          quickActions: {
+            includeDefaults: false,
+            actions: [{ id: 'review', path: '.factory-factory/actions/review.md', pinned: true }],
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    await runScriptConfigPersistenceService.writeFactoryConfigAndSyncWorkspace({
+      workspaceId: 'w1',
+      worktreePath: workspaceDir,
+      config: {
+        scripts: {
+          run: 'pnpm dev',
+        },
+      },
+      persistWorkspaceCommands: mockPersistWorkspaceCommands,
+    });
+
+    const workspaceConfig = FactoryConfigSchema.parse(
+      JSON.parse(readFileSync(join(workspaceDir, 'factory-factory.json'), 'utf8'))
+    );
+    expect(workspaceConfig.scripts.run).toBe('pnpm dev');
+    expect(workspaceConfig.quickActions?.includeDefaults).toBe(false);
   });
 
   it('syncs command cache after manual factory-factory.json edits', async () => {

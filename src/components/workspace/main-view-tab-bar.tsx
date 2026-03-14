@@ -310,6 +310,7 @@ export function MainViewTabBar({
         {onQuickAction && (
           <div className="ml-0.5 shrink-0">
             <QuickActionsMenu
+              workspaceId={workspaceId}
               onExecuteAgent={(action) => {
                 if (action.content) {
                   onQuickAction(action.name, action.content);

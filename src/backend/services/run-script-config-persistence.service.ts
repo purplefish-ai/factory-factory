@@ -47,6 +47,19 @@ function commandsEqual(a: RunScriptCommandCache, b: RunScriptCommandCache): bool
   );
 }
 
+function mergeFactoryConfig(
+  existingConfig: FactoryConfig | null,
+  incomingConfig: FactoryConfig
+): FactoryConfig {
+  return {
+    scripts: incomingConfig.scripts,
+    quickActions:
+      incomingConfig.quickActions === undefined
+        ? existingConfig?.quickActions
+        : incomingConfig.quickActions,
+  };
+}
+
 class RunScriptConfigPersistenceService {
   async syncWorkspaceCommandsFromFactoryConfig(input: {
     workspaceId: string;
@@ -78,7 +91,15 @@ class RunScriptConfigPersistenceService {
     config: FactoryConfig;
     persistWorkspaceCommands: PersistWorkspaceCommands;
   }): Promise<RunScriptCommandCache> {
-    const configContent = JSON.stringify(input.config, null, 2);
+    let existingConfig: FactoryConfig | null = null;
+    try {
+      existingConfig = await FactoryConfigService.readConfig(input.worktreePath);
+    } catch {
+      existingConfig = null;
+    }
+
+    const mergedConfig = mergeFactoryConfig(existingConfig, input.config);
+    const configContent = JSON.stringify(mergedConfig, null, 2);
 
     await writeFile(join(input.worktreePath, FACTORY_CONFIG_FILENAME), configContent, 'utf-8');
 
@@ -88,7 +109,7 @@ class RunScriptConfigPersistenceService {
 
     return this.syncWorkspaceCommandsFromFactoryConfig({
       workspaceId: input.workspaceId,
-      factoryConfig: input.config,
+      factoryConfig: mergedConfig,
       persistWorkspaceCommands: input.persistWorkspaceCommands,
     });
   }

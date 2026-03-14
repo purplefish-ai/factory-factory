@@ -2,8 +2,9 @@ import { SessionProvider } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/domains/session';
+import { workspaceDataService } from '@/backend/domains/workspace';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
-import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
+import { getQuickActionForRepo, listQuickActionsForRepo } from '@/backend/prompts/quick-actions';
 import { SessionStatus } from '@/shared/core';
 import { publicProcedure, router } from './trpc';
 
@@ -17,13 +18,63 @@ export const sessionRouter = router({
 
   // Quick Actions
 
-  // List all available quick actions
-  listQuickActions: publicProcedure.query(() => listQuickActions()),
+  // List available quick actions for a workspace
+  listQuickActions: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        surface: z.enum(['sessionBar', 'chatBar']).optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
+      if (!workspace) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Workspace not found: ${input.workspaceId}`,
+        });
+      }
 
-  // Get a specific quick action by ID
+      const repoPath = workspace.worktreePath ?? workspace.project?.repoPath;
+      if (!repoPath) {
+        return [];
+      }
+
+      return listQuickActionsForRepo({
+        repoPath,
+        surface: input.surface,
+      });
+    }),
+
+  // Get a specific quick action by ID for a workspace
   getQuickAction: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ input }) => getQuickAction(input.id)),
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        id: z.string(),
+        surface: z.enum(['sessionBar', 'chatBar']).optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      const workspace = await workspaceDataService.findByIdWithProject(input.workspaceId);
+      if (!workspace) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: `Workspace not found: ${input.workspaceId}`,
+        });
+      }
+
+      const repoPath = workspace.worktreePath ?? workspace.project?.repoPath;
+      if (!repoPath) {
+        return null;
+      }
+
+      return getQuickActionForRepo({
+        repoPath,
+        id: input.id,
+        surface: input.surface,
+      });
+    }),
 
   // Sessions
 

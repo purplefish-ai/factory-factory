@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowDown, Loader2, Play, RefreshCw } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo } from 'react';
+import { trpc } from '@/client/lib/trpc';
 import type { useChatWebSocket } from '@/components/chat';
 import {
   ChatInput,
@@ -172,6 +173,11 @@ const InitStatusBanner = memo(function InitStatusBanner({
 });
 
 export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
+  const { data: chatQuickActions } = trpc.session.listQuickActions.useQuery({
+    workspaceId: props.workspaceId,
+    surface: 'chatBar',
+  });
+
   const autoStartPending = props.autoStartPending ?? false;
 
   const { retry, retryInit } = useRetryWorkspaceInit(props.workspaceId);
@@ -325,6 +331,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           workspaceId={props.workspaceId}
           acpConfigOptions={props.acpConfigOptions}
           onSetConfigOption={props.setConfigOption}
+          quickActions={chatQuickActions?.filter((action) => action.mode === 'sendPrompt') ?? []}
         />
       </div>
 

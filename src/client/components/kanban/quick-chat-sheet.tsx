@@ -83,6 +83,7 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
             />
           </div>
           <QuickActionsMenu
+            workspaceId={workspaceId ?? undefined}
             onExecuteAgent={(action) => {
               if (action.content) {
                 handleQuickAction(action.name, action.content);

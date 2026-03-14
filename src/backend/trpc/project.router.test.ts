@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssueProvider } from '@/shared/core/enums';
+import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 
 const mockProjectManagementService = vi.hoisted(() => ({
   list: vi.fn(),
@@ -90,6 +91,7 @@ describe('projectRouter', () => {
       authenticated: true,
       user: 'martin',
     });
+    mockReadConfig.mockResolvedValue(null);
     mockGetClonePath.mockReturnValue('/repos/purplefish-ai/factory-factory');
     mockCheckExistingClone.mockResolvedValue('valid_repo');
   });
@@ -367,6 +369,35 @@ describe('projectRouter', () => {
 
     const written = readFileSync(join(tempDir, 'factory-factory.json'), 'utf-8');
     expect(written).toContain('"run": "pnpm test"');
+  });
+
+  it('preserves quickActions when saveFactoryConfig receives scripts-only payload', async () => {
+    const caller = createCaller();
+    mockProjectManagementService.findById.mockResolvedValue({ id: 'p1', repoPath: tempDir });
+    mockReadConfig.mockResolvedValueOnce({
+      scripts: { run: 'pnpm old-dev' },
+      quickActions: {
+        includeDefaults: false,
+        actions: [{ id: 'review', path: '.factory-factory/actions/review.md', pinned: true }],
+      },
+    });
+
+    await expect(
+      caller.saveFactoryConfig({
+        projectId: 'p1',
+        config: {
+          scripts: {
+            run: 'pnpm dev',
+          },
+        },
+      })
+    ).resolves.toEqual({ success: true });
+
+    const written = FactoryConfigSchema.parse(
+      JSON.parse(readFileSync(join(tempDir, 'factory-factory.json'), 'utf-8'))
+    );
+    expect(written.scripts.run).toBe('pnpm dev');
+    expect(written.quickActions?.includeDefaults).toBe(false);
   });
 
   it('returns exists=true for checkFactoryConfig and throws when save target is missing', async () => {

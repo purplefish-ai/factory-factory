@@ -291,11 +291,55 @@ Real-time visual project management with automatic column placement.
 
 ### ⚡ Quick Actions
 
-One-click prompts for common workflows, fully customizable via markdown.
+One-click prompts for common workflows, fully customizable per repository.
 
 - **Agent-driven:** Each action creates a new ACP session with a predefined prompt
-- **Extensible:** Add custom actions by creating markdown files in `prompts/quick-actions/`
+- **Repo-defined:** Configure actions in `factory-factory.json` (`quickActions.actions[].path`) and keep markdown prompts in your repo (for example `.factory-factory/actions/*.md`)
+- **Two surfaces:** `sessionBar` actions start new sessions, `chatBar` actions send prompts in-place
+- **Pinned buttons:** Set `pinned: true` to show an action as a first-class one-click button in the session bar
+- **Icons:** Set `icon` to a supported Lucide icon key (for example `eye`, `sparkles`, `git-pull-request`)
 - **Built-in actions:** Review code, simplify implementations, sync with main, rename branches, and more
+
+Example `factory-factory.json`:
+
+```json
+{
+  "scripts": {
+    "run": "pnpm dev --port {port}"
+  },
+  "quickActions": {
+    "includeDefaults": {
+      "sessionBar": true,
+      "chatBar": true
+    },
+    "actions": [
+      {
+        "id": "review",
+        "path": ".factory-factory/actions/review.md",
+        "surface": "sessionBar",
+        "pinned": true,
+        "icon": "eye"
+      },
+      {
+        "id": "draft-pr",
+        "path": ".factory-factory/actions/draft-pr.md",
+        "surface": "chatBar",
+        "icon": "git-pull-request"
+      }
+    ]
+  }
+}
+```
+
+Example markdown prompt (`.factory-factory/actions/review.md`):
+
+```md
+---
+name: Review
+description: Review recent changes
+---
+Review the current branch diff and list the top risks before merge.
+```
 
 ## Security Considerations
 

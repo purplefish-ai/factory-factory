@@ -1,5 +1,6 @@
 import { ArrowDown } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
+import { trpc } from '@/client/lib/trpc';
 import {
   ChatInput,
   PermissionPrompt,
@@ -27,6 +28,10 @@ export function QuickChatContent({
   isNearBottom,
   scrollToBottom,
 }: QuickChatContentProps) {
+  const { data: chatQuickActions } = trpc.session.listQuickActions.useQuery({
+    workspaceId,
+    surface: 'chatBar',
+  });
   const groupedMessages = useMemo(
     () => groupAdjacentToolCalls(chatState.messages),
     [chatState.messages]
@@ -112,6 +117,7 @@ export function QuickChatContent({
           workspaceId={workspaceId}
           acpConfigOptions={chatState.acpConfigOptions}
           onSetConfigOption={chatState.setConfigOption}
+          quickActions={chatQuickActions?.filter((action) => action.mode === 'sendPrompt') ?? []}
         />
       </div>
     </div>

@@ -321,7 +321,21 @@ export const projectRouter = router({
         throw new Error('Project not found');
       }
 
-      const configContent = JSON.stringify(input.config, null, 2);
+      let existingConfig = null;
+      try {
+        existingConfig = await FactoryConfigService.readConfig(project.repoPath);
+      } catch {
+        existingConfig = null;
+      }
+
+      const mergedConfig = {
+        scripts: input.config.scripts,
+        quickActions:
+          input.config.quickActions === undefined
+            ? existingConfig?.quickActions
+            : input.config.quickActions,
+      };
+      const configContent = JSON.stringify(mergedConfig, null, 2);
       await writeFile(join(project.repoPath, 'factory-factory.json'), configContent, 'utf-8');
 
       return { success: true };

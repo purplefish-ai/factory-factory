@@ -23,8 +23,11 @@ const mockSessionProviderResolverService = vi.hoisted(() => ({
   resolveSessionProvider: vi.fn(),
 }));
 
-const mockListQuickActions = vi.hoisted(() => vi.fn());
-const mockGetQuickAction = vi.hoisted(() => vi.fn());
+const mockWorkspaceDataService = vi.hoisted(() => ({
+  findByIdWithProject: vi.fn(),
+}));
+const mockListQuickActionsForRepo = vi.hoisted(() => vi.fn());
+const mockGetQuickActionForRepo = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/domains/session', () => ({
   sessionDataService: mockSessionDataService,
@@ -32,9 +35,13 @@ vi.mock('@/backend/domains/session', () => ({
   sessionProviderResolverService: mockSessionProviderResolverService,
 }));
 
+vi.mock('@/backend/domains/workspace', () => ({
+  workspaceDataService: mockWorkspaceDataService,
+}));
+
 vi.mock('@/backend/prompts/quick-actions', () => ({
-  listQuickActions: () => mockListQuickActions(),
-  getQuickAction: (id: string) => mockGetQuickAction(id),
+  listQuickActionsForRepo: (params: unknown) => mockListQuickActionsForRepo(params),
+  getQuickActionForRepo: (params: unknown) => mockGetQuickActionForRepo(params),
 }));
 
 import { sessionRouter } from './session.trpc';
@@ -82,11 +89,16 @@ function createCaller() {
 describe('sessionRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWorkspaceDataService.findByIdWithProject.mockResolvedValue({
+      id: 'w1',
+      worktreePath: '/repo/w1',
+      project: { repoPath: '/repo' },
+    });
   });
 
   it('returns quick actions and augments sessions with runtime working state', async () => {
-    mockListQuickActions.mockReturnValue([{ id: 'quick-1', title: 'Fix CI' }]);
-    mockGetQuickAction.mockReturnValue({ id: 'quick-1', title: 'Fix CI' });
+    mockListQuickActionsForRepo.mockResolvedValue([{ id: 'quick-1', title: 'Fix CI' }]);
+    mockGetQuickActionForRepo.mockResolvedValue({ id: 'quick-1', title: 'Fix CI' });
     mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([
       { id: 's-working', name: 'A' },
       { id: 's-idle', name: 'B' },
@@ -94,10 +106,21 @@ describe('sessionRouter', () => {
 
     const { caller } = createCaller();
 
-    await expect(caller.listQuickActions()).resolves.toEqual([{ id: 'quick-1', title: 'Fix CI' }]);
-    await expect(caller.getQuickAction({ id: 'quick-1' })).resolves.toEqual({
+    await expect(caller.listQuickActions({ workspaceId: 'w1' })).resolves.toEqual([
+      { id: 'quick-1', title: 'Fix CI' },
+    ]);
+    await expect(caller.getQuickAction({ workspaceId: 'w1', id: 'quick-1' })).resolves.toEqual({
       id: 'quick-1',
       title: 'Fix CI',
+    });
+    expect(mockListQuickActionsForRepo).toHaveBeenCalledWith({
+      repoPath: '/repo/w1',
+      surface: undefined,
+    });
+    expect(mockGetQuickActionForRepo).toHaveBeenCalledWith({
+      repoPath: '/repo/w1',
+      id: 'quick-1',
+      surface: undefined,
     });
     await expect(caller.listSessions({ workspaceId: 'w1' })).resolves.toEqual([
       { id: 's-working', name: 'A', isWorking: true },

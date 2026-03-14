@@ -80,6 +80,14 @@ export interface ChatInputProps {
   acpConfigOptions?: AcpConfigOption[] | null;
   // Called when user selects an ACP config option value
   onSetConfigOption?: (configId: string, value: string) => void;
+  // Quick actions shown in the chat input dropdown
+  quickActions?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    icon?: string | null;
+    content: string;
+  }>;
 }
 
 // =============================================================================
@@ -545,6 +553,13 @@ interface LeftControlsProps {
   onQuickAction: (action: string) => void;
   quickActionsOpen: boolean;
   onQuickActionsOpenChange: (open: boolean) => void;
+  quickActions?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    icon?: string | null;
+    content: string;
+  }>;
   tokenStats?: TokenStats;
   acpConfigOptions?: AcpConfigOption[] | null;
   onSetConfigOption?: (configId: string, value: string) => void;
@@ -588,6 +603,7 @@ const MobileLeftControls = memo(function MobileLeftControls({
     onQuickAction,
     quickActionsOpen,
     onQuickActionsOpenChange,
+    quickActions,
     tokenStats,
     acpConfigOptions,
     onSetConfigOption,
@@ -629,6 +645,7 @@ const MobileLeftControls = memo(function MobileLeftControls({
         />
       )}
       <QuickActionsDropdown
+        actions={quickActions}
         onAction={onQuickAction}
         disabled={disabled}
         open={quickActionsOpen}
@@ -664,6 +681,7 @@ const DesktopLeftControls = memo(function DesktopLeftControls({
     onQuickAction,
     quickActionsOpen,
     onQuickActionsOpenChange,
+    quickActions,
     tokenStats,
     acpConfigOptions,
     onSetConfigOption,
@@ -736,6 +754,7 @@ const DesktopLeftControls = memo(function DesktopLeftControls({
         </>
       )}
       <QuickActionsDropdown
+        actions={quickActions}
         onAction={onQuickAction}
         disabled={disabled}
         open={quickActionsOpen}
@@ -857,6 +876,7 @@ export const ChatInput = memo(function ChatInput({
   workspaceId,
   acpConfigOptions,
   onSetConfigOption,
+  quickActions,
 }: ChatInputProps) {
   // State for file attachments (uncontrolled mode only)
   const [internalAttachments, setInternalAttachments] = useState<MessageAttachment[]>([]);
@@ -1061,6 +1081,7 @@ export const ChatInput = memo(function ChatInput({
             onQuickAction={actions.handleQuickAction}
             quickActionsOpen={quickActionsOpen}
             onQuickActionsOpenChange={setQuickActionsOpen}
+            quickActions={quickActions}
             tokenStats={tokenStats}
             acpConfigOptions={acpConfigOptions}
             onSetConfigOption={onSetConfigOption}
