@@ -3,9 +3,12 @@ import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { buildQueuedMessage } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import {
+  buildAcceptedMessageStateChange,
+  buildQueuedMessage,
+} from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
-import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
+import { MessageState } from '@/shared/acp-protocol';
 import type { QueueMessageInput } from '@/shared/websocket';
 
 function validateAttachments(attachments: QueueMessageInput['attachments']): string | null {
@@ -52,30 +55,6 @@ function emitRejectedMessageState(
   });
 }
 
-function emitAcceptedMessageState(
-  sessionId: string,
-  messageId: string,
-  queuedMsg: QueuedMessage,
-  queuePosition: number
-): void {
-  sessionDomainService.emitDelta(sessionId, {
-    type: 'message_state_changed',
-    id: messageId,
-    newState: MessageState.ACCEPTED,
-    queuePosition,
-    userMessage: {
-      text: queuedMsg.text,
-      timestamp: queuedMsg.timestamp,
-      attachments: queuedMsg.attachments,
-      settings: {
-        ...queuedMsg.settings,
-        selectedModel: resolveSelectedModel(queuedMsg.settings.selectedModel),
-        reasoningEffort: queuedMsg.settings.reasoningEffort,
-      },
-    },
-  });
-}
-
 export function createQueueMessageHandler(
   deps: HandlerRegistryDependencies
 ): ChatMessageHandler<QueueMessageInput> {
@@ -96,7 +75,10 @@ export function createQueueMessageHandler(
       return;
     }
 
-    emitAcceptedMessageState(sessionId, messageId, queuedMsg, result.position);
+    sessionDomainService.emitDelta(
+      sessionId,
+      buildAcceptedMessageStateChange(messageId, queuedMsg, result.position)
+    );
 
     await deps.tryDispatchNextMessage(sessionId);
   };
