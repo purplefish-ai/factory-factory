@@ -172,6 +172,7 @@ export function InlineWorkspaceForm({
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     setInitialPrompt(newValue);
+    autoResize();
     fileMentions.detectFileMention(newValue);
   };
 
