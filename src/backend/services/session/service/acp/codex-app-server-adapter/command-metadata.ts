@@ -68,12 +68,24 @@ function unescapeGeneralCommandChar(char: string): string {
   return `\\${char}`;
 }
 
+function unescapeDoubleQuotedChar(char: string): string {
+  if (char === '"' || char === '\\' || char === '$' || char === '`') {
+    return char;
+  }
+  return `\\${char}`;
+}
+
 function consumeEscapedTokenChar(state: CommandTokenizeState, char: string): boolean {
   if (!state.escaped) {
     return false;
   }
-  state.current +=
-    state.quote === "'" ? unescapeSingleQuotedChar(char) : unescapeGeneralCommandChar(char);
+  if (state.quote === "'") {
+    state.current += unescapeSingleQuotedChar(char);
+  } else if (state.quote === '"') {
+    state.current += unescapeDoubleQuotedChar(char);
+  } else {
+    state.current += unescapeGeneralCommandChar(char);
+  }
   state.escaped = false;
   state.hasTokenContent = true;
   return true;

@@ -130,6 +130,29 @@ describe('command-metadata', () => {
     ]);
   });
 
+  it('preserves backslashes for non-special escapes inside double quotes', () => {
+    const escapedScopeKey = buildCommandApprovalScopeKey({
+      command: 'cat "semi\\;pipe\\|amp\\&"',
+      cwd: '/tmp/workspace',
+    });
+    const literalScopeKey = buildCommandApprovalScopeKey({
+      command: 'cat "semi;pipe|amp&"',
+      cwd: '/tmp/workspace',
+    });
+
+    expect(escapedScopeKey).toBeTruthy();
+    expect(literalScopeKey).toBeTruthy();
+    expect(escapedScopeKey).not.toBe(literalScopeKey);
+    expect(parseScopeKey(escapedScopeKey, '/tmp/workspace')).toEqual([
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace',
+        tokens: ['cat', 'semi\\;pipe\\|amp\\&'],
+        separator: null,
+      },
+    ]);
+  });
+
   it('preserves whitespace-only quoted args in approval scope keys', () => {
     const quotedSpaceScopeKey = buildCommandApprovalScopeKey({
       command: 'ls " "',
