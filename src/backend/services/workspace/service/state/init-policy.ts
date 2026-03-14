@@ -47,7 +47,7 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
       phase,
       banner: {
         kind: 'error',
-        message: input.initErrorMessage || 'Workspace setup failed while creating the worktree.',
+        message: getBlockedFailedMessage(input),
         showRetry: true,
         showPlay: false,
       },
@@ -113,4 +113,12 @@ function deriveWorkspaceInitPhase(input: WorkspaceInitPolicyInput): WorkspaceIni
   }
 
   return 'READY';
+}
+
+function getBlockedFailedMessage(input: WorkspaceInitPolicyInput): string {
+  if (!input.worktreePath && input.status === 'READY') {
+    return 'Workspace is marked ready, but its worktree is missing.';
+  }
+
+  return input.initErrorMessage || 'Workspace setup failed while creating the worktree.';
 }

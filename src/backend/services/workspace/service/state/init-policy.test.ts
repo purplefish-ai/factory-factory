@@ -48,6 +48,7 @@ describe('getWorkspaceInitPolicy', () => {
 
     expect(policy.phase).toBe('BLOCKED_FAILED');
     expect(policy.dispatchPolicy).toBe('blocked');
+    expect(policy.banner?.message).toBe('Workspace is marked ready, but its worktree is missing.');
     expect(policy.banner?.showPlay).toBe(false);
     expect(policy.banner?.showRetry).toBe(true);
   });
@@ -61,6 +62,7 @@ describe('getWorkspaceInitPolicy', () => {
 
     expect(policy.phase).toBe('BLOCKED_FAILED');
     expect(policy.dispatchPolicy).toBe('blocked');
+    expect(policy.banner?.message).toBe('Workspace is marked ready, but its worktree is missing.');
   });
 
   it('keeps READY_WITH_WARNING resumable for READY status with worktree', () => {
