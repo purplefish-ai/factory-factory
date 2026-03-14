@@ -146,6 +146,50 @@ describe('runScriptConfigPersistenceService', () => {
     expect(repoConfig.quickActions?.actions?.[0]?.id).toBe('review');
   });
 
+  it('propagates invalid worktree config errors instead of overwriting the file', async () => {
+    writeFileSync(join(workspaceDir, 'factory-factory.json'), '{ invalid json', 'utf8');
+
+    await expect(
+      runScriptConfigPersistenceService.writeFactoryConfigAndSyncWorkspace({
+        workspaceId: 'w1',
+        worktreePath: workspaceDir,
+        config: {
+          scripts: {
+            run: 'pnpm dev',
+          },
+        },
+        persistWorkspaceCommands: mockPersistWorkspaceCommands,
+      })
+    ).rejects.toThrow(/Invalid JSON/);
+
+    expect(readFileSync(join(workspaceDir, 'factory-factory.json'), 'utf8')).toBe('{ invalid json');
+  });
+
+  it('propagates invalid repo config errors instead of overwriting the file', async () => {
+    writeFileSync(
+      join(workspaceDir, 'factory-factory.json'),
+      JSON.stringify({ scripts: { run: 'pnpm old-dev' } }, null, 2),
+      'utf8'
+    );
+    writeFileSync(join(repoDir, 'factory-factory.json'), '{ invalid json', 'utf8');
+
+    await expect(
+      runScriptConfigPersistenceService.writeFactoryConfigAndSyncWorkspace({
+        workspaceId: 'w1',
+        worktreePath: workspaceDir,
+        projectRepoPath: repoDir,
+        config: {
+          scripts: {
+            run: 'pnpm dev',
+          },
+        },
+        persistWorkspaceCommands: mockPersistWorkspaceCommands,
+      })
+    ).rejects.toThrow(/Invalid JSON/);
+
+    expect(readFileSync(join(repoDir, 'factory-factory.json'), 'utf8')).toBe('{ invalid json');
+  });
+
   it('syncs command cache after manual factory-factory.json edits', async () => {
     const configPath = join(workspaceDir, 'factory-factory.json');
     writeFileSync(configPath, JSON.stringify({ scripts: { run: 'pnpm dev' } }, null, 2), 'utf8');

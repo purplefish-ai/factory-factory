@@ -44,9 +44,7 @@ export function QuickActionsMenu({
   const agentActions = quickActions?.filter((action) => action.mode === 'newSession') ?? [];
   const pinnedActions = agentActions.filter((action) => action.pinned);
   const overflowActions = agentActions.filter((action) => !action.pinned);
-  const showOverflowMenu =
-    overflowActions.length > 0 ||
-    (pinnedActions.length === 0 && canLoad && agentActions.length > 0);
+  const showOverflowMenu = overflowActions.length > 0;
 
   return (
     <div className="flex items-center gap-0.5">

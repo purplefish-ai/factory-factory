@@ -78,12 +78,7 @@ class RunScriptConfigPersistenceService {
     config: FactoryConfigInput;
     persistWorkspaceCommands: PersistWorkspaceCommands;
   }): Promise<RunScriptCommandCache> {
-    let existingWorktreeConfig: FactoryConfig | null = null;
-    try {
-      existingWorktreeConfig = await FactoryConfigService.readConfig(input.worktreePath);
-    } catch {
-      existingWorktreeConfig = null;
-    }
+    const existingWorktreeConfig = await FactoryConfigService.readConfig(input.worktreePath);
 
     const mergedWorktreeConfig = FactoryConfigService.mergeConfig(
       existingWorktreeConfig,
@@ -98,12 +93,7 @@ class RunScriptConfigPersistenceService {
     );
 
     if (input.projectRepoPath) {
-      let existingRepoConfig: FactoryConfig | null = null;
-      try {
-        existingRepoConfig = await FactoryConfigService.readConfig(input.projectRepoPath);
-      } catch {
-        existingRepoConfig = null;
-      }
+      const existingRepoConfig = await FactoryConfigService.readConfig(input.projectRepoPath);
 
       const mergedRepoConfig = FactoryConfigService.mergeConfig(
         existingRepoConfig ?? existingWorktreeConfig,

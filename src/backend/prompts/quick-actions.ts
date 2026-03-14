@@ -244,10 +244,14 @@ async function loadRepoAction(params: {
       return null;
     }
 
-    const content = await readFile(fullPath, 'utf-8');
+    const content = await readFile(resolvedActionPath, 'utf-8');
     const fallbackId =
       params.actionPath.split('/').pop()?.replace(/\.md$/i, '') ?? params.actionPath;
-    const parsed = parseQuickActionFile(fullPath, content, params.idOverride ?? fallbackId);
+    const parsed = parseQuickActionFile(
+      resolvedActionPath,
+      content,
+      params.idOverride ?? fallbackId
+    );
     if (!parsed) {
       return null;
     }
@@ -453,7 +457,7 @@ async function applyConfiguredEntry(params: {
   }
 
   configuredOrder.set(makeActionKey(resolvedSurface, id), index);
-  deleteActionsById(actionMap, id, entry.surface);
+  deleteActionsById(actionMap, id, resolvedSurface);
   actionMap.set(makeActionKey(resolvedSurface, id), resolvedAction);
 }
 

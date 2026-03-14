@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-const ICON_MAP: Record<string, LucideIcon> = {
+const ICON_MAP = {
   zap: Zap,
   sparkles: Sparkles,
   eye: Eye,
@@ -23,8 +23,15 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'git-branch': GitBranch,
   'git-pull-request': GitPullRequest,
   'message-square-text': MessageSquareText,
-};
+} satisfies Record<string, LucideIcon>;
+
+function isQuickActionIconName(iconName: string): iconName is keyof typeof ICON_MAP {
+  return Object.hasOwn(ICON_MAP, iconName);
+}
 
 export function getQuickActionIcon(iconName?: string | null): LucideIcon {
-  return (iconName && ICON_MAP[iconName]) || Zap;
+  if (iconName && isQuickActionIconName(iconName)) {
+    return ICON_MAP[iconName];
+  }
+  return Zap;
 }

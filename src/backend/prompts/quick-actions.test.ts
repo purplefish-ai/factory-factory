@@ -359,4 +359,92 @@ Help action.`,
     expect(sessionBarActions.map((action) => action.id)).toEqual(['shared', 'review']);
     expect(chatBarActions.map((action) => action.id)).toEqual(['shared', 'brief-help']);
   });
+
+  it('preserves the other surface when replacing an action without an explicit surface', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'quick-actions-surface-replace-'));
+    cleanupDirs.push(repoDir);
+
+    mkdirSync(join(repoDir, '.factory-factory/actions'), { recursive: true });
+    writeFileSync(
+      join(repoDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          quickActions: {
+            includeDefaults: false,
+            actions: [
+              {
+                id: 'shared',
+                path: '.factory-factory/actions/shared-session.md',
+                surface: 'sessionBar',
+              },
+              {
+                id: 'shared',
+                path: '.factory-factory/actions/shared-chat.md',
+                surface: 'chatBar',
+              },
+              {
+                id: 'shared',
+                path: '.factory-factory/actions/shared-chat-override.md',
+              },
+            ],
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/shared-session.md'),
+      `---
+name: Shared Session
+surface: sessionBar
+---
+Session action.`,
+      'utf8'
+    );
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/shared-chat.md'),
+      `---
+name: Shared Chat
+surface: chatBar
+---
+Original chat action.`,
+      'utf8'
+    );
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/shared-chat-override.md'),
+      `---
+name: Shared Chat Override
+surface: chatBar
+---
+Updated chat action.`,
+      'utf8'
+    );
+
+    const sessionBarActions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'sessionBar',
+    });
+    const chatBarActions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'chatBar',
+    });
+
+    expect(sessionBarActions).toEqual([
+      expect.objectContaining({
+        id: 'shared',
+        surface: 'sessionBar',
+        content: 'Session action.',
+      }),
+    ]);
+    expect(chatBarActions).toEqual([
+      expect.objectContaining({
+        id: 'shared',
+        surface: 'chatBar',
+        content: 'Updated chat action.',
+      }),
+    ]);
+  });
 });
