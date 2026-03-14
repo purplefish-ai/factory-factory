@@ -98,6 +98,84 @@ describe('command-metadata', () => {
     expect(quotedScopeKey).not.toBe(splitScopeKey);
   });
 
+  it('builds distinct scope keys for concatenated vs split quoted path args', () => {
+    const concatenatedScopeKey = buildCommandApprovalScopeKey({
+      command: 'ls "my dir"/file.txt',
+      cwd: '/tmp/workspace',
+    });
+    const splitScopeKey = buildCommandApprovalScopeKey({
+      command: 'ls "my dir" /file.txt',
+      cwd: '/tmp/workspace',
+    });
+
+    expect(concatenatedScopeKey).toBeTruthy();
+    expect(splitScopeKey).toBeTruthy();
+    expect(concatenatedScopeKey).not.toBe(splitScopeKey);
+
+    expect(parseScopeKey(concatenatedScopeKey, '/tmp/workspace')).toEqual([
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace',
+        tokens: ['ls', 'my dir/file.txt'],
+        separator: null,
+      },
+    ]);
+    expect(parseScopeKey(splitScopeKey, '/tmp/workspace')).toEqual([
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace',
+        tokens: ['ls', 'my dir', '/file.txt'],
+        separator: null,
+      },
+    ]);
+  });
+
+  it('preserves backslashes for non-special escapes inside double quotes', () => {
+    const escapedScopeKey = buildCommandApprovalScopeKey({
+      command: 'cat "semi\\;pipe\\|amp\\&"',
+      cwd: '/tmp/workspace',
+    });
+    const literalScopeKey = buildCommandApprovalScopeKey({
+      command: 'cat "semi;pipe|amp&"',
+      cwd: '/tmp/workspace',
+    });
+
+    expect(escapedScopeKey).toBeTruthy();
+    expect(literalScopeKey).toBeTruthy();
+    expect(escapedScopeKey).not.toBe(literalScopeKey);
+    expect(parseScopeKey(escapedScopeKey, '/tmp/workspace')).toEqual([
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace',
+        tokens: ['cat', 'semi\\;pipe\\|amp\\&'],
+        separator: null,
+      },
+    ]);
+  });
+
+  it('preserves whitespace-only quoted args in approval scope keys', () => {
+    const quotedSpaceScopeKey = buildCommandApprovalScopeKey({
+      command: 'ls " "',
+      cwd: '/tmp/workspace',
+    });
+    const noArgScopeKey = buildCommandApprovalScopeKey({
+      command: 'ls',
+      cwd: '/tmp/workspace',
+    });
+
+    expect(quotedSpaceScopeKey).toBeTruthy();
+    expect(noArgScopeKey).toBeTruthy();
+    expect(quotedSpaceScopeKey).not.toBe(noArgScopeKey);
+    expect(parseScopeKey(quotedSpaceScopeKey, '/tmp/workspace')).toEqual([
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace',
+        tokens: ['ls', ' '],
+        separator: null,
+      },
+    ]);
+  });
+
   it('builds distinct scope keys for different chain operators', () => {
     const andScopeKey = buildCommandApprovalScopeKey({
       command: 'cat README.md && cat package.json',
