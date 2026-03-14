@@ -177,6 +177,16 @@ module.exports = {
       to: { path: '^src/backend/agents/' },
     },
     {
+      name: 'no-services-importing-orchestration',
+      severity: 'error',
+      comment: 'Services should not depend on orchestration coordinators.',
+      from: {
+        path: '^src/backend/services/',
+        pathNot: '^src/backend/.*\\.test\\.ts$',
+      },
+      to: { path: '^src/backend/orchestration/' },
+    },
+    {
       name: 'session-model-import-boundary',
       severity: 'error',
       comment:
