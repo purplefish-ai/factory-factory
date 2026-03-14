@@ -137,6 +137,8 @@ describe('useWebSocketTransport replay queue', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
     createdSockets = [];
@@ -166,10 +168,18 @@ describe('useWebSocketTransport replay queue', () => {
   });
 
   it('preserves FIFO ordering when onConnected sends after reconnect replay', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
     let transportRef: { current: UseWebSocketTransportReturn | null } | null = null;
+    let connectionCount = 0;
 
     const harness = createHarness({
       onConnected: () => {
+        connectionCount += 1;
+        if (connectionCount !== 2) {
+          return;
+        }
         const transport = transportRef?.current;
         if (!transport) {
           return;
@@ -184,17 +194,31 @@ describe('useWebSocketTransport replay queue', () => {
     if (!transport) {
       throw new Error('Transport was not initialized');
     }
-    const socket = getLastSocket();
+    const initialSocket = getLastSocket();
+
+    flushSync(() => {
+      initialSocket.simulateOpen();
+    });
+
+    flushSync(() => {
+      initialSocket.close();
+    });
 
     for (let id = 1; id <= 15; id += 1) {
       expect(transport.send({ id })).toBe(false);
     }
 
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushEffects();
+
+    const reconnectSocket = getLastSocket();
+    expect(reconnectSocket).not.toBe(initialSocket);
+
     flushSync(() => {
-      socket.simulateOpen();
+      reconnectSocket.simulateOpen();
     });
 
-    expect(extractMessageIds(socket)).toEqual([
+    expect(extractMessageIds(reconnectSocket)).toEqual([
       ...Array.from({ length: 15 }, (_, index) => index + 1),
       'after-reconnect',
     ]);
