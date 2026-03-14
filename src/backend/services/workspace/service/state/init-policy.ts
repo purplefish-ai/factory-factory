@@ -47,7 +47,7 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
       phase,
       banner: {
         kind: 'error',
-        message: input.initErrorMessage || 'Workspace setup failed while creating the worktree.',
+        message: getBlockedFailedMessage(input),
         showRetry: true,
         showPlay: false,
       },
@@ -61,7 +61,7 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
       banner: {
         kind: 'warning',
         message: input.initErrorMessage || 'Init script failed. Workspace may be incomplete.',
-        showRetry: false,
+        showRetry: input.status === 'FAILED',
         showPlay: true,
       },
       dispatchPolicy: 'manual_resume',
@@ -104,9 +104,21 @@ function deriveWorkspaceInitPhase(input: WorkspaceInitPolicyInput): WorkspaceIni
     return hasWorktree ? 'READY_WITH_WARNING' : 'BLOCKED_FAILED';
   }
 
-  if (input.status === 'READY' && hasWorktree && hasWarning) {
+  if (!hasWorktree) {
+    return 'BLOCKED_FAILED';
+  }
+
+  if (input.status === 'READY' && hasWarning) {
     return 'READY_WITH_WARNING';
   }
 
   return 'READY';
+}
+
+function getBlockedFailedMessage(input: WorkspaceInitPolicyInput): string {
+  if (!input.worktreePath && input.status === 'READY') {
+    return 'Workspace is marked ready, but its worktree is missing.';
+  }
+
+  return input.initErrorMessage || 'Workspace setup failed while creating the worktree.';
 }

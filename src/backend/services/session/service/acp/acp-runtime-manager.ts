@@ -601,6 +601,10 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
+    if (!options.workingDir) {
+      throw new Error('ACP working directory is required before spawning adapter process');
+    }
+
     const isCodex = options.provider === 'CODEX';
     const spawnCommand: SpawnCommand = options.adapterBinaryPath
       ? {
