@@ -112,6 +112,31 @@ const defaultSessionServices: EventCollectorSessionServices = {
   sessionService,
 };
 
+function shouldRefreshRatchetForPrSwitch(
+  previousSnapshot: ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>,
+  event: PRSnapshotUpdatedEvent
+): boolean {
+  if (!previousSnapshot) {
+    return false;
+  }
+
+  const hadPreviouslyLinkedPr =
+    previousSnapshot.prNumber !== null || previousSnapshot.prUrl !== null;
+  if (!hadPreviouslyLinkedPr) {
+    return false;
+  }
+
+  const prNumberChanged =
+    previousSnapshot.prNumber !== null && previousSnapshot.prNumber !== event.prNumber;
+  const prUrlChanged =
+    previousSnapshot.prUrl !== null &&
+    event.prUrl !== undefined &&
+    event.prUrl !== null &&
+    previousSnapshot.prUrl !== event.prUrl;
+
+  return prNumberChanged || prUrlChanged;
+}
+
 /**
  * Per-workspace coalescing buffer that accumulates SnapshotUpdateInput fields
  * and flushes them in a single store.upsert() after a debounce window.
@@ -436,6 +461,7 @@ function configureEventCollectorWithState(
 
   // 2. PR snapshot updates
   prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
+    const previousSnapshot = workspaceSnapshotStore.getByWorkspaceId(event.workspaceId);
     const snapshotUpdate: SnapshotUpdateInput = {
       ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
       prNumber: event.prNumber,
@@ -446,6 +472,15 @@ function configureEventCollectorWithState(
     coalescer.enqueue(event.workspaceId, snapshotUpdate, 'event:pr_snapshot_updated', {
       immediate: true,
     });
+
+    if (shouldRefreshRatchetForPrSwitch(previousSnapshot, event)) {
+      void ratchetService.checkWorkspaceById(event.workspaceId).catch((error) => {
+        logger.warn('Failed immediate ratchet refresh after PR switch', {
+          workspaceId: event.workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
 
     // Transition linked Linear issue to completed when PR is merged
     if (event.prState === 'MERGED') {
