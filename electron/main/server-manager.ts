@@ -20,6 +20,8 @@ interface ServerInstance {
  */
 export class ServerManager {
   private serverInstance: ServerInstance | null = null;
+  private serverUrl: string | null = null;
+  private lifecycleLock: Promise<void> = Promise.resolve();
 
   /**
    * Start the backend server.
@@ -28,95 +30,116 @@ export class ServerManager {
    *
    * @returns The URL to load in the browser window
    */
-  async start(): Promise<string> {
+  start(): Promise<string> {
     // In dev mode, use Vite dev server URL (includes HMR)
     const viteDevUrl = process.env.VITE_DEV_SERVER_URL;
     if (viteDevUrl) {
       console.log(`[electron] Dev mode: using Vite dev server at ${viteDevUrl}`);
-      return viteDevUrl;
+      return Promise.resolve(viteDevUrl);
     }
 
-    // Production mode: run backend in-process
-    // Database path - use Electron's userData directory
-    const userDataPath = app.getPath('userData');
-    const databasePath = join(userDataPath, 'data.db');
+    return this.withLifecycleLock(async () => {
+      if (this.serverInstance && this.serverUrl) {
+        return this.serverUrl;
+      }
 
-    // Ensure data directory exists
-    this.ensureDataDir(databasePath);
+      // Production mode: run backend in-process
+      // Database path - use Electron's userData directory
+      const userDataPath = app.getPath('userData');
+      const databasePath = join(userDataPath, 'data.db');
 
-    // Get paths for production build
-    // - Migrations are in Resources/prisma/migrations (via extraResources)
-    // - Frontend is in Resources/app.asar.unpacked/dist/client (unpacked from asar)
-    const migrationsPath = join(process.resourcesPath, 'prisma', 'migrations');
-    const frontendDist = join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'client');
+      // Ensure data directory exists
+      this.ensureDataDir(databasePath);
 
-    // WebSocket logs directory
-    const wsLogsPath = join(userDataPath, 'ws-logs');
+      // Get paths for production build
+      // - Migrations are in Resources/prisma/migrations (via extraResources)
+      // - Frontend is in Resources/app.asar.unpacked/dist/client (unpacked from asar)
+      const migrationsPath = join(process.resourcesPath, 'prisma', 'migrations');
+      const frontendDist = join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'client');
 
-    // Set environment variables BEFORE importing the backend
-    // These are read at module load time by db.ts and config.service.ts
-    process.env.DATABASE_PATH = databasePath;
-    process.env.FRONTEND_STATIC_PATH = frontendDist;
-    process.env.WS_LOGS_PATH = wsLogsPath;
-    process.env.NODE_ENV = 'production';
+      // WebSocket logs directory
+      const wsLogsPath = join(userDataPath, 'ws-logs');
 
-    console.log('[electron] Configuration:');
-    console.log(`[electron]   Database: ${databasePath}`);
-    console.log(`[electron]   Frontend: ${frontendDist}`);
-    console.log(`[electron]   Migrations: ${migrationsPath}`);
-    console.log(`[electron]   WS Logs: ${wsLogsPath}`);
+      // Set environment variables BEFORE importing the backend
+      // These are read at module load time by db.ts and config.service.ts
+      process.env.DATABASE_PATH = databasePath;
+      process.env.FRONTEND_STATIC_PATH = frontendDist;
+      process.env.WS_LOGS_PATH = wsLogsPath;
+      process.env.NODE_ENV = 'production';
 
-    // Run database migrations
-    // Dynamic import is required here because we must set environment variables
-    // BEFORE importing the backend modules (they read env vars at load time)
-    console.log('[electron] Running database migrations...');
-    const backendDistPath = join(
-      process.resourcesPath,
-      'app.asar.unpacked',
-      'dist',
-      'src',
-      'backend'
-    );
-    const migratePath = join(backendDistPath, 'migrate.js');
-    const migrateModule = await this.dynamicImport<{
-      runMigrations: (opts: {
-        databasePath: string;
-        migrationsPath: string;
-        log?: (msg: string) => void;
-      }) => void;
-    }>(this.toModuleImportSpecifier(migratePath));
-    migrateModule.runMigrations({
-      databasePath,
-      migrationsPath,
-      log: (msg: string) => console.log(msg),
+      console.log('[electron] Configuration:');
+      console.log(`[electron]   Database: ${databasePath}`);
+      console.log(`[electron]   Frontend: ${frontendDist}`);
+      console.log(`[electron]   Migrations: ${migrationsPath}`);
+      console.log(`[electron]   WS Logs: ${wsLogsPath}`);
+
+      // Run database migrations
+      // Dynamic import is required here because we must set environment variables
+      // BEFORE importing the backend modules (they read env vars at load time)
+      console.log('[electron] Running database migrations...');
+      const backendDistPath = join(
+        process.resourcesPath,
+        'app.asar.unpacked',
+        'dist',
+        'src',
+        'backend'
+      );
+      const migratePath = join(backendDistPath, 'migrate.js');
+      const migrateModule = await this.dynamicImport<{
+        runMigrations: (opts: {
+          databasePath: string;
+          migrationsPath: string;
+          log?: (msg: string) => void;
+        }) => void;
+      }>(this.toModuleImportSpecifier(migratePath));
+      migrateModule.runMigrations({
+        databasePath,
+        migrationsPath,
+        log: (msg: string) => console.log(msg),
+      });
+
+      // Import and start the backend server
+      console.log('[electron] Starting backend server...');
+      const serverPath = join(backendDistPath, 'server.js');
+      const serverModule = await this.dynamicImport<{
+        createServer: () => ServerInstance;
+      }>(this.toModuleImportSpecifier(serverPath));
+      const serverInstance = serverModule.createServer();
+
+      try {
+        const url = await serverInstance.start();
+        this.serverInstance = serverInstance;
+        this.serverUrl = url;
+        console.log(`[electron] Backend server started at ${url}`);
+        return url;
+      } catch (error) {
+        try {
+          await serverInstance.stop();
+        } catch (stopError) {
+          console.error('[electron] Failed to cleanup server after start error:', stopError);
+        }
+        throw error;
+      }
     });
-
-    // Import and start the backend server
-    console.log('[electron] Starting backend server...');
-    const serverPath = join(backendDistPath, 'server.js');
-    const serverModule = await this.dynamicImport<{
-      createServer: () => ServerInstance;
-    }>(this.toModuleImportSpecifier(serverPath));
-    this.serverInstance = serverModule.createServer();
-
-    const url = await this.serverInstance.start();
-    console.log(`[electron] Backend server started at ${url}`);
-
-    return url;
   }
 
   /**
    * Stop the backend server gracefully.
    */
   async stop(): Promise<void> {
-    if (!this.serverInstance) {
-      return;
-    }
+    await this.withLifecycleLock(async () => {
+      if (!this.serverInstance) {
+        this.serverUrl = null;
+        return;
+      }
 
-    console.log('[electron] Stopping backend server...');
-    await this.serverInstance.stop();
-    this.serverInstance = null;
-    console.log('[electron] Backend server stopped');
+      const serverInstance = this.serverInstance;
+      console.log('[electron] Stopping backend server...');
+      await serverInstance.stop();
+      this.serverInstance = null;
+      this.serverUrl = null;
+      console.log('[electron] Backend server stopped');
+    });
   }
 
   /**
@@ -144,5 +167,21 @@ export class ServerManager {
    */
   private toModuleImportSpecifier(modulePath: string): string {
     return pathToFileURL(modulePath).href;
+  }
+
+  private async withLifecycleLock<T>(operation: () => Promise<T>): Promise<T> {
+    const pendingOperation = this.lifecycleLock;
+    let releaseCurrentOperation!: () => void;
+    this.lifecycleLock = new Promise<void>((resolve) => {
+      releaseCurrentOperation = resolve;
+    });
+
+    await pendingOperation;
+
+    try {
+      return await operation();
+    } finally {
+      releaseCurrentOperation();
+    }
   }
 }
