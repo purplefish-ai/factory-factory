@@ -50,6 +50,7 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
 
       // Invalidate workspace queries to refresh the board
       utils.workspace.listWithKanbanState.invalidate({ projectId });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId });
     },
   });
 

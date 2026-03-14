@@ -106,6 +106,7 @@ function IssueDetailsContent({
     onSuccess: () => {
       onOpenChange(false);
       utils.workspace.listWithKanbanState.invalidate({ projectId });
+      utils.workspace.getProjectSummaryState.invalidate({ projectId });
     },
   });
 
