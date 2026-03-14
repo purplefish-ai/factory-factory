@@ -10,9 +10,11 @@ import { runScriptConfigPersistenceService } from '@/backend/services/run-script
 import {
   agentSessionAccessor,
   chatMessageHandlerService,
+  sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
+import { terminalService } from '@/backend/services/terminal';
 import {
   workspaceAccessor,
   workspaceStateMachine,
@@ -120,9 +122,33 @@ async function readFactoryConfigSafe(
   }
 }
 
-async function handleWorkspaceInitFailure(workspaceId: string, error: Error): Promise<void> {
+async function handleWorkspaceInitFailure(
+  workspaceId: string,
+  error: Error,
+  autoCreatedTerminalId?: string
+): Promise<void> {
   logger.error('Failed to initialize workspace worktree', error, { workspaceId });
   await workspaceStateMachine.markFailed(workspaceId, error.message);
+  if (autoCreatedTerminalId) {
+    try {
+      terminalService.destroyTerminal(workspaceId, autoCreatedTerminalId);
+    } catch (destroyError) {
+      logger.warn('Failed to destroy default terminal after init failure', {
+        workspaceId,
+        terminalId: autoCreatedTerminalId,
+        error: destroyError instanceof Error ? destroyError.message : String(destroyError),
+      });
+    }
+    try {
+      await sessionDataService.clearTerminalPid(autoCreatedTerminalId);
+    } catch (clearPidError) {
+      logger.warn('Failed to clear default terminal PID after init failure', {
+        workspaceId,
+        terminalId: autoCreatedTerminalId,
+        error: clearPidError instanceof Error ? clearPidError.message : String(clearPidError),
+      });
+    }
+  }
   try {
     await sessionService.stopWorkspaceSessions(workspaceId);
   } catch (stopError) {
@@ -789,6 +815,90 @@ async function retryQueuedDispatchAfterWorkspaceReady(
   }
 }
 
+async function startDefaultTerminal(
+  workspaceId: string,
+  worktreePath: string
+): Promise<{ terminalId: string; autoCreated: boolean } | null> {
+  try {
+    const existingTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
+    const existingTerminal = existingTerminals[0];
+    if (existingTerminal) {
+      return {
+        terminalId: existingTerminal.id,
+        autoCreated: false,
+      };
+    }
+
+    const { terminalId, pid } = await terminalService.createTerminal({
+      workspaceId,
+      workingDir: worktreePath,
+    });
+
+    let unsubscribeExit: (() => void) | null = null;
+    let terminalExited = false;
+    let terminalSessionPersisted = false;
+    const clearPersistedTerminalPid = async () => {
+      try {
+        await sessionDataService.clearTerminalPid(terminalId);
+      } catch (error) {
+        logger.warn('Failed to clear terminal PID after default terminal exit', {
+          workspaceId,
+          terminalId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    unsubscribeExit = terminalService.onExit(terminalId, () => {
+      terminalExited = true;
+      if (!terminalSessionPersisted) {
+        return;
+      }
+
+      unsubscribeExit?.();
+      unsubscribeExit = null;
+      void clearPersistedTerminalPid();
+    });
+
+    try {
+      await sessionDataService.createTerminalSession({
+        workspaceId,
+        name: terminalId,
+        pid,
+      });
+    } catch (error) {
+      unsubscribeExit?.();
+      unsubscribeExit = null;
+      terminalService.destroyTerminal(workspaceId, terminalId);
+      throw error;
+    }
+
+    terminalSessionPersisted = true;
+    if (terminalExited) {
+      unsubscribeExit?.();
+      unsubscribeExit = null;
+      await clearPersistedTerminalPid();
+    }
+
+    logger.debug('Auto-created default terminal for workspace', {
+      workspaceId,
+      terminalId,
+      pid,
+    });
+
+    return {
+      terminalId,
+      autoCreated: true,
+    };
+  } catch (error) {
+    logger.warn('Failed to auto-create default terminal for workspace', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 /**
  * Initialize a workspace worktree: creates the git worktree, runs setup/startup
  * scripts, and starts the default Claude session.
@@ -836,6 +946,7 @@ export async function initializeWorkspaceWorktree(
   let project: WorkspaceWithProject['project'] | undefined;
   let worktreeCreated = false;
   let agentSessionPromise: Promise<string | null> = Promise.resolve(null);
+  let autoCreatedTerminalId: string | undefined;
 
   try {
     const workspaceWithProject = await getWorkspaceWithProjectOrThrow(workspaceId);
@@ -875,6 +986,11 @@ export async function initializeWorkspaceWorktree(
         }),
     });
 
+    const defaultTerminal = await startDefaultTerminal(workspaceId, worktreeInfo.worktreePath);
+    if (defaultTerminal?.autoCreated) {
+      autoCreatedTerminalId = defaultTerminal.terminalId;
+    }
+
     // Mark Linear issue as started (fire-and-forget, non-fatal)
     void markLinearIssueStartedIfApplicable(workspaceId);
 
@@ -912,7 +1028,7 @@ export async function initializeWorkspaceWorktree(
     // Ensure any eager session start attempt has settled before cleanup so we
     // do not race stopWorkspaceSessions() with a late startSession() call.
     await agentSessionPromise;
-    await handleWorkspaceInitFailure(workspaceId, toError(error));
+    await handleWorkspaceInitFailure(workspaceId, toError(error), autoCreatedTerminalId);
   } finally {
     if (worktreeCreated) {
       await worktreeLifecycleService.clearInitMode(workspaceId);
