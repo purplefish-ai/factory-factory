@@ -462,6 +462,7 @@ function configureEventCollectorWithState(
   // 2. PR snapshot updates
   prSnapshotService.on(PR_SNAPSHOT_UPDATED, (event: PRSnapshotUpdatedEvent) => {
     const previousSnapshot = workspaceSnapshotStore.getByWorkspaceId(event.workspaceId);
+    const shouldRefreshRatchet = shouldRefreshRatchetForPrSwitch(previousSnapshot, event);
     const snapshotUpdate: SnapshotUpdateInput = {
       ...(event.prUrl !== undefined ? { prUrl: event.prUrl } : {}),
       prNumber: event.prNumber,
@@ -473,7 +474,7 @@ function configureEventCollectorWithState(
       immediate: true,
     });
 
-    if (shouldRefreshRatchetForPrSwitch(previousSnapshot, event)) {
+    if (shouldRefreshRatchet) {
       void ratchetService.checkWorkspaceById(event.workspaceId).catch((error) => {
         logger.warn('Failed immediate ratchet refresh after PR switch', {
           workspaceId: event.workspaceId,
