@@ -130,12 +130,14 @@ describe('SessionService coverage wrappers', () => {
     expect(runtimeManager.isAnySessionWorking).toHaveBeenCalledWith(['session-1']);
   });
 
-  it('returns early when sendSessionMessage is called without an ACP client', async () => {
+  it('rejects when sendSessionMessage is called without an ACP client', async () => {
     const { service, runtimeManager } = createServiceWithPatchedInternals();
     runtimeManager.getClient.mockReturnValue(undefined);
     const sendAcpMessageSpy = vi.spyOn(service, 'sendAcpMessage');
 
-    await expect(service.sendSessionMessage('session-1', 'hello')).resolves.toBeUndefined();
+    await expect(service.sendSessionMessage('session-1', 'hello')).rejects.toThrow(
+      'No ACP client found for sendSessionMessage: session-1'
+    );
     expect(sendAcpMessageSpy).not.toHaveBeenCalled();
   });
 
@@ -182,12 +184,12 @@ describe('SessionService coverage wrappers', () => {
     ]);
   });
 
-  it('swallows sendAcpMessage errors to keep websocket flow alive', async () => {
+  it('propagates sendAcpMessage errors', async () => {
     const { service, runtimeManager } = createServiceWithPatchedInternals();
     runtimeManager.getClient.mockReturnValue({ id: 'client', supportsImages: () => false });
     vi.spyOn(service, 'sendAcpMessage').mockRejectedValue(new Error('prompt failed'));
 
-    await expect(service.sendSessionMessage('session-1', 'hello')).resolves.toBeUndefined();
+    await expect(service.sendSessionMessage('session-1', 'hello')).rejects.toThrow('prompt failed');
   });
 
   it('maps transcript entries into conversation history', () => {
