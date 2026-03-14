@@ -5,5 +5,5 @@
     "noEmit": false
   },
   "include": ["electron/**/*"],
-  "exclude": ["electron/dist"]
+  "exclude": ["electron/dist", "electron/**/*.test.ts"]
 }
