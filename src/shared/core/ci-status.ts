@@ -8,11 +8,23 @@ interface CheckLike {
   state?: string | null;
 }
 
-function getEffectiveState(check: CheckLike): string {
-  if (check.status === 'COMPLETED' && check.conclusion) {
-    return check.conclusion;
+function normalizeCheckValue(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
   }
-  return check.state ?? check.status ?? 'PENDING';
+  return value.toUpperCase();
+}
+
+function getEffectiveState(check: CheckLike): string {
+  const normalizedStatus = normalizeCheckValue(check.status);
+  const normalizedConclusion = normalizeCheckValue(check.conclusion);
+  const normalizedState = normalizeCheckValue(check.state);
+
+  if (normalizedStatus === 'COMPLETED' && normalizedConclusion) {
+    return normalizedConclusion;
+  }
+
+  return normalizedState ?? normalizedStatus ?? 'PENDING';
 }
 
 export function deriveCiStatusFromCheckRollup(
@@ -38,12 +50,7 @@ export function deriveCiStatusFromCheckRollup(
   const hasPending = checks.some((check) => {
     const state = getEffectiveState(check);
     return (
-      state === 'PENDING' ||
-      state === 'EXPECTED' ||
-      state === 'QUEUED' ||
-      state === 'IN_PROGRESS' ||
-      check.status === 'QUEUED' ||
-      check.status === 'IN_PROGRESS'
+      state === 'PENDING' || state === 'EXPECTED' || state === 'QUEUED' || state === 'IN_PROGRESS'
     );
   });
   if (hasPending) {
@@ -52,9 +59,7 @@ export function deriveCiStatusFromCheckRollup(
 
   const allSuccess = checks.every((check) => {
     const state = getEffectiveState(check);
-    return (
-      state === 'SUCCESS' || state === 'NEUTRAL' || state === 'CANCELLED' || state === 'SKIPPED'
-    );
+    return state === 'SUCCESS' || state === 'SKIPPED';
   });
   if (allSuccess) {
     return CIStatus.SUCCESS;
