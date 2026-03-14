@@ -1,4 +1,4 @@
-import type { QueuedMessage } from '@/shared/acp-protocol';
+import { MessageState, type QueuedMessage, resolveSelectedModel } from '@/shared/acp-protocol';
 import type { QueueMessageInput, StartMessageInput } from '@/shared/websocket';
 import { normalizeOptionalString } from './constants';
 
@@ -30,5 +30,28 @@ export function buildQueuedMessage(
       ? { ...message.settings, selectedModel, reasoningEffort }
       : { selectedModel, reasoningEffort, thinkingEnabled: false, planModeEnabled: false },
     timestamp: new Date().toISOString(),
+  };
+}
+
+export function buildAcceptedMessageStateChange(
+  id: string,
+  queuedMessage: QueuedMessage,
+  queuePosition: number
+) {
+  return {
+    type: 'message_state_changed' as const,
+    id,
+    newState: MessageState.ACCEPTED,
+    queuePosition,
+    userMessage: {
+      text: queuedMessage.text,
+      timestamp: queuedMessage.timestamp,
+      attachments: queuedMessage.attachments,
+      settings: {
+        ...queuedMessage.settings,
+        selectedModel: resolveSelectedModel(queuedMessage.settings.selectedModel),
+        reasoningEffort: queuedMessage.settings.reasoningEffort,
+      },
+    },
   };
 }

@@ -4,14 +4,16 @@ import type {
   ChatMessageHandler,
   HandlerRegistryDependencies,
 } from '@/backend/services/session/service/chat/chat-message-handlers/types';
-import { buildQueuedMessage } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import {
+  buildAcceptedMessageStateChange,
+  buildQueuedMessage,
+} from '@/backend/services/session/service/chat/chat-message-handlers/utils';
 import { codexSessionHistoryLoaderService } from '@/backend/services/session/service/data/codex-session-history-loader.service';
 import { claudeSessionHistoryLoaderService } from '@/backend/services/session/service/data/session-history-loader.service';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { buildTranscriptFromHistory } from '@/backend/services/session/service/store/session-transcript';
 import { slashCommandCacheService } from '@/backend/services/session/service/store/slash-command-cache.service';
-import { MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import type { LoadSessionMessage } from '@/shared/websocket';
 
 const logger = createLogger('load-session-handler');
@@ -185,21 +187,10 @@ async function enqueueInitialMessageIfPresent(
     return;
   }
 
-  sessionDomainService.emitDelta(sessionId, {
-    type: 'message_state_changed',
-    id,
-    newState: MessageState.ACCEPTED,
-    queuePosition: result.position,
-    userMessage: {
-      text: queuedMsg.text,
-      timestamp: queuedMsg.timestamp,
-      settings: {
-        ...queuedMsg.settings,
-        selectedModel: resolveSelectedModel(queuedMsg.settings.selectedModel),
-        reasoningEffort: queuedMsg.settings.reasoningEffort,
-      },
-    },
-  });
+  sessionDomainService.emitDelta(
+    sessionId,
+    buildAcceptedMessageStateChange(id, queuedMsg, result.position)
+  );
 
   await deps.tryDispatchNextMessage(sessionId);
 }
