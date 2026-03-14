@@ -13,7 +13,7 @@ vi.mock('node:fs/promises', () => ({
   unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionDataService: mockSessionDataService,
 }));
 

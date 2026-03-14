@@ -6,11 +6,11 @@
  * a more descriptive branch name.
  */
 
-import { sessionInterceptorBridge } from '@/backend/domains/session';
-import { projectManagementService, workspaceDataService } from '@/backend/domains/workspace';
 import { buildBranchRenameInstruction } from '@/backend/prompts/branch-rename';
 import { configService } from '@/backend/services/config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { sessionInterceptorBridge } from '@/backend/services/session';
+import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
 import { countUserMessages, extractKeyTopics } from '@/backend/utils/conversation-analyzer';
 import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 

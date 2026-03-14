@@ -11,12 +11,16 @@ import type { SessionRuntimeState } from '@/shared/session-runtime';
 
 const mockFindAllNonArchived = vi.fn();
 
-vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
-  workspaceAccessor: {
-    findAllNonArchivedWithSessionsAndProject: (...args: unknown[]) =>
-      mockFindAllNonArchived(...args),
-  },
-}));
+vi.mock('@/backend/services/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/workspace')>();
+  return {
+    ...actual,
+    workspaceAccessor: {
+      findAllNonArchivedWithSessionsAndProject: (...args: unknown[]) =>
+        mockFindAllNonArchived(...args),
+    },
+  };
+});
 
 const mockGetWorkspaceGitStats = vi.fn();
 
@@ -52,7 +56,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionService: { getRuntimeSnapshot: vi.fn() },
   chatEventForwarderService: { getAllPendingRequests: vi.fn() },
 }));

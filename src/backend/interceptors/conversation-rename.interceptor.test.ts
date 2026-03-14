@@ -19,11 +19,11 @@ const mockBuildBranchRenameInstruction = vi.hoisted(() => vi.fn());
 const mockCountUserMessages = vi.hoisted(() => vi.fn());
 const mockExtractKeyTopics = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionInterceptorBridge: mockSessionInterceptorBridge,
 }));
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: mockWorkspaceDataService,
   projectManagementService: mockProjectManagementService,
 }));

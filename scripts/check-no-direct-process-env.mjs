@@ -11,12 +11,12 @@ const DEFAULT_ALLOWLISTED_FILES = new Set([
   'src/backend/lib/env.ts',
   'src/backend/services/config.service.ts',
   'src/backend/services/logger.service.ts',
-  'src/backend/domains/terminal/terminal.service.ts',
-  'src/backend/domains/run-script/startup-script.service.ts',
-  'src/backend/domains/session/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts',
-  'src/backend/domains/session/acp/codex-app-server-adapter/codex-model-catalog-loader.ts',
-  'src/backend/domains/session/data/codex-session-history-loader.service.ts',
-  'src/backend/domains/session/store/file-lock.service.ts',
+  'src/backend/services/terminal/service/terminal.service.ts',
+  'src/backend/services/run-script/service/startup-script.service.ts',
+  'src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts',
+  'src/backend/services/session/service/acp/codex-app-server-adapter/codex-model-catalog-loader.ts',
+  'src/backend/services/session/service/data/codex-session-history-loader.service.ts',
+  'src/backend/services/session/service/store/file-lock.service.ts',
 ]);
 
 function toPosixPath(filePath) {

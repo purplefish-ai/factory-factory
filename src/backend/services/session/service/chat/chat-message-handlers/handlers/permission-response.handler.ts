@@ -1,0 +1,52 @@
+import { createLogger } from '@/backend/services/logger.service';
+import { DEBUG_CHAT_WS } from '@/backend/services/session/service/chat/chat-message-handlers/constants';
+import type {
+  ChatMessageHandler,
+  ChatMessageHandlerSessionService,
+} from '@/backend/services/session/service/chat/chat-message-handlers/types';
+import type { PermissionResponseMessage } from '@/shared/websocket';
+import { clearPendingInteractiveRequest, sendWebSocketError } from './utils';
+
+const logger = createLogger('chat-message-handlers');
+
+export function createPermissionResponseHandler(deps: {
+  sessionService: ChatMessageHandlerSessionService;
+}): ChatMessageHandler<PermissionResponseMessage> {
+  const { sessionService } = deps;
+
+  return ({ ws, sessionId, message }) => {
+    const { requestId, optionId, answers } = message;
+
+    try {
+      // ACP permission response -- route through bridge
+      const resolved = sessionService.respondToAcpPermission(
+        sessionId,
+        requestId,
+        optionId,
+        answers
+      );
+      if (!resolved) {
+        sendWebSocketError(ws, 'No pending ACP permission request found for this request ID');
+        return;
+      }
+      if (DEBUG_CHAT_WS) {
+        logger.info('[Chat WS] Responded to permission request', {
+          sessionId,
+          requestId,
+          optionId,
+          answers,
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[Chat WS] Failed to respond to permission request', {
+        sessionId,
+        requestId,
+        error: errorMessage,
+      });
+      sendWebSocketError(ws, `Failed to respond to permission: ${errorMessage}`);
+    } finally {
+      clearPendingInteractiveRequest(sessionId, requestId);
+    }
+  };
+}

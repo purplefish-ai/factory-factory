@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { workspaceDataService } from '@/backend/domains/workspace';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
+import { workspaceDataService } from '@/backend/services/workspace';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
 import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
 

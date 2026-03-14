@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { serviceNames } from '@/backend/services/registry';
 
 // Mock logger (standard pattern)
 vi.mock('./logger.service', () => ({
@@ -48,6 +49,10 @@ function makeUpdate(overrides: Partial<SnapshotUpdateInput> = {}): SnapshotUpdat
     lastActivityAt: null,
     ...overrides,
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ---------------------------------------------------------------------------
@@ -632,21 +637,25 @@ describe('WorkspaceSnapshotStore', () => {
   });
 
   // -------------------------------------------------------------------------
-  // ARCH-02: No domain imports
+  // ARCH-02: No service capsule imports
   // -------------------------------------------------------------------------
-  describe('ARCH-02: No domain imports', () => {
-    it('service file has zero imports from @/backend/domains/', () => {
+  describe('ARCH-02: No service capsule imports', () => {
+    it('service file has zero imports from service capsule roots', () => {
       const serviceFilePath = path.resolve(
         import.meta.dirname,
         'workspace-snapshot-store.service.ts'
       );
       const content = fs.readFileSync(serviceFilePath, 'utf-8');
+      const serviceCapsulePattern = serviceNames.map(escapeRegExp).join('|');
+      const forbiddenServiceCapsuleImport = new RegExp(
+        `@/backend/services/(?:${serviceCapsulePattern})(?:/|['"])`
+      );
 
       // Check only actual import lines, not comments
       const importLines = content.split('\n').filter((line) => /^\s*import\s/.test(line));
 
       for (const line of importLines) {
-        expect(line).not.toContain('@/backend/domains/');
+        expect(line).not.toMatch(forbiddenServiceCapsuleImport);
       }
     });
   });

@@ -1,15 +1,6 @@
 import { SessionProvider, WorkspaceProviderSelection } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { ratchetService } from '@/backend/domains/ratchet';
-import { sessionProviderResolverService, sessionService } from '@/backend/domains/session';
-import {
-  computeKanbanColumn,
-  deriveWorkspaceFlowStateFromWorkspace,
-  WorkspaceCreationService,
-  workspaceDataService,
-  workspaceQueryService,
-} from '@/backend/domains/workspace';
 import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availability';
 import {
   buildWorkspaceSessionSummaries,
@@ -18,6 +9,20 @@ import {
 import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-state';
 import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
+import { ratchetService } from '@/backend/services/ratchet';
+import {
+  sessionDataService,
+  sessionProviderResolverService,
+  sessionService,
+} from '@/backend/services/session';
+import {
+  computeKanbanColumn,
+  deriveWorkspaceFlowStateFromWorkspace,
+  WorkspaceCreationService,
+  workspaceDataService,
+  workspaceQueryService,
+} from '@/backend/services/workspace';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
@@ -166,15 +171,19 @@ export const workspaceRouter = router({
     const logger = getLogger(ctx);
     const { configService } = ctx.appContext.services;
     const maxSessionsPerWorkspace = configService.getMaxSessionsPerWorkspace();
+    const explicitProvider = input.type === 'MANUAL' ? input.provider : undefined;
+    let defaultSessionProvider: SessionProvider | undefined;
 
     // Workspace creation provisions a default session when session capacity is enabled.
     // Block creation if the effective provider cannot be used on this machine.
     if (maxSessionsPerWorkspace > 0) {
-      const explicitProvider = input.type === 'MANUAL' ? input.provider : undefined;
-      const provider =
+      defaultSessionProvider =
         await sessionProviderResolverService.resolveProviderForWorkspaceCreation(explicitProvider);
       const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
-      const providerUnavailableMessage = getProviderUnavailableMessage(provider, cliHealth);
+      const providerUnavailableMessage = getProviderUnavailableMessage(
+        defaultSessionProvider,
+        cliHealth
+      );
       if (providerUnavailableMessage) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
@@ -186,10 +195,26 @@ export const workspaceRouter = router({
     // Use the canonical workspace creation service
     const workspaceCreationService = new WorkspaceCreationService({
       logger,
-      configService,
     });
 
-    const { workspace } = await workspaceCreationService.create(input);
+    const workspace = await workspaceCreationService.create(input);
+
+    if (maxSessionsPerWorkspace > 0 && defaultSessionProvider) {
+      try {
+        await sessionDataService.createAgentSession({
+          workspaceId: workspace.id,
+          workflow: DEFAULT_FOLLOWUP,
+          name: 'Chat 1',
+          provider: defaultSessionProvider,
+          providerProjectPath: null,
+        });
+      } catch (error) {
+        logger.warn('Failed to create default session for workspace', {
+          workspaceId: workspace.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const branchName =
       input.type === 'MANUAL'

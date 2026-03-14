@@ -6,15 +6,15 @@
  */
 
 import pLimit from 'p-limit';
-import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
 import { toError } from '@/backend/lib/error-utils';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import {
   SERVICE_CONCURRENCY,
   SERVICE_INTERVAL_MS,
   SERVICE_THRESHOLDS,
 } from '@/backend/services/constants';
+import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
+import { workspaceAccessor } from '@/backend/services/workspace';
 
 const logger = createLogger('scheduler');
 
