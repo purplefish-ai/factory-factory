@@ -43,7 +43,7 @@ vi.mock('@/backend/services/github', () => ({
 vi.mock('@/backend/services/ratchet', () => ({
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
   RATCHET_TOGGLED: 'ratchet_toggled',
-  ratchetService: { on: vi.fn() },
+  ratchetService: { on: vi.fn(), checkWorkspaceById: vi.fn().mockResolvedValue(null) },
 }));
 
 vi.mock('@/backend/services/run-script', () => ({
@@ -596,6 +596,116 @@ describe('configureEventCollector', () => {
       },
       'event:pr_snapshot_updated'
     );
+  });
+
+  it('triggers immediate ratchet recompute when PR identity changes', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('still triggers ratchet recompute when store mutates snapshot during immediate upsert', () => {
+    const existingSnapshot: { projectId: string; prNumber: number | null; prUrl: string | null } = {
+      projectId: 'proj-1',
+      prNumber: 41,
+      prUrl: 'https://github.com/org/repo/pull/41',
+    };
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue(
+      existingSnapshot as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>
+    );
+    vi.mocked(workspaceSnapshotStore.upsert).mockImplementation((_, update) => {
+      if (update.prNumber !== undefined) {
+        existingSnapshot.prNumber = update.prNumber;
+      }
+      if (update.prUrl !== undefined) {
+        existingSnapshot.prUrl = update.prUrl;
+      }
+    });
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'PENDING',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('does not trigger immediate ratchet recompute when PR identity is unchanged', () => {
+    vi.mocked(workspaceSnapshotStore.getByWorkspaceId).mockReturnValue({
+      projectId: 'proj-1',
+      prNumber: 42,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    } as ReturnType<typeof workspaceSnapshotStore.getByWorkspaceId>);
+
+    configureEventCollector();
+
+    const onCall = vi
+      .mocked(prSnapshotService.on)
+      .mock.calls.find((call) => call[0] === 'pr_snapshot_updated');
+    const handler = onCall![1] as (event: {
+      workspaceId: string;
+      prNumber: number;
+      prState: string;
+      prCiStatus: string;
+      prReviewState: string | null;
+      prUrl?: string | null;
+    }) => void;
+
+    handler({
+      workspaceId: 'ws-1',
+      prNumber: 42,
+      prState: 'OPEN',
+      prCiStatus: 'SUCCESS',
+      prReviewState: null,
+      prUrl: 'https://github.com/org/repo/pull/42',
+    });
+
+    expect(ratchetService.checkWorkspaceById).not.toHaveBeenCalled();
   });
 
   it('ratchet_toggled updates ratchetEnabled and ratchetState immediately', () => {
