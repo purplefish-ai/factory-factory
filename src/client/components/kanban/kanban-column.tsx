@@ -47,6 +47,7 @@ interface KanbanColumnProps {
   onBulkArchive?: () => void;
   isBulkArchiving?: boolean;
   onOpenQuickChat?: (workspaceId: string) => void;
+  onRename?: (workspaceId: string, name: string) => Promise<void>;
 }
 
 export function KanbanColumn({
@@ -59,6 +60,7 @@ export function KanbanColumn({
   onBulkArchive,
   isBulkArchiving,
   onOpenQuickChat,
+  onRename,
 }: KanbanColumnProps) {
   const isEmpty = workspaces.length === 0;
   const showBulkArchiveButton = column.id === 'DONE' && !isEmpty;
@@ -108,6 +110,7 @@ export function KanbanColumn({
                 isTogglePending={togglingWorkspaceId === workspace.id}
                 onArchive={onArchive}
                 onOpenQuickChat={onOpenQuickChat}
+                onRename={onRename}
               />
             </div>
           ))

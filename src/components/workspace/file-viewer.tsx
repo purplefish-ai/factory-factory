@@ -2,7 +2,7 @@ import type { inferRouterOutputs } from '@trpc/server';
 import { AlertCircle, AlertTriangle, Eye, FileCode, Loader2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import type { RefObject, UIEvent } from 'react';
-import { useRef, useState } from 'react';
+import { Component, useRef, useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -154,6 +154,32 @@ function FileViewerWarnings({ truncated, fileSizeLabel, isBinary }: FileViewerWa
   );
 }
 
+class MarkdownPreviewErrorBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>Failed to render preview.</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function FileViewerContent({
   data,
   isMarkdown,
@@ -183,7 +209,9 @@ function FileViewerContent({
     return (
       <ScrollArea className="flex-1" onScroll={onScroll} viewportRef={viewportRef}>
         <div className="p-4">
-          <MarkdownRenderer content={data.content} />
+          <MarkdownPreviewErrorBoundary>
+            <MarkdownRenderer content={data.content} />
+          </MarkdownPreviewErrorBoundary>
         </div>
       </ScrollArea>
     );
@@ -227,12 +255,12 @@ function FileViewerContent({
 }
 
 function FileViewerLoaded({ filePath, tabId, data, syntaxTheme }: FileViewerLoadedProps) {
-  const [showPreview, setShowPreview] = useState(false);
-  const codeViewportRef = useRef<HTMLDivElement>(null);
-  const markdownViewportRef = useRef<HTMLDivElement>(null);
-
   const isMarkdown =
     filePath.endsWith('.md') || filePath.endsWith('.markdown') || data.language === 'markdown';
+
+  const [showPreview, setShowPreview] = useState(isMarkdown && !data.isBinary);
+  const codeViewportRef = useRef<HTMLDivElement>(null);
+  const markdownViewportRef = useRef<HTMLDivElement>(null);
 
   const { handleScroll: handleCodeScroll } = usePersistentScroll({
     tabId,

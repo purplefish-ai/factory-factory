@@ -48,6 +48,7 @@ interface SessionTabsProps {
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
   handleCloseChatSession: ReturnType<typeof useSessionManagement>['handleCloseSession'];
   handleQuickAction: ReturnType<typeof useSessionManagement>['handleQuickAction'];
+  handleRestartSession: () => void;
   maxSessions: ReturnType<typeof useWorkspaceData>['maxSessions'];
   hasWorktreePath: boolean;
   selectedProvider: SessionProviderValue;
@@ -131,6 +132,7 @@ export function WorkspaceDetailView({
         onSelectSession={sessionTabs.handleSelectSession}
         onCreateSession={sessionTabs.handleNewChat}
         onCloseSession={sessionTabs.handleCloseChatSession}
+        onRestartSession={sessionTabs.handleRestartSession}
         onQuickAction={sessionTabs.handleQuickAction}
         maxSessions={sessionTabs.maxSessions}
         hasWorktreePath={sessionTabs.hasWorktreePath}

@@ -163,7 +163,7 @@ export function DiffViewer({ workspaceId, filePath, tabId }: DiffViewerProps) {
   // Check if file is markdown
   const isMarkdown = filePath.endsWith('.md') || filePath.endsWith('.markdown');
 
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(isMarkdown);
   const diffViewportRef = useRef<HTMLDivElement>(null);
   const markdownViewportRef = useRef<HTMLDivElement>(null);
 

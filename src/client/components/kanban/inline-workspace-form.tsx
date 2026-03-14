@@ -35,6 +35,7 @@ interface InlineWorkspaceFormProps {
 }
 
 const ATTACHMENT_ACCEPT_TYPES = [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_TEXT_EXTENSIONS].join(',');
+const MAX_PROMPT_TEXTAREA_HEIGHT_PX = 240;
 
 export function InlineWorkspaceForm({
   projectId,
@@ -60,19 +61,25 @@ export function InlineWorkspaceForm({
     'non_interactive'
   );
 
-  const fileMentions = useProjectFileMentions({
-    projectId,
-    inputRef: textareaRef,
-    onChange: setInitialPrompt,
-  });
-
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
     if (el) {
       el.style.height = 'auto';
-      el.style.height = `${el.scrollHeight}px`;
+      const fullHeight = el.scrollHeight;
+      const clampedHeight = Math.min(fullHeight, MAX_PROMPT_TEXTAREA_HEIGHT_PX);
+      el.style.height = `${clampedHeight}px`;
+      el.style.overflowY = fullHeight > MAX_PROMPT_TEXTAREA_HEIGHT_PX ? 'auto' : 'hidden';
     }
   }, []);
+
+  const fileMentions = useProjectFileMentions({
+    projectId,
+    inputRef: textareaRef,
+    onChange: (value) => {
+      setInitialPrompt(value);
+      autoResize();
+    },
+  });
 
   // Initialize defaults from user settings once loaded
   useEffect(() => {
@@ -165,8 +172,8 @@ export function InlineWorkspaceForm({
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     setInitialPrompt(newValue);
-    fileMentions.detectFileMention(newValue);
     autoResize();
+    fileMentions.detectFileMention(newValue);
   };
 
   return (
@@ -194,7 +201,7 @@ export function InlineWorkspaceForm({
             onDragLeave={pasteDropHandler.handleDragLeave}
             rows={3}
             className={cn(
-              'resize-none text-sm overflow-hidden',
+              'resize-none text-sm',
               pasteDropHandler.isDragging && 'ring-2 ring-primary ring-inset bg-primary/5'
             )}
             autoFocus

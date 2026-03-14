@@ -147,12 +147,9 @@ export class SessionConfigService {
   async applyConfiguredPermissionPreset(
     sessionId: string,
     session: AgentSessionRecord,
-    handle: AcpProcessHandle
+    handle: AcpProcessHandle,
+    preResolvedPreset?: SessionPermissionPreset
   ): Promise<void> {
-    if (handle.provider !== 'CODEX') {
-      return;
-    }
-
     const executionModeOption = handle.configOptions.find(
       (option) => option.id === 'execution_mode' || option.category === 'permission'
     );
@@ -160,21 +157,9 @@ export class SessionConfigService {
       return;
     }
 
-    let permissionPreset: SessionPermissionPreset =
-      session.workflow === 'ratchet' ? 'YOLO' : 'STRICT';
-    try {
-      const settings = await userSettingsAccessor.get();
-      permissionPreset =
-        session.workflow === 'ratchet'
-          ? settings.ratchetPermissions
-          : settings.defaultWorkspacePermissions;
-    } catch (error) {
-      logger.warn('Failed loading user permission presets; using defaults', {
-        sessionId,
-        workflow: session.workflow,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    const permissionPreset =
+      preResolvedPreset ??
+      (await this.resolvePermissionPresetFromSettings(sessionId, session.workflow));
 
     const targetExecutionMode = this.resolveConfiguredExecutionModeTarget(
       executionModeOption,
@@ -586,6 +571,26 @@ export class SessionConfigService {
       /yolo/i.test(option.name ?? '')
     );
     return yoloByName?.value ?? null;
+  }
+
+  private async resolvePermissionPresetFromSettings(
+    sessionId: string,
+    workflow: string
+  ): Promise<SessionPermissionPreset> {
+    const fallback: SessionPermissionPreset = workflow === 'ratchet' ? 'YOLO' : 'STRICT';
+    try {
+      const settings = await userSettingsAccessor.get();
+      return workflow === 'ratchet'
+        ? settings.ratchetPermissions
+        : settings.defaultWorkspacePermissions;
+    } catch (error) {
+      logger.warn('Failed loading user permission presets; using defaults', {
+        sessionId,
+        workflow,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return fallback;
+    }
   }
 
   private resolveConfiguredExecutionModeTarget(

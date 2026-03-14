@@ -1,5 +1,7 @@
 export type AcpProvider = 'CLAUDE' | 'CODEX';
 
+export type PermissionPreset = 'STRICT' | 'RELAXED' | 'YOLO';
+
 export interface AcpClientOptions {
   provider: AcpProvider;
   workingDir: string;
@@ -7,7 +9,8 @@ export interface AcpClientOptions {
   adapterBinaryPath?: string;
   model?: string;
   systemPrompt?: string;
-  permissionMode?: string;
+  /** User-configured permission preset for this session (STRICT/RELAXED/YOLO). */
+  permissionPreset?: PermissionPreset;
   sessionId: string; // FF database session ID for logging
   /** Stored provider session ID for session resume via loadSession */
   resumeProviderSessionId?: string;

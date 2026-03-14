@@ -193,7 +193,6 @@ describe('SessionService', () => {
         workingDir: '/tmp/work',
         systemPrompt: 'system',
         model: 'sonnet',
-        permissionMode: 'bypassPermissions',
         sessionId: 'session-1',
       }),
       expect.any(Object),

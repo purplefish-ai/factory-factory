@@ -17,11 +17,11 @@ import {
 } from '@agentclientprotocol/sdk';
 import pLimit from 'p-limit';
 import { createLogger, getCurrentProcessEnv } from '@/backend/services/logger.service';
-import { AcpClientHandler } from './acp-client-handler';
+import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
-import type { AcpClientOptions } from './types';
+import type { AcpClientOptions, PermissionPreset } from './types';
 
 const logger = createLogger('acp-runtime-manager');
 
@@ -40,6 +40,13 @@ export type AcpRuntimeEventHandlers = {
   /** Permission bridge to inject into AcpClientHandler for suspending requestPermission */
   permissionBridge?: AcpPermissionBridge;
 };
+
+function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApprovePolicy {
+  if (preset === 'YOLO' || preset === 'RELAXED') {
+    return 'all';
+  }
+  return 'none';
+}
 
 /**
  * Resolves the full path to an ACP adapter binary by finding its package
@@ -672,10 +679,19 @@ export class AcpRuntimeManager {
           logger.debug('ACP event received but no handler registered', { sessionId });
         };
 
+    // Resolve auto-approve policy from user's configured permission preset
+    const autoApprovePolicy = resolveAutoApprovePolicy(options.permissionPreset);
+
     // Create connection with client handler (inject permission bridge from handlers)
     const connection = new ClientSideConnection(
       (_agent) =>
-        new AcpClientHandler(sessionId, onEvent, handlers.permissionBridge, handlers.onAcpLog),
+        new AcpClientHandler(
+          sessionId,
+          onEvent,
+          handlers.permissionBridge,
+          handlers.onAcpLog,
+          autoApprovePolicy
+        ),
       stream
     );
 

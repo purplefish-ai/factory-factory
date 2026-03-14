@@ -27,7 +27,6 @@ import { sessionRepository } from './session.repository';
 import { SessionRetryService } from './session.retry.service';
 
 const logger = createLogger('session');
-type SessionPermissionMode = 'bypassPermissions' | 'plan';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
 
@@ -134,6 +133,12 @@ export class SessionService {
     await this.lifecycleService.stopSession(sessionId, options);
   }
 
+  async restartSession(sessionId: string): Promise<void> {
+    await this.lifecycleService.restartSession(sessionId, (id, content) =>
+      this.sendSessionMessage(id, content)
+    );
+  }
+
   async stopWorkspaceSessions(workspaceId: string): Promise<void> {
     await this.lifecycleService.stopWorkspaceSessions(workspaceId);
   }
@@ -142,7 +147,6 @@ export class SessionService {
     sessionId: string,
     options?: {
       thinkingEnabled?: boolean;
-      permissionMode?: SessionPermissionMode;
       model?: string;
       reasoningEffort?: string;
     }
@@ -154,7 +158,6 @@ export class SessionService {
     session: AgentSessionRecord,
     options?: {
       thinkingEnabled?: boolean;
-      permissionMode?: SessionPermissionMode;
       model?: string;
       reasoningEffort?: string;
     }

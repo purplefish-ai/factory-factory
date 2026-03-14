@@ -1,4 +1,4 @@
-import { Archive, Camera, FileCode, FileDiff, Plus } from 'lucide-react';
+import { Archive, Camera, FileCode, FileDiff, Plus, RefreshCw } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { TabButton } from '@/components/ui/tab-button';
@@ -192,6 +192,7 @@ interface MainViewTabBarProps {
   onCloseSession?: (sessionId: string) => void;
   onQuickAction?: (name: string, prompt: string) => void;
   onSelectClosedSession?: (sessionId: string) => void;
+  onRestartSession?: () => void;
   disabled?: boolean;
   /** Maximum sessions allowed per workspace */
   maxSessions?: number;
@@ -210,6 +211,7 @@ export function MainViewTabBar({
   onCloseSession,
   onQuickAction,
   onSelectClosedSession,
+  onRestartSession,
   disabled,
   maxSessions,
   selectedProvider,
@@ -227,118 +229,148 @@ export function MainViewTabBar({
   const providerTriggerLabel = getSessionProviderLabel(selectedProvider);
 
   return (
-    <div
-      role="tablist"
-      className={cn('flex items-center gap-0.5 bg-muted/50 p-1 overflow-x-auto', className)}
-      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-    >
-      {/* Session tabs (Chat 1, Chat 2, etc.) */}
-      {sessions?.map((session, index) => {
-        const isSelected = session.id === currentSessionId;
-        const baseLabel = session.name ?? `Chat ${index + 1}`;
-        return (
-          <SessionTabItem
-            key={session.id}
-            label={baseLabel}
-            isActive={isSelected && activeTabId === 'chat'}
-            sessionSummary={sessionSummariesById?.get(session.id)}
-            isCIFix={session.workflow === 'ci-fix'}
-            persistedStatus={session.status}
-            onSelect={() => {
-              onSelectSession?.(session.id);
-              selectTab('chat');
-            }}
-            onClose={sessions.length > 1 ? () => onCloseSession?.(session.id) : undefined}
-          />
-        );
-      })}
+    <div className={cn('flex items-center bg-muted/50', className)}>
+      {/* Scrollable tab area */}
+      <div
+        role="tablist"
+        className="flex flex-1 min-w-0 items-center gap-0.5 p-1 overflow-x-auto"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        {/* Session tabs (Chat 1, Chat 2, etc.) */}
+        {sessions?.map((session, index) => {
+          const isSelected = session.id === currentSessionId;
+          const baseLabel = session.name ?? `Chat ${index + 1}`;
+          return (
+            <SessionTabItem
+              key={session.id}
+              label={baseLabel}
+              isActive={isSelected && activeTabId === 'chat'}
+              sessionSummary={sessionSummariesById?.get(session.id)}
+              isCIFix={session.workflow === 'ci-fix'}
+              persistedStatus={session.status}
+              onSelect={() => {
+                onSelectSession?.(session.id);
+                selectTab('chat');
+              }}
+              onClose={sessions.length > 1 ? () => onCloseSession?.(session.id) : undefined}
+            />
+          );
+        })}
 
-      {/* Session creation controls (provider + add button) */}
-      {onCreateSession && (
-        <div className="ml-0.5 flex shrink-0 items-center overflow-hidden rounded-md border border-input bg-background">
-          <Select
-            value={selectedProvider}
-            onValueChange={(value) => {
-              setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
-            }}
-            disabled={isButtonDisabled}
-          >
-            <SelectTrigger
-              aria-label="New session provider"
-              className="h-7 w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
+        {/* Session creation controls (provider + add button) */}
+        {onCreateSession && (
+          <div className="ml-0.5 flex shrink-0 items-center overflow-hidden rounded-md border border-input bg-background">
+            <Select
+              value={selectedProvider}
+              onValueChange={(value) => {
+                setSelectedProvider(value === 'CODEX' ? 'CODEX' : 'CLAUDE');
+              }}
+              disabled={isButtonDisabled}
             >
-              <span>{providerTriggerLabel}</span>
-            </SelectTrigger>
-            <SelectContent>
-              {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger
+                aria-label="New session provider"
+                className="h-7 w-auto shrink-0 rounded-none border-0 border-r border-input px-2 text-xs focus:ring-0 [&>svg]:hidden"
+              >
+                <span>{providerTriggerLabel}</span>
+              </SelectTrigger>
+              <SelectContent>
+                {EXPLICIT_SESSION_PROVIDER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onCreateSession}
+                  disabled={isButtonDisabled}
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-none',
+                    'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
+                    'transition-colors disabled:pointer-events-none disabled:opacity-50'
+                  )}
+                  aria-label={`New ${providerTriggerLabel} session`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isAtLimit
+                  ? `Maximum ${maxSessions} sessions per workspace`
+                  : `New ${providerTriggerLabel} session`}
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        )}
+
+        {onQuickAction && (
+          <div className="ml-0.5 shrink-0">
+            <QuickActionsMenu
+              onExecuteAgent={(action) => {
+                if (action.content) {
+                  onQuickAction(action.name, action.content);
+                }
+              }}
+              disabled={isButtonDisabled}
+            />
+          </div>
+        )}
+
+        {onSelectClosedSession && (
+          <div className="ml-0.5 shrink-0">
+            <ClosedSessionsDropdown
+              workspaceId={workspaceId}
+              onSelectClosedSession={onSelectClosedSession}
+              disabled={disabled}
+            />
+          </div>
+        )}
+
+        {/* Separator between sessions and file tabs */}
+        {nonChatTabs.length > 0 && <div className="h-4 w-px bg-border mx-1" />}
+
+        {/* File/diff tabs */}
+        {nonChatTabs.map((tab) => (
+          <TabItem
+            key={tab.id}
+            tab={tab}
+            isActive={tab.id === activeTabId}
+            onSelect={() => selectTab(tab.id)}
+            onClose={() => closeTab(tab.id)}
+          />
+        ))}
+      </div>
+
+      {/* Restart button — pinned to the right, outside the scrollable area */}
+      {onRestartSession && (
+        <div className="shrink-0 pr-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={onCreateSession}
-                disabled={isButtonDisabled}
+                onClick={onRestartSession}
+                disabled={disabled}
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-none',
+                  'flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium',
                   'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground',
                   'transition-colors disabled:pointer-events-none disabled:opacity-50'
                 )}
-                aria-label={`New ${providerTriggerLabel} session`}
+                aria-label="Restart agent"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <RefreshCw className="h-3.5 w-3.5" />
+                Restart
               </button>
             </TooltipTrigger>
-            <TooltipContent>
-              {isAtLimit
-                ? `Maximum ${maxSessions} sessions per workspace`
-                : `New ${providerTriggerLabel} session`}
+            <TooltipContent side="bottom">
+              Stop and restart the agent, resuming from where it left off
             </TooltipContent>
           </Tooltip>
         </div>
       )}
-
-      {onQuickAction && (
-        <div className="ml-0.5 shrink-0">
-          <QuickActionsMenu
-            onExecuteAgent={(action) => {
-              if (action.content) {
-                onQuickAction(action.name, action.content);
-              }
-            }}
-            disabled={isButtonDisabled}
-          />
-        </div>
-      )}
-
-      {onSelectClosedSession && (
-        <div className="ml-0.5 shrink-0">
-          <ClosedSessionsDropdown
-            workspaceId={workspaceId}
-            onSelectClosedSession={onSelectClosedSession}
-            disabled={disabled}
-          />
-        </div>
-      )}
-
-      {/* Separator between sessions and file tabs */}
-      {nonChatTabs.length > 0 && <div className="h-4 w-px bg-border mx-1" />}
-
-      {/* File/diff tabs */}
-      {nonChatTabs.map((tab) => (
-        <TabItem
-          key={tab.id}
-          tab={tab}
-          isActive={tab.id === activeTabId}
-          onSelect={() => selectTab(tab.id)}
-          onClose={() => closeTab(tab.id)}
-        />
-      ))}
     </div>
   );
 }

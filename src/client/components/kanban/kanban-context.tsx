@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import {
   type NormalizedIssue,
   normalizeGitHubIssue,
@@ -64,6 +65,7 @@ interface KanbanContextValue {
   isSyncing: boolean;
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
   togglingWorkspaceId: string | null;
+  renameWorkspace: (workspaceId: string, name: string) => Promise<void>;
   archiveWorkspace: (workspaceId: string, commitUncommitted: boolean) => Promise<void>;
   bulkArchiveColumn: (kanbanColumn: string, commitUncommitted: boolean) => Promise<void>;
   isBulkArchiving: boolean;
@@ -140,6 +142,9 @@ export function KanbanProvider({
 
   const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
+  const renameMutation = trpc.workspace.rename.useMutation({
+    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+  });
   const archiveMutation = trpc.workspace.archive.useMutation();
   const bulkArchiveMutation = trpc.workspace.bulkArchive.useMutation();
   const [togglingWorkspaceId, setTogglingWorkspaceId] = useState<string | null>(null);
@@ -175,6 +180,15 @@ export function KanbanProvider({
     } finally {
       setTogglingWorkspaceId(null);
     }
+  };
+
+  const renameWorkspace = async (workspaceId: string, name: string) => {
+    await renameMutation.mutateAsync({ id: workspaceId, name });
+    await Promise.all([
+      refetchWorkspaces(),
+      utils.workspace.getProjectSummaryState.invalidate({ projectId }),
+      utils.workspace.get.invalidate({ id: workspaceId }),
+    ]);
   };
 
   const archiveWorkspace = async (workspaceId: string, commitUncommitted: boolean) => {
@@ -356,6 +370,7 @@ export function KanbanProvider({
         isSyncing: syncMutation.isPending,
         toggleWorkspaceRatcheting,
         togglingWorkspaceId,
+        renameWorkspace,
         archiveWorkspace,
         bulkArchiveColumn,
         isBulkArchiving: bulkArchiveMutation.isPending,
