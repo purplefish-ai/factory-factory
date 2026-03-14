@@ -405,6 +405,11 @@ async function applyConfiguredEntry(params: {
   }
   configuredOrder.set(id, index);
 
+  if (entry.enabled === false) {
+    deleteActionsById(actionMap, id, entry.surface);
+    return;
+  }
+
   const existing = findActionById(actionMap, id, entry.surface);
   const loadedFromRepo = entry.path
     ? await loadRepoAction({
@@ -419,11 +424,6 @@ async function applyConfiguredEntry(params: {
     loadedFromRepo?.surface ??
     existing?.surface ??
     (modeCandidate ? defaultSurfaceForMode(modeCandidate) : 'sessionBar');
-
-  if (entry.enabled === false) {
-    deleteActionsById(actionMap, id, entry.surface);
-    return;
-  }
 
   if (!(existing || loadedFromRepo)) {
     logger.warn('Skipping quick action override because id was not found and no path provided', {

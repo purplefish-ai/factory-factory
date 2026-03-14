@@ -8,7 +8,7 @@ import { FactoryConfigService } from '@/backend/services/factory-config.service'
 import { gitCloneService, parseGithubUrl } from '@/backend/services/git-clone.service';
 import { projectManagementService } from '@/backend/services/workspace';
 import { IssueProvider } from '@/shared/core/enums';
-import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
+import { FactoryConfigInputSchema } from '@/shared/schemas/factory-config.schema';
 import {
   IssueTrackerConfigSchema,
   sanitizeIssueTrackerConfig,
@@ -312,7 +312,7 @@ export const projectRouter = router({
     .input(
       z.object({
         projectId: z.string(),
-        config: FactoryConfigSchema,
+        config: FactoryConfigInputSchema,
       })
     )
     .mutation(async ({ input }) => {

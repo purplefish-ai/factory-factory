@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { publicProcedure, router } from '@/backend/trpc/trpc';
-import { FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
+import { FactoryConfigInputSchema } from '@/shared/schemas/factory-config.schema';
 
 export const workspaceRunScriptRouter = router({
   // Create factory-factory.json configuration file
@@ -11,7 +11,7 @@ export const workspaceRunScriptRouter = router({
     .input(
       z.object({
         workspaceId: z.string(),
-        config: FactoryConfigSchema,
+        config: FactoryConfigInputSchema,
       })
     )
     .mutation(async ({ input }) => {

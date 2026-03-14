@@ -1,7 +1,11 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { type FactoryConfig, FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
+import {
+  type FactoryConfig,
+  type FactoryConfigInput,
+  FactoryConfigSchema,
+} from '@/shared/schemas/factory-config.schema';
 
 /**
  * Schema for factory-factory.json configuration file
@@ -55,13 +59,20 @@ export class FactoryConfigService {
    */
   static mergeConfig(
     existingConfig: FactoryConfig | null,
-    incomingConfig: FactoryConfig
+    incomingConfig: FactoryConfigInput
   ): FactoryConfig {
-    return {
+    const mergedConfig: FactoryConfigInput = {
       ...(existingConfig ?? {}),
-      ...incomingConfig,
-      scripts: incomingConfig.scripts,
     };
+
+    if (Object.hasOwn(incomingConfig, 'scripts')) {
+      mergedConfig.scripts = incomingConfig.scripts;
+    }
+    if (Object.hasOwn(incomingConfig, 'quickActions')) {
+      mergedConfig.quickActions = incomingConfig.quickActions;
+    }
+
+    return FactoryConfigSchema.parse(mergedConfig);
   }
 
   /**

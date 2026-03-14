@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
-import type { FactoryConfig } from '@/shared/schemas/factory-config.schema';
+import type { FactoryConfig, FactoryConfigInput } from '@/shared/schemas/factory-config.schema';
 
 const logger = createLogger('run-script-config-persistence');
 const FACTORY_CONFIG_FILENAME = 'factory-factory.json';
@@ -75,7 +75,7 @@ class RunScriptConfigPersistenceService {
     workspaceId: string;
     worktreePath: string;
     projectRepoPath?: string | null;
-    config: FactoryConfig;
+    config: FactoryConfigInput;
     persistWorkspaceCommands: PersistWorkspaceCommands;
   }): Promise<RunScriptCommandCache> {
     let existingConfig: FactoryConfig | null = null;

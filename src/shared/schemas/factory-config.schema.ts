@@ -46,16 +46,21 @@ export const FactoryQuickActionsSchema = z.object({
   actions: z.array(FactoryQuickActionEntrySchema).optional(),
 });
 
-export const FactoryConfigSchema = z.object({
-  scripts: z
-    .object({
-      setup: z.string().optional(),
-      run: z.string().optional(),
-      postRun: z.string().optional(),
-      cleanup: z.string().optional(),
-    })
-    .default({}),
+export const FactoryScriptsSchema = z.object({
+  setup: z.string().optional(),
+  run: z.string().optional(),
+  postRun: z.string().optional(),
+  cleanup: z.string().optional(),
+});
+
+export const FactoryConfigInputSchema = z.object({
+  scripts: FactoryScriptsSchema.optional(),
   quickActions: FactoryQuickActionsSchema.optional(),
 });
 
+export const FactoryConfigSchema = FactoryConfigInputSchema.extend({
+  scripts: FactoryScriptsSchema.default({}),
+});
+
 export type FactoryConfig = z.infer<typeof FactoryConfigSchema>;
+export type FactoryConfigInput = z.infer<typeof FactoryConfigInputSchema>;

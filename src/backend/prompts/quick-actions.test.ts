@@ -1,7 +1,19 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    warn: (...args: unknown[]) => mockLoggerWarn(...args),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
+
 import {
   clearQuickActionCache,
   getQuickAction,
@@ -15,6 +27,7 @@ describe('quick-actions', () => {
 
   beforeEach(() => {
     clearQuickActionCache();
+    mockLoggerWarn.mockClear();
   });
 
   afterEach(() => {
@@ -167,5 +180,41 @@ Summarize what should be fixed before merge.`,
         surface: 'chatBar',
       }),
     ]);
+  });
+
+  it('skips loading repo markdown for disabled actions', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'quick-actions-disabled-'));
+    cleanupDirs.push(repoDir);
+
+    writeFileSync(
+      join(repoDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          quickActions: {
+            actions: [
+              {
+                id: 'create-pr',
+                path: '.factory-factory/actions/missing.md',
+                enabled: false,
+              },
+            ],
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    const actions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'chatBar',
+    });
+
+    expect(actions.some((action) => action.id === 'create-pr')).toBe(false);
+    expect(mockLoggerWarn).not.toHaveBeenCalledWith(
+      'Failed to load repo quick action markdown',
+      expect.anything()
+    );
   });
 });

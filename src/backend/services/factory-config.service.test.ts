@@ -179,6 +179,28 @@ describe('FactoryConfigService', () => {
       });
     });
 
+    it('preserves existing scripts when the incoming config only updates quickActions', () => {
+      const merged = FactoryConfigService.mergeConfig(
+        {
+          scripts: { run: 'pnpm dev', cleanup: 'pnpm stop' },
+        },
+        {
+          quickActions: {
+            includeDefaults: false,
+            actions: [{ id: 'review', path: '.factory-factory/actions/review.md' }],
+          },
+        }
+      );
+
+      expect(merged).toEqual({
+        scripts: { run: 'pnpm dev', cleanup: 'pnpm stop' },
+        quickActions: {
+          includeDefaults: false,
+          actions: [{ id: 'review', path: '.factory-factory/actions/review.md' }],
+        },
+      });
+    });
+
     it('replaces top-level keys provided by the incoming config', () => {
       const merged = FactoryConfigService.mergeConfig(
         {
