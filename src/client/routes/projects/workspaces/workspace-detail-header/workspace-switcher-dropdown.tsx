@@ -44,6 +44,7 @@ export function WorkspaceSwitcherDropdown({
     () => groupWorkspaceSwitcherItems((projectState?.workspaces ?? []) as ServerWorkspace[]),
     [projectState?.workspaces]
   );
+  const queueSummaryLabel = `${grouped.working.length} working · ${grouped.waiting.length} waiting`;
 
   const handleValueChange = (workspaceId: string) => {
     if (!workspaceId || workspaceId === currentWorkspaceId) {
@@ -72,11 +73,17 @@ export function WorkspaceSwitcherDropdown({
     <Select value={currentWorkspaceId} onValueChange={handleValueChange}>
       <SelectTrigger
         id="workspace-detail-workspace-select"
-        aria-label="Open workspace menu"
+        aria-label={`Open workspace menu (${queueSummaryLabel})`}
         className="h-7 w-auto max-w-[10rem] border-0 bg-transparent px-0.5 text-[11px] font-normal text-muted-foreground shadow-none focus:ring-0 hover:[&>span]:underline focus-visible:[&>span]:underline md:max-w-[18rem] md:px-1 md:text-sm lg:max-w-none [&>svg:last-of-type]:hidden"
       >
         <span className="flex-1 min-w-0 truncate text-foreground font-semibold md:overflow-visible md:text-clip">
           {currentWorkspaceLabel}
+        </span>
+        <span
+          className="ml-1 hidden shrink-0 text-[10px] font-normal text-muted-foreground tabular-nums lg:inline"
+          aria-hidden
+        >
+          {grouped.working.length} wk · {grouped.waiting.length} wait
         </span>
         <span className="ml-0.5 inline-flex shrink-0 items-center text-current md:ml-2" aria-hidden>
           <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-70 md:h-3.5 md:w-3.5" />
