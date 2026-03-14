@@ -293,7 +293,7 @@ Real-time visual project management with automatic column placement.
 
 One-click prompts for common workflows, fully customizable per repository.
 
-- **Agent-driven:** Each action creates a new ACP session with a predefined prompt
+- **Prompt-driven:** `sessionBar` actions create ACP sessions, while `chatBar` actions send predefined prompts in place
 - **Repo-defined:** Configure actions in `factory-factory.json` (`quickActions.actions[].path`) and keep markdown prompts in your repo (for example `.factory-factory/actions/*.md`)
 - **Two surfaces:** `sessionBar` actions start new sessions, `chatBar` actions send prompts in-place
 - **Pinned buttons:** Set `pinned: true` to show an action as a first-class one-click button in the session bar

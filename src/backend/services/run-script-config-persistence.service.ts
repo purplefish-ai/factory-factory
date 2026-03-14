@@ -78,25 +78,49 @@ class RunScriptConfigPersistenceService {
     config: FactoryConfigInput;
     persistWorkspaceCommands: PersistWorkspaceCommands;
   }): Promise<RunScriptCommandCache> {
-    let existingConfig: FactoryConfig | null = null;
+    let existingWorktreeConfig: FactoryConfig | null = null;
     try {
-      existingConfig = await FactoryConfigService.readConfig(input.worktreePath);
+      existingWorktreeConfig = await FactoryConfigService.readConfig(input.worktreePath);
     } catch {
-      existingConfig = null;
+      existingWorktreeConfig = null;
     }
 
-    const mergedConfig = FactoryConfigService.mergeConfig(existingConfig, input.config);
-    const configContent = JSON.stringify(mergedConfig, null, 2);
+    const mergedWorktreeConfig = FactoryConfigService.mergeConfig(
+      existingWorktreeConfig,
+      input.config
+    );
+    const worktreeConfigContent = JSON.stringify(mergedWorktreeConfig, null, 2);
 
-    await writeFile(join(input.worktreePath, FACTORY_CONFIG_FILENAME), configContent, 'utf-8');
+    await writeFile(
+      join(input.worktreePath, FACTORY_CONFIG_FILENAME),
+      worktreeConfigContent,
+      'utf-8'
+    );
 
     if (input.projectRepoPath) {
-      await writeFile(join(input.projectRepoPath, FACTORY_CONFIG_FILENAME), configContent, 'utf-8');
+      let existingRepoConfig: FactoryConfig | null = null;
+      try {
+        existingRepoConfig = await FactoryConfigService.readConfig(input.projectRepoPath);
+      } catch {
+        existingRepoConfig = null;
+      }
+
+      const mergedRepoConfig = FactoryConfigService.mergeConfig(
+        existingRepoConfig ?? existingWorktreeConfig,
+        input.config
+      );
+      const repoConfigContent = JSON.stringify(mergedRepoConfig, null, 2);
+
+      await writeFile(
+        join(input.projectRepoPath, FACTORY_CONFIG_FILENAME),
+        repoConfigContent,
+        'utf-8'
+      );
     }
 
     return this.syncWorkspaceCommandsFromFactoryConfig({
       workspaceId: input.workspaceId,
-      factoryConfig: mergedConfig,
+      factoryConfig: mergedWorktreeConfig,
       persistWorkspaceCommands: input.persistWorkspaceCommands,
     });
   }

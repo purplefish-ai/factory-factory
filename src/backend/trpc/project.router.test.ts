@@ -449,6 +449,23 @@ describe('projectRouter', () => {
     ).rejects.toThrow('Project not found');
   });
 
+  it('propagates invalid existing factory config errors when saving', async () => {
+    const caller = createCaller();
+    mockProjectManagementService.findById.mockResolvedValue({ id: 'p1', repoPath: tempDir });
+    mockReadConfig.mockRejectedValueOnce(new Error('Invalid schema in factory-factory.json'));
+
+    await expect(
+      caller.saveFactoryConfig({
+        projectId: 'p1',
+        config: {
+          quickActions: {
+            includeDefaults: false,
+          },
+        },
+      })
+    ).rejects.toThrow('Invalid schema in factory-factory.json');
+  });
+
   it('checks GitHub auth and handles GitHub clone flow branches', async () => {
     const caller = createCaller();
     await expect(caller.checkGithubAuth()).resolves.toEqual({

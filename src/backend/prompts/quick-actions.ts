@@ -5,11 +5,12 @@
  * Repositories can override/add actions through factory-factory.json quickActions config.
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { z } from 'zod';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { DEFAULT_CHAT_QUICK_ACTIONS } from '@/shared/quick-actions/default-chat-actions';
 import type {
   FactoryConfig,
   QuickActionMode,
@@ -66,41 +67,16 @@ type QuickActionConfigEntry = NonNullable<
 const QUICK_ACTIONS_DIR = resolve(import.meta.dirname, '../../..', 'prompts/quick-actions');
 const SURFACES: readonly QuickActionSurface[] = ['sessionBar', 'chatBar'];
 
-const DEFAULT_CHAT_ACTIONS: readonly QuickAction[] = [
-  {
-    id: 'create-pr',
-    name: 'Create Pull Request',
-    description: 'Create a pull request for the current branch',
-    surface: 'chatBar',
-    mode: 'sendPrompt',
-    pinned: false,
-    icon: 'git-pull-request',
-    content:
-      'Create a pull request for the current branch using the GitHub CLI (gh). Include a clear title and description summarizing the changes.',
-  },
-  {
-    id: 'address-pr-comments',
-    name: 'Address PR Comments',
-    description: 'Fetch and address pull request comments',
-    surface: 'chatBar',
-    mode: 'sendPrompt',
-    pinned: false,
-    icon: 'message-square-text',
-    content:
-      'Fetch the comments on the current pull request using the GitHub CLI (gh) and address any feedback or requested changes.',
-  },
-  {
-    id: 'simplify-code',
-    name: 'Simplify Code',
-    description: 'Simplify recent changes',
-    surface: 'chatBar',
-    mode: 'sendPrompt',
-    pinned: false,
-    icon: 'sparkles',
-    content:
-      'Use the code-simplifier agent to review and simplify the recent changes. Focus on improving clarity, consistency, and maintainability while preserving all functionality.',
-  },
-] as const;
+const DEFAULT_CHAT_ACTIONS: readonly QuickAction[] = DEFAULT_CHAT_QUICK_ACTIONS.map((action) => ({
+  id: action.id,
+  name: action.name,
+  description: action.description,
+  surface: 'chatBar',
+  mode: 'sendPrompt',
+  pinned: false,
+  icon: action.icon,
+  content: action.prompt,
+}));
 
 // =============================================================================
 // Frontmatter Parser
@@ -236,6 +212,11 @@ function isPathWithinRepo(repoPath: string, actionPath: string): boolean {
   return rel === '' || !(rel.startsWith('..') || isAbsolute(rel));
 }
 
+function isResolvedPathWithinRepo(repoPath: string, actionPath: string): boolean {
+  const rel = relative(repoPath, actionPath);
+  return rel === '' || !(rel.startsWith('..') || isAbsolute(rel));
+}
+
 async function loadRepoAction(params: {
   repoPath: string;
   actionPath: string;
@@ -251,6 +232,18 @@ async function loadRepoAction(params: {
 
   const fullPath = resolve(params.repoPath, params.actionPath);
   try {
+    const [repoRoot, resolvedActionPath] = await Promise.all([
+      realpath(params.repoPath),
+      realpath(fullPath),
+    ]);
+    if (!isResolvedPathWithinRepo(repoRoot, resolvedActionPath)) {
+      logger.warn('Ignoring quick action path outside repository', {
+        repoPath: params.repoPath,
+        actionPath: params.actionPath,
+      });
+      return null;
+    }
+
     const content = await readFile(fullPath, 'utf-8');
     const fallbackId =
       params.actionPath.split('/').pop()?.replace(/\.md$/i, '') ?? params.actionPath;
@@ -355,8 +348,8 @@ function sortResolvedActions(
     if (a.action.pinned !== b.action.pinned) {
       return a.action.pinned ? -1 : 1;
     }
-    const aOrder = configuredOrder.get(a.action.id);
-    const bOrder = configuredOrder.get(b.action.id);
+    const aOrder = configuredOrder.get(makeActionKey(a.action.surface, a.action.id));
+    const bOrder = configuredOrder.get(makeActionKey(b.action.surface, b.action.id));
     if (aOrder !== undefined && bOrder !== undefined && aOrder !== bOrder) {
       return aOrder - bOrder;
     }
@@ -403,7 +396,6 @@ async function applyConfiguredEntry(params: {
     logger.warn('Skipping quick action entry without id/path', { repoPath });
     return;
   }
-  configuredOrder.set(id, index);
 
   if (entry.enabled === false) {
     deleteActionsById(actionMap, id, entry.surface);
@@ -460,6 +452,7 @@ async function applyConfiguredEntry(params: {
     return;
   }
 
+  configuredOrder.set(makeActionKey(resolvedSurface, id), index);
   deleteActionsById(actionMap, id, entry.surface);
   actionMap.set(makeActionKey(resolvedSurface, id), resolvedAction);
 }

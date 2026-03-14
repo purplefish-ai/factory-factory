@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -216,5 +216,147 @@ Summarize what should be fixed before merge.`,
       'Failed to load repo quick action markdown',
       expect.anything()
     );
+  });
+
+  it('rejects repo quick action paths that escape the repository through symlinks', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'quick-actions-symlink-repo-'));
+    const externalDir = mkdtempSync(join(tmpdir(), 'quick-actions-symlink-external-'));
+    cleanupDirs.push(repoDir, externalDir);
+
+    mkdirSync(join(repoDir, '.factory-factory/actions'), { recursive: true });
+    writeFileSync(
+      join(externalDir, 'escape.md'),
+      `---
+name: Escape
+description: Outside repo
+---
+This should never be loaded.`,
+      'utf8'
+    );
+    symlinkSync(
+      join(externalDir, 'escape.md'),
+      join(repoDir, '.factory-factory/actions/escape.md')
+    );
+    writeFileSync(
+      join(repoDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          quickActions: {
+            includeDefaults: false,
+            actions: [
+              {
+                id: 'escape',
+                path: '.factory-factory/actions/escape.md',
+                surface: 'chatBar',
+              },
+            ],
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    const actions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'chatBar',
+    });
+
+    expect(actions).toEqual([]);
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Ignoring quick action path outside repository',
+      expect.objectContaining({
+        repoPath: repoDir,
+        actionPath: '.factory-factory/actions/escape.md',
+      })
+    );
+  });
+
+  it('keeps configured ordering separate for identical ids on different surfaces', async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), 'quick-actions-ordering-'));
+    cleanupDirs.push(repoDir);
+
+    mkdirSync(join(repoDir, '.factory-factory/actions'), { recursive: true });
+    writeFileSync(
+      join(repoDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          quickActions: {
+            includeDefaults: false,
+            actions: [
+              {
+                id: 'shared',
+                path: '.factory-factory/actions/shared-session.md',
+                surface: 'sessionBar',
+              },
+              {
+                id: 'review',
+                path: '.factory-factory/actions/review.md',
+                surface: 'sessionBar',
+              },
+              {
+                id: 'shared',
+                path: '.factory-factory/actions/shared-chat.md',
+                surface: 'chatBar',
+              },
+              {
+                id: 'brief-help',
+                path: '.factory-factory/actions/brief-help.md',
+                surface: 'chatBar',
+              },
+            ],
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/shared-session.md'),
+      `---
+name: Shared Session
+---
+Session action.`,
+      'utf8'
+    );
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/review.md'),
+      `---
+name: Review
+---
+Review action.`,
+      'utf8'
+    );
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/shared-chat.md'),
+      `---
+name: Shared Chat
+---
+Chat action.`,
+      'utf8'
+    );
+    writeFileSync(
+      join(repoDir, '.factory-factory/actions/brief-help.md'),
+      `---
+name: Brief Help
+---
+Help action.`,
+      'utf8'
+    );
+
+    const sessionBarActions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'sessionBar',
+    });
+    const chatBarActions = await listQuickActionsForRepo({
+      repoPath: repoDir,
+      surface: 'chatBar',
+    });
+
+    expect(sessionBarActions.map((action) => action.id)).toEqual(['shared', 'review']);
+    expect(chatBarActions.map((action) => action.id)).toEqual(['shared', 'brief-help']);
   });
 });

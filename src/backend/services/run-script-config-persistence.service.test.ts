@@ -97,6 +97,55 @@ describe('runScriptConfigPersistenceService', () => {
     expect(workspaceConfig.quickActions?.actions?.[0]?.id).toBe('review');
   });
 
+  it('preserves repo-only quickActions when syncing scripts back to the project repo', async () => {
+    writeFileSync(
+      join(workspaceDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          scripts: { run: 'pnpm old-dev' },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+    writeFileSync(
+      join(repoDir, 'factory-factory.json'),
+      JSON.stringify(
+        {
+          scripts: { run: 'pnpm old-dev' },
+          quickActions: {
+            includeDefaults: false,
+            actions: [{ id: 'review', path: '.factory-factory/actions/review.md', pinned: true }],
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    await runScriptConfigPersistenceService.writeFactoryConfigAndSyncWorkspace({
+      workspaceId: 'w1',
+      worktreePath: workspaceDir,
+      projectRepoPath: repoDir,
+      config: {
+        scripts: {
+          run: 'pnpm dev',
+        },
+      },
+      persistWorkspaceCommands: mockPersistWorkspaceCommands,
+    });
+
+    const repoConfig = FactoryConfigSchema.parse(
+      JSON.parse(readFileSync(join(repoDir, 'factory-factory.json'), 'utf8'))
+    );
+    expect(repoConfig.scripts.run).toBe('pnpm dev');
+    expect(repoConfig.quickActions?.includeDefaults).toBe(false);
+    expect(repoConfig.quickActions?.actions).toHaveLength(1);
+    expect(repoConfig.quickActions?.actions?.[0]?.id).toBe('review');
+  });
+
   it('syncs command cache after manual factory-factory.json edits', async () => {
     const configPath = join(workspaceDir, 'factory-factory.json');
     writeFileSync(configPath, JSON.stringify({ scripts: { run: 'pnpm dev' } }, null, 2), 'utf8');

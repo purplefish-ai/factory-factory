@@ -325,13 +325,7 @@ export const projectRouter = router({
         throw new Error('Project not found');
       }
 
-      let existingConfig = null;
-      try {
-        existingConfig = await FactoryConfigService.readConfig(project.repoPath);
-      } catch {
-        existingConfig = null;
-      }
-
+      const existingConfig = await FactoryConfigService.readConfig(project.repoPath);
       const mergedConfig = FactoryConfigService.mergeConfig(existingConfig, input.config);
       const configContent = JSON.stringify(mergedConfig, null, 2);
       await writeFile(join(project.repoPath, 'factory-factory.json'), configContent, 'utf-8');

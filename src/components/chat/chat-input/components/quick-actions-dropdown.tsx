@@ -1,12 +1,6 @@
-import {
-  GitPullRequest,
-  type LucideIcon,
-  MessageSquareText,
-  Sparkles,
-  Terminal,
-  Zap,
-} from 'lucide-react';
+import { Zap } from 'lucide-react';
 import { QUICK_ACTIONS } from '@/components/chat/chat-input/constants';
+import { getQuickActionIcon } from '@/components/shared/quick-action-icons';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -30,18 +24,6 @@ interface QuickActionsDropdownProps {
   onOpenChange?: (open: boolean) => void;
   shortcut?: string;
   showShortcut?: boolean;
-}
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  zap: Zap,
-  sparkles: Sparkles,
-  terminal: Terminal,
-  'git-pull-request': GitPullRequest,
-  'message-square-text': MessageSquareText,
-};
-
-function getActionIcon(iconName?: string | null): LucideIcon {
-  return (iconName && ICON_MAP[iconName]) || Zap;
 }
 
 /**
@@ -91,7 +73,7 @@ export function QuickActionsDropdown({
       </TooltipProvider>
       <DropdownMenuContent align="start" className="w-56">
         {resolvedActions.map((action) => {
-          const Icon = getActionIcon(action.icon);
+          const Icon = getQuickActionIcon(action.icon);
           return (
             <DropdownMenuItem
               key={action.id}

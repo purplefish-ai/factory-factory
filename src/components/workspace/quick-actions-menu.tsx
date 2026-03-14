@@ -1,19 +1,8 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import {
-  Camera,
-  Check,
-  Eye,
-  GitBranch,
-  GitPullRequest,
-  type LucideIcon,
-  MessageSquareText,
-  Play,
-  Sparkles,
-  Terminal,
-  Zap,
-} from 'lucide-react';
+import { Zap } from 'lucide-react';
 import type { AppRouter } from '@/client/lib/trpc';
 import { trpc } from '@/client/lib/trpc';
+import { getQuickActionIcon } from '@/components/shared/quick-action-icons';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -35,27 +24,6 @@ interface QuickActionsMenuProps {
   workspaceId?: string;
   onExecuteAgent: (action: QuickAction) => void;
   disabled?: boolean;
-}
-
-// =============================================================================
-// Icon Mapping
-// =============================================================================
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  zap: Zap,
-  sparkles: Sparkles,
-  eye: Eye,
-  play: Play,
-  terminal: Terminal,
-  check: Check,
-  camera: Camera,
-  'git-branch': GitBranch,
-  'git-pull-request': GitPullRequest,
-  'message-square-text': MessageSquareText,
-};
-
-function getActionIcon(iconName?: string | null): LucideIcon {
-  return (iconName && ICON_MAP[iconName]) || Zap;
 }
 
 // =============================================================================
@@ -83,7 +51,7 @@ export function QuickActionsMenu({
   return (
     <div className="flex items-center gap-0.5">
       {pinnedActions.map((action) => {
-        const Icon = getActionIcon(action.icon);
+        const Icon = getQuickActionIcon(action.icon);
         return (
           <Tooltip key={action.id}>
             <TooltipTrigger asChild>
@@ -124,7 +92,7 @@ export function QuickActionsMenu({
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
             {overflowActions.map((action) => {
-              const Icon = getActionIcon(action.icon);
+              const Icon = getQuickActionIcon(action.icon);
               return (
                 <DropdownMenuItem
                   key={action.id}
