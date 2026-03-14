@@ -29,33 +29,155 @@ const LIST_OR_FIND_COMMANDS = new Set(['ls', 'tree', 'find', 'fd']);
 const GREP_LIKE_COMMANDS = new Set(['rg', 'ripgrep', 'grep', 'ag']);
 const SHELL_META_COMMANDS = new Set(['cd', 'export', 'set', 'unset', 'alias', 'unalias', 'source']);
 
-function trimOptionalQuotes(token: string): { text: string; quote: '"' | "'" | null } {
-  if (token.length >= 2 && token.startsWith('"') && token.endsWith('"')) {
-    return { text: token.slice(1, -1), quote: '"' };
+type CommandTokenizeState = {
+  tokens: string[];
+  current: string;
+  quote: '"' | "'" | null;
+  escaped: boolean;
+  hasTokenContent: boolean;
+};
+
+function pushCommandToken(state: CommandTokenizeState): void {
+  if (!state.hasTokenContent) {
+    return;
   }
-  if (token.length >= 2 && token.startsWith("'") && token.endsWith("'")) {
-    return { text: token.slice(1, -1), quote: "'" };
-  }
-  return { text: token, quote: null };
+  state.tokens.push(state.current);
+  state.current = '';
+  state.hasTokenContent = false;
 }
 
-function unescapeCommandToken(token: string, quote: '"' | "'" | null): string {
-  if (quote === "'") {
-    return token.replace(/\\'/g, "'").replace(/\\\\/g, '\\');
+function unescapeSingleQuotedChar(char: string): string {
+  if (char === "'" || char === '\\') {
+    return char;
   }
-  return token.replace(/\\(["'\\\s|&;])/g, '$1');
+  return `\\${char}`;
 }
 
-function sanitizeCommandToken(token: string): string {
-  const trimmed = token.trim();
-  const { text, quote } = trimOptionalQuotes(trimmed);
-  return unescapeCommandToken(text, quote).trim();
+function unescapeGeneralCommandChar(char: string): string {
+  if (
+    char === '"' ||
+    char === "'" ||
+    char === '\\' ||
+    char === '|' ||
+    char === '&' ||
+    char === ';' ||
+    /\s/u.test(char)
+  ) {
+    return char;
+  }
+  return `\\${char}`;
+}
+
+function consumeEscapedTokenChar(state: CommandTokenizeState, char: string): boolean {
+  if (!state.escaped) {
+    return false;
+  }
+  state.current +=
+    state.quote === "'" ? unescapeSingleQuotedChar(char) : unescapeGeneralCommandChar(char);
+  state.escaped = false;
+  state.hasTokenContent = true;
+  return true;
+}
+
+function consumeSingleQuotedTokenChar(state: CommandTokenizeState, char: string): boolean {
+  if (state.quote !== "'") {
+    return false;
+  }
+  if (char === '\\') {
+    state.escaped = true;
+  } else if (char === "'") {
+    state.quote = null;
+  } else {
+    state.current += char;
+  }
+  state.hasTokenContent = true;
+  return true;
+}
+
+function consumeDoubleQuotedTokenChar(state: CommandTokenizeState, char: string): boolean {
+  if (state.quote !== '"') {
+    return false;
+  }
+  if (char === '\\') {
+    state.escaped = true;
+  } else if (char === '"') {
+    state.quote = null;
+  } else {
+    state.current += char;
+  }
+  state.hasTokenContent = true;
+  return true;
+}
+
+function consumeTokenWhitespace(state: CommandTokenizeState, char: string): boolean {
+  if (!/\s/u.test(char)) {
+    return false;
+  }
+  pushCommandToken(state);
+  return true;
+}
+
+function consumeTokenEscapeInitiator(state: CommandTokenizeState, char: string): boolean {
+  if (char !== '\\') {
+    return false;
+  }
+  state.escaped = true;
+  state.hasTokenContent = true;
+  return true;
+}
+
+function consumeTokenQuoteStart(state: CommandTokenizeState, char: string): boolean {
+  if (!(char === '"' || char === "'")) {
+    return false;
+  }
+  state.quote = char;
+  state.hasTokenContent = true;
+  return true;
+}
+
+function consumeUnquotedTokenChar(state: CommandTokenizeState, char: string): void {
+  state.current += char;
+  state.hasTokenContent = true;
 }
 
 function tokenizeCommand(command: string): string[] {
-  return (command.match(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S+/g) ?? [])
-    .map((token) => sanitizeCommandToken(token))
-    .filter((token) => token.length > 0);
+  const state: CommandTokenizeState = {
+    tokens: [],
+    current: '',
+    quote: null,
+    escaped: false,
+    hasTokenContent: false,
+  };
+
+  for (const char of command) {
+    if (consumeEscapedTokenChar(state, char)) {
+      continue;
+    }
+    if (consumeSingleQuotedTokenChar(state, char)) {
+      continue;
+    }
+    if (consumeDoubleQuotedTokenChar(state, char)) {
+      continue;
+    }
+    if (consumeTokenWhitespace(state, char)) {
+      continue;
+    }
+    if (consumeTokenEscapeInitiator(state, char)) {
+      continue;
+    }
+    if (consumeTokenQuoteStart(state, char)) {
+      continue;
+    }
+    consumeUnquotedTokenChar(state, char);
+  }
+
+  if (state.escaped) {
+    state.current += '\\';
+    state.hasTokenContent = true;
+  }
+
+  pushCommandToken(state);
+  return state.tokens;
 }
 
 function commandName(token: string): string {
