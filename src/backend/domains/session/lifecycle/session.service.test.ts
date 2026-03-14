@@ -102,6 +102,13 @@ function getAcpProcessorState() {
   ).acpEventProcessor;
 }
 
+function mockCreatedAcpClient(acpHandle: AcpProcessHandle): void {
+  vi.mocked(acpRuntimeManager.getOrCreateClient).mockImplementation(() => {
+    vi.mocked(acpRuntimeManager.getClient).mockReturnValue(acpHandle);
+    return Promise.resolve(acpHandle);
+  });
+}
+
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -176,7 +183,7 @@ describe('SessionService', () => {
       injectedBranchRename: true,
     });
 
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionService.startSession('session-1', { initialPrompt: 'Hello' });
@@ -244,7 +251,7 @@ describe('SessionService', () => {
       injectedBranchRename: false,
     });
 
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
 
     const result = await sessionService.getOrCreateSessionClient('session-1');
 
@@ -305,7 +312,7 @@ describe('SessionService', () => {
       systemPrompt: undefined,
       injectedBranchRename: false,
     });
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
 
     const injectUserMessageSpy = vi.spyOn(sessionDomainService, 'injectCommittedUserMessage');
     await sessionService.getOrCreateSessionClient('session-1');
@@ -363,7 +370,7 @@ describe('SessionService', () => {
       systemPrompt: undefined,
       injectedBranchRename: false,
     });
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
 
     const injectUserMessageSpy = vi.spyOn(sessionDomainService, 'injectCommittedUserMessage');
     await sessionService.getOrCreateSessionClient('session-1');
@@ -426,7 +433,7 @@ describe('SessionService', () => {
       systemPrompt: undefined,
       injectedBranchRename: false,
     });
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
 
     const historyHydratedSpy = vi
       .spyOn(sessionDomainService, 'isHistoryHydrated')
@@ -502,7 +509,7 @@ describe('SessionService', () => {
       systemPrompt: undefined,
       injectedBranchRename: false,
     });
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
 
     const injectUserMessageSpy = vi.spyOn(sessionDomainService, 'injectCommittedUserMessage');
     await sessionService.getOrCreateSessionClient('session-1');
@@ -642,7 +649,7 @@ describe('SessionService', () => {
       systemPrompt: undefined,
       injectedBranchRename: false,
     });
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
 
     const result = await sessionService.getOrCreateSessionClientFromRecord(session);
 
@@ -1087,7 +1094,7 @@ describe('SessionService', () => {
       injectedBranchRename: false,
     });
 
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionService.startSession('session-1');
@@ -1149,7 +1156,7 @@ describe('SessionService', () => {
       injectedBranchRename: false,
     });
 
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionService.startSession('session-2');
@@ -1226,7 +1233,7 @@ describe('SessionService', () => {
       systemPrompt: undefined,
       injectedBranchRename: false,
     });
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionService.startSession('session-2');
@@ -1285,7 +1292,7 @@ describe('SessionService', () => {
       injectedBranchRename: false,
     });
 
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
 
     await sessionService.getOrCreateSessionClient('session-1');
 
@@ -1468,7 +1475,7 @@ describe('SessionService', () => {
       systemPrompt: undefined,
       injectedBranchRename: false,
     });
-    vi.mocked(acpRuntimeManager.getOrCreateClient).mockResolvedValue(acpHandle);
+    mockCreatedAcpClient(acpHandle);
     vi.mocked(acpRuntimeManager.sendPrompt).mockResolvedValue({ stopReason: 'end_turn' });
 
     await sessionService.startSession('session-1', { initialPrompt: 'go' });
