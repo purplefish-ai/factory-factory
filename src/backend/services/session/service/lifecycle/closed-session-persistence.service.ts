@@ -128,7 +128,7 @@ class ClosedSessionPersistenceService {
         workspaceId,
         workflow,
       });
-      // Don't throw - we don't want to block session deletion if persistence fails
+      throw error;
     }
   }
 }
