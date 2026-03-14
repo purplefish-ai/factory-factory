@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   createTerminalSession: vi.fn(),
   clearTerminalPid: vi.fn(),
   createTerminal: vi.fn(),
+  destroyTerminal: vi.fn(),
   getTerminalsForWorkspace: vi.fn(),
   onExit: vi.fn(),
   startProvisioning: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock('@/backend/services/session', () => ({
 vi.mock('@/backend/services/terminal', () => ({
   terminalService: {
     createTerminal: mocks.createTerminal,
+    destroyTerminal: mocks.destroyTerminal,
     getTerminalsForWorkspace: mocks.getTerminalsForWorkspace,
     onExit: mocks.onExit,
   },

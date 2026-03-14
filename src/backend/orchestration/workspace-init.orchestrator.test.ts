@@ -354,9 +354,38 @@ describe('initializeWorkspaceWorktree', () => {
         workspaceId: WORKSPACE_ID,
         workingDir: '/worktrees/workspace-ws-1',
       });
+      expect(terminalService.onExit).toHaveBeenCalledWith('term-default', expect.any(Function));
       expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
-      expect(terminalService.onExit).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markReady).toHaveBeenCalledWith(WORKSPACE_ID);
+    });
+
+    it('clears the persisted terminal pid when the terminal exits during session persistence', async () => {
+      setupHappyPath();
+      const createTerminalSessionDeferred = createDeferredPromise<unknown>();
+      let exitListener: ((exitCode: number) => void) | undefined;
+
+      vi.mocked(sessionDataService.createTerminalSession).mockImplementation(
+        () => createTerminalSessionDeferred.promise as never
+      );
+      vi.mocked(terminalService.onExit).mockImplementation((_, listener) => {
+        exitListener = listener;
+        return vi.fn();
+      });
+
+      const initializationPromise = initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      await vi.waitFor(() => {
+        expect(exitListener).toBeDefined();
+      });
+      expect(exitListener).toBeDefined();
+
+      exitListener?.(0);
+      expect(sessionDataService.clearTerminalPid).not.toHaveBeenCalled();
+
+      createTerminalSessionDeferred.resolve(unsafeCoerce({}));
+      await initializationPromise;
+
+      expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith('term-default');
     });
   });
 
@@ -1069,6 +1098,24 @@ describe('initializeWorkspaceWorktree', () => {
       await initializationPromise;
 
       expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
+    });
+
+    it('does not destroy an existing terminal after init failure', async () => {
+      setupHappyPath();
+      vi.mocked(terminalService.getTerminalsForWorkspace).mockReturnValue([
+        unsafeCoerce({ id: 'term-existing' }),
+      ]);
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+      vi.mocked(startupScriptService.runStartupScript).mockRejectedValue(new Error('script boom'));
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(terminalService.createTerminal).not.toHaveBeenCalled();
+      expect(terminalService.destroyTerminal).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
   });
