@@ -132,6 +132,7 @@ async function handleWorkspaceInitFailure(
   if (autoCreatedTerminalId) {
     try {
       terminalService.destroyTerminal(workspaceId, autoCreatedTerminalId);
+      await sessionDataService.clearTerminalPid(autoCreatedTerminalId);
     } catch (destroyError) {
       logger.warn('Failed to destroy default terminal after init failure', {
         workspaceId,

@@ -1117,6 +1117,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(terminalService.createTerminal).not.toHaveBeenCalled();
       expect(terminalService.destroyTerminal).not.toHaveBeenCalled();
+      expect(sessionDataService.clearTerminalPid).not.toHaveBeenCalled();
       expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
   });

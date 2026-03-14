@@ -305,6 +305,8 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     });
     expect(mocks.clearTerminalPid).toHaveBeenCalledWith('term-default');
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
+    expect(mocks.destroyTerminal).toHaveBeenCalledWith('workspace-1', 'term-default');
+    expect(mocks.clearTerminalPid).toHaveBeenCalledWith('term-default');
     expect(mocks.markFailed).toHaveBeenCalled();
   });
 
