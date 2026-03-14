@@ -19,6 +19,34 @@ const STALE_MESSAGE_TYPES = new Set(['stop', 'interrupt']);
 
 export type WebSocketQueuePolicy = 'replay' | 'drop';
 
+function isStaleReplayMessage(message: unknown): boolean {
+  const messageType =
+    typeof message === 'object' && message !== null && 'type' in message ? message.type : undefined;
+  return typeof messageType === 'string' && STALE_MESSAGE_TYPES.has(messageType);
+}
+
+function sendMessageBatch(
+  ws: WebSocket,
+  messages: unknown[],
+  startIndex: number,
+  endIndex: number
+): number {
+  let index = startIndex;
+  for (; index < endIndex; index += 1) {
+    const msg = messages[index];
+    if (msg === undefined) {
+      continue;
+    }
+
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch {
+      return index;
+    }
+  }
+  return index;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -103,6 +131,28 @@ export function useWebSocketTransport(
     onDisconnectedRef.current = onDisconnected;
   }, [onMessage, onConnected, onDisconnected]);
 
+  // Drain replay queue in FIFO order, preserving unsent messages if send fails.
+  const flushQueuedMessages = useCallback((ws: WebSocket) => {
+    const validMessages = messageQueueRef.current.filter((msg) => !isStaleReplayMessage(msg));
+    messageQueueRef.current = [];
+
+    let index = 0;
+    while (index < validMessages.length) {
+      if (ws.readyState !== WebSocket.OPEN) {
+        messageQueueRef.current = validMessages.slice(index);
+        return;
+      }
+
+      const batchEnd = Math.min(index + MAX_FLUSH_BATCH_SIZE, validMessages.length);
+      const nextIndex = sendMessageBatch(ws, validMessages, index, batchEnd);
+      if (nextIndex < batchEnd) {
+        messageQueueRef.current = validMessages.slice(nextIndex);
+        return;
+      }
+      index = nextIndex;
+    }
+  }, []);
+
   // Connect to WebSocket
   const connect = useCallback(() => {
     // Don't connect if no URL provided
@@ -143,31 +193,7 @@ export function useWebSocketTransport(
         return;
       }
 
-      // Flush queued messages, filtering out stale time-sensitive ones
-      const queue = messageQueueRef.current;
-      messageQueueRef.current = [];
-
-      // Filter out stale messages
-      const validMessages = queue.filter((msg) => {
-        const msgType = (msg as { type?: string }).type;
-        if (msgType && STALE_MESSAGE_TYPES.has(msgType)) {
-          return false;
-        }
-        return true;
-      });
-
-      // Send queued messages in batches
-      const toSend = validMessages.slice(0, MAX_FLUSH_BATCH_SIZE);
-      const remaining = validMessages.slice(MAX_FLUSH_BATCH_SIZE);
-
-      for (const msg of toSend) {
-        ws.send(JSON.stringify(msg));
-      }
-
-      // Re-queue any remaining messages
-      if (remaining.length > 0) {
-        messageQueueRef.current = remaining;
-      }
+      flushQueuedMessages(ws);
 
       onConnectedRef.current?.();
     };
@@ -209,7 +235,7 @@ export function useWebSocketTransport(
     ws.onerror = () => {
       // WebSocket errors are handled by onclose
     };
-  }, [queuePolicy, url]);
+  }, [flushQueuedMessages, queuePolicy, url]);
 
   // Attempt immediate recovery when the app returns to the foreground or network.
   const recoverConnection = useCallback(() => {
@@ -300,9 +326,17 @@ export function useWebSocketTransport(
   // Send a message (JSON stringified), queuing if disconnected
   const send = useCallback(
     (message: unknown): boolean => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify(message));
-        return true;
+      const ws = wsRef.current;
+      const socketIsOpen = ws?.readyState === WebSocket.OPEN;
+      const hasBacklog = messageQueueRef.current.length > 0;
+
+      if (socketIsOpen && !hasBacklog && ws) {
+        try {
+          ws.send(JSON.stringify(message));
+          return true;
+        } catch {
+          // Fall through to replay queue path.
+        }
       }
 
       if (queuePolicy !== 'replay') {
@@ -313,10 +347,15 @@ export function useWebSocketTransport(
       if (messageQueueRef.current.length < MAX_QUEUE_SIZE) {
         messageQueueRef.current.push(message);
       }
+
+      if (socketIsOpen && ws) {
+        flushQueuedMessages(ws);
+      }
+
       // Returns false to indicate message was queued, not sent immediately
       return false;
     },
-    [queuePolicy]
+    [flushQueuedMessages, queuePolicy]
   );
 
   // Manual reconnect
