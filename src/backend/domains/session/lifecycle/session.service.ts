@@ -202,13 +202,15 @@ export class SessionService {
         typeof content === 'string'
           ? [{ type: 'text', text: content }]
           : this.toContentBlocks(content, acpClient.supportsImages());
-      return this.sendAcpMessage(sessionId, prompt).catch((error) => {
-        logger.error('ACP prompt failed', {
-          sessionId,
-          error: toErrorMessage(error),
+      return this.sendAcpMessage(sessionId, prompt)
+        .then(() => undefined)
+        .catch((error) => {
+          logger.error('ACP prompt failed', {
+            sessionId,
+            error: toErrorMessage(error),
+          });
+          throw error;
         });
-        throw error;
-      });
     }
 
     const error = new Error(`No ACP client found for sendSessionMessage: ${sessionId}`);
