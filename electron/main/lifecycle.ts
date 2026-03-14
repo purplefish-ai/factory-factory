@@ -16,6 +16,7 @@ interface BrowserWindowLike {
   webContents: {
     send(channel: string, focused: boolean): void;
   };
+  destroy(): void;
   isDestroyed(): boolean;
   show(): void;
   focus(): void;
@@ -114,6 +115,64 @@ export function createElectronLifecycle({
     return stopServerPromise;
   };
 
+  const registerWindowHandlers = (window: BrowserWindowLike): void => {
+    window.on('focus', () => {
+      window.webContents.send('window-focus-changed', true);
+    });
+
+    window.on('blur', () => {
+      window.webContents.send('window-focus-changed', false);
+    });
+
+    window.on('closed', () => {
+      if (mainWindow === window) {
+        mainWindow = null;
+      }
+    });
+  };
+
+  const createAndLoadWindow = async (url: string): Promise<BrowserWindowLike> => {
+    const window = new browserWindow({
+      width: 1400,
+      height: 900,
+      webPreferences: {
+        preload: preloadPath,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    mainWindow = window;
+
+    registerWindowHandlers(window);
+    await window.loadURL(url);
+    logger.log('[electron] Window created and URL loaded');
+
+    return window;
+  };
+
+  const handleCreateWindowFailure = (
+    window: BrowserWindowLike | null,
+    error: unknown
+  ): BrowserWindowLike | null => {
+    const failedWindow = window ?? mainWindow;
+
+    if (failedWindow !== null && !failedWindow.isDestroyed()) {
+      failedWindow.destroy();
+    }
+    if (mainWindow === failedWindow) {
+      mainWindow = null;
+    }
+
+    logger.error('[electron] Failed to create window:', error);
+    dialog.showErrorBox(
+      'Startup Error',
+      `Failed to start application:\n\n${error instanceof Error ? error.stack : String(error)}`
+    );
+    app.quit();
+
+    return null;
+  };
+
   const createWindow = (): Promise<BrowserWindowLike | null> => {
     const existingWindow = resolveMainWindow();
     if (existingWindow) {
@@ -127,6 +186,8 @@ export function createElectronLifecycle({
     }
 
     createWindowPromise = (async () => {
+      let window: BrowserWindowLike | null = null;
+
       try {
         logger.log('[electron] Starting createWindow...');
         logger.log('[electron] process.resourcesPath:', process.resourcesPath);
@@ -139,42 +200,10 @@ export function createElectronLifecycle({
         const url = await serverManager.start();
         logger.log('[electron] Server started, URL:', url);
 
-        const window = new browserWindow({
-          width: 1400,
-          height: 900,
-          webPreferences: {
-            preload: preloadPath,
-            contextIsolation: true,
-            nodeIntegration: false,
-          },
-        });
-        mainWindow = window;
-
-        window.on('focus', () => {
-          window.webContents.send('window-focus-changed', true);
-        });
-
-        window.on('blur', () => {
-          window.webContents.send('window-focus-changed', false);
-        });
-
-        window.on('closed', () => {
-          if (mainWindow === window) {
-            mainWindow = null;
-          }
-        });
-
-        await window.loadURL(url);
-        logger.log('[electron] Window created and URL loaded');
+        window = await createAndLoadWindow(url);
         return window;
       } catch (error) {
-        logger.error('[electron] Failed to create window:', error);
-        dialog.showErrorBox(
-          'Startup Error',
-          `Failed to start application:\n\n${error instanceof Error ? error.stack : String(error)}`
-        );
-        app.quit();
-        return null;
+        return handleCreateWindowFailure(window, error);
       } finally {
         createWindowPromise = null;
       }

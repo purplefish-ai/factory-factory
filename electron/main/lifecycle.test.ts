@@ -28,6 +28,7 @@ class FakeBrowserWindow implements ElectronLifecycleBrowserWindow {
   };
 
   readonly loadURL = vi.fn((url: string) => FakeBrowserWindow.loadUrlImpl(url));
+  readonly destroy = vi.fn(() => this.close());
   readonly show = vi.fn();
   readonly focus = vi.fn();
 
@@ -162,8 +163,19 @@ describe('electron lifecycle coordination', () => {
   it('handles loadURL failures in createWindow and quits', async () => {
     const loadError = new Error('load failed');
 
-    const { lifecycle, app, dialog } = createTestLifecycle();
-    FakeBrowserWindow.loadUrlImpl = () => Promise.reject(loadError);
+    const serverManager = {
+      start: vi
+        .fn()
+        .mockResolvedValueOnce('http://localhost:3001')
+        .mockResolvedValueOnce('http://localhost:3002'),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const { lifecycle, app, dialog } = createTestLifecycle({ serverManager });
+    FakeBrowserWindow.loadUrlImpl = vi
+      .fn()
+      .mockRejectedValueOnce(loadError)
+      .mockResolvedValueOnce(undefined);
+
     const result = await lifecycle.createWindow();
 
     expect(result).toBeNull();
@@ -172,5 +184,12 @@ describe('electron lifecycle coordination', () => {
       expect.stringContaining('load failed')
     );
     expect(app.quit).toHaveBeenCalledTimes(1);
+    expect(FakeBrowserWindow.instances[0]?.destroy).toHaveBeenCalledTimes(1);
+
+    const retryWindow = await lifecycle.createWindow();
+
+    expect(retryWindow).toBe(FakeBrowserWindow.instances[1]);
+    expect(serverManager.start).toHaveBeenCalledTimes(2);
+    expect(FakeBrowserWindow.instances).toHaveLength(2);
   });
 });
