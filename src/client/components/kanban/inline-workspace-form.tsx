@@ -225,7 +225,7 @@ export function InlineWorkspaceForm({
       onCreated(workspace.id);
     },
     onError: (error, _input, context) => {
-      if (context?.previousWorkspaces) {
+      if (context) {
         utils.workspace.listWithKanbanState.setData({ projectId }, context.previousWorkspaces);
       }
       toast.error(`Failed to create workspace: ${error.message}`);
