@@ -27,9 +27,14 @@ const REVIEW_STATE_VALUES = [
   'DISMISSED',
 ] as const;
 
+function normalizeEnumValue(value: string): string {
+  return value.toUpperCase();
+}
+
 function normalizeCheckStatus(status: string): GitHubStatusCheck['status'] {
-  return (CHECK_STATUS_VALUES as readonly string[]).includes(status)
-    ? (status as GitHubStatusCheck['status'])
+  const normalizedStatus = normalizeEnumValue(status);
+  return (CHECK_STATUS_VALUES as readonly string[]).includes(normalizedStatus)
+    ? (normalizedStatus as GitHubStatusCheck['status'])
     : 'PENDING';
 }
 
@@ -39,20 +44,22 @@ function normalizeCheckConclusion(
   if (conclusion === null || conclusion === undefined) {
     return null;
   }
-  return (CHECK_CONCLUSION_VALUES as readonly string[]).includes(conclusion)
-    ? (conclusion as NonNullable<GitHubStatusCheck['conclusion']>)
+  const normalizedConclusion = normalizeEnumValue(conclusion);
+  return (CHECK_CONCLUSION_VALUES as readonly string[]).includes(normalizedConclusion)
+    ? (normalizedConclusion as NonNullable<GitHubStatusCheck['conclusion']>)
     : null;
 }
 
 function normalizeStatusContextStatus(state: string): GitHubStatusCheck['status'] {
-  if (state === 'PENDING' || state === 'EXPECTED') {
+  const normalizedState = normalizeEnumValue(state);
+  if (normalizedState === 'PENDING' || normalizedState === 'EXPECTED') {
     return 'PENDING';
   }
   return 'COMPLETED';
 }
 
 function normalizeStatusContextConclusion(state: string): GitHubStatusCheck['conclusion'] {
-  switch (state) {
+  switch (normalizeEnumValue(state)) {
     case 'SUCCESS':
       return 'SUCCESS';
     case 'FAILURE':
@@ -74,8 +81,9 @@ function normalizeStatusContextConclusion(state: string): GitHubStatusCheck['con
 }
 
 function normalizeReviewState(state: string): GitHubReview['state'] {
-  return (REVIEW_STATE_VALUES as readonly string[]).includes(state)
-    ? (state as GitHubReview['state'])
+  const normalizedState = normalizeEnumValue(state);
+  return (REVIEW_STATE_VALUES as readonly string[]).includes(normalizedState)
+    ? (normalizedState as GitHubReview['state'])
     : 'PENDING';
 }
 

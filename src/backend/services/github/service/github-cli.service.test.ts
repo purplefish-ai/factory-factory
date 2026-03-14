@@ -326,14 +326,23 @@ describe('GitHubCLIService', () => {
       expect(result).toBe('SUCCESS');
     });
 
-    it('should treat NEUTRAL, CANCELLED, and SKIPPED as success', () => {
+    it('should treat SKIPPED as success when paired with successful checks', () => {
       const result = githubCLIService.computeCIStatus([
         { status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { status: 'COMPLETED', conclusion: 'NEUTRAL' },
         { status: 'COMPLETED', conclusion: 'SKIPPED' },
       ]);
 
       expect(result).toBe('SUCCESS');
+    });
+
+    it('should not treat CANCELLED or NEUTRAL checks as success', () => {
+      const result = githubCLIService.computeCIStatus([
+        { status: 'COMPLETED', conclusion: 'SUCCESS' },
+        { status: 'COMPLETED', conclusion: 'NEUTRAL' },
+        { status: 'COMPLETED', conclusion: 'CANCELLED' },
+      ]);
+
+      expect(result).toBe('UNKNOWN');
     });
   });
 
@@ -550,7 +559,7 @@ describe('GitHubCLIService', () => {
     });
 
     describe('getPRFullDetails with malformed data', () => {
-      it('should accept StatusContext entries in statusCheckRollup', async () => {
+      it('normalizes status check casing in statusCheckRollup entries', async () => {
         const fullPRData = {
           number: 123,
           title: 'Test PR',
@@ -565,13 +574,19 @@ describe('GitHubCLIService', () => {
             {
               __typename: 'StatusContext',
               context: 'ci/legacy-status',
-              state: 'PENDING',
+              state: 'pending',
               targetUrl: 'https://example.com/checks/legacy-status',
             },
             {
               __typename: 'StatusContext',
               context: 'ci/legacy-required',
-              state: 'ERROR',
+              state: 'error',
+            },
+            {
+              __typename: 'CheckRun',
+              name: 'ci/modern-check',
+              status: 'completed',
+              conclusion: 'cancelled',
             },
           ],
           reviews: [],
@@ -605,6 +620,13 @@ describe('GitHubCLIService', () => {
             name: 'ci/legacy-required',
             status: 'COMPLETED',
             conclusion: 'FAILURE',
+            detailsUrl: undefined,
+          },
+          {
+            __typename: 'CheckRun',
+            name: 'ci/modern-check',
+            status: 'COMPLETED',
+            conclusion: 'CANCELLED',
             detailsUrl: undefined,
           },
         ]);
@@ -695,6 +717,11 @@ describe('GitHubCLIService', () => {
       expect(result).toBe('PENDING');
     });
 
+    it('should return PENDING for lowercase in_progress status', () => {
+      const result = githubCLIService.computeCIStatus([{ status: 'in_progress' }]);
+      expect(result).toBe('PENDING');
+    });
+
     it('should return PENDING for EXPECTED legacy state', () => {
       const result = githubCLIService.computeCIStatus([{ state: 'EXPECTED' }]);
       expect(result).toBe('PENDING');
@@ -709,12 +736,19 @@ describe('GitHubCLIService', () => {
       expect(result).toBe('FAILURE');
     });
 
-    it('should return SUCCESS when all checks are CANCELLED', () => {
+    it('should return UNKNOWN when all checks are CANCELLED', () => {
       const result = githubCLIService.computeCIStatus([
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
       ]);
-      expect(result).toBe('SUCCESS');
+      expect(result).toBe('UNKNOWN');
+    });
+
+    it('should return FAILURE for lowercase completed + failure values', () => {
+      const result = githubCLIService.computeCIStatus([
+        { status: 'completed', conclusion: 'failure' },
+      ]);
+      expect(result).toBe('FAILURE');
     });
 
     it('should return PENDING when status is QUEUED even if conclusion is set', () => {
@@ -738,7 +772,7 @@ describe('GitHubCLIService', () => {
       const result = githubCLIService.computeCIStatus([
         { status: 'COMPLETED', conclusion: 'STALE' },
       ]);
-      // STALE is not SUCCESS/NEUTRAL/CANCELLED/SKIPPED, nor FAILURE/ERROR/ACTION_REQUIRED
+      // STALE is not SUCCESS/SKIPPED, nor FAILURE/ERROR/ACTION_REQUIRED
       // So allSuccess check will fail, returning UNKNOWN
       expect(result).toBe('UNKNOWN');
     });
