@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { execCommand } from './shell';
+import { LIB_LIMITS } from './constants';
+import { escapeForOsascript, execCommand } from './shell';
 
 describe('execCommand', () => {
   it('preserves UTF-8 output when stdout bytes are split across chunks', async () => {
@@ -36,5 +37,23 @@ describe('execCommand', () => {
     const result = await execCommand(process.execPath, ['-e', script]);
 
     expect(result.code).not.toBe(0);
+  });
+});
+
+describe('escapeForOsascript', () => {
+  it('does not leave a dangling backslash when truncation boundary ends with a quote', () => {
+    const input = `${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}"`;
+
+    const escaped = escapeForOsascript(input);
+
+    expect(escaped).toBe(`${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}\\"`);
+  });
+
+  it('does not leave a dangling backslash when truncation boundary ends with a backslash', () => {
+    const input = `${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}\\`;
+
+    const escaped = escapeForOsascript(input);
+
+    expect(escaped).toBe(`${'a'.repeat(LIB_LIMITS.osascriptEscapedMaxChars - 1)}\\\\`);
   });
 });
