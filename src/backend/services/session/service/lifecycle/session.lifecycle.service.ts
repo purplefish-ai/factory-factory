@@ -701,34 +701,27 @@ export class SessionLifecycleService {
       return;
     }
 
-    try {
-      const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
-      const workspace = await workspaceAccessor.findById(session.workspaceId);
-      if (!workspace?.worktreePath) {
-        logger.warn('Cannot persist ratchet transcript: no worktree path', {
-          sessionId,
-          workspaceId: session.workspaceId,
-        });
-        return;
-      }
-
-      await closedSessionPersistenceService.persistClosedSession({
-        sessionId,
-        workspaceId: session.workspaceId,
-        worktreePath: workspace.worktreePath,
-        name: session.name,
-        workflow: session.workflow,
-        provider: session.provider,
-        model: session.model,
-        startedAt: session.createdAt,
-        messages: transcript,
-      });
-    } catch (error) {
-      logger.error('Failed to persist ratchet transcript', error as Error, {
+    const transcript = this.sessionDomainService.getTranscriptSnapshot(sessionId);
+    const workspace = await workspaceAccessor.findById(session.workspaceId);
+    if (!workspace?.worktreePath) {
+      logger.warn('Cannot persist ratchet transcript: no worktree path', {
         sessionId,
         workspaceId: session.workspaceId,
       });
+      return;
     }
+
+    await closedSessionPersistenceService.persistClosedSession({
+      sessionId,
+      workspaceId: session.workspaceId,
+      worktreePath: workspace.worktreePath,
+      name: session.name,
+      workflow: session.workflow,
+      provider: session.provider,
+      model: session.model,
+      startedAt: session.createdAt,
+      messages: transcript,
+    });
   }
 
   private async getOrCreateAcpSessionClient(
