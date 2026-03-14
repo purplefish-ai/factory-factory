@@ -62,6 +62,43 @@ describe('createQueueMessageHandler', () => {
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });
 
+  it('rejects queue messages with invalid attachments', async () => {
+    const ws = { send: vi.fn() };
+    const tryDispatchNextMessage = vi.fn();
+    const handler = createQueueMessageHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/work',
+      message: {
+        type: 'queue_message',
+        id: 'msg-1',
+        text: 'hello',
+        attachments: [
+          {
+            id: 'img-1',
+            name: 'broken.png',
+            type: 'image/png',
+            size: 10,
+            data: 'invalid base64 with spaces!',
+          },
+        ],
+      } as never,
+    });
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'error', message: 'Attachment "broken.png" has invalid image data' })
+    );
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+    expect(mocks.emitDelta).not.toHaveBeenCalled();
+    expect(tryDispatchNextMessage).not.toHaveBeenCalled();
+  });
+
   it('emits rejected state when enqueue fails', async () => {
     mocks.enqueue.mockReturnValue({ error: 'Queue full' });
     const ws = { send: vi.fn() };
