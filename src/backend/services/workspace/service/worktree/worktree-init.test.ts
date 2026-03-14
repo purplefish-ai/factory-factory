@@ -22,6 +22,11 @@ const mocks = vi.hoisted(() => ({
   enqueue: vi.fn(),
   emitDelta: vi.fn(),
   tryDispatchNextMessage: vi.fn(),
+  createTerminalSession: vi.fn(),
+  clearTerminalPid: vi.fn(),
+  createTerminal: vi.fn(),
+  getTerminalsForWorkspace: vi.fn(),
+  onExit: vi.fn(),
   startProvisioning: vi.fn(),
   markReady: vi.fn(),
   markFailed: vi.fn(),
@@ -60,6 +65,18 @@ vi.mock('@/backend/services/session', () => ({
   },
   chatMessageHandlerService: {
     tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+  },
+  sessionDataService: {
+    createTerminalSession: mocks.createTerminalSession,
+    clearTerminalPid: mocks.clearTerminalPid,
+  },
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalService: {
+    createTerminal: mocks.createTerminal,
+    getTerminalsForWorkspace: mocks.getTerminalsForWorkspace,
+    onExit: mocks.onExit,
   },
 }));
 
@@ -144,6 +161,14 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     mocks.stopWorkspaceSessions.mockResolvedValue(undefined);
     mocks.enqueue.mockReturnValue({ position: 0 });
     mocks.tryDispatchNextMessage.mockResolvedValue(undefined);
+    mocks.createTerminalSession.mockResolvedValue({});
+    mocks.clearTerminalPid.mockResolvedValue(undefined);
+    mocks.createTerminal.mockResolvedValue({
+      terminalId: 'term-default',
+      pid: 12_345,
+    });
+    mocks.getTerminalsForWorkspace.mockReturnValue([]);
+    mocks.onExit.mockImplementation(() => vi.fn());
     mocks.getInitMode.mockResolvedValue(undefined);
     mocks.clearInitMode.mockResolvedValue(undefined);
   });

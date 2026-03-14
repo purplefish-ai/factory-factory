@@ -22,6 +22,10 @@ vi.mock('@/backend/services/session', () => ({
   chatMessageHandlerService: {
     tryDispatchNextMessage: vi.fn(),
   },
+  sessionDataService: {
+    createTerminalSession: vi.fn(),
+    clearTerminalPid: vi.fn(),
+  },
   sessionDomainService: {
     enqueue: vi.fn(),
     emitDelta: vi.fn(),
@@ -32,6 +36,14 @@ vi.mock('@/backend/services/session', () => ({
   },
   agentSessionAccessor: {
     findByWorkspaceId: vi.fn(),
+  },
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalService: {
+    createTerminal: vi.fn(),
+    getTerminalsForWorkspace: vi.fn(),
+    onExit: vi.fn(),
   },
 }));
 
@@ -96,9 +108,11 @@ import { runScriptConfigPersistenceService } from '@/backend/services/run-script
 import {
   agentSessionAccessor,
   chatMessageHandlerService,
+  sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
+import { terminalService } from '@/backend/services/terminal';
 import {
   workspaceAccessor,
   workspaceStateMachine,
@@ -182,6 +196,14 @@ function setupHappyPath() {
   vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
   vi.mocked(sessionService.startSession).mockResolvedValue(undefined as never);
   vi.mocked(chatMessageHandlerService.tryDispatchNextMessage).mockResolvedValue(undefined as never);
+  vi.mocked(sessionDataService.createTerminalSession).mockResolvedValue(unsafeCoerce({}));
+  vi.mocked(sessionDataService.clearTerminalPid).mockResolvedValue(undefined);
+  vi.mocked(terminalService.createTerminal).mockResolvedValue({
+    terminalId: 'term-default',
+    pid: 12_345,
+  });
+  vi.mocked(terminalService.getTerminalsForWorkspace).mockReturnValue([]);
+  vi.mocked(terminalService.onExit).mockImplementation(() => vi.fn());
   return workspace;
 }
 
@@ -288,6 +310,34 @@ describe('initializeWorkspaceWorktree', () => {
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
       expect(worktreeLifecycleService.clearInitMode).toHaveBeenCalledWith(WORKSPACE_ID);
+    });
+
+    it('creates a default terminal session after worktree setup', async () => {
+      setupHappyPath();
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(terminalService.createTerminal).toHaveBeenCalledWith({
+        workspaceId: WORKSPACE_ID,
+        workingDir: '/worktrees/workspace-ws-1',
+      });
+      expect(sessionDataService.createTerminalSession).toHaveBeenCalledWith({
+        workspaceId: WORKSPACE_ID,
+        name: 'term-default',
+        pid: 12_345,
+      });
+    });
+
+    it('does not create a new default terminal when one already exists', async () => {
+      setupHappyPath();
+      vi.mocked(terminalService.getTerminalsForWorkspace).mockReturnValue([
+        unsafeCoerce({ id: 'term-existing' }),
+      ]);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(terminalService.createTerminal).not.toHaveBeenCalled();
+      expect(sessionDataService.createTerminalSession).not.toHaveBeenCalled();
     });
   });
 

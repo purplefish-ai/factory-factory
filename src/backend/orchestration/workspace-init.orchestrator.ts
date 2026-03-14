@@ -10,9 +10,11 @@ import { runScriptConfigPersistenceService } from '@/backend/services/run-script
 import {
   agentSessionAccessor,
   chatMessageHandlerService,
+  sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
+import { terminalService } from '@/backend/services/terminal';
 import {
   workspaceAccessor,
   workspaceStateMachine,
@@ -789,6 +791,57 @@ async function retryQueuedDispatchAfterWorkspaceReady(
   }
 }
 
+async function startDefaultTerminal(
+  workspaceId: string,
+  worktreePath: string
+): Promise<string | null> {
+  try {
+    const existingTerminals = terminalService.getTerminalsForWorkspace(workspaceId);
+    const existingTerminal = existingTerminals[0];
+    if (existingTerminal) {
+      return existingTerminal.id;
+    }
+
+    const { terminalId, pid } = await terminalService.createTerminal({
+      workspaceId,
+      workingDir: worktreePath,
+    });
+
+    await sessionDataService.createTerminalSession({
+      workspaceId,
+      name: terminalId,
+      pid,
+    });
+
+    let unsubscribeExit: (() => void) | null = null;
+    unsubscribeExit = terminalService.onExit(terminalId, () => {
+      unsubscribeExit?.();
+      unsubscribeExit = null;
+      sessionDataService.clearTerminalPid(terminalId).catch((error) => {
+        logger.warn('Failed to clear terminal PID after default terminal exit', {
+          workspaceId,
+          terminalId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    });
+
+    logger.debug('Auto-created default terminal for workspace', {
+      workspaceId,
+      terminalId,
+      pid,
+    });
+
+    return terminalId;
+  } catch (error) {
+    logger.warn('Failed to auto-create default terminal for workspace', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
 /**
  * Initialize a workspace worktree: creates the git worktree, runs setup/startup
  * scripts, and starts the default Claude session.
@@ -874,6 +927,8 @@ export async function initializeWorkspaceWorktree(
           runScriptCleanupCommand: commands.runScriptCleanupCommand,
         }),
     });
+
+    await startDefaultTerminal(workspaceId, worktreeInfo.worktreePath);
 
     // Mark Linear issue as started (fire-and-forget, non-fatal)
     void markLinearIssueStartedIfApplicable(workspaceId);
