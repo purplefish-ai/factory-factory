@@ -124,6 +124,35 @@ describe('codex-zod', () => {
     expect(parsed.data[0]?.isDefault).toBe(true);
   });
 
+  it('parses model/list responses when reasoning-effort fields are omitted', () => {
+    const parsed = modelListResponseSchema.parse({
+      data: [
+        {
+          id: 'legacy-local',
+          displayName: 'Legacy Local',
+          description: 'No reasoning support',
+          inputModalities: ['text'],
+          isDefault: false,
+        },
+        {
+          id: 'gpt-5-lite',
+          displayName: 'GPT-5 Lite',
+          description: 'Supports reasoning without metadata',
+          supportedReasoningEfforts: [
+            { reasoningEffort: 'low' },
+            { reasoningEffort: 'medium', description: null },
+          ],
+          isDefault: true,
+        },
+      ],
+      nextCursor: null,
+    });
+
+    expect(parsed.data[0]?.defaultReasoningEffort).toBeUndefined();
+    expect(parsed.data[1]?.supportedReasoningEfforts?.[0]?.description).toBeUndefined();
+    expect(parsed.data[1]?.supportedReasoningEfforts?.[1]?.description).toBeNull();
+  });
+
   it('parses thread/read responses used for session replay', () => {
     const parsed = threadReadResponseSchema.parse({
       thread: {

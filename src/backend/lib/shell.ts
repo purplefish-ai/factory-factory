@@ -59,13 +59,13 @@ export function escapeShellArg(arg: string): string {
  * Escape a string for AppleScript osascript commands.
  * Handles multiple escaping layers: shell -> AppleScript.
  */
-function escapeForOsascript(str: string): string {
+export function escapeForOsascript(str: string): string {
   return str
+    .slice(0, LIB_LIMITS.osascriptEscapedMaxChars) // Truncate before escaping to avoid dangling escape sequences
     .replace(/[\r\n]+/g, ' ') // Normalize newlines
     .replace(/\\/g, '\\\\') // Escape backslashes for AppleScript
     .replace(/"/g, '\\"') // Escape double quotes for AppleScript
-    .replace(/'/g, "'\\''") // Escape single quotes for shell
-    .slice(0, LIB_LIMITS.osascriptEscapedMaxChars); // Truncate to prevent buffer overflow
+    .replace(/'/g, "'\\''"); // Escape single quotes for shell
 }
 
 // ============================================================================

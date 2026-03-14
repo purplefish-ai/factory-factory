@@ -321,12 +321,12 @@ export const modelListResponseSchema = z
               z
                 .object({
                   reasoningEffort: z.string(),
-                  description: z.string(),
+                  description: z.string().nullable().optional(),
                 })
                 .passthrough()
             )
             .optional(),
-          defaultReasoningEffort: z.string(),
+          defaultReasoningEffort: z.string().nullable().optional(),
           inputModalities: z.array(z.string()).optional(),
           isDefault: z.boolean().optional(),
         })
