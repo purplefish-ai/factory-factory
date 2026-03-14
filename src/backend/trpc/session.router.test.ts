@@ -26,7 +26,7 @@ const mockSessionProviderResolverService = vi.hoisted(() => ({
 const mockListQuickActions = vi.hoisted(() => vi.fn());
 const mockGetQuickAction = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionDataService: mockSessionDataService,
   sessionDomainService: mockSessionDomainService,
   sessionProviderResolverService: mockSessionProviderResolverService,

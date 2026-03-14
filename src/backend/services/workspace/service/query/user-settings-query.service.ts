@@ -1,0 +1,33 @@
+import type { UserSettings } from '@prisma-gen/client';
+import { userSettingsAccessor } from '@/backend/services/settings';
+
+class UserSettingsQueryService {
+  get(): Promise<UserSettings> {
+    return userSettingsAccessor.get();
+  }
+
+  update(data: {
+    preferredIde?: string;
+    customIdeCommand?: string | null;
+    playSoundOnComplete?: boolean;
+    notificationSoundPath?: string | null;
+    ratchetEnabled?: boolean;
+    defaultSessionProvider?: 'CLAUDE' | 'CODEX';
+    defaultClaudeModel?: string;
+    defaultCodexModel?: string;
+    defaultWorkspacePermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
+    ratchetPermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
+  }): Promise<UserSettings> {
+    return userSettingsAccessor.update(data);
+  }
+
+  getWorkspaceOrder(projectId: string): Promise<string[]> {
+    return userSettingsAccessor.getWorkspaceOrder(projectId);
+  }
+
+  updateWorkspaceOrder(projectId: string, workspaceIds: string[]): Promise<UserSettings> {
+    return userSettingsAccessor.updateWorkspaceOrder(projectId, workspaceIds);
+  }
+}
+
+export const userSettingsQueryService = new UserSettingsQueryService();

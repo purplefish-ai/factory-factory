@@ -1,7 +1,7 @@
-import { startupScriptService } from '@/backend/domains/run-script';
-import { sessionService } from '@/backend/domains/session';
 import type { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
+import { startupScriptService } from '@/backend/services/run-script';
+import { sessionService } from '@/backend/services/session';
 import type { WorkspaceWithProject } from './types';
 
 const logger = createLogger('workspace-init-script-pipeline');

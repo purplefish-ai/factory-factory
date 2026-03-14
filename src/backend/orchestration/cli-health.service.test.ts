@@ -17,7 +17,7 @@ vi.mock('node:util', () => ({
   promisify: (fn: unknown) => fn,
 }));
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
     checkHealth: (...args: unknown[]) => mockGithubCheckHealth(...args),
   },

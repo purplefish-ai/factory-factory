@@ -1,20 +1,23 @@
-import { githubCLIService } from '@/backend/domains/github';
-import { linearClientService, linearStateSyncService } from '@/backend/domains/linear';
-import {
-  chatMessageHandlerService,
-  sessionDomainService,
-  sessionService,
-} from '@/backend/domains/session';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
 import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
 import { toError } from '@/backend/lib/error-utils';
-import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
+import { githubCLIService } from '@/backend/services/github';
+import { linearClientService, linearStateSyncService } from '@/backend/services/linear';
 import { createLogger } from '@/backend/services/logger.service';
 import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
+import {
+  agentSessionAccessor,
+  chatMessageHandlerService,
+  sessionDomainService,
+  sessionService,
+} from '@/backend/services/session';
+import {
+  workspaceAccessor,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/services/workspace';
 import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { AttachmentSchema } from '@/shared/websocket';

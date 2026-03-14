@@ -4,21 +4,21 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 // --- Module mocks (before imports) ---
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
     getAuthenticatedUsername: vi.fn(),
     getIssue: vi.fn(),
   },
 }));
 
-vi.mock('@/backend/domains/run-script', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: {
     hasStartupScript: vi.fn(),
     runStartupScript: vi.fn(),
   },
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   chatMessageHandlerService: {
     tryDispatchNextMessage: vi.fn(),
   },
@@ -30,32 +30,21 @@ vi.mock('@/backend/domains/session', () => ({
     startSession: vi.fn(),
     stopWorkspaceSessions: vi.fn(),
   },
-}));
-
-// Mock the deep paths that the source file imports from (vitest intercepts these).
-// The test imports from the barrel below to satisfy dependency-cruiser.
-vi.mock('@/backend/domains/workspace/lifecycle/state-machine.service', () => ({
-  workspaceStateMachine: {
-    startProvisioning: vi.fn(),
-    markFailed: vi.fn(),
-    markReady: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/domains/workspace/worktree/worktree-lifecycle.service', () => ({
-  worktreeLifecycleService: {
-    getInitMode: vi.fn(),
-    clearInitMode: vi.fn(),
-  },
-}));
-
-vi.mock('@/backend/resource_accessors/agent-session.accessor', () => ({
   agentSessionAccessor: {
     findByWorkspaceId: vi.fn(),
   },
 }));
 
-vi.mock('@/backend/resource_accessors/workspace.accessor', () => ({
+vi.mock('@/backend/services/workspace', () => ({
+  workspaceStateMachine: {
+    startProvisioning: vi.fn(),
+    markFailed: vi.fn(),
+    markReady: vi.fn(),
+  },
+  worktreeLifecycleService: {
+    getInitMode: vi.fn(),
+    clearInitMode: vi.fn(),
+  },
   workspaceAccessor: {
     findById: vi.fn(),
     findByIdWithProject: vi.fn(),
@@ -99,19 +88,22 @@ vi.mock('@/shared/acp-protocol', () => ({
 
 // --- Imports (after mocks) ---
 
-import { githubCLIService } from '@/backend/domains/github';
-import { startupScriptService } from '@/backend/domains/run-script';
+import { FactoryConfigService } from '@/backend/services/factory-config.service';
+import { gitOpsService } from '@/backend/services/git-ops.service';
+import { githubCLIService } from '@/backend/services/github';
+import { startupScriptService } from '@/backend/services/run-script';
+import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
 import {
+  agentSessionAccessor,
   chatMessageHandlerService,
   sessionDomainService,
   sessionService,
-} from '@/backend/domains/session';
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
-import { agentSessionAccessor } from '@/backend/resource_accessors/agent-session.accessor';
-import { workspaceAccessor } from '@/backend/resource_accessors/workspace.accessor';
-import { FactoryConfigService } from '@/backend/services/factory-config.service';
-import { gitOpsService } from '@/backend/services/git-ops.service';
-import { runScriptConfigPersistenceService } from '@/backend/services/run-script-config-persistence.service';
+} from '@/backend/services/session';
+import {
+  workspaceAccessor,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/services/workspace';
 import {
   clearWorkspaceInitOrchestratorStateForTests,
   initializeWorkspaceWorktree,

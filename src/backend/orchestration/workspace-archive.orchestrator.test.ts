@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { WorkspaceWithProject } from './types';
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceStateMachine: {
     isValidTransition: vi.fn(),
     startArchiving: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/domains/workspace';
+import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
 import type { ArchiveWorkspaceDependencies } from './workspace-archive.orchestrator';
 import { archiveWorkspace as archiveWorkspaceWithServices } from './workspace-archive.orchestrator';
 

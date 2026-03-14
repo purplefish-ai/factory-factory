@@ -6,7 +6,7 @@ const mockGetWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockUpdateWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockExecCommand = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   userSettingsQueryService: {
     get: (...args: unknown[]) => mockGet(...args),
     update: (...args: unknown[]) => mockUpdate(...args),

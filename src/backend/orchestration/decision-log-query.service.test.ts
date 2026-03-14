@@ -7,7 +7,7 @@ const mockList = vi.hoisted(() => vi.fn());
 const mockCreateAutomatic = vi.hoisted(() => vi.fn());
 const mockCreateManual = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/resource_accessors/decision-log.accessor', () => ({
+vi.mock('@/backend/services/decision-log', () => ({
   decisionLogAccessor: {
     findByAgentId: (...args: unknown[]) => mockFindByAgentId(...args),
     findRecent: (...args: unknown[]) => mockFindRecent(...args),

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Module mocks (inline vi.fn() - no top-level variable references) ---
 
-vi.mock('@/backend/domains/ratchet', () => ({
+vi.mock('@/backend/services/ratchet', () => ({
   ratchetService: { configure: vi.fn(), clearRatchetActiveSessionIfMatching: vi.fn() },
   fixerSessionService: {
     configure: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock('@/backend/domains/ratchet', () => ({
   reconciliationService: { configure: vi.fn() },
 }));
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
   workspaceActivityService: {
@@ -24,7 +24,7 @@ vi.mock('@/backend/domains/workspace', () => ({
   getWorkspaceInitPolicy: vi.fn(),
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionService: {
     configure: vi.fn(),
     setPromptTurnCompleteHandler: vi.fn(),
@@ -40,7 +40,7 @@ vi.mock('@/backend/domains/session', () => ({
   chatMessageHandlerService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
 }));
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
     extractPRInfo: vi.fn(),
     getPRFullDetails: vi.fn(),
@@ -54,7 +54,7 @@ vi.mock('@/backend/domains/github', () => ({
   prSnapshotService: { configure: vi.fn(), refreshWorkspace: vi.fn() },
 }));
 
-vi.mock('@/backend/domains/run-script', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: { configure: vi.fn() },
 }));
 
@@ -64,26 +64,26 @@ vi.mock('./workspace-init.orchestrator', () => ({
 
 // --- Import mocked modules to get references ---
 
-import { githubCLIService, prSnapshotService } from '@/backend/domains/github';
+import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import {
   fixerSessionService,
   ratchetService,
   reconciliationService,
-} from '@/backend/domains/ratchet';
-import { startupScriptService } from '@/backend/domains/run-script';
+} from '@/backend/services/ratchet';
+import { startupScriptService } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   chatMessageHandlerService,
   sessionDomainService,
   sessionService,
-} from '@/backend/domains/session';
+} from '@/backend/services/session';
 import {
   getWorkspaceInitPolicy,
   kanbanStateService,
   workspaceActivityService,
   workspaceQueryService,
   workspaceStateMachine,
-} from '@/backend/domains/workspace';
+} from '@/backend/services/workspace';
 import { configureDomainBridges } from './domain-bridges.orchestrator';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 

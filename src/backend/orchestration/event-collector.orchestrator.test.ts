@@ -25,14 +25,14 @@ function createMockStore(): MockStore {
 
 // --- Module mocks ---
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn() },
   workspaceActivityService: { on: vi.fn() },
   computePendingRequestType: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock('@/backend/domains/github', () => ({
+vi.mock('@/backend/services/github', () => ({
   PR_SNAPSHOT_UPDATED: 'pr_snapshot_updated',
   prSnapshotService: {
     on: vi.fn(),
@@ -40,18 +40,18 @@ vi.mock('@/backend/domains/github', () => ({
   },
 }));
 
-vi.mock('@/backend/domains/ratchet', () => ({
+vi.mock('@/backend/services/ratchet', () => ({
   RATCHET_STATE_CHANGED: 'ratchet_state_changed',
   RATCHET_TOGGLED: 'ratchet_toggled',
   ratchetService: { on: vi.fn() },
 }));
 
-vi.mock('@/backend/domains/run-script', () => ({
+vi.mock('@/backend/services/run-script', () => ({
   RUN_SCRIPT_STATUS_CHANGED: 'run_script_status_changed',
   runScriptStateMachine: { on: vi.fn() },
 }));
 
-vi.mock('@/backend/domains/session', () => ({
+vi.mock('@/backend/services/session', () => ({
   sessionDataService: {
     findAgentSessionById: vi.fn().mockResolvedValue({ id: 's-1', workspaceId: 'ws-1' }),
     findAgentSessionsByWorkspaceId: vi.fn().mockResolvedValue([]),
@@ -91,19 +91,19 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { prSnapshotService } from '@/backend/domains/github';
-import { ratchetService } from '@/backend/domains/ratchet';
-import { runScriptStateMachine } from '@/backend/domains/run-script';
+import { prSnapshotService } from '@/backend/services/github';
+import { ratchetService } from '@/backend/services/ratchet';
+import { runScriptStateMachine } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   sessionDataService,
   sessionDomainService,
-} from '@/backend/domains/session';
+} from '@/backend/services/session';
 import {
   computePendingRequestType,
   workspaceActivityService,
   workspaceStateMachine,
-} from '@/backend/domains/workspace';
+} from '@/backend/services/workspace';
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
 
 import {

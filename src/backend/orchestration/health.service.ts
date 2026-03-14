@@ -1,4 +1,4 @@
-import { healthAccessor } from '@/backend/resource_accessors/health.accessor';
+import { healthAccessor } from '@/backend/services/settings';
 
 class HealthService {
   checkDatabaseConnection(): Promise<void> {

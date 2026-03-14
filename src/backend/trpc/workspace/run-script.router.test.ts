@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockWriteFactoryConfigAndSyncWorkspace = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/domains/workspace', () => ({
+vi.mock('@/backend/services/workspace', () => ({
   workspaceDataService: {
     findByIdWithProject: (...args: unknown[]) => mockFindByIdWithProject(...args),
   },
