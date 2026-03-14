@@ -79,12 +79,12 @@ export function WorkspaceSwitcherDropdown({
         <span className="flex-1 min-w-0 truncate text-foreground font-semibold md:overflow-visible md:text-clip">
           {currentWorkspaceLabel}
         </span>
-        <span
-          className="ml-1 hidden shrink-0 text-[10px] font-normal text-muted-foreground tabular-nums lg:inline"
+        <div
+          className="ml-1 hidden shrink-0 text-[10px] font-normal text-muted-foreground tabular-nums lg:block"
           aria-hidden
         >
           {grouped.working.length} wk · {grouped.waiting.length} wait
-        </span>
+        </div>
         <span className="ml-0.5 inline-flex shrink-0 items-center text-current md:ml-2" aria-hidden>
           <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-70 md:h-3.5 md:w-3.5" />
         </span>
