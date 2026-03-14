@@ -203,12 +203,12 @@ export async function loadModelCatalog(params: { codex: CodexClient }): Promise<
         id: model.id,
         displayName: model.displayName,
         description: model.description,
-        defaultReasoningEffort: model.defaultReasoningEffort,
+        defaultReasoningEffort: model.defaultReasoningEffort ?? null,
         supportedReasoningEfforts: (model.supportedReasoningEfforts ?? [])
           .filter((entry) => isNonEmptyString(entry.reasoningEffort))
           .map((entry) => ({
             reasoningEffort: entry.reasoningEffort,
-            description: entry.description,
+            description: entry.description ?? undefined,
           })),
         inputModalities: model.inputModalities ?? [],
         isDefault: model.isDefault ?? false,

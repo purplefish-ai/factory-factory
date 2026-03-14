@@ -175,6 +175,52 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(codex.request).toHaveBeenNthCalledWith(5, 'model/list', { cursor: 'cursor-2' });
   });
 
+  it('initializes when model/list omits reasoning-effort metadata', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    codex.request.mockResolvedValueOnce({});
+    codex.request.mockResolvedValueOnce({
+      requirements: {
+        allowedApprovalPolicies: DEFAULT_ALLOWED_APPROVAL_POLICIES,
+        allowedSandboxModes: DEFAULT_ALLOWED_SANDBOX_MODES,
+      },
+    });
+    codex.request.mockResolvedValueOnce({
+      data: DEFAULT_COLLABORATION_MODES,
+      nextCursor: null,
+    });
+    codex.request.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'legacy-local',
+          displayName: 'Legacy Local',
+          description: 'No reasoning support',
+          isDefault: true,
+        },
+        {
+          id: 'gpt-5-lite',
+          displayName: 'GPT-5 Lite',
+          description: 'Reasoning descriptions are optional',
+          supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
+          inputModalities: ['text'],
+          isDefault: false,
+        },
+      ],
+      nextCursor: null,
+    });
+
+    await expect(
+      adapter.initialize({
+        protocolVersion: 1,
+        clientCapabilities: {},
+        clientInfo: { name: 'test-client', version: '0.0.1' },
+      })
+    ).resolves.toBeDefined();
+    expect(codex.request).toHaveBeenCalledWith('model/list', {});
+  });
+
   it('assigns session ids as sess_<threadId> on newSession', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
