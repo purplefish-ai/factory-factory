@@ -25,6 +25,29 @@ function isStaleReplayMessage(message: unknown): boolean {
   return typeof messageType === 'string' && STALE_MESSAGE_TYPES.has(messageType);
 }
 
+function serializeMessage(message: unknown): string | null {
+  try {
+    const serialized = JSON.stringify(message);
+    return typeof serialized === 'string' ? serialized : null;
+  } catch {
+    return null;
+  }
+}
+
+function trySendMessage(ws: WebSocket, message: unknown): boolean {
+  const serialized = serializeMessage(message);
+  if (serialized === null) {
+    return false;
+  }
+
+  try {
+    ws.send(serialized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sendMessageBatch(
   ws: WebSocket,
   messages: unknown[],
@@ -38,8 +61,13 @@ function sendMessageBatch(
       continue;
     }
 
+    const serialized = serializeMessage(msg);
+    if (serialized === null) {
+      continue;
+    }
+
     try {
-      ws.send(JSON.stringify(msg));
+      ws.send(serialized);
     } catch {
       return index;
     }
@@ -132,8 +160,10 @@ export function useWebSocketTransport(
   }, [onMessage, onConnected, onDisconnected]);
 
   // Drain replay queue in FIFO order, preserving unsent messages if send fails.
-  const flushQueuedMessages = useCallback((ws: WebSocket) => {
-    const validMessages = messageQueueRef.current.filter((msg) => !isStaleReplayMessage(msg));
+  const flushQueuedMessages = useCallback((ws: WebSocket, dropStaleMessages: boolean) => {
+    const validMessages = dropStaleMessages
+      ? messageQueueRef.current.filter((msg) => !isStaleReplayMessage(msg))
+      : messageQueueRef.current;
     messageQueueRef.current = [];
 
     let index = 0;
@@ -193,7 +223,7 @@ export function useWebSocketTransport(
         return;
       }
 
-      flushQueuedMessages(ws);
+      flushQueuedMessages(ws, true);
 
       onConnectedRef.current?.();
     };
@@ -330,13 +360,8 @@ export function useWebSocketTransport(
       const socketIsOpen = ws?.readyState === WebSocket.OPEN;
       const hasBacklog = messageQueueRef.current.length > 0;
 
-      if (socketIsOpen && !hasBacklog && ws) {
-        try {
-          ws.send(JSON.stringify(message));
-          return true;
-        } catch {
-          // Fall through to replay queue path.
-        }
+      if (socketIsOpen && !hasBacklog && ws && trySendMessage(ws, message)) {
+        return true;
       }
 
       if (queuePolicy !== 'replay') {
@@ -349,7 +374,7 @@ export function useWebSocketTransport(
       }
 
       if (socketIsOpen && ws) {
-        flushQueuedMessages(ws);
+        flushQueuedMessages(ws, false);
       }
 
       // Returns false to indicate message was queued, not sent immediately

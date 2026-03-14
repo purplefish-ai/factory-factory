@@ -25,6 +25,7 @@ class MockWebSocket {
   onmessage: ((event: unknown) => void) | null = null;
   onerror: ((event: unknown) => void) | null = null;
   sentMessages: string[] = [];
+  failSendCount = 0;
 
   constructor(url: string) {
     this.url = url;
@@ -32,6 +33,10 @@ class MockWebSocket {
   }
 
   send(data: string) {
+    if (this.failSendCount > 0) {
+      this.failSendCount -= 1;
+      throw new Error('Mock send failure');
+    }
     if (this.readyState !== WS_OPEN) {
       throw new Error('WebSocket is not open');
     }
@@ -46,6 +51,10 @@ class MockWebSocket {
   simulateOpen() {
     this.readyState = WS_OPEN;
     this.onopen?.({ type: 'open' });
+  }
+
+  failNextSends(count: number) {
+    this.failSendCount = count;
   }
 }
 
@@ -189,6 +198,57 @@ describe('useWebSocketTransport replay queue', () => {
       ...Array.from({ length: 15 }, (_, index) => index + 1),
       'after-reconnect',
     ]);
+
+    harness.cleanup();
+  });
+
+  it('skips non-serializable queued messages without blocking later replay', async () => {
+    const harness = createHarness();
+    await flushEffects();
+
+    const transport = harness.transportRef.current;
+    if (!transport) {
+      throw new Error('Transport was not initialized');
+    }
+    const socket = getLastSocket();
+
+    const circular: { id: string; self?: unknown } = { id: 'circular' };
+    circular.self = circular;
+
+    expect(transport.send({ id: 1 })).toBe(false);
+    expect(transport.send(circular)).toBe(false);
+    expect(transport.send({ id: 2 })).toBe(false);
+
+    flushSync(() => {
+      socket.simulateOpen();
+    });
+
+    expect(extractMessageIds(socket)).toEqual([1, 2]);
+
+    harness.cleanup();
+  });
+
+  it('does not drop fresh stop messages during live backlog flushes', async () => {
+    const harness = createHarness();
+    await flushEffects();
+
+    const transport = harness.transportRef.current;
+    if (!transport) {
+      throw new Error('Transport was not initialized');
+    }
+    const socket = getLastSocket();
+
+    flushSync(() => {
+      socket.simulateOpen();
+    });
+
+    socket.failNextSends(2);
+
+    expect(transport.send({ id: 'queued-first' })).toBe(false);
+    expect(socket.sentMessages).toEqual([]);
+
+    expect(transport.send({ type: 'stop', id: 'fresh-stop' })).toBe(false);
+    expect(extractMessageIds(socket)).toEqual(['queued-first', 'fresh-stop']);
 
     harness.cleanup();
   });
