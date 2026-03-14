@@ -19,7 +19,7 @@ export type CodexModelEntry = {
   id: string;
   displayName: string;
   description: string;
-  defaultReasoningEffort: string;
+  defaultReasoningEffort: string | null;
   supportedReasoningEfforts: Array<{
     reasoningEffort: string;
     description?: string;

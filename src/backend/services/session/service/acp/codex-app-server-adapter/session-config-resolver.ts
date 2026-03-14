@@ -196,11 +196,14 @@ function createReasoningEffortConfigOption(
   }
 
   const supportedValues = [...supportedByValue.keys()];
+  const defaultReasoningEffort = isNonEmptyString(modelEntry.defaultReasoningEffort)
+    ? modelEntry.defaultReasoningEffort
+    : null;
   const resolvedCurrent =
     currentReasoningEffort && supportedByValue.has(currentReasoningEffort)
       ? currentReasoningEffort
-      : supportedByValue.has(modelEntry.defaultReasoningEffort)
-        ? modelEntry.defaultReasoningEffort
+      : defaultReasoningEffort && supportedByValue.has(defaultReasoningEffort)
+        ? defaultReasoningEffort
         : supportedValues[0];
 
   if (!resolvedCurrent) {
@@ -319,7 +322,10 @@ export function resolveReasoningEffortForModel(
   ) {
     return candidateReasoningEffort;
   }
-  if (supportedValues.includes(modelEntry.defaultReasoningEffort)) {
+  if (
+    isNonEmptyString(modelEntry.defaultReasoningEffort) &&
+    supportedValues.includes(modelEntry.defaultReasoningEffort)
+  ) {
     return modelEntry.defaultReasoningEffort;
   }
   return supportedValues[0] ?? null;

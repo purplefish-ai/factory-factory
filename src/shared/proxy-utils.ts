@@ -214,7 +214,7 @@ export function authenticateRequest(params: {
     authenticated: hasValidSession,
     viaToken: false,
     invalidToken: false,
-    sanitizedPath: rawUrl,
+    sanitizedPath,
   };
 }
 
