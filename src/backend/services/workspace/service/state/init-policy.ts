@@ -84,7 +84,7 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
 }
 
 function deriveWorkspaceInitPhase(input: WorkspaceInitPolicyInput): WorkspaceInitPhase {
-  const hasWorktree = Boolean(input.worktreePath);
+  const hasWorktree = hasUsableWorktreePath(input.worktreePath);
   const hasWarning = Boolean(input.initErrorMessage);
 
   if (input.status === 'ARCHIVING' || input.status === 'ARCHIVED') {
@@ -116,9 +116,13 @@ function deriveWorkspaceInitPhase(input: WorkspaceInitPolicyInput): WorkspaceIni
 }
 
 function getBlockedFailedMessage(input: WorkspaceInitPolicyInput): string {
-  if (!input.worktreePath && input.status === 'READY') {
+  if (!hasUsableWorktreePath(input.worktreePath) && input.status === 'READY') {
     return 'Workspace is marked ready, but its worktree is missing.';
   }
 
   return input.initErrorMessage || 'Workspace setup failed while creating the worktree.';
+}
+
+function hasUsableWorktreePath(worktreePath: string | null | undefined): boolean {
+  return typeof worktreePath === 'string' && worktreePath.trim().length > 0;
 }

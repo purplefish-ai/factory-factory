@@ -88,6 +88,10 @@ function normalizeUnknownError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+function hasUsableWorkingDir(workingDir: string | null | undefined): boolean {
+  return typeof workingDir === 'string' && workingDir.trim().length > 0;
+}
+
 function createAcpSpawnError(commandLabel: string, error: unknown): Error {
   const normalized = normalizeUnknownError(error);
   return new Error(`Failed to spawn ACP adapter "${commandLabel}": ${normalized.message}`);
@@ -601,7 +605,7 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers,
     context: { workspaceId: string; workingDir: string }
   ): Promise<AcpProcessHandle> {
-    if (!options.workingDir) {
+    if (!hasUsableWorkingDir(options.workingDir)) {
       throw new Error('ACP working directory is required before spawning adapter process');
     }
 

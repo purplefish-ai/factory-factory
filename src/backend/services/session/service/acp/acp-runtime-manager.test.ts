@@ -213,6 +213,19 @@ describe('AcpRuntimeManager', () => {
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
+    it('rejects before spawn when workingDir is whitespace only', async () => {
+      await expect(
+        manager.getOrCreateClient(
+          'session-whitespace-cwd',
+          { ...defaultOptions(), workingDir: '   ' },
+          defaultHandlers(),
+          defaultContext()
+        )
+      ).rejects.toThrow('ACP working directory is required before spawning adapter process');
+
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
     it('spawns subprocess with detached:false, wires streams, initializes, creates session, returns handle', async () => {
       setupSuccessfulSpawn();
 

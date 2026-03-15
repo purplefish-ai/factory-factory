@@ -26,6 +26,18 @@ describe('getWorkspaceInitPolicy', () => {
     expect(policy.banner?.message).toBe('Running init script...');
   });
 
+  it('treats whitespace worktree as missing for PROVISIONING workspace', () => {
+    const policy = getWorkspaceInitPolicy({
+      status: 'PROVISIONING',
+      worktreePath: '   ',
+      initErrorMessage: null,
+    });
+
+    expect(policy.phase).toBe('CREATING_WORKTREE');
+    expect(policy.dispatchPolicy).toBe('blocked');
+    expect(policy.banner?.message).toBe('Creating worktree...');
+  });
+
   it('returns manual_resume policy for startup script failures after worktree creation', () => {
     const policy = getWorkspaceInitPolicy({
       status: 'FAILED',
@@ -57,6 +69,18 @@ describe('getWorkspaceInitPolicy', () => {
     const policy = getWorkspaceInitPolicy({
       status: 'READY',
       worktreePath: null,
+      initErrorMessage: 'init warning',
+    });
+
+    expect(policy.phase).toBe('BLOCKED_FAILED');
+    expect(policy.dispatchPolicy).toBe('blocked');
+    expect(policy.banner?.message).toBe('Workspace is marked ready, but its worktree is missing.');
+  });
+
+  it('blocks dispatch when workspace is READY with whitespace worktree path', () => {
+    const policy = getWorkspaceInitPolicy({
+      status: 'READY',
+      worktreePath: '   ',
       initErrorMessage: 'init warning',
     });
 
