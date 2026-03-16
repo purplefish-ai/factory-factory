@@ -526,7 +526,7 @@ class GitHubCLIService {
       const { stdout } = await execFileAsync(
         'gh',
         ['api', `repos/${repo}/pulls/${prNumber}/comments`, '--paginate'],
-        { timeout: GH_TIMEOUT_MS.default }
+        { timeout: GH_TIMEOUT_MS.default, maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments }
       );
 
       if (!stdout.trim()) {
