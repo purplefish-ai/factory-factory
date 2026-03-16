@@ -179,6 +179,21 @@ function ProjectFactoryConfigCard({
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
+function resolveSelectedProjectSlug(
+  projects: Array<{ slug: string }> | undefined
+): string | undefined {
+  if (!projects || projects.length === 0) {
+    return undefined;
+  }
+
+  const storedSlug = localStorage.getItem(SELECTED_PROJECT_KEY);
+  if (storedSlug && projects.some((project) => project.slug === storedSlug)) {
+    return storedSlug;
+  }
+
+  return projects[0]?.slug;
+}
+
 function ProjectSettingsSection({
   projects,
 }: {
@@ -968,7 +983,7 @@ export default function AdminDashboardPage() {
     },
   });
 
-  const projectSlug = projects?.[0]?.slug;
+  const projectSlug = resolveSelectedProjectSlug(projects);
 
   // Show full loading only when stats are loading (first load)
   if (isLoadingStats) {

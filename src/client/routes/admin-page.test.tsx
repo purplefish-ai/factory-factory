@@ -51,7 +51,8 @@ vi.mock('@/components/factory-config-scripts', () => ({
 
 vi.mock('@/components/workspace', () => ({
   RatchetWrenchIcon: () => createElement('span', null, 'ratchet'),
-  WorkspacesBackLink: () => createElement('a', { href: '/projects' }, 'Back'),
+  WorkspacesBackLink: ({ projectSlug }: { projectSlug: string }) =>
+    createElement('a', { href: `/projects/${projectSlug}/workspaces` }, 'Back'),
 }));
 
 vi.mock('@/components/workspace/dev-server-setup-panel', () => ({
@@ -91,6 +92,13 @@ vi.mock('@/client/lib/trpc', () => {
       id: 'project-1',
       slug: 'alpha',
       name: 'Alpha',
+      issueProvider: 'github',
+      issueTrackerConfig: null,
+    },
+    {
+      id: 'project-2',
+      slug: 'beta',
+      name: 'Beta',
       issueProvider: 'github',
       issueTrackerConfig: null,
     },
@@ -218,6 +226,22 @@ describe('AdminDashboardPage settings tabs', () => {
     const activePanelAfter = container.querySelector('[role="tabpanel"][data-state="active"]');
     expect(activePanelAfter?.textContent).toContain('Factory Configuration');
     expect(activePanelAfter?.textContent).not.toContain('Notification Settings');
+
+    root.unmount();
+  });
+
+  it('renders workspaces back link for the selected project slug from storage', () => {
+    localStorage.setItem('factoryfactory_selected_project_slug', 'beta');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    flushSync(() => {
+      root.render(createElement(AdminDashboardPage));
+    });
+
+    const backLink = container.querySelector('a[href="/projects/beta/workspaces"]');
+    expect(backLink).not.toBeNull();
 
     root.unmount();
   });
