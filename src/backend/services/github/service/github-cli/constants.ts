@@ -9,4 +9,5 @@ export const GH_TIMEOUT_MS = Object.freeze({
 
 export const GH_MAX_BUFFER_BYTES = Object.freeze({
   diff: 10 * 1024 * 1024, // 10MB buffer for large diffs
+  reviewComments: 10 * 1024 * 1024, // 10MB buffer for paginated review comments
 } as const);
