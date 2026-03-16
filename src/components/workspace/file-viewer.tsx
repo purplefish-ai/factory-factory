@@ -218,7 +218,7 @@ function FileViewerContent({
   }
 
   return (
-    <ScrollArea className="flex-1" onScroll={onScroll} viewportRef={viewportRef}>
+    <ScrollArea className="flex-1" onScroll={onScroll} viewportRef={viewportRef} scrollbars="both">
       <SyntaxHighlighter
         language={data.language}
         style={syntaxTheme}

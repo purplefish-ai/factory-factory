@@ -7,28 +7,37 @@ interface ScrollAreaProps extends React.ComponentPropsWithoutRef<typeof ScrollAr
   onScroll?: React.UIEventHandler<HTMLDivElement>;
   viewportRef?: React.Ref<HTMLDivElement>;
   smoothScroll?: boolean;
+  scrollbars?: 'vertical' | 'horizontal' | 'both';
 }
 
 const ScrollArea = React.forwardRef<
   React.ElementRef<typeof ScrollAreaPrimitive.Root>,
   ScrollAreaProps
->(({ className, children, onScroll, viewportRef, smoothScroll, ...props }, ref) => (
-  <ScrollAreaPrimitive.Root
-    ref={ref}
-    className={cn('relative overflow-hidden group/scroll', className)}
-    {...props}
-  >
-    <ScrollAreaPrimitive.Viewport
-      ref={viewportRef}
-      className={cn('h-full w-full rounded-[inherit]', smoothScroll && 'scroll-smooth')}
-      onScroll={onScroll}
+>(
+  (
+    { className, children, onScroll, viewportRef, smoothScroll, scrollbars = 'vertical', ...props },
+    ref
+  ) => (
+    <ScrollAreaPrimitive.Root
+      ref={ref}
+      className={cn('relative overflow-hidden group/scroll', className)}
+      {...props}
     >
-      {children}
-    </ScrollAreaPrimitive.Viewport>
-    <ScrollBar />
-    <ScrollAreaPrimitive.Corner />
-  </ScrollAreaPrimitive.Root>
-));
+      <ScrollAreaPrimitive.Viewport
+        ref={viewportRef}
+        className={cn('h-full w-full rounded-[inherit]', smoothScroll && 'scroll-smooth')}
+        onScroll={onScroll}
+      >
+        {children}
+      </ScrollAreaPrimitive.Viewport>
+      {(scrollbars === 'vertical' || scrollbars === 'both') && <ScrollBar />}
+      {(scrollbars === 'horizontal' || scrollbars === 'both') && (
+        <ScrollBar orientation="horizontal" />
+      )}
+      <ScrollAreaPrimitive.Corner />
+    </ScrollAreaPrimitive.Root>
+  )
+);
 ScrollArea.displayName = ScrollAreaPrimitive.Root.displayName;
 
 const ScrollBar = React.forwardRef<
