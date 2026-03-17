@@ -17,6 +17,127 @@ export type AutoApprovePolicy = 'none' | 'all';
 
 const logger = createLogger('acp-client-handler');
 
+function isExitPlanModeApprovalRequest(params: RequestPermissionRequest): boolean {
+  if (params.toolCall.title === 'ExitPlanMode') {
+    return true;
+  }
+
+  const rawInput = params.toolCall.rawInput;
+  if (typeof rawInput !== 'object' || rawInput === null) {
+    return false;
+  }
+
+  const typeValue = (rawInput as { type?: unknown }).type;
+  return typeValue === 'ExitPlanMode';
+}
+
+function isUserInputPermissionRequest(params: RequestPermissionRequest): boolean {
+  if (
+    params.toolCall.title === 'AskUserQuestion' ||
+    params.toolCall.title === 'item/tool/requestUserInput'
+  ) {
+    return true;
+  }
+
+  const rawInput = params.toolCall.rawInput;
+  if (typeof rawInput !== 'object' || rawInput === null) {
+    return false;
+  }
+
+  const questions = (rawInput as { questions?: unknown }).questions;
+  return Array.isArray(questions);
+}
+
+function resolveFailClosedOptionId(params: RequestPermissionRequest): string {
+  const rejectOption = params.options.find(
+    (option) => option.kind === 'reject_once' || option.kind === 'reject_always'
+  );
+  if (rejectOption) {
+    return rejectOption.optionId;
+  }
+
+  return params.options[0]?.optionId ?? 'unknown';
+}
+
+function resolveAllowOptionId(params: RequestPermissionRequest): string | null {
+  const allowOption = params.options.find(
+    (option) => option.kind === 'allow_always' || option.kind === 'allow_once'
+  );
+  return allowOption?.optionId ?? null;
+}
+
+function resolveInteractiveRequestTypeLabel(
+  isPlanApproval: boolean
+): 'ExitPlanMode' | 'requestUserInput' {
+  if (isPlanApproval) {
+    return 'ExitPlanMode';
+  }
+  return 'requestUserInput';
+}
+
+function tryAutoApprovePermission(params: {
+  request: RequestPermissionRequest;
+  autoApprovePolicy: AutoApprovePolicy;
+  bypassesAutoApprove: boolean;
+  sessionId: string;
+}): RequestPermissionResponse | null {
+  if (params.autoApprovePolicy !== 'all' || params.bypassesAutoApprove) {
+    return null;
+  }
+
+  const allowOptionId = resolveAllowOptionId(params.request);
+  if (allowOptionId) {
+    logger.debug('Auto-approving permission request per configured preset', {
+      sessionId: params.sessionId,
+      toolCallId: params.request.toolCall.toolCallId,
+    });
+    return {
+      outcome: {
+        outcome: 'selected',
+        optionId: allowOptionId,
+      },
+    };
+  }
+
+  logger.warn('Auto-approve enabled but no allow option found; deferring to permission bridge', {
+    sessionId: params.sessionId,
+    toolCallId: params.request.toolCall.toolCallId,
+    availableOptions: params.request.options.map((option) => option.kind),
+  });
+  return null;
+}
+
+function resolveMissingBridgeOutcome(params: {
+  request: RequestPermissionRequest;
+  bypassesAutoApprove: boolean;
+  isPlanApproval: boolean;
+  sessionId: string;
+}): RequestPermissionResponse {
+  const optionId = params.bypassesAutoApprove
+    ? resolveFailClosedOptionId(params.request)
+    : (resolveAllowOptionId(params.request) ?? resolveFailClosedOptionId(params.request));
+
+  logger.warn(
+    params.bypassesAutoApprove
+      ? 'Permission bridge missing; rejecting interactive ACP permission request'
+      : 'Permission bridge missing; auto-approving ACP permission request',
+    {
+      sessionId: params.sessionId,
+      toolCallId: params.request.toolCall.toolCallId,
+      requestType: params.bypassesAutoApprove
+        ? resolveInteractiveRequestTypeLabel(params.isPlanApproval)
+        : 'permission',
+    }
+  );
+
+  return {
+    outcome: {
+      outcome: 'selected',
+      optionId,
+    },
+  };
+}
+
 export class AcpClientHandler implements Client {
   private readonly sessionId: string;
   private readonly onEvent: AcpEventCallback;
@@ -63,49 +184,37 @@ export class AcpClientHandler implements Client {
       options: params.options.map((o) => ({ optionId: o.optionId, kind: o.kind, name: o.name })),
     });
 
-    // Auto-approve when configured (YOLO/RELAXED permission preset)
-    if (this.autoApprovePolicy === 'all') {
-      const allowOption = params.options.find(
-        (o) => o.kind === 'allow_always' || o.kind === 'allow_once'
-      );
-      if (allowOption) {
-        logger.debug('Auto-approving permission request per configured preset', {
-          sessionId: this.sessionId,
-          toolCallId: params.toolCall.toolCallId,
-        });
-        return Promise.resolve({
-          outcome: {
-            outcome: 'selected',
-            optionId: allowOption.optionId,
-          },
-        });
-      }
-      // No allow option available; fall through to interactive permission bridge
-      logger.warn(
-        'Auto-approve enabled but no allow option found; deferring to permission bridge',
-        {
-          sessionId: this.sessionId,
-          toolCallId: params.toolCall.toolCallId,
-          availableOptions: params.options.map((o) => o.kind),
-        }
-      );
+    const isPlanApproval = isExitPlanModeApprovalRequest(params);
+    const isUserInputRequest = isUserInputPermissionRequest(params);
+    const bypassesAutoApprove = isPlanApproval || isUserInputRequest;
+
+    const autoApproved = tryAutoApprovePermission({
+      request: params,
+      autoApprovePolicy: this.autoApprovePolicy,
+      bypassesAutoApprove,
+      sessionId: this.sessionId,
+    });
+    if (autoApproved) {
+      return Promise.resolve(autoApproved);
+    }
+
+    if (bypassesAutoApprove && this.autoApprovePolicy === 'all') {
+      logger.debug('Bypassing auto-approve for interactive request', {
+        sessionId: this.sessionId,
+        toolCallId: params.toolCall.toolCallId,
+        requestType: isPlanApproval ? 'ExitPlanMode' : 'requestUserInput',
+      });
     }
 
     if (!this.permissionBridge) {
-      // Fallback for non-interactive contexts; production paths should inject permissionBridge.
-      logger.warn('Permission bridge missing; auto-approving ACP permission request', {
-        sessionId: this.sessionId,
-        toolCallId: params.toolCall.toolCallId,
-      });
-      const allowOption = params.options.find(
-        (o) => o.kind === 'allow_always' || o.kind === 'allow_once'
+      return Promise.resolve(
+        resolveMissingBridgeOutcome({
+          request: params,
+          bypassesAutoApprove,
+          isPlanApproval,
+          sessionId: this.sessionId,
+        })
       );
-      return Promise.resolve({
-        outcome: {
-          outcome: 'selected',
-          optionId: allowOption?.optionId ?? params.options[0]?.optionId ?? 'unknown',
-        },
-      });
     }
 
     const requestId = crypto.randomUUID();

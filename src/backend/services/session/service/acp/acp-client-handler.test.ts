@@ -157,5 +157,104 @@ describe('AcpClientHandler', () => {
         optionId: 'allow_always',
       });
     });
+
+    it('does not auto-approve ExitPlanMode requests even in "all" mode', async () => {
+      const bridge = {
+        waitForUserResponse: vi.fn().mockResolvedValue({
+          outcome: { outcome: 'selected', optionId: 'plan' },
+        }),
+      } as unknown as AcpPermissionBridge;
+      const eventFn = vi.fn();
+      const handler = new AcpClientHandler('session-1', eventFn, bridge, onLog, 'all');
+      const params = createMockPermissionRequest({
+        toolCall: {
+          toolCallId: 'tc-exit-plan',
+          title: 'ExitPlanMode',
+          status: 'pending',
+          rawInput: { type: 'ExitPlanMode' },
+        },
+        options: [
+          { optionId: 'default', kind: 'allow_once', name: 'Approve Plan' },
+          { optionId: 'plan', kind: 'reject_once', name: 'Keep Planning' },
+        ],
+      });
+
+      const response = await handler.requestPermission(params);
+
+      expect(bridge.waitForUserResponse).toHaveBeenCalled();
+      expect(eventFn).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          type: 'acp_permission_request',
+        })
+      );
+      expect(response.outcome).toEqual({
+        outcome: 'selected',
+        optionId: 'plan',
+      });
+    });
+
+    it('does not auto-approve requestUserInput prompts even in "all" mode', async () => {
+      const bridge = {
+        waitForUserResponse: vi.fn().mockResolvedValue({
+          outcome: { outcome: 'selected', optionId: 'allow_once' },
+        }),
+      } as unknown as AcpPermissionBridge;
+      const eventFn = vi.fn();
+      const handler = new AcpClientHandler('session-1', eventFn, bridge, onLog, 'all');
+      const params = createMockPermissionRequest({
+        toolCall: {
+          toolCallId: 'tc-user-input',
+          title: 'item/tool/requestUserInput',
+          status: 'pending',
+          rawInput: {
+            questions: [{ id: 'q1', question: 'Select an option', options: [{ label: 'A' }] }],
+          },
+        },
+        options: [
+          { optionId: 'allow_once', kind: 'allow_once', name: 'Submit' },
+          { optionId: 'reject_once', kind: 'reject_once', name: 'Cancel' },
+        ],
+      });
+
+      const response = await handler.requestPermission(params);
+
+      expect(bridge.waitForUserResponse).toHaveBeenCalled();
+      expect(eventFn).toHaveBeenCalledWith(
+        'session-1',
+        expect.objectContaining({
+          type: 'acp_permission_request',
+        })
+      );
+      expect(response.outcome).toEqual({
+        outcome: 'selected',
+        optionId: 'allow_once',
+      });
+    });
+
+    it('fails closed for requestUserInput when permission bridge is missing', async () => {
+      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'all');
+      const params = createMockPermissionRequest({
+        toolCall: {
+          toolCallId: 'tc-user-input-no-bridge',
+          title: 'item/tool/requestUserInput',
+          status: 'pending',
+          rawInput: {
+            questions: [{ id: 'q1', question: 'Select an option', options: [{ label: 'A' }] }],
+          },
+        },
+        options: [
+          { optionId: 'allow_once', kind: 'allow_once', name: 'Submit' },
+          { optionId: 'reject_once', kind: 'reject_once', name: 'Cancel' },
+        ],
+      });
+
+      const response = await handler.requestPermission(params);
+
+      expect(response.outcome).toEqual({
+        outcome: 'selected',
+        optionId: 'reject_once',
+      });
+    });
   });
 });
