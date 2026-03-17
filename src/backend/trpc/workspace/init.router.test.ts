@@ -9,6 +9,7 @@ const mockGetInitMode = vi.hoisted(() => vi.fn());
 const mockSetInitMode = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceInitPolicy = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
+const mockRetryQueuedDispatchAfterWorkspaceReady = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: {
@@ -34,6 +35,8 @@ vi.mock('@/backend/services/workspace', () => ({
 
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
+  retryQueuedDispatchAfterWorkspaceReady: (...args: unknown[]) =>
+    mockRetryQueuedDispatchAfterWorkspaceReady(...args),
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -55,6 +58,7 @@ describe('workspaceInitRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
+    mockRetryQueuedDispatchAfterWorkspaceReady.mockResolvedValue(undefined);
     mockRunStartupScript.mockResolvedValue({ success: true });
   });
 
@@ -129,6 +133,25 @@ describe('workspaceInitRouter', () => {
       expect.objectContaining({ id: 'w2', status: 'PROVISIONING' }),
       workspace.project
     );
+    expect(mockRetryQueuedDispatchAfterWorkspaceReady).toHaveBeenCalledWith('w2', null);
+  });
+
+  it('does not retry queued dispatch when startup script retry fails', async () => {
+    const workspace = {
+      id: 'w2',
+      status: 'FAILED',
+      worktreePath: '/tmp/w2',
+      project: { id: 'p1' },
+    };
+    mockFindByIdWithProject.mockResolvedValue(workspace);
+    mockStartProvisioning.mockResolvedValue({ status: 'PROVISIONING' });
+    mockRunStartupScript.mockResolvedValue({ success: false });
+    mockFindById.mockResolvedValue({ id: 'w2', status: 'FAILED' });
+
+    const caller = createCaller();
+    await expect(caller.retryInit({ id: 'w2' })).resolves.toEqual({ id: 'w2', status: 'FAILED' });
+
+    expect(mockRetryQueuedDispatchAfterWorkspaceReady).not.toHaveBeenCalled();
   });
 
   it('validates retry preconditions', async () => {
