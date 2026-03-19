@@ -122,6 +122,36 @@ export function parseGitHubRemoteUrl(remoteUrl: string): { owner: string; repo: 
 }
 
 /**
+ * Detect the default branch of a git repository.
+ * Reads origin/HEAD symref first, falls back to checking for main/master locally.
+ */
+async function getDefaultBranchFromRepo(repoPath: string): Promise<string> {
+  try {
+    // Try reading origin/HEAD symref: outputs "refs/remotes/origin/main"
+    const symrefResult = await gitCommandC(repoPath, ['symbolic-ref', 'refs/remotes/origin/HEAD']);
+    if (symrefResult.code === 0) {
+      const ref = symrefResult.stdout.trim();
+      const match = ref.match(/^refs\/remotes\/origin\/(.+)$/);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fall back: check which of main/master exists as a local branch
+  for (const candidate of ['main', 'master']) {
+    const result = await gitCommandC(repoPath, ['rev-parse', '--verify', candidate]);
+    if (result.code === 0) {
+      return candidate;
+    }
+  }
+
+  return 'main';
+}
+
+/**
  * Get GitHub owner/repo info from a git repository's remote.
  * Checks the 'origin' remote first.
  */
@@ -169,8 +199,11 @@ class ProjectAccessor {
     const name = deriveNameFromPath(data.repoPath);
     const baseSlug = deriveSlugFromPath(data.repoPath);
 
-    // Auto-detect GitHub info from git remote
-    const githubInfo = await getGitHubInfoFromRepo(data.repoPath);
+    // Auto-detect GitHub info and default branch from git remote
+    const [githubInfo, defaultBranch] = await Promise.all([
+      getGitHubInfoFromRepo(data.repoPath),
+      getDefaultBranchFromRepo(data.repoPath),
+    ]);
 
     // Try base slug first, then with counter suffix if it conflicts
     let slug = baseSlug;
@@ -187,7 +220,7 @@ class ProjectAccessor {
             slug,
             repoPath: data.repoPath,
             worktreeBasePath,
-            defaultBranch: 'main',
+            defaultBranch,
             githubOwner: githubInfo?.owner ?? null,
             githubRepo: githubInfo?.repo ?? null,
             startupScriptCommand: data.startupScriptCommand ?? null,
