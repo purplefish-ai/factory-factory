@@ -20,6 +20,7 @@ interface WorkspaceContentViewProps {
   sessions: Session[] | undefined;
   selectedSessionId: string | null;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
+  unreadSessionIds?: Set<string>;
   isCreatingSession: boolean;
   isDeletingSession: boolean;
   onSelectSession: (sessionId: string) => void;
@@ -52,6 +53,7 @@ export function WorkspaceContentView({
   sessions,
   selectedSessionId,
   sessionSummariesById,
+  unreadSessionIds,
   isCreatingSession,
   isDeletingSession,
   onSelectSession,
@@ -78,6 +80,7 @@ export function WorkspaceContentView({
           sessions={sessions}
           currentSessionId={selectedSessionId}
           sessionSummariesById={sessionSummariesById}
+          unreadSessionIds={unreadSessionIds}
           onSelectSession={onSelectSession}
           onCreateSession={onCreateSession}
           onCloseSession={onCloseSession}

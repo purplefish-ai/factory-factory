@@ -15,19 +15,44 @@ function getCreatedAtMs(value: string | Date): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function byNewest(a: ServerWorkspace, b: ServerWorkspace): number {
-  return getCreatedAtMs(b.createdAt) - getCreatedAtMs(a.createdAt);
+function getLastActivityMs(value: string | null | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-export function groupWorkspacesForSidebar(workspaces: ServerWorkspace[]): SidebarWorkspaceGroups {
+function makeComparator(unreadIds: Set<string>) {
+  return function compare(a: ServerWorkspace, b: ServerWorkspace): number {
+    const aUnread = unreadIds.has(a.id) ? 1 : 0;
+    const bUnread = unreadIds.has(b.id) ? 1 : 0;
+    if (bUnread !== aUnread) {
+      return bUnread - aUnread;
+    }
+
+    const activityDiff = getLastActivityMs(b.lastActivityAt) - getLastActivityMs(a.lastActivityAt);
+    if (activityDiff !== 0) {
+      return activityDiff;
+    }
+
+    return getCreatedAtMs(b.createdAt) - getCreatedAtMs(a.createdAt);
+  };
+}
+
+export function groupWorkspacesForSidebar(
+  workspaces: ServerWorkspace[],
+  unreadIds: Set<string> = new Set()
+): SidebarWorkspaceGroups {
+  const compare = makeComparator(unreadIds);
   return {
     waiting: workspaces
       .filter((workspace) => workspace.cachedKanbanColumn === 'WAITING')
-      .sort(byNewest),
+      .sort(compare),
     working: workspaces
       .filter((workspace) => workspace.cachedKanbanColumn === 'WORKING')
-      .sort(byNewest),
-    done: workspaces.filter((workspace) => workspace.cachedKanbanColumn === 'DONE').sort(byNewest),
+      .sort(compare),
+    done: workspaces.filter((workspace) => workspace.cachedKanbanColumn === 'DONE').sort(compare),
   };
 }
 
@@ -44,12 +69,13 @@ export function groupWorkspacesForAllProjects(
   allProjectsData: Array<{
     project: { id: string; slug: string; name: string };
     workspaces: ServerWorkspace[];
-  }>
+  }>,
+  unreadIds: Set<string> = new Set()
 ): AllProjectsSidebarGroups {
   return {
     projects: allProjectsData.map(({ project, workspaces }) => ({
       project,
-      ...groupWorkspacesForSidebar(workspaces),
+      ...groupWorkspacesForSidebar(workspaces, unreadIds),
     })),
   };
 }

@@ -146,6 +146,7 @@ interface SessionTabItemProps {
   sessionSummary?: WorkspaceSessionRuntimeSummary;
   isCIFix?: boolean;
   persistedStatus?: DbSessionStatus;
+  hasUnread?: boolean;
   onSelect: () => void;
   onClose?: () => void;
 }
@@ -156,24 +157,30 @@ function SessionTabItem({
   sessionSummary,
   isCIFix,
   persistedStatus,
+  hasUnread,
   onSelect,
   onClose,
 }: SessionTabItemProps) {
   return (
-    <TabButton
-      icon={
-        <StatusDot
-          sessionSummary={sessionSummary}
-          isCIFix={isCIFix}
-          persistedStatus={persistedStatus}
-        />
-      }
-      label={label}
-      isActive={isActive}
-      onSelect={onSelect}
-      onClose={onClose}
-      truncate
-    />
+    <div className="relative">
+      <TabButton
+        icon={
+          <StatusDot
+            sessionSummary={sessionSummary}
+            isCIFix={isCIFix}
+            persistedStatus={persistedStatus}
+          />
+        }
+        label={label}
+        isActive={isActive}
+        onSelect={onSelect}
+        onClose={onClose}
+        truncate
+      />
+      {hasUnread && (
+        <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-blue-500 pointer-events-none" />
+      )}
+    </div>
   );
 }
 
@@ -187,6 +194,7 @@ interface MainViewTabBarProps {
   sessions?: Session[];
   currentSessionId?: string | null;
   sessionSummariesById?: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
+  unreadSessionIds?: Set<string>;
   onSelectSession?: (sessionId: string) => void;
   onCreateSession?: () => void;
   onCloseSession?: (sessionId: string) => void;
@@ -206,6 +214,7 @@ export function MainViewTabBar({
   sessions,
   currentSessionId,
   sessionSummariesById,
+  unreadSessionIds,
   onSelectSession,
   onCreateSession,
   onCloseSession,
@@ -248,6 +257,7 @@ export function MainViewTabBar({
               sessionSummary={sessionSummariesById?.get(session.id)}
               isCIFix={session.workflow === 'ci-fix'}
               persistedStatus={session.status}
+              hasUnread={!isSelected && unreadSessionIds?.has(session.id)}
               onSelect={() => {
                 onSelectSession?.(session.id);
                 selectTab('chat');

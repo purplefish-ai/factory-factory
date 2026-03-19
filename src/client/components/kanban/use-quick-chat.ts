@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { useChatWebSocket } from '@/components/chat';
@@ -11,10 +11,12 @@ export function useQuickChat(workspaceId: string | null) {
 
   const { data: sessions } = trpc.session.listSessions.useQuery(
     { workspaceId: workspaceId ?? '' },
-    { enabled: !!workspaceId, staleTime: 0, refetchOnWindowFocus: false }
+    { enabled: !!workspaceId, staleTime: 0, refetchOnWindowFocus: false, refetchInterval: 10_000 }
   );
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(new Set());
+  const lastViewedAtRef = useRef<Map<string, Date>>(new Map());
 
   // Auto-select first session; reset when workspace changes
   useEffect(() => {
@@ -33,6 +35,45 @@ export function useQuickChat(workspaceId: string | null) {
       }
     }
   }, [workspaceId, sessions, selectedSessionId]);
+
+  // Track new activity in non-selected sessions
+  useEffect(() => {
+    if (!sessions) {
+      return;
+    }
+    for (const session of sessions) {
+      const lastViewed = lastViewedAtRef.current.get(session.id);
+      const sessionUpdated = new Date(session.updatedAt);
+      if (!lastViewed) {
+        // First time seeing this session — initialize as already viewed
+        lastViewedAtRef.current.set(session.id, sessionUpdated);
+      } else if (session.id !== selectedSessionId && sessionUpdated > lastViewed) {
+        setUnreadSessionIds((prev) => new Set([...prev, session.id]));
+      }
+    }
+  }, [sessions, selectedSessionId]);
+
+  // Clear unread and record view time when session is selected
+  const handleSelectSession = useCallback((sessionId: string) => {
+    lastViewedAtRef.current.set(sessionId, new Date());
+    setUnreadSessionIds((prev) => {
+      if (!prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.delete(sessionId);
+      return next;
+    });
+    setSelectedSessionId(sessionId);
+  }, []);
+
+  // Also clear unread when workspace changes (reset state)
+  useEffect(() => {
+    if (!workspaceId) {
+      setUnreadSessionIds(new Set());
+      lastViewedAtRef.current.clear();
+    }
+  }, [workspaceId]);
 
   const chatState = useChatWebSocket({
     dbSessionId: workspaceId ? selectedSessionId : null,
@@ -165,10 +206,19 @@ export function useQuickChat(workspaceId: string | null) {
     [workspaceId, createSession, startSession, selectedSessionId]
   );
 
+  // Compute runningSessionId here to avoid duplication in consumers
+  const runningSessionId = useMemo(
+    () => sessions?.find((s) => s.isWorking)?.id ?? null,
+    [sessions]
+  );
+
   return {
     sessions: sessions ?? [],
     selectedSessionId,
     setSelectedSessionId,
+    handleSelectSession,
+    unreadSessionIds,
+    runningSessionId,
     chatState,
     viewportRef,
     onScroll,

@@ -43,6 +43,7 @@ interface SessionTabsProps {
   sessions: ReturnType<typeof useWorkspaceData>['sessions'];
   selectedDbSessionId: string | null;
   sessionSummariesById: ReadonlyMap<string, WorkspaceSessionRuntimeSummary>;
+  unreadSessionIds: Set<string>;
   isDeletingSession: boolean;
   handleSelectSession: ReturnType<typeof useSessionManagement>['handleSelectSession'];
   handleNewChat: ReturnType<typeof useSessionManagement>['handleNewChat'];
@@ -127,6 +128,7 @@ export function WorkspaceDetailView({
         sessions={sessionTabs.sessions}
         selectedSessionId={sessionTabs.selectedDbSessionId}
         sessionSummariesById={sessionTabs.sessionSummariesById}
+        unreadSessionIds={sessionTabs.unreadSessionIds}
         isCreatingSession={header.isCreatingSession}
         isDeletingSession={sessionTabs.isDeletingSession}
         onSelectSession={sessionTabs.handleSelectSession}

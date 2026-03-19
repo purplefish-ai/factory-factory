@@ -29,7 +29,9 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
   const {
     sessions,
     selectedSessionId,
-    setSelectedSessionId,
+    handleSelectSession,
+    unreadSessionIds,
+    runningSessionId,
     chatState,
     viewportRef,
     onScroll,
@@ -51,8 +53,6 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
       })),
     [sessions]
   );
-
-  const runningSessionId = useMemo(() => sessions.find((s) => s.isWorking)?.id ?? null, [sessions]);
 
   const tabBarDisabled = isCreatingSession || !workspaceId;
 
@@ -76,7 +76,8 @@ export function QuickChatSheet({ workspaceId, onClose }: QuickChatSheetProps) {
               sessions={sessionTabData}
               currentSessionId={selectedSessionId}
               runningSessionId={runningSessionId}
-              onSelectSession={setSelectedSessionId}
+              unreadSessionIds={unreadSessionIds}
+              onSelectSession={handleSelectSession}
               onCreateSession={handleNewChat}
               onCloseSession={handleCloseSession}
               disabled={tabBarDisabled}

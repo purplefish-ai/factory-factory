@@ -302,6 +302,42 @@ export function WorkspaceDetailContainer() {
     selectedProvider,
   });
 
+  // Unread tracking — mark sessions with new activity since last viewed
+  const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(new Set());
+  const lastViewedAtRef = useRef<Map<string, Date>>(new Map());
+
+  useEffect(() => {
+    if (!sessions) {
+      return;
+    }
+    for (const session of sessions) {
+      const lastViewed = lastViewedAtRef.current.get(session.id);
+      const sessionUpdated = new Date(session.updatedAt);
+      if (!lastViewed) {
+        lastViewedAtRef.current.set(session.id, sessionUpdated);
+      } else if (session.id !== selectedDbSessionId && sessionUpdated > lastViewed) {
+        setUnreadSessionIds((prev) => new Set([...prev, session.id]));
+      }
+    }
+  }, [sessions, selectedDbSessionId]);
+
+  // Wrap handleSelectSession to clear unread on selection
+  const handleSelectSessionWithUnread = useCallback(
+    (dbSessionId: string) => {
+      lastViewedAtRef.current.set(dbSessionId, new Date());
+      setUnreadSessionIds((prev) => {
+        if (!prev.has(dbSessionId)) {
+          return prev;
+        }
+        const next = new Set(prev);
+        next.delete(dbSessionId);
+        return next;
+      });
+      handleSelectSession(dbSessionId);
+    },
+    [handleSelectSession]
+  );
+
   const handleArchive = useCallback(
     (commitUncommitted: boolean) => {
       archiveWorkspace.mutate({ id: workspaceId, commitUncommitted });
@@ -460,8 +496,9 @@ export function WorkspaceDetailContainer() {
           sessions,
           selectedDbSessionId,
           sessionSummariesById,
+          unreadSessionIds,
           isDeletingSession: deleteSession.isPending,
-          handleSelectSession,
+          handleSelectSession: handleSelectSessionWithUnread,
           handleNewChat,
           handleCloseChatSession,
           handleQuickAction,

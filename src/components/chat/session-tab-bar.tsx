@@ -29,6 +29,7 @@ interface SessionTabBarProps {
   sessions: SessionData[];
   currentSessionId: string | null;
   runningSessionId?: string | null;
+  unreadSessionIds?: Set<string>;
   onSelectSession: (sessionId: string) => void;
   onCreateSession: () => void;
   onCloseSession: (sessionId: string) => void;
@@ -92,6 +93,7 @@ interface SessionTabProps {
   displayName: string;
   isActive: boolean;
   isRunning: boolean;
+  hasUnread?: boolean;
   onSelect: () => void;
   onClose: () => void;
   disabled?: boolean;
@@ -103,6 +105,7 @@ function SessionTab({
   displayName,
   isActive,
   isRunning,
+  hasUnread,
   onSelect,
   onClose,
   disabled,
@@ -157,6 +160,9 @@ function SessionTab({
 
       <span className="truncate max-w-[120px]">{displayName}</span>
 
+      {/* Unread indicator dot */}
+      {hasUnread && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
+
       {/* Close button - visible on hover, hidden in readOnly mode */}
       {!readOnly && (
         <button
@@ -187,6 +193,7 @@ export function SessionTabBar({
   sessions,
   currentSessionId,
   runningSessionId,
+  unreadSessionIds,
   onSelectSession,
   onCreateSession,
   onCloseSession,
@@ -288,6 +295,7 @@ export function SessionTabBar({
                 displayName={getSessionDisplayName(session, index)}
                 isActive={isActive}
                 isRunning={isRunning}
+                hasUnread={!isActive && unreadSessionIds?.has(session.id)}
                 onSelect={() => onSelectSession(session.id)}
                 onClose={() => onCloseSession(session.id)}
                 disabled={disabled}
