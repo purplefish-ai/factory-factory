@@ -6,6 +6,7 @@ import { useProjectContext } from '@/client/lib/providers';
 import { trpc } from '@/client/lib/trpc';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
+const ALL_PROJECTS_SLUG = '__all__';
 
 function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
@@ -57,7 +58,10 @@ function useProjectSlugSync(
 
     if (hasValidSlugInPath) {
       setSelectedProjectSlug(slugFromPath);
-      localStorage.setItem(SELECTED_PROJECT_KEY, slugFromPath);
+      // Don't persist __all__ to localStorage so single-project mode is restored on next visit
+      if (slugFromPath !== ALL_PROJECTS_SLUG) {
+        localStorage.setItem(SELECTED_PROJECT_KEY, slugFromPath);
+      }
     } else {
       const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
       if (stored) {
@@ -66,7 +70,7 @@ function useProjectSlugSync(
     }
   }, [pathname, setSelectedProjectSlug]);
 
-  // Select first project if none selected
+  // Select first project if none selected (skip if all-projects mode active)
   useEffect(() => {
     if (!projects || projects.length === 0 || selectedProjectSlug) {
       return;
@@ -89,6 +93,9 @@ export function useAppNavigationData() {
   const [selectedProjectSlug, setSelectedProjectSlug] = useState<string>(getInitialProjectSlug);
   const { setProjectContext } = useProjectContext();
 
+  // Derive view mode from the selected slug — no separate state needed
+  const viewMode = selectedProjectSlug === ALL_PROJECTS_SLUG ? 'all' : 'single';
+
   const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
 
   const selectedProject = projects?.find((p) => p.slug === selectedProjectSlug);
@@ -98,9 +105,18 @@ export function useAppNavigationData() {
   const { data: projectState } = trpc.workspace.getProjectSummaryState.useQuery(
     { projectId: selectedProjectId ?? '' },
     {
-      enabled: !!selectedProjectId,
+      enabled: viewMode === 'single' && !!selectedProjectId,
       // Sidebar/project state is live-synced via /snapshots (useProjectSnapshotSync).
       // Keep tRPC query as bootstrap/fallback, not a periodic poller.
+      staleTime: Number.POSITIVE_INFINITY,
+      refetchOnWindowFocus: false,
+    }
+  );
+
+  const { data: allProjectsState } = trpc.workspace.getAllProjectsSummaryState.useQuery(
+    {},
+    {
+      enabled: viewMode === 'all',
       staleTime: Number.POSITIVE_INFINITY,
       refetchOnWindowFocus: false,
     }
@@ -112,7 +128,7 @@ export function useAppNavigationData() {
   usePRStatusSync(selectedProjectId, utils);
 
   // Sync workspace snapshots from WebSocket to React Query cache
-  useProjectSnapshotSync(selectedProjectId);
+  useProjectSnapshotSync(selectedProjectId, viewMode);
 
   // Track workspaces that need user attention
   const { needsAttention, clearAttention } = useWorkspaceAttention();
@@ -127,7 +143,7 @@ export function useAppNavigationData() {
     }
   }, [selectedProjectId, setProjectContext]);
 
-  const serverWorkspaces = projectState?.workspaces;
+  const serverWorkspaces = viewMode === 'single' ? projectState?.workspaces : undefined;
   const reviewCount = projectState?.reviewCount ?? 0;
 
   // Get current workspace ID from URL
@@ -147,6 +163,8 @@ export function useAppNavigationData() {
     selectedProjectId,
     issueProvider,
     serverWorkspaces,
+    allProjectsState,
+    viewMode,
     reviewCount,
     needsAttention,
     clearAttention,

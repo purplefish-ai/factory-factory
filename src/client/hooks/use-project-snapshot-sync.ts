@@ -14,6 +14,7 @@ import { mapSnapshotEntryToKanbanWorkspace } from '@/client/lib/snapshot-to-kanb
 import {
   mapSnapshotEntryToServerWorkspace,
   type SnapshotChangedMessage,
+  type SnapshotFullAllMessage,
   type SnapshotFullMessage,
   type SnapshotRemovedMessage,
   SnapshotServerMessageSchema,
@@ -146,9 +147,137 @@ function triggerWorkspaceAttention(workspaceId: string): void {
   }
 }
 
+function handleSnapshotChangedCase(
+  utils: TrpcUtils,
+  message: SnapshotChangedMessage,
+  projectId: string | undefined,
+  viewMode: 'single' | 'all',
+  pendingRequests: Map<string, PendingRequestType>
+): void {
+  const pid = message.projectId ?? projectId;
+  if (!pid) {
+    return;
+  }
+  if (viewMode === 'all' && message.projectId) {
+    applyAllProjectsChangedMessage(
+      utils,
+      message as SnapshotChangedMessage & { projectId: string }
+    );
+  }
+  applySnapshotChangedMessage(utils, pid, message, pendingRequests);
+}
+
+function handleSnapshotRemovedCase(
+  utils: TrpcUtils,
+  message: SnapshotRemovedMessage,
+  projectId: string | undefined,
+  viewMode: 'single' | 'all',
+  pendingRequests: Map<string, PendingRequestType>
+): void {
+  const pid = message.projectId ?? projectId;
+  if (!pid) {
+    return;
+  }
+  if (viewMode === 'all' && message.projectId) {
+    applyAllProjectsRemovedMessage(
+      utils,
+      message as SnapshotRemovedMessage & { projectId: string }
+    );
+  }
+  applySnapshotRemovedMessage(utils, pid, message, pendingRequests);
+}
+
 function invalidateWorkspaceListCaches(utils: TrpcUtils, projectId: string): void {
   utils.workspace.list.invalidate({ projectId });
   utils.workspace.listWithRuntimeState.invalidate({ projectId });
+}
+
+// =============================================================================
+// All-projects cache update helpers
+// =============================================================================
+
+type AllProjectsCacheData =
+  | Array<{
+      project: { id: string; slug: string; name: string };
+      workspaces: CacheWorkspace[];
+      reviewCount: number;
+    }>
+  | undefined;
+
+function applySnapshotFullAllMessage(utils: TrpcUtils, message: SnapshotFullAllMessage): void {
+  utils.workspace.getAllProjectsSummaryState.setData({}, ((prev: AllProjectsCacheData) => {
+    // Group entries by projectId
+    const byProject = new Map<string, typeof message.entries>();
+    for (const entry of message.entries) {
+      const list = byProject.get(entry.projectId) ?? [];
+      list.push(entry);
+      byProject.set(entry.projectId, list);
+    }
+
+    if (!prev) {
+      return prev;
+    }
+
+    return prev.map((projectData) => {
+      const entries = byProject.get(projectData.project.id) ?? [];
+      const existingById = new Map<string, CacheWorkspace>();
+      for (const w of projectData.workspaces) {
+        existingById.set(w.id, w);
+      }
+      return {
+        ...projectData,
+        workspaces: entries.map((e) =>
+          mapSnapshotEntryToServerWorkspace(e, existingById.get(e.workspaceId))
+        ),
+      };
+    });
+  }) as never);
+}
+
+function applyAllProjectsChangedMessage(
+  utils: TrpcUtils,
+  message: SnapshotChangedMessage & { projectId: string }
+): void {
+  utils.workspace.getAllProjectsSummaryState.setData({}, ((prev: AllProjectsCacheData) => {
+    if (!prev) {
+      return prev;
+    }
+    return prev.map((projectData) => {
+      if (projectData.project.id !== message.projectId) {
+        return projectData;
+      }
+      const existingEntry = projectData.workspaces.find((w) => w.id === message.entry.workspaceId);
+      const mapped = mapSnapshotEntryToServerWorkspace(message.entry, existingEntry);
+      const existingIndex = projectData.workspaces.findIndex((w) => w.id === mapped.id);
+      const workspaces = [...projectData.workspaces];
+      if (existingIndex >= 0) {
+        workspaces[existingIndex] = mapped;
+      } else {
+        workspaces.push(mapped);
+      }
+      return { ...projectData, workspaces };
+    });
+  }) as never);
+}
+
+function applyAllProjectsRemovedMessage(
+  utils: TrpcUtils,
+  message: SnapshotRemovedMessage & { projectId: string }
+): void {
+  utils.workspace.getAllProjectsSummaryState.setData({}, ((prev: AllProjectsCacheData) => {
+    if (!prev) {
+      return prev;
+    }
+    return prev.map((projectData) => {
+      if (projectData.project.id !== message.projectId) {
+        return projectData;
+      }
+      return {
+        ...projectData,
+        workspaces: projectData.workspaces.filter((w) => w.id !== message.workspaceId),
+      };
+    });
+  }) as never);
 }
 
 function seedPendingRequests(
@@ -295,13 +424,22 @@ function applySnapshotRemovedMessage(
  * `workspace.get` (detail view) whenever snapshot_full, snapshot_changed,
  * or snapshot_removed messages arrive.
  *
+ * When viewMode is 'all', connects with projectId=__all__ and updates
+ * the getAllProjectsSummaryState cache instead.
+ *
  * Returns void -- the hook's side effect is updating the caches.
  */
-export function useProjectSnapshotSync(projectId: string | undefined): void {
+export function useProjectSnapshotSync(
+  projectId: string | undefined,
+  viewMode: 'single' | 'all' = 'single'
+): void {
   const utils = trpc.useUtils();
   const previousPendingRequestsRef = useRef<Map<string, PendingRequestType>>(new Map());
 
-  const url = projectId ? buildWebSocketUrl('/snapshots', { projectId }) : null;
+  const effectiveProjectId = viewMode === 'all' ? '__all__' : projectId;
+  const url = effectiveProjectId
+    ? buildWebSocketUrl('/snapshots', { projectId: effectiveProjectId })
+    : null;
 
   const handleMessage = useCallback(
     (data: unknown) => {
@@ -312,39 +450,40 @@ export function useProjectSnapshotSync(projectId: string | undefined): void {
       const message = parsed.data;
 
       switch (message.type) {
+        case 'snapshot_full_all': {
+          applySnapshotFullAllMessage(utils, message);
+          break;
+        }
+
         case 'snapshot_full': {
           applySnapshotFullMessage(utils, message, previousPendingRequestsRef.current);
           break;
         }
 
         case 'snapshot_changed': {
-          if (!projectId) {
-            break;
-          }
-          applySnapshotChangedMessage(
+          handleSnapshotChangedCase(
             utils,
-            projectId,
             message,
+            projectId,
+            viewMode,
             previousPendingRequestsRef.current
           );
           break;
         }
 
         case 'snapshot_removed': {
-          if (!projectId) {
-            break;
-          }
-          applySnapshotRemovedMessage(
+          handleSnapshotRemovedCase(
             utils,
-            projectId,
             message,
+            projectId,
+            viewMode,
             previousPendingRequestsRef.current
           );
           break;
         }
       }
     },
-    [projectId, utils]
+    [projectId, viewMode, utils]
   );
 
   useWebSocketTransport({

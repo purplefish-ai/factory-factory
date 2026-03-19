@@ -119,24 +119,33 @@ const SnapshotFullMessageSchema = z.object({
 
 const SnapshotChangedMessageSchema = z.object({
   type: z.literal('snapshot_changed'),
+  projectId: z.string().optional(),
   workspaceId: z.string(),
   entry: WorkspaceSnapshotEntrySchema,
 });
 
 const SnapshotRemovedMessageSchema = z.object({
   type: z.literal('snapshot_removed'),
+  projectId: z.string().optional(),
   workspaceId: z.string(),
+});
+
+const SnapshotFullAllMessageSchema = z.object({
+  type: z.literal('snapshot_full_all'),
+  entries: z.array(WorkspaceSnapshotEntrySchema.extend({ projectId: z.string() })),
 });
 
 export const SnapshotServerMessageSchema = z.discriminatedUnion('type', [
   SnapshotFullMessageSchema,
   SnapshotChangedMessageSchema,
   SnapshotRemovedMessageSchema,
+  SnapshotFullAllMessageSchema,
 ]);
 
 export type SnapshotFullMessage = z.infer<typeof SnapshotFullMessageSchema>;
 export type SnapshotChangedMessage = z.infer<typeof SnapshotChangedMessageSchema>;
 export type SnapshotRemovedMessage = z.infer<typeof SnapshotRemovedMessageSchema>;
+export type SnapshotFullAllMessage = z.infer<typeof SnapshotFullAllMessageSchema>;
 export type SnapshotServerMessage = z.infer<typeof SnapshotServerMessageSchema>;
 
 // =============================================================================

@@ -42,7 +42,11 @@ import {
 import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
 import { WorkspaceItemContent } from './workspace-item-content';
-import { groupWorkspacesForSidebar } from './workspace-sidebar-grouping';
+import {
+  type AllProjectsSidebarGroups,
+  groupWorkspacesForAllProjects,
+  groupWorkspacesForSidebar,
+} from './workspace-sidebar-grouping';
 
 type NavigationData = ReturnType<typeof useAppNavigationData>;
 
@@ -175,6 +179,72 @@ function IssueGroup({ issues }: { issues: NormalizedIssue[] | undefined }) {
 }
 
 // =============================================================================
+// All-projects view component
+// =============================================================================
+
+function AllProjectsView({
+  projectsData,
+  currentWorkspaceId,
+}: {
+  projectsData: AllProjectsSidebarGroups;
+  currentWorkspaceId: string | undefined;
+}) {
+  return (
+    <>
+      {projectsData.projects.map(({ project, waiting, working, done }) => (
+        <div key={project.id}>
+          <SidebarGroup className="pb-0">
+            <SidebarGroupLabel className="text-xs font-semibold uppercase tracking-wider">
+              {project.name}
+            </SidebarGroupLabel>
+          </SidebarGroup>
+
+          {waiting.length > 0 && (
+            <WorkspaceGroup
+              label="Waiting"
+              workspaces={waiting}
+              projectSlug={project.slug}
+              currentWorkspaceId={currentWorkspaceId}
+              emptyText=""
+            />
+          )}
+
+          {working.length > 0 && (
+            <WorkspaceGroup
+              label="Working"
+              workspaces={working}
+              projectSlug={project.slug}
+              currentWorkspaceId={currentWorkspaceId}
+              emptyText=""
+            />
+          )}
+
+          {done.length > 0 && (
+            <WorkspaceGroup
+              label="Done"
+              workspaces={done}
+              projectSlug={project.slug}
+              currentWorkspaceId={currentWorkspaceId}
+              emptyText=""
+            />
+          )}
+
+          {waiting.length === 0 && working.length === 0 && done.length === 0 && (
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <EmptyPlaceholder text="No workspaces" />
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+
+          <SidebarSeparator />
+        </div>
+      ))}
+    </>
+  );
+}
+
+// =============================================================================
 // Sidebar content (shared between desktop and mobile)
 // =============================================================================
 
@@ -262,28 +332,37 @@ function SidebarInner({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <WorkspaceGroup
-          label="Waiting"
-          workspaces={waiting}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          emptyText="No waiting workspaces"
-        />
-        <WorkspaceGroup
-          label="Working"
-          workspaces={working}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          emptyText="No active workspaces"
-        />
-        <IssueGroup issues={issues} />
-        <WorkspaceGroup
-          label="Done"
-          workspaces={done}
-          projectSlug={navData.selectedProjectSlug}
-          currentWorkspaceId={navData.currentWorkspaceId}
-          emptyText="No completed workspaces"
-        />
+        {navData.viewMode === 'all' && navData.allProjectsState ? (
+          <AllProjectsView
+            projectsData={groupWorkspacesForAllProjects(navData.allProjectsState)}
+            currentWorkspaceId={navData.currentWorkspaceId}
+          />
+        ) : (
+          <>
+            <WorkspaceGroup
+              label="Waiting"
+              workspaces={waiting}
+              projectSlug={navData.selectedProjectSlug}
+              currentWorkspaceId={navData.currentWorkspaceId}
+              emptyText="No waiting workspaces"
+            />
+            <WorkspaceGroup
+              label="Working"
+              workspaces={working}
+              projectSlug={navData.selectedProjectSlug}
+              currentWorkspaceId={navData.currentWorkspaceId}
+              emptyText="No active workspaces"
+            />
+            <IssueGroup issues={issues} />
+            <WorkspaceGroup
+              label="Done"
+              workspaces={done}
+              projectSlug={navData.selectedProjectSlug}
+              currentWorkspaceId={navData.currentWorkspaceId}
+              emptyText="No completed workspaces"
+            />
+          </>
+        )}
       </SidebarContent>
 
       <SidebarSeparator />

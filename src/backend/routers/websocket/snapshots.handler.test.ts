@@ -208,6 +208,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     expect(wsA.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'snapshot_changed',
+        projectId: 'proj-A',
         workspaceId: 'ws-1',
         entry: event.entry,
       })
@@ -240,6 +241,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'snapshot_removed',
+        projectId: 'proj-1',
         workspaceId: 'ws-1',
       })
     );
@@ -264,6 +266,7 @@ describe('createSnapshotsUpgradeHandler', () => {
     expect(ws.send).toHaveBeenCalledWith(
       JSON.stringify({
         type: 'snapshot_removed',
+        projectId: 'proj-1',
         workspaceId: 'ws-1',
       })
     );

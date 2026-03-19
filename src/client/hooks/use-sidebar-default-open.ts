@@ -49,7 +49,7 @@ function getPersistedState(category: RouteCategory): boolean | null {
 }
 
 // Categories where user overrides should NOT persist across navigations.
-const TRANSIENT_CATEGORIES: Set<RouteCategory> = new Set();
+const TRANSIENT_CATEGORIES: Set<RouteCategory> = new Set(['board']);
 
 export function clearTransientOverrideOnCategoryChange(
   overrides: Partial<Record<RouteCategory, boolean>>,

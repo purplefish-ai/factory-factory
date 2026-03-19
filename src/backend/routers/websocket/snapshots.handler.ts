@@ -11,6 +11,7 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { projectAccessor } from '@/backend/services/workspace';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -20,6 +21,8 @@ import {
 } from '@/backend/services/workspace-snapshot-store.service';
 import { WorkspaceStatus } from '@/shared/core';
 import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
+
+const ALL_PROJECTS_SENTINEL = '__all__';
 
 // ============================================================================
 // Types
@@ -63,10 +66,12 @@ class SnapshotStoreSubscriptionState {
         isHiddenWorkspaceStatus(event.entry.status)
           ? {
               type: 'snapshot_removed',
+              projectId: event.projectId,
               workspaceId: event.workspaceId,
             }
           : {
               type: 'snapshot_changed',
+              projectId: event.projectId,
               workspaceId: event.workspaceId,
               entry: event.entry,
             }
@@ -87,6 +92,7 @@ class SnapshotStoreSubscriptionState {
 
       const message = JSON.stringify({
         type: 'snapshot_removed',
+        projectId: event.projectId,
         workspaceId: event.workspaceId,
       });
 
@@ -141,6 +147,36 @@ export function resetSnapshotsHandlerStateForTests(): void {
 // Upgrade Handler
 // ============================================================================
 
+function removeAllProjectConnections(
+  ws: WebSocket,
+  projectIds: string[],
+  connections: SnapshotConnectionsMap
+): void {
+  for (const pid of projectIds) {
+    const projectConnections = connections.get(pid);
+    if (projectConnections) {
+      projectConnections.delete(ws);
+      if (projectConnections.size === 0) {
+        connections.delete(pid);
+      }
+    }
+  }
+}
+
+function removeSingleProjectConnection(
+  ws: WebSocket,
+  projectId: string,
+  connections: SnapshotConnectionsMap
+): void {
+  const projectConnections = connections.get(projectId);
+  if (projectConnections) {
+    projectConnections.delete(ws);
+    if (projectConnections.size === 0) {
+      connections.delete(projectId);
+    }
+  }
+}
+
 export function createSnapshotsUpgradeHandler(
   appContext: AppContext,
   options: {
@@ -170,37 +206,61 @@ export function createSnapshotsUpgradeHandler(
       return;
     }
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
+    const isAllProjects = projectId === ALL_PROJECTS_SENTINEL;
+
+    wss.handleUpgrade(request, socket, head, async (ws) => {
       logger.info('Snapshots WebSocket connection established', { projectId });
 
       markWebSocketAlive(ws, wsAliveMap);
 
-      // Add to connection set FIRST (before sending full snapshot)
-      getOrCreateConnectionSet(connections, projectId).add(ws);
+      if (isAllProjects) {
+        // Subscribe to all non-archived projects
+        const projects = await projectAccessor.list({ isArchived: false });
+        const projectIds = projects.map((p) => p.id);
 
-      // Send full project snapshot (WSKT-02, WSKT-05)
-      const entries = workspaceSnapshotStore
-        .getByProjectId(projectId)
-        .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
-      ws.send(
-        JSON.stringify({
-          type: 'snapshot_full',
-          projectId,
-          entries,
-        })
-      );
-
-      ws.on('close', () => {
-        logger.info('Snapshots WebSocket connection closed', { projectId });
-
-        const projectConnections = connections.get(projectId);
-        if (projectConnections) {
-          projectConnections.delete(ws);
-          if (projectConnections.size === 0) {
-            connections.delete(projectId);
-          }
+        for (const pid of projectIds) {
+          getOrCreateConnectionSet(connections, pid).add(ws);
         }
-      });
+
+        // Send combined full snapshot for all projects
+        const allEntries = projectIds.flatMap((pid) =>
+          workspaceSnapshotStore
+            .getByProjectId(pid)
+            .filter((entry) => !isHiddenWorkspaceStatus(entry.status))
+            .map((entry) => ({ ...entry, projectId: pid }))
+        );
+        ws.send(
+          JSON.stringify({
+            type: 'snapshot_full_all',
+            entries: allEntries,
+          })
+        );
+
+        ws.on('close', () => {
+          logger.info('Snapshots WebSocket connection closed', { projectId });
+          removeAllProjectConnections(ws, projectIds, connections);
+        });
+      } else {
+        // Add to connection set FIRST (before sending full snapshot)
+        getOrCreateConnectionSet(connections, projectId).add(ws);
+
+        // Send full project snapshot (WSKT-02, WSKT-05)
+        const entries = workspaceSnapshotStore
+          .getByProjectId(projectId)
+          .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
+        ws.send(
+          JSON.stringify({
+            type: 'snapshot_full',
+            projectId,
+            entries,
+          })
+        );
+
+        ws.on('close', () => {
+          logger.info('Snapshots WebSocket connection closed', { projectId });
+          removeSingleProjectConnection(ws, projectId, connections);
+        });
+      }
 
       ws.on('error', (error) => {
         logger.error('Snapshots WebSocket error', error);

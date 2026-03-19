@@ -1,10 +1,17 @@
 import { ChevronRight, ChevronsUpDown } from 'lucide-react';
 import { useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+} from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 const CURRENT_PROJECT_VALUE = '__current_project__';
+export const ALL_PROJECTS_SLUG = '__all__';
 const DEFAULT_PROJECT_BUTTON_CLASS =
   'h-7 w-auto max-w-[6rem] border-0 bg-transparent px-0.5 text-sm font-semibold text-foreground shadow-none focus:ring-0 sm:max-w-[18rem] sm:px-1 md:max-w-none md:overflow-visible md:text-clip';
 
@@ -52,9 +59,12 @@ export function ProjectSelectorDropdown({
   trailingSeparatorType?: 'chevron' | 'slash';
 }) {
   const isMobile = useIsMobile();
+  const isAllProjects = selectedProjectSlug === ALL_PROJECTS_SLUG;
   const [selectOpen, setSelectOpen] = useState(false);
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
-  const selectedProjectName = selectedProject?.name ?? 'Select a project';
+  const selectedProjectName = isAllProjects
+    ? 'All Projects'
+    : (selectedProject?.name ?? 'Select a project');
   const projectButtonLabel =
     isMobile && selectedProject ? getProjectInitials(selectedProject.name) : selectedProjectName;
   const shouldRenderCurrentProjectItem = Boolean(selectedProject && onCurrentProjectSelect);
@@ -113,11 +123,19 @@ export function ProjectSelectorDropdown({
           </span>
         </SelectTrigger>
         <SelectContent>
+          {/* Hidden item for the current value (required for controlled select) */}
+          {isAllProjects ? (
+            <SelectItem value={ALL_PROJECTS_SLUG} className="hidden" aria-hidden>
+              All Projects
+            </SelectItem>
+          ) : null}
           {shouldRenderCurrentProjectItem && selectedProject ? (
             <SelectItem value={selectedProject.slug} className="hidden" aria-hidden>
               {selectedProject.name}
             </SelectItem>
           ) : null}
+          <SelectItem value={ALL_PROJECTS_SLUG}>All Projects</SelectItem>
+          <SelectSeparator />
           {shouldRenderCurrentProjectItem && selectedProject ? (
             <SelectItem value={CURRENT_PROJECT_VALUE}>{selectedProject.name}</SelectItem>
           ) : null}
@@ -126,6 +144,7 @@ export function ProjectSelectorDropdown({
               {project.name}
             </SelectItem>
           ))}
+          <SelectSeparator />
           <SelectItem value="__create__" className="text-muted-foreground">
             + Create project
           </SelectItem>
