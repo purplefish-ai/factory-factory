@@ -1,4 +1,6 @@
 import { memo } from 'react';
+import { useParams } from 'react-router';
+import { trpc } from '@/client/lib/trpc';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { ToolResultContentValue } from '@/lib/chat-protocol';
 import { cn } from '@/lib/utils';
@@ -16,6 +18,7 @@ import { extractPlanToolResult } from './tool-result-plan';
 
 const TOOL_RESULT_CONTENT_TRUNCATE = 20_000;
 const TOOL_RESULT_ITEM_TEXT_TRUNCATE = 20_000;
+const SCREENSHOT_PATH_REGEX = /\.factory-factory\/screenshots\/[^\s"'`]+\.(?:png|jpg|jpeg|webp)/gi;
 
 function hasStandaloneFileChangeSignature(payload: CodexFileChangePayload): boolean {
   const hasCallId = payload.id?.startsWith('call_') ?? false;
@@ -28,6 +31,35 @@ function truncateContent(content: string, maxLength: number): string {
     return content;
   }
   return `${content.slice(0, maxLength)}\n... (truncated)`;
+}
+
+function extractScreenshotPaths(text: string): string[] {
+  const matches = text.match(SCREENSHOT_PATH_REGEX);
+  return matches ? [...new Set(matches)] : [];
+}
+
+// =============================================================================
+// Inline Screenshot
+// =============================================================================
+
+function InlineScreenshot({ path }: { path: string }) {
+  const { id: workspaceId = '' } = useParams<{ id: string }>();
+  const { data, isLoading } = trpc.workspace.readScreenshot.useQuery(
+    { workspaceId, path },
+    { enabled: !!workspaceId, staleTime: 60_000 }
+  );
+
+  if (!workspaceId || isLoading || !data) {
+    return null;
+  }
+
+  return (
+    <img
+      src={`data:${data.mimeType};base64,${data.data}`}
+      alt={data.name}
+      className="mt-1 max-w-full rounded border"
+    />
+  );
 }
 
 // =============================================================================
@@ -82,6 +114,7 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
   }
 
   if (typeof content === 'string') {
+    const screenshotPaths = isError ? [] : extractScreenshotPaths(content);
     return (
       <div className="w-0 min-w-full">
         <pre
@@ -92,6 +125,9 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
         >
           {truncateContent(content, TOOL_RESULT_CONTENT_TRUNCATE)}
         </pre>
+        {screenshotPaths.map((path) => (
+          <InlineScreenshot key={path} path={path} />
+        ))}
       </div>
     );
   }
@@ -115,11 +151,13 @@ export const ToolResultContentRenderer = memo(function ToolResultContentRenderer
             </pre>
           );
         }
-        // Image items could be rendered here if needed
         return (
-          <div key={key} className="text-xs text-muted-foreground">
-            [Image content]
-          </div>
+          <img
+            key={key}
+            src={`data:${item.source.media_type};base64,${item.source.data}`}
+            alt="Screenshot"
+            className="max-w-full rounded border"
+          />
         );
       })}
     </div>
