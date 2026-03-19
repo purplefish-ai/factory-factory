@@ -49,9 +49,7 @@ function getPersistedState(category: RouteCategory): boolean | null {
 }
 
 // Categories where user overrides should NOT persist across navigations.
-// The board view should always start collapsed — the sidebar opens only
-// transiently (e.g. to click a link) and resets on next visit.
-const TRANSIENT_CATEGORIES: Set<RouteCategory> = new Set(['board']);
+const TRANSIENT_CATEGORIES: Set<RouteCategory> = new Set();
 
 export function clearTransientOverrideOnCategoryChange(
   overrides: Partial<Record<RouteCategory, boolean>>,
