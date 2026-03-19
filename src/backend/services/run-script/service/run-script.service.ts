@@ -74,14 +74,17 @@ export class RunScriptService {
       }
 
       // Verify stale processes and atomically transition to STARTING.
-      // Returns null if the script is already running.
+      // Returns null if the script is already running or still stopping.
       const started = await runScriptStateMachine.start(workspaceId);
       if (!started) {
         // Re-read workspace for current pid/port after verify
         const fresh = await workspaceAccessor.findById(workspaceId);
+        const isStopping = fresh?.runScriptStatus === 'STOPPING';
         return {
           success: false,
-          error: 'Run script is already running',
+          error: isStopping
+            ? 'Run script is still stopping, please wait'
+            : 'Run script is already running',
           pid: fresh?.runScriptPid ?? undefined,
           port: fresh?.runScriptPort ?? undefined,
         };

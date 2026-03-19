@@ -191,6 +191,9 @@ class RunScriptStateMachineService extends EventEmitter {
     if (status === 'RUNNING') {
       return null; // Already running -- caller should return friendly message
     }
+    if (status === 'STOPPING') {
+      return null; // Still stopping -- caller should return friendly message
+    }
     return await this.transition(workspaceId, 'STARTING');
   }
 
