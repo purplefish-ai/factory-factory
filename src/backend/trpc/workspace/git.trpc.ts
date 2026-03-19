@@ -1,11 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { isPathSafe } from '@/backend/lib/file-helpers';
 import { getMergeBase, parseGitStatusOutput } from '@/backend/lib/git-helpers';
-import { execCommand, gitCommand } from '@/backend/lib/shell';
-import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
+import { gitCommand } from '@/backend/lib/shell';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { type Context, publicProcedure, router } from '@/backend/trpc/trpc';
 import {
@@ -15,93 +13,6 @@ import {
 
 const loggerName = 'workspace-git-trpc';
 const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerName);
-
-// =============================================================================
-// Merge helpers
-// =============================================================================
-
-async function validateMergeContext(workspaceId: string) {
-  const { workspace, worktreePath } = await getWorkspaceWithProjectAndWorktreeOrThrow(workspaceId);
-
-  const branchName = workspace.branchName;
-  if (!branchName) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Workspace has no branch name' });
-  }
-
-  const defaultBranch = workspace.project?.defaultBranch ?? 'main';
-  const repoPath = workspace.project?.repoPath;
-  const githubOwner = workspace.project?.githubOwner;
-  const githubRepo = workspace.project?.githubRepo;
-
-  if (!repoPath) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Project has no repo path' });
-  }
-  if (!(githubOwner && githubRepo)) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Project has no GitHub owner/repo configured',
-    });
-  }
-
-  return { branchName, defaultBranch, worktreePath, repoPath, githubOwner, githubRepo };
-}
-
-async function commitUncommittedChanges(worktreePath: string, defaultBranch: string) {
-  const statusResult = await gitCommand(['status', '--porcelain'], worktreePath);
-  if (!statusResult.stdout.trim()) {
-    return;
-  }
-  await gitCommand(['add', '-A'], worktreePath);
-  const commitResult = await gitCommand(
-    ['commit', '--no-verify', '-m', `Auto-commit before merge to ${defaultBranch}`],
-    worktreePath
-  );
-  if (commitResult.code !== 0) {
-    throw new TRPCError({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: `Failed to commit changes: ${commitResult.stderr}`,
-    });
-  }
-}
-
-async function pushBranch(worktreePath: string, branchName: string) {
-  const pushResult = await gitCommand(['push', '-u', 'origin', branchName], worktreePath);
-  if (pushResult.code !== 0) {
-    throw new TRPCError({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: `Failed to push branch: ${pushResult.stderr}`,
-    });
-  }
-}
-
-async function mergeViaGitHubApi(
-  cwd: string,
-  owner: string,
-  repo: string,
-  base: string,
-  head: string
-) {
-  const result = await execCommand(
-    'gh',
-    [
-      'api',
-      `repos/${owner}/${repo}/merges`,
-      '-f',
-      `base=${base}`,
-      '-f',
-      `head=${head}`,
-      '-f',
-      `commit_message=Merge ${head} into ${base}`,
-    ],
-    { cwd }
-  );
-  if (result.code !== 0) {
-    throw new TRPCError({
-      code: 'INTERNAL_SERVER_ERROR',
-      message: `Merge failed: ${result.stderr}`,
-    });
-  }
-}
 
 export const workspaceGitRouter = router({
   // Get git status for workspace
@@ -304,60 +215,5 @@ export const workspaceGitRouter = router({
       }
 
       return { diff: result.stdout };
-    }),
-
-  // Merge workspace branch directly into the default branch (no PR)
-  mergeToMain: publicProcedure
-    .input(z.object({ workspaceId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const logger = getLogger(ctx);
-      const mergeContext = await validateMergeContext(input.workspaceId);
-      const { branchName, defaultBranch, worktreePath, repoPath, githubOwner, githubRepo } =
-        mergeContext;
-
-      logger.info('Merging workspace branch to default branch', {
-        workspaceId: input.workspaceId,
-        branchName,
-        defaultBranch,
-      });
-
-      await commitUncommittedChanges(worktreePath, defaultBranch);
-      await pushBranch(worktreePath, branchName);
-      await mergeViaGitHubApi(worktreePath, githubOwner, githubRepo, defaultBranch, branchName);
-
-      // Pull the merge into the main repo so local is up to date
-      await gitCommand(['pull', 'origin', defaultBranch], repoPath);
-
-      // Clean up: delete remote branch
-      await gitCommand(['push', 'origin', '--delete', branchName], worktreePath).catch(() => {
-        logger.warn('Failed to delete remote branch after merge', { branchName });
-      });
-
-      // Archive the workspace
-      const workspaceWithProject = await workspaceDataService.findByIdWithProject(
-        input.workspaceId
-      );
-      if (workspaceWithProject) {
-        try {
-          await archiveWorkspace(
-            workspaceWithProject,
-            { commitUncommitted: false },
-            ctx.appContext.services
-          );
-        } catch (archiveError) {
-          logger.warn('Failed to archive workspace after merge', {
-            workspaceId: input.workspaceId,
-            error: archiveError instanceof Error ? archiveError.message : String(archiveError),
-          });
-        }
-      }
-
-      logger.info('Successfully merged workspace branch', {
-        workspaceId: input.workspaceId,
-        branchName,
-        defaultBranch,
-      });
-
-      return { success: true, defaultBranch, branchName };
     }),
 });

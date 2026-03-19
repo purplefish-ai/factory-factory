@@ -7,6 +7,7 @@ import {
   getValidModel,
   getValidReasoningEffort,
 } from '@/backend/services/session/service/chat/chat-message-handlers/utils';
+import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type { StartMessageInput } from '@/shared/websocket';
@@ -38,7 +39,7 @@ export function createStartHandler(
         reasoningEffort: getValidReasoningEffort(message),
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = toErrorMessage(error);
       logger.error('[Chat WS] Failed to start session client', { sessionId, error: errorMessage });
       sessionDomainService.markError(sessionId, `Failed to start agent: ${errorMessage}`);
       ws.send(JSON.stringify({ type: 'error', message: `Failed to start agent: ${errorMessage}` }));

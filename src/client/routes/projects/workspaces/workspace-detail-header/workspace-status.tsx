@@ -1,5 +1,4 @@
-import { CheckCircle2, CircleDot, GitMerge, GitPullRequest } from 'lucide-react';
-import { trpc } from '@/client/lib/trpc';
+import { CheckCircle2, CircleDot, GitPullRequest } from 'lucide-react';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -76,42 +75,6 @@ export function WorkspacePrAction({
   }
 
   return null;
-}
-
-type WorkspaceMergeActionProps = {
-  workspace: WorkspaceHeaderWorkspace;
-};
-
-export function WorkspaceMergeAction({ workspace }: WorkspaceMergeActionProps) {
-  const utils = trpc.useUtils();
-  const mergeMutation = trpc.workspace.mergeToMain.useMutation({
-    onSuccess: () => {
-      void utils.workspace.get.invalidate({ id: workspace.id });
-    },
-  });
-
-  // Show merge button when workspace has a branch and isn't already merged
-  if (!workspace.branchName || isWorkspaceMerged(workspace)) {
-    return null;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 gap-1 text-xs px-2"
-          disabled={mergeMutation.isPending}
-          onClick={() => mergeMutation.mutate({ workspaceId: workspace.id })}
-        >
-          <GitMerge className="h-3 w-3" />
-          {mergeMutation.isPending ? 'Merging...' : 'Merge'}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>Merge this branch directly into the default branch</TooltipContent>
-    </Tooltip>
-  );
 }
 
 export function WorkspaceIssueLink({ workspace }: { workspace: WorkspaceHeaderWorkspace }) {

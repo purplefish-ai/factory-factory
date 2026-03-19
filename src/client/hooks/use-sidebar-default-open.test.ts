@@ -21,9 +21,10 @@ describe('getRouteCategoryForPath', () => {
 });
 
 describe('clearTransientOverrideOnCategoryChange', () => {
-  it('clears board override when leaving board routes', () => {
+  it('keeps board override when leaving board routes (board is not transient)', () => {
     const overrides = { board: true, workspace_detail: true };
     expect(clearTransientOverrideOnCategoryChange(overrides, 'board', 'default')).toEqual({
+      board: true,
       workspace_detail: true,
     });
   });

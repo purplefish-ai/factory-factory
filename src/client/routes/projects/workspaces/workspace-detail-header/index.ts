@@ -11,7 +11,6 @@ export { WorkspaceProviderSettings } from './workspace-provider-settings';
 export {
   WorkspaceCiStatus,
   WorkspaceIssueLink,
-  WorkspaceMergeAction,
   WorkspacePrAction,
 } from './workspace-status';
 export { WorkspaceSwitcherDropdown } from './workspace-switcher-dropdown';

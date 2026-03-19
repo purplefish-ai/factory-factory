@@ -20,7 +20,6 @@ import {
   WorkspaceHeaderOverflowMenu,
   type WorkspaceHeaderProps,
   WorkspaceIssueLink,
-  WorkspaceMergeAction,
   WorkspacePrAction,
   WorkspaceProviderSettings,
   WorkspaceSwitcherDropdown,
@@ -85,7 +84,6 @@ export function WorkspaceDetailHeaderSlot({
             isCreatingSession={isCreatingSession}
             handleQuickAction={handleQuickAction}
           />
-          <WorkspaceMergeAction workspace={workspace} />
           <WorkspaceIssueLink workspace={workspace} />
           <WorkspaceCiStatus workspace={workspace} />
           <RunScriptPortBadge workspaceId={workspaceId} />
