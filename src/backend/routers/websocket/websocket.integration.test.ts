@@ -455,6 +455,7 @@ describe('websocket integration', () => {
     await vi.waitFor(() => {
       expect(messages).toContainEqual({
         type: 'snapshot_changed',
+        projectId,
         workspaceId,
         entry: expect.objectContaining({
           prUrl: 'https://github.com/acme/repo/pull/123',
@@ -465,7 +466,7 @@ describe('websocket integration', () => {
     workspaceSnapshotStore.remove(workspaceId);
 
     await vi.waitFor(() => {
-      expect(messages).toContainEqual({ type: 'snapshot_removed', workspaceId });
+      expect(messages).toContainEqual({ type: 'snapshot_removed', projectId, workspaceId });
     });
   });
 
