@@ -23,7 +23,15 @@ Execution Rules:
 - If you make actionable changes, commit with a focused message and push.
 
 Required Sequence:
-1. Merge the latest `main` into the current branch and resolve conflicts.
+1. Merge the latest `main` into the current branch and resolve any conflicts:
+   - Run `git fetch origin main && git merge origin/main`.
+   - If there are conflicts, resolve them file by file. For each conflicted file:
+     - Read the file to understand both sides of the conflict.
+     - Keep the intent of both the PR changes and the incoming main changes.
+     - Prefer the PR's version for code this PR intentionally changed; prefer main's version for unrelated additions.
+     - After resolving, stage the file with `git add <file>`.
+   - Once all conflicts are resolved, complete the merge with `git commit --no-edit`.
+   - If a conflict is too ambiguous to resolve safely (e.g., overlapping logic changes where both sides modified the same function in incompatible ways), document it in the session output and exit without pushing.
 2. Check CI failures and fix them.
 3. Check for unaddressed code review comments and address them.
 4. Run build/lint/test and fix any resulting failures.

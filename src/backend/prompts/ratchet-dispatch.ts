@@ -22,7 +22,11 @@ Context:
 {{REVIEW_COMMENTS}}
 
 Execute autonomously in this order:
-1. Merge latest main and resolve conflicts.
+1. Merge latest main and resolve conflicts:
+   - Run \`git fetch origin main && git merge origin/main\`.
+   - Resolve conflicts file by file: read each file, keep the intent of both sides, prefer the PR's version for code this PR changed and main's version for unrelated additions.
+   - Stage resolved files with \`git add <file>\` and complete with \`git commit --no-edit\`.
+   - If a conflict is too ambiguous to resolve safely, document it and exit without pushing.
 2. Check CI failures and fix them.
 3. Address unaddressed code review comments.
 4. Run build/lint/test and fix failures.
