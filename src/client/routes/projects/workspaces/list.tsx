@@ -10,10 +10,7 @@ export default function WorkspacesListPage() {
 
   const isAllProjects = slug === ALL_PROJECTS_SLUG;
 
-  const { data: project } = trpc.project.getBySlug.useQuery(
-    { slug },
-    { enabled: !isAllProjects }
-  );
+  const { data: project } = trpc.project.getBySlug.useQuery({ slug }, { enabled: !isAllProjects });
 
   if (isAllProjects) {
     return (

@@ -79,7 +79,7 @@ function AllProjectsBoardHeaderSlot({
 function WorkspaceCard({ workspace }: { workspace: ProjectWorkspace }) {
   return (
     <Link
-      to={`/projects/${workspace.projectSlug}/workspaces/${workspace.id}`}
+      to={`/projects/__all__/workspaces/${workspace.id}`}
       className="block rounded-lg border bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow p-3"
     >
       <div className="flex items-start gap-2 mb-1.5">

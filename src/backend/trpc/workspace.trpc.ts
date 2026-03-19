@@ -107,22 +107,22 @@ export const workspaceRouter = router({
     .query(({ input }) => workspaceQueryService.getProjectSummaryState(input.projectId)),
 
   // Get summary state for all non-archived projects (for all-projects sidebar view)
-  getAllProjectsSummaryState: publicProcedure
-    .input(z.object({}))
-    .query(async () => {
-      const projects = await projectAccessor.list({ isArchived: false });
-      const summaries = await Promise.all(
-        projects.map((project) => workspaceQueryService.getProjectSummaryState(project.id))
-      );
-      return projects.map((project, index) => ({
-        project: {
-          id: project.id,
-          slug: project.slug,
-          name: project.name,
-        },
-        ...(summaries[index] as Awaited<ReturnType<typeof workspaceQueryService.getProjectSummaryState>>),
-      }));
-    }),
+  getAllProjectsSummaryState: publicProcedure.input(z.object({})).query(async () => {
+    const projects = await projectAccessor.list({ isArchived: false });
+    const summaries = await Promise.all(
+      projects.map((project) => workspaceQueryService.getProjectSummaryState(project.id))
+    );
+    return projects.map((project, index) => ({
+      project: {
+        id: project.id,
+        slug: project.slug,
+        name: project.name,
+      },
+      ...(summaries[index] as Awaited<
+        ReturnType<typeof workspaceQueryService.getProjectSummaryState>
+      >),
+    }));
+  }),
 
   // List workspaces with kanban state (for board view)
   listWithKanbanState: publicProcedure

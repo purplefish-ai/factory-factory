@@ -15,6 +15,13 @@ import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -203,7 +210,7 @@ function AllProjectsView({
             <WorkspaceGroup
               label="Waiting"
               workspaces={waiting}
-              projectSlug={project.slug}
+              projectSlug="__all__"
               currentWorkspaceId={currentWorkspaceId}
               emptyText=""
             />
@@ -213,7 +220,7 @@ function AllProjectsView({
             <WorkspaceGroup
               label="Working"
               workspaces={working}
-              projectSlug={project.slug}
+              projectSlug="__all__"
               currentWorkspaceId={currentWorkspaceId}
               emptyText=""
             />
@@ -223,7 +230,7 @@ function AllProjectsView({
             <WorkspaceGroup
               label="Done"
               workspaces={done}
-              projectSlug={project.slug}
+              projectSlug="__all__"
               currentWorkspaceId={currentWorkspaceId}
               emptyText=""
             />
@@ -259,6 +266,7 @@ function SidebarInner({
   showNewWorkspaceForm,
   onShowNewWorkspaceFormChange,
   canCreateWorkspace,
+  onNewWorkspaceProjectIdChange,
   onNavigate,
   showCloseButton,
 }: {
@@ -272,6 +280,7 @@ function SidebarInner({
   showNewWorkspaceForm: boolean;
   onShowNewWorkspaceFormChange: (show: boolean) => void;
   canCreateWorkspace: boolean;
+  onNewWorkspaceProjectIdChange: (id: string | undefined) => void;
   onNavigate?: () => void;
   showCloseButton: boolean;
 }) {
@@ -314,6 +323,29 @@ function SidebarInner({
                     onNavigate?.();
                   }}
                 />
+              </div>
+            ) : showNewWorkspaceForm && navData.viewMode === 'all' ? (
+              <div className="px-1 py-1 flex flex-col gap-1">
+                <Select onValueChange={(id) => onNewWorkspaceProjectIdChange(id)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select project…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {navData.projects?.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="text-xs">
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs w-full"
+                  onClick={() => onShowNewWorkspaceFormChange(false)}
+                >
+                  Cancel
+                </Button>
               </div>
             ) : (
               <SidebarMenu>
@@ -428,6 +460,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar();
   const [showNewWorkspaceForm, setShowNewWorkspaceForm] = useState(false);
+  const [newWorkspaceProjectId, setNewWorkspaceProjectId] = useState<string | undefined>(undefined);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(getPersistedSidebarWidth);
 
@@ -443,6 +476,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     if (prevSelectedProjectIdRef.current !== navData.selectedProjectId) {
       prevSelectedProjectIdRef.current = navData.selectedProjectId;
       setShowNewWorkspaceForm(false);
+      setNewWorkspaceProjectId(undefined);
     }
   }, [navData.selectedProjectId]);
 
@@ -533,11 +567,19 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     waiting,
     working,
     done,
-    selectedProjectId: navData.selectedProjectId,
+    selectedProjectId: newWorkspaceProjectId ?? navData.selectedProjectId,
     existingWorkspaceNames: navData.serverWorkspaces?.map((workspace) => workspace.name),
     showNewWorkspaceForm,
-    onShowNewWorkspaceFormChange: setShowNewWorkspaceForm,
-    canCreateWorkspace: Boolean(navData.selectedProjectId && navData.selectedProjectSlug),
+    onShowNewWorkspaceFormChange: (show: boolean) => {
+      setShowNewWorkspaceForm(show);
+      if (!show) {
+        setNewWorkspaceProjectId(undefined);
+      }
+    },
+    canCreateWorkspace:
+      Boolean(navData.selectedProjectId && navData.selectedProjectSlug) ||
+      (navData.viewMode === 'all' && Boolean(navData.projects?.length)),
+    onNewWorkspaceProjectIdChange: setNewWorkspaceProjectId,
   };
 
   // Mobile: Sheet overlay

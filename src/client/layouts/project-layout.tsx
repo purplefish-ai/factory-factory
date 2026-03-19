@@ -6,12 +6,13 @@ import { trpc } from '@/client/lib/trpc';
 export function ProjectLayout() {
   const { slug = '' } = useParams<{ slug: string }>();
   const { setProjectContext } = useProjectContext();
+  const isAllProjects = slug === '__all__';
 
   const {
     data: project,
     isLoading,
     error,
-  } = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug });
+  } = trpc.project.getBySlug.useQuery({ slug }, { enabled: !!slug && !isAllProjects });
 
   // Set project context for tRPC requests when project is loaded
   useEffect(() => {
@@ -23,6 +24,10 @@ export function ProjectLayout() {
       setProjectContext(undefined);
     };
   }, [project?.id, setProjectContext]);
+
+  if (isAllProjects) {
+    return <Outlet />;
+  }
 
   if (isLoading) {
     return (
