@@ -85,7 +85,7 @@ export function WorkspaceDetailHeaderSlot({
             isCreatingSession={isCreatingSession}
             handleQuickAction={handleQuickAction}
           />
-          <WorkspaceMergeAction workspace={workspace} hasChanges={hasChanges} running={running} />
+          <WorkspaceMergeAction workspace={workspace} />
           <WorkspaceIssueLink workspace={workspace} />
           <WorkspaceCiStatus workspace={workspace} />
           <RunScriptPortBadge workspaceId={workspaceId} />

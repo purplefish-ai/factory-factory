@@ -80,15 +80,9 @@ export function WorkspacePrAction({
 
 type WorkspaceMergeActionProps = {
   workspace: WorkspaceHeaderWorkspace;
-  hasChanges?: boolean;
-  running: boolean;
 };
 
-export function WorkspaceMergeAction({
-  workspace,
-  hasChanges,
-  running,
-}: WorkspaceMergeActionProps) {
+export function WorkspaceMergeAction({ workspace }: WorkspaceMergeActionProps) {
   const utils = trpc.useUtils();
   const mergeMutation = trpc.workspace.mergeToMain.useMutation({
     onSuccess: () => {
@@ -96,8 +90,8 @@ export function WorkspaceMergeAction({
     },
   });
 
-  // Show merge button when there are changes, no session running, and no PR
-  if (!hasChanges || running || isWorkspaceMerged(workspace) || hasVisiblePullRequest(workspace)) {
+  // Show merge button when workspace has a branch and isn't already merged
+  if (!workspace.branchName || isWorkspaceMerged(workspace)) {
     return null;
   }
 
