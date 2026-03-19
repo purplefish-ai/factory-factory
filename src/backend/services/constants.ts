@@ -21,8 +21,8 @@ export const SERVICE_TIMEOUT_MS = Object.freeze({
 
 export const SERVICE_INTERVAL_MS = Object.freeze({
   fileLockCleanup: 5 * 60 * 1000,
-  ratchetPoll: 2 * 60_000, // Increased from 1min to 2min to reduce GitHub API pressure
-  schedulerPrSync: 3 * 60 * 1000, // Increased from 2min to 3min to reduce GitHub API pressure
+  ratchetPoll: 3 * 60_000,
+  schedulerPrSync: 3 * 60 * 1000,
   schedulerAutoArchive: 5 * 60 * 1000,
   reconciliationCleanup: 5 * 60 * 1000,
   dbBackup: 5 * 60 * 1000,
@@ -31,6 +31,10 @@ export const SERVICE_INTERVAL_MS = Object.freeze({
 export const SERVICE_CACHE_TTL_MS = Object.freeze({
   ratchetAuthenticatedUsername: 5 * 60_000,
   cliHealth: 30_000,
+  githubHealth: 30_000,
+  githubUsername: 5 * 60_000,
+  githubIssues: 30_000,
+  githubReviewRequests: 30_000,
 } as const);
 
 export const SERVICE_CONCURRENCY = Object.freeze({

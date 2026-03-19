@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
@@ -35,16 +36,63 @@ import { mapWithConcurrencyLimit, parseGhJson } from './github-cli/utils';
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
 /**
  * Service for interacting with GitHub via the `gh` CLI.
  * Uses the locally authenticated gh CLI instead of API tokens.
  */
 class GitHubCLIService {
+  private healthCache: CacheEntry<GitHubCLIHealthStatus> | null = null;
+  private healthInFlight: Promise<GitHubCLIHealthStatus> | null = null;
+  private usernameCache: CacheEntry<string | null> | null = null;
+  private usernameInFlight: Promise<string | null> | null = null;
+  private issuesCache = new Map<string, CacheEntry<GitHubIssue[]>>();
+  private reviewRequestsCache: CacheEntry<ReviewRequestedPR[]> | null = null;
+  private reviewRequestsInFlight: Promise<ReviewRequestedPR[]> | null = null;
+
+  _resetForTesting(): void {
+    this.healthCache = null;
+    this.healthInFlight = null;
+    this.usernameCache = null;
+    this.usernameInFlight = null;
+    this.issuesCache.clear();
+    this.reviewRequestsCache = null;
+    this.reviewRequestsInFlight = null;
+  }
+
   /**
    * Get the authenticated user's GitHub username.
+   * Cached for 5 minutes with in-flight deduplication.
    * Returns null if not authenticated or gh CLI is not available.
    */
   async getAuthenticatedUsername(): Promise<string | null> {
+    if (this.usernameCache && this.usernameCache.expiresAt > Date.now()) {
+      return this.usernameCache.value;
+    }
+    if (this.usernameInFlight !== null) {
+      return this.usernameInFlight;
+    }
+    const promise = this.fetchAuthenticatedUsername();
+    this.usernameInFlight = promise;
+    try {
+      const result = await promise;
+      this.usernameCache = {
+        value: result,
+        expiresAt: Date.now() + SERVICE_CACHE_TTL_MS.githubUsername,
+      };
+      return result;
+    } finally {
+      if (this.usernameInFlight === promise) {
+        this.usernameInFlight = null;
+      }
+    }
+  }
+
+  private async fetchAuthenticatedUsername(): Promise<string | null> {
     try {
       const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login'], {
         timeout: GH_TIMEOUT_MS.userLookup,
@@ -57,8 +105,32 @@ class GitHubCLIService {
 
   /**
    * Check if gh CLI is installed and authenticated.
+   * Cached for 30 seconds with in-flight deduplication.
    */
   async checkHealth(): Promise<GitHubCLIHealthStatus> {
+    if (this.healthCache && this.healthCache.expiresAt > Date.now()) {
+      return this.healthCache.value;
+    }
+    if (this.healthInFlight !== null) {
+      return this.healthInFlight;
+    }
+    const promise = this.fetchHealth();
+    this.healthInFlight = promise;
+    try {
+      const result = await promise;
+      this.healthCache = {
+        value: result,
+        expiresAt: Date.now() + SERVICE_CACHE_TTL_MS.githubHealth,
+      };
+      return result;
+    } finally {
+      if (this.healthInFlight === promise) {
+        this.healthInFlight = null;
+      }
+    }
+  }
+
+  private async fetchHealth(): Promise<GitHubCLIHealthStatus> {
     try {
       const { stdout: versionOutput } = await execFileAsync('gh', ['--version'], {
         timeout: GH_TIMEOUT_MS.healthVersion,
@@ -179,9 +251,33 @@ class GitHubCLIService {
 
   /**
    * List all PRs where the authenticated user is requested as a reviewer.
+   * Cached for 30 seconds with in-flight deduplication.
    * Fetches reviewDecision for each PR to show accurate status.
    */
   async listReviewRequests(): Promise<ReviewRequestedPR[]> {
+    if (this.reviewRequestsCache && this.reviewRequestsCache.expiresAt > Date.now()) {
+      return this.reviewRequestsCache.value;
+    }
+    if (this.reviewRequestsInFlight !== null) {
+      return this.reviewRequestsInFlight;
+    }
+    const promise = this.fetchReviewRequests();
+    this.reviewRequestsInFlight = promise;
+    try {
+      const result = await promise;
+      this.reviewRequestsCache = {
+        value: result,
+        expiresAt: Date.now() + SERVICE_CACHE_TTL_MS.githubReviewRequests,
+      };
+      return result;
+    } finally {
+      if (this.reviewRequestsInFlight === promise) {
+        this.reviewRequestsInFlight = null;
+      }
+    }
+  }
+
+  private async fetchReviewRequests(): Promise<ReviewRequestedPR[]> {
     const { stdout } = await execFileAsync(
       'gh',
       [
@@ -295,6 +391,7 @@ class GitHubCLIService {
 
     try {
       await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+      this.reviewRequestsCache = null;
       logger.info('PR approved successfully', { owner, repo, prNumber });
     } catch (error) {
       const errorType = classifyError(error);
@@ -439,6 +536,7 @@ class GitHubCLIService {
 
     try {
       await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+      this.reviewRequestsCache = null;
       logger.info('PR review submitted successfully', { repo, prNumber, action });
     } catch (error) {
       const errorType = classifyError(error);
@@ -458,7 +556,7 @@ class GitHubCLIService {
 
   /**
    * List open issues for a repository.
-   * Fetches fresh on every call (no caching).
+   * Cached for 30 seconds, keyed by owner/repo/assignee.
    * @param assignee - Filter by assignee. Use '@me' for issues assigned to the authenticated user.
    */
   async listIssues(
@@ -467,6 +565,26 @@ class GitHubCLIService {
     options: { limit?: number; assignee?: string } = {}
   ): Promise<GitHubIssue[]> {
     const { limit = 50, assignee } = options;
+    const cacheKey = `${owner}/${repo}:${assignee ?? ''}:${limit}`;
+    const cached = this.issuesCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
+    const result = await this.fetchIssues(owner, repo, limit, assignee);
+    this.issuesCache.set(cacheKey, {
+      value: result,
+      expiresAt: Date.now() + SERVICE_CACHE_TTL_MS.githubIssues,
+    });
+    return result;
+  }
+
+  private async fetchIssues(
+    owner: string,
+    repo: string,
+    limit: number,
+    assignee: string | undefined
+  ): Promise<GitHubIssue[]> {
     try {
       const args = [
         'issue',
@@ -665,6 +783,7 @@ class GitHubCLIService {
         ['issue', 'close', String(issueNumber), '--repo', `${owner}/${repo}`],
         { timeout: GH_TIMEOUT_MS.default }
       );
+      this.issuesCache.clear();
       logger.info('Issue closed successfully', { owner, repo, issueNumber });
     } catch (error) {
       const errorType = classifyError(error);
