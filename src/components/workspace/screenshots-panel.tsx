@@ -13,13 +13,18 @@ import { useWorkspacePanel } from './workspace-panel-context';
 interface ScreenshotsPanelProps {
   workspaceId: string;
   onTakeScreenshots?: () => void;
+  onNewScreenshot?: () => void;
 }
 
 // =============================================================================
 // Main Component
 // =============================================================================
 
-export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: ScreenshotsPanelProps) {
+export function ScreenshotsPanel({
+  workspaceId,
+  onTakeScreenshots,
+  onNewScreenshot,
+}: ScreenshotsPanelProps) {
   const { openTab } = useWorkspacePanel();
   const utils = trpc.useUtils();
   const [isTaking, setIsTaking] = useState(false);
@@ -38,13 +43,16 @@ export function ScreenshotsPanel({ workspaceId, onTakeScreenshots }: Screenshots
 
   const screenshots = data?.screenshots ?? [];
 
-  // Clear isTaking when new screenshots appear
+  // Clear isTaking when new screenshots appear and notify parent
   useEffect(() => {
+    if (screenshots.length > prevCountRef.current && prevCountRef.current > 0) {
+      onNewScreenshot?.();
+    }
     if (isTaking && screenshots.length > prevCountRef.current) {
       setIsTaking(false);
     }
     prevCountRef.current = screenshots.length;
-  }, [screenshots.length, isTaking]);
+  }, [screenshots.length, isTaking, onNewScreenshot]);
 
   const handleTakeScreenshots = useCallback(() => {
     setIsTaking(true);

@@ -53,7 +53,8 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Authenticate once: `gh auth login`, verify with `gh auth status`.
 - Create a feature branch: `git switch -c your-branch-name`.
 - Keep work tidy: `git status`, `git diff`, `git add -p`, `git commit -m "Verb phrase"`.
-- Open a PR: `gh pr create --fill` (edit title/body as needed), then push updates with `git push`.
+- **PRs must target the fork** (`devonpmack/factory-factory`), not the upstream repo (`purplefish-ai/factory-factory`). Always use `--repo devonpmack/factory-factory` with `gh pr create`.
+- Open a PR: `gh pr create --repo devonpmack/factory-factory --fill` (edit title/body as needed), then push updates with `git push`.
 - For multi-line PR bodies, prefer `--body-file` to avoid newline escaping issues (write content to a temp file and pass it to `gh pr create`).
 - For multi-line issue bodies, prefer `gh issue create --body-file` or `gh issue edit --body-file` to preserve newlines.
 

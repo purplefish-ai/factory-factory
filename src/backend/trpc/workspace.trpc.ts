@@ -400,6 +400,18 @@ export const workspaceRouter = router({
     .input(z.object({ workspaceId: z.string() }))
     .query(({ input }) => workspaceQueryService.hasChanges(input.workspaceId)),
 
+  // Update workspace notepad
+  updateNotepad: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        notepad: z.string().nullable(),
+      })
+    )
+    .mutation(({ input }) => {
+      return workspaceDataService.updateNotepad(input.workspaceId, input.notepad);
+    }),
+
   // Merge sub-routers
   ...workspaceFilesRouter._def.procedures,
   ...workspaceGitRouter._def.procedures,

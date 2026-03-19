@@ -217,6 +217,9 @@ model Workspace {
   cachedKanbanColumn  KanbanColumn      @default(WAITING)
   stateComputedAt     DateTime?         // Last kanban column computation
 
+  // Human-written notepad for workspace notes
+  notepad             String?
+
   @@index([projectId])
   @@index([status])
   @@index([cachedKanbanColumn])

@@ -1,4 +1,4 @@
-import { Camera, FileQuestion, Files, ListTodo, Plus, Terminal } from 'lucide-react';
+import { Camera, FileQuestion, Files, ListTodo, NotebookPen, Plus, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/components/chat';
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { FileBrowserPanel } from './file-browser-panel';
+import { NotepadPanel } from './notepad-panel';
 import { ScreenshotsPanel } from './screenshots-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
@@ -29,7 +30,7 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // Types
 // =============================================================================
 
-type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots';
+type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots' | 'notes';
 type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
 interface PersistedTopPanelState {
@@ -41,7 +42,13 @@ function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
 }
 
 function parseStoredTopTab(value: string | null): TopPanelTab | null {
-  if (value === 'changes' || value === 'files' || value === 'tasks' || value === 'screenshots') {
+  if (
+    value === 'changes' ||
+    value === 'files' ||
+    value === 'tasks' ||
+    value === 'screenshots' ||
+    value === 'notes'
+  ) {
     return value;
   }
   // Legacy migration: old values were direct changes sub-views.
@@ -106,6 +113,7 @@ function TopPanelArea({
   const showFiles = activeTopTab === 'files';
   const showTasks = activeTopTab === 'tasks';
   const showScreenshots = activeTopTab === 'screenshots';
+  const showNotes = activeTopTab === 'notes';
 
   const screenshotsButtonClassName = cn(
     'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
@@ -136,6 +144,12 @@ function TopPanelArea({
           isActive={showTasks}
           onSelect={() => onTopTabChange('tasks')}
         />
+        <TabButton
+          label="Notes"
+          icon={<NotebookPen className="h-3.5 w-3.5" />}
+          isActive={showNotes}
+          onSelect={() => onTopTabChange('notes')}
+        />
 
         <div className="flex-1" />
 
@@ -164,8 +178,13 @@ function TopPanelArea({
         {showFiles && <FileBrowserPanel workspaceId={workspaceId} />}
         {showTasks && <TodoPanelContainer messages={messages} />}
         {showScreenshots && (
-          <ScreenshotsPanel workspaceId={workspaceId} onTakeScreenshots={onTakeScreenshots} />
+          <ScreenshotsPanel
+            workspaceId={workspaceId}
+            onTakeScreenshots={onTakeScreenshots}
+            onNewScreenshot={() => onTopTabChange('screenshots')}
+          />
         )}
+        {showNotes && <NotepadPanel workspaceId={workspaceId} />}
       </div>
     </div>
   );

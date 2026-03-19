@@ -64,6 +64,10 @@ class WorkspaceDataService {
     });
   }
 
+  updateNotepad(id: string, notepad: string | null) {
+    return workspaceAccessor.update(id, { notepad });
+  }
+
   delete(id: string): Promise<Workspace> {
     return workspaceAccessor.delete(id);
   }

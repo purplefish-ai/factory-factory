@@ -66,6 +66,8 @@ interface UpdateWorkspaceInput {
   ratchetLastCiRunId?: string | null;
   // Activity tracking
   hasHadSessions?: boolean;
+  // Notepad
+  notepad?: string | null;
   // Cached kanban column
   cachedKanbanColumn?: KanbanColumn;
   stateComputedAt?: Date | null;

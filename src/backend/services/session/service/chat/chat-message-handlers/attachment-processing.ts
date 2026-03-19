@@ -140,12 +140,21 @@ export function buildContentArray(
     content.push({ type: 'text', text: combinedText });
   }
 
+  const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
   for (const attachment of imageAttachments) {
+    if (!SUPPORTED_IMAGE_TYPES.has(attachment.type)) {
+      logger.warn('Unsupported image media type, defaulting to image/png', {
+        originalType: attachment.type,
+        attachmentName: attachment.name,
+      });
+    }
+    const mediaType = SUPPORTED_IMAGE_TYPES.has(attachment.type) ? attachment.type : 'image/png';
     const imageContent: Extract<AgentContentItem, { type: 'image' }> = {
       type: 'image',
       source: {
         type: 'base64',
-        media_type: attachment.type,
+        media_type: mediaType,
         data: attachment.data,
       },
     };

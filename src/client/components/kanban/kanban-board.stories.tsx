@@ -69,6 +69,7 @@ const baseWorkspace: WorkspaceWithKanban = {
   flowPhase: 'NO_PR',
   ratchetActiveSessionId: null,
   ratchetLastCiRunId: null,
+  notepad: null,
   isArchived: false,
 };
 

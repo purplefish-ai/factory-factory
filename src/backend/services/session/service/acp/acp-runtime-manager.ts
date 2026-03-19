@@ -622,9 +622,13 @@ export class AcpRuntimeManager {
             const binaryName = 'claude-agent-acp';
             const packageName = '@zed-industries/claude-agent-acp';
             const binaryPath = resolveAcpBinary(packageName, binaryName);
+            const args: string[] = [];
+            if (options.permissionPreset === 'YOLO') {
+              args.push('--dangerously-skip-permissions');
+            }
             return {
               command: binaryPath,
-              args: [],
+              args,
               commandLabel: binaryPath,
             };
           })();

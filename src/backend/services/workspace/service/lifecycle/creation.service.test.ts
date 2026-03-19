@@ -58,6 +58,7 @@ describe('WorkspaceCreationService', () => {
     hasHadSessions: false,
     cachedKanbanColumn: 'WAITING',
     stateComputedAt: null,
+    notepad: null,
     initErrorMessage: null,
     initOutput: null,
     initStartedAt: null,

@@ -108,6 +108,7 @@ function createOptimisticWorkingWorkspace(params: {
     hasHadSessions: false,
     cachedKanbanColumn: 'WORKING',
     stateComputedAt: null,
+    notepad: null,
     agentSessions: [],
     terminalSessions: [],
     kanbanColumn: 'WORKING',
