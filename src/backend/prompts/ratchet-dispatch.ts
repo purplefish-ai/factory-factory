@@ -22,9 +22,10 @@ Context:
 {{REVIEW_COMMENTS}}
 
 Execute autonomously in this order:
-1. Merge latest main and resolve conflicts:
-   - Run \`git fetch origin main && git merge origin/main\`.
-   - Resolve conflicts file by file: read each file, keep the intent of both sides, prefer the PR's version for code this PR changed and main's version for unrelated additions.
+1. Merge the PR's base branch and resolve conflicts:
+   - Determine the base branch: \`gh pr view {{PR_NUMBER}} --json baseRefName --jq .baseRefName\`.
+   - Fetch and merge: \`git fetch origin <base> && git merge origin/<base>\`.
+   - Resolve conflicts file by file: read each file, keep the intent of both sides, prefer the PR's version for code this PR changed and the base branch's version for unrelated additions.
    - Stage resolved files with \`git add <file>\` and complete with \`git commit --no-edit\`.
    - If a conflict is too ambiguous to resolve safely, document it and exit without pushing.
 2. Check CI failures and fix them.
@@ -36,7 +37,7 @@ Execute autonomously in this order:
 8. CRITICAL: If you made ANY code changes in response to review comments (regardless of whether you already commented on them in a previous session), you MUST post a PR comment tagging the reviewers to request re-review. Use \`gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"\`. This is MANDATORY even if you previously commented - new code changes always require a new re-review request.
 
 If review feedback is non-actionable, explain why in session output and exit without code changes.
-Do not push merge-only updates. If you only merged main and did not fix CI or review feedback, stop without pushing.
+Do not push merge-only updates. If you only merged the base branch and did not fix CI or review feedback, stop without pushing.
 
 Do not ask for confirmation.`;
 
