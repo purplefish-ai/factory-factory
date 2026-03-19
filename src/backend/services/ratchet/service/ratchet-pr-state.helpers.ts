@@ -38,12 +38,19 @@ export function determineRatchetState(pr: PRStateInfo): RatchetState {
     return RatchetState.IDLE;
   }
 
-  if (pr.ciStatus === CIStatus.PENDING || pr.ciStatus === CIStatus.UNKNOWN) {
-    return RatchetState.CI_RUNNING;
-  }
-
   if (pr.ciStatus === CIStatus.FAILURE) {
     return RatchetState.CI_FAILED;
+  }
+
+  // Check merge conflicts before CI pending/unknown — a PR can have conflicts
+  // even when there are no CI checks configured, and conflicts are independently
+  // actionable regardless of CI status.
+  if (pr.hasMergeConflict) {
+    return RatchetState.MERGE_CONFLICT;
+  }
+
+  if (pr.ciStatus === CIStatus.PENDING || pr.ciStatus === CIStatus.UNKNOWN) {
+    return RatchetState.CI_RUNNING;
   }
 
   if (pr.hasChangesRequested) {
@@ -87,13 +94,15 @@ export function computeDispatchSnapshotKey(
   ciStatus: CIStatus,
   hasChangesRequested: boolean,
   latestReviewActivityAtMs: number | null,
-  statusChecks: RatchetStatusCheckRollupItem[] | null
+  statusChecks: RatchetStatusCheckRollupItem[] | null,
+  hasMergeConflict?: boolean
 ): string {
   const ciKey = computeCiSnapshotKey(ciStatus, statusChecks);
   const reviewKey = `${hasChangesRequested ? 'changes-requested' : 'no-changes-requested'}:${
     latestReviewActivityAtMs ?? 'none'
   }`;
-  return `${ciKey}|${reviewKey}`;
+  const mergeKey = hasMergeConflict ? 'conflict' : 'clean';
+  return `${ciKey}|${reviewKey}|merge:${mergeKey}`;
 }
 
 export function isIgnoredReviewAuthor(
@@ -184,6 +193,10 @@ export function shouldSkipCleanPR(
   logger: Logger
 ): boolean {
   if (prStateInfo.ciStatus !== CIStatus.SUCCESS || prStateInfo.hasChangesRequested) {
+    return false;
+  }
+
+  if (prStateInfo.hasMergeConflict) {
     return false;
   }
 
@@ -312,7 +325,8 @@ export async function fetchPRState(params: {
     ciStatus: CIStatus,
     hasChangesRequested: boolean,
     latestReviewActivityAtMs: number | null,
-    statusChecks: RatchetStatusCheckRollupItem[] | null
+    statusChecks: RatchetStatusCheckRollupItem[] | null,
+    hasMergeConflict?: boolean
   ) => string;
 }): Promise<PRStateInfo | null> {
   const {
@@ -347,6 +361,7 @@ export async function fetchPRState(params: {
     const ciStatus = github.computeCIStatus(statusCheckRollup);
 
     const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
+    const hasMergeConflict = prDetails.mergeStateStatus === 'DIRTY';
     const latestReviewActivityAtMs = computeLatestReviewActivityAtMsFn(
       prDetails,
       reviewComments,
@@ -356,7 +371,8 @@ export async function fetchPRState(params: {
       ciStatus,
       hasChangesRequested,
       latestReviewActivityAtMs,
-      statusCheckRollup
+      statusCheckRollup,
+      hasMergeConflict
     );
 
     const filteredReviewComments = reviewComments
@@ -373,6 +389,7 @@ export async function fetchPRState(params: {
       ciStatus,
       snapshotKey,
       hasChangesRequested,
+      hasMergeConflict,
       latestReviewActivityAtMs,
       statusCheckRollup,
       prState: prDetails.state,

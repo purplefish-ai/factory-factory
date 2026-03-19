@@ -15,6 +15,7 @@ const FALLBACK_TEMPLATE = `You are the autonomous Ratchet agent for this workspa
 Context:
 - PR Number: {{PR_NUMBER}}
 - PR URL: {{PR_URL}}
+- Merge Status: {{MERGE_CONFLICT_STATUS}}
 
 ## Review Comments
 
@@ -75,6 +76,10 @@ export interface ReviewCommentForPrompt {
   url: string;
 }
 
+export interface RatchetDispatchContext {
+  hasMergeConflict?: boolean;
+}
+
 function formatReviewComments(comments: ReviewCommentForPrompt[]): string {
   if (comments.length === 0) {
     return 'No review comments found.';
@@ -91,14 +96,19 @@ function formatReviewComments(comments: ReviewCommentForPrompt[]): string {
 export function buildRatchetDispatchPrompt(
   prUrl: string,
   prNumber: number,
-  reviewComments: ReviewCommentForPrompt[] = []
+  reviewComments: ReviewCommentForPrompt[] = [],
+  context?: RatchetDispatchContext
 ): string {
   const comments = formatReviewComments(reviewComments);
+  const mergeConflictNotice = context?.hasMergeConflict
+    ? 'WARNING: This PR has merge conflicts with the base branch. Resolving these conflicts is the top priority.'
+    : 'No merge conflicts detected.';
   return templateCache
     .getTemplate()
     .replaceAll('{{PR_URL}}', () => prUrl)
     .replaceAll('{{PR_NUMBER}}', () => String(prNumber))
-    .replaceAll('{{REVIEW_COMMENTS}}', () => comments);
+    .replaceAll('{{REVIEW_COMMENTS}}', () => comments)
+    .replaceAll('{{MERGE_CONFLICT_STATUS}}', () => mergeConflictNotice);
 }
 
 export function clearRatchetDispatchPromptCache(): void {

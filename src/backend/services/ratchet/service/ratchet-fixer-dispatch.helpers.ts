@@ -31,7 +31,8 @@ export async function triggerRatchetFixer(params: {
         buildRatchetDispatchPrompt(
           workspace.prUrl,
           prStateInfo.prNumber,
-          prStateInfo.reviewComments
+          prStateInfo.reviewComments,
+          { hasMergeConflict: prStateInfo.hasMergeConflict }
         ),
       beforeStart: ({ sessionId, prompt }) => {
         sessionBridge.injectCommittedUserMessage(sessionId, prompt);

@@ -563,6 +563,7 @@ class RatchetService extends EventEmitter {
       prState: prStateInfo?.prState ?? null,
       ciStatus: prStateInfo?.ciStatus ?? null,
       hasChangesRequested: prStateInfo?.hasChangesRequested ?? null,
+      hasMergeConflict: prStateInfo?.hasMergeConflict ?? null,
       snapshotKey: prStateInfo?.snapshotKey ?? null,
       ciSnapshotKey: snapshotDiagnostics.ciSnapshotKey,
       snapshotComparison: snapshotDiagnostics.snapshotComparison,
@@ -719,12 +720,13 @@ class RatchetService extends EventEmitter {
       };
     }
 
-    // Only dispatch when CI is in a terminal state (SUCCESS or FAILURE)
+    // Only dispatch when CI is in a terminal state (SUCCESS or FAILURE),
+    // unless the PR has merge conflicts which are independently actionable.
     const isTerminalCIStatus =
       context.prStateInfo.ciStatus === CIStatus.SUCCESS ||
       context.prStateInfo.ciStatus === CIStatus.FAILURE;
 
-    if (!isTerminalCIStatus) {
+    if (!(isTerminalCIStatus || context.prStateInfo.hasMergeConflict)) {
       return {
         type: 'RETURN_ACTION',
         action: { type: 'WAITING', reason: 'Waiting for CI to complete (not in terminal state)' },
@@ -782,6 +784,10 @@ class RatchetService extends EventEmitter {
 
   private hasActionableFixTrigger(prStateInfo: PRStateInfo): boolean {
     if (prStateInfo.ciStatus === CIStatus.FAILURE) {
+      return true;
+    }
+
+    if (prStateInfo.hasMergeConflict) {
       return true;
     }
 
@@ -930,13 +936,15 @@ class RatchetService extends EventEmitter {
         ciStatus,
         hasChangesRequested,
         latestReviewActivityAtMs,
-        statusChecks
+        statusChecks,
+        hasMergeConflict
       ) =>
         this.computeDispatchSnapshotKey(
           ciStatus,
           hasChangesRequested,
           latestReviewActivityAtMs,
-          statusChecks
+          statusChecks,
+          hasMergeConflict
         ),
     });
   }
@@ -945,13 +953,15 @@ class RatchetService extends EventEmitter {
     ciStatus: CIStatus,
     hasChangesRequested: boolean,
     latestReviewActivityAtMs: number | null,
-    statusChecks: PRStateInfo['statusCheckRollup']
+    statusChecks: PRStateInfo['statusCheckRollup'],
+    hasMergeConflict?: boolean
   ): string {
     return computeDispatchSnapshotKeyHelper(
       ciStatus,
       hasChangesRequested,
       latestReviewActivityAtMs,
-      statusChecks
+      statusChecks,
+      hasMergeConflict
     );
   }
 

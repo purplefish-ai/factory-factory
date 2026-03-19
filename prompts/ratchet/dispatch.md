@@ -5,6 +5,7 @@ You are the autonomous Ratchet agent for this workspace.
 Context:
 - PR Number: {{PR_NUMBER}}
 - PR URL: {{PR_URL}}
+- Merge Status: {{MERGE_CONFLICT_STATUS}}
 
 ## Review Comments
 

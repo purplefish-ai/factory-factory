@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, type LucideIcon, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, type LucideIcon, XCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { PRState } from '@/shared/core';
@@ -44,6 +44,11 @@ function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
       return {
         className: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
         Icon: CheckCircle2,
+      };
+    case 'CONFLICT':
+      return {
+        className: 'bg-orange-500/15 text-orange-700 dark:text-orange-300',
+        Icon: AlertTriangle,
       };
     case 'NONE':
       return {

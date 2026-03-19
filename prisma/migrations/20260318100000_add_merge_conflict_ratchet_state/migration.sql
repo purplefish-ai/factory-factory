@@ -1,0 +1,3 @@
+-- Add MERGE_CONFLICT to RatchetState enum.
+-- SQLite stores enums as plain strings so no ALTER is needed.
+-- This migration exists as a record of the schema change.

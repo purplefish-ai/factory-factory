@@ -12,6 +12,7 @@ export interface PRStateInfo {
   ciStatus: CIStatus;
   snapshotKey: string;
   hasChangesRequested: boolean;
+  hasMergeConflict: boolean;
   latestReviewActivityAtMs: number | null;
   statusCheckRollup: RatchetStatusCheckRollupItem[] | null;
   prState: string;

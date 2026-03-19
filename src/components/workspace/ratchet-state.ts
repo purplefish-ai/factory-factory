@@ -7,6 +7,7 @@ const STATE_LABELS: Record<RatchetState, string> = {
   IDLE: 'Watching',
   CI_RUNNING: 'CI in progress',
   CI_FAILED: 'Fixing CI',
+  MERGE_CONFLICT: 'Resolving conflicts',
   REVIEW_PENDING: 'Addressing reviews',
   READY: 'Ready to merge',
   MERGED: 'Merged',
