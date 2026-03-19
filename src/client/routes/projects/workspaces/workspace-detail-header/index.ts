@@ -8,5 +8,10 @@ export { getWorkspaceHeaderLabel } from './utils';
 export { WorkspaceBranchLink } from './workspace-branch-link';
 export { WorkspaceHeaderOverflowMenu } from './workspace-header-overflow-menu';
 export { WorkspaceProviderSettings } from './workspace-provider-settings';
-export { WorkspaceCiStatus, WorkspaceIssueLink, WorkspacePrAction } from './workspace-status';
+export {
+  WorkspaceCiStatus,
+  WorkspaceIssueLink,
+  WorkspaceMergeAction,
+  WorkspacePrAction,
+} from './workspace-status';
 export { WorkspaceSwitcherDropdown } from './workspace-switcher-dropdown';

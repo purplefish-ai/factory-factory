@@ -1,4 +1,5 @@
 import { ChevronRight, ChevronsUpDown } from 'lucide-react';
+import { useState } from 'react';
 import {
   Select,
   SelectContent,
@@ -59,6 +60,7 @@ export function ProjectSelectorDropdown({
 }) {
   const isMobile = useIsMobile();
   const isAllProjects = selectedProjectSlug === ALL_PROJECTS_SLUG;
+  const [selectOpen, setSelectOpen] = useState(false);
   const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
   const selectedProjectName = isAllProjects
     ? 'All Projects'
@@ -79,7 +81,7 @@ export function ProjectSelectorDropdown({
   };
 
   const handleCurrentProjectClick = () => {
-    onCurrentProjectSelect?.();
+    setSelectOpen(true);
   };
 
   return (
@@ -92,20 +94,21 @@ export function ProjectSelectorDropdown({
       <button
         type="button"
         onClick={handleCurrentProjectClick}
-        disabled={!onCurrentProjectSelect}
         className={cn(
-          'min-w-0 truncate text-left',
-          onCurrentProjectSelect
-            ? 'cursor-pointer hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline'
-            : 'cursor-default',
+          'min-w-0 truncate text-left cursor-pointer hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline',
           DEFAULT_PROJECT_BUTTON_CLASS,
           projectButtonClassName
         )}
-        aria-label={`Open ${selectedProjectName} kanban`}
+        aria-label={`Open project picker`}
       >
         {projectButtonLabel}
       </button>
-      <Select value={selectedProjectSlug} onValueChange={handleValueChange}>
+      <Select
+        value={selectedProjectSlug}
+        onValueChange={handleValueChange}
+        open={selectOpen}
+        onOpenChange={setSelectOpen}
+      >
         <SelectTrigger
           id={triggerId}
           aria-label="Open project menu"
