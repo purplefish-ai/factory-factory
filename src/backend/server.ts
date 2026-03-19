@@ -69,6 +69,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     findAvailablePort,
     ratchetService,
     rateLimiter,
+    runScriptService,
     schedulerService,
     sessionFileLogger,
     sessionService,
@@ -348,7 +349,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           await startInterceptors();
           reconciliationService.startPeriodicCleanup();
           rateLimiter.start();
-          schedulerService.start();
+          schedulerService.start({ runScriptService });
           ratchetService.start();
 
           logger.info('Server endpoints available', {

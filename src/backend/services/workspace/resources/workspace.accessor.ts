@@ -418,6 +418,23 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Find READY workspaces in the DONE kanban column (merged PR or merged ratchet state).
+   * Used by the scheduler to auto-archive completed workspaces.
+   */
+  findDoneWorkspaces(): Promise<WorkspaceWithProject[]> {
+    return prisma.workspace.findMany({
+      where: {
+        status: 'READY',
+        cachedKanbanColumn: 'DONE',
+      },
+      include: {
+        project: true,
+      },
+      orderBy: { stateComputedAt: 'asc' },
+    });
+  }
+
+  /**
    * Mark workspace as having had sessions (for kanban backlog/waiting distinction).
    * Uses atomic conditional update to prevent race conditions when multiple sessions start.
    */

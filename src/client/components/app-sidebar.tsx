@@ -226,16 +226,6 @@ function AllProjectsView({
             />
           )}
 
-          {done.length > 0 && (
-            <WorkspaceGroup
-              label="Done"
-              workspaces={done}
-              projectSlug="__all__"
-              currentWorkspaceId={currentWorkspaceId}
-              emptyText=""
-            />
-          )}
-
           {waiting.length === 0 && working.length === 0 && done.length === 0 && (
             <SidebarGroup>
               <SidebarGroupContent>
@@ -260,7 +250,6 @@ function SidebarInner({
   issues,
   waiting,
   working,
-  done,
   selectedProjectId,
   existingWorkspaceNames,
   showNewWorkspaceForm,
@@ -274,7 +263,6 @@ function SidebarInner({
   issues: NormalizedIssue[] | undefined;
   waiting: ServerWorkspace[];
   working: ServerWorkspace[];
-  done: ServerWorkspace[];
   selectedProjectId: string | undefined;
   existingWorkspaceNames: string[] | undefined;
   showNewWorkspaceForm: boolean;
@@ -386,13 +374,6 @@ function SidebarInner({
               emptyText="No active workspaces"
             />
             <IssueGroup issues={issues} />
-            <WorkspaceGroup
-              label="Done"
-              workspaces={done}
-              projectSlug={navData.selectedProjectSlug}
-              currentWorkspaceId={navData.currentWorkspaceId}
-              emptyText="No completed workspaces"
-            />
           </>
         )}
       </SidebarContent>
@@ -504,7 +485,7 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
   );
 
   // Group workspaces by kanban column, sorted by createdAt descending (newest first)
-  const { waiting, working, done } = useMemo(() => {
+  const { waiting, working } = useMemo(() => {
     return groupWorkspacesForSidebar(navData.serverWorkspaces ?? []);
   }, [navData.serverWorkspaces]);
 
@@ -566,7 +547,6 @@ export function AppSidebar({ navData }: { navData: NavigationData }) {
     issues,
     waiting,
     working,
-    done,
     selectedProjectId: newWorkspaceProjectId ?? navData.selectedProjectId,
     existingWorkspaceNames: navData.serverWorkspaces?.map((workspace) => workspace.name),
     showNewWorkspaceForm,

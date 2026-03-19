@@ -15,23 +15,35 @@ import {
 import { dbBackupService } from '@/backend/services/db-backup.service';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
+import { sessionService } from '@/backend/services/session';
+import { terminalService } from '@/backend/services/terminal';
 import { workspaceAccessor } from '@/backend/services/workspace';
+import type { ArchiveWorkspaceDependencies } from './workspace-archive.orchestrator';
+import { archiveWorkspace } from './workspace-archive.orchestrator';
 
 const logger = createLogger('scheduler');
+
+type RunScriptDeps = Pick<ArchiveWorkspaceDependencies, 'runScriptService'>;
 
 class SchedulerService {
   private syncInterval: NodeJS.Timeout | null = null;
   private backupInterval: NodeJS.Timeout | null = null;
+  private autoArchiveInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
   private syncInProgress: Promise<unknown> | null = null;
   private readonly prSyncLimit = pLimit(SERVICE_CONCURRENCY.schedulerPrSyncs);
+  private runScriptDeps: RunScriptDeps | null = null;
 
   /**
    * Start the scheduler
    */
-  start(): void {
+  start(deps?: RunScriptDeps): void {
     if (this.syncInterval) {
       return; // Already running
+    }
+
+    if (deps) {
+      this.runScriptDeps = deps;
     }
 
     // Reset shutdown flag in case we're restarting
@@ -64,9 +76,20 @@ class SchedulerService {
       });
     }, SERVICE_INTERVAL_MS.dbBackup);
 
+    // Auto-archive Done workspaces every 5 minutes
+    this.autoArchiveInterval = setInterval(() => {
+      if (this.isShuttingDown || !this.runScriptDeps) {
+        return;
+      }
+      this.autoArchiveDoneWorkspaces(this.runScriptDeps).catch((err) => {
+        logger.error('Auto-archive Done workspaces failed', toError(err));
+      });
+    }, SERVICE_INTERVAL_MS.schedulerAutoArchive);
+
     logger.info('Scheduler started', {
       prSyncIntervalMs: SERVICE_INTERVAL_MS.schedulerPrSync,
       dbBackupIntervalMs: SERVICE_INTERVAL_MS.dbBackup,
+      autoArchiveIntervalMs: SERVICE_INTERVAL_MS.schedulerAutoArchive,
     });
   }
 
@@ -84,6 +107,11 @@ class SchedulerService {
     if (this.backupInterval) {
       clearInterval(this.backupInterval);
       this.backupInterval = null;
+    }
+
+    if (this.autoArchiveInterval) {
+      clearInterval(this.autoArchiveInterval);
+      this.autoArchiveInterval = null;
     }
 
     if (this.syncInProgress !== null) {
@@ -222,6 +250,55 @@ class SchedulerService {
       });
       return { found: false };
     }
+  }
+
+  /**
+   * Auto-archive all workspaces in the DONE kanban column.
+   */
+  async autoArchiveDoneWorkspaces(
+    deps: RunScriptDeps
+  ): Promise<{ archived: number; failed: number }> {
+    if (this.isShuttingDown) {
+      return { archived: 0, failed: 0 };
+    }
+
+    const workspaces = await workspaceAccessor.findDoneWorkspaces();
+
+    if (workspaces.length === 0) {
+      return { archived: 0, failed: 0 };
+    }
+
+    logger.info('Auto-archiving Done workspaces', { count: workspaces.length });
+
+    const archiveDeps: ArchiveWorkspaceDependencies = {
+      githubCLIService,
+      runScriptService: deps.runScriptService,
+      sessionService,
+      terminalService,
+    };
+
+    let archived = 0;
+    let failed = 0;
+
+    for (const workspace of workspaces) {
+      if (this.isShuttingDown) {
+        break;
+      }
+      try {
+        await archiveWorkspace(workspace, { commitUncommitted: true }, archiveDeps);
+        archived++;
+        logger.debug('Auto-archived Done workspace', { workspaceId: workspace.id });
+      } catch (err) {
+        failed++;
+        logger.error('Failed to auto-archive Done workspace', toError(err), {
+          workspaceId: workspace.id,
+        });
+      }
+    }
+
+    logger.info('Auto-archive Done workspaces completed', { archived, failed });
+
+    return { archived, failed };
   }
 
   /**

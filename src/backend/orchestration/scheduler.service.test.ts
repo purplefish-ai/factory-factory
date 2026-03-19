@@ -3,15 +3,18 @@ import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 
 const mockFindNeedingPRSync = vi.fn();
 const mockFindNeedingPRDiscovery = vi.fn();
+const mockFindDoneWorkspaces = vi.fn();
 const mockWorkspaceUpdate = vi.fn();
 const mockFindPRForBranch = vi.fn();
 const mockRefreshWorkspace = vi.fn();
 const mockAttachAndRefreshPR = vi.fn();
+const mockArchiveWorkspace = vi.fn();
 
 vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     findNeedingPRSync: () => mockFindNeedingPRSync(),
     findNeedingPRDiscovery: () => mockFindNeedingPRDiscovery(),
+    findDoneWorkspaces: () => mockFindDoneWorkspaces(),
     update: (...args: unknown[]) => mockWorkspaceUpdate(...args),
   },
 }));
@@ -19,11 +22,28 @@ vi.mock('@/backend/services/workspace', () => ({
 vi.mock('@/backend/services/github', () => ({
   githubCLIService: {
     findPRForBranch: (...args: unknown[]) => mockFindPRForBranch(...args),
+    addIssueComment: vi.fn(),
   },
   prSnapshotService: {
     refreshWorkspace: (...args: unknown[]) => mockRefreshWorkspace(...args),
     attachAndRefreshPR: (...args: unknown[]) => mockAttachAndRefreshPR(...args),
   },
+}));
+
+vi.mock('@/backend/services/session', () => ({
+  sessionService: {
+    stopWorkspaceSessions: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalService: {
+    destroyWorkspaceTerminals: vi.fn(),
+  },
+}));
+
+vi.mock('./workspace-archive.orchestrator', () => ({
+  archiveWorkspace: (...args: unknown[]) => mockArchiveWorkspace(...args),
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({
