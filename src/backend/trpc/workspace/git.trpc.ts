@@ -53,7 +53,7 @@ async function commitUncommittedChanges(worktreePath: string, defaultBranch: str
   }
   await gitCommand(['add', '-A'], worktreePath);
   const commitResult = await gitCommand(
-    ['commit', '-m', `Auto-commit before merge to ${defaultBranch}`],
+    ['commit', '--no-verify', '-m', `Auto-commit before merge to ${defaultBranch}`],
     worktreePath
   );
   if (commitResult.code !== 0) {
