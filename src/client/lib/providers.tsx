@@ -1,5 +1,6 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { createTrpcClient, trpc } from './trpc';
 
 /** Hook to get non-archived projects list - used for sidebar visibility */
@@ -28,6 +29,13 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        mutationCache: new MutationCache({
+          onError: (error) => {
+            // biome-ignore lint/suspicious/noConsole: intentional error logging
+            console.error('[tRPC mutation error]', error);
+            toast.error(error.message);
+          },
+        }),
         defaultOptions: {
           queries: {
             staleTime: 5 * 1000, // 5 seconds
