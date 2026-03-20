@@ -55,6 +55,7 @@ export interface AgentSessionAccessor {
   create(data: CreateAgentSessionInput): Promise<AgentSessionRecord>;
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null>;
   findByIds(ids: string[]): Promise<AgentSessionRecord[]>;
+  findByStatus(status: SessionStatus): Promise<AgentSessionRecord[]>;
   findByWorkspaceId(
     workspaceId: string,
     filters?: AgentSessionFilters
@@ -107,6 +108,13 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       where: {
         id: { in: ids },
       },
+    });
+  }
+
+  findByStatus(status: SessionStatus): Promise<AgentSessionRecord[]> {
+    return prisma.agentSession.findMany({
+      where: { status },
+      orderBy: { updatedAt: 'desc' },
     });
   }
 
