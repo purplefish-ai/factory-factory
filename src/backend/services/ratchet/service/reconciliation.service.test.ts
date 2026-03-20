@@ -4,6 +4,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockFindMany = vi.fn();
 const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
+const mockFindAgentSessionsByStatus = vi.fn();
+const mockUpdateAgentSession = vi.fn();
+const mockGetAllActiveProcesses = vi.fn<
+  () => Array<{
+    sessionId: string;
+    pid: number;
+    status: string;
+    isRunning: boolean;
+    isPromptInFlight: boolean;
+    provider: string;
+  }>
+>(() => []);
+const mockFindTerminalSessionsWithPid = vi.fn();
+const mockUpdateTerminalSession = vi.fn();
 
 vi.mock('@/backend/db', () => ({
   prisma: {
@@ -24,6 +38,23 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
+vi.mock('@/backend/services/session', () => ({
+  agentSessionAccessor: {
+    findByStatus: (...args: unknown[]) => mockFindAgentSessionsByStatus(...args),
+    update: (...args: unknown[]) => mockUpdateAgentSession(...args),
+  },
+  acpRuntimeManager: {
+    getAllActiveProcesses: () => mockGetAllActiveProcesses(),
+  },
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalSessionAccessor: {
+    findWithPid: (...args: unknown[]) => mockFindTerminalSessionsWithPid(...args),
+    update: (...args: unknown[]) => mockUpdateTerminalSession(...args),
+  },
+}));
+
 const mockInitializeWorktree = vi.fn();
 
 // Import after mocks are set up
@@ -34,6 +65,21 @@ describe('ReconciliationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    (
+      reconciliationService as unknown as {
+        isShuttingDown: boolean;
+        cleanupInProgress: Promise<void> | null;
+      }
+    ).isShuttingDown = false;
+    (
+      reconciliationService as unknown as {
+        isShuttingDown: boolean;
+        cleanupInProgress: Promise<void> | null;
+      }
+    ).cleanupInProgress = null;
+    mockGetAllActiveProcesses.mockReturnValue([]);
+    mockFindAgentSessionsByStatus.mockResolvedValue([]);
+    mockFindTerminalSessionsWithPid.mockResolvedValue([]);
     reconciliationService.configure({
       workspace: {
         markFailed: async (workspaceId: string, reason: string) => {
@@ -183,6 +229,52 @@ describe('ReconciliationService', () => {
   });
 
   describe('periodic cleanup', () => {
+    it('marks stale running agent sessions idle when no ACP runtime exists', async () => {
+      mockFindAgentSessionsByStatus.mockResolvedValue([
+        {
+          id: 'session-stale',
+          workspaceId: 'ws-1',
+          status: 'RUNNING',
+          provider: 'CODEX',
+          providerSessionId: 'sess-stale',
+        },
+      ]);
+      mockGetAllActiveProcesses.mockReturnValue([]);
+
+      await reconciliationService.cleanupOrphans();
+
+      expect(mockFindAgentSessionsByStatus).toHaveBeenCalledWith('RUNNING');
+      expect(mockUpdateAgentSession).toHaveBeenCalledWith('session-stale', {
+        status: 'IDLE',
+      });
+    });
+
+    it('keeps running agent sessions when an ACP runtime is still active', async () => {
+      mockFindAgentSessionsByStatus.mockResolvedValue([
+        {
+          id: 'session-live',
+          workspaceId: 'ws-1',
+          status: 'RUNNING',
+          provider: 'CODEX',
+          providerSessionId: 'sess-live',
+        },
+      ]);
+      mockGetAllActiveProcesses.mockReturnValue([
+        {
+          sessionId: 'session-live',
+          pid: 1234,
+          status: 'running',
+          isRunning: true,
+          isPromptInFlight: false,
+          provider: 'CODEX',
+        },
+      ]);
+
+      await reconciliationService.cleanupOrphans();
+
+      expect(mockUpdateAgentSession).not.toHaveBeenCalled();
+    });
+
     it('does not start overlapping cleanup runs while one is in progress', async () => {
       const releaseCleanup: { current: (() => void) | null } = { current: null };
       const cleanupSpy = vi

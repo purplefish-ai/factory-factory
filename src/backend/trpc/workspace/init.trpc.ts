@@ -1,7 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
-import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import {
+  initializeWorkspaceWorktree,
+  retryQueuedDispatchAfterWorkspaceReady,
+} from '@/backend/orchestration/workspace-init.orchestrator';
 import { createLogger } from '@/backend/services/logger.service';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
@@ -110,10 +113,13 @@ export const workspaceInitRouter = router({
       }
 
       // Run script with the updated workspace (retry count already incremented)
-      await startupScriptService.runStartupScript(
+      const startupResult = await startupScriptService.runStartupScript(
         { ...workspace, ...updatedWorkspace },
         workspace.project
       );
+      if (startupResult.success) {
+        await retryQueuedDispatchAfterWorkspaceReady(workspace.id, null);
+      }
 
       return workspaceDataService.findById(input.id);
     }),

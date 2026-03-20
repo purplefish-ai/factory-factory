@@ -1,6 +1,7 @@
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
+import { acpRuntimeManager, agentSessionAccessor } from '@/backend/services/session';
 import { terminalSessionAccessor } from '@/backend/services/terminal';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { SessionStatus } from '@/shared/core';
@@ -146,6 +147,30 @@ class ReconciliationService {
     if (this.isShuttingDown) {
       logger.debug('Skipping orphan cleanup - shutdown in progress');
       return;
+    }
+
+    const activeAgentSessionIds = new Set(
+      acpRuntimeManager.getAllActiveProcesses().map((process) => process.sessionId)
+    );
+    const runningAgentSessions = await agentSessionAccessor.findByStatus(SessionStatus.RUNNING);
+
+    for (const session of runningAgentSessions) {
+      if (activeAgentSessionIds.has(session.id)) {
+        continue;
+      }
+
+      await agentSessionAccessor.update(session.id, {
+        status: SessionStatus.IDLE,
+      });
+      logger.warn('Reconciled stale running agent session', {
+        sessionId: session.id,
+        workspaceId: session.workspaceId,
+        provider: session.provider,
+        providerSessionId: session.providerSessionId,
+        fromStatus: session.status,
+        toStatus: SessionStatus.IDLE,
+        reason: 'orphan_cleanup_missing_active_runtime',
+      });
     }
 
     // Terminal sessions are still PID-tracked and may become orphaned.

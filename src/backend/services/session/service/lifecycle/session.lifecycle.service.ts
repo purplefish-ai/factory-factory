@@ -63,6 +63,12 @@ type StopSessionOptions = {
 
 type SendSessionMessage = (sessionId: string, content: string) => Promise<void>;
 
+type PersistedSessionStatusChangeReason =
+  | 'acp_client_created'
+  | 'acp_runtime_exit'
+  | 'manual_stop'
+  | 'manual_stop_runtime_stop_failed';
+
 export type SessionLifecycleServiceDependencies = {
   repository: SessionRepository;
   promptBuilder: SessionPromptBuilder;
@@ -202,7 +208,11 @@ export class SessionLifecycleService {
       });
     } finally {
       this.finalizeOrphanedToolCallsOnStop(sessionId);
-      await this.updateStoppedSessionState(sessionId);
+      await this.updateStoppedSessionState(
+        sessionId,
+        session,
+        stopClientFailed ? 'manual_stop_runtime_stop_failed' : 'manual_stop'
+      );
       this.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'idle',
@@ -414,10 +424,14 @@ export class SessionLifecycleService {
 
         try {
           this.sessionDomainService.markProcessExit(sid, exitCode);
-          const session = await this.repository.updateSession(sid, {
-            status: SessionStatus.COMPLETED,
+          const session = await this.persistSessionStatusChange(sid, SessionStatus.COMPLETED, {
+            reason: 'acp_runtime_exit',
+            details: { exitCode },
           });
-          logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
+
+          if (!session) {
+            return;
+          }
 
           await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sid);
           if (session.workflow === 'ratchet') {
@@ -612,19 +626,24 @@ export class SessionLifecycleService {
     }
   }
 
-  private async updateStoppedSessionState(sessionId: string): Promise<void> {
+  private async updateStoppedSessionState(
+    sessionId: string,
+    session: AgentSessionRecord | null,
+    reason: Extract<
+      PersistedSessionStatusChangeReason,
+      'manual_stop' | 'manual_stop_runtime_stop_failed'
+    >
+  ): Promise<void> {
     try {
-      await this.retryService.run(
-        () =>
-          this.repository.updateSession(sessionId, {
-            status: SessionStatus.IDLE,
-          }),
-        {
+      await this.persistSessionStatusChange(sessionId, SessionStatus.IDLE, {
+        currentSession: session,
+        reason,
+        retry: {
           attempts: 2,
           operationName: 'updateStoppedSessionState',
           context: { sessionId },
-        }
-      );
+        },
+      });
     } catch (error) {
       logger.warn('Failed to update session state during stop; continuing cleanup', {
         sessionId,
@@ -765,8 +784,13 @@ export class SessionLifecycleService {
       throw error;
     }
 
-    await this.repository.updateSession(sessionId, {
-      status: SessionStatus.RUNNING,
+    await this.persistSessionStatusChange(sessionId, SessionStatus.RUNNING, {
+      currentSession: session,
+      reason: 'acp_client_created',
+      details: {
+        provider: handle.provider,
+        providerSessionId: handle.providerSessionId,
+      },
     });
 
     this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -876,5 +900,57 @@ export class SessionLifecycleService {
       });
       return fallback;
     }
+  }
+
+  private async persistSessionStatusChange(
+    sessionId: string,
+    nextStatus: SessionStatus,
+    options: {
+      currentSession?: AgentSessionRecord | null;
+      reason: PersistedSessionStatusChangeReason;
+      details?: Record<string, unknown>;
+      retry?: {
+        attempts: number;
+        operationName: string;
+        context?: Record<string, unknown>;
+      };
+    }
+  ): Promise<AgentSessionRecord | null> {
+    const currentSession =
+      options.currentSession === undefined
+        ? await this.repository.getSessionById(sessionId)
+        : options.currentSession;
+
+    if (!currentSession) {
+      logger.warn('Skipping session status change because session record was not found', {
+        sessionId,
+        nextStatus,
+        reason: options.reason,
+        ...options.details,
+      });
+      return null;
+    }
+
+    const runUpdate = () =>
+      this.repository.updateSession(sessionId, {
+        status: nextStatus,
+      });
+
+    const updatedSession = options.retry
+      ? await this.retryService.run(runUpdate, options.retry)
+      : await runUpdate();
+
+    logger.info('Persisted session status change', {
+      sessionId,
+      workspaceId: updatedSession.workspaceId,
+      workflow: updatedSession.workflow,
+      provider: updatedSession.provider,
+      fromStatus: currentSession.status,
+      toStatus: updatedSession.status,
+      reason: options.reason,
+      ...options.details,
+    });
+
+    return updatedSession;
   }
 }
