@@ -5,6 +5,136 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.10] - 2026-03-20
+
+### Added
+
+- Add quick chat side panel to kanban board (#1287)
+- Add Python development tools to Docker image (#1322)
+- Add closed sessions history viewer (#1334)
+- Add support for SSH GitHub URLs in project creation (#1341)
+- Add execution_space_folder to Docker image (#1365)
+- Add CLI authentication section to settings page (#1375)
+- Add tool call execution timeout to stop hung sessions (#1378)
+- Add configurable default Claude and Codex models (#1381)
+- Add Restart button to session tab bar for agent recovery (#1401)
+- Add workspace rename via inline edit and header menu (#1403)
+- Add subtle working/waiting counts to workspace switcher (#1405)
+- Auto-create default terminal for new workspaces (#1417)
+- Add merge conflict detection and resolution to ratchet (#1435)
+
+### Changed
+
+- Validate setup terminal websocket messages with Zod (#1288)
+- Move history retry cooldowns into session registry (#1291)
+- Wire frontend chat debug flags to DEBUG_CHAT_WS (#1289)
+- Allow all hosts in Vite dev server for Cloudflare tunnel access (#1315)
+- Persist ACP thought chunks in transcript (#1296) (#1321)
+- Revert "Persist ACP thought chunks in transcript (#1296) (#1321)" (#1329)
+- Use shared AppContext for WebSocket upgrade handlers (#1328)
+- Refactor backend module state into instance lifecycles (#1331)
+- Type ACP runtime event boundary (#1333)
+- Replace backend unsafe Error casts with toError (#1330)
+- Set GitHub URL as default tab for new project creation (#1335)
+- Evict output buffers on archive and terminal destroy (#1339)
+- Keep ACP permission requests open indefinitely (#1337)
+- Improve workspace header project/workspace switching (#1340)
+- Preserve ACP creation lock bookkeeping during stopClient (#1338)
+- Update dependencies and resolve Dependabot alerts (#1345)
+- Inject session service into chat handlers (#1346)
+- Enforce Codex schema drift checks in CI (#1348)
+- Refactor workspace detail header into modular components (#1350)
+- Make appendInitOutput atomic to prevent lost startup logs (#1347)
+- Refactor SessionService into focused lifecycle services (#1349)
+- Change Docker image to serve on port 7001 (#1352)
+- Pass port as CLI argument to serve command in Docker (#1363)
+- Use relative base path in Vite config for reverse proxy compatibility (#1366)
+- Use HTTP/2 for cloudflared tunnel to fix QUIC timeouts (#1371)
+- Log database path on server startup (#1374)
+- Update ACP and claude-agent-acp packages (#1377)
+- Pass image content through to ACP providers instead of stripping (#1379)
+- Refresh Codex fallback models from app-server (#1380)
+- Render Changes panel as a tree with folder expand/collapse (#1382)
+- Default markdown files to preview mode in file and diff viewers (#1399)
+- Migrate backend to service capsule architecture (#1398)
+- Show workspace card immediately after Launch (#1406)
+- Reset stale merged CI state when workspace switches PRs (#1408)
+- Enable horizontal scroll for overflowing file viewer text (#1430)
+- Require explicit approval for plan and user input prompts (#1431)
+
+### Fixed
+
+- Fix #1294: guard websocket upgrade URL parsing (#1313)
+- Fix execCommand UTF-8 decoding and signal exits (#1299) (#1309)
+- Fix rate limiter queue requeue race (#1297) (#1314)
+- Prevent hydration race transcript clobber (#1304) (#1316)
+- Fix #1301: persist assistant string/image transcript messages (#1307)
+- Handle malformed run-script proxy URLs (#1298) (#1317)
+- Prevent overlapping scheduler sync batches (#1295) (#1319)
+- Fix #1304: prevent hydration transcript clobber (#1308)
+- Fix ACP command approval scope key collisions (#1303) (#1320)
+- Fix #1305: prevent ACP session cleanup race (#1312)
+- Fix run-script stop/start race (#1293) (#1324)
+- Fix #1302: guard stale workspace snapshot updates (#1323)
+- Fix Docker build: add --break-system-packages for pipx install (#1325)
+- Fix #1013: Restore planning mode keyboard shortcuts (#1327)
+- Fix #1306: Evict inactive in-memory session stores (#1326)
+- Fix #1342: make CLI warning banner mobile responsive (#1343)
+- Fix Docker image crash from bare Prisma imports missing .js extension (#1351)
+- Fix proxy-safe asset loading for reverse proxy deployments (#1364)
+- Fix asset paths for reverse proxy deployments (#1367)
+- Avoid loading flash on transient chat reconnect (#1368)
+- Fix AI responses visually appending to previous response (#1373)
+- Fix permission preset not applied to CLAUDE sessions (#1400)
+- Fix clipped text in inline new-workspace prompt (#1404)
+- Fix queued message loss when session send fails (#1407)
+- Fix FileLockMutex stale lock stealing (#1386) (#1414)
+- Fix Electron prod backend import paths (#1383) (#1413)
+- Fix CI rollup casing and cancelled handling (#1388) (#1412)
+- Fix env var expansion parsing bugs (#1390) (#1409)
+- Fix #1389: Prevent transcript loss on persistence failures (#1410)
+- Fix #1385: prevent command approval scope key collisions (#1411)
+- Fix proxy fallback path sanitization (#1393) (#1420)
+- Fix Codex model schema for optional reasoning fields (#1395) (#1424)
+- Fix #1396: Block dispatch without workspace worktree (#1423)
+- Fix #1394: validate attachments before queueing (#1422)
+- Fix #1387: Serialize Electron startup and server lifecycle (#1416)
+- Fix #1397: flush websocket replay queue FIFO (#1425)
+- Fix issue launch Todo filtering and add regression test (#1426)
+- Fix ratchet crash on PRs with large review comment payloads (#1428)
+- Fix settings back link project context (#1429)
+
+### Security
+
+- Reject multiline SQL string literals in migrations (#1290)
+- Fix GitHub clone path traversal checks (#1292) (#1310)
+- Fix Windows toast injection and syntax (#1300) (#1318)
+- Centralize backend env access and enforce process.env guard (#1344)
+- Fix broken symlink path traversal in isPathSafe (#1384) (#1415)
+- Sanitize project update issue config (#1391) (#1419)
+- Fix osascript truncation escape injection (#1392) (#1421)
+- Harden workspace/ACP path guards (#1396) (#1427)
+
+### Testing
+
+- Add tests for linear domain services (#1336)
+- Fix #1353: Increase TRPC router test coverage (#1361)
+- Fix #1357: Expand git and run-script backend coverage (#1362)
+- Add startup/runtime coverage tests for server (#1356) (#1360)
+- Add websocket setup and post-run logs tests (#1354) (#1359)
+- Add backend coverage tests for #1355 (#1358)
+- Increase backend critical-path coverage tests (#1369)
+
+### Documentation
+
+- Update docs for Linear domain and issue providers (#1332)
+- Add prompt doc for configuring factory-factory.json port setup (#1402)
+
+### Removed
+
+- Remove workspace back link from detail header (#1311)
+- Remove Docker from production image (#1370)
+
 ## [0.3.9] - 2026-02-24
 
 ### Added
