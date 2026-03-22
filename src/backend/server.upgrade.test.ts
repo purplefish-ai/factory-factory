@@ -92,6 +92,7 @@ type TestHarnessOptions = {
   backendHost?: string;
   frontendStaticPath?: string | null;
   isRunScriptProxyEnabled?: boolean;
+  shouldExposeServerErrorDetails?: boolean;
   requestedPortResult?: number;
 };
 
@@ -112,6 +113,7 @@ function createTestHarness(options: TestHarnessOptions = {}) {
       getEnvironment: () => 'test',
       getFrontendStaticPath: () => options.frontendStaticPath ?? null,
       isDevelopment: () => false,
+      shouldExposeServerErrorDetails: () => options.shouldExposeServerErrorDetails ?? false,
       isRunScriptProxyEnabled: () => options.isRunScriptProxyEnabled ?? false,
       getCorsConfig: () => ({ allowedOrigins: ['http://localhost:3000'] }),
       getAppVersion: () => 'test-version',
@@ -470,5 +472,40 @@ describe('server websocket upgrade routing', () => {
         error: expect.any(String),
       })
     );
+  });
+
+  it('preserves non-500 statuses while hiding stack details by default', async () => {
+    const harness = createTestHarness();
+    const server = createTestServer(harness.context);
+
+    const response = await request(server.getHttpServer())
+      .post('/health')
+      .set('content-type', 'application/json')
+      .send('{"invalid": }');
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Request error',
+      message: expect.any(String),
+    });
+    expect(response.body.message).not.toContain('SyntaxError');
+    expect(response.body.stack).toBeUndefined();
+    expect(harness.logger.error).toHaveBeenCalledWith('Unhandled error', expect.any(SyntaxError));
+  });
+
+  it('includes stack details in error responses when enabled', async () => {
+    const harness = createTestHarness({ shouldExposeServerErrorDetails: true });
+    const server = createTestServer(harness.context);
+
+    const response = await request(server.getHttpServer())
+      .post('/health')
+      .set('content-type', 'application/json')
+      .send('{"invalid": }');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Request error');
+    expect(response.body.name).toBe('SyntaxError');
+    expect(response.body.message).toContain('SyntaxError');
+    expect(response.body.stack).toContain('SyntaxError');
   });
 });
