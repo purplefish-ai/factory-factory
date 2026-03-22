@@ -57,6 +57,7 @@ describe('configService environment accessors', () => {
     process.env.ACP_TRACE_LOGS_PATH = '/tmp/acp-trace';
     process.env.FF_RUN_SCRIPT_PROXY_ENABLED = '1';
     process.env.WS_LOGS_ENABLED = 'true';
+    process.env.FF_EXPOSE_SERVER_ERROR_DETAILS = 'true';
     process.env.DEBUG_CHAT_WS = 'true';
     process.env.NOTIFICATION_SOUND_ENABLED = 'false';
     process.env.NOTIFICATION_PUSH_ENABLED = 'true';
@@ -88,6 +89,7 @@ describe('configService environment accessors', () => {
     expect(configService.getAcpTraceLogsPath()).toBe('/tmp/acp-trace');
     expect(configService.isRunScriptProxyEnabled()).toBe(true);
     expect(configService.isWsLogsEnabled()).toBe(true);
+    expect(configService.shouldExposeServerErrorDetails()).toBe(true);
     expect(configService.getWebConcurrency()).toBe(3);
     expect(configService.getBranchRenameMessageThreshold()).toBe(4);
     expect(configService.getAppVersion()).toBe('9.9.9');
@@ -138,6 +140,7 @@ describe('configService environment accessors', () => {
     expect(configService.getMaxSessionsPerWorkspace()).toBeGreaterThan(0);
     expect(configService.getFrontendStaticPath()).toBe('/tmp/frontend');
     expect(configService.getMigrationsPath()).toBe('/tmp/migrations');
+    expect(configService.shouldExposeServerErrorDetails()).toBe(true);
     expect(configService.getAvailableModels()).toEqual(
       expect.arrayContaining([
         { alias: 'sonnet', model: expect.any(String) },
@@ -153,5 +156,18 @@ describe('configService environment accessors', () => {
     const systemConfig = configService.getSystemConfig();
     expect(systemConfig.backendPort).toBe(configService.getBackendPort());
     expect(systemConfig.logger.serviceName).toBeDefined();
+  });
+
+  it('allows overriding server error detail exposure outside development', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.FF_EXPOSE_SERVER_ERROR_DETAILS = 'false';
+    configService.reload();
+
+    expect(configService.shouldExposeServerErrorDetails()).toBe(false);
+
+    process.env.FF_EXPOSE_SERVER_ERROR_DETAILS = 'true';
+    configService.reload();
+
+    expect(configService.shouldExposeServerErrorDetails()).toBe(true);
   });
 });

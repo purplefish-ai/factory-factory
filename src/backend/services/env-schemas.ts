@@ -73,6 +73,10 @@ export const ConfigEnvSchema = z.object({
   ACP_TRACE_LOGS_ENABLED: z.preprocess(parseBoolean, z.boolean()).optional().catch(undefined),
   ACP_TRACE_LOGS_PATH: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
   WS_LOGS_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(false),
+  FF_EXPOSE_SERVER_ERROR_DETAILS: z
+    .preprocess(parseBoolean, z.boolean())
+    .optional()
+    .catch(undefined),
   WEB_CONCURRENCY: z
     .preprocess(parseInteger, z.number().int().nonnegative())
     .optional()

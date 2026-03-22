@@ -53,6 +53,19 @@ import type { ServerInstance } from './types/server-instance';
 
 export type { ServerInstance };
 
+type HttpError = Error & {
+  status?: number;
+  statusCode?: number;
+};
+
+function getHttpErrorStatus(error: HttpError): number {
+  const status = error.statusCode ?? error.status;
+  if (typeof status !== 'number' || status < 400 || status > 599) {
+    return 500;
+  }
+  return status;
+}
+
 /**
  * Create and configure the backend server.
  * Environment variables must be set before calling this function.
@@ -210,11 +223,19 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // Error Handling
   // ============================================================================
   app.use(
-    (err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    (err: HttpError, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      const status = getHttpErrorStatus(err);
+      const exposeDetails = configService.shouldExposeServerErrorDetails();
+
       logger.error('Unhandled error', err);
-      res.status(500).json({
-        error: 'Internal server error',
-        message: configService.isDevelopment() ? err.message : 'An unexpected error occurred',
+      res.status(status).json({
+        error: status >= 500 ? 'Internal server error' : 'Request error',
+        message: exposeDetails
+          ? (err.stack ?? err.message)
+          : status >= 500
+            ? 'An unexpected error occurred'
+            : err.message,
+        ...(exposeDetails ? { name: err.name, stack: err.stack } : {}),
       });
     }
   );

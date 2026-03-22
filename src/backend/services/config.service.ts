@@ -140,6 +140,7 @@ interface SystemConfig {
   acpTraceLogsEnabled: boolean;
   wsLogsEnabled: boolean;
   runScriptProxyEnabled: boolean;
+  exposeServerErrorDetails: boolean;
 
   // Event compression settings
   compression: CompressionConfig;
@@ -270,6 +271,7 @@ function loadSystemConfig(): SystemConfig {
   const nodeEnv = env.NODE_ENV;
   const debugLogDir = join(baseDir, 'debug');
   const acpTraceLogsEnabled = env.ACP_TRACE_LOGS_ENABLED ?? nodeEnv === 'development';
+  const exposeServerErrorDetails = env.FF_EXPOSE_SERVER_ERROR_DETAILS ?? nodeEnv === 'development';
   const databasePathFromEnv = env.DATABASE_PATH ? expandEnvVars(env.DATABASE_PATH) : undefined;
   const migrationsPath = env.MIGRATIONS_PATH ? expandEnvVars(env.MIGRATIONS_PATH) : undefined;
 
@@ -327,6 +329,7 @@ function loadSystemConfig(): SystemConfig {
     acpTraceLogsEnabled,
     wsLogsEnabled: env.WS_LOGS_ENABLED,
     runScriptProxyEnabled: env.FF_RUN_SCRIPT_PROXY_ENABLED,
+    exposeServerErrorDetails,
 
     // Event compression settings
     compression: {
@@ -583,6 +586,13 @@ class ConfigService {
    */
   isRunScriptProxyEnabled(): boolean {
     return this.config.runScriptProxyEnabled;
+  }
+
+  /**
+   * Check if server error responses should include internal details.
+   */
+  shouldExposeServerErrorDetails(): boolean {
+    return this.config.exposeServerErrorDetails;
   }
 
   /**
