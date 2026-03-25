@@ -62,6 +62,8 @@ export interface RatchetStateChangedEvent {
   workspaceId: string;
   fromState: RatchetState;
   toState: RatchetState;
+  /** Fresh CI status observed from GitHub during this ratchet poll. */
+  prCiStatus?: CIStatus;
 }
 
 export interface RatchetToggledEvent {
@@ -461,6 +463,7 @@ class RatchetService extends EventEmitter {
           workspaceId: workspace.id,
           fromState: decisionContext.previousState,
           toState: decisionContext.finalState,
+          prCiStatus: prStateInfo.ciStatus,
         } satisfies RatchetStateChangedEvent);
       }
       this.logWorkspaceRatchetingDecision(
@@ -835,6 +838,7 @@ class RatchetService extends EventEmitter {
         workspaceId: workspace.id,
         fromState: freshContext.previousState,
         toState: freshContext.finalState,
+        prCiStatus: pollResult.freshPrState.ciStatus,
       } satisfies RatchetStateChangedEvent);
     }
 
@@ -902,6 +906,17 @@ class RatchetService extends EventEmitter {
 
     if (dispatched) {
       await this.snapshot.recordReviewCheck(workspace.id, now);
+    }
+
+    // Sync prCiStatus when the ratchet observes a change from fresh GitHub data.
+    // This ensures the workspace's cached CI status stays current, preventing a
+    // stale "CI Running" display after CI completes between scheduler polls.
+    if (prStateInfo.ciStatus !== workspace.prCiStatus) {
+      await this.snapshot.recordCIObservation({
+        workspaceId: workspace.id,
+        ciStatus: prStateInfo.ciStatus,
+        observedAt: now,
+      });
     }
   }
 
