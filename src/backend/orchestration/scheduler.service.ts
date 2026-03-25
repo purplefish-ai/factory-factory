@@ -5,13 +5,8 @@
  * Replaces Inngest for PR status sync.
  */
 
-import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
-import {
-  SERVICE_CONCURRENCY,
-  SERVICE_INTERVAL_MS,
-  SERVICE_THRESHOLDS,
-} from '@/backend/services/constants';
+import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
@@ -22,7 +17,6 @@ class SchedulerService {
   private syncInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
   private syncInProgress: Promise<unknown> | null = null;
-  private readonly prSyncLimit = pLimit(SERVICE_CONCURRENCY.schedulerPrSyncs);
 
   /**
    * Start the scheduler
@@ -94,11 +88,8 @@ class SchedulerService {
       return { synced: 0, failed: 0 };
     }
 
-    // Process workspaces concurrently with rate limiting
     const results = await Promise.all(
-      workspaces.map((workspace) =>
-        this.prSyncLimit(() => this.syncSinglePR(workspace.id, workspace.prUrl))
-      )
+      workspaces.map((workspace) => this.syncSinglePR(workspace.id, workspace.prUrl))
     );
 
     const synced = results.filter((r) => r.success).length;
@@ -127,7 +118,7 @@ class SchedulerService {
     logger.info('Starting PR discovery', { count: workspaces.length });
 
     const results = await Promise.all(
-      workspaces.map((workspace) => this.prSyncLimit(() => this.discoverPRForWorkspace(workspace)))
+      workspaces.map((workspace) => this.discoverPRForWorkspace(workspace))
     );
 
     const discovered = results.filter((r) => r.found).length;

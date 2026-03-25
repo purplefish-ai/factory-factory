@@ -1,3 +1,6 @@
+/** Max concurrent gh CLI processes system-wide. */
+export const GH_CONCURRENCY = 5;
+
 export const GH_TIMEOUT_MS = Object.freeze({
   healthVersion: 5000,
   healthAuth: 10_000,

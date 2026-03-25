@@ -1304,4 +1304,135 @@ describe('GitHubCLIService', () => {
       );
     });
   });
+
+  describe('centralized exec - singleflight dedup', () => {
+    it('deduplicates identical concurrent read calls', async () => {
+      const mockPRData = {
+        number: 42,
+        state: 'OPEN',
+        isDraft: false,
+        reviewDecision: null,
+        mergedAt: null,
+        updatedAt: '2024-01-01T00:00:00Z',
+        statusCheckRollup: [],
+      };
+
+      mockExecFile.mockResolvedValue({
+        stdout: JSON.stringify(mockPRData),
+        stderr: '',
+      });
+
+      // Fire two identical calls concurrently
+      const [result1, result2] = await Promise.all([
+        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/42'),
+        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/42'),
+      ]);
+
+      // Both should succeed with same data
+      expect(result1).toEqual(mockPRData);
+      expect(result2).toEqual(mockPRData);
+
+      // But execFile should only have been called once (singleflight)
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not deduplicate calls with different args', async () => {
+      const makePRData = (num: number) => ({
+        number: num,
+        state: 'OPEN',
+        isDraft: false,
+        reviewDecision: null,
+        mergedAt: null,
+        updatedAt: '2024-01-01T00:00:00Z',
+        statusCheckRollup: [],
+      });
+
+      mockExecFile
+        .mockResolvedValueOnce({ stdout: JSON.stringify(makePRData(1)), stderr: '' })
+        .mockResolvedValueOnce({ stdout: JSON.stringify(makePRData(2)), stderr: '' });
+
+      const [result1, result2] = await Promise.all([
+        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/1'),
+        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/2'),
+      ]);
+
+      expect(result1?.number).toBe(1);
+      expect(result2?.number).toBe(2);
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+    });
+
+    it('removes inflight entry after resolution so subsequent calls spawn new process', async () => {
+      const mockPRData = {
+        number: 10,
+        state: 'OPEN',
+        isDraft: false,
+        reviewDecision: null,
+        mergedAt: null,
+        updatedAt: '2024-01-01T00:00:00Z',
+        statusCheckRollup: [],
+      };
+
+      mockExecFile.mockResolvedValue({ stdout: JSON.stringify(mockPRData), stderr: '' });
+
+      // First call
+      await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/10');
+      // Second call (sequential, not concurrent)
+      await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/10');
+
+      // Each sequential call should spawn its own process
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+    });
+
+    it('shares rejection across deduplicated callers', async () => {
+      mockExecFile.mockRejectedValue(new Error('some unexpected error'));
+
+      const [result1, result2] = await Promise.all([
+        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/99'),
+        githubCLIService.getPRStatus('https://github.com/owner/repo/pull/99'),
+      ]);
+
+      // Both should get null (getPRStatus catches and returns null)
+      expect(result1).toBeNull();
+      expect(result2).toBeNull();
+
+      // Only one process should have been spawned
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('centralized exec - mutating calls', () => {
+    it('does not deduplicate mutating calls with same args', async () => {
+      mockExecFile.mockResolvedValue({ stdout: '', stderr: '' });
+
+      await Promise.all([
+        githubCLIService.closeIssue('owner', 'repo', 5),
+        githubCLIService.closeIssue('owner', 'repo', 5),
+      ]);
+
+      // Both calls should spawn separate processes (no dedup for writes)
+      expect(mockExecFile).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('error classification - unexpected EOF', () => {
+    it('classifies unexpected EOF as network_error, not unknown', async () => {
+      mockExecFile.mockRejectedValue(
+        new Error(
+          'Command failed: gh pr view 1364 --repo owner/repo\nPost "https://api.github.com/graphql": unexpected EOF\n'
+        )
+      );
+
+      const result = await githubCLIService.getPRStatus('https://github.com/owner/repo/pull/1364');
+
+      expect(result).toBeNull();
+      // Should NOT log as "Failed to fetch PR status via gh CLI" (unknown)
+      // Should log as network_error which still goes through the unknown/else branch but with correct type
+      expect(mockLoggerError).toHaveBeenCalledWith(
+        'Failed to fetch PR status via gh CLI',
+        expect.objectContaining({
+          errorType: 'network_error',
+        })
+      );
+    });
+  });
 });

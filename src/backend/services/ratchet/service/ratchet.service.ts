@@ -8,13 +8,8 @@
  */
 
 import { EventEmitter } from 'node:events';
-import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
-import {
-  SERVICE_CONCURRENCY,
-  SERVICE_INTERVAL_MS,
-  SERVICE_TIMEOUT_MS,
-} from '@/backend/services/constants';
+import { SERVICE_INTERVAL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
 import { workspaceAccessor } from '@/backend/services/workspace';
@@ -78,7 +73,6 @@ class RatchetService extends EventEmitter {
   private sleepTimeout: NodeJS.Timeout | null = null;
   private sleepResolve: (() => void) | null = null;
   private workspaceCheckTimeoutMs = SERVICE_TIMEOUT_MS.ratchetWorkspaceCheck;
-  private readonly checkLimit = pLimit(SERVICE_CONCURRENCY.ratchetWorkspaceChecks);
   private readonly inFlightWorkspaceChecks = new Map<string, Promise<WorkspaceRatchetResult>>();
   private cachedAuthenticatedUsername: AuthenticatedUsernameCache | null = null;
   private readonly backoff = new RateLimitBackoff();
@@ -219,7 +213,7 @@ class RatchetService extends EventEmitter {
     }
 
     const results = await Promise.all(
-      workspaces.map((workspace) => this.checkLimit(() => this.runWorkspaceCheckSafely(workspace)))
+      workspaces.map((workspace) => this.runWorkspaceCheckSafely(workspace))
     );
 
     const stateChanges = results.filter((r) => r.previousState !== r.newState).length;

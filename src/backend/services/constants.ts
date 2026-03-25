@@ -31,11 +31,6 @@ export const SERVICE_CACHE_TTL_MS = Object.freeze({
   cliHealth: 30_000,
 } as const);
 
-export const SERVICE_CONCURRENCY = Object.freeze({
-  ratchetWorkspaceChecks: 20,
-  schedulerPrSyncs: 20,
-} as const);
-
 export const SERVICE_THRESHOLDS = Object.freeze({
   schedulerStaleMinutes: 2,
   ratchetReviewCheckStaleMs: 10 * 60_000, // 10min: treat prReviewLastCheckedAt as stale if no active session
