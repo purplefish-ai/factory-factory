@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import pLimit from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
-import { GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
+import { GH_CONCURRENCY, GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
 import { classifyError, logGitHubCLIError } from './github-cli/errors';
 import {
   computeCIStatus,
@@ -30,23 +31,74 @@ import type {
   PRStatusFromGitHub,
   ReviewRequestedPR,
 } from './github-cli/types';
-import { mapWithConcurrencyLimit, parseGhJson } from './github-cli/utils';
+import { parseGhJson } from './github-cli/utils';
 
 const execFileAsync = promisify(execFile);
 const logger = createLogger('github-cli');
 
+type ExecResult = { stdout: string; stderr: string };
+
 /**
  * Service for interacting with GitHub via the `gh` CLI.
  * Uses the locally authenticated gh CLI instead of API tokens.
+ *
+ * All process spawning is gated through a shared concurrency limiter
+ * and read-only calls benefit from in-flight deduplication (singleflight).
  */
 class GitHubCLIService {
+  private readonly execLimit = pLimit(GH_CONCURRENCY);
+  private readonly inflight = new Map<string, Promise<ExecResult>>();
+
+  /**
+   * Execute a read-only gh CLI command with concurrency limiting and singleflight dedup.
+   * Identical in-flight calls share a single process.
+   */
+  private exec(
+    args: string[],
+    options?: { timeout?: number; maxBuffer?: number }
+  ): Promise<ExecResult> {
+    const key = args.join('\0');
+    const existing = this.inflight.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = this.execLimit(() =>
+      execFileAsync('gh', args, {
+        timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
+        ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
+      })
+    ).finally(() => {
+      this.inflight.delete(key);
+    });
+
+    this.inflight.set(key, promise);
+    return promise;
+  }
+
+  /**
+   * Execute a mutating gh CLI command with concurrency limiting but NO dedup.
+   * Used for write operations (approve, comment, close, etc.).
+   */
+  private execMutating(
+    args: string[],
+    options?: { timeout?: number; maxBuffer?: number }
+  ): Promise<ExecResult> {
+    return this.execLimit(() =>
+      execFileAsync('gh', args, {
+        timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
+        ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
+      })
+    );
+  }
+
   /**
    * Get the authenticated user's GitHub username.
    * Returns null if not authenticated or gh CLI is not available.
    */
   async getAuthenticatedUsername(): Promise<string | null> {
     try {
-      const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login'], {
+      const { stdout } = await this.exec(['api', 'user', '--jq', '.login'], {
         timeout: GH_TIMEOUT_MS.userLookup,
       });
       return stdout.trim() || null;
@@ -60,14 +112,14 @@ class GitHubCLIService {
    */
   async checkHealth(): Promise<GitHubCLIHealthStatus> {
     try {
-      const { stdout: versionOutput } = await execFileAsync('gh', ['--version'], {
+      const { stdout: versionOutput } = await this.exec(['--version'], {
         timeout: GH_TIMEOUT_MS.healthVersion,
       });
       const versionMatch = versionOutput.match(/gh version ([\d.]+)/);
       const version = versionMatch?.[1];
 
       try {
-        await execFileAsync('gh', ['auth', 'status'], { timeout: GH_TIMEOUT_MS.healthAuth });
+        await this.exec(['auth', 'status'], { timeout: GH_TIMEOUT_MS.healthAuth });
         return { isInstalled: true, isAuthenticated: true, version };
       } catch {
         return {
@@ -119,8 +171,7 @@ class GitHubCLIService {
     }
 
     try {
-      const { stdout } = await execFileAsync(
-        'gh',
+      const { stdout } = await this.exec(
         [
           'pr',
           'view',
@@ -182,8 +233,7 @@ class GitHubCLIService {
    * Fetches reviewDecision for each PR to show accurate status.
    */
   async listReviewRequests(): Promise<ReviewRequestedPR[]> {
-    const { stdout } = await execFileAsync(
-      'gh',
+    const { stdout } = await this.exec(
       [
         'search',
         'prs',
@@ -197,12 +247,10 @@ class GitHubCLIService {
 
     const basePRs = parseGhJson(basePRSchema.array(), stdout, 'listReviewRequests');
 
-    const prsWithDetails = await mapWithConcurrencyLimit(
-      basePRs,
-      async (pr) => {
+    const prsWithDetails = await Promise.all(
+      basePRs.map(async (pr) => {
         try {
-          const { stdout: prDetails } = await execFileAsync(
-            'gh',
+          const { stdout: prDetails } = await this.exec(
             [
               'pr',
               'view',
@@ -225,8 +273,7 @@ class GitHubCLIService {
         } catch {
           return { ...pr, reviewDecision: null, additions: 0, deletions: 0, changedFiles: 0 };
         }
-      },
-      5
+      })
     );
 
     return prsWithDetails;
@@ -244,8 +291,7 @@ class GitHubCLIService {
     workspaceCreatedAt?: Date
   ): Promise<{ url: string; number: number } | null> {
     try {
-      const { stdout } = await execFileAsync(
-        'gh',
+      const { stdout } = await this.exec(
         [
           'pr',
           'list',
@@ -294,7 +340,7 @@ class GitHubCLIService {
     const args = ['pr', 'review', String(prNumber), '--repo', `${owner}/${repo}`, '--approve'];
 
     try {
-      await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+      await this.execMutating(args, { timeout: GH_TIMEOUT_MS.default });
       logger.info('PR approved successfully', { owner, repo, prNumber });
     } catch (error) {
       const errorType = classifyError(error);
@@ -339,8 +385,7 @@ class GitHubCLIService {
     ].join(',');
 
     try {
-      const { stdout } = await execFileAsync(
-        'gh',
+      const { stdout } = await this.exec(
         ['pr', 'view', String(prNumber), '--repo', repo, '--json', fields],
         { timeout: GH_TIMEOUT_MS.default }
       );
@@ -394,11 +439,10 @@ class GitHubCLIService {
    */
   async getPRDiff(repo: string, prNumber: number): Promise<string> {
     try {
-      const { stdout } = await execFileAsync(
-        'gh',
-        ['pr', 'diff', String(prNumber), '--repo', repo],
-        { timeout: GH_TIMEOUT_MS.diff, maxBuffer: GH_MAX_BUFFER_BYTES.diff }
-      );
+      const { stdout } = await this.exec(['pr', 'diff', String(prNumber), '--repo', repo], {
+        timeout: GH_TIMEOUT_MS.diff,
+        maxBuffer: GH_MAX_BUFFER_BYTES.diff,
+      });
 
       return stdout;
     } catch (error) {
@@ -438,7 +482,7 @@ class GitHubCLIService {
     }
 
     try {
-      await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+      await this.execMutating(args, { timeout: GH_TIMEOUT_MS.default });
       logger.info('PR review submitted successfully', { repo, prNumber, action });
     } catch (error) {
       const errorType = classifyError(error);
@@ -485,7 +529,7 @@ class GitHubCLIService {
         args.push('--assignee', assignee);
       }
 
-      const { stdout } = await execFileAsync('gh', args, { timeout: GH_TIMEOUT_MS.default });
+      const { stdout } = await this.exec(args, { timeout: GH_TIMEOUT_MS.default });
 
       return parseGhJson(issueSchema.array(), stdout, 'listIssues');
     } catch (error) {
@@ -523,8 +567,7 @@ class GitHubCLIService {
     }>
   > {
     try {
-      const { stdout } = await execFileAsync(
-        'gh',
+      const { stdout } = await this.exec(
         ['api', `repos/${repo}/pulls/${prNumber}/comments`, '--paginate'],
         { timeout: GH_TIMEOUT_MS.default, maxBuffer: GH_MAX_BUFFER_BYTES.reviewComments }
       );
@@ -564,13 +607,9 @@ class GitHubCLIService {
    */
   async addPRComment(repo: string, prNumber: number, body: string): Promise<void> {
     try {
-      await execFileAsync(
-        'gh',
-        ['pr', 'comment', String(prNumber), '--repo', repo, '--body', body],
-        {
-          timeout: GH_TIMEOUT_MS.default,
-        }
-      );
+      await this.execMutating(['pr', 'comment', String(prNumber), '--repo', repo, '--body', body], {
+        timeout: GH_TIMEOUT_MS.default,
+      });
       logger.info('PR comment added successfully', { repo, prNumber });
     } catch (error) {
       const errorType = classifyError(error);
@@ -597,8 +636,7 @@ class GitHubCLIService {
     body: string
   ): Promise<void> {
     try {
-      await execFileAsync(
-        'gh',
+      await this.execMutating(
         ['issue', 'comment', String(issueNumber), '--repo', `${owner}/${repo}`, '--body', body],
         { timeout: GH_TIMEOUT_MS.default }
       );
@@ -624,8 +662,7 @@ class GitHubCLIService {
    */
   async getIssue(owner: string, repo: string, issueNumber: number): Promise<GitHubIssue | null> {
     try {
-      const { stdout } = await execFileAsync(
-        'gh',
+      const { stdout } = await this.exec(
         [
           'issue',
           'view',
@@ -660,8 +697,7 @@ class GitHubCLIService {
    */
   async closeIssue(owner: string, repo: string, issueNumber: number): Promise<void> {
     try {
-      await execFileAsync(
-        'gh',
+      await this.execMutating(
         ['issue', 'close', String(issueNumber), '--repo', `${owner}/${repo}`],
         { timeout: GH_TIMEOUT_MS.default }
       );

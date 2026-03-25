@@ -22,7 +22,10 @@ function isPRNotFoundError(message: string): boolean {
 
 function isNetworkError(message: string): boolean {
   return (
-    message.includes('network') || message.includes('timeout') || message.includes('connection')
+    message.includes('network') ||
+    message.includes('timeout') ||
+    message.includes('connection') ||
+    message.includes('unexpected eof')
   );
 }
 
