@@ -493,7 +493,12 @@ function configureEventCollectorWithState(
   ratchetService.on(RATCHET_STATE_CHANGED, (event: RatchetStateChangedEvent) => {
     coalescer.enqueue(
       event.workspaceId,
-      { ratchetState: event.toState },
+      {
+        ratchetState: event.toState,
+        // Include fresh prCiStatus when the ratchet observed a CI status change.
+        // Prevents stale "CI Running" display after CI completes between scheduler polls.
+        ...(event.prCiStatus !== undefined ? { prCiStatus: event.prCiStatus } : {}),
+      },
       'event:ratchet_state_changed',
       { immediate: true }
     );

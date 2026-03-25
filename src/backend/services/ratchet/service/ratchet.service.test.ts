@@ -2117,6 +2117,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         workspaceId: 'ws-state-change',
         fromState: RatchetState.IDLE,
         toState: RatchetState.CI_FAILED,
+        prCiStatus: CIStatus.FAILURE,
       });
     });
 
