@@ -22,7 +22,10 @@ import {
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
-import { processAttachmentsAndBuildContent } from './chat-message-handlers/attachment-processing';
+import {
+  processAttachmentsAndBuildContent,
+  UnsupportedImageTypeError,
+} from './chat-message-handlers/attachment-processing';
 import { DEBUG_CHAT_WS } from './chat-message-handlers/constants';
 import { createChatMessageHandlerRegistry } from './chat-message-handlers/registry';
 import type { ClientCreator } from './chat-message-handlers/types';
@@ -198,23 +201,7 @@ class ChatMessageHandlerService {
       try {
         await this.dispatchMessage(dbSessionId, msg, clientResult.client);
       } catch (error) {
-        // Dispatch can fail after we pessimistically committed the user message to
-        // transcript for refresh safety. Roll it back before re-queueing so clients
-        // do not see the same message as both queued and committed.
-        logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
-          dbSessionId,
-          messageId: msg.id,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
-          emitSnapshot: false,
-        });
-        // Avoid clobbering markProcessExit() runtime/lastExit when the process
-        // has already stopped and exit handling is in flight.
-        if (sessionService.isSessionRunning(dbSessionId)) {
-          sessionDomainService.markIdle(dbSessionId, 'alive');
-        }
-        sessionDomainService.requeueFront(dbSessionId, msg);
+        this.handleDispatchError(dbSessionId, msg, error);
       }
     } finally {
       this.releaseDispatchToken(dbSessionId, dispatchToken);
@@ -261,6 +248,50 @@ class ChatMessageHandlerService {
   // ============================================================================
   // Private: Dispatch Helpers
   // ============================================================================
+
+  /**
+   * Handle a dispatch error. Permanent errors (e.g. unsupported image format) are
+   * rejected so the user sees a clear message. Transient errors are re-queued.
+   */
+  private handleDispatchError(dbSessionId: string, msg: QueuedMessage, error: unknown): void {
+    if (error instanceof UnsupportedImageTypeError) {
+      logger.error('[Chat WS] Permanent dispatch error, rejecting message', {
+        dbSessionId,
+        messageId: msg.id,
+        error: error.message,
+      });
+      sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
+        emitSnapshot: false,
+      });
+      if (sessionService.isSessionRunning(dbSessionId)) {
+        sessionDomainService.markIdle(dbSessionId, 'alive');
+      }
+      sessionDomainService.emitDelta(dbSessionId, {
+        type: 'message_state_changed',
+        id: msg.id,
+        newState: MessageState.REJECTED,
+        errorMessage: error.message,
+      });
+      return;
+    }
+    // Transient errors: dispatch can fail after we pessimistically committed the
+    // user message to transcript for refresh safety. Roll it back before
+    // re-queueing so clients do not see the same message as both queued and committed.
+    logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
+      dbSessionId,
+      messageId: msg.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
+      emitSnapshot: false,
+    });
+    // Avoid clobbering markProcessExit() runtime/lastExit when the process
+    // has already stopped and exit handling is in flight.
+    if (sessionService.isSessionRunning(dbSessionId)) {
+      sessionDomainService.markIdle(dbSessionId, 'alive');
+    }
+    sessionDomainService.requeueFront(dbSessionId, msg);
+  }
 
   /**
    * Resolve (or auto-start) the client for dispatching a queued message.
