@@ -12,6 +12,26 @@ import { resolveAttachmentContentType } from './attachment-utils';
 
 const logger = createLogger('attachment-processing');
 
+const SUPPORTED_IMAGE_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
+type SupportedImageMediaType = (typeof SUPPORTED_IMAGE_MEDIA_TYPES)[number];
+
+function isSupportedImageMediaType(type: string): type is SupportedImageMediaType {
+  return (SUPPORTED_IMAGE_MEDIA_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * Thrown when an image attachment has an unsupported MIME type.
+ * This is a permanent error — retrying will always fail.
+ */
+export class UnsupportedImageTypeError extends Error {
+  constructor(type: string) {
+    super(
+      `Unsupported image format "${type || '(unknown)'}". Supported formats: JPEG, PNG, GIF, WebP.`
+    );
+    this.name = 'UnsupportedImageTypeError';
+  }
+}
+
 // ============================================================================
 // Validation Helpers
 // ============================================================================
@@ -42,6 +62,20 @@ function validateImageBase64(attachment: MessageAttachment): void {
 }
 
 /**
+ * Validate that an image attachment has a MIME type supported by Claude's API.
+ * @throws UnsupportedImageTypeError if the MIME type is not accepted
+ */
+function validateImageMediaType(attachment: MessageAttachment): void {
+  if (!isSupportedImageMediaType(attachment.type)) {
+    logger.error('[Chat WS] Unsupported image media type', {
+      attachmentId: attachment.id,
+      type: attachment.type,
+    });
+    throw new UnsupportedImageTypeError(attachment.type);
+  }
+}
+
+/**
  * Validate an attachment before processing.
  * Checks for required data and validates base64 encoding for images.
  * @throws Error if attachment is invalid
@@ -52,6 +86,7 @@ export function validateAttachment(attachment: MessageAttachment): void {
   const resolvedType = resolveAttachmentContentType(attachment);
   if (resolvedType === 'image') {
     validateImageBase64(attachment);
+    validateImageMediaType(attachment);
   }
 }
 
@@ -145,7 +180,7 @@ export function buildContentArray(
       type: 'image',
       source: {
         type: 'base64',
-        media_type: attachment.type,
+        media_type: attachment.type as SupportedImageMediaType,
         data: attachment.data,
       },
     };
