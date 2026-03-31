@@ -5,10 +5,13 @@ const mockFindByIdWithProject = vi.hoisted(() => vi.fn());
 const mockFindById = vi.hoisted(() => vi.fn());
 const mockResetToNew = vi.hoisted(() => vi.fn());
 const mockStartProvisioning = vi.hoisted(() => vi.fn());
+const mockStartProvisioningFromReady = vi.hoisted(() => vi.fn());
 const mockGetInitMode = vi.hoisted(() => vi.fn());
 const mockSetInitMode = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceInitPolicy = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
+const mockExecuteStartupScriptPipeline = vi.hoisted(() => vi.fn());
+const mockReadConfig = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: {
@@ -24,6 +27,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceStateMachine: {
     resetToNew: (...args: unknown[]) => mockResetToNew(...args),
     startProvisioning: (...args: unknown[]) => mockStartProvisioning(...args),
+    startProvisioningFromReady: (...args: unknown[]) => mockStartProvisioningFromReady(...args),
   },
   worktreeLifecycleService: {
     getInitMode: (...args: unknown[]) => mockGetInitMode(...args),
@@ -34,6 +38,16 @@ vi.mock('@/backend/services/workspace', () => ({
 
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
+}));
+
+vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () => ({
+  executeStartupScriptPipeline: (...args: unknown[]) => mockExecuteStartupScriptPipeline(...args),
+}));
+
+vi.mock('@/backend/services/factory-config.service', () => ({
+  FactoryConfigService: {
+    readConfig: (...args: unknown[]) => mockReadConfig(...args),
+  },
 }));
 
 vi.mock('@/backend/services/logger.service', () => ({
@@ -153,6 +167,57 @@ describe('workspaceInitRouter', () => {
     });
     mockResetToNew.mockResolvedValue(null);
     await expect(caller.retryInit({ id: 'w1' })).rejects.toMatchObject({
+      code: 'TOO_MANY_REQUESTS',
+    });
+  });
+
+  it('throws NOT_FOUND when getInitStatus workspace is missing', async () => {
+    mockFindByIdWithProject.mockResolvedValue(null);
+    const caller = createCaller();
+    await expect(caller.getInitStatus({ id: 'missing' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('retries startup script pipeline for READY+warning workspace', async () => {
+    const workspace = {
+      id: 'w3',
+      status: 'READY',
+      initErrorMessage: 'setup script failed',
+      worktreePath: '/tmp/w3',
+      project: { id: 'p1' },
+    };
+    mockFindByIdWithProject.mockResolvedValue(workspace);
+    mockStartProvisioningFromReady.mockResolvedValue({ status: 'PROVISIONING' });
+    mockReadConfig.mockResolvedValue({ setupCommands: [] });
+    mockExecuteStartupScriptPipeline.mockResolvedValue(undefined);
+    mockFindById.mockResolvedValue({ id: 'w3', status: 'READY' });
+
+    const caller = createCaller();
+    await expect(caller.retryInit({ id: 'w3' })).resolves.toEqual({ id: 'w3', status: 'READY' });
+
+    expect(mockStartProvisioningFromReady).toHaveBeenCalledWith('w3', 3);
+    expect(mockReadConfig).toHaveBeenCalledWith('/tmp/w3');
+    expect(mockExecuteStartupScriptPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 'w3',
+        worktreePath: '/tmp/w3',
+      })
+    );
+  });
+
+  it('throws TOO_MANY_REQUESTS when READY+warning retry exceeds max retries', async () => {
+    mockFindByIdWithProject.mockResolvedValue({
+      id: 'w4',
+      status: 'READY',
+      initErrorMessage: 'setup script failed',
+      worktreePath: '/tmp/w4',
+      project: { id: 'p1' },
+    });
+    mockStartProvisioningFromReady.mockResolvedValue(null);
+
+    const caller = createCaller();
+    await expect(caller.retryInit({ id: 'w4' })).rejects.toMatchObject({
       code: 'TOO_MANY_REQUESTS',
     });
   });
