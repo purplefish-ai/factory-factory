@@ -108,6 +108,11 @@ export const workspaceInitRouter = router({
       // READY+warning: workspace is functional but setup script failed.
       // Retry by re-running the full startup script pipeline.
       if (isRetryableFromReadyWarning) {
+        // Read config before state transition so a readConfig failure
+        // doesn't leave the workspace stuck in PROVISIONING.
+        const worktreePath = workspace.worktreePath;
+        const factoryConfig = await FactoryConfigService.readConfig(worktreePath);
+
         const updatedWorkspace = await workspaceStateMachine.startProvisioningFromReady(
           workspace.id,
           maxRetries
@@ -118,9 +123,6 @@ export const workspaceInitRouter = router({
             message: `Maximum retry attempts (${maxRetries}) exceeded`,
           });
         }
-
-        const worktreePath = workspace.worktreePath;
-        const factoryConfig = await FactoryConfigService.readConfig(worktreePath);
 
         await executeStartupScriptPipeline({
           workspaceId: workspace.id,
