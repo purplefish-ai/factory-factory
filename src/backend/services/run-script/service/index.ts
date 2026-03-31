@@ -19,6 +19,7 @@ export {
 
 // Startup script execution
 export {
+  type RunStartupScriptOptions,
   type StartupScriptResult,
   startupScriptService,
 } from './startup-script.service';

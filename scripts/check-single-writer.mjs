@@ -59,6 +59,10 @@ const workspaceMutationRules = {
     type: 'static',
     fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage'],
   },
+  startProvisioningFromReadyIfAllowed: {
+    type: 'static',
+    fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage'],
+  },
   resetToNewIfAllowed: {
     type: 'static',
     fields: ['status', 'initRetryCount', 'initStartedAt', 'initCompletedAt', 'initErrorMessage'],

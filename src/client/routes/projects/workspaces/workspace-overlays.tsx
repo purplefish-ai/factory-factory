@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, RefreshCw, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -152,6 +152,8 @@ interface ScriptFailedBannerProps {
   initErrorMessage: string | null;
   initOutput: string | null;
   hasStartupScript: boolean;
+  showDismiss?: boolean;
+  onDismiss?: () => void;
 }
 
 export function ScriptFailedBanner({
@@ -159,6 +161,8 @@ export function ScriptFailedBanner({
   initErrorMessage,
   initOutput,
   hasStartupScript,
+  showDismiss = false,
+  onDismiss,
 }: ScriptFailedBannerProps) {
   const [expanded, setExpanded] = useState(false);
   const { retry, retryInit } = useRetryWorkspaceInit(workspaceId);
@@ -205,6 +209,17 @@ export function ScriptFailedBanner({
               </>
             )}
           </Button>
+          {showDismiss && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={onDismiss}
+              aria-label="Dismiss"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
       {expanded && hasStartupScript && (

@@ -25,6 +25,8 @@ interface WorkspaceStateProps {
   handleBackToWorkspaces: () => void;
   isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
+  setupWarningDismissed: boolean;
+  dismissSetupWarning: () => void;
 }
 
 interface HeaderProps {
@@ -76,18 +78,24 @@ function ScriptBanner({
   workspaceId,
   isScriptFailed,
   workspaceInitStatus,
+  setupWarningDismissed,
+  dismissSetupWarning,
 }: {
   workspaceId: string;
   isScriptFailed: boolean;
   workspaceInitStatus: WorkspaceStateProps['workspaceInitStatus'];
+  setupWarningDismissed: boolean;
+  dismissSetupWarning: () => void;
 }) {
-  if (isScriptFailed) {
+  if (isScriptFailed && !setupWarningDismissed) {
     return (
       <ScriptFailedBanner
         workspaceId={workspaceId}
         initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
         initOutput={workspaceInitStatus?.initOutput ?? null}
         hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+        showDismiss={workspaceInitStatus?.chatBanner?.showDismiss ?? false}
+        onDismiss={dismissSetupWarning}
       />
     );
   }
@@ -165,6 +173,8 @@ export function WorkspaceDetailView({
         workspaceId={workspaceState.workspaceId}
         isScriptFailed={workspaceState.isScriptFailed}
         workspaceInitStatus={workspaceState.workspaceInitStatus}
+        setupWarningDismissed={workspaceState.setupWarningDismissed}
+        dismissSetupWarning={workspaceState.dismissSetupWarning}
       />
 
       {isMobile ? (
