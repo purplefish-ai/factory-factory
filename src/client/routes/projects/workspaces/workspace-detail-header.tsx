@@ -1,3 +1,6 @@
+import { Pencil } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 import {
   HeaderLeftExtraSlot,
   HeaderLeftStartSlot,
@@ -5,6 +8,8 @@ import {
   useAppHeader,
 } from '@/client/components/app-header-context';
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { trpc } from '@/client/lib/trpc';
+import { Button } from '@/components/ui/button';
 import { RunScriptButton, RunScriptPortBadge } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -46,6 +51,42 @@ export function WorkspaceDetailHeaderSlot({
   const { slug, projects, handleProjectChange, handleCurrentProjectSelect } =
     useWorkspaceProjectNavigation();
 
+  const utils = trpc.useUtils();
+  const renameMutation = trpc.workspace.rename.useMutation({
+    onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
+  });
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(workspace.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleStartEdit = () => {
+    setEditValue(workspace.name);
+    setIsEditing(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  };
+
+  const handleSaveRename = async () => {
+    const trimmed = editValue.trim();
+    if (!trimmed || trimmed === workspace.name) {
+      setIsEditing(false);
+      return;
+    }
+    try {
+      await renameMutation.mutateAsync({ id: workspaceId, name: trimmed });
+      await Promise.all([
+        utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId }),
+        utils.workspace.get.invalidate({ id: workspaceId }),
+      ]);
+      setIsEditing(false);
+    } catch {
+      setIsEditing(false);
+      setEditValue(workspace.name);
+    }
+  };
+
+  const isArchived = workspace.status === 'ARCHIVED' || workspace.status === 'ARCHIVING';
+
   useAppHeader({ title: '' });
 
   return (
@@ -62,17 +103,51 @@ export function WorkspaceDetailHeaderSlot({
             trailingSeparatorType="chevron"
             triggerId="workspace-detail-project-select"
           />
-          <WorkspaceSwitcherDropdown
-            projectSlug={slug}
-            projectId={workspace.projectId}
-            currentWorkspaceId={workspaceId}
-            currentWorkspaceLabel={getWorkspaceHeaderLabel(
-              workspace.branchName,
-              workspace.name,
-              isMobile
-            )}
-            currentWorkspaceName={workspace.name}
-          />
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setIsEditing(false);
+                  setEditValue(workspace.name);
+                }
+                e.stopPropagation();
+              }}
+              onBlur={() => void handleSaveRename()}
+              className="min-w-0 max-w-[18rem] text-sm font-semibold bg-transparent border-b border-primary outline-none"
+            />
+          ) : (
+            <div className="group flex items-center gap-0.5">
+              <WorkspaceSwitcherDropdown
+                projectSlug={slug}
+                projectId={workspace.projectId}
+                currentWorkspaceId={workspaceId}
+                currentWorkspaceLabel={getWorkspaceHeaderLabel(
+                  workspace.branchName,
+                  workspace.name,
+                  isMobile
+                )}
+                currentWorkspaceName={workspace.name}
+              />
+              {!isArchived && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={handleStartEdit}
+                  aria-label="Rename workspace"
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </HeaderLeftStartSlot>
       <HeaderLeftExtraSlot>
