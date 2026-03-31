@@ -7,10 +7,11 @@
  *
  * State Diagram:
  *   NEW → PROVISIONING (initialization starts)
- *   PROVISIONING → READY (success)
+ *   PROVISIONING → READY (success, with optional warning message)
  *   PROVISIONING → FAILED (error)
  *   FAILED → PROVISIONING (retry startup script, with count check)
  *   FAILED → NEW (retry from scratch when worktree creation failed)
+ *   READY → PROVISIONING (retry setup script when workspace is READY+warning)
  *   READY → ARCHIVING → ARCHIVED
  *   FAILED → ARCHIVING → ARCHIVED
  *   ARCHIVING → READY/FAILED (rollback on archive failure)
@@ -30,7 +31,7 @@ const logger = createLogger('workspace-state-machine');
 const VALID_TRANSITIONS: Record<WorkspaceStatus, WorkspaceStatus[]> = {
   NEW: ['PROVISIONING'],
   PROVISIONING: ['READY', 'FAILED'],
-  READY: ['ARCHIVING'],
+  READY: ['ARCHIVING', 'PROVISIONING'],
   FAILED: ['PROVISIONING', 'NEW', 'ARCHIVING'],
   ARCHIVING: ['READY', 'FAILED', 'ARCHIVED'],
   ARCHIVED: [],
@@ -61,6 +62,8 @@ export interface TransitionOptions {
   branchName?: string;
   /** Error message to set (for FAILED transition) */
   errorMessage?: string;
+  /** Warning message to store in initErrorMessage on READY transition (non-fatal setup failure) */
+  warningMessage?: string;
 }
 
 export const WORKSPACE_STATE_CHANGED = 'workspace_state_changed' as const;
@@ -81,6 +84,49 @@ type ArchivingSourceStatus = Extract<WorkspaceStatus, 'READY' | 'FAILED'>;
 export interface StartArchivingResult {
   workspace: Workspace;
   previousStatus: ArchivingSourceStatus;
+}
+
+function applyTransitionData(
+  updateData: Prisma.WorkspaceUpdateManyMutationInput,
+  currentStatus: WorkspaceStatus,
+  targetStatus: WorkspaceStatus,
+  now: Date,
+  options?: TransitionOptions
+): void {
+  switch (targetStatus) {
+    case 'PROVISIONING':
+      updateData.initStartedAt = now;
+      updateData.initErrorMessage = null;
+      break;
+
+    case 'READY':
+      // Mark init completion only for PROVISIONING -> READY,
+      // not for ARCHIVING rollback transitions.
+      if (currentStatus === 'PROVISIONING') {
+        updateData.initCompletedAt = now;
+      }
+      if (options?.worktreePath !== undefined) {
+        updateData.worktreePath = options.worktreePath;
+      }
+      if (options?.branchName !== undefined) {
+        updateData.branchName = options.branchName;
+      }
+      if (options?.warningMessage !== undefined) {
+        updateData.initErrorMessage = options.warningMessage;
+      }
+      break;
+
+    case 'FAILED':
+      // Mark init completion only for PROVISIONING -> FAILED,
+      // not for ARCHIVING rollback transitions.
+      if (currentStatus === 'PROVISIONING') {
+        updateData.initCompletedAt = now;
+      }
+      if (options?.errorMessage !== undefined) {
+        updateData.initErrorMessage = options.errorMessage;
+      }
+      break;
+  }
 }
 
 class WorkspaceStateMachineService extends EventEmitter {
@@ -120,37 +166,7 @@ class WorkspaceStateMachineService extends EventEmitter {
     };
 
     // Apply transition-specific updates
-    switch (targetStatus) {
-      case 'PROVISIONING':
-        updateData.initStartedAt = now;
-        updateData.initErrorMessage = null;
-        break;
-
-      case 'READY':
-        // Mark init completion only for PROVISIONING -> READY,
-        // not for ARCHIVING rollback transitions.
-        if (currentStatus === 'PROVISIONING') {
-          updateData.initCompletedAt = now;
-        }
-        if (options?.worktreePath !== undefined) {
-          updateData.worktreePath = options.worktreePath;
-        }
-        if (options?.branchName !== undefined) {
-          updateData.branchName = options.branchName;
-        }
-        break;
-
-      case 'FAILED':
-        // Mark init completion only for PROVISIONING -> FAILED,
-        // not for ARCHIVING rollback transitions.
-        if (currentStatus === 'PROVISIONING') {
-          updateData.initCompletedAt = now;
-        }
-        if (options?.errorMessage !== undefined) {
-          updateData.initErrorMessage = options.errorMessage;
-        }
-        break;
-    }
+    applyTransitionData(updateData, currentStatus, targetStatus, now, options);
 
     // Use compare-and-swap to prevent race conditions
     const result = await workspaceAccessor.transitionWithCas(
@@ -343,6 +359,66 @@ class WorkspaceStateMachineService extends EventEmitter {
    */
   archive(workspaceId: string): Promise<Workspace> {
     return this.markArchived(workspaceId);
+  }
+
+  /**
+   * Mark workspace as ready with a non-fatal setup script warning.
+   * Workspace is fully usable; the warning is surfaced as a dismissable banner.
+   */
+  markReadyWithWarning(workspaceId: string, warningMessage: string): Promise<Workspace> {
+    return this.transition(workspaceId, 'READY', { warningMessage });
+  }
+
+  /**
+   * Start provisioning from READY+warning state (retry setup script).
+   * Atomically increments retry count and enforces max retries.
+   *
+   * @returns The updated workspace, or null if max retries exceeded
+   */
+  async startProvisioningFromReady(workspaceId: string, maxRetries = 3): Promise<Workspace | null> {
+    const workspace = await workspaceAccessor.findRawById(workspaceId);
+
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    if (workspace.status !== 'READY') {
+      throw new WorkspaceStateMachineError(
+        workspaceId,
+        workspace.status,
+        'PROVISIONING',
+        'startProvisioningFromReady can only be called from READY status'
+      );
+    }
+
+    const result = await workspaceAccessor.startProvisioningFromReadyIfAllowed(
+      workspaceId,
+      maxRetries
+    );
+
+    if (result.count === 0) {
+      logger.warn('Max retries exceeded for workspace setup script retry', {
+        workspaceId,
+        maxRetries,
+        currentRetryCount: workspace.initRetryCount,
+      });
+      return null;
+    }
+
+    const updated = await workspaceAccessor.findRawById(workspaceId);
+
+    this.emit(WORKSPACE_STATE_CHANGED, {
+      workspaceId,
+      fromStatus: 'READY' as WorkspaceStatus,
+      toStatus: 'PROVISIONING' as WorkspaceStatus,
+    } satisfies WorkspaceStateChangedEvent);
+
+    logger.debug('Workspace setup script retry started from READY+warning', {
+      workspaceId,
+      retryCount: updated?.initRetryCount,
+    });
+
+    return updated;
   }
 
   /**

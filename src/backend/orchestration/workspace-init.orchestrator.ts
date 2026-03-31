@@ -1009,8 +1009,6 @@ export async function initializeWorkspaceWorktree(
       workspaceWithProject,
       worktreePath: worktreeInfo.worktreePath,
       factoryConfig,
-      getWorkspaceInitErrorMessage: async () =>
-        (await workspaceAccessor.findById(workspaceId))?.initErrorMessage,
     });
     if (startupScriptPipelineResult.handled) {
       await awaitSessionAndDispatchIfSuccess(

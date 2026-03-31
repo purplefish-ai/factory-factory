@@ -53,6 +53,7 @@ vi.mock('@/backend/services/workspace', () => ({
     startProvisioning: vi.fn(),
     markFailed: vi.fn(),
     markReady: vi.fn(),
+    markReadyWithWarning: vi.fn(),
   },
   worktreeLifecycleService: {
     getInitMode: vi.fn(),
@@ -191,6 +192,7 @@ function setupHappyPath() {
     return commands;
   });
   vi.mocked(workspaceStateMachine.markReady).mockResolvedValue(unsafeCoerce(workspace));
+  vi.mocked(workspaceStateMachine.markReadyWithWarning).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('testuser');
   vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([]);
@@ -591,11 +593,28 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(startupScriptService.runStartupScript).toHaveBeenCalledWith(
         expect.objectContaining({ worktreePath: '/worktrees/workspace-ws-1' }),
-        expect.objectContaining({ startupScriptCommand: './setup.sh' })
+        expect.objectContaining({ startupScriptCommand: './setup.sh' }),
+        expect.objectContaining({ deferStateTransition: true })
       );
     });
 
-    it('does not run project startup script when factory setup ran', async () => {
+    it('also runs project startup script when factory setup ran', async () => {
+      setupHappyPath();
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
+        success: true,
+      } as never);
+      vi.mocked(startupScriptService.hasStartupScript).mockReturnValue(false);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      // Both phases are now evaluated — project startup phase checks hasStartupScript
+      expect(startupScriptService.hasStartupScript).toHaveBeenCalled();
+    });
+
+    it('marks ready after factory setup script ran (pipeline handles final state)', async () => {
       setupHappyPath();
       vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
         unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
@@ -606,52 +625,48 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      // hasStartupScript should not be called because factory setup took precedence
-      expect(startupScriptService.hasStartupScript).not.toHaveBeenCalled();
+      // Pipeline calls markReady after all phases succeed
+      expect(workspaceStateMachine.markReady).toHaveBeenCalledWith(WORKSPACE_ID);
     });
 
-    it('does not mark ready when factory setup script ran (script handles state)', async () => {
-      setupHappyPath();
-      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
-        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
-      );
-      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
-        success: true,
-      } as never);
-
-      await initializeWorkspaceWorktree(WORKSPACE_ID);
-
-      expect(workspaceStateMachine.markReady).not.toHaveBeenCalled();
-    });
-
-    it('stops sessions when factory setup script fails', async () => {
+    it('does not stop sessions when factory setup script fails (non-blocking)', async () => {
       setupHappyPath();
       vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
         unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
       );
       vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
         success: false,
+        errorMessage: 'setup failed',
       } as never);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
+      // Sessions are not stopped — failure is non-blocking
+      expect(sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+      // Workspace reaches READY with a warning
+      expect(workspaceStateMachine.markReadyWithWarning).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        expect.any(String)
+      );
     });
 
-    it('does not throw when stopping sessions fails after setup script failure', async () => {
+    it('reaches READY state even when factory setup script fails', async () => {
       setupHappyPath();
       vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
         unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
       );
       vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
         success: false,
+        errorMessage: 'setup failed',
       } as never);
-      vi.mocked(sessionService.stopWorkspaceSessions).mockRejectedValue(
-        new Error('session stop failed')
-      );
 
-      // Should not throw
       await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      // Workspace should still reach READY (with warning) despite setup failure
+      expect(workspaceStateMachine.markReadyWithWarning).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        expect.any(String)
+      );
     });
   });
 
@@ -668,7 +683,7 @@ describe('initializeWorkspaceWorktree', () => {
       expect(startupScriptService.runStartupScript).toHaveBeenCalled();
     });
 
-    it('does not mark ready when project startup script ran', async () => {
+    it('marks ready after project startup script ran (pipeline handles final state)', async () => {
       setupHappyPath();
       vi.mocked(startupScriptService.hasStartupScript).mockReturnValue(true);
       vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
@@ -677,32 +692,44 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceStateMachine.markReady).not.toHaveBeenCalled();
+      // Pipeline calls markReady after all phases succeed
+      expect(workspaceStateMachine.markReady).toHaveBeenCalledWith(WORKSPACE_ID);
     });
 
-    it('stops sessions when project startup script fails', async () => {
+    it('does not stop sessions when project startup script fails (non-blocking)', async () => {
       setupHappyPath();
       vi.mocked(startupScriptService.hasStartupScript).mockReturnValue(true);
       vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
         success: false,
+        errorMessage: 'startup failed',
       } as never);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
-    });
-
-    it('does not throw when stopping sessions fails after startup script failure', async () => {
-      setupHappyPath();
-      vi.mocked(startupScriptService.hasStartupScript).mockReturnValue(true);
-      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
-        success: false,
-      } as never);
-      vi.mocked(sessionService.stopWorkspaceSessions).mockRejectedValue(
-        new Error('session stop failed')
+      // Sessions are not stopped — failure is non-blocking
+      expect(sessionService.stopWorkspaceSessions).not.toHaveBeenCalled();
+      // Workspace reaches READY with a warning
+      expect(workspaceStateMachine.markReadyWithWarning).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        expect.any(String)
       );
+    });
+
+    it('reaches READY state even when project startup script fails', async () => {
+      setupHappyPath();
+      vi.mocked(startupScriptService.hasStartupScript).mockReturnValue(true);
+      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
+        success: false,
+        errorMessage: 'startup failed',
+      } as never);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      // Workspace should still reach READY (with warning) despite startup failure
+      expect(workspaceStateMachine.markReadyWithWarning).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        expect.any(String)
+      );
     });
   });
 
@@ -1123,7 +1150,7 @@ describe('initializeWorkspaceWorktree', () => {
   });
 
   describe('script priority', () => {
-    it('prefers factory setup script over project startup script', async () => {
+    it('runs both factory setup and project startup scripts when both configured', async () => {
       setupHappyPath();
       vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
         unsafeCoerce({ scripts: { setup: './factory-setup.sh', run: null, cleanup: null } })
@@ -1135,11 +1162,12 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      // Factory setup runs, project startup should not be checked
-      expect(startupScriptService.runStartupScript).toHaveBeenCalledTimes(1);
+      // Both factory setup and project startup now run
+      expect(startupScriptService.runStartupScript).toHaveBeenCalledTimes(2);
       expect(startupScriptService.runStartupScript).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ startupScriptCommand: './factory-setup.sh' })
+        expect.objectContaining({ startupScriptCommand: './factory-setup.sh' }),
+        expect.objectContaining({ deferStateTransition: true })
       );
     });
   });
@@ -1163,13 +1191,14 @@ describe('initializeWorkspaceWorktree', () => {
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 
-    it('does not retry ready dispatch when factory setup fails', async () => {
+    it('retries ready dispatch even when factory setup fails (non-blocking)', async () => {
       setupHappyPath();
       vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
         unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
       );
       vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
         success: false,
+        errorMessage: 'setup failed',
       } as never);
       vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
         unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
@@ -1177,7 +1206,8 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(1);
+      // Dispatch is retried because workspace reaches READY (with warning)
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledTimes(2);
       expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
     });
 

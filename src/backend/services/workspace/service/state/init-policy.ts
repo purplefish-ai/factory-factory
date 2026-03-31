@@ -24,6 +24,7 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
         message: 'Creating worktree...',
         showRetry: false,
         showPlay: false,
+        showDismiss: false,
       },
       dispatchPolicy: 'blocked',
     };
@@ -37,6 +38,7 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
         message: 'Running init script...',
         showRetry: false,
         showPlay: false,
+        showDismiss: false,
       },
       dispatchPolicy: 'blocked',
     };
@@ -50,21 +52,27 @@ export function getWorkspaceInitPolicy(input: WorkspaceInitPolicyInput): Workspa
         message: getBlockedFailedMessage(input),
         showRetry: true,
         showPlay: false,
+        showDismiss: false,
       },
       dispatchPolicy: 'blocked',
     };
   }
 
   if (phase === 'READY_WITH_WARNING') {
+    const isReadyWithWarning = input.status === 'READY';
     return {
       phase,
       banner: {
         kind: 'warning',
         message: input.initErrorMessage || 'Init script failed. Workspace may be incomplete.',
-        showRetry: input.status === 'FAILED',
-        showPlay: true,
+        showRetry: true,
+        // Legacy FAILED+worktree path: user must manually resume the agent
+        showPlay: !isReadyWithWarning,
+        // New READY+warning path: banner is dismissable
+        showDismiss: isReadyWithWarning,
       },
-      dispatchPolicy: 'manual_resume',
+      // READY+warning: workspace and agent are fully operational
+      dispatchPolicy: isReadyWithWarning ? 'allowed' : 'manual_resume',
     };
   }
 

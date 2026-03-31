@@ -88,8 +88,8 @@ describe('WorkspaceStateMachineService', () => {
       expect(workspaceStateMachine.isValidTransition('NEW', 'FAILED')).toBe(false);
     });
 
-    it('should not allow READY → PROVISIONING', () => {
-      expect(workspaceStateMachine.isValidTransition('READY', 'PROVISIONING')).toBe(false);
+    it('should allow READY → PROVISIONING (retry from warning)', () => {
+      expect(workspaceStateMachine.isValidTransition('READY', 'PROVISIONING')).toBe(true);
     });
 
     it('should not allow ARCHIVING → NEW', () => {

@@ -11,4 +11,5 @@ export type WorkspaceInitBanner = {
   message: string;
   showRetry: boolean;
   showPlay: boolean;
+  showDismiss: boolean;
 };

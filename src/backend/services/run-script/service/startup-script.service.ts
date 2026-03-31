@@ -27,6 +27,18 @@ export interface StartupScriptResult {
   stderr: string;
   timedOut: boolean;
   durationMs: number;
+  /** Populated when !success — the human-readable error message. */
+  errorMessage?: string;
+}
+
+export interface RunStartupScriptOptions {
+  /**
+   * When true, skip all state machine transitions (markReady/markFailed).
+   * The caller is responsible for transitioning workspace state.
+   * Used by the startup script pipeline to do a single final transition
+   * after all phases have run.
+   */
+  deferStateTransition?: boolean;
 }
 
 class StartupScriptService {
@@ -55,16 +67,24 @@ class StartupScriptService {
    *
    * @returns Result of script execution
    */
-  async runStartupScript(workspace: Workspace, project: Project): Promise<StartupScriptResult> {
+  async runStartupScript(
+    workspace: Workspace,
+    project: Project,
+    options?: RunStartupScriptOptions
+  ): Promise<StartupScriptResult> {
     const worktreePath = workspace.worktreePath;
     if (!worktreePath) {
       throw new Error('Workspace has no worktree path');
     }
 
+    const deferStateTransition = options?.deferStateTransition ?? false;
+
     // Check if project has a startup script configured
     if (!(project.startupScriptCommand || project.startupScriptPath)) {
-      // No script configured - mark as ready immediately
-      await this.workspace.markReady(workspace.id);
+      // No script configured - mark as ready immediately (unless caller manages state)
+      if (!deferStateTransition) {
+        await this.workspace.markReady(workspace.id);
+      }
       return {
         success: true,
         exitCode: 0,
@@ -102,29 +122,13 @@ class StartupScriptService {
       // Flush any remaining buffered output
       await flushOutput();
 
-      const durationMs = Date.now() - startTime;
-
-      if (result.success) {
-        await this.workspace.markReady(workspace.id);
-        logger.info('Startup script completed successfully', {
-          workspaceId: workspace.id,
-          durationMs,
-        });
-      } else {
-        const errorMessage = result.timedOut
-          ? `Script timed out after ${project.startupScriptTimeout}s`
-          : `Script exited with code ${result.exitCode}: ${result.stderr.slice(0, 500)}`;
-
-        await this.workspace.markFailed(workspace.id, errorMessage);
-        logger.error('Startup script failed', {
-          workspaceId: workspace.id,
-          exitCode: result.exitCode,
-          timedOut: result.timedOut,
-          stderr: result.stderr.slice(0, 500),
-        });
-      }
-
-      return { ...result, durationMs };
+      return await this.handleScriptResult(
+        result,
+        workspace.id,
+        project.startupScriptTimeout,
+        deferStateTransition,
+        Date.now() - startTime
+      );
     } catch (error) {
       // Flush any remaining buffered output before handling error
       await flushOutput();
@@ -132,7 +136,9 @@ class StartupScriptService {
       const durationMs = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      await this.workspace.markFailed(workspace.id, errorMessage);
+      if (!deferStateTransition) {
+        await this.workspace.markFailed(workspace.id, errorMessage);
+      }
       logger.error('Startup script execution error', toError(error), {
         workspaceId: workspace.id,
       });
@@ -144,6 +150,7 @@ class StartupScriptService {
         stderr: errorMessage,
         timedOut: false,
         durationMs,
+        errorMessage,
       };
     }
   }
@@ -332,6 +339,41 @@ class StartupScriptService {
    */
   hasStartupScript(project: Project): boolean {
     return !!(project.startupScriptCommand || project.startupScriptPath);
+  }
+
+  /**
+   * Handle the result of a script execution: update workspace state and return a result object.
+   */
+  private async handleScriptResult(
+    result: Omit<StartupScriptResult, 'durationMs'>,
+    workspaceId: string,
+    scriptTimeout: number | null,
+    deferStateTransition: boolean,
+    durationMs: number
+  ): Promise<StartupScriptResult> {
+    if (result.success) {
+      if (!deferStateTransition) {
+        await this.workspace.markReady(workspaceId);
+      }
+      return { ...result, durationMs };
+    }
+
+    const timeoutSeconds = scriptTimeout ?? 300;
+    const errorMessage = result.timedOut
+      ? `Script timed out after ${timeoutSeconds} seconds`
+      : result.stderr || 'Script failed with non-zero exit code';
+
+    if (!deferStateTransition) {
+      await this.workspace.markFailed(workspaceId, errorMessage);
+    }
+
+    logger.warn('Startup script failed', {
+      workspaceId,
+      exitCode: result.exitCode,
+      timedOut: result.timedOut,
+    });
+
+    return { ...result, durationMs, errorMessage };
   }
 
   /**

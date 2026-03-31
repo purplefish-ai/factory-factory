@@ -307,6 +307,27 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Conditional provisioning retry transition (READY -> PROVISIONING).
+   * Used when a workspace is READY+warning and the user retries the setup script.
+   * Returns count=1 when retry is allowed and transition was applied.
+   */
+  startProvisioningFromReadyIfAllowed(id: string, maxRetries: number): Promise<{ count: number }> {
+    return prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
+        initRetryCount: { lt: maxRetries },
+      },
+      data: {
+        status: 'PROVISIONING',
+        initRetryCount: { increment: 1 },
+        initStartedAt: new Date(),
+        initErrorMessage: null,
+      },
+    });
+  }
+
+  /**
    * Conditional reset transition (FAILED -> NEW).
    * Returns count=1 when retry is allowed and transition was applied.
    */
