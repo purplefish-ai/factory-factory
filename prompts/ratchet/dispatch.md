@@ -37,7 +37,11 @@ Required Sequence:
 3. Check for unaddressed code review comments and address them.
 4. Run build/lint/test and fix any resulting failures.
 5. Push only when you made actionable CI or review fixes (not merge-only updates).
-6. Comment briefly on addressed review comments and resolve them. IMPORTANT: When responding to a comment, explicitly @ mention the person who made the comment (e.g., "@username - fixed as suggested").
+6. Reply to every review comment (human or AI) and resolve addressed threads.
+   - For each comment you acted on: explain what you changed and where (file + line), then resolve the thread.
+   - For each comment you did not act on: explain why (e.g. "intentional design", "out of scope for this PR", "this is informational — no change needed").
+   - Always explicitly @ mention the commenter in your reply (e.g. "@username — fixed as suggested").
+   - This step is MANDATORY regardless of whether any code changes were made.
 7. Request re-review from reviewers whose comments you addressed using `gh pr edit {{PR_NUMBER}} --add-reviewer <login>`.
 8. CRITICAL: If you made ANY code changes in response to review comments (regardless of whether you already commented on them in a previous session), you MUST post a PR comment tagging the reviewers to request re-review. Use `gh pr comment {{PR_NUMBER}} --body "@reviewer1 @reviewer2 please re-review"`. This is MANDATORY even if you previously commented on the review - the act of pushing new changes requires a new re-review request. Include all addressed reviewers in one comment.
 
@@ -45,6 +49,6 @@ Completion Criteria:
 - Branch includes the latest base branch.
 - No unresolved conflicts remain.
 - CI and local verification are healthy, or best effort is documented in session output.
-- Addressed review comments are replied to and resolved.
+- All review comments (human and AI) are replied to; addressed threads are resolved.
 - Re-review has been requested from reviewers whose comments were addressed.
 - MANDATORY: If you made code changes addressing review comments, a PR comment MUST be posted tagging ALL reviewers whose comments triggered these changes, asking them to re-review. This is required even if you previously responded to their comments - new code changes always require a new re-review request.
