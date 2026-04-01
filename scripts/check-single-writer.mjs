@@ -70,6 +70,10 @@ const workspaceMutationRules = {
   markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
   clearRatchetActiveSession: { type: 'static', fields: ['ratchetActiveSessionId'] },
   clearInitOutput: { type: 'static', fields: ['initOutput'] },
+  resetStaleRunScriptStatuses: {
+    type: 'static',
+    fields: ['runScriptStatus', 'runScriptPid', 'runScriptPort', 'runScriptStartedAt'],
+  },
 };
 
 function collectSourceFiles(dir) {
