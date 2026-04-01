@@ -287,6 +287,40 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Find workspaces with transient run script statuses (STARTING or STOPPING)
+   * and reset them to IDLE. Called at server startup to recover states left
+   * in-flight by a server crash or restart.
+   * Returns the affected workspaces (id + prior status) for logging/event emission.
+   */
+  async resetStaleRunScriptStatuses(): Promise<
+    Array<{ id: string; runScriptStatus: RunScriptStatus }>
+  > {
+    const stale = await prisma.workspace.findMany({
+      where: { runScriptStatus: { in: ['STARTING', 'STOPPING'] } },
+      select: { id: true, runScriptStatus: true },
+    });
+
+    if (stale.length === 0) {
+      return [];
+    }
+
+    await prisma.workspace.updateMany({
+      where: {
+        id: { in: stale.map((w) => w.id) },
+        runScriptStatus: { in: ['STARTING', 'STOPPING'] },
+      },
+      data: {
+        runScriptStatus: 'IDLE',
+        runScriptPid: null,
+        runScriptPort: null,
+        runScriptStartedAt: null,
+      },
+    });
+
+    return stale;
+  }
+
+  /**
    * Conditional provisioning retry transition (FAILED -> PROVISIONING).
    * Returns count=1 when retry is allowed and transition was applied.
    */
