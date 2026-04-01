@@ -24,7 +24,9 @@ const {
   mockSetSessionConfigOption: vi.fn(),
   mockSetSessionMode: vi.fn(),
   mockSetSessionModel: vi.fn(),
-  mockNdJsonStream: vi.fn().mockReturnValue({ writable: {}, readable: {} }),
+  mockNdJsonStream: vi
+    .fn()
+    .mockReturnValue({ writable: {}, readable: { pipeThrough: () => ({}) } }),
 }));
 
 // ---- Mocks ----
