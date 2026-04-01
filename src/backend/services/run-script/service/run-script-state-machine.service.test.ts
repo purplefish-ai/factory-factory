@@ -775,14 +775,19 @@ describe('RunScriptStateMachineService', () => {
       mockUpdateMany.mockResolvedValue({ count: 2 });
 
       const events: unknown[] = [];
-      runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, (e) => events.push(e));
+      const listener = (e: unknown) => events.push(e);
+      runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, listener);
 
-      await runScriptStateMachine.recoverStaleStates();
+      try {
+        await runScriptStateMachine.recoverStaleStates();
 
-      expect(events).toEqual([
-        { workspaceId: 'ws-1', fromStatus: 'STARTING', toStatus: 'IDLE' },
-        { workspaceId: 'ws-2', fromStatus: 'STOPPING', toStatus: 'IDLE' },
-      ]);
+        expect(events).toEqual([
+          { workspaceId: 'ws-1', fromStatus: 'STARTING', toStatus: 'IDLE' },
+          { workspaceId: 'ws-2', fromStatus: 'STOPPING', toStatus: 'IDLE' },
+        ]);
+      } finally {
+        runScriptStateMachine.off(RUN_SCRIPT_STATUS_CHANGED, listener);
+      }
     });
   });
 

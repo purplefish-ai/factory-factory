@@ -305,7 +305,10 @@ class WorkspaceAccessor {
     }
 
     await prisma.workspace.updateMany({
-      where: { id: { in: stale.map((w) => w.id) } },
+      where: {
+        id: { in: stale.map((w) => w.id) },
+        runScriptStatus: { in: ['STARTING', 'STOPPING'] },
+      },
       data: {
         runScriptStatus: 'IDLE',
         runScriptPid: null,

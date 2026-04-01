@@ -164,7 +164,10 @@ describe('workspaceAccessor', () => {
         select: { id: true, runScriptStatus: true },
       });
       expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: { id: { in: ['ws-1', 'ws-2'] } },
+        where: {
+          id: { in: ['ws-1', 'ws-2'] },
+          runScriptStatus: { in: ['STARTING', 'STOPPING'] },
+        },
         data: {
           runScriptStatus: 'IDLE',
           runScriptPid: null,
