@@ -138,6 +138,43 @@ describe('workspaceAccessor', () => {
     await expect(workspaceAccessor.appendInitOutput('ws-1', 'line')).resolves.toBeUndefined();
   });
 
+  describe('resetStaleRunScriptStatuses', () => {
+    it('returns empty array and skips update when no stale workspaces exist', async () => {
+      mockFindMany.mockResolvedValue([]);
+
+      const result = await workspaceAccessor.resetStaleRunScriptStatuses();
+
+      expect(result).toEqual([]);
+      expect(mockUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('resets STARTING and STOPPING workspaces to IDLE and returns affected records', async () => {
+      const stale = [
+        { id: 'ws-1', runScriptStatus: 'STARTING' },
+        { id: 'ws-2', runScriptStatus: 'STOPPING' },
+      ];
+      mockFindMany.mockResolvedValue(stale);
+      mockUpdateMany.mockResolvedValue({ count: 2 });
+
+      const result = await workspaceAccessor.resetStaleRunScriptStatuses();
+
+      expect(result).toEqual(stale);
+      expect(mockFindMany).toHaveBeenCalledWith({
+        where: { runScriptStatus: { in: ['STARTING', 'STOPPING'] } },
+        select: { id: true, runScriptStatus: true },
+      });
+      expect(mockUpdateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['ws-1', 'ws-2'] } },
+        data: {
+          runScriptStatus: 'IDLE',
+          runScriptPid: null,
+          runScriptPort: null,
+          runScriptStartedAt: null,
+        },
+      });
+    });
+  });
+
   it('finds one ratchet candidate by id with READY and PR filters', async () => {
     mockFindFirst.mockResolvedValue({ id: 'ws-1', prUrl: 'https://github.com/org/repo/pull/1' });
 

@@ -249,6 +249,31 @@ class RunScriptStateMachineService extends EventEmitter {
   }
 
   /**
+   * Recover stale transient states left by a server crash or restart.
+   * Resets all STARTING and STOPPING workspaces to IDLE and emits status-changed
+   * events so the UI reflects the correct state.
+   * Should be called once at server startup.
+   */
+  async recoverStaleStates(): Promise<void> {
+    const recovered = await workspaceAccessor.resetStaleRunScriptStatuses();
+
+    if (recovered.length === 0) {
+      return;
+    }
+
+    logger.info('Recovered stale run script states on startup', { count: recovered.length });
+
+    for (const { id, runScriptStatus: fromStatus } of recovered) {
+      logger.info('Reset stale run script state to IDLE', { workspaceId: id, fromStatus });
+      this.emit(RUN_SCRIPT_STATUS_CHANGED, {
+        workspaceId: id,
+        fromStatus,
+        toStatus: 'IDLE',
+      } satisfies RunScriptStatusChangedEvent);
+    }
+  }
+
+  /**
    * Check current status and verify process is still running.
    * Updates status to FAILED if process is stale.
    *
