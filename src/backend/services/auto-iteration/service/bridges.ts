@@ -5,7 +5,12 @@
  */
 
 import type { AutoIterationStatus } from '@/shared/core';
-import type { AutoIterationProgress } from './auto-iteration.types';
+import type {
+  AgentLogbook,
+  AgentLogbookEntry,
+  AutoIterationConfig,
+  AutoIterationProgress,
+} from './auto-iteration.types';
 
 /** Session capabilities needed by auto-iteration. */
 export interface AutoIterationSessionBridge {
@@ -26,4 +31,17 @@ export interface AutoIterationWorkspaceBridge {
   updateAutoIterationStatus(workspaceId: string, status: AutoIterationStatus): Promise<void>;
   updateAutoIterationProgress(workspaceId: string, progress: AutoIterationProgress): Promise<void>;
   updateAutoIterationSessionId(workspaceId: string, sessionId: string | null): Promise<void>;
+}
+
+/** Logbook capabilities needed by auto-iteration. */
+export interface AutoIterationLogbookBridge {
+  initialize(
+    worktreePath: string,
+    workspaceId: string,
+    config: AutoIterationConfig,
+    baselineOutput: string,
+    baselineMetricSummary: string
+  ): Promise<void>;
+  appendEntry(worktreePath: string, entry: AgentLogbookEntry): Promise<void>;
+  read(worktreePath: string): Promise<AgentLogbook | null>;
 }
