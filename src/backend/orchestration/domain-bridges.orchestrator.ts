@@ -55,6 +55,7 @@ type BridgeServices = {
   getWorkspaceInitPolicy: typeof getWorkspaceInitPolicy;
   githubCLIService: typeof githubCLIService;
   kanbanStateService: typeof kanbanStateService;
+  logbookService: typeof logbookService;
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   reconciliationService: typeof reconciliationService;
@@ -76,6 +77,7 @@ const defaultServices: BridgeServices = {
   getWorkspaceInitPolicy,
   githubCLIService,
   kanbanStateService,
+  logbookService,
   prSnapshotService,
   ratchetService,
   reconciliationService,
@@ -99,6 +101,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     getWorkspaceInitPolicy,
     githubCLIService,
     kanbanStateService,
+    logbookService,
     prSnapshotService,
     ratchetService,
     reconciliationService,

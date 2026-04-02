@@ -82,13 +82,41 @@ export class AutoIterationService {
     return this.logbookBridge;
   }
 
-  /** Start the auto-iteration loop for a workspace. */
+  /** Start the auto-iteration loop for a workspace. Atomically registers the loop to prevent races. */
   async start(workspaceId: string, config: AutoIterationConfig): Promise<void> {
+    // Atomic guard: register the loop synchronously before any await to prevent concurrent starts
     if (this.loops.has(workspaceId)) {
       throw new Error(`Auto-iteration already running for workspace ${workspaceId}`);
     }
+    const placeholder: RunningLoop = {
+      workspaceId,
+      sessionId: '',
+      config,
+      progress: {
+        currentIteration: 0,
+        baselineMetricSummary: '',
+        currentMetricSummary: '',
+        acceptedCount: 0,
+        rejectedRegressionCount: 0,
+        rejectedCritiqueCount: 0,
+        crashedCount: 0,
+        sessionRecycleCount: 0,
+        startedAt: new Date().toISOString(),
+        lastIterationAt: null,
+      },
+      pauseRequested: false,
+      stopRequested: false,
+      loopPromise: null,
+    };
+    this.loops.set(workspaceId, placeholder);
 
-    const worktreePath = await this.workspace.getWorktreePath(workspaceId);
+    let worktreePath: string;
+    try {
+      worktreePath = await this.workspace.getWorktreePath(workspaceId);
+    } catch (err) {
+      this.loops.delete(workspaceId);
+      throw err;
+    }
     await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
 
     // Start ACP session
@@ -140,20 +168,13 @@ export class AutoIterationService {
       lastIterationAt: null,
     };
 
-    const loop: RunningLoop = {
-      workspaceId,
-      sessionId,
-      config,
-      progress,
-      pauseRequested: false,
-      stopRequested: false,
-      loopPromise: null,
-    };
-    this.loops.set(workspaceId, loop);
+    // Update the placeholder with real data
+    placeholder.sessionId = sessionId;
+    placeholder.progress = progress;
     await this.workspace.updateAutoIterationProgress(workspaceId, progress);
 
     // Run the loop (fire-and-forget — errors are caught internally)
-    loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
+    placeholder.loopPromise = this.runLoop(placeholder, worktreePath).catch((err) => {
       this.logger.error('Auto-iteration loop failed', { workspaceId, error: String(err) });
       void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
       this.loops.delete(workspaceId);
@@ -177,7 +198,12 @@ export class AutoIterationService {
 
     // Wait for the previous loop to fully exit before starting a new one
     if (loop.loopPromise) {
-      await loop.loopPromise;
+      const prevPromise = loop.loopPromise;
+      await prevPromise;
+      // Another resume() may have already restarted the loop while we awaited
+      if (loop.loopPromise !== null && loop.loopPromise !== prevPromise) {
+        return; // A newer loop is already running
+      }
     }
 
     loop.pauseRequested = false;
@@ -617,10 +643,40 @@ function parseCritiqueResult(response: string): CritiqueResult {
 }
 
 function extractJson(text: string): Record<string, unknown> {
-  // Try to find JSON in the response (may be wrapped in markdown code blocks)
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  // Find the first balanced JSON object in the response (may be wrapped in markdown code blocks).
+  // Uses brace counting instead of greedy regex to avoid matching from first `{` to last `}`.
+  const start = text.indexOf('{');
+  if (start === -1) {
     throw new Error('No JSON found');
   }
-  return JSON.parse(jsonMatch[0]);
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return JSON.parse(text.slice(start, i + 1));
+      }
+    }
+  }
+  throw new Error('No JSON found');
 }
