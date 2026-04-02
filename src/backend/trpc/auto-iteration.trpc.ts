@@ -47,7 +47,14 @@ export const autoIterationRouter = router({
           message: `Invalid auto-iteration config: ${configParsed.error.message}`,
         });
       }
-      await autoIterationService.start(input.workspaceId, configParsed.data);
+      try {
+        await autoIterationService.start(input.workspaceId, configParsed.data);
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('already running')) {
+          throw new TRPCError({ code: 'CONFLICT', message: err.message });
+        }
+        throw err;
+      }
 
       return { success: true };
     }),
@@ -78,7 +85,14 @@ export const autoIterationRouter = router({
           message: 'Auto-iteration can only be resumed from paused state',
         });
       }
-      await autoIterationService.resume(input.workspaceId);
+      try {
+        await autoIterationService.resume(input.workspaceId);
+      } catch (err) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: err instanceof Error ? err.message : 'Failed to resume auto-iteration',
+        });
+      }
       return { success: true };
     }),
 

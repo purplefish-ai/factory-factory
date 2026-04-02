@@ -46,8 +46,17 @@ export class LogbookService {
     const filePath = getLogbookPath(worktreePath);
     try {
       const raw = await fs.readFile(filePath, 'utf-8');
-      const logbook: AgentLogbook = JSON.parse(raw);
-      return logbook;
+      const parsed = JSON.parse(raw);
+      // Validate minimal expected shape before returning
+      if (
+        typeof parsed !== 'object' ||
+        parsed === null ||
+        typeof parsed.workspaceId !== 'string' ||
+        !Array.isArray(parsed.iterations)
+      ) {
+        throw new Error(`Invalid logbook structure in ${filePath}`);
+      }
+      return parsed as AgentLogbook;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;

@@ -28,9 +28,9 @@ export async function revertHead(worktreePath: string): Promise<void> {
   await git(worktreePath, ['revert', 'HEAD', '--no-edit']);
 }
 
-/** Get the diff of the most recent commit. */
+/** Get the diff of the most recent commit. Works on root commits too. */
 export async function getHeadDiff(worktreePath: string): Promise<string> {
-  const { stdout } = await git(worktreePath, ['diff', 'HEAD~1..HEAD']);
+  const { stdout } = await git(worktreePath, ['show', '--format=', 'HEAD']);
   return stdout;
 }
 

@@ -110,75 +110,77 @@ export class AutoIterationService {
     };
     this.loops.set(workspaceId, placeholder);
 
-    let worktreePath: string;
     try {
-      worktreePath = await this.workspace.getWorktreePath(workspaceId);
+      const worktreePath = await this.workspace.getWorktreePath(workspaceId);
+      await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
+
+      // Start ACP session
+      const systemPrompt = buildSystemPrompt(config);
+      const sessionId = await this.session.startSession(workspaceId, {
+        initialPrompt: systemPrompt,
+        startupModePreset: 'non_interactive',
+      });
+      await this.workspace.updateAutoIterationSessionId(workspaceId, sessionId);
+
+      // Run baseline measurement
+      this.logger.info('Running baseline measurement', { workspaceId });
+      const baselineResult = await runTestCommand(
+        worktreePath,
+        config.testCommand,
+        config.testTimeoutSeconds
+      );
+      const baselineOutput = truncateTestOutput(
+        `${baselineResult.stdout}\n${baselineResult.stderr}`
+      );
+
+      // Get baseline metric evaluation from LLM
+      const baselinePrompt = buildMeasurePrompt(
+        baselineOutput,
+        '(no previous measurement — this is the baseline)'
+      );
+      await this.session.sendPrompt(sessionId, baselinePrompt);
+      await this.session.waitForIdle(sessionId);
+      const baselineResponse = await this.session.getLastAssistantMessage(sessionId);
+      const baselineEval = parseMetricEvaluation(baselineResponse);
+
+      // Initialize logbook
+      await this.logbook.initialize(
+        worktreePath,
+        workspaceId,
+        config,
+        baselineOutput,
+        baselineEval.metricSummary
+      );
+
+      const progress: AutoIterationProgress = {
+        currentIteration: 0,
+        baselineMetricSummary: baselineEval.metricSummary,
+        currentMetricSummary: baselineEval.metricSummary,
+        acceptedCount: 0,
+        rejectedRegressionCount: 0,
+        rejectedCritiqueCount: 0,
+        crashedCount: 0,
+        sessionRecycleCount: 0,
+        startedAt: new Date().toISOString(),
+        lastIterationAt: null,
+      };
+
+      // Update the placeholder with real data
+      placeholder.sessionId = sessionId;
+      placeholder.progress = progress;
+      await this.workspace.updateAutoIterationProgress(workspaceId, progress);
+
+      // Run the loop (fire-and-forget — errors are caught internally)
+      placeholder.loopPromise = this.runLoop(placeholder, worktreePath).catch((err) => {
+        this.logger.error('Auto-iteration loop failed', { workspaceId, error: String(err) });
+        void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+        this.loops.delete(workspaceId);
+      });
     } catch (err) {
       this.loops.delete(workspaceId);
+      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
       throw err;
     }
-    await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
-
-    // Start ACP session
-    const systemPrompt = buildSystemPrompt(config);
-    const sessionId = await this.session.startSession(workspaceId, {
-      initialPrompt: systemPrompt,
-      startupModePreset: 'non_interactive',
-    });
-    await this.workspace.updateAutoIterationSessionId(workspaceId, sessionId);
-
-    // Run baseline measurement
-    this.logger.info('Running baseline measurement', { workspaceId });
-    const baselineResult = await runTestCommand(
-      worktreePath,
-      config.testCommand,
-      config.testTimeoutSeconds
-    );
-    const baselineOutput = truncateTestOutput(`${baselineResult.stdout}\n${baselineResult.stderr}`);
-
-    // Get baseline metric evaluation from LLM
-    const baselinePrompt = buildMeasurePrompt(
-      baselineOutput,
-      '(no previous measurement — this is the baseline)'
-    );
-    await this.session.sendPrompt(sessionId, baselinePrompt);
-    await this.session.waitForIdle(sessionId);
-    const baselineResponse = await this.session.getLastAssistantMessage(sessionId);
-    const baselineEval = parseMetricEvaluation(baselineResponse);
-
-    // Initialize logbook
-    await this.logbook.initialize(
-      worktreePath,
-      workspaceId,
-      config,
-      baselineOutput,
-      baselineEval.metricSummary
-    );
-
-    const progress: AutoIterationProgress = {
-      currentIteration: 0,
-      baselineMetricSummary: baselineEval.metricSummary,
-      currentMetricSummary: baselineEval.metricSummary,
-      acceptedCount: 0,
-      rejectedRegressionCount: 0,
-      rejectedCritiqueCount: 0,
-      crashedCount: 0,
-      sessionRecycleCount: 0,
-      startedAt: new Date().toISOString(),
-      lastIterationAt: null,
-    };
-
-    // Update the placeholder with real data
-    placeholder.sessionId = sessionId;
-    placeholder.progress = progress;
-    await this.workspace.updateAutoIterationProgress(workspaceId, progress);
-
-    // Run the loop (fire-and-forget — errors are caught internally)
-    placeholder.loopPromise = this.runLoop(placeholder, worktreePath).catch((err) => {
-      this.logger.error('Auto-iteration loop failed', { workspaceId, error: String(err) });
-      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-      this.loops.delete(workspaceId);
-    });
   }
 
   /** Pause the loop between iterations. */
@@ -204,6 +206,14 @@ export class AutoIterationService {
       if (loop.loopPromise !== null && loop.loopPromise !== prevPromise) {
         return; // A newer loop is already running
       }
+    }
+
+    // Re-check the map: the loop's .catch() deletes the entry on failure,
+    // so the stale `loop` reference would be orphaned from the map.
+    if (!this.loops.has(workspaceId)) {
+      throw new Error(
+        `Auto-iteration loop for workspace ${workspaceId} failed and was cleaned up — cannot resume`
+      );
     }
 
     loop.pauseRequested = false;
