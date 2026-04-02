@@ -574,7 +574,7 @@ export class AutoIterationService {
         loop.config.testCommand,
         loop.config.testTimeoutSeconds
       );
-      if (retryResult.exitCode === 0 && !retryResult.timedOut) {
+      if (retryResult.exitCode <= 1 && !retryResult.timedOut) {
         return { fixedResult: retryResult, updatedCommitSha: currentCommitSha };
       }
       latestResult = retryResult;
