@@ -56,9 +56,11 @@ type BridgeServices = {
   prSnapshotService: typeof prSnapshotService;
   ratchetService: typeof ratchetService;
   reconciliationService: typeof reconciliationService;
+  sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
   sessionService: typeof sessionService;
   startupScriptService: typeof startupScriptService;
+  workspaceAccessor: typeof workspaceAccessor;
   workspaceActivityService: typeof workspaceActivityService;
   workspaceQueryService: typeof workspaceQueryService;
   workspaceSnapshotStore: typeof workspaceSnapshotStore;
@@ -75,9 +77,11 @@ const defaultServices: BridgeServices = {
   prSnapshotService,
   ratchetService,
   reconciliationService,
+  sessionDataService,
   sessionDomainService,
   sessionService,
   startupScriptService,
+  workspaceAccessor,
   workspaceActivityService,
   workspaceQueryService,
   workspaceSnapshotStore,
@@ -96,9 +100,11 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     prSnapshotService,
     ratchetService,
     reconciliationService,
+    sessionDataService,
     sessionDomainService,
     sessionService,
     startupScriptService,
+    workspaceAccessor,
     workspaceActivityService,
     workspaceQueryService,
     workspaceSnapshotStore,

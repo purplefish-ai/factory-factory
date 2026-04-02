@@ -246,7 +246,7 @@ export class AutoIterationService {
         iteration: progress.currentIteration,
       });
 
-      const entry = await this.runIteration(loop, worktreePath, iterationStart);
+      const { entry, targetReached } = await this.runIteration(loop, worktreePath, iterationStart);
 
       // Update progress
       progress.lastIterationAt = new Date().toISOString();
@@ -272,27 +272,11 @@ export class AutoIterationService {
       await logbookService.appendEntry(worktreePath, entry);
       await this.workspace.updateAutoIterationProgress(workspaceId, progress);
 
-      // Check if target was reached (only for accepted entries)
-      if (entry.status === 'accepted') {
-        const measureResult = await runTestCommand(
-          worktreePath,
-          config.testCommand,
-          config.testTimeoutSeconds
-        );
-        const output = truncateTestOutput(`${measureResult.stdout}\n${measureResult.stderr}`);
-        const measurePrompt = buildMeasurePrompt(output, progress.currentMetricSummary);
-        await this.session.sendPrompt(loop.sessionId, measurePrompt);
-        await this.session.waitForIdle(loop.sessionId);
-        const measureResponse = await this.session.getLastAssistantMessage(loop.sessionId);
-        const evalResult = parseMetricEvaluation(measureResponse);
-        progress.currentMetricSummary = evalResult.metricSummary;
-
-        if (evalResult.targetReached) {
-          this.logger.info('Target reached!', { workspaceId, metric: evalResult.metricSummary });
-          await this.workspace.updateAutoIterationProgress(workspaceId, progress);
-          await this.finalize(loop, AutoIterationStatus.COMPLETED);
-          return;
-        }
+      // Check if target was reached (already evaluated inside runIteration for accepted entries)
+      if (targetReached) {
+        this.logger.info('Target reached!', { workspaceId, metric: progress.currentMetricSummary });
+        await this.finalize(loop, AutoIterationStatus.COMPLETED);
+        return;
       }
     }
   }
@@ -301,7 +285,7 @@ export class AutoIterationService {
     loop: RunningLoop,
     worktreePath: string,
     startedAt: string
-  ): Promise<AgentLogbookEntry> {
+  ): Promise<{ entry: AgentLogbookEntry; targetReached: boolean }> {
     const { config, progress } = loop;
     const metricBefore = progress.currentMetricSummary;
 
@@ -327,21 +311,24 @@ export class AutoIterationService {
     // Check if there are actual changes
     if (!(await hasUncommittedChanges(worktreePath))) {
       return {
-        iteration: progress.currentIteration,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        status: 'crashed',
-        changeDescription: 'No changes were made',
-        commitSha: '',
-        commitReverted: false,
-        metricBefore,
-        metricAfter: null,
-        testOutput: '',
-        metricImproved: null,
-        crashError: 'Agent made no code changes',
-        fixAttempts: 0,
-        critiqueNotes: null,
-        critiqueApproved: null,
+        entry: {
+          iteration: progress.currentIteration,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          status: 'crashed',
+          changeDescription: 'No changes were made',
+          commitSha: '',
+          commitReverted: false,
+          metricBefore,
+          metricAfter: null,
+          testOutput: '',
+          metricImproved: null,
+          crashError: 'Agent made no code changes',
+          fixAttempts: 0,
+          critiqueNotes: null,
+          critiqueApproved: null,
+        },
+        targetReached: false,
       };
     }
 
@@ -370,7 +357,7 @@ export class AutoIterationService {
         commitSha
       );
       if ('entry' in crashResult) {
-        return crashResult.entry;
+        return { entry: crashResult.entry, targetReached: false };
       }
       // Fix succeeded — use the fresh test result and updated SHA for evaluation
       postResult = crashResult.fixedResult;
@@ -379,21 +366,24 @@ export class AutoIterationService {
     if (postResult.timedOut) {
       await revertHead(worktreePath);
       return {
-        iteration: progress.currentIteration,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        status: 'crashed',
-        changeDescription: changeDescription.slice(0, 500),
-        commitSha,
-        commitReverted: true,
-        metricBefore,
-        metricAfter: null,
-        testOutput: truncateTestOutput(`${postResult.stdout}\n${postResult.stderr}`, 100),
-        metricImproved: null,
-        crashError: 'Test command timed out',
-        fixAttempts: 0,
-        critiqueNotes: null,
-        critiqueApproved: null,
+        entry: {
+          iteration: progress.currentIteration,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          status: 'crashed',
+          changeDescription: changeDescription.slice(0, 500),
+          commitSha,
+          commitReverted: true,
+          metricBefore,
+          metricAfter: null,
+          testOutput: truncateTestOutput(`${postResult.stdout}\n${postResult.stderr}`, 100),
+          metricImproved: null,
+          crashError: 'Test command timed out',
+          fixAttempts: 0,
+          critiqueNotes: null,
+          critiqueApproved: null,
+        },
+        targetReached: false,
       };
     }
 
@@ -408,21 +398,24 @@ export class AutoIterationService {
     if (!evalResult.improved) {
       await revertHead(worktreePath);
       return {
-        iteration: progress.currentIteration,
-        startedAt,
-        completedAt: new Date().toISOString(),
-        status: 'rejected_regression',
-        changeDescription: changeDescription.slice(0, 500),
-        commitSha,
-        commitReverted: true,
-        metricBefore,
-        metricAfter: evalResult.metricSummary,
-        testOutput: postOutput.slice(0, 2000),
-        metricImproved: false,
-        crashError: null,
-        fixAttempts: 0,
-        critiqueNotes: null,
-        critiqueApproved: null,
+        entry: {
+          iteration: progress.currentIteration,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          status: 'rejected_regression',
+          changeDescription: changeDescription.slice(0, 500),
+          commitSha,
+          commitReverted: true,
+          metricBefore,
+          metricAfter: evalResult.metricSummary,
+          testOutput: postOutput.slice(0, 2000),
+          metricImproved: false,
+          crashError: null,
+          fixAttempts: 0,
+          critiqueNotes: null,
+          critiqueApproved: null,
+        },
+        targetReached: false,
       };
     }
 
@@ -438,13 +431,37 @@ export class AutoIterationService {
     if (!critique.approved) {
       await revertHead(worktreePath);
       return {
+        entry: {
+          iteration: progress.currentIteration,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          status: 'rejected_critique',
+          changeDescription: changeDescription.slice(0, 500),
+          commitSha,
+          commitReverted: true,
+          metricBefore,
+          metricAfter: evalResult.metricSummary,
+          testOutput: postOutput.slice(0, 2000),
+          metricImproved: true,
+          crashError: null,
+          fixAttempts: 0,
+          critiqueNotes: critique.notes,
+          critiqueApproved: false,
+        },
+        targetReached: false,
+      };
+    }
+
+    // --- ACCEPTED ---
+    return {
+      entry: {
         iteration: progress.currentIteration,
         startedAt,
         completedAt: new Date().toISOString(),
-        status: 'rejected_critique',
+        status: 'accepted',
         changeDescription: changeDescription.slice(0, 500),
         commitSha,
-        commitReverted: true,
+        commitReverted: false,
         metricBefore,
         metricAfter: evalResult.metricSummary,
         testOutput: postOutput.slice(0, 2000),
@@ -452,27 +469,9 @@ export class AutoIterationService {
         crashError: null,
         fixAttempts: 0,
         critiqueNotes: critique.notes,
-        critiqueApproved: false,
-      };
-    }
-
-    // --- ACCEPTED ---
-    return {
-      iteration: progress.currentIteration,
-      startedAt,
-      completedAt: new Date().toISOString(),
-      status: 'accepted',
-      changeDescription: changeDescription.slice(0, 500),
-      commitSha,
-      commitReverted: false,
-      metricBefore,
-      metricAfter: evalResult.metricSummary,
-      testOutput: postOutput.slice(0, 2000),
-      metricImproved: true,
-      crashError: null,
-      fixAttempts: 0,
-      critiqueNotes: critique.notes,
-      critiqueApproved: true,
+        critiqueApproved: true,
+      },
+      targetReached: evalResult.targetReached,
     };
   }
 
