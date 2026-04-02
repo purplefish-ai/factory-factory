@@ -1,5 +1,13 @@
 import type { AgentLogbookEntry, AutoIterationConfig } from './auto-iteration.types';
 
+/**
+ * Escape content interpolated into XML-like prompt blocks to prevent
+ * prompt-boundary injection if the content contains closing tag sequences.
+ */
+function escapeXmlContent(content: string): string {
+  return content.replace(/<\//g, '<\\/');
+}
+
 export function buildSystemPrompt(config: AutoIterationConfig): string {
   return `You are an auto-iteration agent. Your job is to improve a codebase against a specific metric through targeted, incremental changes.
 
@@ -36,7 +44,7 @@ Target: ${targetDescription}
 Here is the most recent test output (truncated):
 
 <test_output>
-${truncatedTestOutput}
+${escapeXmlContent(truncatedTestOutput)}
 </test_output>
 
 Analyze the codebase and implement a single focused change to improve the metric toward the target. After making your changes, stop and wait for the next instruction.`;
@@ -49,7 +57,7 @@ export function buildMeasurePrompt(
   return `The test command has been run. Here is the output:
 
 <test_output>
-${truncatedTestOutput}
+${escapeXmlContent(truncatedTestOutput)}
 </test_output>
 
 Previous metric state: ${previousMetricSummary}
@@ -66,7 +74,7 @@ export function buildCrashFixPrompt(truncatedErrorOutput: string, attemptNumber:
   return `The test command crashed after your changes. Here is the error output (last 100 lines):
 
 <error_output>
-${truncatedErrorOutput}
+${escapeXmlContent(truncatedErrorOutput)}
 </error_output>
 
 This is fix attempt ${attemptNumber}/2. Diagnose the issue and fix it.
@@ -79,7 +87,7 @@ export function buildCritiquePrompt(gitDiff: string): string {
 Review the changes you just made with extreme scrutiny. The diff is:
 
 <diff>
-${gitDiff}
+${escapeXmlContent(gitDiff)}
 </diff>
 
 Evaluate whether this change is:

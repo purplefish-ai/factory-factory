@@ -153,6 +153,12 @@ export class WorkspaceCreationService {
         message: 'autoIterationConfig is required for AUTO_ITERATION workspaces',
       });
     }
+    if (source.autoIterationConfig && source.mode !== 'AUTO_ITERATION') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'autoIterationConfig is only allowed for AUTO_ITERATION workspaces',
+      });
+    }
 
     const metadata: Record<string, unknown> = {};
     if (source.initialPrompt) {
