@@ -78,3 +78,20 @@ export const RunScriptStatus = {
   FAILED: 'FAILED',
 } as const;
 export type RunScriptStatus = (typeof RunScriptStatus)[keyof typeof RunScriptStatus];
+
+export const WorkspaceMode = {
+  STANDARD: 'STANDARD',
+  AUTO_ITERATION: 'AUTO_ITERATION',
+} as const;
+export type WorkspaceMode = (typeof WorkspaceMode)[keyof typeof WorkspaceMode];
+
+export const AutoIterationStatus = {
+  IDLE: 'IDLE',
+  RUNNING: 'RUNNING',
+  PAUSED: 'PAUSED',
+  COMPLETED: 'COMPLETED',
+  MAX_ITERATIONS: 'MAX_ITERATIONS',
+  STOPPED: 'STOPPED',
+  FAILED: 'FAILED',
+} as const;
+export type AutoIterationStatus = (typeof AutoIterationStatus)[keyof typeof AutoIterationStatus];

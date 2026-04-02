@@ -50,6 +50,16 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     initialAttachments: z.array(AttachmentSchema).optional(),
     startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
     provider: z.nativeEnum(SessionProvider).optional(),
+    mode: z.enum(['STANDARD', 'AUTO_ITERATION']).optional(),
+    autoIterationConfig: z
+      .object({
+        testCommand: z.string().min(1),
+        targetDescription: z.string().min(1),
+        maxIterations: z.number().int().min(0).optional().default(25),
+        testTimeoutSeconds: z.number().int().min(1).optional().default(300),
+        sessionRecycleInterval: z.number().int().min(1).optional().default(10),
+      })
+      .optional(),
   }),
   z.object({
     type: z.literal('RESUME_BRANCH'),

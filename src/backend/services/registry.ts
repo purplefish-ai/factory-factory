@@ -20,6 +20,7 @@ export const serviceNames = [
   'run-script',
   'settings',
   'decision-log',
+  'auto-iteration',
 ] as const;
 
 export type ServiceName = (typeof serviceNames)[number];
@@ -65,5 +66,9 @@ export const serviceRegistry = {
   'decision-log': {
     dependsOn: [],
     ownsModels: ['DecisionLog'],
+  },
+  'auto-iteration': {
+    dependsOn: ['session', 'workspace'],
+    ownsModels: [],
   },
 } as const satisfies Record<ServiceName, ServiceDefinition>;

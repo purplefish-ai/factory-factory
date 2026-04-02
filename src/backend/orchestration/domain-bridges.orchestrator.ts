@@ -8,6 +8,12 @@
  * Domain services never import each other; they receive capabilities via bridges.
  */
 
+import type { Prisma } from '@prisma-gen/client';
+import {
+  type AutoIterationSessionBridge,
+  type AutoIterationWorkspaceBridge,
+  autoIterationService,
+} from '@/backend/services/auto-iteration';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import {
   fixerSessionService,
@@ -21,6 +27,7 @@ import { startupScriptService } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   chatMessageHandlerService,
+  sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
@@ -30,6 +37,7 @@ import {
   getWorkspaceInitPolicy,
   kanbanStateService,
   type WorkspaceInitPolicyInput,
+  workspaceAccessor,
   workspaceActivityService,
   workspaceQueryService,
   workspaceStateMachine,
@@ -211,6 +219,98 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       markFailed: (id, msg) => workspaceStateMachine.markFailed(id, msg),
     },
   });
+
+  // === Auto-iteration domain bridges ===
+  const autoIterationWorkspaceBridge: AutoIterationWorkspaceBridge = {
+    async getWorktreePath(workspaceId) {
+      const ws = await workspaceAccessor.findRawById(workspaceId);
+      if (!ws?.worktreePath) {
+        throw new Error(`Workspace ${workspaceId} has no worktree path`);
+      }
+      return ws.worktreePath;
+    },
+    async updateAutoIterationStatus(workspaceId, status) {
+      await workspaceAccessor.update(workspaceId, { autoIterationStatus: status });
+    },
+    async updateAutoIterationProgress(workspaceId, progress) {
+      await workspaceAccessor.update(workspaceId, {
+        autoIterationProgress: progress as unknown as Prisma.InputJsonValue,
+      });
+    },
+    async updateAutoIterationSessionId(workspaceId, sessionId) {
+      await workspaceAccessor.update(workspaceId, { autoIterationSessionId: sessionId });
+    },
+  };
+
+  const autoIterationSessionBridge: AutoIterationSessionBridge = {
+    async startSession(workspaceId, opts) {
+      const session = await sessionDataService.createAgentSession({
+        workspaceId,
+        name: 'Auto-iteration',
+        workflow: 'auto-iteration',
+      });
+      await sessionService.startSession(session.id, {
+        initialPrompt: opts.initialPrompt,
+        startupModePreset: opts.startupModePreset,
+      });
+      return session.id;
+    },
+    async sendPrompt(sessionId, prompt) {
+      await sessionService.sendAcpMessage(sessionId, [{ type: 'text', text: prompt }]);
+    },
+    async waitForIdle(_sessionId) {
+      // sendAcpMessage already blocks until the turn completes
+    },
+    async stopSession(sessionId) {
+      await sessionService.stopSession(sessionId);
+    },
+    getLastAssistantMessage(sessionId): Promise<string> {
+      const transcript = sessionDomainService.getTranscriptSnapshot(sessionId);
+      for (let i = transcript.length - 1; i >= 0; i--) {
+        const entry = transcript[i];
+        // AgentMessage.type === 'assistant' identifies assistant turns
+        // AgentMessage.message.content is AgentContentItem[] | string
+        if (entry?.message?.type === 'assistant') {
+          const content = entry.message.message?.content;
+          if (typeof content === 'string') {
+            return Promise.resolve(content);
+          }
+          if (Array.isArray(content)) {
+            return Promise.resolve(
+              content
+                .filter(
+                  (b) => typeof b === 'object' && b !== null && 'type' in b && b.type === 'text'
+                )
+                .map((b) => ('text' in b && typeof b.text === 'string' ? b.text : ''))
+                .join('')
+            );
+          }
+          return Promise.resolve('');
+        }
+      }
+      return Promise.resolve('');
+    },
+    async recycleSession(workspaceId, handoffPrompt) {
+      const ws = await workspaceAccessor.findRawById(workspaceId);
+      if (ws?.autoIterationSessionId) {
+        try {
+          await sessionService.stopSession(ws.autoIterationSessionId);
+        } catch {
+          // Session may already be stopped
+        }
+      }
+      const newSession = await sessionDataService.createAgentSession({
+        workspaceId,
+        name: 'Auto-iteration (recycled)',
+        workflow: 'auto-iteration',
+      });
+      await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
+      await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
+      return newSession.id;
+    },
+  };
+
+  autoIterationService.configure(autoIterationSessionBridge, autoIterationWorkspaceBridge);
 
   // === Snapshot store derivation functions ===
   workspaceSnapshotStore.configure({

@@ -1,5 +1,6 @@
 import type { Prisma, SessionProvider, Workspace } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
+import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import type { createLogger } from '@/backend/services/logger.service';
 import { userSettingsAccessor } from '@/backend/services/settings';
@@ -26,6 +27,8 @@ export type WorkspaceCreationSource =
       initialAttachments?: MessageAttachment[];
       startupModePreset?: 'non_interactive' | 'plan';
       provider?: SessionProvider;
+      mode?: 'STANDARD' | 'AUTO_ITERATION';
+      autoIterationConfig?: AutoIterationConfig;
     }
   | {
       type: 'RESUME_BRANCH';
@@ -75,6 +78,8 @@ type PreparedWorkspaceCreation = {
     linearIssueUrl?: string;
     creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
     creationMetadata?: Prisma.InputJsonValue;
+    mode?: 'STANDARD' | 'AUTO_ITERATION';
+    autoIterationConfig?: Prisma.InputJsonValue;
   };
   initMode?: {
     useExistingBranch: boolean;
@@ -162,6 +167,10 @@ export class WorkspaceCreationService {
         creationSource: 'MANUAL',
         ...(Object.keys(metadata).length > 0
           ? { creationMetadata: metadata as Prisma.InputJsonValue }
+          : {}),
+        ...(source.mode ? { mode: source.mode } : {}),
+        ...(source.autoIterationConfig
+          ? { autoIterationConfig: source.autoIterationConfig as unknown as Prisma.InputJsonValue }
           : {}),
       },
     };

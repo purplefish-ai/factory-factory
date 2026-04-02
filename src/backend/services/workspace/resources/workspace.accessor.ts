@@ -32,6 +32,8 @@ interface CreateWorkspaceInput {
   ratchetSessionProvider?: Prisma.WorkspaceCreateInput['ratchetSessionProvider'];
   creationSource?: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
   creationMetadata?: Prisma.InputJsonValue;
+  mode?: 'STANDARD' | 'AUTO_ITERATION';
+  autoIterationConfig?: Prisma.InputJsonValue;
 }
 
 interface UpdateWorkspaceInput {
@@ -77,6 +79,11 @@ interface UpdateWorkspaceInput {
   runScriptPort?: number | null;
   runScriptStartedAt?: Date | null;
   runScriptStatus?: RunScriptStatus;
+  // Auto-iteration tracking
+  autoIterationStatus?: Prisma.WorkspaceUpdateInput['autoIterationStatus'];
+  autoIterationConfig?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
+  autoIterationProgress?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
+  autoIterationSessionId?: string | null;
 }
 
 interface FindByProjectIdFilters {
@@ -139,6 +146,8 @@ class WorkspaceAccessor {
         ratchetSessionProvider: data.ratchetSessionProvider,
         creationSource: data.creationSource,
         creationMetadata: data.creationMetadata,
+        mode: data.mode,
+        autoIterationConfig: data.autoIterationConfig,
       },
     });
   }
