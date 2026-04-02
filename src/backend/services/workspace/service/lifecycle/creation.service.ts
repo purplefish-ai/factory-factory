@@ -147,6 +147,13 @@ export class WorkspaceCreationService {
   private prepareManualCreation(
     source: Extract<WorkspaceCreationSource, { type: 'MANUAL' }>
   ): PreparedWorkspaceCreation {
+    if (source.mode === 'AUTO_ITERATION' && !source.autoIterationConfig) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'autoIterationConfig is required for AUTO_ITERATION workspaces',
+      });
+    }
+
     const metadata: Record<string, unknown> = {};
     if (source.initialPrompt) {
       metadata.initialPrompt = source.initialPrompt;

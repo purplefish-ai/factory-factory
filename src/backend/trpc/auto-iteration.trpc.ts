@@ -4,6 +4,14 @@ import { autoIterationService, logbookService } from '@/backend/services/auto-it
 import { workspaceDataService } from '@/backend/services/workspace';
 import { publicProcedure, router } from './trpc';
 
+const autoIterationConfigSchema = z.object({
+  testCommand: z.string().min(1),
+  targetDescription: z.string().min(1),
+  maxIterations: z.number().int().min(0).default(25),
+  testTimeoutSeconds: z.number().int().min(1).default(300),
+  sessionRecycleInterval: z.number().int().min(1).default(10),
+});
+
 export const autoIterationRouter = router({
   /** Start the auto-iteration loop for a workspace. */
   start: publicProcedure
@@ -32,14 +40,14 @@ export const autoIterationRouter = router({
         });
       }
 
-      const config = workspace.autoIterationConfig as Record<string, unknown>;
-      await autoIterationService.start(input.workspaceId, {
-        testCommand: config.testCommand as string,
-        targetDescription: config.targetDescription as string,
-        maxIterations: (config.maxIterations as number) ?? 25,
-        testTimeoutSeconds: (config.testTimeoutSeconds as number) ?? 300,
-        sessionRecycleInterval: (config.sessionRecycleInterval as number) ?? 10,
-      });
+      const configParsed = autoIterationConfigSchema.safeParse(workspace.autoIterationConfig);
+      if (!configParsed.success) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Invalid auto-iteration config: ${configParsed.error.message}`,
+        });
+      }
+      await autoIterationService.start(input.workspaceId, configParsed.data);
 
       return { success: true };
     }),

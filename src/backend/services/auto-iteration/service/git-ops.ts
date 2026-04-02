@@ -15,6 +15,14 @@ export async function commitAll(worktreePath: string, message: string): Promise<
   return stdout.trim();
 }
 
+/** Amend the most recent commit with staged changes. Returns the updated short commit SHA. */
+export async function amendHead(worktreePath: string): Promise<string> {
+  await git(worktreePath, ['add', '-A']);
+  await git(worktreePath, ['commit', '--amend', '--no-edit']);
+  const { stdout } = await git(worktreePath, ['rev-parse', '--short', 'HEAD']);
+  return stdout.trim();
+}
+
 /** Revert the most recent commit. */
 export async function revertHead(worktreePath: string): Promise<void> {
   await git(worktreePath, ['revert', 'HEAD', '--no-edit']);

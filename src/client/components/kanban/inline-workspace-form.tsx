@@ -60,6 +60,7 @@ function createOptimisticWorkingWorkspace(params: {
   projectId: string;
   name: string;
   ratchetEnabled: boolean;
+  mode?: 'STANDARD' | 'AUTO_ITERATION';
   createdAt?: Date;
   updatedAt?: Date;
 }): KanbanWorkspace {
@@ -116,7 +117,7 @@ function createOptimisticWorkingWorkspace(params: {
     hasHadSessions: false,
     cachedKanbanColumn: 'WORKING',
     stateComputedAt: null,
-    mode: 'STANDARD' as const,
+    mode: (params.mode ?? 'STANDARD') as 'STANDARD' | 'AUTO_ITERATION',
     autoIterationStatus: null,
     autoIterationConfig: null,
     autoIterationProgress: null,
@@ -197,6 +198,7 @@ export function InlineWorkspaceForm({
         projectId,
         name: input.type === 'MANUAL' ? input.name : 'New Workspace',
         ratchetEnabled: input.type === 'MANUAL' ? (input.ratchetEnabled ?? true) : true,
+        mode: input.type === 'MANUAL' ? (input.mode ?? 'STANDARD') : 'STANDARD',
       });
 
       await utils.workspace.listWithKanbanState.cancel({ projectId });
@@ -217,6 +219,7 @@ export function InlineWorkspaceForm({
         projectId: workspace.projectId,
         name: workspace.name,
         ratchetEnabled: workspace.ratchetEnabled,
+        mode: workspace.mode ?? 'STANDARD',
         createdAt: workspace.createdAt,
         updatedAt: workspace.updatedAt,
       });

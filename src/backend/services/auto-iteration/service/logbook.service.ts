@@ -41,15 +41,18 @@ export class LogbookService {
     await this.write(worktreePath, logbook);
   }
 
-  /** Read the logbook from disk. Returns null if not found. */
+  /** Read the logbook from disk. Returns null if the file does not exist. */
   async read(worktreePath: string): Promise<AgentLogbook | null> {
     const filePath = getLogbookPath(worktreePath);
     try {
       const raw = await fs.readFile(filePath, 'utf-8');
       const logbook: AgentLogbook = JSON.parse(raw);
       return logbook;
-    } catch {
-      return null;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw err;
     }
   }
 

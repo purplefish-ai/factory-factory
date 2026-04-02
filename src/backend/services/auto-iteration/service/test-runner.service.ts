@@ -19,6 +19,7 @@ export function runTestCommand(
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let exited = false;
 
     child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
@@ -31,13 +32,14 @@ export function runTestCommand(
       timedOut = true;
       child.kill('SIGTERM');
       setTimeout(() => {
-        if (!child.killed) {
+        if (!exited) {
           child.kill('SIGKILL');
         }
       }, 5000);
     }, timeoutSeconds * 1000);
 
     child.on('close', (code) => {
+      exited = true;
       clearTimeout(timer);
       resolve({
         stdout,
