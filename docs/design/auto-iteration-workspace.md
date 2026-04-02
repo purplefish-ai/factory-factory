@@ -651,11 +651,15 @@ CONTEXT MANAGEMENT:
 
 ### Measure Prompt (sent after test command runs)
 
+Note: All interpolated values inside XML-like blocks (e.g., `<test_output>`) are
+escaped at runtime via `escapeXmlContent()` which replaces `</` with `<\/` to
+prevent prompt-boundary injection from external content.
+
 ```
 The test command has been run. Here is the output:
 
 <test_output>
-{testCommandOutput}
+{escapeXmlContent(testCommandOutput)}
 </test_output>
 
 Previous metric state: {previousMetricSummary}
@@ -675,7 +679,7 @@ The test command crashed after your changes. Here is the error output
 (last 100 lines):
 
 <error_output>
-{truncatedErrorOutput}
+{escapeXmlContent(truncatedErrorOutput)}
 </error_output>
 
 This is fix attempt {attemptNumber}/2. Diagnose the issue and fix it.
@@ -691,7 +695,7 @@ ROLE SWITCH: You are now a critical code reviewer, not the implementer.
 Review the changes you just made with extreme scrutiny. The diff is:
 
 <diff>
-{gitDiff}
+{escapeXmlContent(gitDiff)}
 </diff>
 
 Evaluate whether this change is:

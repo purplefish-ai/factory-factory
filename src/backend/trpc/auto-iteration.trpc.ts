@@ -53,10 +53,16 @@ export const autoIterationRouter = router({
     }),
 
   /** Pause the auto-iteration loop. */
-  pause: publicProcedure.input(z.object({ workspaceId: z.string() })).mutation(({ input }) => {
-    autoIterationService.pause(input.workspaceId);
-    return { success: true };
-  }),
+  pause: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .mutation(async ({ input }) => {
+      const workspace = await workspaceDataService.findById(input.workspaceId);
+      if (!workspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
+      }
+      autoIterationService.pause(input.workspaceId);
+      return { success: true };
+    }),
 
   /** Resume a paused auto-iteration loop. */
   resume: publicProcedure
@@ -77,7 +83,11 @@ export const autoIterationRouter = router({
     }),
 
   /** Stop the auto-iteration loop. */
-  stop: publicProcedure.input(z.object({ workspaceId: z.string() })).mutation(({ input }) => {
+  stop: publicProcedure.input(z.object({ workspaceId: z.string() })).mutation(async ({ input }) => {
+    const workspace = await workspaceDataService.findById(input.workspaceId);
+    if (!workspace) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
+    }
     autoIterationService.stop(input.workspaceId);
     return { success: true };
   }),

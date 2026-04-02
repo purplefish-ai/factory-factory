@@ -63,7 +63,7 @@ export function runTestCommand(
         stdout,
         stderr: `${stderr}\n${err.message}`,
         exitCode: 1,
-        timedOut: false,
+        timedOut,
       });
     });
   });
