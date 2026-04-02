@@ -67,8 +67,12 @@ export class LogbookService {
 
   private async write(worktreePath: string, logbook: AgentLogbook): Promise<void> {
     const filePath = getLogbookPath(worktreePath);
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(logbook, null, 2), 'utf-8');
+    const dir = path.dirname(filePath);
+    await fs.mkdir(dir, { recursive: true });
+    // Atomic write: write to a temp file then rename to prevent corruption on interruption
+    const tmpPath = `${filePath}.${Date.now()}.tmp`;
+    await fs.writeFile(tmpPath, JSON.stringify(logbook, null, 2), 'utf-8');
+    await fs.rename(tmpPath, filePath);
   }
 }
 

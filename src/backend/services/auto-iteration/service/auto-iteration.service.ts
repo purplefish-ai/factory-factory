@@ -404,7 +404,10 @@ export class AutoIterationService {
     );
 
     // --- CRASH HANDLING ---
-    if (postResult.exitCode !== 0 && !postResult.timedOut) {
+    // Only treat infrastructure-level failures as crashes (exit code > 1, e.g. syntax errors,
+    // test framework failing to start). Normal test failures (exit code 1) still proceed to
+    // evaluation so the loop can accept iterations that improve the pass rate incrementally.
+    if (postResult.exitCode > 1 && !postResult.timedOut) {
       const crashResult = await this.handleCrash(
         loop,
         worktreePath,
