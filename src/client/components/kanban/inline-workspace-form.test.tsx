@@ -22,8 +22,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('lucide-react', () => ({
+  ChevronDown: () => null,
   Loader2: () => null,
   Paperclip: () => null,
+  RefreshCw: () => null,
 }));
 
 vi.mock('sonner', () => ({
@@ -121,6 +123,26 @@ vi.mock('@/components/chat/file-mention-palette', () => ({
 vi.mock('@/components/ui/button', () => ({
   Button: ({ children, ...props }: import('react').ButtonHTMLAttributes<HTMLButtonElement>) =>
     createElement('button', props, children),
+}));
+
+vi.mock('@/components/ui/dropdown-menu', () => ({
+  DropdownMenu: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  DropdownMenuContent: ({ children }: { children: ReactNode }) =>
+    createElement('div', null, children),
+  DropdownMenuItem: ({ children, onClick }: { children: ReactNode; onClick?: () => void }) =>
+    createElement('div', { onClick }, children),
+  DropdownMenuTrigger: ({ children }: { children: ReactNode }) =>
+    createElement('div', null, children),
+}));
+
+vi.mock('@/components/ui/input', () => ({
+  Input: (props: import('react').InputHTMLAttributes<HTMLInputElement>) =>
+    createElement('input', props),
+}));
+
+vi.mock('@/components/ui/label', () => ({
+  Label: ({ children, ...props }: import('react').LabelHTMLAttributes<HTMLLabelElement>) =>
+    createElement('label', props, children),
 }));
 
 vi.mock('@/components/ui/card', () => ({
