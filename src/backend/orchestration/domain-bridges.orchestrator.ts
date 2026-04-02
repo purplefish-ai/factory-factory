@@ -49,6 +49,7 @@ import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status'
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
 type BridgeServices = {
+  autoIterationService: typeof autoIterationService;
   chatEventForwarderService: typeof chatEventForwarderService;
   chatMessageHandlerService: typeof chatMessageHandlerService;
   fixerSessionService: typeof fixerSessionService;
@@ -71,6 +72,7 @@ type BridgeServices = {
 };
 
 const defaultServices: BridgeServices = {
+  autoIterationService,
   chatEventForwarderService,
   chatMessageHandlerService,
   fixerSessionService,
@@ -95,6 +97,7 @@ const defaultServices: BridgeServices = {
 export function configureDomainBridges(services: Partial<BridgeServices> = {}): void {
   const resolved = { ...defaultServices, ...services };
   const {
+    autoIterationService,
     chatEventForwarderService,
     chatMessageHandlerService,
     fixerSessionService,

@@ -88,10 +88,18 @@ export const autoIterationRouter = router({
       try {
         await autoIterationService.resume(input.workspaceId);
       } catch (err) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: err instanceof Error ? err.message : 'Failed to resume auto-iteration',
-        });
+        // Only map known user-state errors to BAD_REQUEST; rethrow unexpected failures
+        if (
+          err instanceof Error &&
+          (err.message.includes('No auto-iteration loop found') ||
+            err.message.includes('failed and was cleaned up'))
+        ) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: err.message,
+          });
+        }
+        throw err;
       }
       return { success: true };
     }),
