@@ -187,7 +187,7 @@ export class AutoIterationService {
       return null;
     }
     return {
-      status: AutoIterationStatus.RUNNING,
+      status: loop.pauseRequested ? AutoIterationStatus.PAUSED : AutoIterationStatus.RUNNING,
       config: loop.config,
       progress: loop.progress,
     };
@@ -250,7 +250,8 @@ export class AutoIterationService {
 
       // Update progress
       progress.lastIterationAt = new Date().toISOString();
-      if (entry.metricAfter) {
+      // Only advance the metric when the commit was kept — reverted iterations leave the code unchanged
+      if (entry.metricAfter && !entry.commitReverted) {
         progress.currentMetricSummary = entry.metricAfter;
       }
       switch (entry.status) {
@@ -488,12 +489,11 @@ export class AutoIterationService {
   > {
     const maxAttempts = 2;
     let currentCommitSha = commitSha;
+    let latestResult: { stdout: string; stderr: string } = initialResult;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const errorOutput = truncateTestOutput(
-        `${initialResult.stdout}\n${initialResult.stderr}`,
-        100
-      );
+      // Use the most recent failure output so the agent sees what's still broken
+      const errorOutput = truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100);
       const fixPrompt = buildCrashFixPrompt(errorOutput, attempt);
       await this.session.sendPrompt(loop.sessionId, fixPrompt);
       await this.session.waitForIdle(loop.sessionId);
@@ -517,6 +517,7 @@ export class AutoIterationService {
       if (retryResult.exitCode === 0 && !retryResult.timedOut) {
         return { fixedResult: retryResult, updatedCommitSha: currentCommitSha };
       }
+      latestResult = retryResult;
     }
 
     // Give up — revert

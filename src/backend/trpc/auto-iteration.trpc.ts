@@ -62,6 +62,16 @@ export const autoIterationRouter = router({
   resume: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ input }) => {
+      const workspace = await workspaceDataService.findById(input.workspaceId);
+      if (!workspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
+      }
+      if (workspace.autoIterationStatus !== 'PAUSED') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Auto-iteration can only be resumed from paused state',
+        });
+      }
       await autoIterationService.resume(input.workspaceId);
       return { success: true };
     }),

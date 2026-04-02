@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import type { TestCommandResult } from './auto-iteration.types';
 
 const MAX_OUTPUT_LINES = 200;
+// Cap each stream at 5 MB to prevent unbounded memory growth on noisy test runs
+const MAX_BUFFER_BYTES = 5 * 1024 * 1024;
 
 /** Run a test command in a worktree and capture output. */
 export function runTestCommand(
@@ -23,9 +25,15 @@ export function runTestCommand(
 
     child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
+      if (stdout.length > MAX_BUFFER_BYTES) {
+        stdout = stdout.slice(-MAX_BUFFER_BYTES);
+      }
     });
     child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
+      if (stderr.length > MAX_BUFFER_BYTES) {
+        stderr = stderr.slice(-MAX_BUFFER_BYTES);
+      }
     });
 
     const timer = setTimeout(() => {

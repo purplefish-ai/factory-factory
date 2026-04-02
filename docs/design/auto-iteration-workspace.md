@@ -93,9 +93,9 @@ Where we diverge from autoresearch (intentionally):
 │       → Log with status "accepted"                          │
 │                                                             │
 │  CHECK TERMINATION                                          │
-│  11. If target reached → stop, status = "target_reached"    │
+│  11. If target reached → stop, status = "COMPLETED"         │
 │  12. If max > 0 and iteration >= max → stop,                │
-│      status = "max_iterations"                              │
+│      status = "MAX_ITERATIONS"                              │
 │                                                             │
 │  SESSION RECYCLING                                          │
 │  13. If iteration % sessionRecycleInterval == 0:            │
@@ -225,7 +225,7 @@ model Workspace {
   autoIterationStatus     AutoIterationStatus?
   autoIterationConfig     Json?     // { testCommand, targetDescription, maxIterations }
   autoIterationProgress   Json?     // { currentIteration, baselineMetric, currentMetric, ... }
-  autoIterationLogbookPath String?  // Path to logbook JSON file in worktree
+  autoIterationSessionId    String?  // Active ACP session for auto-iteration loop
 }
 ```
 
