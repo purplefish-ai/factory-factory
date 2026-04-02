@@ -10,9 +10,11 @@
 
 import type { Prisma } from '@prisma-gen/client';
 import {
+  type AutoIterationLogbookBridge,
   type AutoIterationSessionBridge,
   type AutoIterationWorkspaceBridge,
   autoIterationService,
+  logbookService,
 } from '@/backend/services/auto-iteration';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import {
@@ -316,7 +318,13 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     },
   };
 
-  autoIterationService.configure(autoIterationSessionBridge, autoIterationWorkspaceBridge);
+  const autoIterationLogbookBridge: AutoIterationLogbookBridge = logbookService;
+
+  autoIterationService.configure(
+    autoIterationSessionBridge,
+    autoIterationWorkspaceBridge,
+    autoIterationLogbookBridge
+  );
 
   // === Snapshot store derivation functions ===
   workspaceSnapshotStore.configure({

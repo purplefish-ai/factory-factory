@@ -9,9 +9,12 @@ import type {
   MetricEvaluation,
   TestCommandResult,
 } from './auto-iteration.types';
-import type { AutoIterationSessionBridge, AutoIterationWorkspaceBridge } from './bridges';
+import type {
+  AutoIterationLogbookBridge,
+  AutoIterationSessionBridge,
+  AutoIterationWorkspaceBridge,
+} from './bridges';
 import { amendHead, commitAll, getHeadDiff, hasUncommittedChanges, revertHead } from './git-ops';
-import { logbookService } from './logbook.service';
 import {
   buildCrashFixPrompt,
   buildCritiquePrompt,
@@ -31,6 +34,8 @@ interface RunningLoop {
   progress: AutoIterationProgress;
   pauseRequested: boolean;
   stopRequested: boolean;
+  /** Tracks the active loop promise to prevent concurrent loops on resume. */
+  loopPromise: Promise<void> | null;
 }
 
 /**
@@ -41,16 +46,19 @@ export class AutoIterationService {
   private loops = new Map<string, RunningLoop>();
   private sessionBridge: AutoIterationSessionBridge | null = null;
   private workspaceBridge: AutoIterationWorkspaceBridge | null = null;
+  private logbookBridge: AutoIterationLogbookBridge | null = null;
 
   constructor(private readonly logger: Logger) {}
 
   /** Inject cross-service bridges at startup. */
   configure(
     sessionBridge: AutoIterationSessionBridge,
-    workspaceBridge: AutoIterationWorkspaceBridge
+    workspaceBridge: AutoIterationWorkspaceBridge,
+    logbookBridge: AutoIterationLogbookBridge
   ): void {
     this.sessionBridge = sessionBridge;
     this.workspaceBridge = workspaceBridge;
+    this.logbookBridge = logbookBridge;
   }
 
   private get session(): AutoIterationSessionBridge {
@@ -65,6 +73,13 @@ export class AutoIterationService {
       throw new Error('AutoIterationService not configured');
     }
     return this.workspaceBridge;
+  }
+
+  private get logbook(): AutoIterationLogbookBridge {
+    if (!this.logbookBridge) {
+      throw new Error('AutoIterationService not configured');
+    }
+    return this.logbookBridge;
   }
 
   /** Start the auto-iteration loop for a workspace. */
@@ -104,7 +119,7 @@ export class AutoIterationService {
     const baselineEval = parseMetricEvaluation(baselineResponse);
 
     // Initialize logbook
-    await logbookService.initialize(
+    await this.logbook.initialize(
       worktreePath,
       workspaceId,
       config,
@@ -132,12 +147,13 @@ export class AutoIterationService {
       progress,
       pauseRequested: false,
       stopRequested: false,
+      loopPromise: null,
     };
     this.loops.set(workspaceId, loop);
     await this.workspace.updateAutoIterationProgress(workspaceId, progress);
 
     // Run the loop (fire-and-forget — errors are caught internally)
-    this.runLoop(loop, worktreePath).catch((err) => {
+    loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
       this.logger.error('Auto-iteration loop failed', { workspaceId, error: String(err) });
       void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
       this.loops.delete(workspaceId);
@@ -158,11 +174,17 @@ export class AutoIterationService {
     if (!loop) {
       throw new Error(`No auto-iteration loop found for workspace ${workspaceId}`);
     }
+
+    // Wait for the previous loop to fully exit before starting a new one
+    if (loop.loopPromise) {
+      await loop.loopPromise;
+    }
+
     loop.pauseRequested = false;
     await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
 
     const worktreePath = await this.workspace.getWorktreePath(workspaceId);
-    this.runLoop(loop, worktreePath).catch((err) => {
+    loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
       this.logger.error('Auto-iteration loop failed on resume', {
         workspaceId,
         error: String(err),
@@ -227,7 +249,7 @@ export class AutoIterationService {
           workspaceId,
           iteration: progress.currentIteration,
         });
-        const logbook = await logbookService.read(worktreePath);
+        const logbook = await this.logbook.read(worktreePath);
         const handoffPrompt = buildHandoffPrompt(
           config,
           logbook?.iterations ?? [],
@@ -269,7 +291,7 @@ export class AutoIterationService {
           break;
       }
 
-      await logbookService.appendEntry(worktreePath, entry);
+      await this.logbook.appendEntry(worktreePath, entry);
       await this.workspace.updateAutoIterationProgress(workspaceId, progress);
 
       // Check if target was reached (already evaluated inside runIteration for accepted entries)

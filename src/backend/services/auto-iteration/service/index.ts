@@ -18,6 +18,7 @@ export type {
 } from './auto-iteration.types';
 // Bridge interfaces for orchestration layer wiring
 export type {
+  AutoIterationLogbookBridge,
   AutoIterationSessionBridge,
   AutoIterationWorkspaceBridge,
 } from './bridges';
