@@ -7,9 +7,10 @@ import type {
   AutoIterationSnapshot,
   CritiqueResult,
   MetricEvaluation,
+  TestCommandResult,
 } from './auto-iteration.types';
 import type { AutoIterationSessionBridge, AutoIterationWorkspaceBridge } from './bridges';
-import { commitAll, getHeadDiff, hasUncommittedChanges, revertHead } from './git-ops';
+import { amendHead, commitAll, getHeadDiff, hasUncommittedChanges, revertHead } from './git-ops';
 import { logbookService } from './logbook.service';
 import {
   buildCrashFixPrompt,
@@ -199,7 +200,6 @@ export class AutoIterationService {
 
   // --- Core loop ---
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: intentional — orchestrates multi-phase iteration loop
   private async runLoop(loop: RunningLoop, worktreePath: string): Promise<void> {
     const { config, progress, workspaceId } = loop;
 
@@ -345,13 +345,13 @@ export class AutoIterationService {
     }
 
     // --- MEASURE PHASE ---
-    const commitSha = await commitAll(
+    let commitSha = await commitAll(
       worktreePath,
       `auto-iteration #${progress.currentIteration}: ${changeDescription.slice(0, 72)}`
     );
 
     // Run test command after changes
-    const postResult = await runTestCommand(
+    let postResult = await runTestCommand(
       worktreePath,
       config.testCommand,
       config.testTimeoutSeconds
@@ -359,7 +359,7 @@ export class AutoIterationService {
 
     // --- CRASH HANDLING ---
     if (postResult.exitCode !== 0 && !postResult.timedOut) {
-      const crashEntry = await this.handleCrash(
+      const crashResult = await this.handleCrash(
         loop,
         worktreePath,
         postResult,
@@ -368,10 +368,12 @@ export class AutoIterationService {
         changeDescription,
         commitSha
       );
-      if (crashEntry) {
-        return crashEntry;
+      if ('entry' in crashResult) {
+        return crashResult.entry;
       }
-      // If handleCrash returns null, it means the fix worked — continue to evaluation
+      // Fix succeeded — use the fresh test result and updated SHA for evaluation
+      postResult = crashResult.fixedResult;
+      commitSha = crashResult.updatedCommitSha;
     }
     if (postResult.timedOut) {
       await revertHead(worktreePath);
@@ -481,8 +483,11 @@ export class AutoIterationService {
     metricBefore: string,
     changeDescription: string,
     commitSha: string
-  ): Promise<AgentLogbookEntry | null> {
+  ): Promise<
+    { entry: AgentLogbookEntry } | { fixedResult: TestCommandResult; updatedCommitSha: string }
+  > {
     const maxAttempts = 2;
+    let currentCommitSha = commitSha;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const errorOutput = truncateTestOutput(
@@ -498,12 +503,9 @@ export class AutoIterationService {
         break;
       }
 
-      // Amend the commit with fixes
+      // Amend the original commit with fixes (keeps a single commit to revert if needed)
       if (await hasUncommittedChanges(worktreePath)) {
-        await commitAll(
-          worktreePath,
-          `auto-iteration #${loop.progress.currentIteration}: fix attempt ${attempt}`
-        );
+        currentCommitSha = await amendHead(worktreePath);
       }
 
       // Re-run test
@@ -513,28 +515,30 @@ export class AutoIterationService {
         loop.config.testTimeoutSeconds
       );
       if (retryResult.exitCode === 0 && !retryResult.timedOut) {
-        return null; // Fixed! Continue to evaluation
+        return { fixedResult: retryResult, updatedCommitSha: currentCommitSha };
       }
     }
 
     // Give up — revert
     await revertHead(worktreePath);
     return {
-      iteration: loop.progress.currentIteration,
-      startedAt,
-      completedAt: new Date().toISOString(),
-      status: 'crashed',
-      changeDescription: changeDescription.slice(0, 500),
-      commitSha,
-      commitReverted: true,
-      metricBefore,
-      metricAfter: null,
-      testOutput: truncateTestOutput(`${initialResult.stdout}\n${initialResult.stderr}`, 100),
-      metricImproved: null,
-      crashError: initialResult.stderr.slice(-500),
-      fixAttempts: maxAttempts,
-      critiqueNotes: null,
-      critiqueApproved: null,
+      entry: {
+        iteration: loop.progress.currentIteration,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        status: 'crashed',
+        changeDescription: changeDescription.slice(0, 500),
+        commitSha: currentCommitSha,
+        commitReverted: true,
+        metricBefore,
+        metricAfter: null,
+        testOutput: truncateTestOutput(`${initialResult.stdout}\n${initialResult.stderr}`, 100),
+        metricImproved: null,
+        crashError: initialResult.stderr.slice(-500),
+        fixAttempts: maxAttempts,
+        critiqueNotes: null,
+        critiqueApproved: null,
+      },
     };
   }
 
@@ -582,9 +586,9 @@ function parseCritiqueResult(response: string): CritiqueResult {
       notes: String(json.notes ?? ''),
     };
   } catch {
-    // If we can't parse, default to approved (conservative — don't block on parse errors)
+    // If we can't parse, reject — silently accepting unreviewed changes is riskier than blocking
     return {
-      approved: true,
+      approved: false,
       notes: `Could not parse critique response: ${response.slice(0, 200)}`,
     };
   }
