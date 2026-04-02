@@ -36,7 +36,7 @@ export const serviceRegistry = {
     ownsModels: ['AgentSession', 'ClosedSession'],
   },
   workspace: {
-    dependsOn: ['settings'],
+    dependsOn: ['settings', 'auto-iteration'],
     ownsModels: ['Project', 'Workspace'],
   },
   terminal: {
@@ -68,7 +68,7 @@ export const serviceRegistry = {
     ownsModels: ['DecisionLog'],
   },
   'auto-iteration': {
-    dependsOn: ['session', 'workspace'],
+    dependsOn: [],
     ownsModels: [],
   },
 } as const satisfies Record<ServiceName, ServiceDefinition>;
