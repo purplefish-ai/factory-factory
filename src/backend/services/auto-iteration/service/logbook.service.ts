@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { AgentLogbook, AgentLogbookEntry, AutoIterationConfig } from './auto-iteration.types';
@@ -70,7 +71,7 @@ export class LogbookService {
     const dir = path.dirname(filePath);
     await fs.mkdir(dir, { recursive: true });
     // Atomic write: write to a temp file then rename to prevent corruption on interruption
-    const tmpPath = `${filePath}.${Date.now()}.tmp`;
+    const tmpPath = `${filePath}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
     await fs.writeFile(tmpPath, JSON.stringify(logbook, null, 2), 'utf-8');
     await fs.rename(tmpPath, filePath);
   }

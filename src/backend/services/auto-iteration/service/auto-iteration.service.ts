@@ -407,6 +407,7 @@ export class AutoIterationService {
     // Only treat infrastructure-level failures as crashes (exit code > 1, e.g. syntax errors,
     // test framework failing to start). Normal test failures (exit code 1) still proceed to
     // evaluation so the loop can accept iterations that improve the pass rate incrementally.
+    let crashFixAttempts = 0;
     if (postResult.exitCode > 1 && !postResult.timedOut) {
       const crashResult = await this.handleCrash(
         loop,
@@ -423,6 +424,7 @@ export class AutoIterationService {
       // Fix succeeded — use the fresh test result and updated SHA for evaluation
       postResult = crashResult.fixedResult;
       commitSha = crashResult.updatedCommitSha;
+      crashFixAttempts = crashResult.fixAttempts;
     }
     if (postResult.timedOut) {
       await revertHead(worktreePath);
@@ -472,7 +474,7 @@ export class AutoIterationService {
           testOutput: postOutput.slice(0, 2000),
           metricImproved: false,
           crashError: null,
-          fixAttempts: 0,
+          fixAttempts: crashFixAttempts,
           critiqueNotes: null,
           critiqueApproved: null,
         },
@@ -505,7 +507,7 @@ export class AutoIterationService {
           testOutput: postOutput.slice(0, 2000),
           metricImproved: true,
           crashError: null,
-          fixAttempts: 0,
+          fixAttempts: crashFixAttempts,
           critiqueNotes: critique.notes,
           critiqueApproved: false,
         },
@@ -528,7 +530,7 @@ export class AutoIterationService {
         testOutput: postOutput.slice(0, 2000),
         metricImproved: true,
         crashError: null,
-        fixAttempts: 0,
+        fixAttempts: crashFixAttempts,
         critiqueNotes: critique.notes,
         critiqueApproved: true,
       },
@@ -545,13 +547,16 @@ export class AutoIterationService {
     changeDescription: string,
     commitSha: string
   ): Promise<
-    { entry: AgentLogbookEntry } | { fixedResult: TestCommandResult; updatedCommitSha: string }
+    | { entry: AgentLogbookEntry }
+    | { fixedResult: TestCommandResult; updatedCommitSha: string; fixAttempts: number }
   > {
     const maxAttempts = 2;
     let currentCommitSha = commitSha;
     let latestResult: { stdout: string; stderr: string } = initialResult;
 
+    let attemptsMade = 0;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      attemptsMade = attempt;
       // Use the most recent failure output so the agent sees what's still broken
       const errorOutput = truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100);
       const fixPrompt = buildCrashFixPrompt(errorOutput, attempt);
@@ -575,7 +580,11 @@ export class AutoIterationService {
         loop.config.testTimeoutSeconds
       );
       if (retryResult.exitCode <= 1 && !retryResult.timedOut) {
-        return { fixedResult: retryResult, updatedCommitSha: currentCommitSha };
+        return {
+          fixedResult: retryResult,
+          updatedCommitSha: currentCommitSha,
+          fixAttempts: attemptsMade,
+        };
       }
       latestResult = retryResult;
     }
@@ -596,7 +605,7 @@ export class AutoIterationService {
         testOutput: truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100),
         metricImproved: null,
         crashError: latestResult.stderr.slice(-500),
-        fixAttempts: maxAttempts,
+        fixAttempts: attemptsMade,
         critiqueNotes: null,
         critiqueApproved: null,
       },
