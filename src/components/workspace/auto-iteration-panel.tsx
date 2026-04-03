@@ -534,6 +534,7 @@ function InsightsEditor({ workspaceId }: { workspaceId: string }) {
         onChange={(e) => handleChange(e.target.value)}
         placeholder="# Auto-Iteration Insights&#10;&#10;Add ideas, deferred approaches, or observations here.&#10;Tag with [open], [resolved], or [obsolete]."
         spellCheck={false}
+        disabled={saveMutation.isPending}
       />
     </div>
   );
@@ -642,11 +643,12 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
 
       <TabBar active={activeTab} onChange={setActiveTab} />
 
-      {activeTab === 'log' ? (
+      <div className={cn('flex-1 min-h-0', activeTab !== 'log' && 'hidden')}>
         <IterationLog logbook={logbook} isRunning={isRunning} />
-      ) : (
+      </div>
+      <div className={cn('flex-1 min-h-0', activeTab !== 'insights' && 'hidden')}>
         <InsightsEditor workspaceId={workspaceId} />
-      )}
+      </div>
     </div>
   );
 }

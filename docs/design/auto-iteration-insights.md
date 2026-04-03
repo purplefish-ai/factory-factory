@@ -153,12 +153,13 @@ Add alongside `logbook.service.ts` in `src/backend/services/auto-iteration/servi
 ```typescript
 export const insightsService = {
   read(worktreePath: string): string | null;
+  write(worktreePath: string, content: string): Promise<void>;  // used by UI save endpoint
   initialize(worktreePath: string): Promise<void>;  // create file if absent
   getOpenEntries(worktreePath: string): string;     // filter to [open], cap tokens
 };
 ```
 
-No write method needed — the agent writes directly via file tools.
+The `write` method is used by the tRPC `saveInsights` endpoint (UI editor tab). The agent also writes directly via file tools.
 
 ### 2. Git exclusion (`git-ops.ts`)
 

@@ -68,7 +68,9 @@ export class InsightsService {
     // contain [resolved] or [obsolete] tags, reassemble, then truncate.
     const paragraphs = raw.split(/\n{2,}/);
     const open = paragraphs.filter((p) => {
-      const lower = p.toLowerCase();
+      // Skip HTML comments — they may contain instructional mentions of tags
+      const withoutComments = p.replace(/<!--[\s\S]*?-->/g, '');
+      const lower = withoutComments.toLowerCase();
       return !(lower.includes('[resolved]') || lower.includes('[obsolete]'));
     });
 
