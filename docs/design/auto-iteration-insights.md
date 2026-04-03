@@ -152,10 +152,10 @@ Add alongside `logbook.service.ts` in `src/backend/services/auto-iteration/servi
 
 ```typescript
 export const insightsService = {
-  read(worktreePath: string): string | null;
+  read(worktreePath: string): Promise<string | null>;
   write(worktreePath: string, content: string): Promise<void>;  // used by UI save endpoint
   initialize(worktreePath: string): Promise<void>;  // create file if absent
-  getOpenEntries(worktreePath: string): string;     // filter to [open], cap tokens
+  getOpenContent(worktreePath: string): Promise<string | null>;  // filter to [open], cap chars
 };
 ```
 

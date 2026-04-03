@@ -91,7 +91,8 @@ export class InsightsService {
     }
 
     // Truncate from the start (oldest content) to keep recent entries
-    return `... (earlier entries truncated)\n\n${filtered.slice(-INJECTION_CHAR_LIMIT)}`;
+    const prefix = '... (earlier entries truncated)\n\n';
+    return `${prefix}${filtered.slice(-(INJECTION_CHAR_LIMIT - prefix.length))}`;
   }
 }
 
