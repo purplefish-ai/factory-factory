@@ -47,6 +47,7 @@ interface BannerProgress {
   crashedCount: number;
   baselineMetricSummary: string;
   currentMetricSummary: string;
+  startedAt: string;
 }
 
 function getStepStates(currentStage: Stage | null): Record<Stage, StepState> {
@@ -109,24 +110,52 @@ function StagesStepper({ currentStage }: { currentStage: Stage | null }) {
   );
 }
 
+function computeIterationsPerHour(startedAt: string, currentIteration: number): number | null {
+  if (currentIteration < 1) {
+    return null;
+  }
+  const elapsedMs = Date.now() - new Date(startedAt).getTime();
+  if (elapsedMs <= 0) {
+    return null;
+  }
+  const elapsedHours = elapsedMs / 3_600_000;
+  return currentIteration / elapsedHours;
+}
+
+function formatIterationsPerHour(rate: number): string {
+  if (rate >= 10) {
+    return `${Math.round(rate)} iter/hr`;
+  }
+  return `${rate.toFixed(1)} iter/hr`;
+}
+
 function IterationStats({
   currentIteration,
   maxIterations,
   acceptedCount,
   totalRejected,
+  startedAt,
 }: {
   currentIteration: number;
   maxIterations: number;
   acceptedCount: number;
   totalRejected: number;
+  startedAt?: string;
 }) {
   const maxLabel = maxIterations === 0 ? '' : ` / ${maxIterations}`;
+  const iterPerHour = startedAt ? computeIterationsPerHour(startedAt, currentIteration) : null;
   return (
     <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
       <span>
         Iteration {currentIteration}
         {maxLabel}
       </span>
+      {iterPerHour !== null && (
+        <>
+          <span>·</span>
+          <span>{formatIterationsPerHour(iterPerHour)}</span>
+        </>
+      )}
       {acceptedCount > 0 && (
         <>
           <span>·</span>
@@ -235,6 +264,7 @@ function PausedBanner({
           maxIterations={maxIterations}
           acceptedCount={acceptedCount}
           totalRejected={totalRejected}
+          startedAt={progress.startedAt}
         />
       )}
     </div>
@@ -277,6 +307,7 @@ function RunningBanner({
           maxIterations={maxIterations}
           acceptedCount={acceptedCount}
           totalRejected={totalRejected}
+          startedAt={progress.startedAt}
         />
       )}
     </div>

@@ -31,6 +31,10 @@ Where we diverge from autoresearch (intentionally):
 - **Critiquer step** — autoresearch has no post-hoc critique; it relies on the agent's judgment during implementation. We add an explicit critique phase because production codebases need stronger safeguards against metric gaming and unmaintainable hacks.
 - **Structured logbook** — autoresearch uses a simple TSV. We use a structured JSON logbook with richer metadata (diffs, critique notes, commit refs) suitable for UI display.
 
+Additional ideas adopted from autoresearch:
+5. **Strategy file (inspired by `program.md`)** — autoresearch decouples research methodology (`program.md`) from executable code (`train.py`), allowing humans to iterate on agent instructions while the agent iterates on code. We adopt this as `.factory-factory/auto-iteration-strategy.md` — a user-editable markdown file in the worktree that the agent reads fresh at the start of each iteration. This enables "meta-iteration": humans steer the agent mid-run without stopping or restarting the loop. See the dedicated [Strategy File](#strategy-file) section.
+6. **Throughput metric** — autoresearch frames outcomes as "~12 experiments/hour". We surface iterations/hour in the UI so users can gauge loop health and compare configurations. See the [Throughput Metric](#throughput-metric) section under UI Changes.
+
 ---
 
 ## Iteration Loop (Core Algorithm)
@@ -194,6 +198,43 @@ The LLM is asked to respond with structured JSON for the evaluation, so the back
 
 ---
 
+## Strategy File
+
+The **strategy file** at `.factory-factory/auto-iteration-strategy.md` is a user-editable markdown file that the agent reads fresh at the start of each iteration. It enables mid-run guidance without stopping or restarting the loop.
+
+### Lifecycle
+
+1. **Seeded on start** — When auto-iteration begins, a default template is written (if no file exists) containing the target description and test command as context, plus a placeholder section for user guidance.
+2. **Read each iteration** — At the top of `runIteration()`, the file is read from disk. If present, its content is injected into the implement prompt inside a `<strategy>` block.
+3. **Optional** — If the file is missing or deleted, the agent proceeds normally with no strategy context.
+4. **User-editable at any time** — Users can edit the file between iterations (e.g., while the agent is running tests or during a pause) to steer the agent's approach, add constraints, or redirect focus.
+
+### Why a file (not a config field)
+
+- **Zero-restart editing** — Users edit a local file with their editor; no API call or UI interaction needed
+- **Versioned with the worktree** — Git tracks changes to the strategy over time
+- **Readable by the agent** — The agent can also read the file directly via tool calls if it needs to reference strategy mid-implementation
+- **Follows logbook pattern** — Same `.factory-factory/` directory, same service handles I/O
+
+### Default template
+
+```markdown
+# Auto-Iteration Strategy
+
+Target: {targetDescription}
+Test command: {testCommand}
+
+## Guidance for the agent
+
+<!--
+Edit this file between iterations to steer the agent.
+The agent reads it fresh at the start of each iteration.
+You can add hints, constraints, or focus areas below.
+-->
+```
+
+---
+
 ## Data Model Changes
 
 ### Prisma Schema
@@ -345,6 +386,14 @@ interface AutoIterationWorkspaceBridge {
   getWorktreePath(workspaceId: string): Promise<string>;
   updateProgress(workspaceId: string, progress: AutoIterationProgress): Promise<void>;
   updateStatus(workspaceId: string, status: AutoIterationStatus): Promise<void>;
+}
+
+interface AutoIterationLogbookBridge {
+  initialize(...): Promise<void>;
+  appendEntry(worktreePath: string, entry: AgentLogbookEntry): Promise<void>;
+  read(worktreePath: string): Promise<AgentLogbook | null>;
+  readStrategyFile(worktreePath: string): Promise<string | null>;   // Read user strategy file
+  writeStrategyFile(worktreePath: string, content: string): Promise<void>; // Seed default template
 }
 ```
 
@@ -594,7 +643,26 @@ When viewing an auto-iteration workspace, the detail page shows a specialized la
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 5. WebSocket Events
+### 5. Throughput Metric
+
+The UI displays an **iterations/hour** throughput metric to help users gauge loop health and compare configurations (inspired by autoresearch's "~12 experiments/hour" framing).
+
+**Computation**: Client-side, from existing `startedAt` and `currentIteration` fields:
+
+```typescript
+iterationsPerHour = currentIteration / ((Date.now() - startedAt) / 3_600_000)
+```
+
+**Display**:
+- Format: "2.4 iter/hr" (one decimal when < 10, rounded integer otherwise)
+- **Progress banner** (`RunningBanner`): Shown in the iteration stats area alongside "Iteration N / M"
+- **Detail panel** (`ProgressSummary`): Shown next to the iteration count
+- Only displayed once at least 1 iteration has completed (avoids division by zero)
+- Shown in running and paused states; not shown for terminal states
+
+No backend changes needed — the metric is derived from fields already present in `AutoIterationProgress`.
+
+### 6. WebSocket Events
 
 New event types for real-time progress updates:
 
@@ -647,6 +715,13 @@ CONTEXT MANAGEMENT:
 - Your iteration history is recorded in
   .factory-factory/auto-iteration-logbook.json — you can read this
   file to review what has been tried before.
+
+STRATEGY FILE:
+- The user may provide guidance in .factory-factory/auto-iteration-strategy.md
+- This file is read at the start of each iteration — if it exists,
+  follow the guidance within it
+- The user can edit this file between iterations to steer your approach
+  without restarting the loop
 ```
 
 ### Measure Prompt (sent after test command runs)
