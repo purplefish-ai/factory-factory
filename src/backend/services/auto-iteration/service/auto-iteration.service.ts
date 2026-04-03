@@ -127,6 +127,7 @@ export class AutoIterationService {
         lastIterationAt: null,
         currentPhase: 'baseline',
         lastTestOutput: null,
+        lastEvalDecision: null,
       },
       pauseRequested: false,
       stopRequested: false,
@@ -155,10 +156,14 @@ export class AutoIterationService {
       // Run baseline measurement
       this.logger.info('Running baseline measurement', { workspaceId });
       await this.emitPhase(placeholder, 'baseline');
+      placeholder.progress.lastTestOutput = null;
       const baselineResult = await runTestCommand(
         worktreePath,
         config.testCommand,
-        config.testTimeoutSeconds
+        config.testTimeoutSeconds,
+        (chunk) => {
+          placeholder.progress.lastTestOutput = (placeholder.progress.lastTestOutput ?? '') + chunk;
+        }
       );
       const baselineOutput = truncateTestOutput(
         `${baselineResult.stdout}\n${baselineResult.stderr}`
@@ -200,6 +205,7 @@ export class AutoIterationService {
         lastIterationAt: null,
         currentPhase: 'idle',
         lastTestOutput: baselineOutput,
+        lastEvalDecision: null,
       };
 
       // Update the placeholder with real data
@@ -496,12 +502,19 @@ export class AutoIterationService {
     const { config, progress } = loop;
     const metricBefore = progress.currentMetricSummary;
 
+    // Clear previous eval decision at the start of each iteration
+    loop.progress.lastEvalDecision = null;
+
     // --- IMPLEMENT PHASE ---
     await this.emitPhase(loop, 'measuring');
+    loop.progress.lastTestOutput = null;
     const testResult = await runTestCommand(
       worktreePath,
       config.testCommand,
-      config.testTimeoutSeconds
+      config.testTimeoutSeconds,
+      (chunk) => {
+        loop.progress.lastTestOutput = (loop.progress.lastTestOutput ?? '') + chunk;
+      }
     );
     const testOutput = truncateTestOutput(`${testResult.stdout}\n${testResult.stderr}`);
     await this.emitPhase(loop, 'implementing', testOutput);
@@ -553,10 +566,14 @@ export class AutoIterationService {
 
     // Run test command after changes
     await this.emitPhase(loop, 'measuring');
+    loop.progress.lastTestOutput = null;
     let postResult = await runTestCommand(
       worktreePath,
       config.testCommand,
-      config.testTimeoutSeconds
+      config.testTimeoutSeconds,
+      (chunk) => {
+        loop.progress.lastTestOutput = (loop.progress.lastTestOutput ?? '') + chunk;
+      }
     );
 
     // --- CRASH HANDLING ---
@@ -614,6 +631,12 @@ export class AutoIterationService {
     await this.session.waitForIdle(loop.sessionId);
     const measureResponse = await this.session.getLastAssistantMessage(loop.sessionId);
     const evalResult = parseMetricEvaluation(measureResponse);
+
+    // Surface eval decision in real-time for UI display
+    loop.progress.lastEvalDecision = {
+      improved: evalResult.improved,
+      metricSummary: evalResult.metricSummary,
+    };
 
     if (!evalResult.improved) {
       await revertHead(worktreePath);
