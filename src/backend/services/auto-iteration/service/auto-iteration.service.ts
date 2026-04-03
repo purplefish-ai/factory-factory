@@ -641,6 +641,7 @@ export class AutoIterationService {
       try {
         const prPrompt = buildCreatePrPrompt(loop.config, loop.progress, status);
         await this.session.sendPrompt(loop.sessionId, prPrompt);
+        await this.session.waitForIdle(loop.sessionId);
       } catch (err) {
         this.logger.warn('Failed to send PR creation prompt', {
           workspaceId: loop.workspaceId,
