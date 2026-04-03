@@ -12,6 +12,7 @@ export type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
 export {
   AcpRuntimeManager,
   acpRuntimeManager,
+  PromptTimeoutError,
 } from './acp-runtime-manager';
 export {
   CodexAppServerAcpAdapter,

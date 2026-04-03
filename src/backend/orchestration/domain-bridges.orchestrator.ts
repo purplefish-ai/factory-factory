@@ -215,6 +215,10 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       clearRatchetActiveSessionIfMatching: (workspaceId, sessionId) =>
         ratchetService.clearRatchetActiveSessionIfMatching(workspaceId, sessionId),
     },
+    autoIterationExit: {
+      onAutoIterationSessionExit: (workspaceId, sessionId) =>
+        autoIterationService.onSessionDeath(workspaceId, sessionId),
+    },
   });
 
   chatMessageHandlerService.configure({
@@ -279,8 +283,8 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       }
       return session.id;
     },
-    async sendPrompt(sessionId, prompt) {
-      await sessionService.sendAcpMessage(sessionId, [{ type: 'text', text: prompt }]);
+    async sendPrompt(sessionId, prompt, timeoutMs) {
+      await sessionService.sendAcpMessage(sessionId, [{ type: 'text', text: prompt }], timeoutMs);
     },
     async waitForIdle(_sessionId) {
       // sendAcpMessage already blocks until the turn completes

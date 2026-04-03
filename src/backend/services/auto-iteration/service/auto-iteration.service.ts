@@ -15,7 +15,14 @@ import type {
   AutoIterationSessionBridge,
   AutoIterationWorkspaceBridge,
 } from './bridges';
-import { amendHead, commitAll, getHeadDiff, hasUncommittedChanges, revertHead } from './git-ops';
+import {
+  amendHead,
+  commitAll,
+  discardUncommittedChanges,
+  getHeadDiff,
+  hasUncommittedChanges,
+  revertHead,
+} from './git-ops';
 import {
   buildCrashFixPrompt,
   buildCreatePrPrompt,
@@ -29,6 +36,15 @@ import { runTestCommand, truncateTestOutput } from './test-runner.service';
 
 type Logger = ReturnType<typeof createLogger>;
 
+/** Default prompt timeout: 20 minutes. */
+const DEFAULT_PROMPT_TIMEOUT_SECONDS = 1200;
+
+/** Get prompt timeout in milliseconds from config, or the default. */
+function getPromptTimeoutMs(config: AutoIterationConfig): number | undefined {
+  const seconds = config.promptTimeoutSeconds ?? DEFAULT_PROMPT_TIMEOUT_SECONDS;
+  return seconds > 0 ? seconds * 1000 : undefined;
+}
+
 interface RunningLoop {
   workspaceId: string;
   sessionId: string;
@@ -36,6 +52,8 @@ interface RunningLoop {
   progress: AutoIterationProgress;
   pauseRequested: boolean;
   stopRequested: boolean;
+  /** Set when the session died unexpectedly, so the loop finalizes as FAILED, not STOPPED. */
+  failedByDeath: boolean;
   /** Tracks the active loop promise to prevent concurrent loops on resume. */
   loopPromise: Promise<void> | null;
 }
@@ -110,6 +128,7 @@ export class AutoIterationService {
       },
       pauseRequested: false,
       stopRequested: false,
+      failedByDeath: false,
       loopPromise: null,
     };
     this.loops.set(workspaceId, placeholder);
@@ -145,7 +164,7 @@ export class AutoIterationService {
         baselineOutput,
         '(no previous measurement — this is the baseline)'
       );
-      await this.session.sendPrompt(sessionId, baselinePrompt);
+      await this.session.sendPrompt(sessionId, baselinePrompt, getPromptTimeoutMs(config));
       await this.session.waitForIdle(sessionId);
       const baselineResponse = await this.session.getLastAssistantMessage(sessionId);
       const baselineEval = parseMetricEvaluation(baselineResponse);
@@ -281,6 +300,26 @@ export class AutoIterationService {
     return this.loops.has(workspaceId);
   }
 
+  /**
+   * Handle notification that an auto-iteration session has died unexpectedly.
+   * Called by the orchestration layer when the ACP process exits for a session
+   * belonging to an auto-iteration workspace. Idempotent — no-op if the loop
+   * is already cleaned up by the promise rejection path.
+   */
+  onSessionDeath(workspaceId: string, sessionId: string): void {
+    const loop = this.loops.get(workspaceId);
+    if (!loop || loop.sessionId !== sessionId) {
+      return;
+    }
+
+    this.logger.warn('Auto-iteration session died unexpectedly', { workspaceId, sessionId });
+    loop.failedByDeath = true;
+    loop.stopRequested = true;
+    void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+    void this.workspace.updateAutoIterationSessionId(workspaceId, null);
+    this.loops.delete(workspaceId);
+  }
+
   // --- Phase tracking ---
 
   /** Update the current phase and optionally test output, then persist to DB for UI polling. */
@@ -304,7 +343,10 @@ export class AutoIterationService {
     while (true) {
       // Check termination conditions
       if (loop.stopRequested) {
-        await this.finalize(loop, AutoIterationStatus.STOPPED);
+        await this.finalize(
+          loop,
+          loop.failedByDeath ? AutoIterationStatus.FAILED : AutoIterationStatus.STOPPED
+        );
         return;
       }
       if (loop.pauseRequested) {
@@ -345,7 +387,61 @@ export class AutoIterationService {
         iteration: progress.currentIteration,
       });
 
-      const { entry, targetReached } = await this.runIteration(loop, worktreePath, iterationStart);
+      let entry: AgentLogbookEntry;
+      let targetReached: boolean;
+      try {
+        const result = await this.runIteration(loop, worktreePath, iterationStart);
+        entry = result.entry;
+        targetReached = result.targetReached;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'PromptTimeoutError') {
+          // Treat prompt timeout like a crash: revert any uncommitted work and continue the loop
+          this.logger.warn('Prompt timed out during iteration, treating as crash', {
+            workspaceId,
+            iteration: progress.currentIteration,
+          });
+          try {
+            if (loop.progress.currentPhase === 'implementing') {
+              // During implement, changes are not yet committed — discard uncommitted work
+              if (await hasUncommittedChanges(worktreePath)) {
+                await discardUncommittedChanges(worktreePath);
+              }
+            } else {
+              // After implement (measure/evaluate/critique/crash_fix), commitAll has already run
+              // — always revert HEAD to undo the iteration's committed changes
+              await revertHead(worktreePath);
+            }
+          } catch (revertError) {
+            this.logger.error('Failed to revert after prompt timeout, aborting loop', {
+              workspaceId,
+              iteration: progress.currentIteration,
+              error: revertError instanceof Error ? revertError.message : String(revertError),
+            });
+            await this.finalize(loop, AutoIterationStatus.FAILED);
+            return;
+          }
+          entry = {
+            iteration: progress.currentIteration,
+            startedAt: iterationStart,
+            completedAt: new Date().toISOString(),
+            status: 'crashed',
+            changeDescription: 'Prompt timed out',
+            commitSha: '',
+            commitReverted: false,
+            metricBefore: progress.currentMetricSummary,
+            metricAfter: null,
+            testOutput: '',
+            metricImproved: null,
+            crashError: error.message,
+            fixAttempts: 0,
+            critiqueNotes: null,
+            critiqueApproved: null,
+          };
+          targetReached = false;
+        } else {
+          throw error;
+        }
+      }
 
       // Update progress
       progress.lastIterationAt = new Date().toISOString();
@@ -404,7 +500,7 @@ export class AutoIterationService {
       config.targetDescription,
       testOutput
     );
-    await this.session.sendPrompt(loop.sessionId, implementPrompt);
+    await this.session.sendPrompt(loop.sessionId, implementPrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
 
     // Get description of what was changed
@@ -499,7 +595,7 @@ export class AutoIterationService {
     const postOutput = truncateTestOutput(`${postResult.stdout}\n${postResult.stderr}`);
     await this.emitPhase(loop, 'evaluating', postOutput);
     const measurePrompt = buildMeasurePrompt(postOutput, metricBefore);
-    await this.session.sendPrompt(loop.sessionId, measurePrompt);
+    await this.session.sendPrompt(loop.sessionId, measurePrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
     const measureResponse = await this.session.getLastAssistantMessage(loop.sessionId);
     const evalResult = parseMetricEvaluation(measureResponse);
@@ -533,7 +629,7 @@ export class AutoIterationService {
     const diff = await getHeadDiff(worktreePath);
     const truncatedDiff = diff.length > 5000 ? `${diff.slice(0, 5000)}\n... (truncated)` : diff;
     const critiquePrompt = buildCritiquePrompt(truncatedDiff);
-    await this.session.sendPrompt(loop.sessionId, critiquePrompt);
+    await this.session.sendPrompt(loop.sessionId, critiquePrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
     const critiqueResponse = await this.session.getLastAssistantMessage(loop.sessionId);
     const critique = parseCritiqueResult(critiqueResponse);
@@ -607,7 +703,7 @@ export class AutoIterationService {
       // Use the most recent failure output so the agent sees what's still broken
       const errorOutput = truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100);
       const fixPrompt = buildCrashFixPrompt(errorOutput, attempt);
-      await this.session.sendPrompt(loop.sessionId, fixPrompt);
+      await this.session.sendPrompt(loop.sessionId, fixPrompt, getPromptTimeoutMs(loop.config));
       await this.session.waitForIdle(loop.sessionId);
 
       const fixResponse = await this.session.getLastAssistantMessage(loop.sessionId);
@@ -670,7 +766,7 @@ export class AutoIterationService {
     if (loop.progress.acceptedCount > 0) {
       try {
         const prPrompt = buildCreatePrPrompt(loop.config, loop.progress, status);
-        await this.session.sendPrompt(loop.sessionId, prPrompt);
+        await this.session.sendPrompt(loop.sessionId, prPrompt, getPromptTimeoutMs(loop.config));
         await this.session.waitForIdle(loop.sessionId);
       } catch (err) {
         this.logger.warn('Failed to send PR creation prompt', {

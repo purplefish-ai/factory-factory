@@ -74,6 +74,10 @@ const workspaceMutationRules = {
     type: 'static',
     fields: ['runScriptStatus', 'runScriptPid', 'runScriptPort', 'runScriptStartedAt'],
   },
+  resetStaleAutoIterationStatuses: {
+    type: 'static',
+    fields: ['autoIterationStatus', 'autoIterationSessionId'],
+  },
 };
 
 function collectSourceFiles(dir) {

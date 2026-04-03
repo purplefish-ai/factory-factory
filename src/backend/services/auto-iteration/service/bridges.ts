@@ -18,7 +18,7 @@ export interface AutoIterationSessionBridge {
     workspaceId: string,
     opts: { initialPrompt?: string; startupModePreset?: 'non_interactive' }
   ): Promise<string>; // returns sessionId
-  sendPrompt(sessionId: string, prompt: string): Promise<void>;
+  sendPrompt(sessionId: string, prompt: string, timeoutMs?: number): Promise<void>;
   waitForIdle(sessionId: string): Promise<void>;
   stopSession(sessionId: string): Promise<void>;
   getLastAssistantMessage(sessionId: string): Promise<string>;
