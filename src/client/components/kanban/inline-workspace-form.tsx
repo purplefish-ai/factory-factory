@@ -12,6 +12,7 @@ import { useProjectFileMentions } from '@/components/chat/chat-input/hooks/use-p
 import { FileMentionPalette } from '@/components/chat/file-mention-palette';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -160,6 +161,10 @@ export function InlineWorkspaceForm({
   const [mode, setMode] = useState<'STANDARD' | 'AUTO_ITERATION'>('STANDARD');
   const [testCommand, setTestCommand] = useState('');
   const [targetDescription, setTargetDescription] = useState('');
+  const [maxIterations, setMaxIterations] = useState(25);
+  const [unlimitedIterations, setUnlimitedIterations] = useState(false);
+  const [testTimeoutSeconds, setTestTimeoutSeconds] = useState(300);
+  const [baseBranch, setBaseBranch] = useState('');
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -277,6 +282,18 @@ export function InlineWorkspaceForm({
     event.target.value = '';
   };
 
+  const buildAutoIterationConfig = () => ({
+    testCommand: testCommand.trim(),
+    targetDescription: targetDescription.trim(),
+    maxIterations: unlimitedIterations ? 0 : maxIterations,
+    testTimeoutSeconds,
+  });
+
+  const getAutoIterationBranchName = () => {
+    const trimmed = baseBranch.trim();
+    return trimmed || undefined;
+  };
+
   const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' = mode) => {
     if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
       toast.error('Auto-iteration requires a test command and target description.');
@@ -296,10 +313,8 @@ export function InlineWorkspaceForm({
       ratchetEnabled,
       provider,
       mode: launchMode,
-      autoIterationConfig:
-        launchMode === 'AUTO_ITERATION'
-          ? { testCommand: testCommand.trim(), targetDescription: targetDescription.trim() }
-          : undefined,
+      autoIterationConfig: launchMode === 'AUTO_ITERATION' ? buildAutoIterationConfig() : undefined,
+      branchName: launchMode === 'AUTO_ITERATION' ? getAutoIterationBranchName() : undefined,
     });
   };
 
@@ -391,6 +406,50 @@ export function InlineWorkspaceForm({
                 placeholder="e.g. All tests pass with no regressions"
                 value={targetDescription}
                 onChange={(e) => setTargetDescription(e.target.value)}
+                disabled={isCreating}
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Max iterations</Label>
+                <Input
+                  className="h-7 w-20 text-xs"
+                  type="number"
+                  min={1}
+                  value={unlimitedIterations ? '' : maxIterations}
+                  onChange={(e) => setMaxIterations(Number(e.target.value) || 25)}
+                  disabled={isCreating || unlimitedIterations}
+                  placeholder="25"
+                />
+              </div>
+              <label className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Checkbox
+                  checked={unlimitedIterations}
+                  onCheckedChange={(checked) => setUnlimitedIterations(checked === true)}
+                  disabled={isCreating}
+                  className="h-3.5 w-3.5"
+                />
+                Unlimited
+              </label>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Test timeout (s)</Label>
+                <Input
+                  className="h-7 w-20 text-xs"
+                  type="number"
+                  min={1}
+                  value={testTimeoutSeconds}
+                  onChange={(e) => setTestTimeoutSeconds(Number(e.target.value) || 300)}
+                  disabled={isCreating}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Base branch (optional)</Label>
+              <Input
+                className="h-7 text-xs font-mono"
+                placeholder="defaults to project default branch"
+                value={baseBranch}
+                onChange={(e) => setBaseBranch(e.target.value)}
                 disabled={isCreating}
               />
             </div>

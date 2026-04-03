@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Pencil,
   Play,
+  RefreshCw,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -309,6 +310,35 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   };
 }
 
+function AutoIterationBadge({ workspace }: { workspace: WorkspaceWithKanban }) {
+  const progress = workspace.autoIterationProgress as {
+    currentIteration?: number;
+    currentMetricSummary?: string;
+  } | null;
+  const config = workspace.autoIterationConfig as { maxIterations?: number } | null;
+  const status = workspace.autoIterationStatus;
+  const current = progress?.currentIteration ?? 0;
+  const max = config?.maxIterations ?? 25;
+  const maxLabel = max === 0 ? '∞' : String(max);
+  const isRunning = status === 'RUNNING';
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex items-center gap-1.5 text-[11px] text-primary/80">
+          <RefreshCw className={cn('h-3 w-3', isRunning && 'animate-spin')} />
+          <span className="font-mono">
+            Iter {current}/{maxLabel}
+          </span>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>{progress?.currentMetricSummary || 'Auto-iteration workspace'}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function KanbanCard({
   workspace,
   projectSlug,
@@ -449,6 +479,7 @@ export function KanbanCard({
                 <PendingRequestBadge type={showPendingRequest} />
               </div>
             )}
+            {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}
             {sessionRuntimeError && (
               <div className="flex items-center gap-2 text-[11px] text-amber-700 min-w-0">
                 <AlertTriangle className="h-3 w-3 shrink-0" />

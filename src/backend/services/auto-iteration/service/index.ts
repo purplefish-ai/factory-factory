@@ -13,6 +13,7 @@ export type {
   AutoIterationProgress,
   AutoIterationSnapshot,
   CritiqueResult,
+  IterationPhase,
   MetricEvaluation,
   TestCommandResult,
 } from './auto-iteration.types';
