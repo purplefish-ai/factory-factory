@@ -25,13 +25,13 @@ export function runTestCommand(
 
     child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
-      if (stdout.length > MAX_BUFFER_BYTES) {
+      if (Buffer.byteLength(stdout) > MAX_BUFFER_BYTES) {
         stdout = stdout.slice(-MAX_BUFFER_BYTES);
       }
     });
     child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
-      if (stderr.length > MAX_BUFFER_BYTES) {
+      if (Buffer.byteLength(stderr) > MAX_BUFFER_BYTES) {
         stderr = stderr.slice(-MAX_BUFFER_BYTES);
       }
     });
