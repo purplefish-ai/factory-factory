@@ -163,7 +163,7 @@ export function InlineWorkspaceForm({
   const [targetDescription, setTargetDescription] = useState('');
   const [maxIterations, setMaxIterations] = useState(25);
   const [unlimitedIterations, setUnlimitedIterations] = useState(false);
-  const [testTimeoutSeconds, setTestTimeoutSeconds] = useState(300);
+  const [testTimeoutSeconds, setTestTimeoutSeconds] = useState(600);
   const [baseBranch, setBaseBranch] = useState('');
 
   const autoResize = useCallback(() => {

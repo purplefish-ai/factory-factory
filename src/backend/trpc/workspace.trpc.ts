@@ -57,7 +57,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
           testCommand: z.string().min(1),
           targetDescription: z.string().min(1),
           maxIterations: z.number().int().min(0).optional().default(25),
-          testTimeoutSeconds: z.number().int().min(1).optional().default(300),
+          testTimeoutSeconds: z.number().int().min(1).optional().default(600),
           sessionRecycleInterval: z.number().int().min(1).optional().default(10),
         })
         .optional(),
