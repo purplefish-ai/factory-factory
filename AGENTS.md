@@ -40,6 +40,11 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Root files in `src/backend/services/*.ts` remain infrastructure/cross-cutting services (logger, config, scheduler, etc.)
 - Tests are co-located with each service module
 
+## Inngest Functions & Steps
+- When defining Inngest functions or steps, identify any inputs or outputs that could grow large (e.g., file contents, diffs, logs, embeddings, serialized data).
+- Pass large payloads via S3 links (store to S3 first, pass the URL) rather than inlining them as raw values in event data or step return values.
+- This prevents hitting Inngest's event/step payload size limits and keeps execution state lean.
+
 ## Testing Guidelines
 - Tests are run with Vitest (`pnpm test`, `pnpm test:watch`, `pnpm test:coverage`).
 - Add tests alongside the modules they cover or in existing test locations for the package you touch.
