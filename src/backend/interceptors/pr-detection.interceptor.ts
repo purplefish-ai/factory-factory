@@ -92,25 +92,31 @@ export const prDetectionInterceptor: ToolInterceptor = {
   tools: '*',
 
   async onToolComplete(event: ToolEvent, context: InterceptorContext): Promise<void> {
-    // Skip if tool execution failed
-    if (event.output?.isError) {
-      return;
-    }
-
-    // Check if this was a `gh pr create` command
+    // Check if this was a `gh pr create` command.
+    // Note: we intentionally do NOT skip on isError here. `gh pr create` can exit
+    // non-zero (e.g. "A pull request for branch 'x' already exists") while still
+    // printing the PR URL in its output. We only bail if no URL is found.
     const command = extractCommand(event);
     if (!(command && GH_PR_CREATE_REGEX.test(command))) {
       return;
     }
 
-    // Extract PR URL from output
+    // Extract PR URL from output regardless of error status
     const prUrl = extractPrUrlFromEvent(event);
     if (!prUrl) {
       logger.debug('No PR URL found in gh pr create output', {
         workspaceId: context.workspaceId,
         toolName: event.toolName,
+        isError: event.output?.isError,
       });
       return;
+    }
+
+    if (event.output?.isError) {
+      logger.info('Detected PR URL in error output of gh pr create — PR may already exist', {
+        workspaceId: context.workspaceId,
+        prUrl,
+      });
     }
 
     logger.info('Detected PR creation', {

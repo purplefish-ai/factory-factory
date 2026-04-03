@@ -145,6 +145,40 @@ describe('prDetectionInterceptor', () => {
     );
   });
 
+  it('associates PR when gh pr create exits with error but output contains URL (PR already exists)', async () => {
+    const event = createEvent({
+      toolName: 'Bash',
+      input: { command: 'gh pr create --title "test"' },
+      output: {
+        content:
+          "GraphQL: A pull request for branch 'feature-x' into branch 'main' already exists:\nhttps://github.com/purplefish-ai/factory-factory/pull/1001\n(createPullRequest)",
+        isError: true,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/1001'
+    );
+  });
+
+  it('does not call attachAndRefreshPR when gh pr create fails with no PR URL in output', async () => {
+    const event = createEvent({
+      toolName: 'Bash',
+      input: { command: 'gh pr create --title "test"' },
+      output: {
+        content: 'error: remote: Repository not found.',
+        isError: true,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+  });
+
   it('ignores non-create gh commands', async () => {
     const event = createEvent({
       toolName: 'commandExecution',
