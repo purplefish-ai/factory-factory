@@ -18,6 +18,7 @@ import type {
 import { amendHead, commitAll, getHeadDiff, hasUncommittedChanges, revertHead } from './git-ops';
 import {
   buildCrashFixPrompt,
+  buildCreatePrPrompt,
   buildCritiquePrompt,
   buildHandoffPrompt,
   buildImplementPrompt,
@@ -37,8 +38,6 @@ interface RunningLoop {
   stopRequested: boolean;
   /** Tracks the active loop promise to prevent concurrent loops on resume. */
   loopPromise: Promise<void> | null;
-  /** Synchronous flag set during resume() to prevent concurrent resume calls. */
-  resuming: boolean;
 }
 
 /**
@@ -112,7 +111,6 @@ export class AutoIterationService {
       pauseRequested: false,
       stopRequested: false,
       loopPromise: null,
-      resuming: false,
     };
     this.loops.set(workspaceId, placeholder);
 
@@ -217,43 +215,43 @@ export class AutoIterationService {
       throw new Error(`No auto-iteration loop found for workspace ${workspaceId}`);
     }
 
-    // Synchronous flag prevents concurrent resume() calls — a second caller
-    // will see resuming === true before any await yields control.
-    if (loop.resuming) {
-      return;
+    // Wait for the previous loop to fully exit before starting a new one
+    if (loop.loopPromise) {
+      const prevPromise = loop.loopPromise;
+      await prevPromise;
+      // Another resume() may have already restarted the loop while we awaited
+      if (loop.loopPromise !== null && loop.loopPromise !== prevPromise) {
+        return; // A newer loop is already running
+      }
     }
-    loop.resuming = true;
 
-    try {
-      // Wait for the previous loop to fully exit before starting a new one
-      if (loop.loopPromise) {
-        await loop.loopPromise;
-      }
+    // Re-check the map: the loop's .catch() deletes the entry on failure,
+    // so the stale `loop` reference would be orphaned from the map.
+    if (!this.loops.has(workspaceId)) {
+      throw new Error(
+        `Auto-iteration loop for workspace ${workspaceId} failed and was cleaned up — cannot resume`
+      );
+    }
 
-      // Re-check the map: the loop's .catch() deletes the entry on failure,
-      // so the stale `loop` reference would be orphaned from the map.
-      if (!this.loops.has(workspaceId)) {
-        throw new Error(
-          `Auto-iteration loop for workspace ${workspaceId} failed and was cleaned up — cannot resume`
-        );
-      }
+    loop.pauseRequested = false;
 
-      loop.pauseRequested = false;
+    // Set a sentinel promise synchronously to prevent concurrent resume() calls from
+    // both passing the swap-check guard — mirrors how start() uses a synchronous map insertion.
+    // A second concurrent resume() will see loopPromise changed and bail out at the swap-check.
+    const sentinel = Promise.resolve();
+    loop.loopPromise = sentinel;
 
-      await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
+    await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
 
-      const worktreePath = await this.workspace.getWorktreePath(workspaceId);
-      loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
-        this.logger.error('Auto-iteration loop failed on resume', {
-          workspaceId,
-          error: String(err),
-        });
-        void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
-        this.loops.delete(workspaceId);
+    const worktreePath = await this.workspace.getWorktreePath(workspaceId);
+    loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
+      this.logger.error('Auto-iteration loop failed on resume', {
+        workspaceId,
+        error: String(err),
       });
-    } finally {
-      loop.resuming = false;
-    }
+      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+      this.loops.delete(workspaceId);
+    });
   }
 
   /** Stop the loop (finishes current iteration, then stops). */
@@ -666,6 +664,21 @@ export class AutoIterationService {
       status,
       iterations: loop.progress.currentIteration,
     });
+
+    // If there were accepted changes, instruct the agent to open a PR before stopping.
+    if (loop.progress.acceptedCount > 0) {
+      try {
+        const prPrompt = buildCreatePrPrompt(loop.config, loop.progress, status);
+        await this.session.sendPrompt(loop.sessionId, prPrompt);
+        await this.session.waitForIdle(loop.sessionId);
+      } catch (err) {
+        this.logger.warn('Failed to send PR creation prompt', {
+          workspaceId: loop.workspaceId,
+          err,
+        });
+      }
+    }
+
     try {
       await this.session.stopSession(loop.sessionId);
     } catch {
