@@ -26,13 +26,13 @@ export function runTestCommand(
     child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
       if (Buffer.byteLength(stdout) > MAX_BUFFER_BYTES) {
-        stdout = stdout.slice(-MAX_BUFFER_BYTES);
+        stdout = Buffer.from(stdout).subarray(-MAX_BUFFER_BYTES).toString('utf-8');
       }
     });
     child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString();
       if (Buffer.byteLength(stderr) > MAX_BUFFER_BYTES) {
-        stderr = stderr.slice(-MAX_BUFFER_BYTES);
+        stderr = Buffer.from(stderr).subarray(-MAX_BUFFER_BYTES).toString('utf-8');
       }
     });
 

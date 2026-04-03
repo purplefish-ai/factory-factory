@@ -331,7 +331,16 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
         name: 'Auto-iteration (recycled)',
         workflow: 'auto-iteration',
       });
-      await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
+      try {
+        await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
+      } catch (err) {
+        try {
+          await sessionService.stopSession(newSession.id);
+        } catch {
+          // Best-effort cleanup
+        }
+        throw err;
+      }
       await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
       return newSession.id;
     },
