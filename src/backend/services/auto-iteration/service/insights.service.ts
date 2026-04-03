@@ -68,8 +68,14 @@ export class InsightsService {
     // contain [resolved] or [obsolete] tags, reassemble, then truncate.
     const paragraphs = raw.split(/\n{2,}/);
     const open = paragraphs.filter((p) => {
-      // Skip HTML comments — they may contain instructional mentions of tags
-      const withoutComments = p.replace(/<!--[\s\S]*?-->/g, '');
+      // Strip HTML comments — they may contain instructional mentions of tags.
+      // Loop until stable to handle nested/overlapping comment sequences.
+      let withoutComments = p;
+      let prev: string;
+      do {
+        prev = withoutComments;
+        withoutComments = withoutComments.replace(/<!--[\s\S]*?-->/g, '');
+      } while (withoutComments !== prev);
       const lower = withoutComments.toLowerCase();
       return !(lower.includes('[resolved]') || lower.includes('[obsolete]'));
     });
