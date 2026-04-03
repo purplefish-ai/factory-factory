@@ -101,6 +101,4 @@ export interface AutoIterationSnapshot {
   progress: AutoIterationProgress | null;
   /** ISO timestamp of last phase transition (only present when loop is running in-memory). */
   heartbeatAt?: string;
-  /** Current phase within an iteration (only present when loop is running in-memory). */
-  currentPhase?: string;
 }
