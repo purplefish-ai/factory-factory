@@ -5,7 +5,7 @@ export interface AutoIterationConfig {
   testCommand: string;
   targetDescription: string;
   maxIterations: number; // 0 = unlimited
-  testTimeoutSeconds: number; // default: 300
+  testTimeoutSeconds: number; // default: 600
   sessionRecycleInterval: number; // default: 10
   promptTimeoutSeconds?: number; // default: 1200 (20 minutes); undefined = no timeout
 }

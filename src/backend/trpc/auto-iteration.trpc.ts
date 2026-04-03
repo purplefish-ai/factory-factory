@@ -12,7 +12,7 @@ const autoIterationConfigSchema = z.object({
   testCommand: z.string().min(1),
   targetDescription: z.string().min(1),
   maxIterations: z.number().int().min(0).default(25),
-  testTimeoutSeconds: z.number().int().min(1).default(300),
+  testTimeoutSeconds: z.number().int().min(1).default(600),
   sessionRecycleInterval: z.number().int().min(1).default(10),
 });
 
