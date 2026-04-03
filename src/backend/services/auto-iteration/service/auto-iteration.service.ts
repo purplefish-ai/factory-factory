@@ -378,7 +378,14 @@ export class AutoIterationService {
             iteration: progress.currentIteration,
           });
           try {
-            if (await hasUncommittedChanges(worktreePath)) {
+            if (loop.currentPhase === 'implement') {
+              // During implement, changes are not yet committed — discard any uncommitted work
+              if (await hasUncommittedChanges(worktreePath)) {
+                await revertHead(worktreePath);
+              }
+            } else {
+              // After implement (measure/evaluate/critique/crash_fix), commitAll has already run
+              // — always revert HEAD to undo the iteration's committed changes
               await revertHead(worktreePath);
             }
           } catch (revertError) {

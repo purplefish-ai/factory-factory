@@ -434,7 +434,11 @@ export class SessionLifecycleService {
             logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
           }
           if (session.workflow === 'auto-iteration' && this.autoIterationExitBridge) {
-            this.autoIterationExitBridge.onAutoIterationSessionExit(session.workspaceId, sid);
+            // Only propagate death for unexpected exits — intentional stop/recycle sets
+            // isStopInProgress, so the loop should not be marked as failed in those cases.
+            if (!this.runtimeManager.isStopInProgress(sid)) {
+              this.autoIterationExitBridge.onAutoIterationSessionExit(session.workspaceId, sid);
+            }
           }
         } catch (error) {
           logger.warn('Failed to update ACP session status on exit', {
