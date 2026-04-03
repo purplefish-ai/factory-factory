@@ -17,6 +17,7 @@ import type {
 import { amendHead, commitAll, getHeadDiff, hasUncommittedChanges, revertHead } from './git-ops';
 import {
   buildCrashFixPrompt,
+  buildCreatePrPrompt,
   buildCritiquePrompt,
   buildHandoffPrompt,
   buildImplementPrompt,
@@ -634,6 +635,20 @@ export class AutoIterationService {
       status,
       iterations: loop.progress.currentIteration,
     });
+
+    // If there were accepted changes, instruct the agent to open a PR before stopping.
+    if (loop.progress.acceptedCount > 0) {
+      try {
+        const prPrompt = buildCreatePrPrompt(loop.config, loop.progress, status);
+        await this.session.sendPrompt(loop.sessionId, prPrompt);
+      } catch (err) {
+        this.logger.warn('Failed to send PR creation prompt', {
+          workspaceId: loop.workspaceId,
+          err,
+        });
+      }
+    }
+
     try {
       await this.session.stopSession(loop.sessionId);
     } catch {
