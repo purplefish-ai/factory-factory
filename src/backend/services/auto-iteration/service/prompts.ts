@@ -54,17 +54,27 @@ INSIGHTS FILE:
 - Write to it whenever you notice something worth preserving — you do not need to wait for a specific phase.
 - You may also mark old entries as [resolved] or [obsolete], and trim the file to remove clutter when appropriate.
 - Untagged entries and entries tagged [open] will be shown to you at the start of future runs.
+
+STRATEGY FILE:
+- The user may provide guidance in .factory-factory/auto-iteration-strategy.md
+- This file is read at the start of each iteration — if it exists, follow the guidance within it
+- The user can edit this file between iterations to steer your approach without restarting the loop
 ${insightsBlock}`;
 }
 
 export function buildImplementPrompt(
   currentMetricSummary: string,
   targetDescription: string,
-  truncatedTestOutput: string
+  truncatedTestOutput: string,
+  strategyContent?: string | null
 ): string {
+  const strategySection = strategyContent
+    ? `\n\nUSER STRATEGY (from .factory-factory/auto-iteration-strategy.md):\n\n<strategy>\n${escapeXmlContent(strategyContent)}\n</strategy>\n`
+    : '';
+
   return `The current metric state is: ${currentMetricSummary}
 Target: ${targetDescription}
-
+${strategySection}
 Here is the most recent test output (truncated):
 
 <test_output>
@@ -154,6 +164,22 @@ Your final task is to create a pull request for the changes made during this ses
 Do NOT make any additional code changes. Only create the pull request.`;
 }
 
+export function buildStrategyFileTemplate(config: AutoIterationConfig): string {
+  return `# Auto-Iteration Strategy
+
+Target: ${config.targetDescription}
+Test command: ${config.testCommand}
+
+## Guidance for the agent
+
+<!--
+Edit this file between iterations to steer the agent.
+The agent reads it fresh at the start of each iteration.
+You can add hints, constraints, or focus areas below.
+-->
+`;
+}
+
 export function buildHandoffPrompt(
   config: AutoIterationConfig,
   entries: AgentLogbookEntry[],
@@ -197,5 +223,9 @@ CURRENT STATE:
 - Target: ${config.targetDescription}
 - Iterations completed: ${entries.length}, Accepted: ${accepted}, Rejected: ${rejected}
 ${insightsBlock}
-The codebase already contains all accepted changes. Continue iterating.`;
+The codebase already contains all accepted changes.
+
+NOTE: The user may have placed guidance in .factory-factory/auto-iteration-strategy.md — if it exists, follow its guidance for future iterations.
+
+Continue iterating.`;
 }

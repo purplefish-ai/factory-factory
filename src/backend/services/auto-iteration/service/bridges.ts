@@ -44,4 +44,8 @@ export interface AutoIterationLogbookBridge {
   ): Promise<void>;
   appendEntry(worktreePath: string, entry: AgentLogbookEntry): Promise<void>;
   read(worktreePath: string): Promise<AgentLogbook | null>;
+  /** Read the user-editable strategy file. Returns null if absent. */
+  readStrategyFile(worktreePath: string): Promise<string | null>;
+  /** Seed the default strategy file template. No-op if the file already exists. */
+  writeStrategyFile(worktreePath: string, content: string): Promise<void>;
 }

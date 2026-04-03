@@ -283,6 +283,25 @@ function BaselineSection({ baseline }: { baseline: LogbookData['baseline'] }) {
   );
 }
 
+function computeIterationsPerHour(startedAt: string, currentIteration: number): number | null {
+  if (currentIteration < 1) {
+    return null;
+  }
+  const elapsedMs = Date.now() - new Date(startedAt).getTime();
+  if (elapsedMs <= 0) {
+    return null;
+  }
+  const elapsedHours = elapsedMs / 3_600_000;
+  return currentIteration / elapsedHours;
+}
+
+function formatIterationsPerHour(rate: number): string {
+  if (rate >= 10) {
+    return `${Math.round(rate)} iter/hr`;
+  }
+  return `${rate.toFixed(1)} iter/hr`;
+}
+
 function ProgressSummary({
   progress,
   config,
@@ -293,6 +312,7 @@ function ProgressSummary({
   status: string;
 }) {
   const maxLabel = config.maxIterations === 0 ? '∞' : String(config.maxIterations);
+  const iterPerHour = computeIterationsPerHour(progress.startedAt, progress.currentIteration);
 
   return (
     <div className="space-y-2 p-3 border-b">
@@ -309,9 +329,17 @@ function ProgressSummary({
           />
           <span className="text-xs font-medium">{STATUS_LABELS[status] ?? status}</span>
         </div>
-        <span className="text-xs text-muted-foreground font-mono">
-          {progress.currentIteration} / {maxLabel}
-        </span>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+          <span>
+            {progress.currentIteration} / {maxLabel}
+          </span>
+          {iterPerHour !== null && (
+            <>
+              <span className="text-muted-foreground/50">·</span>
+              <span>{formatIterationsPerHour(iterPerHour)}</span>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-4 gap-1 text-center">

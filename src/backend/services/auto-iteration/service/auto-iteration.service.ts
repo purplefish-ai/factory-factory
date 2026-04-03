@@ -31,6 +31,7 @@ import {
   buildHandoffPrompt,
   buildImplementPrompt,
   buildMeasurePrompt,
+  buildStrategyFileTemplate,
   buildSystemPrompt,
 } from './prompts';
 import { runTestCommand, truncateTestOutput } from './test-runner.service';
@@ -182,6 +183,9 @@ export class AutoIterationService {
         baselineOutput,
         baselineEval.metricSummary
       );
+
+      // Seed the default strategy file (no-op if user already created one)
+      await this.logbook.writeStrategyFile(worktreePath, buildStrategyFileTemplate(config));
 
       const progress: AutoIterationProgress = {
         currentIteration: 0,
@@ -502,10 +506,14 @@ export class AutoIterationService {
     const testOutput = truncateTestOutput(`${testResult.stdout}\n${testResult.stderr}`);
     await this.emitPhase(loop, 'implementing', testOutput);
 
+    // Read user strategy file fresh each iteration (may have been edited between iterations)
+    const strategyContent = await this.logbook.readStrategyFile(worktreePath);
+
     const implementPrompt = buildImplementPrompt(
       metricBefore,
       config.targetDescription,
-      testOutput
+      testOutput,
+      strategyContent
     );
     await this.session.sendPrompt(loop.sessionId, implementPrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
