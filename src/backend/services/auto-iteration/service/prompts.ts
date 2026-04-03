@@ -1,4 +1,8 @@
-import type { AgentLogbookEntry, AutoIterationConfig } from './auto-iteration.types';
+import type {
+  AgentLogbookEntry,
+  AutoIterationConfig,
+  AutoIterationProgress,
+} from './auto-iteration.types';
 
 /**
  * Escape content interpolated into XML-like prompt blocks to prevent
@@ -101,6 +105,33 @@ Respond with ONLY a JSON object (no markdown, no explanation):
   "approved": true/false,
   "notes": "..."
 }`;
+}
+
+export function buildCreatePrPrompt(
+  config: AutoIterationConfig,
+  progress: AutoIterationProgress,
+  status: string
+): string {
+  const statusLabel =
+    status === 'COMPLETED'
+      ? 'the target was reached'
+      : status === 'MAX_ITERATIONS'
+        ? `the maximum of ${config.maxIterations} iterations was reached`
+        : `the run ended (${status.toLowerCase()})`;
+
+  return `The auto-iteration session is finishing — ${statusLabel}.
+
+RESULTS:
+- Target: ${config.targetDescription}
+- Iterations completed: ${progress.currentIteration}
+- Accepted improvements: ${progress.acceptedCount}
+- Metric: ${progress.baselineMetricSummary} → ${progress.currentMetricSummary}
+
+Your final task is to create a pull request for the changes made during this session. Run \`gh pr create\` with:
+- A concise title describing the improvement (e.g. "Improve <metric> via auto-iteration")
+- A body summarising what changed and what the metric improvement was
+
+Do NOT make any additional code changes. Only create the pull request.`;
 }
 
 export function buildHandoffPrompt(
