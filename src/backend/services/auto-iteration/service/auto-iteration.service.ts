@@ -41,6 +41,18 @@ type Logger = ReturnType<typeof createLogger>;
 /** Default prompt timeout: 20 minutes. */
 const DEFAULT_PROMPT_TIMEOUT_SECONDS = 1200;
 
+/** Cap streaming lastTestOutput at ~512K characters to prevent unbounded in-memory growth. */
+const MAX_STREAMING_OUTPUT_CHARS = 512 * 1024;
+
+/** Append a chunk to lastTestOutput, keeping only the tail when the cap is exceeded. */
+function appendStreamingOutput(current: string | null, chunk: string): string {
+  const updated = (current ?? '') + chunk;
+  if (updated.length > MAX_STREAMING_OUTPUT_CHARS) {
+    return updated.slice(-MAX_STREAMING_OUTPUT_CHARS);
+  }
+  return updated;
+}
+
 /** Get prompt timeout in milliseconds from config, or the default. */
 function getPromptTimeoutMs(config: AutoIterationConfig): number | undefined {
   const seconds = config.promptTimeoutSeconds ?? DEFAULT_PROMPT_TIMEOUT_SECONDS;
@@ -127,6 +139,7 @@ export class AutoIterationService {
         lastIterationAt: null,
         currentPhase: 'baseline',
         lastTestOutput: null,
+        lastEvalDecision: null,
       },
       pauseRequested: false,
       stopRequested: false,
@@ -155,10 +168,17 @@ export class AutoIterationService {
       // Run baseline measurement
       this.logger.info('Running baseline measurement', { workspaceId });
       await this.emitPhase(placeholder, 'baseline');
+      placeholder.progress.lastTestOutput = null;
       const baselineResult = await runTestCommand(
         worktreePath,
         config.testCommand,
-        config.testTimeoutSeconds
+        config.testTimeoutSeconds,
+        (chunk) => {
+          placeholder.progress.lastTestOutput = appendStreamingOutput(
+            placeholder.progress.lastTestOutput,
+            chunk
+          );
+        }
       );
       const baselineOutput = truncateTestOutput(
         `${baselineResult.stdout}\n${baselineResult.stderr}`
@@ -200,6 +220,7 @@ export class AutoIterationService {
         lastIterationAt: null,
         currentPhase: 'idle',
         lastTestOutput: baselineOutput,
+        lastEvalDecision: null,
       };
 
       // Update the placeholder with real data
@@ -496,12 +517,19 @@ export class AutoIterationService {
     const { config, progress } = loop;
     const metricBefore = progress.currentMetricSummary;
 
+    // Clear previous eval decision at the start of each iteration
+    loop.progress.lastEvalDecision = null;
+
     // --- IMPLEMENT PHASE ---
     await this.emitPhase(loop, 'measuring');
+    loop.progress.lastTestOutput = null;
     const testResult = await runTestCommand(
       worktreePath,
       config.testCommand,
-      config.testTimeoutSeconds
+      config.testTimeoutSeconds,
+      (chunk) => {
+        loop.progress.lastTestOutput = appendStreamingOutput(loop.progress.lastTestOutput, chunk);
+      }
     );
     const testOutput = truncateTestOutput(`${testResult.stdout}\n${testResult.stderr}`);
     await this.emitPhase(loop, 'implementing', testOutput);
@@ -553,10 +581,14 @@ export class AutoIterationService {
 
     // Run test command after changes
     await this.emitPhase(loop, 'measuring');
+    loop.progress.lastTestOutput = null;
     let postResult = await runTestCommand(
       worktreePath,
       config.testCommand,
-      config.testTimeoutSeconds
+      config.testTimeoutSeconds,
+      (chunk) => {
+        loop.progress.lastTestOutput = appendStreamingOutput(loop.progress.lastTestOutput, chunk);
+      }
     );
 
     // --- CRASH HANDLING ---
@@ -614,6 +646,12 @@ export class AutoIterationService {
     await this.session.waitForIdle(loop.sessionId);
     const measureResponse = await this.session.getLastAssistantMessage(loop.sessionId);
     const evalResult = parseMetricEvaluation(measureResponse);
+
+    // Surface eval decision in real-time for UI display
+    loop.progress.lastEvalDecision = {
+      improved: evalResult.improved,
+      metricSummary: evalResult.metricSummary,
+    };
 
     if (!evalResult.improved) {
       await revertHead(worktreePath);

@@ -38,6 +38,7 @@ interface IterationProgress {
   lastIterationAt: string | null;
   currentPhase?: string;
   lastTestOutput?: string | null;
+  lastEvalDecision?: { improved: boolean; metricSummary: string } | null;
 }
 
 interface IterationConfig {
@@ -219,7 +220,7 @@ function PhaseIndicator({ phase }: { phase: string }) {
   );
 }
 
-function LiveTestOutput({ output }: { output: string }) {
+function LiveTestOutput({ output }: { output: string | null | undefined }) {
   // Auto-scroll to bottom on each render (component only re-renders when output prop changes)
   const scrollToBottom = (el: HTMLPreElement | null) => {
     if (el) {
@@ -231,14 +232,21 @@ function LiveTestOutput({ output }: { output: string }) {
     <div className="border-b">
       <div className="flex items-center gap-1 px-3 py-1 text-[10px] text-muted-foreground bg-muted/20">
         <Terminal className="h-2.5 w-2.5" />
-        Latest test output
+        Test output
       </div>
-      <pre
-        ref={scrollToBottom}
-        className="text-[11px] font-mono whitespace-pre-wrap break-all px-3 py-1.5 max-h-40 overflow-y-auto text-muted-foreground"
-      >
-        {output}
-      </pre>
+      {output ? (
+        <pre
+          ref={scrollToBottom}
+          className="text-[11px] font-mono whitespace-pre-wrap break-all px-3 py-1.5 max-h-40 overflow-y-auto text-muted-foreground"
+        >
+          {output}
+        </pre>
+      ) : (
+        <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-muted-foreground">
+          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          Waiting for output...
+        </div>
+      )}
     </div>
   );
 }
@@ -622,7 +630,9 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   const isRunning = status === 'RUNNING';
   const currentPhase = progress?.currentPhase ?? 'idle';
   const lastTestOutput = progress?.lastTestOutput;
-  const showLiveOutput = isRunning && lastTestOutput && TEST_OUTPUT_PHASES.has(currentPhase);
+  const lastEvalDecision = progress?.lastEvalDecision;
+  const showLiveOutput = isRunning && TEST_OUTPUT_PHASES.has(currentPhase);
+  const isEvaluating = isRunning && currentPhase === 'evaluating';
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -639,7 +649,31 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
 
       {isRunning && <PhaseIndicator phase={currentPhase} />}
 
-      {showLiveOutput && <LiveTestOutput output={lastTestOutput} />}
+      {isRunning && lastEvalDecision && (
+        <div
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1 text-[11px] border-b',
+            lastEvalDecision.improved
+              ? 'bg-green-500/5 text-green-600'
+              : 'bg-orange-500/5 text-orange-600'
+          )}
+        >
+          <span>{lastEvalDecision.improved ? '↑ Improved' : '↓ Regressed'}:</span>
+          <span className="text-muted-foreground truncate">{lastEvalDecision.metricSummary}</span>
+        </div>
+      )}
+
+      {showLiveOutput && (
+        <>
+          <LiveTestOutput output={lastTestOutput} />
+          {isEvaluating && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground border-b bg-primary/5">
+              <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
+              <span className="text-primary">Evaluating with LLM...</span>
+            </div>
+          )}
+        </>
+      )}
 
       <TabBar active={activeTab} onChange={setActiveTab} />
 
