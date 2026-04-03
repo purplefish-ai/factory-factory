@@ -41,6 +41,18 @@ type Logger = ReturnType<typeof createLogger>;
 /** Default prompt timeout: 20 minutes. */
 const DEFAULT_PROMPT_TIMEOUT_SECONDS = 1200;
 
+/** Cap streaming lastTestOutput at 512 KB to prevent unbounded in-memory growth. */
+const MAX_STREAMING_OUTPUT_BYTES = 512 * 1024;
+
+/** Append a chunk to lastTestOutput, keeping only the tail when the cap is exceeded. */
+function appendStreamingOutput(current: string | null, chunk: string): string {
+  const updated = (current ?? '') + chunk;
+  if (updated.length > MAX_STREAMING_OUTPUT_BYTES) {
+    return updated.slice(-MAX_STREAMING_OUTPUT_BYTES);
+  }
+  return updated;
+}
+
 /** Get prompt timeout in milliseconds from config, or the default. */
 function getPromptTimeoutMs(config: AutoIterationConfig): number | undefined {
   const seconds = config.promptTimeoutSeconds ?? DEFAULT_PROMPT_TIMEOUT_SECONDS;
@@ -162,7 +174,10 @@ export class AutoIterationService {
         config.testCommand,
         config.testTimeoutSeconds,
         (chunk) => {
-          placeholder.progress.lastTestOutput = (placeholder.progress.lastTestOutput ?? '') + chunk;
+          placeholder.progress.lastTestOutput = appendStreamingOutput(
+            placeholder.progress.lastTestOutput,
+            chunk
+          );
         }
       );
       const baselineOutput = truncateTestOutput(
@@ -513,7 +528,7 @@ export class AutoIterationService {
       config.testCommand,
       config.testTimeoutSeconds,
       (chunk) => {
-        loop.progress.lastTestOutput = (loop.progress.lastTestOutput ?? '') + chunk;
+        loop.progress.lastTestOutput = appendStreamingOutput(loop.progress.lastTestOutput, chunk);
       }
     );
     const testOutput = truncateTestOutput(`${testResult.stdout}\n${testResult.stderr}`);
@@ -572,7 +587,7 @@ export class AutoIterationService {
       config.testCommand,
       config.testTimeoutSeconds,
       (chunk) => {
-        loop.progress.lastTestOutput = (loop.progress.lastTestOutput ?? '') + chunk;
+        loop.progress.lastTestOutput = appendStreamingOutput(loop.progress.lastTestOutput, chunk);
       }
     );
 
