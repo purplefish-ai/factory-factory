@@ -10,6 +10,16 @@ export interface AutoIterationConfig {
   promptTimeoutSeconds?: number; // default: 1200 (20 minutes); undefined = no timeout
 }
 
+/** Phase of the current iteration for real-time UI display. */
+export type IterationPhase =
+  | 'baseline'
+  | 'implementing'
+  | 'measuring'
+  | 'evaluating'
+  | 'critiquing'
+  | 'recycling'
+  | 'idle';
+
 /** Progress snapshot for an auto-iteration workspace. Stored as JSON in Workspace.autoIterationProgress. */
 export interface AutoIterationProgress {
   currentIteration: number;
@@ -22,6 +32,10 @@ export interface AutoIterationProgress {
   sessionRecycleCount: number;
   startedAt: string;
   lastIterationAt: string | null;
+  /** Current phase of the active iteration — drives the phase indicator in the UI. */
+  currentPhase: IterationPhase;
+  /** Most recent test command output (truncated). Updated after each test run for live display. */
+  lastTestOutput: string | null;
 }
 
 /** A single entry in the agent logbook. */

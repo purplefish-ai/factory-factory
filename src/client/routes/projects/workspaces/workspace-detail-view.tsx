@@ -13,6 +13,7 @@ import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/comp
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
+import { AutoIterationProgressBanner } from './auto-iteration-progress-banner';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
@@ -175,6 +176,11 @@ export function WorkspaceDetailView({
         workspaceInitStatus={workspaceState.workspaceInitStatus}
         setupWarningDismissed={workspaceState.setupWarningDismissed}
         dismissSetupWarning={workspaceState.dismissSetupWarning}
+      />
+
+      <AutoIterationProgressBanner
+        workspaceId={workspaceState.workspaceId}
+        mode={workspaceState.workspace?.mode}
       />
 
       {isMobile ? (

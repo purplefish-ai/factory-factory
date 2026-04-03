@@ -6,6 +6,7 @@ import type {
   AutoIterationProgress,
   AutoIterationSnapshot,
   CritiqueResult,
+  IterationPhase,
   MetricEvaluation,
   TestCommandResult,
 } from './auto-iteration.types';
@@ -48,10 +49,8 @@ interface RunningLoop {
   failedByDeath: boolean;
   /** Tracks the active loop promise to prevent concurrent loops on resume. */
   loopPromise: Promise<void> | null;
-  /** Timestamp of last phase transition, for observability. */
+  /** Timestamp of last phase transition, for observability/staleness detection. */
   heartbeatAt: Date;
-  /** Current phase within an iteration, for observability. */
-  currentPhase: string;
 }
 
 /**
@@ -119,13 +118,14 @@ export class AutoIterationService {
         sessionRecycleCount: 0,
         startedAt: new Date().toISOString(),
         lastIterationAt: null,
+        currentPhase: 'baseline',
+        lastTestOutput: null,
       },
       pauseRequested: false,
       stopRequested: false,
       failedByDeath: false,
       loopPromise: null,
       heartbeatAt: new Date(),
-      currentPhase: 'setup',
     };
     this.loops.set(workspaceId, placeholder);
 
@@ -139,10 +139,12 @@ export class AutoIterationService {
         initialPrompt: systemPrompt,
         startupModePreset: 'non_interactive',
       });
+      placeholder.sessionId = sessionId;
       await this.workspace.updateAutoIterationSessionId(workspaceId, sessionId);
 
       // Run baseline measurement
       this.logger.info('Running baseline measurement', { workspaceId });
+      await this.emitPhase(placeholder, 'baseline');
       const baselineResult = await runTestCommand(
         worktreePath,
         config.testCommand,
@@ -151,6 +153,7 @@ export class AutoIterationService {
       const baselineOutput = truncateTestOutput(
         `${baselineResult.stdout}\n${baselineResult.stderr}`
       );
+      await this.emitPhase(placeholder, 'evaluating', baselineOutput);
 
       // Get baseline metric evaluation from LLM
       const baselinePrompt = buildMeasurePrompt(
@@ -182,6 +185,8 @@ export class AutoIterationService {
         sessionRecycleCount: 0,
         startedAt: new Date().toISOString(),
         lastIterationAt: null,
+        currentPhase: 'idle',
+        lastTestOutput: baselineOutput,
       };
 
       // Update the placeholder with real data
@@ -284,7 +289,6 @@ export class AutoIterationService {
       config: loop.config,
       progress: loop.progress,
       heartbeatAt: loop.heartbeatAt.toISOString(),
-      currentPhase: loop.currentPhase,
     };
   }
 
@@ -311,6 +315,22 @@ export class AutoIterationService {
     void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
     void this.workspace.updateAutoIterationSessionId(workspaceId, null);
     this.loops.delete(workspaceId);
+  }
+
+  // --- Phase tracking ---
+
+  /** Update the current phase and optionally test output, then persist to DB for UI polling. */
+  private async emitPhase(
+    loop: RunningLoop,
+    phase: IterationPhase,
+    testOutput?: string
+  ): Promise<void> {
+    loop.progress.currentPhase = phase;
+    loop.heartbeatAt = new Date();
+    if (testOutput !== undefined) {
+      loop.progress.lastTestOutput = testOutput;
+    }
+    await this.workspace.updateAutoIterationProgress(loop.workspaceId, loop.progress);
   }
 
   // --- Core loop ---
@@ -345,6 +365,7 @@ export class AutoIterationService {
           workspaceId,
           iteration: progress.currentIteration,
         });
+        await this.emitPhase(loop, 'recycling');
         const logbook = await this.logbook.read(worktreePath);
         const handoffPrompt = buildHandoffPrompt(
           config,
@@ -378,7 +399,7 @@ export class AutoIterationService {
             iteration: progress.currentIteration,
           });
           try {
-            if (loop.currentPhase === 'implement') {
+            if (loop.progress.currentPhase === 'implementing') {
               // During implement, changes are not yet committed — discard any uncommitted work
               if (await hasUncommittedChanges(worktreePath)) {
                 await revertHead(worktreePath);
@@ -441,6 +462,7 @@ export class AutoIterationService {
           break;
       }
 
+      progress.currentPhase = 'idle';
       await this.logbook.appendEntry(worktreePath, entry);
       await this.workspace.updateAutoIterationProgress(workspaceId, progress);
 
@@ -462,14 +484,14 @@ export class AutoIterationService {
     const metricBefore = progress.currentMetricSummary;
 
     // --- IMPLEMENT PHASE ---
-    loop.heartbeatAt = new Date();
-    loop.currentPhase = 'implement';
+    await this.emitPhase(loop, 'measuring');
     const testResult = await runTestCommand(
       worktreePath,
       config.testCommand,
       config.testTimeoutSeconds
     );
     const testOutput = truncateTestOutput(`${testResult.stdout}\n${testResult.stderr}`);
+    await this.emitPhase(loop, 'implementing', testOutput);
 
     const implementPrompt = buildImplementPrompt(
       metricBefore,
@@ -507,14 +529,13 @@ export class AutoIterationService {
     }
 
     // --- MEASURE PHASE ---
-    loop.heartbeatAt = new Date();
-    loop.currentPhase = 'measure';
     let commitSha = await commitAll(
       worktreePath,
       `auto-iteration #${progress.currentIteration}: ${changeDescription.slice(0, 72)}`
     );
 
     // Run test command after changes
+    await this.emitPhase(loop, 'measuring');
     let postResult = await runTestCommand(
       worktreePath,
       config.testCommand,
@@ -569,9 +590,8 @@ export class AutoIterationService {
     }
 
     // --- EVALUATE PHASE ---
-    loop.heartbeatAt = new Date();
-    loop.currentPhase = 'evaluate';
     const postOutput = truncateTestOutput(`${postResult.stdout}\n${postResult.stderr}`);
+    await this.emitPhase(loop, 'evaluating', postOutput);
     const measurePrompt = buildMeasurePrompt(postOutput, metricBefore);
     await this.session.sendPrompt(loop.sessionId, measurePrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
@@ -603,8 +623,7 @@ export class AutoIterationService {
     }
 
     // --- CRITIQUE PHASE ---
-    loop.heartbeatAt = new Date();
-    loop.currentPhase = 'critique';
+    await this.emitPhase(loop, 'critiquing');
     const diff = await getHeadDiff(worktreePath);
     const truncatedDiff = diff.length > 5000 ? `${diff.slice(0, 5000)}\n... (truncated)` : diff;
     const critiquePrompt = buildCritiquePrompt(truncatedDiff);
@@ -680,7 +699,6 @@ export class AutoIterationService {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       attemptsMade = attempt;
       loop.heartbeatAt = new Date();
-      loop.currentPhase = `crash_fix_${attempt}`;
       // Use the most recent failure output so the agent sees what's still broken
       const errorOutput = truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100);
       const fixPrompt = buildCrashFixPrompt(errorOutput, attempt);
