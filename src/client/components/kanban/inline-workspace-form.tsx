@@ -164,6 +164,7 @@ export function InlineWorkspaceForm({
   const [maxIterations, setMaxIterations] = useState(25);
   const [unlimitedIterations, setUnlimitedIterations] = useState(false);
   const [testTimeoutSeconds, setTestTimeoutSeconds] = useState(300);
+  const [baseBranch, setBaseBranch] = useState('');
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -288,6 +289,11 @@ export function InlineWorkspaceForm({
     testTimeoutSeconds,
   });
 
+  const getAutoIterationBranchName = () => {
+    const trimmed = baseBranch.trim();
+    return trimmed || undefined;
+  };
+
   const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' = mode) => {
     if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
       toast.error('Auto-iteration requires a test command and target description.');
@@ -308,6 +314,7 @@ export function InlineWorkspaceForm({
       provider,
       mode: launchMode,
       autoIterationConfig: launchMode === 'AUTO_ITERATION' ? buildAutoIterationConfig() : undefined,
+      branchName: launchMode === 'AUTO_ITERATION' ? getAutoIterationBranchName() : undefined,
     });
   };
 
@@ -435,6 +442,16 @@ export function InlineWorkspaceForm({
                   disabled={isCreating}
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Base branch (optional)</Label>
+              <Input
+                className="h-7 text-xs font-mono"
+                placeholder="defaults to project default branch"
+                value={baseBranch}
+                onChange={(e) => setBaseBranch(e.target.value)}
+                disabled={isCreating}
+              />
             </div>
           </div>
         )}

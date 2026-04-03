@@ -8,6 +8,7 @@ import {
   Play,
   RefreshCw,
   Square,
+  Terminal,
   XCircle,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -31,6 +32,8 @@ interface IterationProgress {
   sessionRecycleCount: number;
   startedAt: string;
   lastIterationAt: string | null;
+  currentPhase?: string;
+  lastTestOutput?: string | null;
 }
 
 interface IterationConfig {
@@ -59,6 +62,11 @@ interface LogbookEntry {
   critiqueApproved: boolean | null;
 }
 
+interface LogbookData {
+  baseline?: { testOutput: string; metricSummary: string; evaluatedAt: string };
+  iterations: LogbookEntry[];
+}
+
 const STATUS_LABELS: Record<string, string> = {
   IDLE: 'Idle',
   RUNNING: 'Running',
@@ -67,6 +75,16 @@ const STATUS_LABELS: Record<string, string> = {
   MAX_ITERATIONS: 'Max iterations reached',
   STOPPED: 'Stopped',
   FAILED: 'Failed',
+};
+
+const PHASE_LABELS: Record<string, string> = {
+  baseline: 'Running baseline test...',
+  implementing: 'Agent implementing changes...',
+  measuring: 'Running test command...',
+  evaluating: 'Evaluating metrics...',
+  critiquing: 'Critiquing changes...',
+  recycling: 'Recycling session...',
+  idle: 'Between iterations',
 };
 
 const ENTRY_STATUS_CONFIG: Record<
@@ -78,6 +96,30 @@ const ENTRY_STATUS_CONFIG: Record<
   rejected_critique: { icon: XCircle, label: 'Rejected (critique)', color: 'text-amber-500' },
   crashed: { icon: OctagonX, label: 'Crashed', color: 'text-red-500' },
 };
+
+function TestOutputBlock({ output, maxLines = 30 }: { output: string; maxLines?: number }) {
+  const [showAll, setShowAll] = useState(false);
+  const lines = output.split('\n');
+  const truncated = !showAll && lines.length > maxLines;
+  const displayText = truncated ? lines.slice(-maxLines).join('\n') : output;
+
+  return (
+    <div className="relative">
+      {truncated && (
+        <button
+          type="button"
+          className="text-[10px] text-primary hover:underline mb-0.5"
+          onClick={() => setShowAll(true)}
+        >
+          Show all {lines.length} lines
+        </button>
+      )}
+      <pre className="text-[11px] font-mono whitespace-pre-wrap break-all bg-muted/50 rounded p-1.5 max-h-48 overflow-y-auto text-muted-foreground">
+        {displayText}
+      </pre>
+    </div>
+  );
+}
 
 function IterationEntry({ entry }: { entry: LogbookEntry }) {
   const [expanded, setExpanded] = useState(false);
@@ -137,6 +179,100 @@ function IterationEntry({ entry }: { entry: LogbookEntry }) {
           {entry.changeDescription && (
             <div className="text-muted-foreground">{entry.changeDescription.slice(0, 500)}</div>
           )}
+          {entry.testOutput && (
+            <div className="mt-1">
+              <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-0.5">
+                <Terminal className="h-2.5 w-2.5" />
+                Test output
+              </div>
+              <TestOutputBlock output={entry.testOutput} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhaseIndicator({ phase }: { phase: string }) {
+  const label = PHASE_LABELS[phase] ?? phase;
+  const isActive = phase !== 'idle';
+
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1.5 text-xs border-b',
+        isActive ? 'bg-primary/5 text-primary' : 'bg-muted/20 text-muted-foreground'
+      )}
+    >
+      {isActive ? (
+        <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+      ) : (
+        <RefreshCw className="h-3 w-3 shrink-0" />
+      )}
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function LiveTestOutput({ output }: { output: string }) {
+  // Auto-scroll to bottom on each render (component only re-renders when output prop changes)
+  const scrollToBottom = (el: HTMLPreElement | null) => {
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
+  };
+
+  return (
+    <div className="border-b">
+      <div className="flex items-center gap-1 px-3 py-1 text-[10px] text-muted-foreground bg-muted/20">
+        <Terminal className="h-2.5 w-2.5" />
+        Latest test output
+      </div>
+      <pre
+        ref={scrollToBottom}
+        className="text-[11px] font-mono whitespace-pre-wrap break-all px-3 py-1.5 max-h-40 overflow-y-auto text-muted-foreground"
+      >
+        {output}
+      </pre>
+    </div>
+  );
+}
+
+function BaselineSection({ baseline }: { baseline: LogbookData['baseline'] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!baseline) {
+    return null;
+  }
+
+  return (
+    <div className="border-b border-border/50">
+      <button
+        type="button"
+        className="w-full flex items-start gap-2 p-2 text-left hover:bg-muted/30 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
+        )}
+        <RefreshCw className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-medium">Baseline</span>
+            <span className="text-xs text-blue-500">{baseline.metricSummary}</span>
+          </div>
+        </div>
+      </button>
+      {expanded && baseline.testOutput && (
+        <div className="px-8 pb-2">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-0.5">
+            <Terminal className="h-2.5 w-2.5" />
+            Baseline test output
+          </div>
+          <TestOutputBlock output={baseline.testOutput} />
         </div>
       )}
     </div>
@@ -213,8 +349,93 @@ function ProgressSummary({
   );
 }
 
-export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
+const TEST_OUTPUT_PHASES = new Set(['evaluating', 'measuring', 'implementing', 'baseline']);
+
+const TERMINAL_STATUSES = new Set(['FAILED', 'STOPPED', 'MAX_ITERATIONS', 'COMPLETED']);
+
+function AutoIterationControls({ workspaceId, status }: { workspaceId: string; status: string }) {
+  const isRunning = status === 'RUNNING';
+  const isPaused = status === 'PAUSED';
+  const isTerminal = TERMINAL_STATUSES.has(status);
+
   const utils = trpc.useUtils();
+  const invalidate = () => void utils.autoIteration.getStatus.invalidate({ workspaceId });
+  const pauseMutation = trpc.autoIteration.pause.useMutation({ onSuccess: invalidate });
+  const resumeMutation = trpc.autoIteration.resume.useMutation({ onSuccess: invalidate });
+  const stopMutation = trpc.autoIteration.stop.useMutation({ onSuccess: invalidate });
+  const startMutation = trpc.autoIteration.start.useMutation({ onSuccess: invalidate });
+
+  return (
+    <TooltipProvider>
+      {isRunning && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => pauseMutation.mutate({ workspaceId })}
+              disabled={pauseMutation.isPending}
+            >
+              <Pause className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Pause after current iteration</TooltipContent>
+        </Tooltip>
+      )}
+      {isPaused && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => resumeMutation.mutate({ workspaceId })}
+              disabled={resumeMutation.isPending}
+            >
+              <Play className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Resume iteration</TooltipContent>
+        </Tooltip>
+      )}
+      {(isRunning || isPaused) && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-destructive"
+              onClick={() => stopMutation.mutate({ workspaceId })}
+              disabled={stopMutation.isPending}
+            >
+              <Square className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Stop iteration</TooltipContent>
+        </Tooltip>
+      )}
+      {isTerminal && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => startMutation.mutate({ workspaceId })}
+              disabled={startMutation.isPending}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', startMutation.isPending && 'animate-spin')} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Restart auto-iteration</TooltipContent>
+        </Tooltip>
+      )}
+    </TooltipProvider>
+  );
+}
+
+export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   const { data: statusData, isLoading: statusLoading } = trpc.autoIteration.getStatus.useQuery(
     { workspaceId },
     { refetchInterval: 3000 }
@@ -223,16 +444,6 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
     { workspaceId },
     { refetchInterval: 5000 }
   );
-
-  const pauseMutation = trpc.autoIteration.pause.useMutation({
-    onSuccess: () => void utils.autoIteration.getStatus.invalidate({ workspaceId }),
-  });
-  const resumeMutation = trpc.autoIteration.resume.useMutation({
-    onSuccess: () => void utils.autoIteration.getStatus.invalidate({ workspaceId }),
-  });
-  const stopMutation = trpc.autoIteration.stop.useMutation({
-    onSuccess: () => void utils.autoIteration.getStatus.invalidate({ workspaceId }),
-  });
 
   if (statusLoading) {
     return (
@@ -245,64 +456,18 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   const status = statusData?.status ?? 'IDLE';
   const progress = statusData?.progress as IterationProgress | null;
   const config = statusData?.config as IterationConfig | null;
-  const iterations = (logbookData?.iterations ?? []) as LogbookEntry[];
+  const logbook = logbookData as LogbookData | null;
+  const iterations = (logbook?.iterations ?? []) as LogbookEntry[];
   const isRunning = status === 'RUNNING';
-  const isPaused = status === 'PAUSED';
+  const currentPhase = progress?.currentPhase ?? 'idle';
+  const lastTestOutput = progress?.lastTestOutput;
+  const showLiveOutput = isRunning && lastTestOutput && TEST_OUTPUT_PHASES.has(currentPhase);
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Controls */}
       <div className="flex items-center gap-1 p-2 border-b bg-muted/30">
-        <TooltipProvider>
-          {isRunning && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => pauseMutation.mutate({ workspaceId })}
-                  disabled={pauseMutation.isPending}
-                >
-                  <Pause className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Pause after current iteration</TooltipContent>
-            </Tooltip>
-          )}
-          {isPaused && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
-                  onClick={() => resumeMutation.mutate({ workspaceId })}
-                  disabled={resumeMutation.isPending}
-                >
-                  <Play className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Resume iteration</TooltipContent>
-            </Tooltip>
-          )}
-          {(isRunning || isPaused) && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 text-destructive"
-                  onClick={() => stopMutation.mutate({ workspaceId })}
-                  disabled={stopMutation.isPending}
-                >
-                  <Square className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Stop iteration</TooltipContent>
-            </Tooltip>
-          )}
-        </TooltipProvider>
+        <AutoIterationControls workspaceId={workspaceId} status={status} />
         <span className="ml-auto text-[10px] text-muted-foreground">
           Auto-iteration {STATUS_LABELS[status]?.toLowerCase() ?? status}
         </span>
@@ -313,9 +478,15 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
         <ProgressSummary progress={progress} config={config} status={status} />
       )}
 
+      {/* Phase indicator — only when actively running */}
+      {isRunning && <PhaseIndicator phase={currentPhase} />}
+
+      {/* Live test output — show when we have output and are running a test-related phase */}
+      {showLiveOutput && <LiveTestOutput output={lastTestOutput} />}
+
       {/* Iteration log */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {iterations.length === 0 ? (
+        {iterations.length === 0 && !logbook?.baseline ? (
           <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
             {isRunning ? 'Running baseline measurement...' : 'No iterations yet'}
           </div>
@@ -324,6 +495,7 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
             {[...iterations].reverse().map((entry) => (
               <IterationEntry key={entry.iteration} entry={entry} />
             ))}
+            {logbook?.baseline && <BaselineSection baseline={logbook.baseline} />}
           </div>
         )}
       </div>
