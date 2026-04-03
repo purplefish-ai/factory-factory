@@ -1,6 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { autoIterationService, logbookService } from '@/backend/services/auto-iteration';
+import {
+  autoIterationService,
+  insightsService,
+  logbookService,
+} from '@/backend/services/auto-iteration';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { publicProcedure, router } from './trpc';
 
@@ -148,5 +152,34 @@ export const autoIterationRouter = router({
         return null;
       }
       return logbookService.read(workspace.worktreePath);
+    }),
+
+  /** Get the insights file contents for a workspace. */
+  getInsights: publicProcedure
+    .input(z.object({ workspaceId: z.string() }))
+    .query(async ({ input }) => {
+      const workspace = await workspaceDataService.findById(input.workspaceId);
+      if (!workspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
+      }
+      if (!workspace.worktreePath) {
+        return null;
+      }
+      return insightsService.read(workspace.worktreePath);
+    }),
+
+  /** Save the insights file contents for a workspace. */
+  saveInsights: publicProcedure
+    .input(z.object({ workspaceId: z.string(), content: z.string() }))
+    .mutation(async ({ input }) => {
+      const workspace = await workspaceDataService.findById(input.workspaceId);
+      if (!workspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
+      }
+      if (!workspace.worktreePath) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Workspace has no worktree path' });
+      }
+      await insightsService.write(workspace.worktreePath, input.content);
+      return { success: true };
     }),
 });

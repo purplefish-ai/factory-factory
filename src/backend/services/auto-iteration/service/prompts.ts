@@ -12,7 +12,19 @@ function escapeXmlContent(content: string): string {
   return content.replace(/<\//g, '<\\/');
 }
 
-export function buildSystemPrompt(config: AutoIterationConfig): string {
+export function buildSystemPrompt(
+  config: AutoIterationConfig,
+  insightsContent?: string | null
+): string {
+  const insightsBlock = insightsContent
+    ? `\nINSIGHTS FROM PREVIOUS RUNS (.factory-factory/auto-iteration-insights.md):
+<insights>
+${escapeXmlContent(insightsContent)}
+</insights>
+Use these as starting points and context. Do not repeat approaches already recorded as obsolete.
+`
+    : '';
+
   return `You are an auto-iteration agent. Your job is to improve a codebase against a specific metric through targeted, incremental changes.
 
 METRIC CONFIGURATION:
@@ -36,10 +48,18 @@ CONTEXT MANAGEMENT:
 - Do NOT dump entire file contents into the conversation. Read only the sections relevant to your current change.
 - Your iteration history is recorded in .factory-factory/auto-iteration-logbook.json — you can read this file to review what has been tried before.
 
+INSIGHTS FILE:
+- You have a persistent insights file at .factory-factory/auto-iteration-insights.md.
+- Use it to record ideas, hypotheses, deferred approaches, or observations that might help attain the target in future runs.
+- Write to it whenever you notice something worth preserving — you do not need to wait for a specific phase.
+- You may also mark old entries as [resolved] or [obsolete], and trim the file to remove clutter when appropriate.
+- Untagged entries and entries tagged [open] will be shown to you at the start of future runs.
+
 STRATEGY FILE:
 - The user may provide guidance in .factory-factory/auto-iteration-strategy.md
 - This file is read at the start of each iteration — if it exists, follow the guidance within it
-- The user can edit this file between iterations to steer your approach without restarting the loop`;
+- The user can edit this file between iterations to steer your approach without restarting the loop
+${insightsBlock}`;
 }
 
 export function buildImplementPrompt(
@@ -163,7 +183,8 @@ You can add hints, constraints, or focus areas below.
 export function buildHandoffPrompt(
   config: AutoIterationConfig,
   entries: AgentLogbookEntry[],
-  currentMetricSummary: string
+  currentMetricSummary: string,
+  insightsContent?: string | null
 ): string {
   const history = entries
     .map((e) => {
@@ -181,6 +202,14 @@ export function buildHandoffPrompt(
   const accepted = entries.filter((e) => e.status === 'accepted').length;
   const rejected = entries.filter((e) => e.status !== 'accepted').length;
 
+  const insightsBlock = insightsContent
+    ? `\nINSIGHTS (from auto-iteration-insights.md):
+<insights>
+${escapeXmlContent(insightsContent)}
+</insights>
+`
+    : '';
+
   return `You are continuing an auto-iteration run. Here is your context:
 
 ITERATION HISTORY (from logbook):
@@ -193,7 +222,7 @@ CURRENT STATE:
 - Current metric: ${currentMetricSummary}
 - Target: ${config.targetDescription}
 - Iterations completed: ${entries.length}, Accepted: ${accepted}, Rejected: ${rejected}
-
+${insightsBlock}
 The codebase already contains all accepted changes.
 
 NOTE: The user may have placed guidance in .factory-factory/auto-iteration-strategy.md — if it exists, follow its guidance for future iterations.

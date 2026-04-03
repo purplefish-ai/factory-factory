@@ -23,7 +23,8 @@ export type {
   AutoIterationSessionBridge,
   AutoIterationWorkspaceBridge,
 } from './bridges';
-
+// Insights service (for reading/writing insights from tRPC routes)
+export { insightsService } from './insights.service';
 // Logbook service (for reading logbook from tRPC routes)
 export { logbookService } from './logbook.service';
 

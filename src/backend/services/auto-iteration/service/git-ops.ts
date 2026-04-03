@@ -11,6 +11,7 @@ function git(worktreePath: string, args: string[]): Promise<{ stdout: string; st
 export async function commitAll(worktreePath: string, message: string): Promise<string> {
   await git(worktreePath, ['add', '-A']);
   await unstageLogbook(worktreePath);
+  await unstageInsights(worktreePath);
   await git(worktreePath, ['commit', '-m', message, '--allow-empty']);
   const { stdout } = await git(worktreePath, ['rev-parse', '--short', 'HEAD']);
   return stdout.trim();
@@ -20,6 +21,7 @@ export async function commitAll(worktreePath: string, message: string): Promise<
 export async function amendHead(worktreePath: string): Promise<string> {
   await git(worktreePath, ['add', '-A']);
   await unstageLogbook(worktreePath);
+  await unstageInsights(worktreePath);
   await git(worktreePath, ['commit', '--amend', '--no-edit']);
   const { stdout } = await git(worktreePath, ['rev-parse', '--short', 'HEAD']);
   return stdout.trim();
@@ -49,6 +51,7 @@ export async function hasUncommittedChanges(worktreePath: string): Promise<boole
 }
 
 const LOGBOOK_PATH = '.factory-factory/auto-iteration-logbook.json';
+const INSIGHTS_PATH = '.factory-factory/auto-iteration-insights.md';
 
 /** Unstage the auto-iteration logbook if it is currently staged. */
 async function unstageLogbook(worktreePath: string): Promise<void> {
@@ -58,5 +61,14 @@ async function unstageLogbook(worktreePath: string): Promise<void> {
     // HEAD may not exist yet (initial commit). Fall back to rm --cached which
     // works regardless of whether HEAD exists.
     await git(worktreePath, ['rm', '--cached', '--ignore-unmatch', '--', LOGBOOK_PATH]);
+  }
+}
+
+/** Unstage the auto-iteration insights file if it is currently staged. */
+async function unstageInsights(worktreePath: string): Promise<void> {
+  try {
+    await git(worktreePath, ['reset', 'HEAD', '--', INSIGHTS_PATH]);
+  } catch {
+    await git(worktreePath, ['rm', '--cached', '--ignore-unmatch', '--', INSIGHTS_PATH]);
   }
 }
