@@ -1,5 +1,7 @@
 import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
 import { toError } from '@/backend/lib/error-utils';
+import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
+import { autoIterationService } from '@/backend/services/auto-iteration';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
@@ -21,7 +23,7 @@ import {
   worktreeLifecycleService,
 } from '@/backend/services/workspace';
 import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
-import { SessionStatus } from '@/shared/core';
+import { SessionStatus, WorkspaceMode } from '@/shared/core';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getDecryptedLinearConfig, getWorkspaceLinearContext } from './linear-config.helper';
 import type { WorkspaceWithProject } from './types';
@@ -934,6 +936,53 @@ async function awaitSessionAndDispatchIfSuccess(
   }
 }
 
+/**
+ * Check if a workspace is an auto-iteration workspace and start the loop if so.
+ * Called after the worktree is ready and scripts have run.
+ */
+async function maybeStartAutoIteration(workspaceId: string): Promise<boolean> {
+  try {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (!workspace || workspace.mode !== WorkspaceMode.AUTO_ITERATION) {
+      return false;
+    }
+    if (!workspace.autoIterationConfig) {
+      logger.warn('Auto-iteration workspace missing config, skipping auto-start', { workspaceId });
+      return false;
+    }
+
+    const config = workspace.autoIterationConfig as unknown as AutoIterationConfig;
+    logger.info('Starting auto-iteration loop for workspace', { workspaceId, config });
+    await autoIterationService.start(workspaceId, config);
+    return true;
+  } catch (error) {
+    logger.error('Failed to start auto-iteration loop', {
+      workspaceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/**
+ * Handle post-init for standard workspaces: wait for session start and dispatch.
+ * For auto-iteration workspaces: fire-and-forget the auto-iteration loop start.
+ */
+async function handlePostInitSessionStart(
+  workspaceId: string,
+  isAutoIteration: boolean,
+  agentSessionPromise: Promise<string | null>,
+  success: boolean
+): Promise<void> {
+  if (isAutoIteration) {
+    if (success) {
+      void maybeStartAutoIteration(workspaceId);
+    }
+  } else {
+    await awaitSessionAndDispatchIfSuccess(workspaceId, agentSessionPromise, success);
+  }
+}
+
 export async function initializeWorkspaceWorktree(
   workspaceId: string,
   options?: { branchName?: string; useExistingBranch?: boolean }
@@ -994,15 +1043,21 @@ export async function initializeWorkspaceWorktree(
     // Mark Linear issue as started (fire-and-forget, non-fatal)
     void markLinearIssueStartedIfApplicable(workspaceId);
 
-    // Start Claude session eagerly - runs in parallel with setup scripts.
-    // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
-    agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
-      logger.error('Failed to start default Claude session', {
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
+    // Check if this is an auto-iteration workspace before starting the default session.
+    // Auto-iteration workspaces manage their own ACP session via autoIterationService.
+    const isAutoIteration = workspaceWithProject.mode === WorkspaceMode.AUTO_ITERATION;
+
+    if (!isAutoIteration) {
+      // Start Claude session eagerly - runs in parallel with setup scripts.
+      // If scripts fail, stopWorkspaceSessions() in the failure handlers will clean it up.
+      agentSessionPromise = startDefaultAgentSession(workspaceId).catch((error) => {
+        logger.error('Failed to start default Claude session', {
+          workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
       });
-      return null;
-    });
+    }
 
     const startupScriptPipelineResult = await executeStartupScriptPipeline({
       workspaceId,
@@ -1011,8 +1066,9 @@ export async function initializeWorkspaceWorktree(
       factoryConfig,
     });
     if (startupScriptPipelineResult.handled) {
-      await awaitSessionAndDispatchIfSuccess(
+      await handlePostInitSessionStart(
         workspaceId,
+        isAutoIteration,
         agentSessionPromise,
         startupScriptPipelineResult.success
       );
@@ -1021,7 +1077,7 @@ export async function initializeWorkspaceWorktree(
 
     // No setup scripts ran, mark ready
     await workspaceStateMachine.markReady(workspaceId);
-    await awaitSessionAndDispatchIfSuccess(workspaceId, agentSessionPromise, true);
+    await handlePostInitSessionStart(workspaceId, isAutoIteration, agentSessionPromise, true);
   } catch (error) {
     // Ensure any eager session start attempt has settled before cleanup so we
     // do not race stopWorkspaceSessions() with a late startSession() call.
