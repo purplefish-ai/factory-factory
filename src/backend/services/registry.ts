@@ -32,7 +32,7 @@ type ServiceDefinition = {
 
 export const serviceRegistry = {
   session: {
-    dependsOn: ['workspace', 'settings', 'terminal'],
+    dependsOn: ['workspace', 'settings', 'terminal', 'github'],
     ownsModels: ['AgentSession', 'ClosedSession'],
   },
   workspace: {
