@@ -357,7 +357,48 @@ export class AutoIterationService {
         iteration: progress.currentIteration,
       });
 
-      const { entry, targetReached } = await this.runIteration(loop, worktreePath, iterationStart);
+      let entry: AgentLogbookEntry;
+      let targetReached: boolean;
+      try {
+        const result = await this.runIteration(loop, worktreePath, iterationStart);
+        entry = result.entry;
+        targetReached = result.targetReached;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'PromptTimeoutError') {
+          // Treat prompt timeout like a crash: revert any uncommitted work and continue the loop
+          this.logger.warn('Prompt timed out during iteration, treating as crash', {
+            workspaceId,
+            iteration: progress.currentIteration,
+          });
+          try {
+            if (await hasUncommittedChanges(worktreePath)) {
+              await revertHead(worktreePath);
+            }
+          } catch {
+            // Best-effort revert
+          }
+          entry = {
+            iteration: progress.currentIteration,
+            startedAt: iterationStart,
+            completedAt: new Date().toISOString(),
+            status: 'crashed',
+            changeDescription: 'Prompt timed out',
+            commitSha: '',
+            commitReverted: false,
+            metricBefore: progress.currentMetricSummary,
+            metricAfter: null,
+            testOutput: '',
+            metricImproved: null,
+            crashError: error.message,
+            fixAttempts: 0,
+            critiqueNotes: null,
+            critiqueApproved: null,
+          };
+          targetReached = false;
+        } else {
+          throw error;
+        }
+      }
 
       // Update progress
       progress.lastIterationAt = new Date().toISOString();
@@ -618,6 +659,8 @@ export class AutoIterationService {
     let attemptsMade = 0;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       attemptsMade = attempt;
+      loop.heartbeatAt = new Date();
+      loop.currentPhase = `crash_fix_${attempt}`;
       // Use the most recent failure output so the agent sees what's still broken
       const errorOutput = truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100);
       const fixPrompt = buildCrashFixPrompt(errorOutput, attempt);

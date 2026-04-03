@@ -126,8 +126,9 @@ A periodic watchdog becomes a defense-in-depth measure rather than a necessity. 
 
 **Files:**
 - `src/backend/services/workspace/resources/workspace.accessor.ts` — Add `resetStaleAutoIterationStatuses()` following the pattern at lines 304-321 (`resetStaleRunScriptStatuses`)
-- `src/backend/services/auto-iteration/service/auto-iteration.service.ts` — Add `recoverStaleStates()` method that calls the accessor and logs results
-- `src/backend/server.ts` — Call `autoIterationService.recoverStaleStates()` after existing `runScriptStateMachine.recoverStaleStates()` (~line 336)
+- `src/backend/server.ts` — Call `workspaceAccessor.resetStaleAutoIterationStatuses()` directly after existing `runScriptStateMachine.recoverStaleStates()` (~line 336)
+
+Note: Unlike run-script recovery (which goes through `runScriptStateMachine.recoverStaleStates()`), auto-iteration recovery is called directly from `server.ts` via `workspaceAccessor` to avoid a circular dependency (auto-iteration ↔ workspace). The recovery is purely a database operation with no in-memory loop manipulation needed.
 
 Target status on recovery: `FAILED` (not `PAUSED`), because the in-memory loop context is irrecoverably lost on server restart. The user can re-start auto-iteration manually.
 
