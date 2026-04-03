@@ -2,16 +2,19 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Lightbulb,
+  List,
   Loader2,
   OctagonX,
   Pause,
   Play,
   RefreshCw,
+  Save,
   Square,
   Terminal,
   XCircle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -438,7 +441,134 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
   );
 }
 
+function InsightsEditor({ workspaceId }: { workspaceId: string }) {
+  const { data: insightsData, isLoading } = trpc.autoIteration.getInsights.useQuery(
+    { workspaceId },
+    { refetchOnWindowFocus: false }
+  );
+  const [content, setContent] = useState<string>('');
+  const [dirty, setDirty] = useState(false);
+
+  // Sync fetched content into local state (only on initial load or refetch when not dirty)
+  useEffect(() => {
+    if (insightsData !== undefined && !dirty) {
+      setContent(insightsData ?? '');
+    }
+  }, [insightsData, dirty]);
+
+  const utils = trpc.useUtils();
+  const saveMutation = trpc.autoIteration.saveInsights.useMutation({
+    onSuccess: () => {
+      setDirty(false);
+      void utils.autoIteration.getInsights.invalidate({ workspaceId });
+      toast.success('Insights saved');
+    },
+    onError: (err) => toast.error(`Failed to save insights: ${err.message}`),
+  });
+
+  const handleChange = (value: string) => {
+    setContent(value);
+    setDirty(true);
+  };
+
+  const handleSave = () => {
+    saveMutation.mutate({ workspaceId, content });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center flex-1">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20">
+        <span className="text-[10px] text-muted-foreground">
+          Markdown — tag entries [open], [resolved], or [obsolete]
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 gap-1 px-2 text-[10px]"
+          onClick={handleSave}
+          disabled={!dirty || saveMutation.isPending}
+        >
+          <Save className="h-3 w-3" />
+          {dirty ? 'Save' : 'Saved'}
+        </Button>
+      </div>
+      <textarea
+        className="flex-1 min-h-0 w-full resize-none bg-transparent p-3 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none"
+        value={content}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder="# Auto-Iteration Insights&#10;&#10;Add ideas, deferred approaches, or observations here.&#10;Tag with [open], [resolved], or [obsolete]."
+        spellCheck={false}
+      />
+    </div>
+  );
+}
+
+type PanelTab = 'log' | 'insights';
+
+function TabBar({ active, onChange }: { active: PanelTab; onChange: (t: PanelTab) => void }) {
+  return (
+    <div className="flex border-b shrink-0">
+      <button
+        type="button"
+        className={cn(
+          'flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
+          active === 'log'
+            ? 'border-b-2 border-primary text-primary'
+            : 'text-muted-foreground hover:text-foreground'
+        )}
+        onClick={() => onChange('log')}
+      >
+        <List className="h-3 w-3" />
+        Log
+      </button>
+      <button
+        type="button"
+        className={cn(
+          'flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
+          active === 'insights'
+            ? 'border-b-2 border-primary text-primary'
+            : 'text-muted-foreground hover:text-foreground'
+        )}
+        onClick={() => onChange('insights')}
+      >
+        <Lightbulb className="h-3 w-3" />
+        Insights
+      </button>
+    </div>
+  );
+}
+
+function IterationLog({ logbook, isRunning }: { logbook: LogbookData | null; isRunning: boolean }) {
+  const iterations = (logbook?.iterations ?? []) as LogbookEntry[];
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      {iterations.length === 0 && !logbook?.baseline ? (
+        <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
+          {isRunning ? 'Running baseline measurement...' : 'No iterations yet'}
+        </div>
+      ) : (
+        <div>
+          {[...iterations].reverse().map((entry) => (
+            <IterationEntry key={entry.iteration} entry={entry} />
+          ))}
+          {logbook?.baseline && <BaselineSection baseline={logbook.baseline} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
+  const [activeTab, setActiveTab] = useState<PanelTab>('log');
+
   const { data: statusData, isLoading: statusLoading } = trpc.autoIteration.getStatus.useQuery(
     { workspaceId },
     { refetchInterval: 3000 }
@@ -460,7 +590,6 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   const progress = statusData?.progress as IterationProgress | null;
   const config = statusData?.config as IterationConfig | null;
   const logbook = logbookData as LogbookData | null;
-  const iterations = (logbook?.iterations ?? []) as LogbookEntry[];
   const isRunning = status === 'RUNNING';
   const currentPhase = progress?.currentPhase ?? 'idle';
   const lastTestOutput = progress?.lastTestOutput;
@@ -468,7 +597,6 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Controls */}
       <div className="flex items-center gap-1 p-2 border-b bg-muted/30">
         <AutoIterationControls workspaceId={workspaceId} status={status} />
         <span className="ml-auto text-[10px] text-muted-foreground">
@@ -476,32 +604,21 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
         </span>
       </div>
 
-      {/* Progress summary */}
       {progress && config && (
         <ProgressSummary progress={progress} config={config} status={status} />
       )}
 
-      {/* Phase indicator — only when actively running */}
       {isRunning && <PhaseIndicator phase={currentPhase} />}
 
-      {/* Live test output — show when we have output and are running a test-related phase */}
       {showLiveOutput && <LiveTestOutput output={lastTestOutput} />}
 
-      {/* Iteration log */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {iterations.length === 0 && !logbook?.baseline ? (
-          <div className="flex items-center justify-center h-20 text-xs text-muted-foreground">
-            {isRunning ? 'Running baseline measurement...' : 'No iterations yet'}
-          </div>
-        ) : (
-          <div>
-            {[...iterations].reverse().map((entry) => (
-              <IterationEntry key={entry.iteration} entry={entry} />
-            ))}
-            {logbook?.baseline && <BaselineSection baseline={logbook.baseline} />}
-          </div>
-        )}
-      </div>
+      <TabBar active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === 'log' ? (
+        <IterationLog logbook={logbook} isRunning={isRunning} />
+      ) : (
+        <InsightsEditor workspaceId={workspaceId} />
+      )}
     </div>
   );
 }

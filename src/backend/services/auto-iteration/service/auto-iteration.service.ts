@@ -23,6 +23,7 @@ import {
   hasUncommittedChanges,
   revertHead,
 } from './git-ops';
+import { insightsService } from './insights.service';
 import {
   buildCrashFixPrompt,
   buildCreatePrPrompt,
@@ -137,8 +138,12 @@ export class AutoIterationService {
       const worktreePath = await this.workspace.getWorktreePath(workspaceId);
       await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
 
+      // Initialize insights file (no-op if already exists) and load open entries
+      await insightsService.initialize(worktreePath);
+      const insightsContent = await insightsService.getOpenContent(worktreePath);
+
       // Start ACP session
-      const systemPrompt = buildSystemPrompt(config);
+      const systemPrompt = buildSystemPrompt(config, insightsContent);
       const sessionId = await this.session.startSession(workspaceId, {
         initialPrompt: systemPrompt,
         startupModePreset: 'non_interactive',
@@ -369,10 +374,12 @@ export class AutoIterationService {
         });
         await this.emitPhase(loop, 'recycling');
         const logbook = await this.logbook.read(worktreePath);
+        const recycleInsights = await insightsService.getOpenContent(worktreePath);
         const handoffPrompt = buildHandoffPrompt(
           config,
           logbook?.iterations ?? [],
-          progress.currentMetricSummary
+          progress.currentMetricSummary,
+          recycleInsights
         );
         loop.sessionId = await this.session.recycleSession(workspaceId, handoffPrompt);
         await this.workspace.updateAutoIterationSessionId(workspaceId, loop.sessionId);
