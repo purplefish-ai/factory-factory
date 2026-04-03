@@ -49,8 +49,6 @@ interface RunningLoop {
   failedByDeath: boolean;
   /** Tracks the active loop promise to prevent concurrent loops on resume. */
   loopPromise: Promise<void> | null;
-  /** Timestamp of last phase transition, for observability/staleness detection. */
-  heartbeatAt: Date;
 }
 
 /**
@@ -125,7 +123,6 @@ export class AutoIterationService {
       stopRequested: false,
       failedByDeath: false,
       loopPromise: null,
-      heartbeatAt: new Date(),
     };
     this.loops.set(workspaceId, placeholder);
 
@@ -288,7 +285,6 @@ export class AutoIterationService {
       status: loop.pauseRequested ? AutoIterationStatus.PAUSED : AutoIterationStatus.RUNNING,
       config: loop.config,
       progress: loop.progress,
-      heartbeatAt: loop.heartbeatAt.toISOString(),
     };
   }
 
@@ -326,7 +322,6 @@ export class AutoIterationService {
     testOutput?: string
   ): Promise<void> {
     loop.progress.currentPhase = phase;
-    loop.heartbeatAt = new Date();
     if (testOutput !== undefined) {
       loop.progress.lastTestOutput = testOutput;
     }
@@ -698,7 +693,6 @@ export class AutoIterationService {
     let attemptsMade = 0;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       attemptsMade = attempt;
-      loop.heartbeatAt = new Date();
       // Use the most recent failure output so the agent sees what's still broken
       const errorOutput = truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100);
       const fixPrompt = buildCrashFixPrompt(errorOutput, attempt);
