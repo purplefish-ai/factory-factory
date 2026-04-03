@@ -74,6 +74,3 @@ tunnel-url/
 
 # Port file for postRun script discovery
 .factory-factory-port
-
-# Auto-iteration logbook (ephemeral runtime state)
-.factory-factory/auto-iteration-logbook.json

@@ -9,7 +9,7 @@ function git(worktreePath: string, args: string[]): Promise<{ stdout: string; st
 
 /** Stage all changes and commit with a message. Returns the short commit SHA. */
 export async function commitAll(worktreePath: string, message: string): Promise<string> {
-  await git(worktreePath, ['add', '-A']);
+  await git(worktreePath, ['add', '-A', '--', ':!.factory-factory/auto-iteration-logbook.json']);
   await git(worktreePath, ['commit', '-m', message, '--allow-empty']);
   const { stdout } = await git(worktreePath, ['rev-parse', '--short', 'HEAD']);
   return stdout.trim();
@@ -17,7 +17,7 @@ export async function commitAll(worktreePath: string, message: string): Promise<
 
 /** Amend the most recent commit with staged changes. Returns the updated short commit SHA. */
 export async function amendHead(worktreePath: string): Promise<string> {
-  await git(worktreePath, ['add', '-A']);
+  await git(worktreePath, ['add', '-A', '--', ':!.factory-factory/auto-iteration-logbook.json']);
   await git(worktreePath, ['commit', '--amend', '--no-edit']);
   const { stdout } = await git(worktreePath, ['rev-parse', '--short', 'HEAD']);
   return stdout.trim();
