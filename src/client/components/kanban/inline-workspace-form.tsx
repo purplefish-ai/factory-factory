@@ -417,7 +417,7 @@ export function InlineWorkspaceForm({
                   type="number"
                   min={1}
                   value={unlimitedIterations ? '' : maxIterations}
-                  onChange={(e) => setMaxIterations(Number(e.target.value) || 25)}
+                  onChange={(e) => setMaxIterations(Math.max(1, Number(e.target.value) || 25))}
                   disabled={isCreating || unlimitedIterations}
                   placeholder="25"
                 />

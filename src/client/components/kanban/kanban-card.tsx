@@ -295,7 +295,13 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const showBranch = Boolean(workspace.branchName);
   const showPendingRequest = workspace.pendingRequestType;
   const hasMetadata =
-    showSetup || showCi || showBranch || showPR || showPendingRequest || !!sessionRuntimeError;
+    showSetup ||
+    showCi ||
+    showBranch ||
+    showPR ||
+    showPendingRequest ||
+    !!sessionRuntimeError ||
+    workspace.mode === 'AUTO_ITERATION';
   return {
     showPR,
     isArchived,

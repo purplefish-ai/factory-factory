@@ -12,6 +12,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -360,10 +361,12 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
 
   const utils = trpc.useUtils();
   const invalidate = () => void utils.autoIteration.getStatus.invalidate({ workspaceId });
-  const pauseMutation = trpc.autoIteration.pause.useMutation({ onSuccess: invalidate });
-  const resumeMutation = trpc.autoIteration.resume.useMutation({ onSuccess: invalidate });
-  const stopMutation = trpc.autoIteration.stop.useMutation({ onSuccess: invalidate });
-  const startMutation = trpc.autoIteration.start.useMutation({ onSuccess: invalidate });
+  const onError = (error: { message: string }) =>
+    toast.error(`Auto-iteration action failed: ${error.message}`);
+  const pauseMutation = trpc.autoIteration.pause.useMutation({ onSuccess: invalidate, onError });
+  const resumeMutation = trpc.autoIteration.resume.useMutation({ onSuccess: invalidate, onError });
+  const stopMutation = trpc.autoIteration.stop.useMutation({ onSuccess: invalidate, onError });
+  const startMutation = trpc.autoIteration.start.useMutation({ onSuccess: invalidate, onError });
 
   return (
     <TooltipProvider>

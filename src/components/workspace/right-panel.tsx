@@ -274,12 +274,17 @@ export function RightPanel({
 
   // Auto-select the auto-iteration tab on first load for auto-iteration workspaces
   const autoIterationTabSelectedRef = useRef(false);
+  const prevWorkspaceIdRef = useRef(workspaceId);
   useEffect(() => {
+    if (prevWorkspaceIdRef.current !== workspaceId) {
+      prevWorkspaceIdRef.current = workspaceId;
+      autoIterationTabSelectedRef.current = false;
+    }
     if (isAutoIteration && !autoIterationTabSelectedRef.current) {
       autoIterationTabSelectedRef.current = true;
       handleTopTabChange('auto-iteration');
     }
-  }, [isAutoIteration, handleTopTabChange]);
+  }, [isAutoIteration, handleTopTabChange, workspaceId]);
 
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {
