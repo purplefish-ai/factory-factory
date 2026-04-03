@@ -14,6 +14,7 @@ vi.mock('@/backend/services/ratchet', () => ({
 
 vi.mock('@/backend/services/workspace', () => ({
   kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
+  workspaceAccessor: { findRawById: vi.fn(), update: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
+  sessionDataService: { createAgentSession: vi.fn() },
   sessionService: {
     configure: vi.fn(),
     setPromptTurnCompleteHandler: vi.fn(),
@@ -34,8 +36,9 @@ vi.mock('@/backend/services/session', () => ({
     stopSession: vi.fn(),
     startSession: vi.fn(),
     sendSessionMessage: vi.fn(),
+    sendAcpMessage: vi.fn(),
   },
-  sessionDomainService: { injectCommittedUserMessage: vi.fn() },
+  sessionDomainService: { injectCommittedUserMessage: vi.fn(), getTranscriptSnapshot: vi.fn() },
   chatEventForwarderService: { configure: vi.fn(), getAllPendingRequests: vi.fn() },
   chatMessageHandlerService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
 }));

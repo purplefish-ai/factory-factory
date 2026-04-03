@@ -6,6 +6,7 @@ export {
   getCiVisualLabel,
 } from './ci-status.js';
 export {
+  AutoIterationStatus,
   CIStatus,
   IssueProvider,
   KanbanColumn,
@@ -14,6 +15,7 @@ export {
   RunScriptStatus,
   SessionStatus,
   WorkspaceCreationSource,
+  WorkspaceMode,
   WorkspaceStatus,
 } from './enums.js';
 

@@ -72,6 +72,11 @@ const baseWorkspace: WorkspaceWithKanban = {
   ratchetActiveSessionId: null,
   ratchetLastCiRunId: null,
   isArchived: false,
+  mode: 'STANDARD' as const,
+  autoIterationStatus: null,
+  autoIterationConfig: null,
+  autoIterationProgress: null,
+  autoIterationSessionId: null,
 };
 
 const mockWorkspaces: WorkspaceWithKanban[] = [

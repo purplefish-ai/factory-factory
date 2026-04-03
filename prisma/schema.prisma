@@ -100,6 +100,21 @@ enum RunScriptStatus {
   FAILED     // Run script failed
 }
 
+enum WorkspaceMode {
+  STANDARD
+  AUTO_ITERATION
+}
+
+enum AutoIterationStatus {
+  IDLE            // Configured but not started
+  RUNNING         // Loop is actively iterating
+  PAUSED          // User paused the loop
+  COMPLETED       // Target reached
+  MAX_ITERATIONS  // Hit iteration limit
+  STOPPED         // User manually stopped
+  FAILED          // Unrecoverable error
+}
+
 
 // Models
 model Project {
@@ -210,6 +225,13 @@ model Workspace {
   ratchetLastCheckedAt    DateTime?                       // When ratchet last checked this workspace
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
   ratchetLastCiRunId      String?                         // Track which CI run we processed
+
+  // Auto-iteration tracking
+  mode                      WorkspaceMode         @default(STANDARD)
+  autoIterationStatus       AutoIterationStatus?
+  autoIterationConfig       Json?                 // { testCommand, targetDescription, maxIterations, testTimeoutSeconds, sessionRecycleInterval }
+  autoIterationProgress     Json?                 // { currentIteration, baselineMetricSummary, currentMetricSummary, counts, timestamps }
+  autoIterationSessionId    String?               // Active ACP session for auto-iteration loop
 
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
