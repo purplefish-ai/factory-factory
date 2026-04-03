@@ -49,6 +49,8 @@ async function unstageLogbook(worktreePath: string): Promise<void> {
   try {
     await git(worktreePath, ['reset', 'HEAD', '--', LOGBOOK_PATH]);
   } catch {
-    // File was not staged or doesn't exist — nothing to unstage.
+    // HEAD may not exist yet (initial commit). Fall back to rm --cached which
+    // works regardless of whether HEAD exists.
+    await git(worktreePath, ['rm', '--cached', '--ignore-unmatch', '--', LOGBOOK_PATH]);
   }
 }
