@@ -1,4 +1,4 @@
-import { Camera, FileQuestion, Files, ListTodo, Plus, Terminal } from 'lucide-react';
+import { Camera, FileQuestion, Files, ListTodo, Plus, RefreshCw, Terminal } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/components/chat';
@@ -7,6 +7,7 @@ import { TabButton } from '@/components/ui/tab-button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
+import { AutoIterationPanel } from './auto-iteration-panel';
 import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { FileBrowserPanel } from './file-browser-panel';
@@ -29,7 +30,7 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // Types
 // =============================================================================
 
-type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots';
+type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots' | 'auto-iteration';
 type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
 interface PersistedTopPanelState {
@@ -41,7 +42,13 @@ function isLogsBottomTab(tab: BottomPanelTab): tab is LogsBottomTab {
 }
 
 function parseStoredTopTab(value: string | null): TopPanelTab | null {
-  if (value === 'changes' || value === 'files' || value === 'tasks' || value === 'screenshots') {
+  if (
+    value === 'changes' ||
+    value === 'files' ||
+    value === 'tasks' ||
+    value === 'screenshots' ||
+    value === 'auto-iteration'
+  ) {
     return value;
   }
   // Legacy migration: old values were direct changes sub-views.
@@ -93,6 +100,7 @@ interface TopPanelAreaProps {
   activeTopTab: TopPanelTab;
   onTopTabChange: (tab: TopPanelTab) => void;
   onTakeScreenshots: () => void;
+  isAutoIteration: boolean;
 }
 
 function TopPanelArea({
@@ -101,11 +109,13 @@ function TopPanelArea({
   activeTopTab,
   onTopTabChange,
   onTakeScreenshots,
+  isAutoIteration,
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
   const showTasks = activeTopTab === 'tasks';
   const showScreenshots = activeTopTab === 'screenshots';
+  const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
 
   const screenshotsButtonClassName = cn(
     'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
@@ -136,6 +146,14 @@ function TopPanelArea({
           isActive={showTasks}
           onSelect={() => onTopTabChange('tasks')}
         />
+        {isAutoIteration && (
+          <TabButton
+            label="Iterations"
+            icon={<RefreshCw className="h-3.5 w-3.5" />}
+            isActive={showAutoIteration}
+            onSelect={() => onTopTabChange('auto-iteration')}
+          />
+        )}
 
         <div className="flex-1" />
 
@@ -166,6 +184,7 @@ function TopPanelArea({
         {showScreenshots && (
           <ScreenshotsPanel workspaceId={workspaceId} onTakeScreenshots={onTakeScreenshots} />
         )}
+        {showAutoIteration && <AutoIterationPanel workspaceId={workspaceId} />}
       </div>
     </div>
   );
@@ -196,6 +215,12 @@ export function RightPanel({
   const handleTerminalStateChange = useCallback((state: TerminalTabState) => {
     setTerminalTabState(state);
   }, []);
+
+  const { data: workspace } = trpc.workspace.get.useQuery(
+    { id: workspaceId },
+    { enabled: !!workspaceId }
+  );
+  const isAutoIteration = workspace?.mode === 'AUTO_ITERATION';
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -246,6 +271,33 @@ export function RightPanel({
     handleTopTabChange('screenshots');
     onTakeScreenshots?.();
   }, [handleTopTabChange, onTakeScreenshots]);
+
+  // Auto-select the auto-iteration tab on first load for auto-iteration workspaces,
+  // but only when the user has no persisted tab preference for this workspace.
+  const autoIterationTabSelectedRef = useRef(false);
+  const prevWorkspaceIdRef = useRef(workspaceId);
+  useEffect(() => {
+    if (prevWorkspaceIdRef.current !== workspaceId) {
+      prevWorkspaceIdRef.current = workspaceId;
+      autoIterationTabSelectedRef.current = false;
+    }
+    if (isAutoIteration && !autoIterationTabSelectedRef.current) {
+      autoIterationTabSelectedRef.current = true;
+      // Only auto-select when the user has no persisted tab for this workspace
+      let hasPersistedTab = false;
+      if (typeof window !== 'undefined') {
+        try {
+          hasPersistedTab =
+            localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) != null;
+        } catch {
+          hasPersistedTab = false;
+        }
+      }
+      if (!hasPersistedTab) {
+        handleTopTabChange('auto-iteration');
+      }
+    }
+  }, [isAutoIteration, handleTopTabChange, workspaceId]);
 
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {
@@ -310,6 +362,7 @@ export function RightPanel({
           activeTopTab={activeTopTab}
           onTopTabChange={handleTopTabChange}
           onTakeScreenshots={handleTakeScreenshots}
+          isAutoIteration={isAutoIteration}
         />
       </ResizablePanel>
 

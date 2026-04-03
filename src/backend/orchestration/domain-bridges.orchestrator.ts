@@ -263,10 +263,20 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
         name: 'Auto-iteration',
         workflow: 'auto-iteration',
       });
-      await sessionService.startSession(session.id, {
-        initialPrompt: opts.initialPrompt,
-        startupModePreset: opts.startupModePreset,
-      });
+      try {
+        await sessionService.startSession(session.id, {
+          initialPrompt: opts.initialPrompt,
+          startupModePreset: opts.startupModePreset,
+        });
+      } catch (err) {
+        // Clean up the session record if startup failed to prevent orphaned entries
+        try {
+          await sessionService.stopSession(session.id);
+        } catch {
+          // Best-effort cleanup
+        }
+        throw err;
+      }
       return session.id;
     },
     async sendPrompt(sessionId, prompt) {
@@ -309,7 +319,10 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       if (ws?.autoIterationSessionId) {
         try {
           await sessionService.stopSession(ws.autoIterationSessionId);
-        } catch {
+        } catch (error) {
+          if (!(error instanceof Error && /already stopped|not found/i.test(error.message))) {
+            throw error;
+          }
           // Session may already be stopped
         }
       }
@@ -318,7 +331,16 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
         name: 'Auto-iteration (recycled)',
         workflow: 'auto-iteration',
       });
-      await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
+      try {
+        await sessionService.startSession(newSession.id, { startupModePreset: 'non_interactive' });
+      } catch (err) {
+        try {
+          await sessionService.stopSession(newSession.id);
+        } catch {
+          // Best-effort cleanup
+        }
+        throw err;
+      }
       await sessionService.sendAcpMessage(newSession.id, [{ type: 'text', text: handoffPrompt }]);
       return newSession.id;
     },

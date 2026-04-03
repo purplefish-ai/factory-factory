@@ -6,6 +6,7 @@ import type {
   AutoIterationProgress,
   AutoIterationSnapshot,
   CritiqueResult,
+  IterationPhase,
   MetricEvaluation,
   TestCommandResult,
 } from './auto-iteration.types';
@@ -104,6 +105,8 @@ export class AutoIterationService {
         sessionRecycleCount: 0,
         startedAt: new Date().toISOString(),
         lastIterationAt: null,
+        currentPhase: 'baseline',
+        lastTestOutput: null,
       },
       pauseRequested: false,
       stopRequested: false,
@@ -121,10 +124,12 @@ export class AutoIterationService {
         initialPrompt: systemPrompt,
         startupModePreset: 'non_interactive',
       });
+      placeholder.sessionId = sessionId;
       await this.workspace.updateAutoIterationSessionId(workspaceId, sessionId);
 
       // Run baseline measurement
       this.logger.info('Running baseline measurement', { workspaceId });
+      await this.emitPhase(placeholder, 'baseline');
       const baselineResult = await runTestCommand(
         worktreePath,
         config.testCommand,
@@ -133,6 +138,7 @@ export class AutoIterationService {
       const baselineOutput = truncateTestOutput(
         `${baselineResult.stdout}\n${baselineResult.stderr}`
       );
+      await this.emitPhase(placeholder, 'evaluating', baselineOutput);
 
       // Get baseline metric evaluation from LLM
       const baselinePrompt = buildMeasurePrompt(
@@ -164,6 +170,8 @@ export class AutoIterationService {
         sessionRecycleCount: 0,
         startedAt: new Date().toISOString(),
         lastIterationAt: null,
+        currentPhase: 'idle',
+        lastTestOutput: baselineOutput,
       };
 
       // Update the placeholder with real data
@@ -273,6 +281,21 @@ export class AutoIterationService {
     return this.loops.has(workspaceId);
   }
 
+  // --- Phase tracking ---
+
+  /** Update the current phase and optionally test output, then persist to DB for UI polling. */
+  private async emitPhase(
+    loop: RunningLoop,
+    phase: IterationPhase,
+    testOutput?: string
+  ): Promise<void> {
+    loop.progress.currentPhase = phase;
+    if (testOutput !== undefined) {
+      loop.progress.lastTestOutput = testOutput;
+    }
+    await this.workspace.updateAutoIterationProgress(loop.workspaceId, loop.progress);
+  }
+
   // --- Core loop ---
 
   private async runLoop(loop: RunningLoop, worktreePath: string): Promise<void> {
@@ -302,6 +325,7 @@ export class AutoIterationService {
           workspaceId,
           iteration: progress.currentIteration,
         });
+        await this.emitPhase(loop, 'recycling');
         const logbook = await this.logbook.read(worktreePath);
         const handoffPrompt = buildHandoffPrompt(
           config,
@@ -344,6 +368,7 @@ export class AutoIterationService {
           break;
       }
 
+      progress.currentPhase = 'idle';
       await this.logbook.appendEntry(worktreePath, entry);
       await this.workspace.updateAutoIterationProgress(workspaceId, progress);
 
@@ -365,12 +390,14 @@ export class AutoIterationService {
     const metricBefore = progress.currentMetricSummary;
 
     // --- IMPLEMENT PHASE ---
+    await this.emitPhase(loop, 'measuring');
     const testResult = await runTestCommand(
       worktreePath,
       config.testCommand,
       config.testTimeoutSeconds
     );
     const testOutput = truncateTestOutput(`${testResult.stdout}\n${testResult.stderr}`);
+    await this.emitPhase(loop, 'implementing', testOutput);
 
     const implementPrompt = buildImplementPrompt(
       metricBefore,
@@ -414,6 +441,7 @@ export class AutoIterationService {
     );
 
     // Run test command after changes
+    await this.emitPhase(loop, 'measuring');
     let postResult = await runTestCommand(
       worktreePath,
       config.testCommand,
@@ -469,6 +497,7 @@ export class AutoIterationService {
 
     // --- EVALUATE PHASE ---
     const postOutput = truncateTestOutput(`${postResult.stdout}\n${postResult.stderr}`);
+    await this.emitPhase(loop, 'evaluating', postOutput);
     const measurePrompt = buildMeasurePrompt(postOutput, metricBefore);
     await this.session.sendPrompt(loop.sessionId, measurePrompt);
     await this.session.waitForIdle(loop.sessionId);
@@ -500,6 +529,7 @@ export class AutoIterationService {
     }
 
     // --- CRITIQUE PHASE ---
+    await this.emitPhase(loop, 'critiquing');
     const diff = await getHeadDiff(worktreePath);
     const truncatedDiff = diff.length > 5000 ? `${diff.slice(0, 5000)}\n... (truncated)` : diff;
     const critiquePrompt = buildCritiquePrompt(truncatedDiff);
