@@ -41,14 +41,14 @@ type Logger = ReturnType<typeof createLogger>;
 /** Default prompt timeout: 20 minutes. */
 const DEFAULT_PROMPT_TIMEOUT_SECONDS = 1200;
 
-/** Cap streaming lastTestOutput at 512 KB to prevent unbounded in-memory growth. */
-const MAX_STREAMING_OUTPUT_BYTES = 512 * 1024;
+/** Cap streaming lastTestOutput at ~512K characters to prevent unbounded in-memory growth. */
+const MAX_STREAMING_OUTPUT_CHARS = 512 * 1024;
 
 /** Append a chunk to lastTestOutput, keeping only the tail when the cap is exceeded. */
 function appendStreamingOutput(current: string | null, chunk: string): string {
   const updated = (current ?? '') + chunk;
-  if (updated.length > MAX_STREAMING_OUTPUT_BYTES) {
-    return updated.slice(-MAX_STREAMING_OUTPUT_BYTES);
+  if (updated.length > MAX_STREAMING_OUTPUT_CHARS) {
+    return updated.slice(-MAX_STREAMING_OUTPUT_CHARS);
   }
   return updated;
 }
