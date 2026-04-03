@@ -288,6 +288,11 @@ export function AutoIterationProgressBanner({
   mode,
 }: AutoIterationProgressBannerProps) {
   const [dismissed, setDismissed] = useState(false);
+  const [lastWorkspaceId, setLastWorkspaceId] = useState(workspaceId);
+  if (workspaceId !== lastWorkspaceId) {
+    setLastWorkspaceId(workspaceId);
+    setDismissed(false);
+  }
   const isAutoIteration = mode === 'AUTO_ITERATION';
 
   const { data: statusData } = trpc.autoIteration.getStatus.useQuery(

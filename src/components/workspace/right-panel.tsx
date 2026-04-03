@@ -115,7 +115,7 @@ function TopPanelArea({
   const showFiles = activeTopTab === 'files';
   const showTasks = activeTopTab === 'tasks';
   const showScreenshots = activeTopTab === 'screenshots';
-  const showAutoIteration = activeTopTab === 'auto-iteration';
+  const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
 
   const screenshotsButtonClassName = cn(
     'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',

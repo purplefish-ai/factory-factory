@@ -438,7 +438,9 @@ export function InlineWorkspaceForm({
                   type="number"
                   min={1}
                   value={testTimeoutSeconds}
-                  onChange={(e) => setTestTimeoutSeconds(Number(e.target.value) || 300)}
+                  onChange={(e) =>
+                    setTestTimeoutSeconds(Math.max(1, Number(e.target.value) || 300))
+                  }
                   disabled={isCreating}
                 />
               </div>
