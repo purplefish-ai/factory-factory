@@ -417,7 +417,10 @@ export function InlineWorkspaceForm({
                   type="number"
                   min={1}
                   value={unlimitedIterations ? '' : maxIterations}
-                  onChange={(e) => setMaxIterations(Math.max(1, Number(e.target.value) || 25))}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setMaxIterations(Number.isNaN(val) ? 25 : Math.max(1, val));
+                  }}
                   disabled={isCreating || unlimitedIterations}
                   placeholder="25"
                 />
@@ -438,9 +441,10 @@ export function InlineWorkspaceForm({
                   type="number"
                   min={1}
                   value={testTimeoutSeconds}
-                  onChange={(e) =>
-                    setTestTimeoutSeconds(Math.max(1, Number(e.target.value) || 300))
-                  }
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setTestTimeoutSeconds(Number.isNaN(val) ? 300 : Math.max(1, val));
+                  }}
                   disabled={isCreating}
                 />
               </div>

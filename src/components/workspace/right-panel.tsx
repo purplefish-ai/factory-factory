@@ -272,7 +272,8 @@ export function RightPanel({
     onTakeScreenshots?.();
   }, [handleTopTabChange, onTakeScreenshots]);
 
-  // Auto-select the auto-iteration tab on first load for auto-iteration workspaces
+  // Auto-select the auto-iteration tab on first load for auto-iteration workspaces,
+  // but only when the user has no persisted tab preference for this workspace.
   const autoIterationTabSelectedRef = useRef(false);
   const prevWorkspaceIdRef = useRef(workspaceId);
   useEffect(() => {
@@ -282,7 +283,13 @@ export function RightPanel({
     }
     if (isAutoIteration && !autoIterationTabSelectedRef.current) {
       autoIterationTabSelectedRef.current = true;
-      handleTopTabChange('auto-iteration');
+      // Only auto-select when the user has no persisted tab for this workspace
+      const hasPersistedTab =
+        typeof window !== 'undefined' &&
+        localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) != null;
+      if (!hasPersistedTab) {
+        handleTopTabChange('auto-iteration');
+      }
     }
   }, [isAutoIteration, handleTopTabChange, workspaceId]);
 

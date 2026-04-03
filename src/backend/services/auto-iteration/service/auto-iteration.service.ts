@@ -125,6 +125,7 @@ export class AutoIterationService {
         startupModePreset: 'non_interactive',
       });
       await this.workspace.updateAutoIterationSessionId(workspaceId, sessionId);
+      placeholder.sessionId = sessionId;
 
       // Run baseline measurement
       this.logger.info('Running baseline measurement', { workspaceId });
