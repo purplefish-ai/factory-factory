@@ -418,6 +418,9 @@ export function InlineWorkspaceForm({
                   min={1}
                   value={unlimitedIterations ? '' : maxIterations}
                   onChange={(e) => {
+                    if (e.target.value === '') {
+                      return;
+                    }
                     const val = Number(e.target.value);
                     setMaxIterations(Number.isNaN(val) ? 25 : Math.max(1, val));
                   }}
@@ -442,6 +445,9 @@ export function InlineWorkspaceForm({
                   min={1}
                   value={testTimeoutSeconds}
                   onChange={(e) => {
+                    if (e.target.value === '') {
+                      return;
+                    }
                     const val = Number(e.target.value);
                     setTestTimeoutSeconds(Number.isNaN(val) ? 300 : Math.max(1, val));
                   }}

@@ -284,9 +284,15 @@ export function RightPanel({
     if (isAutoIteration && !autoIterationTabSelectedRef.current) {
       autoIterationTabSelectedRef.current = true;
       // Only auto-select when the user has no persisted tab for this workspace
-      const hasPersistedTab =
-        typeof window !== 'undefined' &&
-        localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) != null;
+      let hasPersistedTab = false;
+      if (typeof window !== 'undefined') {
+        try {
+          hasPersistedTab =
+            localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) != null;
+        } catch {
+          hasPersistedTab = false;
+        }
+      }
       if (!hasPersistedTab) {
         handleTopTabChange('auto-iteration');
       }
