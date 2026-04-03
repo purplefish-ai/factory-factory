@@ -36,6 +36,12 @@ export async function getHeadDiff(worktreePath: string): Promise<string> {
   return stdout;
 }
 
+/** Discard all uncommitted changes (staged and unstaged). */
+export async function discardUncommittedChanges(worktreePath: string): Promise<void> {
+  await git(worktreePath, ['reset', '--hard', 'HEAD']);
+  await git(worktreePath, ['clean', '-fd']);
+}
+
 /** Check if there are any uncommitted changes. */
 export async function hasUncommittedChanges(worktreePath: string): Promise<boolean> {
   const { stdout } = await git(worktreePath, ['status', '--porcelain']);

@@ -15,7 +15,14 @@ import type {
   AutoIterationSessionBridge,
   AutoIterationWorkspaceBridge,
 } from './bridges';
-import { amendHead, commitAll, getHeadDiff, hasUncommittedChanges, revertHead } from './git-ops';
+import {
+  amendHead,
+  commitAll,
+  discardUncommittedChanges,
+  getHeadDiff,
+  hasUncommittedChanges,
+  revertHead,
+} from './git-ops';
 import {
   buildCrashFixPrompt,
   buildCreatePrPrompt,
@@ -395,9 +402,9 @@ export class AutoIterationService {
           });
           try {
             if (loop.progress.currentPhase === 'implementing') {
-              // During implement, changes are not yet committed — discard any uncommitted work
+              // During implement, changes are not yet committed — discard uncommitted work
               if (await hasUncommittedChanges(worktreePath)) {
-                await revertHead(worktreePath);
+                await discardUncommittedChanges(worktreePath);
               }
             } else {
               // After implement (measure/evaluate/critique/crash_fix), commitAll has already run
