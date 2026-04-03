@@ -177,6 +177,15 @@ export class AutoIterationService {
         this.loops.delete(workspaceId);
       });
     } catch (err) {
+      // Clean up the session if one was started before the failure
+      if (placeholder.sessionId) {
+        try {
+          await this.session.stopSession(placeholder.sessionId);
+        } catch {
+          // Session cleanup is best-effort
+        }
+        void this.workspace.updateAutoIterationSessionId(workspaceId, null);
+      }
       this.loops.delete(workspaceId);
       void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
       throw err;
@@ -217,6 +226,13 @@ export class AutoIterationService {
     }
 
     loop.pauseRequested = false;
+
+    // Set a sentinel promise synchronously to prevent concurrent resume() calls from
+    // both passing the swap-check guard — mirrors how start() uses a synchronous map insertion.
+    // A second concurrent resume() will see loopPromise changed and bail out at the swap-check.
+    const sentinel = Promise.resolve();
+    loop.loopPromise = sentinel;
+
     await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
 
     const worktreePath = await this.workspace.getWorktreePath(workspaceId);
