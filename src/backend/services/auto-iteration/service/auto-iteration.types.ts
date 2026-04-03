@@ -7,6 +7,7 @@ export interface AutoIterationConfig {
   maxIterations: number; // 0 = unlimited
   testTimeoutSeconds: number; // default: 300
   sessionRecycleInterval: number; // default: 10
+  promptTimeoutSeconds?: number; // default: 1200 (20 minutes); undefined = no timeout
 }
 
 /** Progress snapshot for an auto-iteration workspace. Stored as JSON in Workspace.autoIterationProgress. */
@@ -84,4 +85,8 @@ export interface AutoIterationSnapshot {
   status: AutoIterationStatus | null;
   config: AutoIterationConfig | null;
   progress: AutoIterationProgress | null;
+  /** ISO timestamp of last phase transition (only present when loop is running in-memory). */
+  heartbeatAt?: string;
+  /** Current phase within an iteration (only present when loop is running in-memory). */
+  currentPhase?: string;
 }

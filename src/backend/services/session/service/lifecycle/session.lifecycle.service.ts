@@ -7,7 +7,10 @@ import type {
   AcpRuntimeManager,
   PermissionPreset,
 } from '@/backend/services/session/service/acp';
-import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
+import type {
+  SessionAutoIterationExitBridge,
+  SessionLifecycleWorkspaceBridge,
+} from '@/backend/services/session/service/bridges';
 import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -86,6 +89,7 @@ export class SessionLifecycleService {
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
+  private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
 
   constructor(options: SessionLifecycleServiceDependencies) {
     this.repository = options.repository;
@@ -99,8 +103,12 @@ export class SessionLifecycleService {
     this.retryService = options.retryService;
   }
 
-  configure(bridges: { workspace: SessionLifecycleWorkspaceBridge }): void {
+  configure(bridges: {
+    workspace: SessionLifecycleWorkspaceBridge;
+    autoIterationExit?: SessionAutoIterationExitBridge;
+  }): void {
     this.workspaceBridge = bridges.workspace;
+    this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
   }
 
   async startSession(
@@ -424,6 +432,9 @@ export class SessionLifecycleService {
             await this.persistRatchetTranscript(sid, session);
             await this.repository.deleteSession(sid);
             logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
+          }
+          if (session.workflow === 'auto-iteration' && this.autoIterationExitBridge) {
+            this.autoIterationExitBridge.onAutoIterationSessionExit(session.workspaceId, sid);
           }
         } catch (error) {
           logger.warn('Failed to update ACP session status on exit', {

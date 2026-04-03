@@ -26,6 +26,11 @@ export interface SessionLifecycleWorkspaceBridge {
   clearRatchetActiveSessionIfMatching(workspaceId: string, sessionId: string): Promise<void>;
 }
 
+/** Auto-iteration exit notification bridge */
+export interface SessionAutoIterationExitBridge {
+  onAutoIterationSessionExit(workspaceId: string, sessionId: string): void;
+}
+
 /** Workspace init policy callback needed by session domain */
 export interface SessionInitPolicyBridge {
   getWorkspaceInitPolicy(input: SessionInitPolicyInput): SessionInitPolicyResult;

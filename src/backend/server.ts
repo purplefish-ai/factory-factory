@@ -49,6 +49,7 @@ import {
 } from './routers/websocket';
 import { reconciliationService } from './services/ratchet';
 import { runScriptStateMachine } from './services/run-script';
+import { workspaceAccessor } from './services/workspace';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 
@@ -336,6 +337,19 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           await runScriptStateMachine.recoverStaleStates();
         } catch (error) {
           logger.error('Failed to recover stale run script states on startup', toError(error));
+        }
+
+        // Reset auto-iteration states left in RUNNING by a prior crash
+        try {
+          const recovered = await workspaceAccessor.resetStaleAutoIterationStatuses();
+          if (recovered.length > 0) {
+            logger.info('Recovered stale auto-iteration states on startup', {
+              count: recovered.length,
+              workspaceIds: recovered.map((w) => w.id),
+            });
+          }
+        } catch (error) {
+          logger.error('Failed to recover stale auto-iteration states on startup', toError(error));
         }
       };
 

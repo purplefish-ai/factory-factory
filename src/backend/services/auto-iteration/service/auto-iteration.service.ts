@@ -28,6 +28,15 @@ import { runTestCommand, truncateTestOutput } from './test-runner.service';
 
 type Logger = ReturnType<typeof createLogger>;
 
+/** Default prompt timeout: 20 minutes. */
+const DEFAULT_PROMPT_TIMEOUT_SECONDS = 1200;
+
+/** Get prompt timeout in milliseconds from config, or the default. */
+function getPromptTimeoutMs(config: AutoIterationConfig): number | undefined {
+  const seconds = config.promptTimeoutSeconds ?? DEFAULT_PROMPT_TIMEOUT_SECONDS;
+  return seconds > 0 ? seconds * 1000 : undefined;
+}
+
 interface RunningLoop {
   workspaceId: string;
   sessionId: string;
@@ -37,6 +46,10 @@ interface RunningLoop {
   stopRequested: boolean;
   /** Tracks the active loop promise to prevent concurrent loops on resume. */
   loopPromise: Promise<void> | null;
+  /** Timestamp of last phase transition, for observability. */
+  heartbeatAt: Date;
+  /** Current phase within an iteration, for observability. */
+  currentPhase: string;
 }
 
 /**
@@ -108,6 +121,8 @@ export class AutoIterationService {
       pauseRequested: false,
       stopRequested: false,
       loopPromise: null,
+      heartbeatAt: new Date(),
+      currentPhase: 'setup',
     };
     this.loops.set(workspaceId, placeholder);
 
@@ -139,7 +154,7 @@ export class AutoIterationService {
         baselineOutput,
         '(no previous measurement — this is the baseline)'
       );
-      await this.session.sendPrompt(sessionId, baselinePrompt);
+      await this.session.sendPrompt(sessionId, baselinePrompt, getPromptTimeoutMs(config));
       await this.session.waitForIdle(sessionId);
       const baselineResponse = await this.session.getLastAssistantMessage(sessionId);
       const baselineEval = parseMetricEvaluation(baselineResponse);
@@ -265,12 +280,33 @@ export class AutoIterationService {
       status: loop.pauseRequested ? AutoIterationStatus.PAUSED : AutoIterationStatus.RUNNING,
       config: loop.config,
       progress: loop.progress,
+      heartbeatAt: loop.heartbeatAt.toISOString(),
+      currentPhase: loop.currentPhase,
     };
   }
 
   /** Check if a loop is running. */
   isRunning(workspaceId: string): boolean {
     return this.loops.has(workspaceId);
+  }
+
+  /**
+   * Handle notification that an auto-iteration session has died unexpectedly.
+   * Called by the orchestration layer when the ACP process exits for a session
+   * belonging to an auto-iteration workspace. Idempotent — no-op if the loop
+   * is already cleaned up by the promise rejection path.
+   */
+  onSessionDeath(workspaceId: string, sessionId: string): void {
+    const loop = this.loops.get(workspaceId);
+    if (!loop || loop.sessionId !== sessionId) {
+      return;
+    }
+
+    this.logger.warn('Auto-iteration session died unexpectedly', { workspaceId, sessionId });
+    loop.stopRequested = true;
+    void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+    void this.workspace.updateAutoIterationSessionId(workspaceId, null);
+    this.loops.delete(workspaceId);
   }
 
   // --- Core loop ---
@@ -365,6 +401,8 @@ export class AutoIterationService {
     const metricBefore = progress.currentMetricSummary;
 
     // --- IMPLEMENT PHASE ---
+    loop.heartbeatAt = new Date();
+    loop.currentPhase = 'implement';
     const testResult = await runTestCommand(
       worktreePath,
       config.testCommand,
@@ -377,7 +415,7 @@ export class AutoIterationService {
       config.targetDescription,
       testOutput
     );
-    await this.session.sendPrompt(loop.sessionId, implementPrompt);
+    await this.session.sendPrompt(loop.sessionId, implementPrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
 
     // Get description of what was changed
@@ -408,6 +446,8 @@ export class AutoIterationService {
     }
 
     // --- MEASURE PHASE ---
+    loop.heartbeatAt = new Date();
+    loop.currentPhase = 'measure';
     let commitSha = await commitAll(
       worktreePath,
       `auto-iteration #${progress.currentIteration}: ${changeDescription.slice(0, 72)}`
@@ -468,9 +508,11 @@ export class AutoIterationService {
     }
 
     // --- EVALUATE PHASE ---
+    loop.heartbeatAt = new Date();
+    loop.currentPhase = 'evaluate';
     const postOutput = truncateTestOutput(`${postResult.stdout}\n${postResult.stderr}`);
     const measurePrompt = buildMeasurePrompt(postOutput, metricBefore);
-    await this.session.sendPrompt(loop.sessionId, measurePrompt);
+    await this.session.sendPrompt(loop.sessionId, measurePrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
     const measureResponse = await this.session.getLastAssistantMessage(loop.sessionId);
     const evalResult = parseMetricEvaluation(measureResponse);
@@ -500,10 +542,12 @@ export class AutoIterationService {
     }
 
     // --- CRITIQUE PHASE ---
+    loop.heartbeatAt = new Date();
+    loop.currentPhase = 'critique';
     const diff = await getHeadDiff(worktreePath);
     const truncatedDiff = diff.length > 5000 ? `${diff.slice(0, 5000)}\n... (truncated)` : diff;
     const critiquePrompt = buildCritiquePrompt(truncatedDiff);
-    await this.session.sendPrompt(loop.sessionId, critiquePrompt);
+    await this.session.sendPrompt(loop.sessionId, critiquePrompt, getPromptTimeoutMs(config));
     await this.session.waitForIdle(loop.sessionId);
     const critiqueResponse = await this.session.getLastAssistantMessage(loop.sessionId);
     const critique = parseCritiqueResult(critiqueResponse);
@@ -577,7 +621,7 @@ export class AutoIterationService {
       // Use the most recent failure output so the agent sees what's still broken
       const errorOutput = truncateTestOutput(`${latestResult.stdout}\n${latestResult.stderr}`, 100);
       const fixPrompt = buildCrashFixPrompt(errorOutput, attempt);
-      await this.session.sendPrompt(loop.sessionId, fixPrompt);
+      await this.session.sendPrompt(loop.sessionId, fixPrompt, getPromptTimeoutMs(loop.config));
       await this.session.waitForIdle(loop.sessionId);
 
       const fixResponse = await this.session.getLastAssistantMessage(loop.sessionId);
@@ -640,7 +684,7 @@ export class AutoIterationService {
     if (loop.progress.acceptedCount > 0) {
       try {
         const prPrompt = buildCreatePrPrompt(loop.config, loop.progress, status);
-        await this.session.sendPrompt(loop.sessionId, prPrompt);
+        await this.session.sendPrompt(loop.sessionId, prPrompt, getPromptTimeoutMs(loop.config));
         await this.session.waitForIdle(loop.sessionId);
       } catch (err) {
         this.logger.warn('Failed to send PR creation prompt', {

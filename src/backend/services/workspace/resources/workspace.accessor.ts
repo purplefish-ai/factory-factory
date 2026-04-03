@@ -296,6 +296,35 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Find workspaces with auto-iteration status RUNNING and reset them to FAILED.
+   * Called at server startup to recover states left in-flight by a server crash or restart.
+   * The in-memory loop context is irrecoverably lost on restart, so FAILED (not PAUSED).
+   */
+  async resetStaleAutoIterationStatuses(): Promise<Array<{ id: string }>> {
+    const stale = await prisma.workspace.findMany({
+      where: { autoIterationStatus: 'RUNNING' },
+      select: { id: true },
+    });
+
+    if (stale.length === 0) {
+      return [];
+    }
+
+    await prisma.workspace.updateMany({
+      where: {
+        id: { in: stale.map((w) => w.id) },
+        autoIterationStatus: 'RUNNING',
+      },
+      data: {
+        autoIterationStatus: 'FAILED',
+        autoIterationSessionId: null,
+      },
+    });
+
+    return stale;
+  }
+
+  /**
    * Find workspaces with transient run script statuses (STARTING or STOPPING)
    * and reset them to IDLE. Called at server startup to recover states left
    * in-flight by a server crash or restart.
