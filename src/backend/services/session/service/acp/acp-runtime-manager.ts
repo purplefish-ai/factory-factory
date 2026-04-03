@@ -1109,24 +1109,35 @@ export class AcpRuntimeManager {
     } catch (error) {
       handle.isPromptInFlight = false;
       if (error instanceof PromptTimeoutError) {
-        // Attempt graceful cancellation, then escalate to kill
-        logger.warn('Prompt timed out, attempting cancel', { sessionId, timeoutMs });
-        try {
-          await Promise.race([
-            this.cancelPrompt(sessionId),
-            new Promise<void>((resolve) => setTimeout(resolve, 5000)),
-          ]);
-        } catch {
-          // Cancel failed — stop the client forcibly
-          logger.warn('Cancel failed after timeout, stopping client', { sessionId });
-          try {
-            await this.stopClient(sessionId);
-          } catch {
-            // Best-effort cleanup
-          }
-        }
+        await this.escalatePromptTimeout(sessionId, timeoutMs);
       }
       throw error;
+    }
+  }
+
+  /** Attempt graceful cancel after a prompt timeout, then escalate to kill. */
+  private async escalatePromptTimeout(
+    sessionId: string,
+    timeoutMs: number | undefined
+  ): Promise<void> {
+    logger.warn('Prompt timed out, attempting cancel', { sessionId, timeoutMs });
+    try {
+      const cancelled = await Promise.race([
+        this.cancelPrompt(sessionId).then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+      ]);
+      if (!cancelled) {
+        logger.warn('Cancel timed out after prompt timeout, stopping client', { sessionId });
+        await this.stopClient(sessionId).catch(() => {
+          // Best-effort cleanup
+        });
+      }
+    } catch {
+      // Cancel failed — stop the client forcibly
+      logger.warn('Cancel failed after timeout, stopping client', { sessionId });
+      await this.stopClient(sessionId).catch(() => {
+        // Best-effort cleanup
+      });
     }
   }
 

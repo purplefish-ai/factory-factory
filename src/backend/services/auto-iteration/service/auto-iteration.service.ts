@@ -44,6 +44,8 @@ interface RunningLoop {
   progress: AutoIterationProgress;
   pauseRequested: boolean;
   stopRequested: boolean;
+  /** Set when the session died unexpectedly, so the loop finalizes as FAILED, not STOPPED. */
+  failedByDeath: boolean;
   /** Tracks the active loop promise to prevent concurrent loops on resume. */
   loopPromise: Promise<void> | null;
   /** Timestamp of last phase transition, for observability. */
@@ -120,6 +122,7 @@ export class AutoIterationService {
       },
       pauseRequested: false,
       stopRequested: false,
+      failedByDeath: false,
       loopPromise: null,
       heartbeatAt: new Date(),
       currentPhase: 'setup',
@@ -303,6 +306,7 @@ export class AutoIterationService {
     }
 
     this.logger.warn('Auto-iteration session died unexpectedly', { workspaceId, sessionId });
+    loop.failedByDeath = true;
     loop.stopRequested = true;
     void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
     void this.workspace.updateAutoIterationSessionId(workspaceId, null);
@@ -317,7 +321,10 @@ export class AutoIterationService {
     while (true) {
       // Check termination conditions
       if (loop.stopRequested) {
-        await this.finalize(loop, AutoIterationStatus.STOPPED);
+        await this.finalize(
+          loop,
+          loop.failedByDeath ? AutoIterationStatus.FAILED : AutoIterationStatus.STOPPED
+        );
         return;
       }
       if (loop.pauseRequested) {
@@ -374,8 +381,14 @@ export class AutoIterationService {
             if (await hasUncommittedChanges(worktreePath)) {
               await revertHead(worktreePath);
             }
-          } catch {
-            // Best-effort revert
+          } catch (revertError) {
+            this.logger.error('Failed to revert after prompt timeout, aborting loop', {
+              workspaceId,
+              iteration: progress.currentIteration,
+              error: revertError instanceof Error ? revertError.message : String(revertError),
+            });
+            await this.finalize(loop, AutoIterationStatus.FAILED);
+            return;
           }
           entry = {
             iteration: progress.currentIteration,
