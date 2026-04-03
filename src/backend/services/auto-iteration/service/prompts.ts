@@ -34,17 +34,27 @@ CONTEXT MANAGEMENT:
     tail -n 50 /tmp/output.log
     grep -E "PASS|FAIL|error" /tmp/output.log
 - Do NOT dump entire file contents into the conversation. Read only the sections relevant to your current change.
-- Your iteration history is recorded in .factory-factory/auto-iteration-logbook.json — you can read this file to review what has been tried before.`;
+- Your iteration history is recorded in .factory-factory/auto-iteration-logbook.json — you can read this file to review what has been tried before.
+
+STRATEGY FILE:
+- The user may provide guidance in .factory-factory/auto-iteration-strategy.md
+- This file is read at the start of each iteration — if it exists, follow the guidance within it
+- The user can edit this file between iterations to steer your approach without restarting the loop`;
 }
 
 export function buildImplementPrompt(
   currentMetricSummary: string,
   targetDescription: string,
-  truncatedTestOutput: string
+  truncatedTestOutput: string,
+  strategyContent?: string | null
 ): string {
+  const strategySection = strategyContent
+    ? `\n\nUSER STRATEGY (from .factory-factory/auto-iteration-strategy.md):\n\n<strategy>\n${escapeXmlContent(strategyContent)}\n</strategy>\n`
+    : '';
+
   return `The current metric state is: ${currentMetricSummary}
 Target: ${targetDescription}
-
+${strategySection}
 Here is the most recent test output (truncated):
 
 <test_output>
@@ -134,6 +144,22 @@ Your final task is to create a pull request for the changes made during this ses
 Do NOT make any additional code changes. Only create the pull request.`;
 }
 
+export function buildStrategyFileTemplate(config: AutoIterationConfig): string {
+  return `# Auto-Iteration Strategy
+
+Target: ${config.targetDescription}
+Test command: ${config.testCommand}
+
+## Guidance for the agent
+
+<!--
+Edit this file between iterations to steer the agent.
+The agent reads it fresh at the start of each iteration.
+You can add hints, constraints, or focus areas below.
+-->
+`;
+}
+
 export function buildHandoffPrompt(
   config: AutoIterationConfig,
   entries: AgentLogbookEntry[],
@@ -168,5 +194,9 @@ CURRENT STATE:
 - Target: ${config.targetDescription}
 - Iterations completed: ${entries.length}, Accepted: ${accepted}, Rejected: ${rejected}
 
-The codebase already contains all accepted changes. Continue iterating.`;
+The codebase already contains all accepted changes.
+
+NOTE: The user may have placed guidance in .factory-factory/auto-iteration-strategy.md — if it exists, follow its guidance for future iterations.
+
+Continue iterating.`;
 }

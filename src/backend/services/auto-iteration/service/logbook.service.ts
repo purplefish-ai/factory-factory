@@ -5,6 +5,7 @@ import type { AgentLogbook, AgentLogbookEntry, AutoIterationConfig } from './aut
 
 const LOGBOOK_DIR = '.factory-factory';
 const LOGBOOK_FILENAME = 'auto-iteration-logbook.json';
+const STRATEGY_FILENAME = 'auto-iteration-strategy.md';
 
 function getLogbookPath(worktreePath: string): string {
   return path.join(worktreePath, LOGBOOK_DIR, LOGBOOK_FILENAME);
@@ -61,6 +62,34 @@ export class LogbookService {
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;
+      }
+      throw err;
+    }
+  }
+
+  /** Read the user-editable strategy file. Returns null if the file does not exist. */
+  async readStrategyFile(worktreePath: string): Promise<string | null> {
+    const filePath = path.join(worktreePath, LOGBOOK_DIR, STRATEGY_FILENAME);
+    try {
+      return await fs.readFile(filePath, 'utf-8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  /** Seed the default strategy file. No-op if the file already exists. */
+  async writeStrategyFile(worktreePath: string, content: string): Promise<void> {
+    const filePath = path.join(worktreePath, LOGBOOK_DIR, STRATEGY_FILENAME);
+    const dir = path.dirname(filePath);
+    await fs.mkdir(dir, { recursive: true });
+    try {
+      await fs.writeFile(filePath, content, { flag: 'wx' }); // wx = create exclusive, fail if exists
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        return; // File already exists — don't overwrite user edits
       }
       throw err;
     }
