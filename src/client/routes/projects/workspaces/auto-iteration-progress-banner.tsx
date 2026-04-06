@@ -313,7 +313,7 @@ function RunningBanner({
     let baselineSubLabel: string;
     if (currentPhase === 'evaluating') {
       baselineSubLabel = 'evaluating with LLM';
-    } else if (progress?.lastTestOutput) {
+    } else if (currentPhase === 'measuring') {
       baselineSubLabel = 'running tests';
     } else {
       baselineSubLabel = 'starting...';

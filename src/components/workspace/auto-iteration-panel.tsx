@@ -636,7 +636,14 @@ function BaselinePanelBody({
           Baseline test output
         </div>
         {lastTestOutput ? (
-          <pre className="flex-1 min-h-0 overflow-y-auto text-[11px] font-mono whitespace-pre-wrap break-all px-3 py-1.5 text-muted-foreground">
+          <pre
+            ref={(el) => {
+              if (el) {
+                el.scrollTop = el.scrollHeight;
+              }
+            }}
+            className="flex-1 min-h-0 overflow-y-auto text-[11px] font-mono whitespace-pre-wrap break-all px-3 py-1.5 text-muted-foreground"
+          >
             {lastTestOutput}
           </pre>
         ) : (
