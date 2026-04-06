@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Settings2 } from 'lucide-react';
+import { Info, MoreHorizontal, Pencil, Settings2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
@@ -48,6 +48,7 @@ export function WorkspaceHeaderOverflowMenu({
   const [providerSettingsOpen, setProviderSettingsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const utils = trpc.useUtils();
@@ -85,8 +86,43 @@ export function WorkspaceHeaderOverflowMenu({
     }
   };
 
+  const metadata = workspace.creationMetadata as Record<string, unknown> | null | undefined;
+  const initialPrompt = typeof metadata?.initialPrompt === 'string' ? metadata.initialPrompt : null;
+  const hasContent = workspace.description || initialPrompt;
+
   return (
     <>
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Workspace details</DialogTitle>
+          </DialogHeader>
+          {hasContent ? (
+            <div className="flex flex-col gap-4">
+              {workspace.description && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Description
+                  </span>
+                  <p className="text-sm whitespace-pre-wrap">{workspace.description}</p>
+                </div>
+              )}
+              {initialPrompt && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Initial prompt
+                  </span>
+                  <p className="text-sm whitespace-pre-wrap">{initialPrompt}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No description or initial prompt was provided for this workspace.
+            </p>
+          )}
+        </DialogContent>
+      </Dialog>
       <WorkspaceProviderSettings
         workspace={workspace}
         workspaceId={workspaceId}
@@ -146,6 +182,17 @@ export function WorkspaceHeaderOverflowMenu({
         </Tooltip>
         <DropdownMenuContent align="end" className="w-60">
           <DropdownMenuLabel>Workspace actions</DropdownMenuLabel>
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault();
+              requestAnimationFrame(() => {
+                setDetailsOpen(true);
+              });
+            }}
+          >
+            <Info className="h-4 w-4" />
+            View details
+          </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={(event) => {
               event.preventDefault();
