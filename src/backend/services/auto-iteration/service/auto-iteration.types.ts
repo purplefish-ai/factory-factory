@@ -7,7 +7,7 @@ export interface AutoIterationConfig {
   maxIterations: number; // 0 = unlimited
   testTimeoutSeconds: number; // default: 600
   sessionRecycleInterval: number; // default: 10
-  promptTimeoutSeconds?: number; // default: 1200 (20 minutes); undefined = no timeout
+  promptTimeoutSeconds?: number; // default: 600 (10 minutes); undefined = no timeout
 }
 
 /** Phase of the current iteration for real-time UI display. */
