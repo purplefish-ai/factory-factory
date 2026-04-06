@@ -48,6 +48,7 @@ interface BannerProgress {
   baselineMetricSummary: string;
   currentMetricSummary: string;
   startedAt: string;
+  lastTestOutput?: string | null;
 }
 
 function getStepStates(currentStage: Stage | null): Record<Stage, StepState> {
@@ -309,10 +310,20 @@ function RunningBanner({
 
   // currentIteration === 0 means baseline hasn't completed yet
   if (currentIteration === 0) {
+    let baselineSubLabel: string;
+    if (currentPhase === 'evaluating') {
+      baselineSubLabel = 'evaluating with LLM';
+    } else if (progress?.lastTestOutput) {
+      baselineSubLabel = 'running tests';
+    } else {
+      baselineSubLabel = 'starting...';
+    }
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border-b text-xs">
         <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
-        <span className="text-muted-foreground">Running baseline measurement...</span>
+        <span className="font-medium">Baseline</span>
+        <span className="text-muted-foreground/50">·</span>
+        <span className="text-muted-foreground">{baselineSubLabel}</span>
       </div>
     );
   }

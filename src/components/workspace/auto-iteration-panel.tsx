@@ -199,9 +199,9 @@ function IterationEntry({ entry }: { entry: LogbookEntry }) {
   );
 }
 
-function PhaseIndicator({ phase }: { phase: string }) {
-  const label = PHASE_LABELS[phase] ?? phase;
-  const isActive = phase !== 'idle';
+function PhaseIndicator({ phase, labelOverride }: { phase: string; labelOverride?: string }) {
+  const label = labelOverride ?? PHASE_LABELS[phase] ?? phase;
+  const isActive = phase !== 'idle' || labelOverride !== undefined;
 
   return (
     <div
@@ -603,6 +603,102 @@ function IterationLog({ logbook, isRunning }: { logbook: LogbookData | null; isR
   );
 }
 
+function EvalDecisionStrip({
+  decision,
+}: {
+  decision: { improved: boolean; metricSummary: string };
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1 text-[11px] border-b',
+        decision.improved ? 'bg-green-500/5 text-green-600' : 'bg-orange-500/5 text-orange-600'
+      )}
+    >
+      <span>{decision.improved ? '↑ Improved' : '↓ Regressed'}:</span>
+      <span className="text-muted-foreground truncate">{decision.metricSummary}</span>
+    </div>
+  );
+}
+
+function BaselinePanelBody({
+  lastTestOutput,
+  isEvaluating,
+}: {
+  lastTestOutput: string | null | undefined;
+  isEvaluating: boolean;
+}) {
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex-1 min-h-0 flex flex-col border-b">
+        <div className="flex items-center gap-1 px-3 py-1 text-[10px] text-muted-foreground bg-muted/20 shrink-0">
+          <Terminal className="h-2.5 w-2.5" />
+          Baseline test output
+        </div>
+        {lastTestOutput ? (
+          <pre className="flex-1 min-h-0 overflow-y-auto text-[11px] font-mono whitespace-pre-wrap break-all px-3 py-1.5 text-muted-foreground">
+            {lastTestOutput}
+          </pre>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-muted-foreground">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            Waiting for output...
+          </div>
+        )}
+      </div>
+      {isEvaluating && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] border-b bg-primary/5 shrink-0">
+          <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
+          <span className="text-primary">Evaluating baseline with LLM...</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IterationPanelBody({
+  workspaceId,
+  lastTestOutput,
+  isEvaluating,
+  showLiveOutput,
+  logbook,
+  isRunning,
+  activeTab,
+  setActiveTab,
+}: {
+  workspaceId: string;
+  lastTestOutput: string | null | undefined;
+  isEvaluating: boolean;
+  showLiveOutput: boolean;
+  logbook: LogbookData | null;
+  isRunning: boolean;
+  activeTab: PanelTab;
+  setActiveTab: (t: PanelTab) => void;
+}) {
+  return (
+    <>
+      {showLiveOutput && (
+        <>
+          <LiveTestOutput output={lastTestOutput} />
+          {isEvaluating && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground border-b bg-primary/5">
+              <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
+              <span className="text-primary">Evaluating with LLM...</span>
+            </div>
+          )}
+        </>
+      )}
+      <TabBar active={activeTab} onChange={setActiveTab} />
+      <div className={cn('flex-1 min-h-0', activeTab !== 'log' && 'hidden')}>
+        <IterationLog logbook={logbook} isRunning={isRunning} />
+      </div>
+      <div className={cn('flex-1 min-h-0', activeTab !== 'insights' && 'hidden')}>
+        <InsightsEditor workspaceId={workspaceId} />
+      </div>
+    </>
+  );
+}
+
 export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   const [activeTab, setActiveTab] = useState<PanelTab>('log');
 
@@ -628,11 +724,17 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
   const config = statusData?.config as IterationConfig | null;
   const logbook = logbookData as LogbookData | null;
   const isRunning = status === 'RUNNING';
+  const currentIteration = progress?.currentIteration ?? 0;
   const currentPhase = progress?.currentPhase ?? 'idle';
   const lastTestOutput = progress?.lastTestOutput;
   const lastEvalDecision = progress?.lastEvalDecision;
-  const showLiveOutput = isRunning && TEST_OUTPUT_PHASES.has(currentPhase);
+  // 4c: baseline = running + no completed iterations yet
+  const isBaseline = isRunning && currentIteration === 0;
+  const showLiveOutput = isRunning && !isBaseline && TEST_OUTPUT_PHASES.has(currentPhase);
   const isEvaluating = isRunning && currentPhase === 'evaluating';
+  // 4d: brief gap after baseline eval before first iteration — override the misleading "idle" label
+  const phaseLabel =
+    currentPhase === 'idle' && isBaseline ? 'Starting first iteration...' : undefined;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -643,46 +745,30 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
         </span>
       </div>
 
-      {progress && config && (
+      {/* 4b: suppress ProgressSummary during baseline — all counters are 0 and meaningless */}
+      {progress && config && currentIteration > 0 && (
         <ProgressSummary progress={progress} config={config} status={status} />
       )}
 
-      {isRunning && <PhaseIndicator phase={currentPhase} />}
+      {isRunning && <PhaseIndicator phase={currentPhase} labelOverride={phaseLabel} />}
 
-      {isRunning && lastEvalDecision && (
-        <div
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-1 text-[11px] border-b',
-            lastEvalDecision.improved
-              ? 'bg-green-500/5 text-green-600'
-              : 'bg-orange-500/5 text-orange-600'
-          )}
-        >
-          <span>{lastEvalDecision.improved ? '↑ Improved' : '↓ Regressed'}:</span>
-          <span className="text-muted-foreground truncate">{lastEvalDecision.metricSummary}</span>
-        </div>
+      {isRunning && lastEvalDecision && <EvalDecisionStrip decision={lastEvalDecision} />}
+
+      {/* 4c: during baseline show a full-height focused output view instead of the tab area */}
+      {isBaseline ? (
+        <BaselinePanelBody lastTestOutput={lastTestOutput} isEvaluating={isEvaluating} />
+      ) : (
+        <IterationPanelBody
+          workspaceId={workspaceId}
+          lastTestOutput={lastTestOutput}
+          isEvaluating={isEvaluating}
+          showLiveOutput={showLiveOutput}
+          logbook={logbook}
+          isRunning={isRunning}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
       )}
-
-      {showLiveOutput && (
-        <>
-          <LiveTestOutput output={lastTestOutput} />
-          {isEvaluating && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground border-b bg-primary/5">
-              <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
-              <span className="text-primary">Evaluating with LLM...</span>
-            </div>
-          )}
-        </>
-      )}
-
-      <TabBar active={activeTab} onChange={setActiveTab} />
-
-      <div className={cn('flex-1 min-h-0', activeTab !== 'log' && 'hidden')}>
-        <IterationLog logbook={logbook} isRunning={isRunning} />
-      </div>
-      <div className={cn('flex-1 min-h-0', activeTab !== 'insights' && 'hidden')}>
-        <InsightsEditor workspaceId={workspaceId} />
-      </div>
     </div>
   );
 }
