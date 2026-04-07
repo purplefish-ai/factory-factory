@@ -450,6 +450,7 @@ export class AcpEventProcessor {
         toolUseId: progress.tool_use_id,
         toolName: progress.tool_name ?? 'ACP Tool',
         toolInput: {},
+        skipTimeout: isTerminalStatus,
       });
     }
   }
@@ -549,9 +550,10 @@ export class AcpEventProcessor {
     sessionId: string,
     tool: Pick<PendingAcpToolCall, 'toolUseId' | 'toolName'> & {
       toolInput: Record<string, unknown>;
+      skipTimeout?: boolean;
     }
   ): void {
-    if (!this.shouldSkipToolTimeout(tool.toolName, tool.toolInput)) {
+    if (!(tool.skipTimeout || this.shouldSkipToolTimeout(tool.toolName, tool.toolInput))) {
       this.startToolCallTimer(sessionId, tool.toolUseId, tool.toolName);
     }
 
