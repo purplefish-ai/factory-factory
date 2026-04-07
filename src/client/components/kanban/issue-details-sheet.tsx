@@ -5,6 +5,13 @@ import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -61,6 +68,9 @@ function IssueDetailsContent({
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
+  const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
+    'non_interactive'
+  );
 
   const isGitHub = issue.provider === 'github';
   const isLinear = issue.provider === 'linear';
@@ -120,6 +130,7 @@ function IssueDetailsContent({
         issueUrl: issue.url,
         name: issue.title,
         ratchetEnabled,
+        startupModePreset,
       });
     } else if (issue.githubIssueNumber) {
       createWorkspaceMutation.mutate({
@@ -129,6 +140,7 @@ function IssueDetailsContent({
         issueUrl: issue.url,
         name: issue.title,
         ratchetEnabled,
+        startupModePreset,
       });
     }
   };
@@ -210,6 +222,19 @@ function IssueDetailsContent({
             <ExternalLink className="h-4 w-4 mr-2" />
             {externalLabel}
           </Button>
+          <Select
+            value={startupModePreset}
+            onValueChange={(value) => setStartupModePreset(value as 'non_interactive' | 'plan')}
+            disabled={createWorkspaceMutation.isPending || isLoadingSettings}
+          >
+            <SelectTrigger className="w-[110px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="non_interactive">Default</SelectItem>
+              <SelectItem value="plan">Planning</SelectItem>
+            </SelectContent>
+          </Select>
           <Button
             onClick={handleStart}
             disabled={createWorkspaceMutation.isPending || isLoadingSettings}

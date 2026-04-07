@@ -1,10 +1,18 @@
 import { CircleDot, Play, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { RatchetToggleButton } from '@/components/workspace';
 
 interface IssueCardProps {
@@ -17,6 +25,9 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
   const utils = trpc.useUtils();
   const { data: userSettings, isLoading: isLoadingSettings } = trpc.userSettings.get.useQuery();
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
+  const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
+    'non_interactive'
+  );
   const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.id}`;
 
   useEffect(() => {
@@ -52,6 +63,9 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
       utils.workspace.listWithKanbanState.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
     },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to start workspace');
+    },
   });
 
   const handleStart = (e: React.MouseEvent) => {
@@ -67,6 +81,7 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
         issueUrl: issue.url,
         name: issue.title,
         ratchetEnabled,
+        startupModePreset,
       });
     } else if (issue.githubIssueNumber) {
       createWorkspaceMutation.mutate({
@@ -76,6 +91,7 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
         issueUrl: issue.url,
         name: issue.title,
         ratchetEnabled,
+        startupModePreset,
       });
     }
   };
@@ -131,16 +147,35 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
               {issue.author}
             </span>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-xs shrink-0"
-            onClick={handleStart}
-            disabled={createWorkspaceMutation.isPending || isLoadingSettings}
-          >
-            <Play className="h-3 w-3 mr-1" />
-            {createWorkspaceMutation.isPending ? '...' : 'Start'}
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Select
+              value={startupModePreset}
+              onValueChange={(value) => setStartupModePreset(value as 'non_interactive' | 'plan')}
+              disabled={createWorkspaceMutation.isPending || isLoadingSettings}
+            >
+              <SelectTrigger
+                className="h-6 w-[92px] px-2 text-xs"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="non_interactive">Default</SelectItem>
+                <SelectItem value="plan">Planning</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs shrink-0"
+              onClick={handleStart}
+              disabled={createWorkspaceMutation.isPending || isLoadingSettings}
+            >
+              <Play className="h-3 w-3 mr-1" />
+              {createWorkspaceMutation.isPending ? '...' : 'Start'}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
