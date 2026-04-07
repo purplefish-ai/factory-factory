@@ -65,7 +65,7 @@ function makeDeps(
 }
 
 /** Emit a tool_use content_block_start delta (tool start event). */
-function toolStartDelta(toolUseId: string, toolName: string) {
+function toolStartDelta(toolUseId: string, toolName: string, input: Record<string, unknown> = {}) {
   return {
     type: 'agent_message',
     data: {
@@ -73,7 +73,7 @@ function toolStartDelta(toolUseId: string, toolName: string) {
       event: {
         type: 'content_block_start',
         index: 0,
-        content_block: { type: 'tool_use', id: toolUseId, name: toolName, input: {} },
+        content_block: { type: 'tool_use', id: toolUseId, name: toolName, input },
       },
     },
   };
@@ -190,5 +190,44 @@ describe('AcpEventProcessor tool call timeouts', () => {
 
     expect(onToolCallTimeout).toHaveBeenCalledOnce();
     expect(onToolCallTimeout).toHaveBeenCalledWith('sid', 'tool-2', 'Read');
+  });
+
+  it('does not timeout requestUserInput tool calls while waiting for user response', () => {
+    const onToolCallTimeout = vi.fn();
+    const processor = new AcpEventProcessor(
+      makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
+    );
+    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.beginPromptTurn('sid');
+
+    processor.handleAcpDelta(
+      'sid',
+      toolStartDelta('tool-user-input', 'item/tool/requestUserInput', {
+        questions: [{ id: 'q1', question: 'Continue?' }],
+      }) as never
+    );
+    vi.advanceTimersByTime(2000);
+
+    expect(onToolCallTimeout).not.toHaveBeenCalled();
+  });
+
+  it('does not timeout ExitPlanMode approval tool calls while waiting for user response', () => {
+    const onToolCallTimeout = vi.fn();
+    const processor = new AcpEventProcessor(
+      makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
+    );
+    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.beginPromptTurn('sid');
+
+    processor.handleAcpDelta(
+      'sid',
+      toolStartDelta('tool-exit-plan', 'ExitPlanMode', {
+        type: 'ExitPlanMode',
+        plan: { type: 'text', text: '- ship it' },
+      }) as never
+    );
+    vi.advanceTimersByTime(2000);
+
+    expect(onToolCallTimeout).not.toHaveBeenCalled();
   });
 });
