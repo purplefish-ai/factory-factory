@@ -753,7 +753,7 @@ export function AutoIterationPanel({ workspaceId }: AutoIterationPanelProps) {
       </div>
 
       {/* 4b: suppress ProgressSummary during baseline — all counters are 0 and meaningless */}
-      {progress && config && currentIteration > 0 && (
+      {progress && config && !isBaseline && (
         <ProgressSummary progress={progress} config={config} status={status} />
       )}
 
