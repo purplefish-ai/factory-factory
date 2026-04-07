@@ -5,6 +5,36 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.12] - 2026-04-07
+
+### Added
+
+- Add auto-iteration workspace mode (#1464)
+- Create PR automatically when auto-iteration reaches terminal state (#1467)
+- Add auto-iteration progress banner to workspace view (#1471)
+- Add auto-iteration resilience: timeout, recovery, and death propagation (#1473)
+- Add strategy file and throughput metric to auto-iteration (#1474)
+- Add persistent insights file for auto-iteration mode (#1475)
+- Add workspace details button to view initial prompt and description (#1478)
+- Allow starting ticket workspaces in planning mode (#1483)
+
+### Changed
+
+- Exclude auto-iteration logbook from commits in user worktrees (#1469)
+- Increase auto-iteration default timeout to 10 minutes (#1476)
+- Lower auto-iteration default prompt timeout to 10 minutes (#1479)
+- Migrate CLAUDE ACP package to agentclientprotocol (#1481)
+- Skip tool timeout for interactive user-input waits (#1482)
+
+### Fixed
+
+- Fix PR association missed when gh pr create exits non-zero or session ends (#1472)
+- Prevent auto-iteration agent from self-iterating during implement step (#1480)
+
+### Documentation
+
+- Add Inngest payload size guidelines to AGENTS.md (#1466)
+
 ## [0.3.10] - 2026-03-20
 
 ### Added
