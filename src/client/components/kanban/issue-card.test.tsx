@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   createWorkspaceMutateMock: vi.fn(),
   createWorkspaceMutationOptions: undefined as Record<string, unknown> | undefined,
   createOptimisticWorkspaceCacheDataMock: vi.fn(),
+  toastErrorMock: vi.fn(),
 }));
 
 vi.mock('lucide-react', () => ({
@@ -23,6 +24,12 @@ vi.mock('lucide-react', () => ({
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({
   createOptimisticWorkspaceCacheData: mocks.createOptimisticWorkspaceCacheDataMock,
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: mocks.toastErrorMock,
+  },
 }));
 
 vi.mock('@/client/lib/trpc', () => ({
@@ -146,6 +153,21 @@ describe('IssueCard', () => {
     expect(mocks.getProjectSummaryStateInvalidateMock).toHaveBeenCalledWith({
       projectId: 'project-1',
     });
+
+    root.unmount();
+    container.remove();
+  });
+
+  it('shows a toast when creating a workspace from an issue fails', () => {
+    const { container, root } = renderCard();
+
+    const mutationOptions = mocks.createWorkspaceMutationOptions as {
+      onError: (error: Error) => void;
+    };
+
+    mutationOptions.onError(new Error('Workspace creation failed'));
+
+    expect(mocks.toastErrorMock).toHaveBeenCalledWith('Workspace creation failed');
 
     root.unmount();
     container.remove();

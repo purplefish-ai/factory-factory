@@ -1,5 +1,6 @@
 import { CircleDot, Play, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
 import { createOptimisticWorkspaceCacheData } from '@/client/lib/workspace-cache-helpers';
@@ -61,6 +62,9 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
       // Invalidate workspace queries to refresh the board
       utils.workspace.listWithKanbanState.invalidate({ projectId });
       utils.workspace.getProjectSummaryState.invalidate({ projectId });
+    },
+    onError: (error) => {
+      toast.error(error.message || 'Failed to start workspace');
     },
   });
 
