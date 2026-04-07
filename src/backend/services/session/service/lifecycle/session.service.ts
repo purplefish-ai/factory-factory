@@ -3,7 +3,10 @@ import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
 import { acpRuntimeManager } from '@/backend/services/session/service/acp';
-import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
+import type {
+  SessionAutoIterationExitBridge,
+  SessionLifecycleWorkspaceBridge,
+} from '@/backend/services/session/service/bridges';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import type {
@@ -103,7 +106,10 @@ export class SessionService {
   /**
    * Configure cross-domain bridges. Called once at startup by orchestration layer.
    */
-  configure(bridges: { workspace: SessionLifecycleWorkspaceBridge }): void {
+  configure(bridges: {
+    workspace: SessionLifecycleWorkspaceBridge;
+    autoIterationExit?: SessionAutoIterationExitBridge;
+  }): void {
     this.workspaceBridge = bridges.workspace;
     this.lifecycleService.configure(bridges);
   }
@@ -261,7 +267,11 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  async sendAcpMessage(sessionId: string, prompt: ContentBlock[]): Promise<string> {
+  async sendAcpMessage(
+    sessionId: string,
+    prompt: ContentBlock[],
+    timeoutMs?: number
+  ): Promise<string> {
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     // Scope orphan detection to each prompt turn.
     this.acpEventProcessor.beginPromptTurn(sessionId);
@@ -278,7 +288,7 @@ export class SessionService {
     }
 
     try {
-      const result = await this.runtimeManager.sendPrompt(sessionId, prompt);
+      const result = await this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
       this.acpEventProcessor.finalizeOrphanedToolCalls(
         sessionId,
         `stop_reason:${result.stopReason}`

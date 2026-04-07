@@ -13,6 +13,7 @@ import { ArchiveWorkspaceDialog, RightPanel, WorkspaceContentView } from '@/comp
 import type { WorkspaceSessionRuntimeSummary } from '@/components/workspace/session-tab-runtime';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { SessionProviderValue } from '@/lib/session-provider-selection';
+import { AutoIterationProgressBanner } from './auto-iteration-progress-banner';
 import type { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import type { useWorkspaceInitStatus } from './use-workspace-detail-hooks';
 import { ChatContent, type ChatContentProps } from './workspace-detail-chat-content';
@@ -25,6 +26,8 @@ interface WorkspaceStateProps {
   handleBackToWorkspaces: () => void;
   isScriptFailed: boolean;
   workspaceInitStatus: ReturnType<typeof useWorkspaceInitStatus>['workspaceInitStatus'];
+  setupWarningDismissed: boolean;
+  dismissSetupWarning: () => void;
 }
 
 interface HeaderProps {
@@ -76,18 +79,24 @@ function ScriptBanner({
   workspaceId,
   isScriptFailed,
   workspaceInitStatus,
+  setupWarningDismissed,
+  dismissSetupWarning,
 }: {
   workspaceId: string;
   isScriptFailed: boolean;
   workspaceInitStatus: WorkspaceStateProps['workspaceInitStatus'];
+  setupWarningDismissed: boolean;
+  dismissSetupWarning: () => void;
 }) {
-  if (isScriptFailed) {
+  if (isScriptFailed && !setupWarningDismissed) {
     return (
       <ScriptFailedBanner
         workspaceId={workspaceId}
         initErrorMessage={workspaceInitStatus?.initErrorMessage ?? null}
         initOutput={workspaceInitStatus?.initOutput ?? null}
         hasStartupScript={workspaceInitStatus?.hasStartupScript ?? false}
+        showDismiss={workspaceInitStatus?.chatBanner?.showDismiss ?? false}
+        onDismiss={dismissSetupWarning}
       />
     );
   }
@@ -165,6 +174,13 @@ export function WorkspaceDetailView({
         workspaceId={workspaceState.workspaceId}
         isScriptFailed={workspaceState.isScriptFailed}
         workspaceInitStatus={workspaceState.workspaceInitStatus}
+        setupWarningDismissed={workspaceState.setupWarningDismissed}
+        dismissSetupWarning={workspaceState.dismissSetupWarning}
+      />
+
+      <AutoIterationProgressBanner
+        workspaceId={workspaceState.workspaceId}
+        mode={workspaceState.workspace?.mode}
       />
 
       {isMobile ? (

@@ -70,6 +70,11 @@ describe('WorkspaceCreationService', () => {
     runScriptPort: null,
     runScriptStartedAt: null,
     runScriptStatus: 'IDLE',
+    mode: 'STANDARD' as const,
+    autoIterationStatus: null,
+    autoIterationConfig: null,
+    autoIterationProgress: null,
+    autoIterationSessionId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

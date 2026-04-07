@@ -52,7 +52,7 @@
     "@radix-ui/react-toggle-group",
     "@hookform/resolvers",
     "geist",
-    "@zed-industries/claude-agent-acp"
+    "@agentclientprotocol/claude-agent-acp"
   ],
   "vitest": {
     "entry": ["src/**/*.test.{ts,tsx}", "vitest.config.ts"]

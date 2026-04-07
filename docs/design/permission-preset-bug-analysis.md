@@ -12,7 +12,7 @@ A secondary issue exists for CODEX sessions: the permission preset is not re-app
 
 Factory Factory supports two ACP providers:
 
-- **CLAUDE** — via the external `@zed-industries/claude-agent-acp` binary (stdio JSON-RPC)
+- **CLAUDE** — via the external `@agentclientprotocol/claude-agent-acp` binary (stdio JSON-RPC)
 - **CODEX** — via an internal `codex-app-server-acp` adapter (in-process, wrapping Codex app-server)
 
 Both providers support ACP's `requestPermission` RPC, which suspends agent execution until the user approves or denies a tool call. The user expects that setting "YOLO" globally should suppress all permission prompts for new sessions, regardless of provider.

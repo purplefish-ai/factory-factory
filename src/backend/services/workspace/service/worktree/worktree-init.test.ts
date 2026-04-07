@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   onExit: vi.fn(),
   startProvisioning: vi.fn(),
   markReady: vi.fn(),
+  markReadyWithWarning: vi.fn(),
   markFailed: vi.fn(),
   getInitMode: vi.fn(),
   clearInitMode: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceStateMachine: {
     startProvisioning: mocks.startProvisioning,
     markReady: mocks.markReady,
+    markReadyWithWarning: mocks.markReadyWithWarning,
     markFailed: mocks.markFailed,
   },
   worktreeLifecycleService: {
@@ -309,7 +311,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     expect(mocks.markFailed).toHaveBeenCalled();
   });
 
-  it('stops eagerly-started session when startup script reports failure', async () => {
+  it('continues session normally when startup script reports failure (non-blocking)', async () => {
     mocks.runStartupScript.mockResolvedValue({
       success: false,
       exitCode: 1,
@@ -317,6 +319,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       stderr: 'fail',
       timedOut: false,
       durationMs: 10,
+      errorMessage: 'Script failed with non-zero exit code',
     });
     mocks.findByWorkspaceId.mockResolvedValue([{ id: 'session-1', status: SessionStatus.IDLE }]);
 
@@ -329,7 +332,10 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       initialPrompt: '',
       startupModePreset: 'non_interactive',
     });
-    expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
+    // Session should NOT be stopped — failure is non-blocking
+    expect(mocks.stopWorkspaceSessions).not.toHaveBeenCalled();
+    // Workspace should be marked ready with a warning
+    expect(mocks.markReadyWithWarning).toHaveBeenCalledWith('workspace-1', expect.any(String));
   });
 
   it('refreshes cached GitHub username after TTL expiry', async () => {

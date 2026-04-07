@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { Loader2, Paperclip } from 'lucide-react';
+import { ChevronDown, Loader2, Paperclip, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -12,6 +12,15 @@ import { useProjectFileMentions } from '@/components/chat/chat-input/hooks/use-p
 import { FileMentionPalette } from '@/components/chat/file-mention-palette';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -52,6 +61,7 @@ function createOptimisticWorkingWorkspace(params: {
   projectId: string;
   name: string;
   ratchetEnabled: boolean;
+  mode?: 'STANDARD' | 'AUTO_ITERATION';
   createdAt?: Date;
   updatedAt?: Date;
 }): KanbanWorkspace {
@@ -108,6 +118,11 @@ function createOptimisticWorkingWorkspace(params: {
     hasHadSessions: false,
     cachedKanbanColumn: 'WORKING',
     stateComputedAt: null,
+    mode: (params.mode ?? 'STANDARD') as 'STANDARD' | 'AUTO_ITERATION',
+    autoIterationStatus: null,
+    autoIterationConfig: null,
+    autoIterationProgress: null,
+    autoIterationSessionId: null,
     agentSessions: [],
     terminalSessions: [],
     kanbanColumn: 'WORKING',
@@ -143,6 +158,13 @@ export function InlineWorkspaceForm({
   const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
     'non_interactive'
   );
+  const [mode, setMode] = useState<'STANDARD' | 'AUTO_ITERATION'>('STANDARD');
+  const [testCommand, setTestCommand] = useState('');
+  const [targetDescription, setTargetDescription] = useState('');
+  const [maxIterations, setMaxIterations] = useState(25);
+  const [unlimitedIterations, setUnlimitedIterations] = useState(false);
+  const [testTimeoutSeconds, setTestTimeoutSeconds] = useState(600);
+  const [baseBranch, setBaseBranch] = useState('');
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -181,6 +203,7 @@ export function InlineWorkspaceForm({
         projectId,
         name: input.type === 'MANUAL' ? input.name : 'New Workspace',
         ratchetEnabled: input.type === 'MANUAL' ? (input.ratchetEnabled ?? true) : true,
+        mode: input.type === 'MANUAL' ? (input.mode ?? 'STANDARD') : 'STANDARD',
       });
 
       await utils.workspace.listWithKanbanState.cancel({ projectId });
@@ -201,6 +224,7 @@ export function InlineWorkspaceForm({
         projectId: workspace.projectId,
         name: workspace.name,
         ratchetEnabled: workspace.ratchetEnabled,
+        mode: workspace.mode ?? 'STANDARD',
         createdAt: workspace.createdAt,
         updatedAt: workspace.updatedAt,
       });
@@ -258,7 +282,23 @@ export function InlineWorkspaceForm({
     event.target.value = '';
   };
 
-  const handleLaunch = () => {
+  const buildAutoIterationConfig = () => ({
+    testCommand: testCommand.trim(),
+    targetDescription: targetDescription.trim(),
+    maxIterations: unlimitedIterations ? 0 : maxIterations,
+    testTimeoutSeconds,
+  });
+
+  const getAutoIterationBranchName = () => {
+    const trimmed = baseBranch.trim();
+    return trimmed || undefined;
+  };
+
+  const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' = mode) => {
+    if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
+      toast.error('Auto-iteration requires a test command and target description.');
+      return;
+    }
     const trimmedPrompt = initialPrompt.trim();
     const name = trimmedPrompt
       ? generateWorkspaceNameFromPrompt(trimmedPrompt, availableWorkspaceNames)
@@ -272,6 +312,9 @@ export function InlineWorkspaceForm({
       startupModePreset: startupModePreset === 'plan' ? 'plan' : undefined,
       ratchetEnabled,
       provider,
+      mode: launchMode,
+      autoIterationConfig: launchMode === 'AUTO_ITERATION' ? buildAutoIterationConfig() : undefined,
+      branchName: launchMode === 'AUTO_ITERATION' ? getAutoIterationBranchName() : undefined,
     });
   };
 
@@ -289,7 +332,7 @@ export function InlineWorkspaceForm({
     }
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !isCreating) {
       e.preventDefault();
-      handleLaunch();
+      handleLaunch(mode);
     }
   };
 
@@ -340,6 +383,90 @@ export function InlineWorkspaceForm({
             }
           />
         ) : null}
+        {mode === 'AUTO_ITERATION' && (
+          <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+              <RefreshCw className="h-3 w-3" />
+              Auto-iteration config
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Test command</Label>
+              <Input
+                className="h-7 text-xs font-mono"
+                placeholder="e.g. pnpm test"
+                value={testCommand}
+                onChange={(e) => setTestCommand(e.target.value)}
+                disabled={isCreating}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Target description</Label>
+              <Input
+                className="h-7 text-xs"
+                placeholder="e.g. All tests pass with no regressions"
+                value={targetDescription}
+                onChange={(e) => setTargetDescription(e.target.value)}
+                disabled={isCreating}
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Max iterations</Label>
+                <Input
+                  className="h-7 w-20 text-xs"
+                  type="number"
+                  min={1}
+                  value={unlimitedIterations ? '' : maxIterations}
+                  onChange={(e) => {
+                    if (e.target.value === '') {
+                      return;
+                    }
+                    const val = Number(e.target.value);
+                    setMaxIterations(Number.isNaN(val) ? 25 : Math.max(1, val));
+                  }}
+                  disabled={isCreating || unlimitedIterations}
+                  placeholder="25"
+                />
+              </div>
+              <label className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Checkbox
+                  checked={unlimitedIterations}
+                  onCheckedChange={(checked) => setUnlimitedIterations(checked === true)}
+                  disabled={isCreating}
+                  className="h-3.5 w-3.5"
+                />
+                Unlimited
+              </label>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Test timeout (s)</Label>
+                <Input
+                  className="h-7 w-20 text-xs"
+                  type="number"
+                  min={1}
+                  value={testTimeoutSeconds}
+                  onChange={(e) => {
+                    if (e.target.value === '') {
+                      return;
+                    }
+                    const val = Number(e.target.value);
+                    setTestTimeoutSeconds(Number.isNaN(val) ? 300 : Math.max(1, val));
+                  }}
+                  disabled={isCreating}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Base branch (optional)</Label>
+              <Input
+                className="h-7 text-xs font-mono"
+                placeholder="defaults to project default branch"
+                value={baseBranch}
+                onChange={(e) => setBaseBranch(e.target.value)}
+                disabled={isCreating}
+              />
+            </div>
+          </div>
+        )}
         <div className="space-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
@@ -408,19 +535,48 @@ export function InlineWorkspaceForm({
             >
               Cancel
             </Button>
-            <Button
-              size="sm"
-              className="h-7 text-xs whitespace-nowrap"
-              onClick={handleLaunch}
-              disabled={
-                isCreating ||
-                isLoadingSettings ||
-                (shouldFetchExistingNames && isLoadingWorkspaceList)
-              }
-            >
-              {isCreating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-              Launch
-            </Button>
+            <div className="flex">
+              <Button
+                size="sm"
+                className={cn(
+                  'h-7 text-xs whitespace-nowrap rounded-r-none',
+                  mode === 'AUTO_ITERATION' && 'bg-primary/90'
+                )}
+                onClick={() => handleLaunch(mode)}
+                disabled={
+                  isCreating ||
+                  isLoadingSettings ||
+                  (shouldFetchExistingNames && isLoadingWorkspaceList)
+                }
+              >
+                {isCreating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                {mode === 'AUTO_ITERATION' ? 'Launch (auto-iterate)' : 'Launch'}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    className="h-7 rounded-l-none border-l border-primary-foreground/20 px-1.5"
+                    disabled={
+                      isCreating ||
+                      isLoadingSettings ||
+                      (shouldFetchExistingNames && isLoadingWorkspaceList)
+                    }
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="text-xs">
+                  <DropdownMenuItem className="text-xs" onClick={() => setMode('STANDARD')}>
+                    Launch as Standard Workspace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onClick={() => setMode('AUTO_ITERATION')}>
+                    <RefreshCw className="mr-1.5 h-3 w-3" />
+                    Launch as Auto-Iteration Workspace
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </CardContent>

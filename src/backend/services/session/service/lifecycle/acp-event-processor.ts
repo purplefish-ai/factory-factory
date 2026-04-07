@@ -539,7 +539,9 @@ export class AcpEventProcessor {
       toolInput: Record<string, unknown>;
     }
   ): void {
-    this.startToolCallTimer(sessionId, tool.toolUseId, tool.toolName);
+    if (!this.shouldSkipToolTimeout(tool.toolName, tool.toolInput)) {
+      this.startToolCallTimer(sessionId, tool.toolUseId, tool.toolName);
+    }
 
     const context = this.getInterceptorContext(sessionId);
     if (!context) {
@@ -552,6 +554,33 @@ export class AcpEventProcessor {
       input: tool.toolInput,
     };
     interceptorRegistry.notifyToolStart(event, context);
+  }
+
+  private shouldSkipToolTimeout(toolName: string, toolInput: Record<string, unknown>): boolean {
+    const normalizedToolName = this.normalizeIdentifier(toolName);
+    if (
+      normalizedToolName === 'askuserquestion' ||
+      normalizedToolName === 'requestuserinput' ||
+      normalizedToolName === 'itemtoolrequestuserinput' ||
+      normalizedToolName === 'exitplanmode'
+    ) {
+      return true;
+    }
+
+    if (Array.isArray(toolInput.questions)) {
+      return true;
+    }
+
+    const inputType = toolInput.type;
+    if (typeof inputType === 'string' && this.normalizeIdentifier(inputType) === 'exitplanmode') {
+      return true;
+    }
+
+    return false;
+  }
+
+  private normalizeIdentifier(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
   private notifyInterceptorToolComplete(

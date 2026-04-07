@@ -1,4 +1,5 @@
 import { adminRouter } from './admin.trpc';
+import { autoIterationRouter } from './auto-iteration.trpc';
 import { closedSessionsRouter } from './closed-sessions.trpc';
 import { decisionLogRouter } from './decision-log.trpc';
 import { githubRouter } from './github.trpc';
@@ -21,6 +22,7 @@ export const appRouter = router({
   userSettings: userSettingsRouter,
   github: githubRouter,
   linear: linearRouter,
+  autoIteration: autoIterationRouter,
 });
 
 // Export type for use in frontend

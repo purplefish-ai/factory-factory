@@ -59,6 +59,10 @@ const workspaceMutationRules = {
     type: 'static',
     fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage'],
   },
+  startProvisioningFromReadyIfAllowed: {
+    type: 'static',
+    fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage'],
+  },
   resetToNewIfAllowed: {
     type: 'static',
     fields: ['status', 'initRetryCount', 'initStartedAt', 'initCompletedAt', 'initErrorMessage'],
@@ -66,6 +70,14 @@ const workspaceMutationRules = {
   markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
   clearRatchetActiveSession: { type: 'static', fields: ['ratchetActiveSessionId'] },
   clearInitOutput: { type: 'static', fields: ['initOutput'] },
+  resetStaleRunScriptStatuses: {
+    type: 'static',
+    fields: ['runScriptStatus', 'runScriptPid', 'runScriptPort', 'runScriptStartedAt'],
+  },
+  resetStaleAutoIterationStatuses: {
+    type: 'static',
+    fields: ['autoIterationStatus', 'autoIterationSessionId'],
+  },
 };
 
 function collectSourceFiles(dir) {

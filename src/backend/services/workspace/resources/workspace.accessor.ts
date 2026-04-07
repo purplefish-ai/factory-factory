@@ -32,6 +32,8 @@ interface CreateWorkspaceInput {
   ratchetSessionProvider?: Prisma.WorkspaceCreateInput['ratchetSessionProvider'];
   creationSource?: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
   creationMetadata?: Prisma.InputJsonValue;
+  mode?: 'STANDARD' | 'AUTO_ITERATION';
+  autoIterationConfig?: Prisma.InputJsonValue;
 }
 
 interface UpdateWorkspaceInput {
@@ -77,6 +79,11 @@ interface UpdateWorkspaceInput {
   runScriptPort?: number | null;
   runScriptStartedAt?: Date | null;
   runScriptStatus?: RunScriptStatus;
+  // Auto-iteration tracking
+  autoIterationStatus?: Prisma.WorkspaceUpdateInput['autoIterationStatus'];
+  autoIterationConfig?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
+  autoIterationProgress?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
+  autoIterationSessionId?: string | null;
 }
 
 interface FindByProjectIdFilters {
@@ -139,6 +146,8 @@ class WorkspaceAccessor {
         ratchetSessionProvider: data.ratchetSessionProvider,
         creationSource: data.creationSource,
         creationMetadata: data.creationMetadata,
+        mode: data.mode,
+        autoIterationConfig: data.autoIterationConfig,
       },
     });
   }
@@ -287,6 +296,69 @@ class WorkspaceAccessor {
   }
 
   /**
+   * Find workspaces with auto-iteration status RUNNING and reset them to FAILED.
+   * Called at server startup to recover states left in-flight by a server crash or restart.
+   * The in-memory loop context is irrecoverably lost on restart, so FAILED (not PAUSED).
+   */
+  async resetStaleAutoIterationStatuses(): Promise<Array<{ id: string }>> {
+    const stale = await prisma.workspace.findMany({
+      where: { autoIterationStatus: 'RUNNING' },
+      select: { id: true },
+    });
+
+    if (stale.length === 0) {
+      return [];
+    }
+
+    await prisma.workspace.updateMany({
+      where: {
+        id: { in: stale.map((w) => w.id) },
+        autoIterationStatus: 'RUNNING',
+      },
+      data: {
+        autoIterationStatus: 'FAILED',
+        autoIterationSessionId: null,
+      },
+    });
+
+    return stale;
+  }
+
+  /**
+   * Find workspaces with transient run script statuses (STARTING or STOPPING)
+   * and reset them to IDLE. Called at server startup to recover states left
+   * in-flight by a server crash or restart.
+   * Returns the affected workspaces (id + prior status) for logging/event emission.
+   */
+  async resetStaleRunScriptStatuses(): Promise<
+    Array<{ id: string; runScriptStatus: RunScriptStatus }>
+  > {
+    const stale = await prisma.workspace.findMany({
+      where: { runScriptStatus: { in: ['STARTING', 'STOPPING'] } },
+      select: { id: true, runScriptStatus: true },
+    });
+
+    if (stale.length === 0) {
+      return [];
+    }
+
+    await prisma.workspace.updateMany({
+      where: {
+        id: { in: stale.map((w) => w.id) },
+        runScriptStatus: { in: ['STARTING', 'STOPPING'] },
+      },
+      data: {
+        runScriptStatus: 'IDLE',
+        runScriptPid: null,
+        runScriptPort: null,
+        runScriptStartedAt: null,
+      },
+    });
+
+    return stale;
+  }
+
+  /**
    * Conditional provisioning retry transition (FAILED -> PROVISIONING).
    * Returns count=1 when retry is allowed and transition was applied.
    */
@@ -295,6 +367,27 @@ class WorkspaceAccessor {
       where: {
         id,
         status: 'FAILED',
+        initRetryCount: { lt: maxRetries },
+      },
+      data: {
+        status: 'PROVISIONING',
+        initRetryCount: { increment: 1 },
+        initStartedAt: new Date(),
+        initErrorMessage: null,
+      },
+    });
+  }
+
+  /**
+   * Conditional provisioning retry transition (READY -> PROVISIONING).
+   * Used when a workspace is READY+warning and the user retries the setup script.
+   * Returns count=1 when retry is allowed and transition was applied.
+   */
+  startProvisioningFromReadyIfAllowed(id: string, maxRetries: number): Promise<{ count: number }> {
+    return prisma.workspace.updateMany({
+      where: {
+        id,
+        status: 'READY',
         initRetryCount: { lt: maxRetries },
       },
       data: {

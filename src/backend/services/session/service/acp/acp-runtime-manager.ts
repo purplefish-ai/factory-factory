@@ -25,6 +25,14 @@ import type { AcpClientOptions, PermissionPreset } from './types';
 
 const logger = createLogger('acp-runtime-manager');
 
+/** Thrown when an ACP prompt exceeds the caller-specified timeout. */
+export class PromptTimeoutError extends Error {
+  constructor(sessionId: string, timeoutMs: number) {
+    super(`ACP prompt timed out after ${timeoutMs}ms for session ${sessionId}`);
+    this.name = 'PromptTimeoutError';
+  }
+}
+
 export type AcpRuntimeCreatedCallback = (
   sessionId: string,
   client: AcpProcessHandle,
@@ -86,6 +94,57 @@ type AcpErrorLogDetails = {
 
 function normalizeUnknownError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Workaround for claude-agent-acp bug where the Read tool sends `line: [start, end]`
+ * (an array) instead of `line: number` in session/update locations.
+ * Normalizes array line values to the first element before SDK Zod validation.
+ */
+function normalizeSessionUpdateMessage(message: unknown): unknown {
+  if (
+    !isRecord(message) ||
+    message.method !== 'session/update' ||
+    !isRecord(message.params) ||
+    !isRecord(message.params.update) ||
+    !Array.isArray(message.params.update.locations)
+  ) {
+    return message;
+  }
+
+  const update = message.params.update;
+  const locations = update.locations as unknown[];
+  const needsNormalization = locations.some(
+    (loc) =>
+      isRecord(loc) && loc.line !== undefined && loc.line !== null && typeof loc.line !== 'number'
+  );
+  if (!needsNormalization) {
+    return message;
+  }
+
+  return {
+    ...message,
+    params: {
+      ...message.params,
+      update: {
+        ...update,
+        locations: locations.map((loc) => {
+          if (!isRecord(loc) || typeof loc.line === 'number' || loc.line == null) {
+            return loc;
+          }
+          return {
+            ...loc,
+            line:
+              Array.isArray(loc.line) && loc.line.length > 0 ? (loc.line[0] as number) : undefined,
+          };
+        }),
+      },
+    },
+  };
 }
 
 function hasUsableWorkingDir(workingDir: string | null | undefined): boolean {
@@ -620,7 +679,7 @@ export class AcpRuntimeManager {
         ? resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint)
         : (() => {
             const binaryName = 'claude-agent-acp';
-            const packageName = '@zed-industries/claude-agent-acp';
+            const packageName = '@agentclientprotocol/claude-agent-acp';
             const binaryPath = resolveAcpBinary(packageName, binaryName);
             return {
               command: binaryPath,
@@ -679,6 +738,19 @@ export class AcpRuntimeManager {
     const output = Writable.toWeb(child.stdin) as WritableStream<Uint8Array>;
     const stream = ndJsonStream(output, input);
 
+    // Normalize malformed session/update notifications before SDK Zod validation.
+    // Workaround: claude-agent-acp sends `line: [start, end]` arrays instead of numbers.
+    const normalizedStream = {
+      writable: stream.writable,
+      readable: stream.readable.pipeThrough(
+        new TransformStream({
+          transform(message, controller) {
+            controller.enqueue(normalizeSessionUpdateMessage(message));
+          },
+        })
+      ),
+    };
+
     // Create event callback that routes to handlers
     const acpEventHandler = handlers.onAcpEvent;
     const onEvent = acpEventHandler
@@ -700,7 +772,7 @@ export class AcpRuntimeManager {
           handlers.onAcpLog,
           autoApprovePolicy
         ),
-      stream
+      normalizedStream
     );
 
     let initResult: Awaited<ReturnType<ClientSideConnection['initialize']>>;
@@ -993,7 +1065,11 @@ export class AcpRuntimeManager {
     }
   }
 
-  async sendPrompt(sessionId: string, prompt: ContentBlock[]): Promise<{ stopReason: string }> {
+  async sendPrompt(
+    sessionId: string,
+    prompt: ContentBlock[],
+    timeoutMs?: number
+  ): Promise<{ stopReason: string }> {
     const handle = this.sessions.get(sessionId);
     if (!handle) {
       throw new Error(`No ACP session found for sessionId: ${sessionId}`);
@@ -1001,15 +1077,67 @@ export class AcpRuntimeManager {
 
     handle.isPromptInFlight = true;
     try {
-      const result = await handle.connection.prompt({
+      const promptPromise = handle.connection.prompt({
         sessionId: handle.providerSessionId,
         prompt,
       });
+
+      let result: { stopReason: string };
+      if (timeoutMs != null && timeoutMs > 0) {
+        result = await new Promise<{ stopReason: string }>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new PromptTimeoutError(sessionId, timeoutMs)),
+            timeoutMs
+          );
+          promptPromise.then(
+            (r) => {
+              clearTimeout(timer);
+              resolve(r);
+            },
+            (e) => {
+              clearTimeout(timer);
+              reject(e);
+            }
+          );
+        });
+      } else {
+        result = await promptPromise;
+      }
+
       handle.isPromptInFlight = false;
       return { stopReason: result.stopReason };
     } catch (error) {
       handle.isPromptInFlight = false;
+      if (error instanceof PromptTimeoutError) {
+        await this.escalatePromptTimeout(sessionId, timeoutMs);
+      }
       throw error;
+    }
+  }
+
+  /** Attempt graceful cancel after a prompt timeout, then escalate to kill. */
+  private async escalatePromptTimeout(
+    sessionId: string,
+    timeoutMs: number | undefined
+  ): Promise<void> {
+    logger.warn('Prompt timed out, attempting cancel', { sessionId, timeoutMs });
+    try {
+      const cancelled = await Promise.race([
+        this.cancelPrompt(sessionId).then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+      ]);
+      if (!cancelled) {
+        logger.warn('Cancel timed out after prompt timeout, stopping client', { sessionId });
+        await this.stopClient(sessionId).catch(() => {
+          // Best-effort cleanup
+        });
+      }
+    } catch {
+      // Cancel failed — stop the client forcibly
+      logger.warn('Cancel failed after timeout, stopping client', { sessionId });
+      await this.stopClient(sessionId).catch(() => {
+        // Best-effort cleanup
+      });
     }
   }
 

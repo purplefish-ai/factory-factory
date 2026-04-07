@@ -234,6 +234,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           message: sessionRuntimeError,
           showRetry: false,
           showPlay: false,
+          showDismiss: false,
         }
       : null;
 

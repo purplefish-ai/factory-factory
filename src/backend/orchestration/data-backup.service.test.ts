@@ -143,6 +143,11 @@ const mockWorkspace: Workspace = {
   hasHadSessions: true,
   cachedKanbanColumn: KanbanColumn.WORKING,
   stateComputedAt: new Date('2025-01-01T00:35:00.000Z'),
+  mode: 'STANDARD',
+  autoIterationStatus: null,
+  autoIterationConfig: null,
+  autoIterationProgress: null,
+  autoIterationSessionId: null,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:35:00.000Z'),
 };

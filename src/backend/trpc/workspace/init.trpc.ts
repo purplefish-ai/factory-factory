@@ -1,7 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
+import type { WorkspaceWithProject } from '@/backend/orchestration/types';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
+import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
 import { startupScriptService } from '@/backend/services/run-script';
 import {
@@ -58,10 +61,14 @@ export const workspaceInitRouter = router({
         });
       }
 
-      if (workspace.status !== 'FAILED') {
+      const isRetryableFromFailed = workspace.status === 'FAILED';
+      const isRetryableFromReadyWarning =
+        workspace.status === 'READY' && !!workspace.initErrorMessage;
+
+      if (!(isRetryableFromFailed || isRetryableFromReadyWarning)) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Can only retry failed initializations',
+          message: 'Can only retry failed or setup-warning initializations',
         });
       }
 
@@ -98,7 +105,36 @@ export const workspaceInitRouter = router({
         return workspaceDataService.findById(input.id);
       }
 
-      // Worktree exists - just retry the startup script
+      // READY+warning: workspace is functional but setup script failed.
+      // Retry by re-running the full startup script pipeline.
+      if (isRetryableFromReadyWarning) {
+        // Read config before state transition so a readConfig failure
+        // doesn't leave the workspace stuck in PROVISIONING.
+        const worktreePath = workspace.worktreePath;
+        const factoryConfig = await FactoryConfigService.readConfig(worktreePath);
+
+        const updatedWorkspace = await workspaceStateMachine.startProvisioningFromReady(
+          workspace.id,
+          maxRetries
+        );
+        if (!updatedWorkspace) {
+          throw new TRPCError({
+            code: 'TOO_MANY_REQUESTS',
+            message: `Maximum retry attempts (${maxRetries}) exceeded`,
+          });
+        }
+
+        await executeStartupScriptPipeline({
+          workspaceId: workspace.id,
+          workspaceWithProject: workspace as WorkspaceWithProject,
+          worktreePath,
+          factoryConfig,
+        });
+
+        return workspaceDataService.findById(input.id);
+      }
+
+      // FAILED+worktree: legacy path — re-run startup script only.
       const updatedWorkspace = await workspaceStateMachine.startProvisioning(input.id, {
         maxRetries,
       });

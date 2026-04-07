@@ -39,18 +39,45 @@ const getLogger = (ctx: Context) => ctx.appContext.services.createLogger(loggerN
 
 // Zod schema for workspace creation source discriminated union
 const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
-  z.object({
-    type: z.literal('MANUAL'),
-    projectId: z.string(),
-    name: z.string().min(1),
-    description: z.string().optional(),
-    branchName: z.string().optional(),
-    ratchetEnabled: z.boolean().optional(),
-    initialPrompt: z.string().optional(),
-    initialAttachments: z.array(AttachmentSchema).optional(),
-    startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
-    provider: z.nativeEnum(SessionProvider).optional(),
-  }),
+  z
+    .object({
+      type: z.literal('MANUAL'),
+      projectId: z.string(),
+      name: z.string().min(1),
+      description: z.string().optional(),
+      branchName: z.string().optional(),
+      ratchetEnabled: z.boolean().optional(),
+      initialPrompt: z.string().optional(),
+      initialAttachments: z.array(AttachmentSchema).optional(),
+      startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
+      provider: z.nativeEnum(SessionProvider).optional(),
+      mode: z.enum(['STANDARD', 'AUTO_ITERATION']).optional(),
+      autoIterationConfig: z
+        .object({
+          testCommand: z.string().min(1),
+          targetDescription: z.string().min(1),
+          maxIterations: z.number().int().min(0).optional().default(25),
+          testTimeoutSeconds: z.number().int().min(1).optional().default(600),
+          sessionRecycleInterval: z.number().int().min(1).optional().default(10),
+        })
+        .optional(),
+    })
+    .superRefine((data, ctx) => {
+      if (data.mode === 'AUTO_ITERATION' && !data.autoIterationConfig) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'autoIterationConfig is required when mode is AUTO_ITERATION',
+          path: ['autoIterationConfig'],
+        });
+      }
+      if (data.autoIterationConfig && data.mode !== 'AUTO_ITERATION') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'autoIterationConfig is only allowed when mode is AUTO_ITERATION',
+          path: ['autoIterationConfig'],
+        });
+      }
+    }),
   z.object({
     type: z.literal('RESUME_BRANCH'),
     projectId: z.string(),

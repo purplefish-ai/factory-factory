@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock Prisma
 const mockFindUnique = vi.fn();
+const mockFindMany = vi.fn();
 const mockUpdateMany = vi.fn();
 const mockFindUniqueOrThrow = vi.fn();
 
@@ -9,6 +10,7 @@ vi.mock('@/backend/db', () => ({
   prisma: {
     workspace: {
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
+      findMany: (...args: unknown[]) => mockFindMany(...args),
       updateMany: (...args: unknown[]) => mockUpdateMany(...args),
       findUniqueOrThrow: (...args: unknown[]) => mockFindUniqueOrThrow(...args),
     },
@@ -752,6 +754,40 @@ describe('RunScriptStateMachineService', () => {
         fromStatus: 'STARTING',
         toStatus: 'RUNNING',
       });
+    });
+  });
+
+  describe('recoverStaleStates', () => {
+    it('does nothing when no stale states exist', async () => {
+      mockFindMany.mockResolvedValue([]);
+
+      await runScriptStateMachine.recoverStaleStates();
+
+      expect(mockUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('resets stale workspaces and emits status-changed events', async () => {
+      const stale = [
+        { id: 'ws-1', runScriptStatus: 'STARTING' as const },
+        { id: 'ws-2', runScriptStatus: 'STOPPING' as const },
+      ];
+      mockFindMany.mockResolvedValue(stale);
+      mockUpdateMany.mockResolvedValue({ count: 2 });
+
+      const events: unknown[] = [];
+      const listener = (e: unknown) => events.push(e);
+      runScriptStateMachine.on(RUN_SCRIPT_STATUS_CHANGED, listener);
+
+      try {
+        await runScriptStateMachine.recoverStaleStates();
+
+        expect(events).toEqual([
+          { workspaceId: 'ws-1', fromStatus: 'STARTING', toStatus: 'IDLE' },
+          { workspaceId: 'ws-2', fromStatus: 'STOPPING', toStatus: 'IDLE' },
+        ]);
+      } finally {
+        runScriptStateMachine.off(RUN_SCRIPT_STATUS_CHANGED, listener);
+      }
     });
   });
 

@@ -141,11 +141,8 @@ export function WorkspaceDetailContainer() {
     { enabled: workspace?.hasHadSessions === true && workspace?.prState === 'NONE' }
   );
 
-  const { workspaceInitStatus, isScriptFailed } = useWorkspaceInitStatus(
-    workspaceId,
-    workspace,
-    utils
-  );
+  const { workspaceInitStatus, isScriptFailed, setupWarningDismissed, dismissSetupWarning } =
+    useWorkspaceInitStatus(workspaceId, workspace, utils);
   useEffect(() => {
     const phase = workspaceInitStatus?.phase;
     if (phase === 'READY' || phase === 'ARCHIVED') {
@@ -444,6 +441,8 @@ export function WorkspaceDetailContainer() {
           handleBackToWorkspaces,
           isScriptFailed,
           workspaceInitStatus,
+          setupWarningDismissed,
+          dismissSetupWarning,
         }}
         header={{
           archivePending: archiveWorkspace.isPending,

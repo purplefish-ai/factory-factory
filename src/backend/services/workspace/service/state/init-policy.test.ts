@@ -89,7 +89,7 @@ describe('getWorkspaceInitPolicy', () => {
     expect(policy.banner?.message).toBe('Workspace is marked ready, but its worktree is missing.');
   });
 
-  it('keeps READY_WITH_WARNING resumable for READY status with worktree', () => {
+  it('shows dismissable warning for READY status with init error (non-blocking)', () => {
     const policy = getWorkspaceInitPolicy({
       status: 'READY',
       worktreePath: '/tmp/worktree',
@@ -97,8 +97,9 @@ describe('getWorkspaceInitPolicy', () => {
     });
 
     expect(policy.phase).toBe('READY_WITH_WARNING');
-    expect(policy.dispatchPolicy).toBe('manual_resume');
-    expect(policy.banner?.showPlay).toBe(true);
-    expect(policy.banner?.showRetry).toBe(false);
+    expect(policy.dispatchPolicy).toBe('allowed');
+    expect(policy.banner?.showPlay).toBe(false);
+    expect(policy.banner?.showRetry).toBe(true);
+    expect(policy.banner?.showDismiss).toBe(true);
   });
 });

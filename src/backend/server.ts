@@ -48,6 +48,8 @@ import {
   createTerminalUpgradeHandler,
 } from './routers/websocket';
 import { reconciliationService } from './services/ratchet';
+import { runScriptStateMachine } from './services/run-script';
+import { workspaceAccessor } from './services/workspace';
 import { appRouter, createContext } from './trpc/index';
 import type { ServerInstance } from './types/server-instance';
 
@@ -315,6 +317,42 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
         });
       }
 
+      const runStartupReconciliation = async (): Promise<void> => {
+        try {
+          await reconciliationService.cleanupOrphans();
+        } catch (error) {
+          logger.error('Failed to cleanup orphan sessions on startup', toError(error));
+        }
+
+        // Reconcile workspaces that may have been left in inconsistent states
+        // (e.g., stuck in PROVISIONING due to server crash)
+        try {
+          await reconciliationService.reconcile();
+        } catch (error) {
+          logger.error('Failed to reconcile workspaces on startup', toError(error));
+        }
+
+        // Reset run script states left in transient STARTING/STOPPING by a prior crash
+        try {
+          await runScriptStateMachine.recoverStaleStates();
+        } catch (error) {
+          logger.error('Failed to recover stale run script states on startup', toError(error));
+        }
+
+        // Reset auto-iteration states left in RUNNING by a prior crash
+        try {
+          const recovered = await workspaceAccessor.resetStaleAutoIterationStatuses();
+          if (recovered.length > 0) {
+            logger.info('Recovered stale auto-iteration states on startup', {
+              count: recovered.length,
+              workspaceIds: recovered.map((w) => w.id),
+            });
+          }
+        } catch (error) {
+          logger.error('Failed to recover stale auto-iteration states on startup', toError(error));
+        }
+      };
+
       return new Promise((resolve, reject) => {
         server.listen(actualPort, REQUESTED_HOST, async () => {
           logger.info('Backend server started', {
@@ -329,19 +367,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           configureEventCollector(context.services);
           configureSnapshotReconciliation(context.services);
 
-          try {
-            await reconciliationService.cleanupOrphans();
-          } catch (error) {
-            logger.error('Failed to cleanup orphan sessions on startup', toError(error));
-          }
-
-          // Reconcile workspaces that may have been left in inconsistent states
-          // (e.g., stuck in PROVISIONING due to server crash)
-          try {
-            await reconciliationService.reconcile();
-          } catch (error) {
-            logger.error('Failed to reconcile workspaces on startup', toError(error));
-          }
+          await runStartupReconciliation();
 
           sessionFileLogger.cleanupOldLogs();
           acpTraceLogger.cleanupOldLogs();

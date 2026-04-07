@@ -1,3 +1,4 @@
+import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -7,7 +8,10 @@ import type {
   AcpRuntimeManager,
   PermissionPreset,
 } from '@/backend/services/session/service/acp';
-import type { SessionLifecycleWorkspaceBridge } from '@/backend/services/session/service/bridges';
+import type {
+  SessionAutoIterationExitBridge,
+  SessionLifecycleWorkspaceBridge,
+} from '@/backend/services/session/service/bridges';
 import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
 import { acpTraceLogger } from '@/backend/services/session/service/logging/acp-trace-logger.service';
 import type { SessionDomainService } from '@/backend/services/session/service/session-domain.service';
@@ -86,6 +90,7 @@ export class SessionLifecycleService {
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
+  private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
 
   constructor(options: SessionLifecycleServiceDependencies) {
     this.repository = options.repository;
@@ -99,8 +104,12 @@ export class SessionLifecycleService {
     this.retryService = options.retryService;
   }
 
-  configure(bridges: { workspace: SessionLifecycleWorkspaceBridge }): void {
+  configure(bridges: {
+    workspace: SessionLifecycleWorkspaceBridge;
+    autoIterationExit?: SessionAutoIterationExitBridge;
+  }): void {
     this.workspaceBridge = bridges.workspace;
+    this.autoIterationExitBridge = bridges.autoIterationExit ?? null;
   }
 
   async startSession(
@@ -420,10 +429,18 @@ export class SessionLifecycleService {
           logger.debug('Updated ACP session status to COMPLETED on exit', { sessionId: sid });
 
           await this.clearRatchetActiveSessionIfMatching(session.workspaceId, sid);
+          void this.maybeDiscoverPROnSessionEnd(session.workspaceId);
           if (session.workflow === 'ratchet') {
             await this.persistRatchetTranscript(sid, session);
             await this.repository.deleteSession(sid);
             logger.debug('Deleted transient ratchet ACP session', { sessionId: sid });
+          }
+          if (session.workflow === 'auto-iteration' && this.autoIterationExitBridge) {
+            // Only propagate death for unexpected exits — intentional stop/recycle sets
+            // isStopInProgress, so the loop should not be marked as failed in those cases.
+            if (!this.runtimeManager.isStopInProgress(sid)) {
+              this.autoIterationExitBridge.onAutoIterationSessionExit(session.workspaceId, sid);
+            }
           }
         } catch (error) {
           logger.warn('Failed to update ACP session status on exit', {
@@ -676,6 +693,52 @@ export class SessionLifecycleService {
     }
 
     await this.workspaceBridge.clearRatchetActiveSessionIfMatching(workspaceId, sessionId);
+  }
+
+  /**
+   * After a session ends, check if a PR was created for the workspace's branch
+   * that the interceptor may have missed. This is a fast fallback that avoids
+   * waiting for the 3-minute periodic scheduler.
+   */
+  private async maybeDiscoverPROnSessionEnd(workspaceId: string): Promise<void> {
+    try {
+      const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
+      if (!workspace) {
+        return;
+      }
+      // Already associated — nothing to do
+      if (workspace.prUrl) {
+        return;
+      }
+      const { branchName, createdAt, project } = workspace;
+      if (!(branchName && project?.githubOwner && project?.githubRepo)) {
+        return;
+      }
+      const pr = await githubCLIService.findPRForBranch(
+        project.githubOwner,
+        project.githubRepo,
+        branchName,
+        createdAt
+      );
+      if (!pr) {
+        return;
+      }
+      const result = await prSnapshotService.attachAndRefreshPR(workspaceId, pr.url);
+      if (result.success) {
+        logger.info('Discovered PR for workspace on session end', {
+          workspaceId,
+          branchName,
+          prNumber: result.snapshot.prNumber,
+          prUrl: pr.url,
+        });
+      }
+    } catch (error) {
+      // Fire-and-forget: log but don't surface to caller
+      logger.debug('PR discovery on session end failed', {
+        workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private clearSessionStoreIfInactive(

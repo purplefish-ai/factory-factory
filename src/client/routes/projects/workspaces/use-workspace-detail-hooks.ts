@@ -53,14 +53,31 @@ export function useWorkspaceInitStatus(
   }, [workspaceInitStatus?.status, hasWorktreePath, workspaceId, utils, workspace?.worktreePath]);
 
   const status = workspaceInitStatus?.status;
+  const initErrorMessage = workspaceInitStatus?.initErrorMessage ?? null;
 
-  // Script failed after worktree was created — non-blocking banner with retry
-  const isScriptFailed = status === 'FAILED' && hasWorktreePath;
+  // Script failed after worktree was created — non-blocking banner with retry.
+  // Covers both the legacy FAILED+worktree path and the new READY+warning path.
+  const isScriptFailed =
+    (status === 'FAILED' && hasWorktreePath) || (status === 'READY' && !!initErrorMessage);
+
+  // Ephemeral dismiss state — resets when the error message changes (e.g. after a retry).
+  const [setupWarningDismissed, setSetupWarningDismissed] = useState(false);
+  const prevErrorMessageRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (initErrorMessage !== prevErrorMessageRef.current) {
+      setSetupWarningDismissed(false);
+      prevErrorMessageRef.current = initErrorMessage;
+    }
+  }, [initErrorMessage]);
+
+  const dismissSetupWarning = useCallback(() => setSetupWarningDismissed(true), []);
 
   return {
     workspaceInitStatus,
     isInitStatusPending,
     isScriptFailed,
+    setupWarningDismissed,
+    dismissSetupWarning,
   };
 }
 

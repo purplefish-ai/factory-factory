@@ -166,6 +166,7 @@
     },
     {
       "includes": [
+        "src/backend/services/auto-iteration/service/auto-iteration.service.ts",
         "src/backend/services/run-script.service.ts",
         "src/components/agent-activity/tool-renderers/tool-info-renderer.tsx",
         "src/components/chat/chat-input/hooks/use-chat-input-actions.ts",
