@@ -25,7 +25,7 @@ type PendingAcpToolCall = {
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
 
-const DEFAULT_TOOL_CALL_TIMEOUT_MS = 600_000; // 10 minutes
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 3_600_000; // 60 minutes
 
 export type AcpEventProcessorDependencies = {
   runtimeManager: AcpRuntimeManager;
@@ -429,8 +429,16 @@ export class AcpEventProcessor {
     if (!progress.tool_use_id) {
       return;
     }
-    // ACP translator emits terminal tool_progress before tool_result in the same batch.
-    // Keep pending metadata here and clear only after processing tool_result.
+    // Keep pending metadata so tool_result can carry consistent context, but stop
+    // timeout enforcement as soon as ACP reports a terminal status. This avoids
+    // timing out a completed tool when tool_result is delayed or missing.
+    const isTerminalStatus = this.isTerminalToolStatus(progress.acpStatus);
+    if (isTerminalStatus) {
+      this.clearToolCallTimer(sid, progress.tool_use_id);
+    }
+
+    // ACP translator can emit terminal tool_progress before tool_result in the
+    // same batch, so we still keep pending metadata until tool_result arrives.
     const existing = this.getPendingToolCall(sid, progress.tool_use_id);
     this.upsertPendingToolCall(sid, progress.tool_use_id, {
       toolName: progress.tool_name ?? 'ACP Tool',
@@ -442,6 +450,7 @@ export class AcpEventProcessor {
         toolUseId: progress.tool_use_id,
         toolName: progress.tool_name ?? 'ACP Tool',
         toolInput: {},
+        skipTimeout: isTerminalStatus,
       });
     }
   }
@@ -484,6 +493,10 @@ export class AcpEventProcessor {
       return undefined;
     }
     return input as Record<string, unknown>;
+  }
+
+  private isTerminalToolStatus(status: string | undefined): boolean {
+    return status === 'completed' || status === 'failed';
   }
 
   private extractToolResultText(content: unknown): string {
@@ -537,9 +550,10 @@ export class AcpEventProcessor {
     sessionId: string,
     tool: Pick<PendingAcpToolCall, 'toolUseId' | 'toolName'> & {
       toolInput: Record<string, unknown>;
+      skipTimeout?: boolean;
     }
   ): void {
-    if (!this.shouldSkipToolTimeout(tool.toolName, tool.toolInput)) {
+    if (!(tool.skipTimeout || this.shouldSkipToolTimeout(tool.toolName, tool.toolInput))) {
       this.startToolCallTimer(sessionId, tool.toolUseId, tool.toolName);
     }
 

@@ -35,6 +35,7 @@ vi.mock('@/backend/services/session/service/logging/session-file-logger.service'
   sessionFileLogger: { log: vi.fn() },
 }));
 
+import { interceptorRegistry } from '@/backend/interceptors/registry';
 import type { AcpEventProcessorDependencies } from './acp-event-processor';
 import { AcpEventProcessor } from './acp-event-processor';
 
@@ -134,6 +135,46 @@ describe('AcpEventProcessor tool call timeouts', () => {
     processor.handleAcpDelta('sid', toolResultDelta('tool-1') as never);
     vi.advanceTimersByTime(1000);
 
+    expect(onToolCallTimeout).not.toHaveBeenCalled();
+  });
+
+  it('does not fire after terminal tool_progress even when tool_result is missing', () => {
+    const onToolCallTimeout = vi.fn();
+    const processor = new AcpEventProcessor(
+      makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
+    );
+    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.beginPromptTurn('sid');
+
+    processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
+    processor.handleAcpDelta('sid', {
+      type: 'tool_progress',
+      tool_use_id: 'tool-1',
+      tool_name: 'Bash',
+      acpStatus: 'completed',
+    } as never);
+    vi.advanceTimersByTime(2000);
+
+    expect(onToolCallTimeout).not.toHaveBeenCalled();
+  });
+
+  it('does not start a timeout when terminal tool_progress is the first event seen', () => {
+    const onToolCallTimeout = vi.fn();
+    const processor = new AcpEventProcessor(
+      makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
+    );
+    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.beginPromptTurn('sid');
+
+    processor.handleAcpDelta('sid', {
+      type: 'tool_progress',
+      tool_use_id: 'tool-1',
+      tool_name: 'Bash',
+      acpStatus: 'completed',
+    } as never);
+    vi.advanceTimersByTime(2000);
+
+    expect(interceptorRegistry.notifyToolStart).toHaveBeenCalledOnce();
     expect(onToolCallTimeout).not.toHaveBeenCalled();
   });
 
