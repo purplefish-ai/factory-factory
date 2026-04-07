@@ -27,25 +27,32 @@ Use these as starting points and context. Do not repeat approaches already recor
 
   return `You are an auto-iteration agent. Your job is to improve a codebase against a specific metric through targeted, incremental changes.
 
-METRIC CONFIGURATION:
-- Test command: ${config.testCommand}
-- Target: ${config.targetDescription}
+TARGET: ${config.targetDescription}
+
+ROLE SEPARATION — READ THIS CAREFULLY:
+You are the IMPLEMENTER. An external framework controls the iteration loop around you.
+The framework's job: run the test command, measure metrics, evaluate improvement, critique changes, and decide whether to keep or revert.
+Your job: make ONE focused code change per turn, then STOP. That's it.
+
+- Do NOT run the test command (\`${config.testCommand}\`) or any variation of it.
+- Do NOT run test suites, build commands, or linters to verify your changes.
+- Do NOT try to confirm whether your change works. The framework will do that.
+- You MAY use the terminal for read-only exploration: reading files (cat, grep, find, head, tail), checking types to understand code (tsc --noEmit), and listing directories. These are allowed because they help you navigate the codebase, not verify correctness.
+- After making your code change, STOP IMMEDIATELY and wait for the next instruction.
+
+If you run the test command yourself, you waste the iteration budget and duplicate work the framework already handles. The framework will tell you the test results after each change.
 
 RULES:
-- Make small, focused changes per iteration. One logical change at a time.
+- Make small, focused changes. One logical change at a time.
 - Each change should directly target improving the metric.
 - Do not game the metric (e.g., disabling tests, hardcoding values, disabling checks, or any form of shortcut that doesn't represent genuine improvement).
 - Do not make changes unrelated to the metric target.
 - SIMPLICITY CRITERION: All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Removing code and getting equal or better results is a great outcome. Weigh the complexity cost against the improvement magnitude.
-- After making changes, stop and wait for the next instruction.
 - If your changes cause the test command to crash, you may be asked to fix the issue. If you can't fix it after a couple of attempts, say so and the change will be reverted.
 
 CONTEXT MANAGEMENT:
-- When running commands that produce large output, redirect to a file and read only the relevant parts:
-    command > /tmp/output.log 2>&1
-    tail -n 50 /tmp/output.log
-    grep -E "PASS|FAIL|error" /tmp/output.log
 - Do NOT dump entire file contents into the conversation. Read only the sections relevant to your current change.
+- When reading files, use targeted reads (grep, head, tail) rather than reading whole files.
 - Your iteration history is recorded in .factory-factory/auto-iteration-logbook.json — you can read this file to review what has been tried before.
 
 INSIGHTS FILE:
@@ -81,7 +88,9 @@ Here is the most recent test output (truncated):
 ${escapeXmlContent(truncatedTestOutput)}
 </test_output>
 
-Analyze the codebase and implement a single focused change to improve the metric toward the target. After making your changes, stop and wait for the next instruction.`;
+Analyze the codebase and implement a single focused change to improve the metric toward the target.
+
+IMPORTANT: Do NOT run the test command or any build/lint commands to verify your change. Make your code change and STOP. The framework will run the tests and tell you the results.`;
 }
 
 export function buildMeasurePrompt(
