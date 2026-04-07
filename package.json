@@ -205,7 +205,7 @@
       "lodash": "4.18.1",
       "lodash-es": "4.18.1",
       "next": "16.1.7",
-      "path-to-regexp": "8.4.0",
+      "path-to-regexp": "8.4.2",
       "picomatch@^2": "2.3.2",
       "picomatch@^4": "4.0.4",
       "serialize-javascript": "7.0.5",
