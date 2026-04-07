@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,6 +74,14 @@ vi.mock('@/components/ui/card', () => ({
     createElement('div', props, children),
   CardTitle: ({ children, ...props }: import('react').HTMLAttributes<HTMLDivElement>) =>
     createElement('div', props, children),
+}));
+
+vi.mock('@/components/ui/select', () => ({
+  Select: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  SelectContent: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  SelectItem: ({ children }: { children: ReactNode }) => createElement('div', null, children),
+  SelectTrigger: ({ children }: { children: ReactNode }) => createElement('button', null, children),
+  SelectValue: () => null,
 }));
 
 vi.mock('@/components/workspace', () => ({

@@ -43,6 +43,7 @@ export type WorkspaceCreationSource =
       name?: string;
       description?: string;
       ratchetEnabled?: boolean;
+      startupModePreset?: 'non_interactive' | 'plan';
     }
   | {
       type: 'LINEAR_ISSUE';
@@ -53,6 +54,7 @@ export type WorkspaceCreationSource =
       name?: string;
       description?: string;
       ratchetEnabled?: boolean;
+      startupModePreset?: 'non_interactive' | 'plan';
     };
 
 /**
@@ -206,6 +208,14 @@ export class WorkspaceCreationService {
   private prepareGitHubIssueCreation(
     source: Extract<WorkspaceCreationSource, { type: 'GITHUB_ISSUE' }>
   ): PreparedWorkspaceCreation {
+    const metadata: Record<string, unknown> = {
+      issueNumber: source.issueNumber,
+      issueUrl: source.issueUrl,
+    };
+    if (source.startupModePreset) {
+      metadata.startupModePreset = source.startupModePreset;
+    }
+
     return {
       preparedInput: {
         projectId: source.projectId,
@@ -214,10 +224,7 @@ export class WorkspaceCreationService {
         githubIssueNumber: source.issueNumber,
         githubIssueUrl: source.issueUrl,
         creationSource: 'GITHUB_ISSUE',
-        creationMetadata: {
-          issueNumber: source.issueNumber,
-          issueUrl: source.issueUrl,
-        },
+        creationMetadata: metadata as Prisma.InputJsonValue,
       },
     };
   }
@@ -225,6 +232,15 @@ export class WorkspaceCreationService {
   private prepareLinearIssueCreation(
     source: Extract<WorkspaceCreationSource, { type: 'LINEAR_ISSUE' }>
   ): PreparedWorkspaceCreation {
+    const metadata: Record<string, unknown> = {
+      issueId: source.issueId,
+      issueIdentifier: source.issueIdentifier,
+      issueUrl: source.issueUrl,
+    };
+    if (source.startupModePreset) {
+      metadata.startupModePreset = source.startupModePreset;
+    }
+
     return {
       preparedInput: {
         projectId: source.projectId,
@@ -234,11 +250,7 @@ export class WorkspaceCreationService {
         linearIssueIdentifier: source.issueIdentifier,
         linearIssueUrl: source.issueUrl,
         creationSource: 'LINEAR_ISSUE',
-        creationMetadata: {
-          issueId: source.issueId,
-          issueIdentifier: source.issueIdentifier,
-          issueUrl: source.issueUrl,
-        },
+        creationMetadata: metadata as Prisma.InputJsonValue,
       },
     };
   }

@@ -67,6 +67,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     name: z.string().optional(),
     description: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
+    startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
   }),
   z.object({
     type: z.literal('LINEAR_ISSUE'),
@@ -77,6 +78,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     name: z.string().optional(),
     description: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
+    startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
   }),
 ]);
 
