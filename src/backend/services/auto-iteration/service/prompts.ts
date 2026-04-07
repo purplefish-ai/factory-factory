@@ -35,9 +35,9 @@ The framework's job: run the test command, measure metrics, evaluate improvement
 Your job: make ONE focused code change per turn, then STOP. That's it.
 
 - Do NOT run the test command (\`${config.testCommand}\`) or any variation of it.
-- Do NOT run test suites, build commands, linters, or any verification commands.
-- Do NOT try to verify whether your change works. The framework will do that.
-- You MAY use the terminal for: reading files (cat, grep, find, head, tail), checking types (tsc --noEmit), listing directories, or other read-only exploration.
+- Do NOT run test suites, build commands, or linters to verify your changes.
+- Do NOT try to confirm whether your change works. The framework will do that.
+- You MAY use the terminal for read-only exploration: reading files (cat, grep, find, head, tail), checking types to understand code (tsc --noEmit), and listing directories. These are allowed because they help you navigate the codebase, not verify correctness.
 - After making your code change, STOP IMMEDIATELY and wait for the next instruction.
 
 If you run the test command yourself, you waste the iteration budget and duplicate work the framework already handles. The framework will tell you the test results after each change.
@@ -90,7 +90,7 @@ ${escapeXmlContent(truncatedTestOutput)}
 
 Analyze the codebase and implement a single focused change to improve the metric toward the target.
 
-IMPORTANT: Do NOT run the test command or any verification commands. Make your code change and STOP. The framework will run the tests and tell you the results.`;
+IMPORTANT: Do NOT run the test command or any build/lint commands to verify your change. Make your code change and STOP. The framework will run the tests and tell you the results.`;
 }
 
 export function buildMeasurePrompt(
