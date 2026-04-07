@@ -679,7 +679,7 @@ export class AcpRuntimeManager {
         ? resolveInternalCodexAcpSpawnCommand(this.preferSourceEntrypoint)
         : (() => {
             const binaryName = 'claude-agent-acp';
-            const packageName = '@zed-industries/claude-agent-acp';
+            const packageName = '@agentclientprotocol/claude-agent-acp';
             const binaryPath = resolveAcpBinary(packageName, binaryName);
             return {
               command: binaryPath,
