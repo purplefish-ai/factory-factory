@@ -432,6 +432,9 @@ describe('server websocket upgrade routing', () => {
     const server = createTestServer(harness.context);
 
     const fallbackResponse = await request(server.getHttpServer()).get('/workspace/abc');
+    const deepFallbackResponse = await request(server.getHttpServer()).get(
+      '/workspace/abc/session/def'
+    );
     const apiResponse = await request(server.getHttpServer()).get('/api/unknown');
 
     expect(fallbackResponse.status).toBe(200);
@@ -439,6 +442,11 @@ describe('server websocket upgrade routing', () => {
     expect(fallbackResponse.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
     expect(fallbackResponse.headers.pragma).toBe('no-cache');
     expect(fallbackResponse.headers.expires).toBe('0');
+    expect(deepFallbackResponse.status).toBe(200);
+    expect(deepFallbackResponse.text).toContain('factory-factory');
+    expect(deepFallbackResponse.headers['cache-control']).toBe(
+      'no-cache, no-store, must-revalidate'
+    );
     expect(apiResponse.status).toBe(404);
   });
 
