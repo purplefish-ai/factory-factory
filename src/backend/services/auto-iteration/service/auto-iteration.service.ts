@@ -38,8 +38,8 @@ import { runTestCommand, truncateTestOutput } from './test-runner.service';
 
 type Logger = ReturnType<typeof createLogger>;
 
-/** Default prompt timeout: 20 minutes. */
-const DEFAULT_PROMPT_TIMEOUT_SECONDS = 1200;
+/** Default prompt timeout: 5 minutes. A single focused code change should not take longer. */
+const DEFAULT_PROMPT_TIMEOUT_SECONDS = 300;
 
 /** Get prompt timeout in milliseconds from config, or the default. */
 function getPromptTimeoutMs(config: AutoIterationConfig): number | undefined {
