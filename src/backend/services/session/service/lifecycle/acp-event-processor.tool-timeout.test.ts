@@ -137,6 +137,26 @@ describe('AcpEventProcessor tool call timeouts', () => {
     expect(onToolCallTimeout).not.toHaveBeenCalled();
   });
 
+  it('does not fire after terminal tool_progress even when tool_result is missing', () => {
+    const onToolCallTimeout = vi.fn();
+    const processor = new AcpEventProcessor(
+      makeDeps({ onToolCallTimeout, toolCallTimeoutMs: 1000 })
+    );
+    processor.registerSessionContext('sid', { workspaceId: 'ws', workingDir: '/tmp' });
+    processor.beginPromptTurn('sid');
+
+    processor.handleAcpDelta('sid', toolStartDelta('tool-1', 'Bash') as never);
+    processor.handleAcpDelta('sid', {
+      type: 'tool_progress',
+      tool_use_id: 'tool-1',
+      tool_name: 'Bash',
+      acpStatus: 'completed',
+    } as never);
+    vi.advanceTimersByTime(2000);
+
+    expect(onToolCallTimeout).not.toHaveBeenCalled();
+  });
+
   it('clears all timers when clearPendingToolCalls is called', () => {
     const onToolCallTimeout = vi.fn();
     const processor = new AcpEventProcessor(
