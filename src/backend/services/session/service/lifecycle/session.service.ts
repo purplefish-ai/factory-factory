@@ -72,14 +72,24 @@ export class SessionService {
       sessionPermissionService: this.sessionPermissionService,
       sessionConfigService: this.sessionConfigService,
       onToolCallTimeout: (sessionId, toolUseId, toolName) => {
-        // this.lifecycleService is assigned below; the callback fires lazily so it is safe.
-        // Guard: if a prior timeout (or other cause) already triggered a stop, skip the
-        // duplicate call to avoid noisy error logs from concurrent timeout timers.
+        // Guard: skip if the runtime is already gone.
         if (!this.runtimeManager.isSessionRunning(sessionId)) {
           return;
         }
-        this.lifecycleService.stopSession(sessionId).catch((err: unknown) => {
-          logger.error('Failed to stop session after tool call timeout', {
+        if (!this.runtimeManager.isSessionWorking(sessionId)) {
+          return;
+        }
+
+        logger.warn('Tool call exceeded timeout; requesting ACP prompt cancel', {
+          sessionId,
+          toolUseId,
+          toolName,
+        });
+
+        // Soft recovery only: avoid hard-stopping the ACP process so the session
+        // can continue/resume without a forced restart.
+        this.runtimeManager.cancelPrompt(sessionId).catch((err: unknown) => {
+          logger.warn('Failed to cancel prompt after tool call timeout', {
             sessionId,
             toolUseId,
             toolName,

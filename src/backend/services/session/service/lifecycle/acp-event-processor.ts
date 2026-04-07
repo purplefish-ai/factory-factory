@@ -25,7 +25,7 @@ type PendingAcpToolCall = {
   acpLocations?: Array<{ path: string; line?: number | null }>;
 };
 
-const DEFAULT_TOOL_CALL_TIMEOUT_MS = 600_000; // 10 minutes
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 3_600_000; // 60 minutes
 
 export type AcpEventProcessorDependencies = {
   runtimeManager: AcpRuntimeManager;

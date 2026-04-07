@@ -101,6 +101,11 @@ function getAcpProcessorState() {
         pendingAcpToolCalls: Map<string, Map<string, unknown>>;
         sessionToWorkspace: Map<string, string>;
         sessionToWorkingDir: Map<string, string>;
+        registerSessionContext: (
+          sessionId: string,
+          context: { workspaceId: string; workingDir: string }
+        ) => void;
+        beginPromptTurn: (sessionId: string) => void;
         handleAcpDelta: (sid: string, delta: unknown) => void;
       };
     }
@@ -1454,6 +1459,50 @@ describe('SessionService', () => {
     await sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }]);
 
     expect(appendClaudeEventSpy).not.toHaveBeenCalled();
+  });
+
+  it('requests prompt cancellation instead of hard-stopping on tool timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const acpProcessor = getAcpProcessorState();
+      vi.mocked(acpRuntimeManager.isSessionRunning).mockReturnValue(true);
+      vi.mocked(acpRuntimeManager.isSessionWorking).mockReturnValue(true);
+      vi.mocked(acpRuntimeManager.cancelPrompt).mockResolvedValue(undefined);
+
+      acpProcessor.registerSessionContext('session-1', {
+        workspaceId: 'workspace-1',
+        workingDir: '/tmp/work',
+      });
+      acpProcessor.beginPromptTurn('session-1');
+      acpProcessor.handleAcpDelta(
+        'session-1',
+        unsafeCoerce({
+          type: 'agent_message',
+          data: {
+            type: 'stream_event',
+            event: {
+              type: 'content_block_start',
+              index: 0,
+              content_block: {
+                type: 'tool_use',
+                id: 'tool-timeout',
+                name: 'exec_command',
+                input: {},
+              },
+            },
+          },
+        })
+      );
+
+      vi.advanceTimersByTime(3_600_001);
+      await vi.runOnlyPendingTimersAsync();
+      await Promise.resolve();
+
+      expect(acpRuntimeManager.cancelPrompt).toHaveBeenCalledWith('session-1');
+      expect(acpRuntimeManager.stopClient).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('schedules prompt-turn completion callbacks after ACP prompt settles', async () => {
