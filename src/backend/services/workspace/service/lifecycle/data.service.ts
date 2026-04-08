@@ -51,17 +51,28 @@ class WorkspaceDataService {
     });
   }
 
-  update(
+  updateProviderDefaults(
     id: string,
-    data: {
-      defaultSessionProvider?: WorkspaceProviderSelection;
-      ratchetSessionProvider?: WorkspaceProviderSelection;
-      ratchetCiResponseEnabled?: boolean | null;
-      ratchetMergeConflictResponseEnabled?: boolean | null;
-      ratchetReviewResponseEnabled?: boolean | null;
-    }
+    defaultSessionProvider?: WorkspaceProviderSelection,
+    ratchetSessionProvider?: WorkspaceProviderSelection
   ) {
-    return workspaceAccessor.update(id, data);
+    return workspaceAccessor.update(id, {
+      defaultSessionProvider,
+      ratchetSessionProvider,
+    });
+  }
+
+  updateRatchetTriggers(
+    id: string,
+    ratchetCiResponseEnabled: boolean | null | undefined,
+    ratchetMergeConflictResponseEnabled: boolean | null | undefined,
+    ratchetReviewResponseEnabled: boolean | null | undefined
+  ) {
+    return workspaceAccessor.update(id, {
+      ratchetCiResponseEnabled,
+      ratchetMergeConflictResponseEnabled,
+      ratchetReviewResponseEnabled,
+    });
   }
 
   delete(id: string): Promise<Workspace> {

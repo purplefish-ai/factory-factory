@@ -317,10 +317,11 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const updated = await workspaceDataService.update(input.workspaceId, {
-        defaultSessionProvider: input.defaultSessionProvider,
-        ratchetSessionProvider: input.ratchetSessionProvider,
-      });
+      const updated = await workspaceDataService.updateProviderDefaults(
+        input.workspaceId,
+        input.defaultSessionProvider,
+        input.ratchetSessionProvider
+      );
       return updated;
     }),
 
@@ -335,8 +336,12 @@ export const workspaceRouter = router({
       })
     )
     .mutation(({ input }) => {
-      const { workspaceId, ...triggers } = input;
-      return workspaceDataService.update(workspaceId, triggers);
+      return workspaceDataService.updateRatchetTriggers(
+        input.workspaceId,
+        input.ratchetCiResponseEnabled,
+        input.ratchetMergeConflictResponseEnabled,
+        input.ratchetReviewResponseEnabled
+      );
     }),
 
   // Archive a workspace

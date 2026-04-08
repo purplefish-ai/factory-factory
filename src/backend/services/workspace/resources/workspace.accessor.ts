@@ -66,6 +66,10 @@ interface UpdateWorkspaceInput {
   ratchetLastCheckedAt?: Date | null;
   ratchetActiveSessionId?: string | null;
   ratchetLastCiRunId?: string | null;
+  // Ratchet trigger controls
+  ratchetCiResponseEnabled?: boolean | null;
+  ratchetMergeConflictResponseEnabled?: boolean | null;
+  ratchetReviewResponseEnabled?: boolean | null;
   // Activity tracking
   hasHadSessions?: boolean;
   // Cached kanban column
