@@ -17,6 +17,7 @@ export interface GitHubRepository {
 export interface GitHubStatusCheck {
   __typename: 'CheckRun' | 'StatusContext';
   name: string;
+  workflowName?: string;
   status: 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'QUEUED';
   conclusion:
     | 'SUCCESS'
@@ -28,6 +29,8 @@ export interface GitHubStatusCheck {
     | 'NEUTRAL'
     | null;
   detailsUrl?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface GitHubReview {

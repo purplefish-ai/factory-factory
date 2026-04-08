@@ -353,9 +353,12 @@ export async function fetchPRState(params: {
     const statusCheckRollup =
       prDetails.statusCheckRollup?.map((check) => ({
         name: check.name,
+        workflowName: check.workflowName,
         status: check.status,
         conclusion: check.conclusion ?? undefined,
         detailsUrl: check.detailsUrl,
+        startedAt: check.startedAt,
+        completedAt: check.completedAt,
       })) ?? null;
 
     const ciStatus = github.computeCIStatus(statusCheckRollup);

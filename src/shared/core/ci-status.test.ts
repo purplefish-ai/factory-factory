@@ -31,4 +31,63 @@ describe('deriveCiStatusFromCheckRollup', () => {
 
     expect(result).toBe(CIStatus.SUCCESS);
   });
+
+  it('treats NEUTRAL and CANCELLED as non-blocking when a passing check exists', () => {
+    const result = deriveCiStatusFromCheckRollup([
+      { status: 'completed', conclusion: 'cancelled' },
+      { status: 'completed', conclusion: 'neutral' },
+      { status: 'completed', conclusion: 'success' },
+    ]);
+
+    expect(result).toBe(CIStatus.SUCCESS);
+  });
+
+  it('uses the latest GitHub Actions run per check identity before classifying', () => {
+    const result = deriveCiStatusFromCheckRollup([
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+      },
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'SUCCESS',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/101/job/1',
+      },
+    ]);
+
+    expect(result).toBe(CIStatus.SUCCESS);
+  });
+
+  it('keeps failures from distinct checks even when one rerun succeeded', () => {
+    const result = deriveCiStatusFromCheckRollup([
+      {
+        name: 'commitlint',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/11',
+      },
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/22',
+      },
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'SUCCESS',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/101/job/22',
+      },
+    ]);
+
+    expect(result).toBe(CIStatus.FAILURE);
+  });
 });

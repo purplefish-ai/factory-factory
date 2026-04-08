@@ -14,9 +14,14 @@ export interface PRStatusFromGitHub {
   mergedAt: string | null;
   updatedAt: string;
   statusCheckRollup: Array<{
+    name?: string;
+    workflowName?: string;
     status?: string; // COMPLETED, QUEUED, IN_PROGRESS, etc.
     conclusion?: string; // SUCCESS, FAILURE, NEUTRAL, CANCELLED, SKIPPED, etc.
     state?: string; // Legacy format support
+    detailsUrl?: string;
+    startedAt?: string;
+    completedAt?: string;
   }> | null;
 }
 
