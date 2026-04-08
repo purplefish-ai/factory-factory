@@ -1,5 +1,6 @@
 import { Settings2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -95,7 +96,11 @@ export function WorkspaceProviderSettings({
   const updateRatchetTriggers = trpc.workspace.updateRatchetTriggers.useMutation({
     onSuccess: () => {
       invalidateWorkspace();
+      if (!isProviderDirty) {
+        setDialogOpen(false);
+      }
     },
+    onError: (error) => toast.error(`Failed to save ratchet triggers: ${error.message}`),
   });
 
   const isOpenControlled = open !== undefined;
@@ -279,7 +284,7 @@ export function WorkspaceProviderSettings({
                   ratchetReviewResponseEnabled: fromTriState(reviewResponse),
                 });
               }
-              if (!isProviderDirty) {
+              if (!(isProviderDirty || isTriggerDirty)) {
                 setDialogOpen(false);
               }
             }}
