@@ -5,7 +5,7 @@ import {
 } from '@/backend/services/constants';
 import type { createLogger } from '@/backend/services/logger.service';
 import type { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
-import { CIStatus, RatchetState } from '@/shared/core';
+import { CIStatus, RatchetState, reduceCheckRollupToLatestRunAttempts } from '@/shared/core';
 import type { RatchetGitHubBridge } from './bridges';
 import type {
   PRStateInfo,
@@ -68,8 +68,9 @@ export function computeCiSnapshotKey(
     return `ci:${ciStatus}`;
   }
 
+  const reducedStatusChecks = reduceCheckRollupToLatestRunAttempts(statusChecks);
   const failedChecks =
-    statusChecks?.filter((check) =>
+    reducedStatusChecks?.filter((check) =>
       FAILURE_CONCLUSIONS.has(check.conclusion?.toUpperCase() ?? '')
     ) ?? [];
 
@@ -361,7 +362,8 @@ export async function fetchPRState(params: {
         completedAt: check.completedAt,
       })) ?? null;
 
-    const ciStatus = github.computeCIStatus(statusCheckRollup);
+    const reducedStatusCheckRollup = reduceCheckRollupToLatestRunAttempts(statusCheckRollup);
+    const ciStatus = github.computeCIStatus(reducedStatusCheckRollup);
 
     const hasChangesRequested = prDetails.reviewDecision === 'CHANGES_REQUESTED';
     const hasMergeConflict = prDetails.mergeStateStatus === 'DIRTY';
@@ -374,7 +376,7 @@ export async function fetchPRState(params: {
       ciStatus,
       hasChangesRequested,
       latestReviewActivityAtMs,
-      statusCheckRollup,
+      reducedStatusCheckRollup,
       hasMergeConflict
     );
 
@@ -394,7 +396,7 @@ export async function fetchPRState(params: {
       hasChangesRequested,
       hasMergeConflict,
       latestReviewActivityAtMs,
-      statusCheckRollup,
+      statusCheckRollup: reducedStatusCheckRollup,
       prState: prDetails.state,
       prNumber: prDetails.number,
       reviewComments: filteredReviewComments,

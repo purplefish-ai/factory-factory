@@ -110,8 +110,14 @@ function shouldReplaceRunAttempt(
   return candidate.sourceIndex > existing.sourceIndex;
 }
 
-function reduceToLatestRunAttempts(checks: CheckLike[]): CheckLike[] {
-  const reduced: CheckLike[] = [];
+export function reduceCheckRollupToLatestRunAttempts<T extends CheckLike>(
+  checks: T[] | null | undefined
+): T[] | null {
+  if (!checks) {
+    return null;
+  }
+
+  const reduced: T[] = [];
   const identityToIndex = new Map<string, number>();
   const metadataByIdentity = new Map<
     string,
@@ -168,7 +174,10 @@ export function deriveCiStatusFromCheckRollup(
     return CIStatus.UNKNOWN;
   }
 
-  const checksForClassification = reduceToLatestRunAttempts(checks);
+  const checksForClassification = reduceCheckRollupToLatestRunAttempts(checks);
+  if (!checksForClassification || checksForClassification.length === 0) {
+    return CIStatus.UNKNOWN;
+  }
 
   const hasFailure = checksForClassification.some((check) => {
     const state = getEffectiveState(check);
