@@ -33,9 +33,12 @@ export interface RatchetPRFullDetails {
   comments: Array<{ updatedAt: string; author: { login: string } }>;
   statusCheckRollup: Array<{
     name?: string;
+    workflowName?: string;
     status?: string;
     conclusion?: string | null;
     detailsUrl?: string;
+    startedAt?: string;
+    completedAt?: string;
   }> | null;
 }
 
@@ -52,9 +55,12 @@ export interface RatchetReviewComment {
 /** Input shape for CI status computation */
 export interface RatchetStatusCheckInput {
   name?: string;
+  workflowName?: string;
   status?: string;
   conclusion?: string | null;
   detailsUrl?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 /** PR state as returned by fetchAndComputePRState */

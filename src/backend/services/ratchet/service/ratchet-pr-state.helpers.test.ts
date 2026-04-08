@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { PRStateInfo } from './ratchet.types';
 import {
+  computeCiSnapshotKey,
   computeDispatchSnapshotKey,
   determineRatchetState,
   shouldSkipCleanPR,
@@ -141,5 +142,37 @@ describe('computeDispatchSnapshotKey', () => {
     const clean = computeDispatchSnapshotKey(CIStatus.PENDING, false, null, null, false);
     const conflicted = computeDispatchSnapshotKey(CIStatus.PENDING, false, null, null, true);
     expect(clean).not.toBe(conflicted);
+  });
+});
+
+describe('computeCiSnapshotKey', () => {
+  it('ignores stale failures from superseded runs of the same check', () => {
+    const key = computeCiSnapshotKey(CIStatus.FAILURE, [
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+      },
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'SUCCESS',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/101/job/1',
+      },
+      {
+        name: 'commitlint',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/101/job/2',
+      },
+    ]);
+
+    expect(key).toContain('commitlint:FAILURE');
+    expect(key).not.toContain('ci:FAILURE:100');
+    expect(key).toBe('ci:FAILURE:commitlint:FAILURE:101');
   });
 });

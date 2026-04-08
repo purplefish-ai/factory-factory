@@ -4,4 +4,5 @@ export {
   deriveCiVisualStateFromChecks,
   deriveCiVisualStateFromPrCiStatus,
   getCiVisualLabel,
+  reduceCheckRollupToLatestRunAttempts,
 } from '@/shared/core';

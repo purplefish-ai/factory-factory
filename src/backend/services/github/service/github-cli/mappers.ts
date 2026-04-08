@@ -104,9 +104,12 @@ export function mapStatusChecks(
     return {
       __typename: check.__typename ?? 'CheckRun',
       name: check.name,
+      workflowName: check.workflowName,
       status: normalizeCheckStatus(check.status),
       conclusion: normalizeCheckConclusion(check.conclusion),
       detailsUrl: check.detailsUrl,
+      startedAt: check.startedAt,
+      completedAt: check.completedAt,
     };
   });
 }
@@ -149,9 +152,14 @@ export function mapLabels(labels: z.infer<typeof fullPRDetailsSchema>['labels'])
  */
 export function computeCIStatus(
   statusCheckRollup: Array<{
+    name?: string;
+    workflowName?: string;
     status?: string;
     conclusion?: string;
     state?: string;
+    detailsUrl?: string;
+    startedAt?: string;
+    completedAt?: string;
   }> | null
 ): CIStatus {
   return deriveCiStatusFromCheckRollup(statusCheckRollup);
