@@ -172,6 +172,7 @@ describe('computeCiSnapshotKey', () => {
     ]);
 
     expect(key).toContain('commitlint:FAILURE');
-    expect(key).not.toContain('ci:FAILURE:101');
+    expect(key).not.toContain('ci:FAILURE:100');
+    expect(key).toBe('ci:FAILURE:commitlint:FAILURE:101');
   });
 });
