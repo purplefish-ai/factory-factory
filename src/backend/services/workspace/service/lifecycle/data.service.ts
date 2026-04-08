@@ -56,12 +56,12 @@ class WorkspaceDataService {
     data: {
       defaultSessionProvider?: WorkspaceProviderSelection;
       ratchetSessionProvider?: WorkspaceProviderSelection;
+      ratchetCiResponseEnabled?: boolean | null;
+      ratchetMergeConflictResponseEnabled?: boolean | null;
+      ratchetReviewResponseEnabled?: boolean | null;
     }
   ) {
-    return workspaceAccessor.update(id, {
-      defaultSessionProvider: data.defaultSessionProvider,
-      ratchetSessionProvider: data.ratchetSessionProvider,
-    });
+    return workspaceAccessor.update(id, data);
   }
 
   delete(id: string): Promise<Workspace> {

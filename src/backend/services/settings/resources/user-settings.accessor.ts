@@ -16,6 +16,9 @@ interface UpdateUserSettingsInput {
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   // Ratchet settings
   ratchetEnabled?: boolean;
+  ratchetCiResponseEnabled?: boolean;
+  ratchetMergeConflictResponseEnabled?: boolean;
+  ratchetReviewResponseEnabled?: boolean;
   defaultSessionProvider?: SessionProvider;
   defaultClaudeModel?: string;
   defaultCodexModel?: string;

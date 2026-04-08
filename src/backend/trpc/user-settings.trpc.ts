@@ -42,6 +42,9 @@ export const userSettingsRouter = router({
         notificationSoundPath: z.string().nullable().optional(),
         // Ratchet settings
         ratchetEnabled: z.boolean().optional(),
+        ratchetCiResponseEnabled: z.boolean().optional(),
+        ratchetMergeConflictResponseEnabled: z.boolean().optional(),
+        ratchetReviewResponseEnabled: z.boolean().optional(),
         // Session provider defaults
         defaultSessionProvider: z.nativeEnum(SessionProvider).optional(),
         defaultClaudeModel: z.string().trim().min(1, 'Claude model cannot be empty').optional(),

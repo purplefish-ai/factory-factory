@@ -109,6 +109,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       defaultCodexModel: 'default',
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
+      ratchetCiResponseEnabled: true,
+      ratchetMergeConflictResponseEnabled: true,
+      ratchetReviewResponseEnabled: true,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
@@ -130,6 +133,9 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         ratchetActiveSessionId: null,
         ratchetLastCiRunId: null,
         prReviewLastCheckedAt: null,
+        ratchetCiResponseEnabled: null,
+        ratchetMergeConflictResponseEnabled: null,
+        ratchetReviewResponseEnabled: null,
       },
     ]);
 
@@ -783,6 +789,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
       activeRatchetSession: null,
       hasStateChangedSinceLastDispatch: true,
       hasOtherActiveSession: false,
+      triggerSettings: {
+        ciResponseEnabled: true,
+        mergeConflictResponseEnabled: true,
+        reviewResponseEnabled: true,
+      },
     });
 
     expect(decision).toEqual({ type: 'TRIGGER_FIXER' });
@@ -1448,6 +1459,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         activeRatchetSession: activeSession,
         hasStateChangedSinceLastDispatch: true,
         hasOtherActiveSession: false,
+        triggerSettings: {
+          ciResponseEnabled: true,
+          mergeConflictResponseEnabled: true,
+          reviewResponseEnabled: true,
+        },
       }) as { type: string; action: unknown };
       expect(result.action).toEqual(activeSession);
     });
@@ -1460,6 +1476,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         activeRatchetSession: null,
         hasStateChangedSinceLastDispatch: true,
         hasOtherActiveSession: true,
+        triggerSettings: {
+          ciResponseEnabled: true,
+          mergeConflictResponseEnabled: true,
+          reviewResponseEnabled: true,
+        },
       }) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe('Workspace is not idle (active session)');
     });
@@ -1476,6 +1497,11 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         activeRatchetSession: null,
         hasStateChangedSinceLastDispatch: true,
         hasOtherActiveSession: false,
+        triggerSettings: {
+          ciResponseEnabled: true,
+          mergeConflictResponseEnabled: true,
+          reviewResponseEnabled: true,
+        },
       }) as { type: string; action?: { reason: string } };
       expect(result.action?.reason).toBe('No CI failures or PR review comments to address');
     });

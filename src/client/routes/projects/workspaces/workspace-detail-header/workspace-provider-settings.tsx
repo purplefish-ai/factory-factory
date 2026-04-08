@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   EXPLICIT_SESSION_PROVIDER_OPTIONS,
@@ -29,6 +30,22 @@ import {
   resolveProviderSelection,
 } from '@/lib/session-provider-selection';
 import type { WorkspaceHeaderWorkspace } from './types';
+
+type TriState = 'default' | 'on' | 'off';
+
+function toTriState(value: boolean | null | undefined): TriState {
+  if (value === null || value === undefined) {
+    return 'default';
+  }
+  return value ? 'on' : 'off';
+}
+
+function fromTriState(value: TriState): boolean | null {
+  if (value === 'default') {
+    return null;
+  }
+  return value === 'on';
+}
 
 export function WorkspaceProviderSettings({
   workspace,
@@ -50,15 +67,34 @@ export function WorkspaceProviderSettings({
   const [ratchetProvider, setRatchetProvider] = useState<NewSessionProviderSelection>(
     resolveProviderSelection(workspace.ratchetSessionProvider)
   );
+  const [ciResponse, setCiResponse] = useState<TriState>(
+    toTriState(workspace.ratchetCiResponseEnabled)
+  );
+  const [mergeConflictResponse, setMergeConflictResponse] = useState<TriState>(
+    toTriState(workspace.ratchetMergeConflictResponseEnabled)
+  );
+  const [reviewResponse, setReviewResponse] = useState<TriState>(
+    toTriState(workspace.ratchetReviewResponseEnabled)
+  );
   const { data: userSettings } = trpc.userSettings.get.useQuery();
   const utils = trpc.useUtils();
 
+  const invalidateWorkspace = () => {
+    utils.workspace.get.invalidate({ id: workspaceId });
+    utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
+    utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
+  };
+
   const updateProviderDefaults = trpc.workspace.updateProviderDefaults.useMutation({
     onSuccess: () => {
-      utils.workspace.get.invalidate({ id: workspaceId });
-      utils.workspace.listWithKanbanState.invalidate({ projectId: workspace.projectId });
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: workspace.projectId });
+      invalidateWorkspace();
       setDialogOpen(false);
+    },
+  });
+
+  const updateRatchetTriggers = trpc.workspace.updateRatchetTriggers.useMutation({
+    onSuccess: () => {
+      invalidateWorkspace();
     },
   });
 
@@ -77,12 +113,30 @@ export function WorkspaceProviderSettings({
     }
     setDefaultProvider(resolveProviderSelection(workspace.defaultSessionProvider));
     setRatchetProvider(resolveProviderSelection(workspace.ratchetSessionProvider));
-  }, [dialogOpen, workspace.defaultSessionProvider, workspace.ratchetSessionProvider]);
+    setCiResponse(toTriState(workspace.ratchetCiResponseEnabled));
+    setMergeConflictResponse(toTriState(workspace.ratchetMergeConflictResponseEnabled));
+    setReviewResponse(toTriState(workspace.ratchetReviewResponseEnabled));
+  }, [
+    dialogOpen,
+    workspace.defaultSessionProvider,
+    workspace.ratchetSessionProvider,
+    workspace.ratchetCiResponseEnabled,
+    workspace.ratchetMergeConflictResponseEnabled,
+    workspace.ratchetReviewResponseEnabled,
+  ]);
 
   const currentDefaultProvider = resolveProviderSelection(workspace.defaultSessionProvider);
   const currentRatchetProvider = resolveProviderSelection(workspace.ratchetSessionProvider);
-  const isDirty =
+  const currentCiResponse = toTriState(workspace.ratchetCiResponseEnabled);
+  const currentMergeConflictResponse = toTriState(workspace.ratchetMergeConflictResponseEnabled);
+  const currentReviewResponse = toTriState(workspace.ratchetReviewResponseEnabled);
+  const isProviderDirty =
     defaultProvider !== currentDefaultProvider || ratchetProvider !== currentRatchetProvider;
+  const isTriggerDirty =
+    ciResponse !== currentCiResponse ||
+    mergeConflictResponse !== currentMergeConflictResponse ||
+    reviewResponse !== currentReviewResponse;
+  const isDirty = isProviderDirty || isTriggerDirty;
   const userDefaultProvider = userSettings?.defaultSessionProvider;
   const defaultWorkspaceLabel = getWorkspaceDefaultOptionLabel(
     'WORKSPACE_DEFAULT',
@@ -171,6 +225,38 @@ export function WorkspaceProviderSettings({
               )}
             />
           </div>
+          {workspace.ratchetEnabled && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Ratchet Triggers</Label>
+                <p className="text-xs text-muted-foreground">
+                  Override global defaults for which events trigger ratchet dispatches.
+                </p>
+                <TriggerSelect
+                  id="ci-response"
+                  label="CI failures"
+                  globalDefault={userSettings?.ratchetCiResponseEnabled ?? true}
+                  value={ciResponse}
+                  onChange={setCiResponse}
+                />
+                <TriggerSelect
+                  id="merge-conflict-response"
+                  label="Merge conflicts"
+                  globalDefault={userSettings?.ratchetMergeConflictResponseEnabled ?? true}
+                  value={mergeConflictResponse}
+                  onChange={setMergeConflictResponse}
+                />
+                <TriggerSelect
+                  id="review-response"
+                  label="Review comments"
+                  globalDefault={userSettings?.ratchetReviewResponseEnabled ?? true}
+                  value={reviewResponse}
+                  onChange={setReviewResponse}
+                />
+              </div>
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setDialogOpen(false)}>
@@ -178,18 +264,68 @@ export function WorkspaceProviderSettings({
           </Button>
           <Button
             onClick={() => {
-              updateProviderDefaults.mutate({
-                workspaceId,
-                defaultSessionProvider: defaultProvider,
-                ratchetSessionProvider: ratchetProvider,
-              });
+              if (isProviderDirty) {
+                updateProviderDefaults.mutate({
+                  workspaceId,
+                  defaultSessionProvider: defaultProvider,
+                  ratchetSessionProvider: ratchetProvider,
+                });
+              }
+              if (isTriggerDirty) {
+                updateRatchetTriggers.mutate({
+                  workspaceId,
+                  ratchetCiResponseEnabled: fromTriState(ciResponse),
+                  ratchetMergeConflictResponseEnabled: fromTriState(mergeConflictResponse),
+                  ratchetReviewResponseEnabled: fromTriState(reviewResponse),
+                });
+              }
+              if (!isProviderDirty) {
+                setDialogOpen(false);
+              }
             }}
-            disabled={!isDirty || updateProviderDefaults.isPending}
+            disabled={
+              !isDirty || updateProviderDefaults.isPending || updateRatchetTriggers.isPending
+            }
           >
-            {updateProviderDefaults.isPending ? 'Saving...' : 'Save'}
+            {updateProviderDefaults.isPending || updateRatchetTriggers.isPending
+              ? 'Saving...'
+              : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TriggerSelect({
+  id,
+  label,
+  globalDefault,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  globalDefault: boolean;
+  value: TriState;
+  onChange: (value: TriState) => void;
+}) {
+  const defaultLabel = `Default (${globalDefault ? 'On' : 'Off'})`;
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Label htmlFor={`trigger-${id}`} className="text-sm shrink-0">
+        {label}
+      </Label>
+      <Select value={value} onValueChange={(v) => onChange(v as TriState)}>
+        <SelectTrigger id={`trigger-${id}`} className="w-[160px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="default">{defaultLabel}</SelectItem>
+          <SelectItem value="on">On</SelectItem>
+          <SelectItem value="off">Off</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

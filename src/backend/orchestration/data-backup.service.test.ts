@@ -148,6 +148,9 @@ const mockWorkspace: Workspace = {
   autoIterationConfig: null,
   autoIterationProgress: null,
   autoIterationSessionId: null,
+  ratchetCiResponseEnabled: null,
+  ratchetMergeConflictResponseEnabled: null,
+  ratchetReviewResponseEnabled: null,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:35:00.000Z'),
 };
@@ -193,6 +196,9 @@ const mockUserSettings: UserSettings = {
   defaultCodexModel: 'gpt-5-codex',
   defaultWorkspacePermissions: 'STRICT',
   ratchetPermissions: 'YOLO',
+  ratchetCiResponseEnabled: true,
+  ratchetMergeConflictResponseEnabled: true,
+  ratchetReviewResponseEnabled: true,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };

@@ -226,6 +226,11 @@ model Workspace {
   ratchetActiveSessionId  String?                         // ID of active fixer session (if any)
   ratchetLastCiRunId      String?                         // Track which CI run we processed
 
+  // Ratchet trigger controls (null = inherit from UserSettings global default)
+  ratchetCiResponseEnabled            Boolean?            // Respond to CI failures
+  ratchetMergeConflictResponseEnabled Boolean?            // Respond to merge conflicts
+  ratchetReviewResponseEnabled        Boolean?            // Respond to review comments
+
   // Auto-iteration tracking
   mode                      WorkspaceMode         @default(STANDARD)
   autoIterationStatus       AutoIterationStatus?
@@ -329,6 +334,11 @@ model UserSettings {
   defaultCodexModel         String @default("default")
   defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
   ratchetPermissions        SessionPermissionPreset @default(YOLO) // Default execution-mode preset for ratchet sessions
+
+  // Ratchet trigger defaults (global defaults for new/inheriting workspaces)
+  ratchetCiResponseEnabled            Boolean @default(true)   // Respond to CI failures
+  ratchetMergeConflictResponseEnabled Boolean @default(true)   // Respond to merge conflicts
+  ratchetReviewResponseEnabled        Boolean @default(true)   // Respond to review comments
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

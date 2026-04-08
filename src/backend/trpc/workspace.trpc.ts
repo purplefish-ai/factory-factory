@@ -324,6 +324,21 @@ export const workspaceRouter = router({
       return updated;
     }),
 
+  // Update workspace-level ratchet trigger controls
+  updateRatchetTriggers: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        ratchetCiResponseEnabled: z.boolean().nullable().optional(),
+        ratchetMergeConflictResponseEnabled: z.boolean().nullable().optional(),
+        ratchetReviewResponseEnabled: z.boolean().nullable().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      const { workspaceId, ...triggers } = input;
+      return workspaceDataService.update(workspaceId, triggers);
+    }),
+
   // Archive a workspace
   archive: publicProcedure
     .input(z.object({ id: z.string(), commitUncommitted: z.boolean().optional() }))

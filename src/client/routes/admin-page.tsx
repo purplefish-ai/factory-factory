@@ -805,6 +805,53 @@ function RatchetSettingsSection() {
           />
         </div>
 
+        {/* Trigger defaults */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Trigger defaults</Label>
+          <p className="text-xs text-muted-foreground">
+            Control which events trigger automatic ratchet dispatches for new workspaces.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="ratchet-ci-response">Respond to CI failures</Label>
+            </div>
+            <Switch
+              id="ratchet-ci-response"
+              checked={settings?.ratchetCiResponseEnabled ?? true}
+              onCheckedChange={(checked) => {
+                updateSettings.mutate({ ratchetCiResponseEnabled: checked });
+              }}
+              disabled={updateSettings.isPending}
+            />
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="ratchet-merge-conflict-response">Respond to merge conflicts</Label>
+            </div>
+            <Switch
+              id="ratchet-merge-conflict-response"
+              checked={settings?.ratchetMergeConflictResponseEnabled ?? true}
+              onCheckedChange={(checked) => {
+                updateSettings.mutate({ ratchetMergeConflictResponseEnabled: checked });
+              }}
+              disabled={updateSettings.isPending}
+            />
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="ratchet-review-response">Respond to review comments</Label>
+            </div>
+            <Switch
+              id="ratchet-review-response"
+              checked={settings?.ratchetReviewResponseEnabled ?? true}
+              onCheckedChange={(checked) => {
+                updateSettings.mutate({ ratchetReviewResponseEnabled: checked });
+              }}
+              disabled={updateSettings.isPending}
+            />
+          </div>
+        </div>
+
         <div className="space-y-2">
           <Label htmlFor="ratchet-permissions">Ratchet permission defaults</Label>
           <Select

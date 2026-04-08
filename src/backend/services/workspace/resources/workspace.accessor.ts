@@ -111,6 +111,9 @@ type WorkspaceForRatchet = {
   ratchetActiveSessionId: string | null;
   ratchetLastCiRunId: string | null;
   prReviewLastCheckedAt: Date | null;
+  ratchetCiResponseEnabled: boolean | null;
+  ratchetMergeConflictResponseEnabled: boolean | null;
+  ratchetReviewResponseEnabled: boolean | null;
 };
 
 export type WorkspaceWithSessions = WorkspaceWithAgentSessions;
@@ -634,6 +637,9 @@ class WorkspaceAccessor {
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
         prReviewLastCheckedAt: true,
+        ratchetCiResponseEnabled: true,
+        ratchetMergeConflictResponseEnabled: true,
+        ratchetReviewResponseEnabled: true,
       },
       orderBy: { ratchetLastCheckedAt: 'asc' }, // Check oldest first
     }) as Promise<WorkspaceForRatchet[]>;
@@ -662,6 +668,9 @@ class WorkspaceAccessor {
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
         prReviewLastCheckedAt: true,
+        ratchetCiResponseEnabled: true,
+        ratchetMergeConflictResponseEnabled: true,
+        ratchetReviewResponseEnabled: true,
       },
     }) as Promise<WorkspaceForRatchet | null>;
   }
