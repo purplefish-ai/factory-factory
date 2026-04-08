@@ -34,6 +34,26 @@ function parseWorkspaceOrderMap(value: Prisma.JsonValue | null): WorkspaceOrderM
   return parsed.success ? parsed.data : {};
 }
 
+function normalizeModelInputs(data: UpdateUserSettingsInput) {
+  const normalizedClaudeModel =
+    data.defaultClaudeModel === undefined
+      ? undefined
+      : normalizeSessionModelForProvider(data.defaultClaudeModel, 'CLAUDE');
+  if (data.defaultClaudeModel !== undefined && !normalizedClaudeModel) {
+    throw new Error('Invalid default Claude model');
+  }
+
+  const normalizedCodexModel =
+    data.defaultCodexModel === undefined
+      ? undefined
+      : normalizeSessionModelForProvider(data.defaultCodexModel, 'CODEX');
+  if (data.defaultCodexModel !== undefined && !normalizedCodexModel) {
+    throw new Error('Invalid default Codex model');
+  }
+
+  return { normalizedClaudeModel, normalizedCodexModel };
+}
+
 class UserSettingsAccessor {
   /**
    * Get user settings for the default user.
@@ -77,21 +97,7 @@ class UserSettingsAccessor {
    */
   async update(data: UpdateUserSettingsInput): Promise<UserSettings> {
     const userId = 'default';
-    const normalizedClaudeModel =
-      data.defaultClaudeModel === undefined
-        ? undefined
-        : normalizeSessionModelForProvider(data.defaultClaudeModel, 'CLAUDE');
-    if (data.defaultClaudeModel !== undefined && !normalizedClaudeModel) {
-      throw new Error('Invalid default Claude model');
-    }
-
-    const normalizedCodexModel =
-      data.defaultCodexModel === undefined
-        ? undefined
-        : normalizeSessionModelForProvider(data.defaultCodexModel, 'CODEX');
-    if (data.defaultCodexModel !== undefined && !normalizedCodexModel) {
-      throw new Error('Invalid default Codex model');
-    }
+    const { normalizedClaudeModel, normalizedCodexModel } = normalizeModelInputs(data);
 
     return await prisma.userSettings.upsert({
       where: { userId },
@@ -106,6 +112,10 @@ class UserSettingsAccessor {
         customIdeCommand: data.customIdeCommand ?? null,
         playSoundOnComplete: data.playSoundOnComplete ?? true,
         cachedSlashCommands: data.cachedSlashCommands ?? undefined,
+        ratchetEnabled: data.ratchetEnabled ?? false,
+        ratchetCiResponseEnabled: data.ratchetCiResponseEnabled ?? true,
+        ratchetMergeConflictResponseEnabled: data.ratchetMergeConflictResponseEnabled ?? true,
+        ratchetReviewResponseEnabled: data.ratchetReviewResponseEnabled ?? true,
         defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
         defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
         defaultCodexModel: normalizedCodexModel ?? 'default',
