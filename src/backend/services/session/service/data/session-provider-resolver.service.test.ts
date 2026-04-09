@@ -72,6 +72,7 @@ describe('sessionProviderResolverService', () => {
       workspaceOrder: null,
       cachedSlashCommands: null,
       ratchetEnabled: false,
+      ratchetReplyToPrComments: true,
       defaultSessionProvider: 'CLAUDE',
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',

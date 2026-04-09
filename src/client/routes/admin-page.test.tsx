@@ -85,6 +85,7 @@ vi.mock('@/client/lib/trpc', () => {
     defaultCodexModel: 'default',
     defaultWorkspacePermissions: 'STRICT',
     ratchetEnabled: false,
+    ratchetReplyToPrComments: true,
     ratchetPermissions: 'YOLO',
   };
   const projects = [
