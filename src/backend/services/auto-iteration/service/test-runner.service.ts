@@ -9,7 +9,8 @@ const MAX_BUFFER_BYTES = 5 * 1024 * 1024;
 export function runTestCommand(
   worktreePath: string,
   command: string,
-  timeoutSeconds: number
+  timeoutSeconds: number,
+  onChunk?: (text: string) => void
 ): Promise<TestCommandResult> {
   return new Promise((resolve) => {
     const child = spawn('bash', ['-c', command], {
@@ -24,16 +25,20 @@ export function runTestCommand(
     let exited = false;
 
     child.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
+      const text = data.toString();
+      stdout += text;
       if (Buffer.byteLength(stdout) > MAX_BUFFER_BYTES) {
         stdout = Buffer.from(stdout).subarray(-MAX_BUFFER_BYTES).toString('utf-8');
       }
+      onChunk?.(text);
     });
     child.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
+      const text = data.toString();
+      stderr += text;
       if (Buffer.byteLength(stderr) > MAX_BUFFER_BYTES) {
         stderr = Buffer.from(stderr).subarray(-MAX_BUFFER_BYTES).toString('utf-8');
       }
+      onChunk?.(text);
     });
 
     const timer = setTimeout(() => {

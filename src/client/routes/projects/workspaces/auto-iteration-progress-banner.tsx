@@ -48,6 +48,7 @@ interface BannerProgress {
   baselineMetricSummary: string;
   currentMetricSummary: string;
   startedAt: string;
+  lastTestOutput?: string | null;
 }
 
 function getStepStates(currentStage: Stage | null): Record<Stage, StepState> {
@@ -76,36 +77,57 @@ function StepDot({ state }: { state: StepState }) {
   );
 }
 
-function StagesStepper({ currentStage }: { currentStage: Stage | null }) {
+const MEASURE_SUB_LABELS: Partial<Record<string, string>> = {
+  measuring: 'running tests',
+  evaluating: 'evaluating with LLM',
+};
+
+function StagesStepper({
+  currentStage,
+  currentPhase,
+}: {
+  currentStage: Stage | null;
+  currentPhase: string;
+}) {
   const stepStates = getStepStates(currentStage);
 
   return (
     <div className="flex items-center gap-1">
-      {STAGE_ORDER.map((stage, i) => (
-        <div key={stage} className="flex items-center gap-1">
-          {i > 0 && (
-            <ChevronRight
-              className={cn(
-                'h-3 w-3 flex-shrink-0',
-                stepStates[STAGE_ORDER[i - 1] as Stage] === 'completed'
-                  ? 'text-primary'
-                  : 'text-muted-foreground/40'
-              )}
-            />
-          )}
-          <div className="flex items-center gap-1.5">
-            <StepDot state={stepStates[stage]} />
-            <span
-              className={cn(
-                'text-xs font-medium',
-                stepStates[stage] === 'pending' && 'text-muted-foreground'
-              )}
-            >
-              {STAGE_LABELS[stage]}
-            </span>
+      {STAGE_ORDER.map((stage, i) => {
+        const subLabel =
+          stage === 'measure' && stepStates[stage] === 'active'
+            ? MEASURE_SUB_LABELS[currentPhase]
+            : undefined;
+
+        return (
+          <div key={stage} className="flex items-center gap-1">
+            {i > 0 && (
+              <ChevronRight
+                className={cn(
+                  'h-3 w-3 flex-shrink-0',
+                  stepStates[STAGE_ORDER[i - 1] as Stage] === 'completed'
+                    ? 'text-primary'
+                    : 'text-muted-foreground/40'
+                )}
+              />
+            )}
+            <div className="flex items-center gap-1.5">
+              <StepDot state={stepStates[stage]} />
+              <div className="flex flex-col leading-tight">
+                <span
+                  className={cn(
+                    'text-xs font-medium',
+                    stepStates[stage] === 'pending' && 'text-muted-foreground'
+                  )}
+                >
+                  {STAGE_LABELS[stage]}
+                </span>
+                {subLabel && <span className="text-[10px] text-muted-foreground">{subLabel}</span>}
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -288,10 +310,20 @@ function RunningBanner({
 
   // currentIteration === 0 means baseline hasn't completed yet
   if (currentIteration === 0) {
+    let baselineSubLabel: string;
+    if (currentPhase === 'evaluating') {
+      baselineSubLabel = 'evaluating with LLM';
+    } else if (currentPhase === 'measuring') {
+      baselineSubLabel = 'running tests';
+    } else {
+      baselineSubLabel = 'starting...';
+    }
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border-b text-xs">
         <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
-        <span className="text-muted-foreground">Running baseline measurement...</span>
+        <span className="font-medium">Baseline</span>
+        <span className="text-muted-foreground/50">·</span>
+        <span className="text-muted-foreground">{baselineSubLabel}</span>
       </div>
     );
   }
@@ -300,7 +332,7 @@ function RunningBanner({
 
   return (
     <div className="flex items-center justify-between gap-4 px-3 py-2 bg-primary/5 border-b text-xs">
-      <StagesStepper currentStage={currentStage} />
+      <StagesStepper currentStage={currentStage} currentPhase={currentPhase} />
       {progress && (
         <IterationStats
           currentIteration={currentIteration}
