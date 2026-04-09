@@ -75,6 +75,9 @@ describe('WorkspaceCreationService', () => {
     autoIterationConfig: null,
     autoIterationProgress: null,
     autoIterationSessionId: null,
+    ratchetCiResponseEnabled: null,
+    ratchetMergeConflictResponseEnabled: null,
+    ratchetReviewResponseEnabled: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -130,6 +133,9 @@ describe('WorkspaceCreationService', () => {
       defaultCodexModel: 'default',
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
+      ratchetCiResponseEnabled: true,
+      ratchetMergeConflictResponseEnabled: true,
+      ratchetReviewResponseEnabled: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -204,6 +210,9 @@ describe('WorkspaceCreationService', () => {
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
           ratchetPermissions: 'YOLO',
+          ratchetCiResponseEnabled: true,
+          ratchetMergeConflictResponseEnabled: true,
+          ratchetReviewResponseEnabled: true,
           createdAt: new Date(),
           updatedAt: new Date(),
         };

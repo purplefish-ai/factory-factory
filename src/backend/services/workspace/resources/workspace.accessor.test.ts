@@ -202,6 +202,9 @@ describe('workspaceAccessor', () => {
         ratchetActiveSessionId: true,
         ratchetLastCiRunId: true,
         prReviewLastCheckedAt: true,
+        ratchetCiResponseEnabled: true,
+        ratchetMergeConflictResponseEnabled: true,
+        ratchetReviewResponseEnabled: true,
       },
     });
   });
