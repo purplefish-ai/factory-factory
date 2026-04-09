@@ -14,11 +14,24 @@ describe('isWorkspaceDoneOrMerged', () => {
     expect(isWorkspaceDoneOrMerged({ prState: 'OPEN', ratchetState: 'MERGED' })).toBe(true);
   });
 
+  it('returns true when ratchet state is closed', () => {
+    expect(isWorkspaceDoneOrMerged({ prState: 'OPEN', ratchetState: 'CLOSED' })).toBe(true);
+  });
+
   it('returns true when sidebar CI state is merged', () => {
     expect(
       isWorkspaceDoneOrMerged({
         prState: 'OPEN',
         sidebarStatus: { ciState: 'MERGED' },
+      })
+    ).toBe(true);
+  });
+
+  it('returns true when sidebar CI state is closed', () => {
+    expect(
+      isWorkspaceDoneOrMerged({
+        prState: 'OPEN',
+        sidebarStatus: { ciState: 'CLOSED' },
       })
     ).toBe(true);
   });

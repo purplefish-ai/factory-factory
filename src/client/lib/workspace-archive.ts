@@ -23,7 +23,9 @@ export function isWorkspaceDoneOrMerged(
     workspace.prState === 'MERGED' ||
     workspace.prState === 'CLOSED' ||
     workspace.ratchetState === 'MERGED' ||
+    workspace.ratchetState === 'CLOSED' ||
     workspace.sidebarStatus?.ciState === 'MERGED' ||
+    workspace.sidebarStatus?.ciState === 'CLOSED' ||
     workspace.kanbanColumn === 'DONE' ||
     workspace.cachedKanbanColumn === 'DONE'
   );

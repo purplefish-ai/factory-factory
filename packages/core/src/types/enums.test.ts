@@ -58,6 +58,7 @@ describe('domain enums', () => {
       'IDLE',
       'CI_RUNNING',
       'CI_FAILED',
+      'MERGE_CONFLICT',
       'REVIEW_PENDING',
       'READY',
       'MERGED',
