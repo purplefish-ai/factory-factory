@@ -1,10 +1,12 @@
+import type { KanbanColumn, PRState, RatchetState, WorkspaceSidebarCiState } from '@/shared/core';
+
 interface ArchiveWorkspaceStateLike {
-  prState?: string | null;
-  ratchetState?: string | null;
-  kanbanColumn?: string | null;
-  cachedKanbanColumn?: string | null;
+  prState?: PRState | null;
+  ratchetState?: RatchetState | null;
+  kanbanColumn?: KanbanColumn | null;
+  cachedKanbanColumn?: KanbanColumn | null;
   sidebarStatus?: {
-    ciState?: string | null;
+    ciState?: WorkspaceSidebarCiState | null;
   } | null;
 }
 
@@ -23,7 +25,6 @@ export function isWorkspaceDoneOrMerged(
     workspace.prState === 'MERGED' ||
     workspace.prState === 'CLOSED' ||
     workspace.ratchetState === 'MERGED' ||
-    workspace.ratchetState === 'CLOSED' ||
     workspace.sidebarStatus?.ciState === 'MERGED' ||
     workspace.sidebarStatus?.ciState === 'CLOSED' ||
     workspace.kanbanColumn === 'DONE' ||
