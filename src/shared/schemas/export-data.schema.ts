@@ -141,6 +141,7 @@ const exportedUserSettingsSchema = z.object({
   playSoundOnComplete: z.boolean(),
   notificationSoundPath: z.string().nullable(),
   ratchetEnabled: z.boolean(),
+  ratchetReplyToPrComments: z.boolean().optional().default(true),
   defaultSessionProvider: SessionProvider,
   defaultClaudeModel: z.string().optional().default('sonnet'),
   defaultCodexModel: z.string().optional().default('default'),

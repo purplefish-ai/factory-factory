@@ -66,6 +66,12 @@ export function isWorkspaceMerged(
   );
 }
 
+export function isWorkspaceClosed(
+  workspace: Pick<WorkspaceHeaderWorkspace, 'prState' | 'sidebarStatus'>
+): boolean {
+  return workspace.prState === 'CLOSED' || workspace.sidebarStatus?.ciState === 'CLOSED';
+}
+
 export function hasVisiblePullRequest(
   workspace: Pick<WorkspaceHeaderWorkspace, 'prUrl' | 'prNumber' | 'prState'>
 ): workspace is {
@@ -73,10 +79,5 @@ export function hasVisiblePullRequest(
   prNumber: NonNullable<WorkspaceHeaderWorkspace['prNumber']>;
   prState: WorkspaceHeaderWorkspace['prState'];
 } {
-  return Boolean(
-    workspace.prUrl &&
-      workspace.prNumber &&
-      workspace.prState !== 'NONE' &&
-      workspace.prState !== 'CLOSED'
-  );
+  return Boolean(workspace.prUrl && workspace.prNumber && workspace.prState !== 'NONE');
 }

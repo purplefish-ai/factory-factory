@@ -5,9 +5,14 @@ import { z } from 'zod';
  */
 const statusCheckRollupItemSchema = z
   .object({
+    name: z.string().optional(),
+    workflowName: z.string().optional(),
     status: z.string().optional(),
     conclusion: z.string().optional(),
     state: z.string().optional(),
+    detailsUrl: z.string().optional(),
+    startedAt: z.string().optional(),
+    completedAt: z.string().optional(),
   })
   .refine((item) => item.status !== undefined || item.state !== undefined, {
     message: 'statusCheckRollup items must include status or state',
@@ -71,6 +76,9 @@ const fullPRCheckRunSchema = z.object({
   status: z.string(),
   conclusion: z.string().nullable().optional(),
   detailsUrl: z.string().optional(),
+  workflowName: z.string().optional(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
 });
 
 const fullPRStatusContextSchema = z.object({

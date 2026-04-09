@@ -335,14 +335,14 @@ describe('GitHubCLIService', () => {
       expect(result).toBe('SUCCESS');
     });
 
-    it('should not treat CANCELLED or NEUTRAL checks as success', () => {
+    it('should treat CANCELLED or NEUTRAL as non-blocking when a passing check exists', () => {
       const result = githubCLIService.computeCIStatus([
         { status: 'COMPLETED', conclusion: 'SUCCESS' },
         { status: 'COMPLETED', conclusion: 'NEUTRAL' },
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
       ]);
 
-      expect(result).toBe('UNKNOWN');
+      expect(result).toBe('SUCCESS');
     });
   });
 
@@ -742,6 +742,36 @@ describe('GitHubCLIService', () => {
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
       ]);
       expect(result).toBe('UNKNOWN');
+    });
+
+    it('should return SUCCESS for mixed SUCCESS/SKIPPED/NEUTRAL/CANCELLED checks', () => {
+      const result = githubCLIService.computeCIStatus([
+        { status: 'COMPLETED', conclusion: 'SUCCESS' },
+        { status: 'COMPLETED', conclusion: 'SKIPPED' },
+        { status: 'COMPLETED', conclusion: 'NEUTRAL' },
+        { status: 'COMPLETED', conclusion: 'CANCELLED' },
+      ]);
+      expect(result).toBe('SUCCESS');
+    });
+
+    it('should prefer the latest run attempt for the same check identity', () => {
+      const result = githubCLIService.computeCIStatus([
+        {
+          name: 'ci',
+          workflowName: 'CI',
+          status: 'COMPLETED',
+          conclusion: 'FAILURE',
+          detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+        },
+        {
+          name: 'ci',
+          workflowName: 'CI',
+          status: 'COMPLETED',
+          conclusion: 'SUCCESS',
+          detailsUrl: 'https://github.com/org/repo/actions/runs/101/job/1',
+        },
+      ]);
+      expect(result).toBe('SUCCESS');
     });
 
     it('should return FAILURE for lowercase completed + failure values', () => {

@@ -12,6 +12,7 @@ class UserSettingsQueryService {
     playSoundOnComplete?: boolean;
     notificationSoundPath?: string | null;
     ratchetEnabled?: boolean;
+    ratchetReplyToPrComments?: boolean;
     defaultSessionProvider?: 'CLAUDE' | 'CODEX';
     defaultClaudeModel?: string;
     defaultCodexModel?: string;

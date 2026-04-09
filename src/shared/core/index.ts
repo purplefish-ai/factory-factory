@@ -4,6 +4,7 @@ export {
   deriveCiVisualStateFromChecks,
   deriveCiVisualStateFromPrCiStatus,
   getCiVisualLabel,
+  reduceCheckRollupToLatestRunAttempts,
 } from './ci-status.js';
 export {
   AutoIterationStatus,

@@ -9,6 +9,7 @@ export type WorkspaceSidebarCiState =
   | 'FAILING'
   | 'PASSING'
   | 'UNKNOWN'
+  | 'CLOSED'
   | 'MERGED'
   | 'CONFLICT';
 
@@ -36,6 +37,10 @@ export function deriveWorkspaceSidebarStatus(
 
   if (input.prState === 'MERGED' || input.ratchetState === 'MERGED') {
     return { activityState, ciState: 'MERGED' };
+  }
+
+  if (input.prState === 'CLOSED') {
+    return { activityState, ciState: 'CLOSED' };
   }
 
   // Merge conflicts are shown regardless of CI status
@@ -73,6 +78,8 @@ export function getWorkspaceCiLabel(state: WorkspaceSidebarCiState): string {
       return 'CI Passing';
     case 'UNKNOWN':
       return 'CI Unknown';
+    case 'CLOSED':
+      return 'Closed';
     case 'MERGED':
       return 'Merged';
     case 'CONFLICT':
@@ -93,6 +100,9 @@ export function getWorkspaceCiTooltip(
   if (ciState === 'PASSING') {
     return 'CI checks are passing';
   }
+  if (ciState === 'CLOSED') {
+    return 'PR is closed';
+  }
   if (ciState === 'MERGED') {
     return 'PR is merged';
   }
@@ -110,6 +120,9 @@ export function getWorkspacePrTooltipSuffix(
   prState: PRState | null
 ): string {
   if (prState === 'CLOSED') {
+    return ' · Closed';
+  }
+  if (ciState === 'CLOSED') {
     return ' · Closed';
   }
   if (ciState === 'MERGED') {

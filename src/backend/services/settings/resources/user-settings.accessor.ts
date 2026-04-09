@@ -19,6 +19,7 @@ interface UpdateUserSettingsInput {
   ratchetCiResponseEnabled?: boolean;
   ratchetMergeConflictResponseEnabled?: boolean;
   ratchetReviewResponseEnabled?: boolean;
+  ratchetReplyToPrComments?: boolean;
   defaultSessionProvider?: SessionProvider;
   defaultClaudeModel?: string;
   defaultCodexModel?: string;
@@ -34,7 +35,10 @@ function parseWorkspaceOrderMap(value: Prisma.JsonValue | null): WorkspaceOrderM
   return parsed.success ? parsed.data : {};
 }
 
-function normalizeModelInputs(data: UpdateUserSettingsInput) {
+function normalizeDefaultSessionModels(data: UpdateUserSettingsInput): {
+  normalizedClaudeModel: string | undefined;
+  normalizedCodexModel: string | undefined;
+} {
   const normalizedClaudeModel =
     data.defaultClaudeModel === undefined
       ? undefined
@@ -78,6 +82,7 @@ class UserSettingsAccessor {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
+          ratchetReplyToPrComments: true,
           ratchetPermissions: 'YOLO',
         },
       });
@@ -97,7 +102,7 @@ class UserSettingsAccessor {
    */
   async update(data: UpdateUserSettingsInput): Promise<UserSettings> {
     const userId = 'default';
-    const { normalizedClaudeModel, normalizedCodexModel } = normalizeModelInputs(data);
+    const { normalizedClaudeModel, normalizedCodexModel } = normalizeDefaultSessionModels(data);
 
     return await prisma.userSettings.upsert({
       where: { userId },
@@ -120,6 +125,7 @@ class UserSettingsAccessor {
         defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
         defaultCodexModel: normalizedCodexModel ?? 'default',
         defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
+        ratchetReplyToPrComments: data.ratchetReplyToPrComments ?? true,
         ratchetPermissions: data.ratchetPermissions ?? 'YOLO',
       },
     });

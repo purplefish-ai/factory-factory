@@ -1,10 +1,10 @@
 import { Archive, Loader2 } from 'lucide-react';
+import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { Button } from '@/components/ui/button';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkspaceHeaderWorkspace } from './types';
-import { isWorkspaceMerged } from './utils';
 
 export function ArchiveActionButton({
   workspace,
@@ -17,7 +17,7 @@ export function ArchiveActionButton({
   onArchiveRequest: () => void;
   renderAsMenuItem?: boolean;
 }) {
-  const merged = isWorkspaceMerged(workspace);
+  const completed = isWorkspaceDoneOrMerged(workspace);
 
   if (renderAsMenuItem) {
     return (
@@ -30,7 +30,7 @@ export function ArchiveActionButton({
         }}
         disabled={archivePending}
         className={cn(
-          merged ? '' : 'text-destructive focus:text-destructive dark:text-destructive'
+          completed ? '' : 'text-destructive focus:text-destructive dark:text-destructive'
         )}
       >
         {archivePending ? (
@@ -47,11 +47,11 @@ export function ArchiveActionButton({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant={merged ? 'default' : 'ghost'}
+          variant={completed ? 'default' : 'ghost'}
           size="icon"
           className={cn(
             'h-9 w-9 md:h-8 md:w-8',
-            merged ? '' : 'hover:bg-destructive/10 hover:text-destructive'
+            completed ? '' : 'hover:bg-destructive/10 hover:text-destructive'
           )}
           onClick={onArchiveRequest}
           disabled={archivePending}

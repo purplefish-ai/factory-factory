@@ -311,6 +311,7 @@ async function importUserSettings(
       notificationSoundPath: settings.notificationSoundPath,
       // Ratchet settings
       ratchetEnabled: settings.ratchetEnabled,
+      ratchetReplyToPrComments: settings.ratchetReplyToPrComments,
       defaultSessionProvider: settings.defaultSessionProvider,
       defaultClaudeModel: settings.defaultClaudeModel,
       defaultCodexModel: settings.defaultCodexModel,
@@ -451,6 +452,7 @@ class DataBackupService {
               notificationSoundPath: userSettings.notificationSoundPath,
               // Ratchet settings
               ratchetEnabled: userSettings.ratchetEnabled,
+              ratchetReplyToPrComments: userSettings.ratchetReplyToPrComments,
               defaultSessionProvider: userSettings.defaultSessionProvider,
               defaultClaudeModel: userSettings.defaultClaudeModel,
               defaultCodexModel: userSettings.defaultCodexModel,

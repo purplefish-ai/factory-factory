@@ -1,6 +1,7 @@
 import { toError } from '@/backend/lib/error-utils';
 import { buildRatchetDispatchPrompt } from '@/backend/prompts/ratchet-dispatch';
 import type { createLogger } from '@/backend/services/logger.service';
+import { userSettingsAccessor } from '@/backend/services/settings';
 import type { RatchetSessionBridge } from './bridges';
 import { fixerSessionService } from './fixer-session.service';
 import type { PRStateInfo, RatchetAction, WorkspaceWithPR } from './ratchet.types';
@@ -21,6 +22,7 @@ export async function triggerRatchetFixer(params: {
     params;
 
   try {
+    const userSettings = await userSettingsAccessor.get();
     const result = await fixerSessionService.acquireAndDispatch({
       workspaceId: workspace.id,
       workflow: RATCHET_WORKFLOW,
@@ -32,7 +34,10 @@ export async function triggerRatchetFixer(params: {
           workspace.prUrl,
           prStateInfo.prNumber,
           prStateInfo.reviewComments,
-          { hasMergeConflict: prStateInfo.hasMergeConflict }
+          {
+            hasMergeConflict: prStateInfo.hasMergeConflict,
+            replyToPrComments: userSettings.ratchetReplyToPrComments,
+          }
         ),
       beforeStart: ({ sessionId, prompt }) => {
         sessionBridge.injectCommittedUserMessage(sessionId, prompt);

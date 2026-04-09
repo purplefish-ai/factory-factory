@@ -3,9 +3,12 @@ import type { CIStatus, RatchetState } from '@/shared/core';
 
 export interface RatchetStatusCheckRollupItem {
   name?: string;
+  workflowName?: string;
   status?: string;
   conclusion?: string | null;
   detailsUrl?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface PRStateInfo {

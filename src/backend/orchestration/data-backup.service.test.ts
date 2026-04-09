@@ -191,6 +191,7 @@ const mockUserSettings: UserSettings = {
   workspaceOrder: { 'proj-1': ['ws-1', 'ws-2'] },
   cachedSlashCommands: { commands: [] },
   ratchetEnabled: true,
+  ratchetReplyToPrComments: true,
   defaultSessionProvider: SessionProvider.CLAUDE,
   defaultClaudeModel: 'sonnet',
   defaultCodexModel: 'gpt-5-codex',
@@ -317,6 +318,7 @@ function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
         playSoundOnComplete: true,
         notificationSoundPath: '/path/to/sound.mp3',
         ratchetEnabled: true,
+        ratchetReplyToPrComments: true,
         defaultSessionProvider: SessionProvider.CLAUDE,
         defaultClaudeModel: 'sonnet',
         defaultCodexModel: 'gpt-5-codex',
@@ -355,6 +357,7 @@ describe('DataBackupService', () => {
       expect(result.data.userSettings).toEqual(
         expect.objectContaining({
           ratchetEnabled: true,
+          ratchetReplyToPrComments: true,
           defaultSessionProvider: SessionProvider.CLAUDE,
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'gpt-5-codex',

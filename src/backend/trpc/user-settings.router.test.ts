@@ -34,12 +34,14 @@ describe('userSettingsRouter', () => {
     mockGet.mockResolvedValue({
       preferredIde: 'cursor',
       customIdeCommand: null,
+      ratchetReplyToPrComments: true,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
     });
     mockUpdate.mockResolvedValue({
       preferredIde: 'vscode',
       customIdeCommand: null,
+      ratchetReplyToPrComments: false,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
     });
@@ -48,19 +50,29 @@ describe('userSettingsRouter', () => {
     await expect(caller.get()).resolves.toEqual({
       preferredIde: 'cursor',
       customIdeCommand: null,
+      ratchetReplyToPrComments: true,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
     });
     await expect(
-      caller.update({ preferredIde: 'vscode', playSoundOnComplete: true })
+      caller.update({
+        preferredIde: 'vscode',
+        playSoundOnComplete: true,
+        ratchetReplyToPrComments: false,
+      })
     ).resolves.toEqual({
       preferredIde: 'vscode',
       customIdeCommand: null,
+      ratchetReplyToPrComments: false,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
     });
 
-    expect(mockUpdate).toHaveBeenCalledWith({ preferredIde: 'vscode', playSoundOnComplete: true });
+    expect(mockUpdate).toHaveBeenCalledWith({
+      preferredIde: 'vscode',
+      playSoundOnComplete: true,
+      ratchetReplyToPrComments: false,
+    });
   });
 
   it('requires command when preferred ide is custom', async () => {

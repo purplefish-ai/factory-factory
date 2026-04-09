@@ -67,12 +67,21 @@ describe('computeKanbanColumn', () => {
     ).toBe('WORKING');
   });
 
-  it('maps merged PRs to DONE and hidden empty READY workspaces to null', () => {
+  it('maps merged and closed PRs to DONE and hidden empty READY workspaces to null', () => {
     expect(
       computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'MERGED',
+        ratchetState: 'IDLE',
+        hasHadSessions: true,
+      })
+    ).toBe('DONE');
+    expect(
+      computeKanbanColumn({
+        lifecycle: 'READY',
+        isWorking: false,
+        prState: 'CLOSED',
         ratchetState: 'IDLE',
         hasHadSessions: true,
       })
@@ -101,6 +110,15 @@ describe('computeKanbanColumn', () => {
   });
 
   it('maps idle session-backed workspaces to WAITING', () => {
+    expect(
+      computeKanbanColumn({
+        lifecycle: 'READY',
+        isWorking: false,
+        prState: 'DRAFT',
+        ratchetState: 'IDLE',
+        hasHadSessions: true,
+      })
+    ).toBe('WAITING');
     expect(
       computeKanbanColumn({
         lifecycle: 'READY',

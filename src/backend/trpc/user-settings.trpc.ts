@@ -45,6 +45,7 @@ export const userSettingsRouter = router({
         ratchetCiResponseEnabled: z.boolean().optional(),
         ratchetMergeConflictResponseEnabled: z.boolean().optional(),
         ratchetReviewResponseEnabled: z.boolean().optional(),
+        ratchetReplyToPrComments: z.boolean().optional(),
         // Session provider defaults
         defaultSessionProvider: z.nativeEnum(SessionProvider).optional(),
         defaultClaudeModel: z.string().trim().min(1, 'Claude model cannot be empty').optional(),
