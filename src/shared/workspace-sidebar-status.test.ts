@@ -43,6 +43,18 @@ describe('workspace-sidebar-status', () => {
     expect(result.ciState).toBe('MERGED');
   });
 
+  it('treats closed PRs as a terminal closed state', () => {
+    const result = deriveWorkspaceSidebarStatus({
+      isWorking: false,
+      prUrl: 'https://github.com/o/r/pull/1',
+      prState: 'CLOSED',
+      prCiStatus: 'SUCCESS',
+      ratchetState: 'IDLE',
+    });
+
+    expect(result.ciState).toBe('CLOSED');
+  });
+
   it('prefers PR snapshot CI failure over stale ratchet CI running', () => {
     const result = deriveWorkspaceSidebarStatus({
       isWorking: false,
@@ -93,11 +105,13 @@ describe('workspace-sidebar-status', () => {
 
   it('provides ci tooltip text from centralized helper', () => {
     expect(getWorkspaceCiTooltip('RUNNING', 'OPEN')).toBe('CI checks are running');
+    expect(getWorkspaceCiTooltip('CLOSED', 'CLOSED')).toBe('PR is closed');
     expect(getWorkspaceCiTooltip('UNKNOWN', 'CLOSED')).toBe('PR is closed');
   });
 
   it('provides pr tooltip suffix text from centralized helper', () => {
     expect(getWorkspacePrTooltipSuffix('PASSING', 'OPEN')).toBe(' · CI passing');
+    expect(getWorkspacePrTooltipSuffix('CLOSED', 'OPEN')).toBe(' · Closed');
     expect(getWorkspacePrTooltipSuffix('UNKNOWN', 'CLOSED')).toBe(' · Closed');
     expect(getWorkspacePrTooltipSuffix('UNKNOWN', 'OPEN')).toBe('');
   });

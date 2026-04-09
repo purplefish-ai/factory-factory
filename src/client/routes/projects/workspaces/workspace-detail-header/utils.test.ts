@@ -3,6 +3,7 @@ import {
   getWorkspaceHeaderLabel,
   groupWorkspaceSwitcherItems,
   hasVisiblePullRequest,
+  isWorkspaceClosed,
   isWorkspaceMerged,
 } from './utils';
 
@@ -106,9 +107,32 @@ describe('pr helpers', () => {
     ).toBe(true);
   });
 
+  it('detects closed state from PR state or sidebar state', () => {
+    expect(
+      isWorkspaceClosed({
+        prState: 'CLOSED',
+        sidebarStatus: { activityState: 'IDLE', ciState: 'PASSING' },
+      })
+    ).toBe(true);
+
+    expect(
+      isWorkspaceClosed({
+        prState: 'OPEN',
+        sidebarStatus: { activityState: 'IDLE', ciState: 'CLOSED' },
+      })
+    ).toBe(true);
+  });
+
   it('requires url, number, and non-hidden state for visible PR', () => {
     expect(
       hasVisiblePullRequest({ prUrl: 'https://example.com/pr/1', prNumber: 1, prState: 'OPEN' })
+    ).toBe(true);
+    expect(
+      hasVisiblePullRequest({
+        prUrl: 'https://example.com/pr/2',
+        prNumber: 2,
+        prState: 'CLOSED',
+      })
     ).toBe(true);
     expect(hasVisiblePullRequest({ prUrl: null, prNumber: 1, prState: 'OPEN' })).toBe(false);
     expect(

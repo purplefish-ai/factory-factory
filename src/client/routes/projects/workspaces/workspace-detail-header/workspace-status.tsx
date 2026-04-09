@@ -1,10 +1,11 @@
-import { CheckCircle2, CircleDot, GitPullRequest } from 'lucide-react';
+import { CheckCircle2, CircleDot, GitPullRequest, XCircle } from 'lucide-react';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
+import { PrStateBadge } from '@/components/shared/pr-state-badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { WorkspaceHeaderWorkspace, WorkspacePrChipProps } from './types';
-import { hasVisiblePullRequest, isWorkspaceMerged } from './utils';
+import { hasVisiblePullRequest, isWorkspaceClosed, isWorkspaceMerged } from './utils';
 
 type WorkspacePrActionProps = {
   workspace: WorkspaceHeaderWorkspace;
@@ -14,7 +15,15 @@ type WorkspacePrActionProps = {
   handleQuickAction: (title: string, prompt: string) => void;
 };
 
-export function WorkspacePrChip({ prUrl, prNumber, isMerged, className }: WorkspacePrChipProps) {
+export function WorkspacePrChip({
+  prUrl,
+  prNumber,
+  variant = 'default',
+  className,
+}: WorkspacePrChipProps) {
+  const isMerged = variant === 'merged';
+  const isClosed = variant === 'closed';
+
   return (
     <a
       href={prUrl}
@@ -22,12 +31,17 @@ export function WorkspacePrChip({ prUrl, prNumber, isMerged, className }: Worksp
       rel="noopener noreferrer"
       className={cn(
         'flex items-center gap-1 text-xs hover:opacity-80 transition-opacity',
-        isMerged ? 'text-green-500' : 'text-muted-foreground hover:text-foreground',
+        isMerged
+          ? 'text-green-500'
+          : isClosed
+            ? 'text-slate-500'
+            : 'text-muted-foreground hover:text-foreground',
         className
       )}
     >
       <GitPullRequest className="h-3 w-3" />#{prNumber}
       {isMerged && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+      {isClosed && <XCircle className="h-3 w-3 text-slate-500" />}
     </a>
   );
 }
@@ -39,7 +53,7 @@ export function WorkspacePrAction({
   isCreatingSession,
   handleQuickAction,
 }: WorkspacePrActionProps) {
-  if (hasChanges && !running && (workspace.prState === 'NONE' || workspace.prState === 'CLOSED')) {
+  if (hasChanges && !running && workspace.prState === 'NONE') {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -65,12 +79,14 @@ export function WorkspacePrAction({
   }
 
   if (hasVisiblePullRequest(workspace)) {
+    const variant = isWorkspaceMerged(workspace)
+      ? 'merged'
+      : isWorkspaceClosed(workspace)
+        ? 'closed'
+        : 'default';
+
     return (
-      <WorkspacePrChip
-        prUrl={workspace.prUrl}
-        prNumber={workspace.prNumber}
-        isMerged={isWorkspaceMerged(workspace)}
-      />
+      <WorkspacePrChip prUrl={workspace.prUrl} prNumber={workspace.prNumber} variant={variant} />
     );
   }
 
@@ -118,6 +134,13 @@ export function WorkspaceCiStatus({ workspace }: { workspace: WorkspaceHeaderWor
   }
 
   return (
-    <CiStatusChip ciState={workspace.sidebarStatus.ciState} prState={workspace.prState} size="md" />
+    <div className="flex items-center gap-2">
+      <CiStatusChip
+        ciState={workspace.sidebarStatus.ciState}
+        prState={workspace.prState}
+        size="md"
+      />
+      <PrStateBadge prState={workspace.prState} size="md" />
+    </div>
   );
 }
