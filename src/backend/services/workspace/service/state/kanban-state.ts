@@ -29,7 +29,7 @@ export interface WorkspaceWithKanbanState {
  * Simplified 3-column model:
  * - WORKING: Initializing states (NEW/PROVISIONING/FAILED) or actively working
  * - WAITING: Idle workspaces with hasHadSessions=true (includes PR states)
- * - DONE: PR merged
+ * - DONE: PR merged or closed
  *
  * Note: Workspaces with hasHadSessions=false AND status=READY are hidden from view.
  * Archived workspaces retain their pre-archive cachedKanbanColumn and are hidden
@@ -58,8 +58,12 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
 
   // From here, lifecycle === READY and not working
 
-  // DONE: PR merged, as observed by either PR snapshot or ratchet monitor.
-  if (prState === PRState.MERGED || ratchetState === RatchetState.MERGED) {
+  // DONE: PR merged or closed, as observed by either PR snapshot or ratchet monitor.
+  if (
+    prState === PRState.MERGED ||
+    prState === PRState.CLOSED ||
+    ratchetState === RatchetState.MERGED
+  ) {
     return KanbanColumn.DONE;
   }
 
@@ -70,7 +74,7 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
   }
 
   // WAITING: Everything else - idle workspaces with sessions
-  // (includes PR states: NONE, DRAFT, OPEN, CHANGES_REQUESTED, APPROVED, CLOSED)
+  // (includes PR states: NONE, DRAFT, OPEN, CHANGES_REQUESTED, APPROVED)
   return KanbanColumn.WAITING;
 }
 

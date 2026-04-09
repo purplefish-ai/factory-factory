@@ -12,7 +12,7 @@ export type WorkspaceSessionManagement = ReturnType<typeof useSessionManagement>
 export type WorkspacePrChipProps = {
   prUrl: NonNullable<WorkspaceHeaderWorkspace['prUrl']>;
   prNumber: NonNullable<WorkspaceHeaderWorkspace['prNumber']>;
-  isMerged: boolean;
+  variant?: 'default' | 'merged' | 'closed';
   className?: string;
 };
 

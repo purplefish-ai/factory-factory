@@ -20,7 +20,7 @@ export const KANBAN_COLUMNS: ColumnConfig[] = [
   { id: 'ISSUES', label: 'Todo · GitHub', description: 'Issues assigned to you' },
   { id: 'WORKING', label: 'Working', description: 'Agent is working' },
   { id: 'WAITING', label: 'Waiting', description: 'Waiting for input' },
-  { id: 'DONE', label: 'Done', description: 'PR merged' },
+  { id: 'DONE', label: 'Done', description: 'PR merged or closed' },
 ];
 
 export function getKanbanColumns(issueProvider: string): ColumnConfig[] {
@@ -33,7 +33,7 @@ export function getKanbanColumns(issueProvider: string): ColumnConfig[] {
     },
     { id: 'WORKING', label: 'Working', description: 'Agent is working' },
     { id: 'WAITING', label: 'Waiting', description: 'Waiting for input' },
-    { id: 'DONE', label: 'Done', description: 'PR merged' },
+    { id: 'DONE', label: 'Done', description: 'PR merged or closed' },
   ];
 }
 

@@ -40,6 +40,11 @@ function getCiStatusConfig(ciState: WorkspaceSidebarCiState): {
         className: 'bg-muted text-muted-foreground',
         Icon: Circle,
       };
+    case 'CLOSED':
+      return {
+        className: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
+        Icon: XCircle,
+      };
     case 'MERGED':
       return {
         className: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',

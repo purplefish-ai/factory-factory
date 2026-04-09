@@ -5,7 +5,7 @@ interface ArchiveWorkspaceStateLike {
 }
 
 /**
- * Treat merged PRs and DONE kanban workspaces as safe-to-archive without
+ * Treat completed PRs and DONE kanban workspaces as safe-to-archive without
  * showing commit-before-archive warnings.
  */
 export function isWorkspaceDoneOrMerged(
@@ -17,6 +17,7 @@ export function isWorkspaceDoneOrMerged(
 
   return (
     workspace.prState === 'MERGED' ||
+    workspace.prState === 'CLOSED' ||
     workspace.kanbanColumn === 'DONE' ||
     workspace.cachedKanbanColumn === 'DONE'
   );

@@ -6,6 +6,10 @@ describe('isWorkspaceDoneOrMerged', () => {
     expect(isWorkspaceDoneOrMerged({ prState: 'MERGED' })).toBe(true);
   });
 
+  it('returns true when PR state is closed', () => {
+    expect(isWorkspaceDoneOrMerged({ prState: 'CLOSED' })).toBe(true);
+  });
+
   it('returns true when live kanban column is done', () => {
     expect(isWorkspaceDoneOrMerged({ kanbanColumn: 'DONE' })).toBe(true);
   });

@@ -14,6 +14,7 @@ import { Link } from 'react-router';
 import { PendingRequestBadge } from '@/client/components/pending-request-badge';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
+import { PrStateBadge } from '@/components/shared/pr-state-badge';
 import { SetupStatusChip } from '@/components/shared/setup-status-chip';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -112,7 +113,12 @@ function CiRow({
   ciState: WorkspaceSidebarCiState;
   prState: Workspace['prState'];
 }) {
-  return <CiStatusChip ciState={ciState} prState={prState} size="sm" />;
+  return (
+    <div className="flex items-center gap-1.5">
+      <CiStatusChip ciState={ciState} prState={prState} size="sm" />
+      <PrStateBadge prState={prState} size="sm" />
+    </div>
+  );
 }
 
 function CardArchiveButton({
