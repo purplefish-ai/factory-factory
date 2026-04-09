@@ -16,6 +16,7 @@ interface UpdateUserSettingsInput {
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   // Ratchet settings
   ratchetEnabled?: boolean;
+  ratchetReplyToPrComments?: boolean;
   defaultSessionProvider?: SessionProvider;
   defaultClaudeModel?: string;
   defaultCodexModel?: string;
@@ -29,6 +30,29 @@ export type WorkspaceOrderMap = Record<string, string[]>;
 function parseWorkspaceOrderMap(value: Prisma.JsonValue | null): WorkspaceOrderMap {
   const parsed = workspaceOrderMapSchema.safeParse(value);
   return parsed.success ? parsed.data : {};
+}
+
+function normalizeDefaultSessionModels(data: UpdateUserSettingsInput): {
+  normalizedClaudeModel: string | undefined;
+  normalizedCodexModel: string | undefined;
+} {
+  const normalizedClaudeModel =
+    data.defaultClaudeModel === undefined
+      ? undefined
+      : normalizeSessionModelForProvider(data.defaultClaudeModel, 'CLAUDE');
+  if (data.defaultClaudeModel !== undefined && !normalizedClaudeModel) {
+    throw new Error('Invalid default Claude model');
+  }
+
+  const normalizedCodexModel =
+    data.defaultCodexModel === undefined
+      ? undefined
+      : normalizeSessionModelForProvider(data.defaultCodexModel, 'CODEX');
+  if (data.defaultCodexModel !== undefined && !normalizedCodexModel) {
+    throw new Error('Invalid default Codex model');
+  }
+
+  return { normalizedClaudeModel, normalizedCodexModel };
 }
 
 class UserSettingsAccessor {
@@ -55,6 +79,7 @@ class UserSettingsAccessor {
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
           defaultWorkspacePermissions: 'STRICT',
+          ratchetReplyToPrComments: true,
           ratchetPermissions: 'YOLO',
         },
       });
@@ -74,21 +99,7 @@ class UserSettingsAccessor {
    */
   async update(data: UpdateUserSettingsInput): Promise<UserSettings> {
     const userId = 'default';
-    const normalizedClaudeModel =
-      data.defaultClaudeModel === undefined
-        ? undefined
-        : normalizeSessionModelForProvider(data.defaultClaudeModel, 'CLAUDE');
-    if (data.defaultClaudeModel !== undefined && !normalizedClaudeModel) {
-      throw new Error('Invalid default Claude model');
-    }
-
-    const normalizedCodexModel =
-      data.defaultCodexModel === undefined
-        ? undefined
-        : normalizeSessionModelForProvider(data.defaultCodexModel, 'CODEX');
-    if (data.defaultCodexModel !== undefined && !normalizedCodexModel) {
-      throw new Error('Invalid default Codex model');
-    }
+    const { normalizedClaudeModel, normalizedCodexModel } = normalizeDefaultSessionModels(data);
 
     return await prisma.userSettings.upsert({
       where: { userId },
@@ -107,6 +118,7 @@ class UserSettingsAccessor {
         defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
         defaultCodexModel: normalizedCodexModel ?? 'default',
         defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
+        ratchetReplyToPrComments: data.ratchetReplyToPrComments ?? true,
         ratchetPermissions: data.ratchetPermissions ?? 'YOLO',
       },
     });

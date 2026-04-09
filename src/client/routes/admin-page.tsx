@@ -830,6 +830,23 @@ function RatchetSettingsSection() {
           </p>
         </div>
 
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="ratchet-reply-to-pr-comments">Reply to PR comments</Label>
+            <p className="text-sm text-muted-foreground">
+              When enabled, Ratchet replies on review threads and posts a re-review PR comment
+            </p>
+          </div>
+          <Switch
+            id="ratchet-reply-to-pr-comments"
+            checked={settings?.ratchetReplyToPrComments ?? true}
+            onCheckedChange={(checked) => {
+              updateSettings.mutate({ ratchetReplyToPrComments: checked });
+            }}
+            disabled={updateSettings.isPending}
+          />
+        </div>
+
         {/* Manual trigger button */}
         <div className="border-t pt-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

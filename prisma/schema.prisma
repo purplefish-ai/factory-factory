@@ -324,6 +324,7 @@ model UserSettings {
 
   // Ratchet Settings (unified PR progression)
   ratchetEnabled            Boolean  @default(false)  // Default for new GitHub-issue-created workspaces
+  ratchetReplyToPrComments  Boolean  @default(true)   // Whether Ratchet should post PR/review comment replies
   defaultSessionProvider    SessionProvider @default(CLAUDE)
   defaultClaudeModel        String @default("sonnet")
   defaultCodexModel         String @default("default")
