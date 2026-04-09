@@ -78,10 +78,15 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Compute release version
+        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        id: release_version
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+
       - name: Create and push tag
         if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION="${{ steps.release_version.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if [ -n "$(git ls-remote --tags origin "refs/tags/v$VERSION")" ]; then
@@ -90,3 +95,11 @@ jobs:
             git tag -a "v$VERSION" -m "Release v$VERSION"
             git push origin "v$VERSION"
           fi
+
+      - name: Create GitHub release
+        if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.release_version.outputs.version }}
+          name: v${{ steps.release_version.outputs.version }}
+          generate_release_notes: true
