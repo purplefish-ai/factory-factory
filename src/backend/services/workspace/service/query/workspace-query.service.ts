@@ -34,6 +34,7 @@ class WorkspaceQueryService {
   /** Cached GitHub review count (DOM-04: moved from module scope to instance field) */
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
   private reviewCountRefreshInFlight = false;
+  private prStatusSyncInFlight = false;
 
   private sessionBridge: WorkspaceSessionBridge | null = null;
   private githubBridge: WorkspaceGitHubBridge | null = null;
@@ -407,6 +408,11 @@ class WorkspaceQueryService {
   }
 
   async syncAllPRStatuses(projectId: string) {
+    if (this.prStatusSyncInFlight) {
+      logger.info('Batch PR status sync already in flight, skipping', { projectId });
+      return { queued: 0 };
+    }
+
     const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
@@ -419,6 +425,8 @@ class WorkspaceQueryService {
       return { queued: 0 };
     }
 
+    this.prStatusSyncInFlight = true;
+
     // Fire-and-forget: results are pushed to clients via WebSocket as each call completes.
     Promise.all(
       workspacesWithPRs.map((workspace) =>
@@ -426,7 +434,10 @@ class WorkspaceQueryService {
       )
     )
       .then(() => logger.info('Batch PR status sync completed', { projectId }))
-      .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }));
+      .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }))
+      .finally(() => {
+        this.prStatusSyncInFlight = false;
+      });
 
     return { queued: workspacesWithPRs.length };
   }
