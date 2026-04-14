@@ -140,7 +140,9 @@ export function KanbanProvider({
 
   const isLoadingIssues = isLinear ? isLoadingLinearIssues : isLoadingGithubIssues;
 
-  const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation();
+  const syncMutation = trpc.workspace.syncAllPRStatuses.useMutation({
+    onError: (error) => toast.error(`Failed to sync PR statuses: ${error.message}`),
+  });
   const toggleRatchetingMutation = trpc.workspace.toggleRatcheting.useMutation();
   const renameMutation = trpc.workspace.rename.useMutation({
     onError: (error) => toast.error(`Failed to rename workspace: ${error.message}`),
