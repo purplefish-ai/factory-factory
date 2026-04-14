@@ -34,8 +34,10 @@ export interface AutoIterationProgress {
   lastIterationAt: string | null;
   /** Current phase of the active iteration — drives the phase indicator in the UI. */
   currentPhase: IterationPhase;
-  /** Most recent test command output (truncated). Updated after each test run for live display. */
+  /** Most recent test command output (truncated). Updated live while the test runs. */
   lastTestOutput: string | null;
+  /** Result of the most recent LLM metric evaluation. Set after eval, cleared at next iteration start. */
+  lastEvalDecision: { improved: boolean; metricSummary: string } | null;
 }
 
 /** A single entry in the agent logbook. */
