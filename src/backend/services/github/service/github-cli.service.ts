@@ -49,6 +49,23 @@ class GitHubCLIService {
   private readonly execLimit = pLimit(GH_CONCURRENCY);
   private readonly inflight = new Map<string, Promise<ExecResult>>();
 
+  // Stale-while-revalidate caches for expensive GitHub CLI calls.
+  private cachedHealth: { result: GitHubCLIHealthStatus; fetchedAt: number } | null = null;
+  private healthRefreshInFlight = false;
+  private readonly HEALTH_CACHE_TTL_MS = 30_000;
+
+  private readonly issueCache = new Map<string, { issues: GitHubIssue[]; fetchedAt: number }>();
+  private readonly issueRefreshInFlight = new Set<string>();
+  private readonly ISSUE_CACHE_TTL_MS = 60_000;
+
+  /** Clear all caches — used in tests to prevent cross-test contamination. */
+  clearCaches(): void {
+    this.cachedHealth = null;
+    this.healthRefreshInFlight = false;
+    this.issueCache.clear();
+    this.issueRefreshInFlight.clear();
+  }
+
   /**
    * Execute a read-only gh CLI command with concurrency limiting and singleflight dedup.
    * Identical in-flight calls share a single process.
@@ -109,8 +126,34 @@ class GitHubCLIService {
 
   /**
    * Check if gh CLI is installed and authenticated.
+   * Result is cached for 30 s (stale-while-revalidate).
    */
   async checkHealth(): Promise<GitHubCLIHealthStatus> {
+    const now = Date.now();
+    if (this.cachedHealth) {
+      const isStale = now - this.cachedHealth.fetchedAt >= this.HEALTH_CACHE_TTL_MS;
+      if (isStale && !this.healthRefreshInFlight) {
+        this.healthRefreshInFlight = true;
+        this.runCheckHealth()
+          .then((result) => {
+            this.cachedHealth = { result, fetchedAt: Date.now() };
+          })
+          .catch(() => {
+            // Keep stale value on error.
+          })
+          .finally(() => {
+            this.healthRefreshInFlight = false;
+          });
+      }
+      return this.cachedHealth.result;
+    }
+    // First call: no cache — fetch synchronously.
+    const result = await this.runCheckHealth();
+    this.cachedHealth = { result, fetchedAt: Date.now() };
+    return result;
+  }
+
+  private async runCheckHealth(): Promise<GitHubCLIHealthStatus> {
     try {
       const { stdout: versionOutput } = await this.exec(['--version'], {
         timeout: GH_TIMEOUT_MS.healthVersion,
@@ -502,10 +545,44 @@ class GitHubCLIService {
 
   /**
    * List open issues for a repository.
-   * Fetches fresh on every call (no caching).
+   * Results are cached for 60 s (stale-while-revalidate).
    * @param assignee - Filter by assignee. Use '@me' for issues assigned to the authenticated user.
    */
   async listIssues(
+    owner: string,
+    repo: string,
+    options: { limit?: number; assignee?: string } = {}
+  ): Promise<GitHubIssue[]> {
+    const { limit = 50, assignee } = options;
+    const cacheKey = `${owner}/${repo}?limit=${limit}&assignee=${assignee ?? ''}`;
+    const now = Date.now();
+    const cached = this.issueCache.get(cacheKey);
+
+    if (cached) {
+      const isStale = now - cached.fetchedAt >= this.ISSUE_CACHE_TTL_MS;
+      if (isStale && !this.issueRefreshInFlight.has(cacheKey)) {
+        this.issueRefreshInFlight.add(cacheKey);
+        this.fetchIssues(owner, repo, options)
+          .then((issues) => {
+            this.issueCache.set(cacheKey, { issues, fetchedAt: Date.now() });
+          })
+          .catch(() => {
+            // Keep stale value on error.
+          })
+          .finally(() => {
+            this.issueRefreshInFlight.delete(cacheKey);
+          });
+      }
+      return cached.issues;
+    }
+
+    // First call: no cache — fetch synchronously and populate cache.
+    const issues = await this.fetchIssues(owner, repo, options);
+    this.issueCache.set(cacheKey, { issues, fetchedAt: Date.now() });
+    return issues;
+  }
+
+  private async fetchIssues(
     owner: string,
     repo: string,
     options: { limit?: number; assignee?: string } = {}

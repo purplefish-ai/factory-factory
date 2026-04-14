@@ -42,6 +42,7 @@ vi.mocked(execFile).mockImplementation(mockExecFile as never);
 describe('GitHubCLIService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    githubCLIService.clearCaches();
   });
 
   afterEach(() => {
