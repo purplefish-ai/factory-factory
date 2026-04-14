@@ -45,6 +45,7 @@ import {
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
+import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   WORKSPACE_STATE_CHANGED,
@@ -103,6 +104,7 @@ type EventCollectorSessionServices = {
   sessionDataService: typeof sessionDataService;
   sessionDomainService: typeof sessionDomainService;
   sessionService: typeof sessionService;
+  terminalService: typeof terminalService;
 };
 
 const defaultSessionServices: EventCollectorSessionServices = {
@@ -110,6 +112,7 @@ const defaultSessionServices: EventCollectorSessionServices = {
   sessionDataService,
   sessionDomainService,
   sessionService,
+  terminalService,
 };
 
 function shouldRefreshRatchetForPrSwitch(
@@ -449,6 +452,28 @@ function configureEventCollectorWithState(
     if (event.toStatus === 'ARCHIVED') {
       // Immediate removal for UI feedback -- no coalescing delay
       workspaceSnapshotStore.remove(event.workspaceId);
+      workspaceActivityService.clearWorkspace(event.workspaceId);
+      void Promise.allSettled([
+        state.eventCollectorSessionServices.sessionService.stopWorkspaceSessions(event.workspaceId),
+        Promise.resolve().then(() => {
+          state.eventCollectorSessionServices.terminalService.destroyWorkspaceTerminals(
+            event.workspaceId
+          );
+        }),
+      ]).then((results) => {
+        const cleanupErrors = results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : []
+        );
+
+        if (cleanupErrors.length > 0) {
+          logger.warn('Failed to cleanup archived workspace resources from state change event', {
+            workspaceId: event.workspaceId,
+            errors: cleanupErrors.map((error) =>
+              error instanceof Error ? error.message : String(error)
+            ),
+          });
+        }
+      });
       return;
     }
     coalescer.enqueue(

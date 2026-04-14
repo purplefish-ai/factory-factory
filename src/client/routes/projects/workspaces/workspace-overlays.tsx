@@ -112,16 +112,16 @@ export function ScriptRunningBanner({ initOutput, hasStartupScript }: ScriptRunn
 
   return (
     <div className="border-b bg-muted/50 px-4 py-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <span>Running init script...</span>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="min-w-0 break-words">Running init script...</span>
         </div>
         {hasStartupScript && initOutput && (
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 px-2 text-xs"
+            className="h-6 self-start px-2 text-xs sm:self-auto"
             onClick={() => setExpanded(!expanded)}
           >
             {expanded ? (
@@ -169,12 +169,14 @@ export function ScriptFailedBanner({
 
   return (
     <div className="border-b bg-destructive/10 px-4 py-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-destructive">
-          <AlertTriangle className="h-3 w-3" />
-          <span>Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}</span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-2 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          <span className="min-w-0 break-words whitespace-normal">
+            Init script failed{initErrorMessage ? `: ${initErrorMessage}` : ''}
+          </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 flex-wrap items-center gap-1 self-start sm:justify-end">
           {hasStartupScript && initOutput && (
             <Button
               variant="ghost"

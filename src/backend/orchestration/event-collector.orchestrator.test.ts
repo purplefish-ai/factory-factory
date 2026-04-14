@@ -28,7 +28,7 @@ function createMockStore(): MockStore {
 vi.mock('@/backend/services/workspace', () => ({
   WORKSPACE_STATE_CHANGED: 'workspace_state_changed',
   workspaceStateMachine: { on: vi.fn() },
-  workspaceActivityService: { on: vi.fn() },
+  workspaceActivityService: { on: vi.fn(), clearWorkspace: vi.fn() },
   computePendingRequestType: vi.fn().mockReturnValue(null),
 }));
 
@@ -70,6 +70,13 @@ vi.mock('@/backend/services/session', () => ({
       activity: 'IDLE',
       updatedAt: '2026-01-01T00:00:00.000Z',
     }),
+    stopWorkspaceSessions: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
+vi.mock('@/backend/services/terminal', () => ({
+  terminalService: {
+    destroyWorkspaceTerminals: vi.fn(),
   },
 }));
 
@@ -98,7 +105,9 @@ import {
   chatEventForwarderService,
   sessionDataService,
   sessionDomainService,
+  sessionService,
 } from '@/backend/services/session';
+import { terminalService } from '@/backend/services/terminal';
 import {
   computePendingRequestType,
   workspaceActivityService,
@@ -486,7 +495,7 @@ describe('configureEventCollector', () => {
     expect(sessionDomainService.off).toHaveBeenCalledWith('runtime_changed', expect.any(Function));
   });
 
-  it('ARCHIVED workspace event calls store.remove() immediately', () => {
+  it('ARCHIVED workspace event removes snapshot and cleans up workspace resources immediately', async () => {
     configureEventCollector();
 
     // Get the workspace state changed handler
@@ -500,9 +509,13 @@ describe('configureEventCollector', () => {
     }) => void;
 
     handler({ workspaceId: 'ws-archived', fromStatus: 'READY', toStatus: 'ARCHIVED' });
+    await Promise.resolve();
 
     // store.remove() called immediately, not through coalescer
     expect(workspaceSnapshotStore.remove).toHaveBeenCalledWith('ws-archived');
+    expect(workspaceActivityService.clearWorkspace).toHaveBeenCalledWith('ws-archived');
+    expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-archived');
+    expect(terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-archived');
     expect(workspaceSnapshotStore.upsert).not.toHaveBeenCalled();
   });
 
