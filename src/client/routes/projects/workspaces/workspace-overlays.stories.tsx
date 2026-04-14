@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { ArchivingOverlay, InitializationOverlay } from './workspace-overlays';
+import { ArchivingOverlay, InitializationOverlay, ScriptFailedBanner } from './workspace-overlays';
 
 const meta = {
   title: 'Workspaces/Overlays',
@@ -58,6 +58,17 @@ export const InitializationFailed: Story = {
       status="FAILED"
       initErrorMessage="Failed to run startup script: Command exited with code 1"
       initOutput="Installing dependencies...\nnpm install\nERROR: Package not found"
+      hasStartupScript={true}
+    />
+  ),
+};
+
+export const ScriptFailedLongMessage: Story = {
+  render: () => (
+    <ScriptFailedBanner
+      workspaceId="test-workspace"
+      initErrorMessage="Command failed: pnpm install --filter very-long-package-name --reporter append-only because the generated lockfile checksum did not match the expected workspace state after bootstrap and postinstall hooks"
+      initOutput="Installing dependencies...\npnpm install\nERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL"
       hasStartupScript={true}
     />
   ),
