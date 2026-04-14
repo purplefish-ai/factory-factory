@@ -11,6 +11,7 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
+import { snapshotReconciliationService } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
 import {
   SNAPSHOT_CHANGED,
   SNAPSHOT_REMOVED,
@@ -175,20 +176,38 @@ export function createSnapshotsUpgradeHandler(
 
       markWebSocketAlive(ws, wsAliveMap);
 
-      // Add to connection set FIRST (before sending full snapshot)
+      // Add to connection set FIRST so we don't miss any delta events during
+      // the optional reconciliation wait below.
       getOrCreateConnectionSet(connections, projectId).add(ws);
 
-      // Send full project snapshot (WSKT-02, WSKT-05)
-      const entries = workspaceSnapshotStore
-        .getByProjectId(projectId)
-        .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
-      ws.send(
-        JSON.stringify({
-          type: 'snapshot_full',
-          projectId,
-          entries,
-        })
-      );
+      // If a startup reconciliation is in progress and the store has no entries
+      // yet for this project, wait for it before sending snapshot_full so the
+      // client receives populated data rather than an empty array.
+      const sendSnapshot = () => {
+        if (ws.readyState !== WS_READY_STATE.OPEN) {
+          return;
+        }
+        const entries = workspaceSnapshotStore
+          .getByProjectId(projectId)
+          .filter((entry) => !isHiddenWorkspaceStatus(entry.status));
+        ws.send(
+          JSON.stringify({
+            type: 'snapshot_full',
+            projectId,
+            entries,
+          })
+        );
+      };
+
+      const storeHasEntries = workspaceSnapshotStore.getByProjectId(projectId).length > 0;
+      if (storeHasEntries) {
+        sendSnapshot();
+      } else {
+        snapshotReconciliationService
+          .waitForInProgress()
+          .then(sendSnapshot)
+          .catch(() => sendSnapshot());
+      }
 
       ws.on('close', () => {
         logger.info('Snapshots WebSocket connection closed', { projectId });
