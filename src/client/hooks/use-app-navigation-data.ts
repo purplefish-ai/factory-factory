@@ -23,15 +23,8 @@ function getInitialProjectSlug(): string {
 /**
  * Syncs PR statuses when project changes.
  */
-function usePRStatusSync(
-  selectedProjectId: string | undefined,
-  utils: ReturnType<typeof trpc.useUtils>
-) {
-  const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation({
-    onSuccess: () => {
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-    },
-  });
+function usePRStatusSync(selectedProjectId: string | undefined) {
+  const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation();
   const lastSyncedProjectRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -106,10 +99,8 @@ export function useAppNavigationData() {
     }
   );
 
-  const utils = trpc.useUtils();
-
   // Sync PR statuses from GitHub once when project changes
-  usePRStatusSync(selectedProjectId, utils);
+  usePRStatusSync(selectedProjectId);
 
   // Sync workspace snapshots from WebSocket to React Query cache
   useProjectSnapshotSync(selectedProjectId);

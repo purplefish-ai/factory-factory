@@ -460,8 +460,7 @@ describe('WorkspaceQueryService', () => {
       { id: 'w2', prUrl: null },
     ]);
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({
-      synced: 0,
-      failed: 0,
+      queued: 0,
     });
 
     mockFindByProjectIdWithSessions.mockResolvedValueOnce([
@@ -473,8 +472,7 @@ describe('WorkspaceQueryService', () => {
       .mockResolvedValueOnce({ success: false });
 
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({
-      synced: 1,
-      failed: 1,
+      queued: 2,
     });
   });
 

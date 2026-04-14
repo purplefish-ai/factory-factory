@@ -61,7 +61,7 @@ interface KanbanContextValue {
   isError: boolean;
   error: { message: string } | null;
   refetch: () => void;
-  syncAndRefetch: () => Promise<void>;
+  syncAndRefetch: () => void;
   isSyncing: boolean;
   toggleWorkspaceRatcheting: (workspaceId: string, enabled: boolean) => Promise<void>;
   togglingWorkspaceId: string | null;
@@ -162,8 +162,8 @@ export function KanbanProvider({
 
   const refetchIssues = isLinear ? refetchLinearIssues : refetchGithubIssues;
 
-  const syncAndRefetch = async () => {
-    await syncMutation.mutateAsync({ projectId });
+  const syncAndRefetch = () => {
+    syncMutation.mutate({ projectId });
     refetchWorkspaces();
     refetchIssues();
   };

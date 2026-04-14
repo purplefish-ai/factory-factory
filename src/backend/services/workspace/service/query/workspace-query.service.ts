@@ -1,4 +1,5 @@
 import pLimit from 'p-limit';
+import { toError } from '@/backend/lib/error-utils';
 import {
   assembleWorkspaceDerivedState,
   DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
@@ -405,28 +406,19 @@ class WorkspaceQueryService {
     );
 
     if (workspacesWithPRs.length === 0) {
-      return { synced: 0, failed: 0 };
+      return { queued: 0 };
     }
 
-    let synced = 0;
-    let failed = 0;
-
-    await Promise.all(
+    // Fire-and-forget: results are pushed to clients via WebSocket as each call completes.
+    Promise.all(
       workspacesWithPRs.map((workspace) =>
-        gitConcurrencyLimit(async () => {
-          const prResult = await this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl);
-          if (!prResult.success) {
-            failed++;
-            return;
-          }
-          synced++;
-        })
+        gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl))
       )
-    );
+    )
+      .then(() => logger.info('Batch PR status sync completed', { projectId }))
+      .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }));
 
-    logger.info('Batch PR status sync completed', { projectId, synced, failed });
-
-    return { synced, failed };
+    return { queued: workspacesWithPRs.length };
   }
 
   async hasChanges(workspaceId: string): Promise<boolean> {
