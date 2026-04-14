@@ -145,6 +145,7 @@ model Project {
 
   @@index([slug])
   @@index([isArchived])
+  @@index([isArchived, updatedAt])
 }
 
 model DecisionLog {
@@ -246,6 +247,11 @@ model Workspace {
   // Composite indexes for common query patterns
   @@index([projectId, status])
   @@index([projectId, cachedKanbanColumn])
+  @@index([projectId, updatedAt])
+  @@index([projectId, createdAt])
+  @@index([status, prUrl])
+  @@index([status, prUpdatedAt])
+  @@index([status, ratchetEnabled, ratchetLastCheckedAt])
 }
 
 model AgentSession {
@@ -268,6 +274,9 @@ model AgentSession {
   @@index([status])
   @@index([provider])
   @@index([workspaceId, provider])
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, updatedAt])
 }
 
 model TerminalSession {
@@ -282,6 +291,7 @@ model TerminalSession {
 
   @@index([workspaceId])
   @@index([status])
+  @@index([workspaceId, updatedAt])
 }
 
 model ClosedSession {
