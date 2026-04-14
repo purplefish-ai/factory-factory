@@ -140,6 +140,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "mermaid": "^11.14.0",
+    "next": "16.2.3",
     "node-pty": "^1.1.0",
     "open": "^11.0.0",
     "p-limit": "^7.3.0",
@@ -192,7 +193,7 @@
       "@isaacs/brace-expansion": ">=5.0.1",
       "@modelcontextprotocol/sdk>ajv": ">=8.18.0",
       "@anthropic-ai/sdk": "0.81.0",
-      "@hono/node-server": "1.19.11",
+      "@hono/node-server": "1.19.14",
       "@xmldom/xmldom": "0.8.12",
       "app-builder-lib>minimatch": ">=10.2.1",
       "brace-expansion@^1": "1.1.13",
@@ -204,7 +205,7 @@
       "hono": "4.12.12",
       "lodash": "4.18.1",
       "lodash-es": "4.18.1",
-      "next": "16.1.7",
+      "next": "16.2.3",
       "path-to-regexp": "8.4.2",
       "picomatch@^2": "2.3.2",
       "picomatch@^4": "4.0.4",
@@ -258,6 +259,6 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.2",
     "vitest": "^4.0.18",
-    "wait-on": "^9.0.4"
+    "wait-on": "^9.0.5"
   }
 }
