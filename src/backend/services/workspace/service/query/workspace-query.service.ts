@@ -33,6 +33,7 @@ const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
 class WorkspaceQueryService {
   /** Cached GitHub review count (DOM-04: moved from module scope to instance field) */
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
+  private reviewCountRefreshInFlight = false;
 
   private sessionBridge: WorkspaceSessionBridge | null = null;
   private githubBridge: WorkspaceGitHubBridge | null = null;
@@ -137,23 +138,32 @@ class WorkspaceQueryService {
       )
     );
 
-    let reviewCount = 0;
+    // Stale-while-revalidate: return cached count immediately, refresh in background if stale.
+    const reviewCount = this.cachedReviewCount?.count ?? 0;
     const now = Date.now();
-    if (this.cachedReviewCount && now - this.cachedReviewCount.fetchedAt < REVIEW_CACHE_TTL_MS) {
-      reviewCount = this.cachedReviewCount.count;
-    } else {
-      try {
-        const health = await this.github.checkHealth();
-        if (health.isInstalled && health.isAuthenticated) {
-          const prs = await this.github.listReviewRequests();
-          reviewCount = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
-          this.cachedReviewCount = { count: reviewCount, fetchedAt: now };
-        }
-      } catch (error) {
-        logger.debug('Failed to fetch review count', {
-          error: error instanceof Error ? error.message : String(error),
+    const isStale =
+      !this.cachedReviewCount || now - this.cachedReviewCount.fetchedAt >= REVIEW_CACHE_TTL_MS;
+    if (isStale && !this.reviewCountRefreshInFlight) {
+      this.reviewCountRefreshInFlight = true;
+      this.github
+        .checkHealth()
+        .then(async (health) => {
+          if (health.isInstalled && health.isAuthenticated) {
+            const prs = await this.github.listReviewRequests();
+            this.cachedReviewCount = {
+              count: prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length,
+              fetchedAt: Date.now(),
+            };
+          }
+        })
+        .catch((error) => {
+          logger.debug('Failed to fetch review count', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          this.reviewCountRefreshInFlight = false;
         });
-      }
     }
 
     return {
