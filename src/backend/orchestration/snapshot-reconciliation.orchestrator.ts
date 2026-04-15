@@ -38,7 +38,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const RECONCILIATION_INTERVAL_MS = 60_000;
-const GIT_CONCURRENCY = 3;
+const GIT_CONCURRENCY = 10;
 
 type SnapshotReconciliationSessionServices = {
   chatEventForwarderService: typeof chatEventForwarderService;
@@ -207,6 +207,18 @@ export class SnapshotReconciliationService {
     if (this.reconcileInProgress !== null) {
       await this.reconcileInProgress;
     }
+  }
+
+  /**
+   * If a reconciliation is currently in progress, waits for it to finish.
+   * Used by the /snapshots WebSocket handler to defer the initial snapshot_full
+   * message until the store is populated on startup.
+   */
+  waitForInProgress(): Promise<void> {
+    if (this.reconcileInProgress !== null) {
+      return this.reconcileInProgress.then(() => undefined);
+    }
+    return Promise.resolve();
   }
 
   /**

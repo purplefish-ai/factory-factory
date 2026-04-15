@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import pLimit from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
+import { isRateLimitMessage } from '@/backend/services/rate-limit-backoff';
 import type { CIStatus, PRState } from '@/shared/core';
 import type { PRWithFullDetails, ReviewAction } from '@/shared/github-types';
 import { GH_CONCURRENCY, GH_MAX_BUFFER_BYTES, GH_TIMEOUT_MS } from './github-cli/constants';
@@ -45,18 +46,49 @@ type ExecResult = { stdout: string; stderr: string };
  * All process spawning is gated through a shared concurrency limiter
  * and read-only calls benefit from in-flight deduplication (singleflight).
  */
+// How long to fast-fail gh calls after a rate limit is detected (60 s).
+const RATE_LIMIT_FAST_FAIL_MS = 60_000;
+
 class GitHubCLIService {
   private readonly execLimit = pLimit(GH_CONCURRENCY);
   private readonly inflight = new Map<string, Promise<ExecResult>>();
 
+  // Stale-while-revalidate caches for expensive GitHub CLI calls.
+  private cachedHealth: { result: GitHubCLIHealthStatus; fetchedAt: number } | null = null;
+  private healthRefreshInFlight = false;
+  private readonly HEALTH_CACHE_TTL_MS = 30_000;
+
+  private readonly issueCache = new Map<string, { issues: GitHubIssue[]; fetchedAt: number }>();
+  private readonly issueRefreshInFlight = new Set<string>();
+  private readonly ISSUE_CACHE_TTL_MS = 60_000;
+
+  // When set, all exec() calls will fail immediately until this timestamp.
+  private rateLimitedUntil: number | null = null;
+
+  /** Clear all caches — used in tests to prevent cross-test contamination. */
+  clearCaches(): void {
+    this.cachedHealth = null;
+    this.healthRefreshInFlight = false;
+    this.issueCache.clear();
+    this.issueRefreshInFlight.clear();
+    this.rateLimitedUntil = null;
+  }
+
   /**
    * Execute a read-only gh CLI command with concurrency limiting and singleflight dedup.
    * Identical in-flight calls share a single process.
+   *
+   * Fast-fails immediately when a rate limit was detected recently, preventing
+   * calls from piling up in the queue and blocking user-facing requests.
    */
   private exec(
     args: string[],
     options?: { timeout?: number; maxBuffer?: number }
   ): Promise<ExecResult> {
+    if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
+      return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
+    }
+
     const key = args.join('\0');
     const existing = this.inflight.get(key);
     if (existing) {
@@ -68,9 +100,20 @@ class GitHubCLIService {
         timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
         ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
       })
-    ).finally(() => {
-      this.inflight.delete(key);
-    });
+    )
+      .then(
+        (result) => result,
+        (err: unknown) => {
+          const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+          if (isRateLimitMessage(msg)) {
+            this.rateLimitedUntil = Date.now() + RATE_LIMIT_FAST_FAIL_MS;
+          }
+          throw err;
+        }
+      )
+      .finally(() => {
+        this.inflight.delete(key);
+      });
 
     this.inflight.set(key, promise);
     return promise;
@@ -79,16 +122,31 @@ class GitHubCLIService {
   /**
    * Execute a mutating gh CLI command with concurrency limiting but NO dedup.
    * Used for write operations (approve, comment, close, etc.).
+   *
+   * Also applies rate-limit fast-fail to avoid queueing behind other blocked calls.
    */
   private execMutating(
     args: string[],
     options?: { timeout?: number; maxBuffer?: number }
   ): Promise<ExecResult> {
+    if (this.rateLimitedUntil !== null && Date.now() < this.rateLimitedUntil) {
+      return Promise.reject(new Error('GitHub API rate limit exceeded, backing off'));
+    }
+
     return this.execLimit(() =>
       execFileAsync('gh', args, {
         timeout: options?.timeout ?? GH_TIMEOUT_MS.default,
         ...(options?.maxBuffer ? { maxBuffer: options.maxBuffer } : {}),
       })
+    ).then(
+      (result) => result,
+      (err: unknown) => {
+        const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+        if (isRateLimitMessage(msg)) {
+          this.rateLimitedUntil = Date.now() + RATE_LIMIT_FAST_FAIL_MS;
+        }
+        throw err;
+      }
     );
   }
 
@@ -109,8 +167,34 @@ class GitHubCLIService {
 
   /**
    * Check if gh CLI is installed and authenticated.
+   * Result is cached for 30 s (stale-while-revalidate).
    */
   async checkHealth(): Promise<GitHubCLIHealthStatus> {
+    const now = Date.now();
+    if (this.cachedHealth) {
+      const isStale = now - this.cachedHealth.fetchedAt >= this.HEALTH_CACHE_TTL_MS;
+      if (isStale && !this.healthRefreshInFlight) {
+        this.healthRefreshInFlight = true;
+        this.runCheckHealth()
+          .then((result) => {
+            this.cachedHealth = { result, fetchedAt: Date.now() };
+          })
+          .catch(() => {
+            // Keep stale value on error.
+          })
+          .finally(() => {
+            this.healthRefreshInFlight = false;
+          });
+      }
+      return this.cachedHealth.result;
+    }
+    // First call: no cache — fetch synchronously.
+    const result = await this.runCheckHealth();
+    this.cachedHealth = { result, fetchedAt: Date.now() };
+    return result;
+  }
+
+  private async runCheckHealth(): Promise<GitHubCLIHealthStatus> {
     try {
       const { stdout: versionOutput } = await this.exec(['--version'], {
         timeout: GH_TIMEOUT_MS.healthVersion,
@@ -502,10 +586,44 @@ class GitHubCLIService {
 
   /**
    * List open issues for a repository.
-   * Fetches fresh on every call (no caching).
+   * Results are cached for 60 s (stale-while-revalidate).
    * @param assignee - Filter by assignee. Use '@me' for issues assigned to the authenticated user.
    */
   async listIssues(
+    owner: string,
+    repo: string,
+    options: { limit?: number; assignee?: string } = {}
+  ): Promise<GitHubIssue[]> {
+    const { limit = 50, assignee } = options;
+    const cacheKey = `${owner}/${repo}?limit=${limit}&assignee=${assignee ?? ''}`;
+    const now = Date.now();
+    const cached = this.issueCache.get(cacheKey);
+
+    if (cached) {
+      const isStale = now - cached.fetchedAt >= this.ISSUE_CACHE_TTL_MS;
+      if (isStale && !this.issueRefreshInFlight.has(cacheKey)) {
+        this.issueRefreshInFlight.add(cacheKey);
+        this.fetchIssues(owner, repo, options)
+          .then((issues) => {
+            this.issueCache.set(cacheKey, { issues, fetchedAt: Date.now() });
+          })
+          .catch(() => {
+            // Keep stale value on error.
+          })
+          .finally(() => {
+            this.issueRefreshInFlight.delete(cacheKey);
+          });
+      }
+      return cached.issues;
+    }
+
+    // First call: no cache — fetch synchronously and populate cache.
+    const issues = await this.fetchIssues(owner, repo, options);
+    this.issueCache.set(cacheKey, { issues, fetchedAt: Date.now() });
+    return issues;
+  }
+
+  private async fetchIssues(
     owner: string,
     repo: string,
     options: { limit?: number; assignee?: string } = {}

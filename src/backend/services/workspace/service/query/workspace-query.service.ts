@@ -1,4 +1,5 @@
 import pLimit from 'p-limit';
+import { toError } from '@/backend/lib/error-utils';
 import {
   assembleWorkspaceDerivedState,
   DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
@@ -32,6 +33,8 @@ const REVIEW_CACHE_TTL_MS = 60_000; // 1 minute cache
 class WorkspaceQueryService {
   /** Cached GitHub review count (DOM-04: moved from module scope to instance field) */
   private cachedReviewCount: { count: number; fetchedAt: number } | null = null;
+  private reviewCountRefreshInFlight = false;
+  private prStatusSyncInFlight = false;
 
   private sessionBridge: WorkspaceSessionBridge | null = null;
   private githubBridge: WorkspaceGitHubBridge | null = null;
@@ -136,23 +139,32 @@ class WorkspaceQueryService {
       )
     );
 
-    let reviewCount = 0;
+    // Stale-while-revalidate: return cached count immediately, refresh in background if stale.
+    const reviewCount = this.cachedReviewCount?.count ?? 0;
     const now = Date.now();
-    if (this.cachedReviewCount && now - this.cachedReviewCount.fetchedAt < REVIEW_CACHE_TTL_MS) {
-      reviewCount = this.cachedReviewCount.count;
-    } else {
-      try {
-        const health = await this.github.checkHealth();
-        if (health.isInstalled && health.isAuthenticated) {
-          const prs = await this.github.listReviewRequests();
-          reviewCount = prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length;
-          this.cachedReviewCount = { count: reviewCount, fetchedAt: now };
-        }
-      } catch (error) {
-        logger.debug('Failed to fetch review count', {
-          error: error instanceof Error ? error.message : String(error),
+    const isStale =
+      !this.cachedReviewCount || now - this.cachedReviewCount.fetchedAt >= REVIEW_CACHE_TTL_MS;
+    if (isStale && !this.reviewCountRefreshInFlight) {
+      this.reviewCountRefreshInFlight = true;
+      this.github
+        .checkHealth()
+        .then(async (health) => {
+          if (health.isInstalled && health.isAuthenticated) {
+            const prs = await this.github.listReviewRequests();
+            this.cachedReviewCount = {
+              count: prs.filter((pr) => pr.reviewDecision !== 'APPROVED').length,
+              fetchedAt: Date.now(),
+            };
+          }
+        })
+        .catch((error) => {
+          logger.debug('Failed to fetch review count', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        })
+        .finally(() => {
+          this.reviewCountRefreshInFlight = false;
         });
-      }
     }
 
     return {
@@ -396,6 +408,11 @@ class WorkspaceQueryService {
   }
 
   async syncAllPRStatuses(projectId: string) {
+    if (this.prStatusSyncInFlight) {
+      logger.info('Batch PR status sync already in flight, skipping', { projectId });
+      return { queued: 0 };
+    }
+
     const workspaces = await workspaceAccessor.findByProjectIdWithSessions(projectId, {
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
     });
@@ -405,28 +422,24 @@ class WorkspaceQueryService {
     );
 
     if (workspacesWithPRs.length === 0) {
-      return { synced: 0, failed: 0 };
+      return { queued: 0 };
     }
 
-    let synced = 0;
-    let failed = 0;
+    this.prStatusSyncInFlight = true;
 
-    await Promise.all(
+    // Fire-and-forget: results are pushed to clients via WebSocket as each call completes.
+    Promise.all(
       workspacesWithPRs.map((workspace) =>
-        gitConcurrencyLimit(async () => {
-          const prResult = await this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl);
-          if (!prResult.success) {
-            failed++;
-            return;
-          }
-          synced++;
-        })
+        gitConcurrencyLimit(() => this.prSnapshot.refreshWorkspace(workspace.id, workspace.prUrl))
       )
-    );
+    )
+      .then(() => logger.info('Batch PR status sync completed', { projectId }))
+      .catch((err) => logger.error('Batch PR status sync failed', toError(err), { projectId }))
+      .finally(() => {
+        this.prStatusSyncInFlight = false;
+      });
 
-    logger.info('Batch PR status sync completed', { projectId, synced, failed });
-
-    return { synced, failed };
+    return { queued: workspacesWithPRs.length };
   }
 
   async hasChanges(workspaceId: string): Promise<boolean> {

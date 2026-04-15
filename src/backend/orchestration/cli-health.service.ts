@@ -52,6 +52,7 @@ export interface CLIUpgradeResult {
 class CLIHealthService {
   private cachedStatus: CLIHealthStatus | null = null;
   private cacheTimestamp = 0;
+  private refreshInFlight = false;
 
   private extractSemver(value: string | undefined): string | undefined {
     if (!value) {
@@ -242,19 +243,40 @@ class CLIHealthService {
   /**
    * Check health of all required CLIs.
    * Results are cached for CACHE_TTL_MS to avoid excessive process spawning.
+   * Stale-while-revalidate: returns cached value immediately when stale,
+   * firing a background refresh. forceRefresh bypasses this and blocks.
    */
   async checkHealth(forceRefresh = false): Promise<CLIHealthStatus> {
     const now = Date.now();
+    const isValid = this.cachedStatus && now - this.cacheTimestamp < SERVICE_CACHE_TTL_MS.cliHealth;
 
-    // Return cached result if still valid
-    if (
-      !forceRefresh &&
-      this.cachedStatus &&
-      now - this.cacheTimestamp < SERVICE_CACHE_TTL_MS.cliHealth
-    ) {
+    if (!forceRefresh && this.cachedStatus) {
+      if (!(isValid || this.refreshInFlight)) {
+        // Stale — kick off background refresh and return stale value immediately.
+        this.refreshInFlight = true;
+        this.runHealthCheck()
+          .then((status) => {
+            this.cachedStatus = status;
+            this.cacheTimestamp = Date.now();
+          })
+          .catch(() => {
+            // Keep stale value on error.
+          })
+          .finally(() => {
+            this.refreshInFlight = false;
+          });
+      }
       return this.cachedStatus;
     }
 
+    // First call or forceRefresh: fetch synchronously.
+    const status = await this.runHealthCheck();
+    this.cachedStatus = status;
+    this.cacheTimestamp = Date.now();
+    return status;
+  }
+
+  private async runHealthCheck(): Promise<CLIHealthStatus> {
     logger.debug('Checking CLI health...');
 
     // Run checks in parallel
@@ -275,10 +297,6 @@ class CLIHealthService {
         github.isAuthenticated,
     };
 
-    // Cache the result
-    this.cachedStatus = status;
-    this.cacheTimestamp = now;
-
     if (!status.allHealthy) {
       logger.warn('CLI health check found issues', {
         claudeInstalled: claude.isInstalled,
@@ -297,6 +315,7 @@ class CLIHealthService {
   clearCache(): void {
     this.cachedStatus = null;
     this.cacheTimestamp = 0;
+    this.refreshInFlight = false;
   }
 }
 

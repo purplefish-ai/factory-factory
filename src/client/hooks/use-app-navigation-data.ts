@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
+import { toast } from 'sonner';
 import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
 import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
 import { useProjectContext } from '@/client/lib/providers';
@@ -23,14 +24,9 @@ function getInitialProjectSlug(): string {
 /**
  * Syncs PR statuses when project changes.
  */
-function usePRStatusSync(
-  selectedProjectId: string | undefined,
-  utils: ReturnType<typeof trpc.useUtils>
-) {
+function usePRStatusSync(selectedProjectId: string | undefined) {
   const syncAllPRStatuses = trpc.workspace.syncAllPRStatuses.useMutation({
-    onSuccess: () => {
-      utils.workspace.getProjectSummaryState.invalidate({ projectId: selectedProjectId });
-    },
+    onError: (error) => toast.error(`Failed to sync PR statuses: ${error.message}`),
   });
   const lastSyncedProjectRef = useRef<string | null>(null);
 
@@ -106,10 +102,8 @@ export function useAppNavigationData() {
     }
   );
 
-  const utils = trpc.useUtils();
-
   // Sync PR statuses from GitHub once when project changes
-  usePRStatusSync(selectedProjectId, utils);
+  usePRStatusSync(selectedProjectId);
 
   // Sync workspace snapshots from WebSocket to React Query cache
   useProjectSnapshotSync(selectedProjectId);

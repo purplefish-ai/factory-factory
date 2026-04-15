@@ -262,8 +262,9 @@ describe('WorkspaceQueryService', () => {
       { reviewDecision: 'CHANGES_REQUESTED' },
     ]);
 
+    // First call: no cache yet — returns 0 immediately and fires background refresh.
     const first = await workspaceQueryService.getProjectSummaryState('p1');
-    expect(first.reviewCount).toBe(1);
+    expect(first.reviewCount).toBe(0);
     expect(first.workspaces).toHaveLength(2);
     expect(first.workspaces[0]).toMatchObject({
       id: 'w1',
@@ -271,6 +272,10 @@ describe('WorkspaceQueryService', () => {
       gitStats: expect.objectContaining({ total: 3 }),
     });
 
+    // Flush background refresh promises (checkHealth → listReviewRequests → cache write).
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Second call: cache is now warm — returns cached count without calling GitHub.
     mockGithubListReviewRequests.mockClear();
     const second = await workspaceQueryService.getProjectSummaryState('p1');
     expect(second.reviewCount).toBe(1);
@@ -460,8 +465,7 @@ describe('WorkspaceQueryService', () => {
       { id: 'w2', prUrl: null },
     ]);
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({
-      synced: 0,
-      failed: 0,
+      queued: 0,
     });
 
     mockFindByProjectIdWithSessions.mockResolvedValueOnce([
@@ -473,8 +477,7 @@ describe('WorkspaceQueryService', () => {
       .mockResolvedValueOnce({ success: false });
 
     await expect(workspaceQueryService.syncAllPRStatuses('p1')).resolves.toEqual({
-      synced: 1,
-      failed: 1,
+      queued: 2,
     });
   });
 

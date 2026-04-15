@@ -5,6 +5,7 @@
  * Replaces Inngest for PR status sync.
  */
 
+import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS, SERVICE_THRESHOLDS } from '@/backend/services/constants';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
@@ -12,6 +13,9 @@ import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
 
 const logger = createLogger('scheduler');
+
+// At most 3 concurrent GitHub CLI calls from the scheduler to avoid rate limit bursts
+const ghLimit = pLimit(3);
 
 class SchedulerService {
   private syncInterval: NodeJS.Timeout | null = null;
@@ -89,7 +93,7 @@ class SchedulerService {
     }
 
     const results = await Promise.all(
-      workspaces.map((workspace) => this.syncSinglePR(workspace.id, workspace.prUrl))
+      workspaces.map((workspace) => ghLimit(() => this.syncSinglePR(workspace.id, workspace.prUrl)))
     );
 
     const synced = results.filter((r) => r.success).length;
@@ -118,7 +122,7 @@ class SchedulerService {
     logger.info('Starting PR discovery', { count: workspaces.length });
 
     const results = await Promise.all(
-      workspaces.map((workspace) => this.discoverPRForWorkspace(workspace))
+      workspaces.map((workspace) => ghLimit(() => this.discoverPRForWorkspace(workspace)))
     );
 
     const discovered = results.filter((r) => r.found).length;
