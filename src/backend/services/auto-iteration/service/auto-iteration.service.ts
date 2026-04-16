@@ -497,14 +497,8 @@ export class AutoIterationService {
             iteration: progress.currentIteration,
             consecutiveTimeouts: loop.consecutiveTimeoutCount,
           });
-          if (loop.consecutiveTimeoutCount >= MAX_CONSECUTIVE_TIMEOUT_RETRIES) {
-            this.logger.error(
-              `${MAX_CONSECUTIVE_TIMEOUT_RETRIES} consecutive prompt timeouts, aborting loop`,
-              { workspaceId }
-            );
-            await this.finalize(loop, AutoIterationStatus.FAILED);
-            return;
-          }
+          // Always clean up the worktree before checking whether to abort —
+          // otherwise the final timeout leaves dirty state behind.
           try {
             if (loop.progress.currentPhase === 'implementing') {
               // During implement, changes are not yet committed — discard uncommitted work
@@ -522,6 +516,14 @@ export class AutoIterationService {
               iteration: progress.currentIteration,
               error: revertError instanceof Error ? revertError.message : String(revertError),
             });
+            await this.finalize(loop, AutoIterationStatus.FAILED);
+            return;
+          }
+          if (loop.consecutiveTimeoutCount >= MAX_CONSECUTIVE_TIMEOUT_RETRIES) {
+            this.logger.error(
+              `${MAX_CONSECUTIVE_TIMEOUT_RETRIES} consecutive prompt timeouts, aborting loop`,
+              { workspaceId }
+            );
             await this.finalize(loop, AutoIterationStatus.FAILED);
             return;
           }
