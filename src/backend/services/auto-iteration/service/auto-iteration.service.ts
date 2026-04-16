@@ -298,36 +298,13 @@ export class AutoIterationService {
     config: AutoIterationConfig,
     progress: AutoIterationProgress
   ): Promise<void> {
+    // Atomic guard: register the loop synchronously before any await to prevent concurrent starts
     if (this.loops.has(workspaceId)) {
       throw new Error(`Auto-iteration already running for workspace ${workspaceId}`);
     }
-
-    const worktreePath = await this.workspace.getWorktreePath(workspaceId);
-
-    // Build a handoff prompt so the new session has context from prior iterations
-    const logbook = await this.logbook.read(worktreePath);
-    const recycleInsights = await insightsService.getOpenContent(worktreePath);
-    const handoffPrompt = buildHandoffPrompt(
-      config,
-      logbook?.iterations ?? [],
-      progress.currentMetricSummary,
-      recycleInsights
-    );
-
-    // Start a fresh session with the handoff context
-    const systemPrompt = buildSystemPrompt(config, recycleInsights);
-    const sessionId = await this.session.startSession(workspaceId, {
-      initialPrompt: systemPrompt,
-      startupModePreset: 'non_interactive',
-    });
-
-    // Send the handoff prompt to give the session context about prior work
-    await this.session.sendPrompt(sessionId, handoffPrompt, getPromptTimeoutMs(config));
-    await this.session.waitForIdle(sessionId);
-
-    const loop: RunningLoop = {
+    const placeholder: RunningLoop = {
       workspaceId,
-      sessionId,
+      sessionId: '',
       config,
       progress: { ...progress, currentPhase: 'idle' },
       pauseRequested: false,
@@ -336,18 +313,58 @@ export class AutoIterationService {
       loopPromise: null,
       consecutiveTimeoutCount: 0,
     };
-    this.loops.set(workspaceId, loop);
-    await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
-    await this.workspace.updateAutoIterationSessionId(workspaceId, sessionId);
+    this.loops.set(workspaceId, placeholder);
 
-    loop.loopPromise = this.runLoop(loop, worktreePath).catch((err) => {
-      this.logger.error('Auto-iteration loop failed on resumeFromFailed', {
-        workspaceId,
-        error: String(err),
+    try {
+      const worktreePath = await this.workspace.getWorktreePath(workspaceId);
+
+      // Build a handoff prompt so the new session has context from prior iterations
+      const logbook = await this.logbook.read(worktreePath);
+      const recycleInsights = await insightsService.getOpenContent(worktreePath);
+      const handoffPrompt = buildHandoffPrompt(
+        config,
+        logbook?.iterations ?? [],
+        progress.currentMetricSummary,
+        recycleInsights
+      );
+
+      // Start a fresh session with the handoff context
+      const systemPrompt = buildSystemPrompt(config, recycleInsights);
+      const sessionId = await this.session.startSession(workspaceId, {
+        initialPrompt: systemPrompt,
+        startupModePreset: 'non_interactive',
       });
-      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+      placeholder.sessionId = sessionId;
+
+      // Send the handoff prompt to give the session context about prior work
+      await this.session.sendPrompt(sessionId, handoffPrompt, getPromptTimeoutMs(config));
+      await this.session.waitForIdle(sessionId);
+
+      await this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.RUNNING);
+      await this.workspace.updateAutoIterationSessionId(workspaceId, sessionId);
+
+      placeholder.loopPromise = this.runLoop(placeholder, worktreePath).catch((err) => {
+        this.logger.error('Auto-iteration loop failed on resumeFromFailed', {
+          workspaceId,
+          error: String(err),
+        });
+        void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+        this.loops.delete(workspaceId);
+      });
+    } catch (err) {
+      // Clean up the session if one was started before the failure
+      if (placeholder.sessionId) {
+        try {
+          await this.session.stopSession(placeholder.sessionId);
+        } catch {
+          // Session cleanup is best-effort
+        }
+        void this.workspace.updateAutoIterationSessionId(workspaceId, null);
+      }
       this.loops.delete(workspaceId);
-    });
+      void this.workspace.updateAutoIterationStatus(workspaceId, AutoIterationStatus.FAILED);
+      throw err;
+    }
   }
 
   /** Stop the loop (finishes current iteration, then stops). */
