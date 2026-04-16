@@ -16,6 +16,45 @@ const autoIterationConfigSchema = z.object({
   sessionRecycleInterval: z.number().int().min(1).default(10),
 });
 
+/** Handle resume-from-failed: validate config/progress and delegate to service. */
+async function handleResumeFromFailed(
+  workspace: { autoIterationConfig: unknown; autoIterationProgress: unknown },
+  workspaceId: string
+): Promise<void> {
+  if (!workspace.autoIterationConfig) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Workspace has no auto-iteration config',
+    });
+  }
+  const configParsed = autoIterationConfigSchema.safeParse(workspace.autoIterationConfig);
+  if (!configParsed.success) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Invalid auto-iteration config: ${configParsed.error.message}`,
+    });
+  }
+  const progress = workspace.autoIterationProgress as Record<string, unknown> | null;
+  if (!progress) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'No progress data to resume from — use restart instead',
+    });
+  }
+  try {
+    await autoIterationService.resumeFromFailed(
+      workspaceId,
+      configParsed.data,
+      progress as unknown as Parameters<typeof autoIterationService.resumeFromFailed>[2]
+    );
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('already running')) {
+      throw new TRPCError({ code: 'CONFLICT', message: err.message });
+    }
+    throw err;
+  }
+}
+
 export const autoIterationRouter = router({
   /** Start the auto-iteration loop for a workspace. */
   start: publicProcedure
@@ -75,7 +114,7 @@ export const autoIterationRouter = router({
       return { success: true };
     }),
 
-  /** Resume a paused auto-iteration loop. */
+  /** Resume a paused or failed auto-iteration loop. */
   resume: publicProcedure
     .input(z.object({ workspaceId: z.string() }))
     .mutation(async ({ input }) => {
@@ -83,12 +122,21 @@ export const autoIterationRouter = router({
       if (!workspace) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found' });
       }
-      if (workspace.autoIterationStatus !== 'PAUSED') {
+      if (
+        workspace.autoIterationStatus !== 'PAUSED' &&
+        workspace.autoIterationStatus !== 'FAILED'
+      ) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Auto-iteration can only be resumed from paused state',
+          message: 'Auto-iteration can only be resumed from paused or failed state',
         });
       }
+
+      if (workspace.autoIterationStatus === 'FAILED') {
+        await handleResumeFromFailed(workspace, input.workspaceId);
+        return { success: true };
+      }
+
       try {
         await autoIterationService.resume(input.workspaceId);
       } catch (err) {
