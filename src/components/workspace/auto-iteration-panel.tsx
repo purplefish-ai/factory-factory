@@ -388,6 +388,7 @@ const TERMINAL_STATUSES = new Set(['FAILED', 'STOPPED', 'MAX_ITERATIONS', 'COMPL
 function AutoIterationControls({ workspaceId, status }: { workspaceId: string; status: string }) {
   const isRunning = status === 'RUNNING';
   const isPaused = status === 'PAUSED';
+  const isFailed = status === 'FAILED';
   const isTerminal = TERMINAL_STATUSES.has(status);
 
   const utils = trpc.useUtils();
@@ -447,6 +448,22 @@ function AutoIterationControls({ workspaceId, status }: { workspaceId: string; s
             </Button>
           </TooltipTrigger>
           <TooltipContent>Stop iteration</TooltipContent>
+        </Tooltip>
+      )}
+      {isFailed && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0"
+              onClick={() => resumeMutation.mutate({ workspaceId })}
+              disabled={resumeMutation.isPending}
+            >
+              <Play className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Resume from where it left off</TooltipContent>
         </Tooltip>
       )}
       {isTerminal && (
