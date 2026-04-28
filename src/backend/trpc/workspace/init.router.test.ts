@@ -124,25 +124,40 @@ describe('workspaceInitRouter', () => {
     });
   });
 
-  it('retries startup script when worktree exists', async () => {
+  it('retries failed initialization with existing worktree in the background', async () => {
+    const deferredInit = createDeferredPromise<void>();
     const workspace = {
       id: 'w2',
       status: 'FAILED',
       worktreePath: '/tmp/w2',
+      branchName: 'feature/w2',
       project: { id: 'p1' },
     };
+    let initFinished = false;
     mockFindByIdWithProject.mockResolvedValue(workspace);
     mockStartProvisioning.mockResolvedValue({ status: 'PROVISIONING' });
-    mockFindById.mockResolvedValue({ id: 'w2', status: 'READY' });
+    mockInitializeWorkspaceWorktree.mockImplementation(async () => {
+      await deferredInit.promise;
+      initFinished = true;
+    });
+    mockFindById.mockResolvedValue({ id: 'w2', status: 'PROVISIONING' });
 
     const caller = createCaller();
-    await expect(caller.retryInit({ id: 'w2' })).resolves.toEqual({ id: 'w2', status: 'READY' });
+    await expect(caller.retryInit({ id: 'w2' })).resolves.toEqual({
+      id: 'w2',
+      status: 'PROVISIONING',
+    });
 
+    expect(initFinished).toBe(false);
     expect(mockStartProvisioning).toHaveBeenCalledWith('w2', { maxRetries: 3 });
-    expect(mockRunStartupScript).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'w2', status: 'PROVISIONING' }),
-      workspace.project
-    );
+    expect(mockInitializeWorkspaceWorktree).toHaveBeenCalledWith('w2', {
+      branchName: 'feature/w2',
+      provisioningAlreadyStarted: true,
+    });
+    expect(mockRunStartupScript).not.toHaveBeenCalled();
+
+    deferredInit.resolve();
+    await deferredInit.promise;
   });
 
   it('validates retry preconditions', async () => {
@@ -169,6 +184,22 @@ describe('workspaceInitRouter', () => {
     await expect(caller.retryInit({ id: 'w1' })).rejects.toMatchObject({
       code: 'TOO_MANY_REQUESTS',
     });
+  });
+
+  it('throws TOO_MANY_REQUESTS when failed existing-worktree retry exceeds max retries', async () => {
+    mockFindByIdWithProject.mockResolvedValue({
+      id: 'w2',
+      status: 'FAILED',
+      project: { worktreeBasePath: '/tmp' },
+      worktreePath: '/tmp/w2',
+    });
+    mockStartProvisioning.mockResolvedValue(null);
+
+    const caller = createCaller();
+    await expect(caller.retryInit({ id: 'w2' })).rejects.toMatchObject({
+      code: 'TOO_MANY_REQUESTS',
+    });
+    expect(mockInitializeWorkspaceWorktree).not.toHaveBeenCalled();
   });
 
   it('throws NOT_FOUND when getInitStatus workspace is missing', async () => {
@@ -222,3 +253,13 @@ describe('workspaceInitRouter', () => {
     });
   });
 });
+
+function createDeferredPromise<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}

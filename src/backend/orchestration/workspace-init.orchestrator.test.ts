@@ -161,8 +161,8 @@ function makeWorkspaceWithProject(overrides = {}) {
   });
 }
 
-function setupHappyPath() {
-  const workspace = makeWorkspaceWithProject();
+function setupHappyPath(overrides = {}) {
+  const workspace = makeWorkspaceWithProject(overrides);
   vi.mocked(workspaceStateMachine.startProvisioning).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(workspace);
   vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
@@ -227,6 +227,16 @@ describe('initializeWorkspaceWorktree', () => {
 
       expect(workspaceAccessor.findByIdWithProject).not.toHaveBeenCalled();
       expect(gitOpsService.createWorktree).not.toHaveBeenCalled();
+    });
+
+    it('continues without starting provisioning when already started by caller', async () => {
+      setupHappyPath();
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID, { provisioningAlreadyStarted: true });
+
+      expect(workspaceStateMachine.startProvisioning).not.toHaveBeenCalled();
+      expect(workspaceAccessor.findByIdWithProject).toHaveBeenCalledWith(WORKSPACE_ID);
+      expect(workspaceStateMachine.markReady).toHaveBeenCalledWith(WORKSPACE_ID);
     });
   });
 
@@ -330,6 +340,48 @@ describe('initializeWorkspaceWorktree', () => {
         name: 'term-default',
         pid: 12_345,
       });
+    });
+
+    it('reuses an existing worktree and restores terminal/session on retry', async () => {
+      setupHappyPath({
+        status: 'FAILED',
+        worktreePath: '/worktrees/existing-ws-1',
+        branchName: 'feature/existing',
+      });
+      vi.mocked(FactoryConfigService.readConfig).mockResolvedValue(
+        unsafeCoerce({ scripts: { setup: './setup.sh', run: null, cleanup: null } })
+      );
+      vi.mocked(startupScriptService.runStartupScript).mockResolvedValue({
+        success: true,
+      } as never);
+      vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([
+        unsafeCoerce({ id: 'session-1', status: SessionStatus.IDLE, model: 'claude-sonnet' }),
+      ]);
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(gitOpsService.ensureBaseBranchExists).not.toHaveBeenCalled();
+      expect(gitOpsService.createWorktree).not.toHaveBeenCalled();
+      expect(gitOpsService.createWorktreeFromExistingBranch).not.toHaveBeenCalled();
+      expect(FactoryConfigService.readConfig).toHaveBeenCalledWith('/worktrees/existing-ws-1');
+      expect(startupScriptService.runStartupScript).toHaveBeenCalledWith(
+        expect.objectContaining({ worktreePath: '/worktrees/existing-ws-1' }),
+        expect.objectContaining({ startupScriptCommand: './setup.sh' }),
+        expect.objectContaining({ deferStateTransition: true })
+      );
+      expect(terminalService.createTerminal).toHaveBeenCalledWith({
+        workspaceId: WORKSPACE_ID,
+        workingDir: '/worktrees/existing-ws-1',
+      });
+      expect(sessionService.startSession).toHaveBeenCalledWith('session-1', {
+        initialPrompt: '',
+        startupModePreset: 'non_interactive',
+      });
+
+      const updateData = vi.mocked(workspaceAccessor.update).mock.calls[0]?.[1];
+      expect(updateData).not.toHaveProperty('worktreePath');
+      expect(updateData).not.toHaveProperty('branchName');
+      expect(worktreeLifecycleService.clearInitMode).not.toHaveBeenCalled();
     });
 
     it('does not create a new default terminal when one already exists', async () => {
