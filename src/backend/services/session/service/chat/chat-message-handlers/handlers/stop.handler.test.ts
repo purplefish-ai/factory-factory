@@ -47,4 +47,35 @@ describe('createStopHandler', () => {
     expect(mocks.resetDispatchState).toHaveBeenCalledWith('session-1');
     expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
   });
+
+  it('waits for stopSession before retrying queued dispatch', async () => {
+    let resolveStop!: () => void;
+    mocks.stopSession.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveStop = resolve;
+      })
+    );
+    const handler = createStopHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+      resetDispatchState: mocks.resetDispatchState,
+    });
+
+    const stopPromise = handler({
+      ws: { send: vi.fn() } as never,
+      sessionId: 'session-1',
+      workingDir: '/tmp/work',
+      message: { type: 'stop' } as never,
+    });
+
+    await Promise.resolve();
+
+    expect(mocks.tryDispatchNextMessage).not.toHaveBeenCalled();
+
+    resolveStop();
+    await stopPromise;
+
+    expect(mocks.tryDispatchNextMessage).toHaveBeenCalledWith('session-1');
+  });
 });

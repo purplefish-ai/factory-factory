@@ -904,6 +904,85 @@ describe('AcpRuntimeManager', () => {
       expect(handlers.onExit).not.toHaveBeenCalled();
     });
 
+    it('skips exit handler when a stopped process exits after stop timeout', async () => {
+      const child = setupSuccessfulSpawn();
+      const handlers = defaultHandlers();
+
+      await manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext());
+
+      child.kill = vi.fn((signal?: string) => {
+        if (signal) {
+          child.killed = true;
+        }
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.advanceTimersByTimeAsync(5100);
+      await stopPromise;
+
+      vi.useRealTimers();
+
+      expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(manager.isStopInProgress('session-1')).toBe(false);
+
+      (handlers.onExit as ReturnType<typeof vi.fn>).mockClear();
+      child.exitCode = 137;
+      child.emit('exit', 137, 'SIGKILL');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(handlers.onExit).not.toHaveBeenCalled();
+    });
+
+    it('does not let a late stopped-process exit affect a replacement client', async () => {
+      const firstChild = setupSuccessfulSpawn();
+      const firstHandlers = defaultHandlers();
+
+      await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        firstHandlers,
+        defaultContext()
+      );
+
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal) {
+          firstChild.killed = true;
+        }
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.advanceTimersByTimeAsync(5100);
+      await stopPromise;
+
+      vi.useRealTimers();
+
+      const secondChild = createMockChildProcess();
+      const secondHandlers = defaultHandlers();
+      mockSpawn.mockReturnValueOnce(secondChild);
+
+      const restartedHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        secondHandlers,
+        defaultContext()
+      );
+
+      (firstHandlers.onExit as ReturnType<typeof vi.fn>).mockClear();
+      firstChild.exitCode = 137;
+      firstChild.emit('exit', 137, 'SIGKILL');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(firstHandlers.onExit).not.toHaveBeenCalled();
+      expect(manager.getClient('session-1')).toBe(restartedHandle);
+    });
+
     it('keeps newer client tracked when old stop exits later', async () => {
       const firstChild = setupSuccessfulSpawn();
 
