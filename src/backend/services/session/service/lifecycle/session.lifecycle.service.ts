@@ -77,6 +77,7 @@ export type SessionLifecycleServiceDependencies = {
   acpEventProcessor: AcpEventProcessor;
   promptTurnCompletionService: SessionPromptTurnCompletionService;
   retryService: SessionRetryService;
+  onBeforeStopSession?: (sessionId: string) => void;
 };
 
 export class SessionLifecycleService {
@@ -89,6 +90,7 @@ export class SessionLifecycleService {
   private readonly acpEventProcessor: AcpEventProcessor;
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
+  private readonly onBeforeStopSession?: (sessionId: string) => void;
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
   private autoIterationExitBridge: SessionAutoIterationExitBridge | null = null;
 
@@ -102,6 +104,7 @@ export class SessionLifecycleService {
     this.acpEventProcessor = options.acpEventProcessor;
     this.promptTurnCompletionService = options.promptTurnCompletionService;
     this.retryService = options.retryService;
+    this.onBeforeStopSession = options.onBeforeStopSession;
   }
 
   configure(bridges: {
@@ -178,6 +181,7 @@ export class SessionLifecycleService {
 
   async stopSession(sessionId: string, options?: StopSessionOptions): Promise<void> {
     this.promptTurnCompletionService.clearSession(sessionId);
+    this.onBeforeStopSession?.(sessionId);
     const session = await this.loadSessionForStop(sessionId);
     const workspaceId = session?.workspaceId ?? this.acpEventProcessor.getWorkspaceId(sessionId);
 

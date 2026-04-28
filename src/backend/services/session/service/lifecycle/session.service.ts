@@ -1,4 +1,5 @@
 import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk';
+import pLimit, { type LimitFunction } from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
@@ -50,6 +51,7 @@ export class SessionService {
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
   private readonly lifecycleService: SessionLifecycleService;
+  private readonly acpPromptLimiters = new Map<string, LimitFunction>();
   /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
 
@@ -110,6 +112,9 @@ export class SessionService {
       acpEventProcessor: this.acpEventProcessor,
       promptTurnCompletionService: this.promptTurnCompletionService,
       retryService: this.retryService,
+      onBeforeStopSession: (sessionId) => {
+        this.clearQueuedAcpPrompts(sessionId);
+      },
     });
   }
 
@@ -277,7 +282,50 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  async sendAcpMessage(
+  sendAcpMessage(sessionId: string, prompt: ContentBlock[], timeoutMs?: number): Promise<string> {
+    return this.withSerializedAcpPrompt(sessionId, () =>
+      this.executeAcpMessage(sessionId, prompt, timeoutMs)
+    );
+  }
+
+  private withSerializedAcpPrompt<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+    const limiter = this.getAcpPromptLimiter(sessionId);
+    const result = limiter(task);
+    const cleanup = () => this.deleteAcpPromptLimiterIfDrained(sessionId, limiter);
+    result.then(cleanup, cleanup);
+    return result;
+  }
+
+  private clearQueuedAcpPrompts(sessionId: string): void {
+    const limiter = this.acpPromptLimiters.get(sessionId);
+    if (!limiter) {
+      return;
+    }
+    limiter.clearQueue();
+    this.deleteAcpPromptLimiterIfDrained(sessionId, limiter);
+  }
+
+  private deleteAcpPromptLimiterIfDrained(sessionId: string, limiter: LimitFunction): void {
+    if (
+      this.acpPromptLimiters.get(sessionId) === limiter &&
+      limiter.activeCount === 0 &&
+      limiter.pendingCount === 0
+    ) {
+      this.acpPromptLimiters.delete(sessionId);
+    }
+  }
+
+  private getAcpPromptLimiter(sessionId: string): LimitFunction {
+    const existing = this.acpPromptLimiters.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+    const limiter = pLimit({ concurrency: 1, rejectOnClear: true });
+    this.acpPromptLimiters.set(sessionId, limiter);
+    return limiter;
+  }
+
+  private async executeAcpMessage(
     sessionId: string,
     prompt: ContentBlock[],
     timeoutMs?: number
