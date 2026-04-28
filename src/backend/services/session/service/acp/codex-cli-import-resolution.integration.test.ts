@@ -136,7 +136,14 @@ describe('CODEX CLI import resolution', () => {
       );
     }
 
-    expect([0, 143]).toContain(result.status);
+    if (result.status === 143) {
+      expect(result.error).toMatchObject({ code: 'ETIMEDOUT' });
+      expect(stderr).not.toContain('does not provide an export named');
+      expect(stderr).not.toContain('SyntaxError');
+      return;
+    }
+
+    expect(result.status).toBe(0);
     expect(stderr).not.toContain('does not provide an export named');
     expect(stderr).not.toContain('SyntaxError');
   }, 35_000);
