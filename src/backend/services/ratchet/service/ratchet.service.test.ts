@@ -230,6 +230,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         status: 'RUNNING',
       },
     ] as never);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(true);
 
     const result = await unsafeCoerce<{
@@ -299,7 +300,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     );
   });
 
-  it('does dispatch when session is running but idle', async () => {
+  it('does not dispatch when session is running but idle', async () => {
     const workspace = {
       id: 'ws-idle-session',
       prUrl: 'https://github.com/example/repo/pull/44',
@@ -334,21 +335,21 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         status: 'RUNNING',
       },
     ] as never);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
-
-    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
-      status: 'started',
-      sessionId: 'ratchet-session-idle-ok',
-      promptSent: true,
-    } as never);
 
     const result = await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
     }>(ratchetService).processWorkspace(workspace);
 
     expect(result).toMatchObject({
-      action: { type: 'TRIGGERED_FIXER', sessionId: 'ratchet-session-idle-ok' },
+      action: {
+        type: 'WAITING',
+        reason: 'Workspace is not idle (active session)',
+      },
     });
+    expect(mockSessionBridge.isSessionRunning).toHaveBeenCalledWith('chat-idle-1');
+    expect(fixerSessionService.acquireAndDispatch).not.toHaveBeenCalled();
   });
 
   it('does not dispatch when PR state unchanged since last dispatch', async () => {

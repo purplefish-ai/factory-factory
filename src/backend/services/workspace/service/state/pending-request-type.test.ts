@@ -14,6 +14,18 @@ describe('computePendingRequestType', () => {
     expect(result).toBe('plan_approval');
   });
 
+  it('returns plan_approval when stable input type is ExitPlanMode', () => {
+    const result = computePendingRequestType(
+      ['s1', 's2'],
+      new Map([
+        ['s1', { toolName: 'Review Proposed Plan', input: { type: 'ExitPlanMode' } }],
+        ['s2', { toolName: 'ReadFile' }],
+      ])
+    );
+
+    expect(result).toBe('plan_approval');
+  });
+
   it('returns user_question when any session has AskUserQuestion pending', () => {
     const result = computePendingRequestType(
       ['s1', 's2'],

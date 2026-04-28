@@ -53,6 +53,10 @@ class MockWebSocket {
     this.onopen?.({ type: 'open' });
   }
 
+  simulateMessage(data: unknown) {
+    this.onmessage?.({ type: 'message', data: JSON.stringify(data) });
+  }
+
   failNextSends(count: number) {
     this.failSendCount = count;
   }
@@ -71,12 +75,14 @@ function getLastSocket(): MockWebSocket {
 interface TransportHarnessProps {
   url: string | null;
   onConnected?: () => void;
+  onMessage?: (message: unknown) => void;
   transportRef: { current: UseWebSocketTransportReturn | null };
 }
 
-function TransportHarness({ url, onConnected, transportRef }: TransportHarnessProps) {
+function TransportHarness({ url, onConnected, onMessage, transportRef }: TransportHarnessProps) {
   const transport = useWebSocketTransport({
     url,
+    onMessage,
     onConnected,
     queuePolicy: 'replay',
   });
@@ -84,24 +90,39 @@ function TransportHarness({ url, onConnected, transportRef }: TransportHarnessPr
   return null;
 }
 
-function createHarness(options: { onConnected?: () => void } = {}) {
+function createHarness(
+  options: {
+    initialUrl?: string | null;
+    onConnected?: () => void;
+    onMessage?: (message: unknown) => void;
+  } = {}
+) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   const transportRef = { current: null as UseWebSocketTransportReturn | null };
-
-  flushSync(() => {
+  const render = (url: string | null) => {
     root.render(
       createElement(TransportHarness, {
-        url: 'ws://localhost:3000/chat',
+        url,
         onConnected: options.onConnected,
+        onMessage: options.onMessage,
         transportRef,
       })
     );
+  };
+
+  flushSync(() => {
+    render(options.initialUrl ?? 'ws://localhost:3000/chat');
   });
 
   return {
     transportRef,
+    rerenderUrl: (url: string | null) => {
+      flushSync(() => {
+        render(url);
+      });
+    },
     cleanup: () => {
       flushSync(() => {
         root.unmount();
@@ -273,6 +294,66 @@ describe('useWebSocketTransport replay queue', () => {
 
     expect(transport.send({ type: 'stop', id: 'fresh-stop' })).toBe(false);
     expect(extractMessageIds(socket)).toEqual(['queued-first', 'fresh-stop']);
+
+    harness.cleanup();
+  });
+
+  it('drops messages from sockets superseded by a URL change', async () => {
+    const receivedMessages: unknown[] = [];
+    const harness = createHarness({
+      initialUrl: 'ws://localhost:3000/chat?sessionId=one',
+      onMessage: (message) => {
+        receivedMessages.push(message);
+      },
+    });
+    await flushEffects();
+
+    const firstSocket = getLastSocket();
+    flushSync(() => {
+      firstSocket.simulateOpen();
+    });
+
+    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
+    await flushEffects();
+
+    const secondSocket = getLastSocket();
+    expect(secondSocket).not.toBe(firstSocket);
+
+    flushSync(() => {
+      firstSocket.simulateMessage({ type: 'session_snapshot', session: 'old' });
+      secondSocket.simulateOpen();
+      secondSocket.simulateMessage({ type: 'session_snapshot', session: 'new' });
+    });
+
+    expect(receivedMessages).toEqual([{ type: 'session_snapshot', session: 'new' }]);
+
+    harness.cleanup();
+  });
+
+  it('ignores open events from sockets superseded by a URL change', async () => {
+    let connectedCount = 0;
+    const harness = createHarness({
+      initialUrl: 'ws://localhost:3000/chat?sessionId=one',
+      onConnected: () => {
+        connectedCount += 1;
+      },
+    });
+    await flushEffects();
+
+    const firstSocket = getLastSocket();
+
+    harness.rerenderUrl('ws://localhost:3000/chat?sessionId=two');
+    await flushEffects();
+
+    const secondSocket = getLastSocket();
+    expect(secondSocket).not.toBe(firstSocket);
+
+    flushSync(() => {
+      firstSocket.simulateOpen();
+      secondSocket.simulateOpen();
+    });
+
+    expect(connectedCount).toBe(1);
 
     harness.cleanup();
   });

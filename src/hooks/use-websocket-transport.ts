@@ -214,6 +214,10 @@ export function useWebSocketTransport(
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (wsRef.current !== ws) {
+        return;
+      }
+
       setConnected(true);
       reconnectAttemptsRef.current = 0;
 
@@ -229,6 +233,10 @@ export function useWebSocketTransport(
     };
 
     ws.onmessage = (event) => {
+      if (wsRef.current !== ws) {
+        return;
+      }
+
       try {
         if (typeof event.data !== 'string') {
           return;

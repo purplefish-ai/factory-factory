@@ -182,5 +182,5 @@ export async function hasActiveSession(
   sessionBridge: RatchetSessionBridge
 ): Promise<boolean> {
   const sessions = await agentSessionAccessor.findByWorkspaceId(workspaceId);
-  return sessions.some((session) => sessionBridge.isSessionWorking(session.id));
+  return sessions.some((session) => sessionBridge.isSessionRunning(session.id));
 }
