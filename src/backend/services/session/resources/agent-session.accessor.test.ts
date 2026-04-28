@@ -6,6 +6,7 @@ import { SessionStatus } from '@/shared/core';
 const mockCreate = vi.fn();
 const mockFindUnique = vi.fn();
 const mockFindMany = vi.fn();
+const mockCount = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 const mockUserSettingsGet = vi.fn();
@@ -16,6 +17,7 @@ vi.mock('@/backend/db', () => ({
       create: (...args: unknown[]) => mockCreate(...args),
       findUnique: (...args: unknown[]) => mockFindUnique(...args),
       findMany: (...args: unknown[]) => mockFindMany(...args),
+      count: (...args: unknown[]) => mockCount(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
     },
@@ -130,6 +132,19 @@ describe('agentSessionAccessor', () => {
       },
       take: 3,
       orderBy: { createdAt: 'asc' },
+    });
+  });
+
+  it('countActiveByWorkspaceId counts only running and idle sessions', async () => {
+    mockCount.mockResolvedValue(2);
+
+    await expect(agentSessionAccessor.countActiveByWorkspaceId('workspace-1')).resolves.toBe(2);
+
+    expect(mockCount).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-1',
+        status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+      },
     });
   });
 

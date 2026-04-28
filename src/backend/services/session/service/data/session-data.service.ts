@@ -29,6 +29,10 @@ class SessionDataService {
     return agentSessionAccessor.findByWorkspaceId(workspaceId, filters);
   }
 
+  countActiveAgentSessionsByWorkspaceId(workspaceId: string): Promise<number> {
+    return agentSessionAccessor.countActiveByWorkspaceId(workspaceId);
+  }
+
   createAgentSession(data: {
     workspaceId: string;
     name?: string;
