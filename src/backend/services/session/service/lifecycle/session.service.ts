@@ -291,15 +291,7 @@ export class SessionService {
   private withSerializedAcpPrompt<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
     const limiter = this.getAcpPromptLimiter(sessionId);
     const result = limiter(task);
-    const cleanup = () => {
-      if (
-        this.acpPromptLimiters.get(sessionId) === limiter &&
-        limiter.activeCount === 0 &&
-        limiter.pendingCount === 0
-      ) {
-        this.acpPromptLimiters.delete(sessionId);
-      }
-    };
+    const cleanup = () => this.deleteAcpPromptLimiterIfDrained(sessionId, limiter);
     result.then(cleanup, cleanup);
     return result;
   }
@@ -310,7 +302,17 @@ export class SessionService {
       return;
     }
     limiter.clearQueue();
-    this.acpPromptLimiters.delete(sessionId);
+    this.deleteAcpPromptLimiterIfDrained(sessionId, limiter);
+  }
+
+  private deleteAcpPromptLimiterIfDrained(sessionId: string, limiter: LimitFunction): void {
+    if (
+      this.acpPromptLimiters.get(sessionId) === limiter &&
+      limiter.activeCount === 0 &&
+      limiter.pendingCount === 0
+    ) {
+      this.acpPromptLimiters.delete(sessionId);
+    }
   }
 
   private getAcpPromptLimiter(sessionId: string): LimitFunction {

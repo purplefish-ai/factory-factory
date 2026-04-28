@@ -749,6 +749,47 @@ describe('SessionService', () => {
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps active ACP prompt serialization during manual stop', async () => {
+    const firstPrompt = createDeferred<{ stopReason: string }>();
+    const thirdPrompt = createDeferred<{ stopReason: string }>();
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.sendPrompt)
+      .mockReturnValueOnce(firstPrompt.promise as never)
+      .mockReturnValueOnce(thirdPrompt.promise as never);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    const firstSend = sessionService.sendAcpMessage('session-active-stop', [
+      { type: 'text', text: 'first' },
+    ]);
+    await Promise.resolve();
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+
+    const secondSend = sessionService.sendAcpMessage('session-active-stop', [
+      { type: 'text', text: 'second' },
+    ]);
+    const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.resolve();
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+
+    await sessionService.stopSession('session-active-stop');
+    await secondRejection;
+
+    const thirdSend = sessionService.sendAcpMessage('session-active-stop', [
+      { type: 'text', text: 'third' },
+    ]);
+    await Promise.resolve();
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+
+    firstPrompt.resolve({ stopReason: 'end_turn' });
+    await expect(firstSend).resolves.toBe('end_turn');
+    await Promise.resolve();
+
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+    thirdPrompt.resolve({ stopReason: 'end_turn' });
+    await expect(thirdSend).resolves.toBe('end_turn');
+  });
+
   it('clears in-memory session state after manual stop when no clients are connected', async () => {
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
