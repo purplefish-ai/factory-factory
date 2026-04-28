@@ -25,7 +25,7 @@ re_verification: false
 |---|-------|--------|----------|
 | 1 | All terminal operations flow through src/backend/domains/terminal/ | ✓ VERIFIED | terminal.service.ts (545 lines) exists at domain path with full TerminalService class. Shim at old path re-exports from domain. 4 consumers use old path which resolves to domain via shim. |
 | 2 | Existing consumers continue to work via shim at old path | ✓ VERIFIED | Shim at src/backend/services/terminal.service.ts re-exports from '@/backend/domains/terminal/terminal.service'. 4 consumers found: app-context.ts, mcp/terminal.mcp.ts (2 imports), worktree-lifecycle.service.ts. pnpm typecheck passes. |
-| 3 | TERM-02 verified satisfied: all Maps are private instance fields, no module-level mutable state | ✓ VERIFIED | 4 Maps confirmed as private instance fields: terminals, outputListeners, exitListeners, activeTerminals. Only static members are readonly constants (MONITORING_INTERVAL_MS, MAX_OUTPUT_BUFFER_SIZE). Zero module-level mutable state. |
+| 3 | TERM-02 verified satisfied: all Maps are private instance fields, no module-level mutable state | ✓ VERIFIED | 4 Maps confirmed as private instance fields: terminals, outputListeners, exitListeners, activeTerminals. Only static member is readonly constant MONITORING_INTERVAL_MS. Output buffer size controlled by module-level constant MAX_TERMINAL_OUTPUT_BUFFER_SIZE. Zero module-level mutable state. |
 | 4 | Domain has co-located unit tests covering the public API (TERM-03) | ✓ VERIFIED | terminal.service.test.ts exists with 33 tests covering all 15+ public API methods. All tests pass. Coverage: createTerminal, writeToTerminal, resizeTerminal, destroyTerminal, getTerminal, getTerminalsForWorkspace, onOutput, onExit, destroyWorkspaceTerminals, cleanup, getActiveTerminalCount, setActiveTerminal, getActiveTerminal, clearActiveTerminal, getAllTerminals. |
 | 5 | Domain barrel smoke test confirms exports are not undefined | ✓ VERIFIED | terminal-domain-exports.test.ts exists with 1 test verifying terminalService is defined when imported from barrel. Test passes. |
 | 6 | pnpm typecheck passes | ✓ VERIFIED | pnpm typecheck completes with zero errors. All consumers resolve imports correctly. |
@@ -54,7 +54,7 @@ re_verification: false
 
 | Requirement | Status | Blocking Issue |
 |-------------|--------|----------------|
-| TERM-01: `src/backend/domains/terminal/` owns terminal pty management, output buffering, and monitoring | ✓ SATISFIED | None. Full TerminalService class exists at domain path with all PTY operations, output buffering (MAX_OUTPUT_BUFFER_SIZE constant, outputBuffer field), and resource monitoring (monitoringInterval, updateAllTerminalResources). |
+| TERM-01: `src/backend/domains/terminal/` owns terminal pty management, output buffering, and monitoring | ✓ SATISFIED | None. Full TerminalService class exists at domain path with all PTY operations, output buffering (MAX_TERMINAL_OUTPUT_BUFFER_SIZE constant, outputBuffer field), and resource monitoring (monitoringInterval, updateAllTerminalResources). |
 | TERM-02: Static Maps in terminal service replaced with instance-based state | ✓ SATISFIED | None. All 4 Maps are private instance fields (terminals, outputListeners, exitListeners, activeTerminals). Zero static mutable state. Only static readonly constants exist. |
 | TERM-03: Terminal domain has co-located unit tests covering its public API | ✓ SATISFIED | None. 33 tests cover all 15+ public API methods. Barrel smoke test verifies exports. All tests pass. |
 
