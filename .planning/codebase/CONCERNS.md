@@ -88,11 +88,11 @@
 - Cause: `JSON.parse()` blocks the event loop for large payloads
 - Improvement path: Consider streaming JSON parsing for diff operations or chunking large diffs. Add progress indicator to UI for large operations
 
-**Terminal Output Buffer Unbounded Growth:**
-- Problem: Terminal output buffers accumulate data with only soft size limit (100KB per terminal) that gets trimmed after reaching capacity
-- Files: `src/backend/services/terminal.service.ts` (lines 93), but buffer management logic needs review
-- Cause: If terminal produces output faster than trimming happens, buffer could exceed limit temporarily
-- Improvement path: Implement ring buffer or limit total terminals per workspace. Add metrics to monitor buffer sizes
+**Terminal Output Buffer Growth:**
+- Problem: Terminal output buffers accumulate data with a hard size limit (100KB per terminal) enforced by a ring buffer
+- Files: `src/backend/services/terminal.service.ts` (RollingOutputBuffer class)
+- Current state: Ring buffer implementation ensures buffer never exceeds limit, even with rapid output
+- Improvement path: Limit total terminals per workspace. Add metrics to monitor buffer sizes
 
 **Workspace State Machine Queries:**
 - Problem: State machine transitions query workspace by ID multiple times in sequence (read for validation, update for transition)

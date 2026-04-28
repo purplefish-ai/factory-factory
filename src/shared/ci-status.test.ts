@@ -43,13 +43,19 @@ describe('ci-status', () => {
     );
   });
 
-  it('returns UNKNOWN when all checks are complete but non-success', () => {
+  it('returns FAILING when a completed check is cancelled', () => {
     expect(
       deriveCiVisualStateFromChecks([
         { conclusion: 'NEUTRAL', status: 'COMPLETED' },
         { conclusion: 'CANCELLED', status: 'COMPLETED' },
       ])
-    ).toBe('UNKNOWN');
+    ).toBe('FAILING');
+  });
+
+  it('returns PASSING when completed checks are neutral', () => {
+    expect(deriveCiVisualStateFromChecks([{ conclusion: 'NEUTRAL', status: 'COMPLETED' }])).toBe(
+      'PASSING'
+    );
   });
 
   it('derives canonical CI status from check rollup', () => {
@@ -66,12 +72,11 @@ describe('ci-status', () => {
 
     expect(deriveCiStatusFromCheckRollup([{ status: 'IN_PROGRESS' }])).toBe('PENDING');
 
-    expect(
-      deriveCiStatusFromCheckRollup([
-        { status: 'COMPLETED', conclusion: 'NEUTRAL' },
-        { status: 'COMPLETED', conclusion: 'CANCELLED' },
-      ])
-    ).toBe('UNKNOWN');
+    expect(deriveCiStatusFromCheckRollup([{ status: 'COMPLETED', conclusion: 'NEUTRAL' }])).toBe(
+      'SUCCESS'
+    );
+
+    expect(deriveCiStatusFromCheckRollup([])).toBe('SUCCESS');
   });
 
   it('handles lowercase status and conclusion values', () => {
@@ -82,9 +87,9 @@ describe('ci-status', () => {
     );
   });
 
-  it('derives UNKNOWN for unrecognized completed outcomes', () => {
+  it('derives FAILURE for startup failures', () => {
     expect(
       deriveCiStatusFromCheckRollup([{ status: 'COMPLETED', conclusion: 'STARTUP_FAILURE' }])
-    ).toBe('UNKNOWN');
+    ).toBe('FAILURE');
   });
 });

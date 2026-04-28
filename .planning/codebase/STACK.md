@@ -39,7 +39,7 @@
 **Styling & Layout:**
 - Tailwind CSS 4.1.18 (@tailwindcss/vite plugin for dev)
 - Tailwind typography plugin 0.5.19 - Markdown/rich text styling
-- PostCSS 8.5.6 - CSS processing
+- PostCSS 8.5.12 - CSS processing
 - Tailwind merge 3.4.0 - Utility class composition
 - Tailwindcss animate 1.0.7 - Animation utilities
 
