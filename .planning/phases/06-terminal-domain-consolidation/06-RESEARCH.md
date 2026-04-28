@@ -10,7 +10,7 @@ Phase 6 consolidates one source file (`src/backend/services/terminal.service.ts`
 
 The terminal service manages PTY instances via `node-pty` (lazy-loaded with `createRequire`), output buffering for reconnection resilience, and resource monitoring via `pidusage`. It has seven direct consumers: `app-context.ts`, `server.ts`, `terminal.handler.ts` (WebSocket), `terminal.mcp.ts` (MCP tool), `admin.trpc.ts`, `workspace.trpc.ts`, and `worktree-lifecycle.service.ts` (workspace domain). No existing unit tests exist for the terminal service -- TERM-03 requires creating them from scratch.
 
-**Critical finding on TERM-02:** The requirement states "Static Maps replaced with instance-based state." However, the Maps in `terminal.service.ts` are **already instance fields** on the `TerminalService` class (lines 77-86: `private terminals`, `private outputListeners`, `private exitListeners`, `private activeTerminals`). There are no module-level Maps. The only `static` members are `static readonly` constants (`MONITORING_INTERVAL_MS`, `MAX_OUTPUT_BUFFER_SIZE`) which are stateless configuration. TERM-02 may already be satisfied, or it may be referring to the singleton export pattern (`export const terminalService = new TerminalService()`) which is the same pattern used across all domains. The planner should treat TERM-02 as "verify and confirm compliance" rather than "refactor Maps."
+**Critical finding on TERM-02:** The requirement states "Static Maps replaced with instance-based state." However, the Maps in `terminal.service.ts` are **already instance fields** on the `TerminalService` class (`private terminals`, `private outputListeners`, `private exitListeners`, `private activeTerminals`). There are no module-level Maps. The only `static` member is the `MONITORING_INTERVAL_MS` constant, which is stateless configuration. Output buffer size is controlled by a module-level constant (`MAX_TERMINAL_OUTPUT_BUFFER_SIZE`). TERM-02 may already be satisfied, or it may be referring to the singleton export pattern (`export const terminalService = new TerminalService()`) which is the same pattern used across all domains. The planner should treat TERM-02 as "verify and confirm compliance" rather than "refactor Maps."
 
 **Primary recommendation:** Follow the established move-and-shim pattern. Copy the file to the domain, create a shim at the old path, populate the barrel index, add a domain export smoke test, and write unit tests covering the public API with mocked `node-pty` and `pidusage`.
 
@@ -315,12 +315,13 @@ The public API of `TerminalService` consists of these methods:
 | Direct imports everywhere | Shim at old path, direct import to domain | Phase 2 | Zero consumer changes during consolidation |
 
 **Already correct (no changes needed for TERM-02):**
-- `terminals` Map is a private instance field (line 77)
-- `outputListeners` Map is a private instance field (line 80)
-- `exitListeners` Map is a private instance field (line 83)
-- `activeTerminals` Map is a private instance field (line 86)
-- `monitoringInterval` is a private instance field (line 89)
-- `MONITORING_INTERVAL_MS` and `MAX_OUTPUT_BUFFER_SIZE` are `static readonly` constants (stateless config, acceptable)
+- `terminals` Map is a private instance field
+- `outputListeners` Map is a private instance field
+- `exitListeners` Map is a private instance field
+- `activeTerminals` Map is a private instance field
+- `monitoringInterval` is a private instance field
+- `MONITORING_INTERVAL_MS` is a `static readonly` constant (stateless config, acceptable)
+- `MAX_TERMINAL_OUTPUT_BUFFER_SIZE` is a module-level constant (stateless config, acceptable)
 
 ## Open Questions
 
