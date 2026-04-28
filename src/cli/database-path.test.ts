@@ -32,6 +32,18 @@ describe('resolveDatabasePath', () => {
     );
   });
 
+  it('falls back to BASE_DIR when DATABASE_PATH is unset', () => {
+    const baseDir = join(tempDir, 'configured-base');
+
+    expect(resolveDatabasePath({ env: { BASE_DIR: baseDir } })).toBe(join(baseDir, 'data.db'));
+  });
+
+  it('expands environment variables in BASE_DIR fallback', () => {
+    expect(resolveDatabasePath({ env: { BASE_DIR: '$HOME/factory', HOME: tempDir } })).toBe(
+      join(tempDir, 'factory', 'data.db')
+    );
+  });
+
   it('prefers the explicit option path over DATABASE_PATH', () => {
     expect(
       resolveDatabasePath({
@@ -39,6 +51,14 @@ describe('resolveDatabasePath', () => {
         env: { DATABASE_PATH: 'env.db' },
       })
     ).toBe(join(tempDir, 'option.db'));
+  });
+
+  it('prefers DATABASE_PATH over BASE_DIR', () => {
+    expect(
+      resolveDatabasePath({
+        env: { BASE_DIR: join(tempDir, 'base'), DATABASE_PATH: 'env.db' },
+      })
+    ).toBe(join(tempDir, 'env.db'));
   });
 
   it('preserves absolute configured paths', () => {
