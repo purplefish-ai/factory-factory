@@ -4,6 +4,7 @@ import type { CLIHealthStatus } from '@/backend/orchestration/cli-health.service
 
 const mockSessionDataService = vi.hoisted(() => ({
   findAgentSessionsByWorkspaceId: vi.fn(),
+  countActiveAgentSessionsByWorkspaceId: vi.fn(),
   findAgentSessionById: vi.fn(),
   createAgentSession: vi.fn(),
   updateAgentSession: vi.fn(),
@@ -82,6 +83,7 @@ function createCaller() {
 describe('sessionRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValue(0);
   });
 
   it('returns quick actions and augments sessions with runtime working state', async () => {
@@ -108,10 +110,7 @@ describe('sessionRouter', () => {
   it('enforces workspace session limits and creates a session with provider resolution', async () => {
     const { caller, cliHealthService } = createCaller();
 
-    mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([
-      { id: 's1' },
-      { id: 's2' },
-    ]);
+    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValueOnce(2);
     await expect(
       caller.createSession({
         workspaceId: 'w1',
@@ -119,7 +118,7 @@ describe('sessionRouter', () => {
       })
     ).rejects.toThrow('Maximum sessions per workspace (2) reached');
 
-    mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([{ id: 's1' }]);
+    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValueOnce(1);
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CODEX
     );
@@ -133,6 +132,7 @@ describe('sessionRouter', () => {
       })
     ).resolves.toEqual({ id: 's3', workspaceId: 'w1' });
 
+    expect(mockSessionDataService.countActiveAgentSessionsByWorkspaceId).toHaveBeenCalledWith('w1');
     expect(mockSessionProviderResolverService.resolveSessionProvider).toHaveBeenCalledWith({
       workspaceId: 'w1',
       explicitProvider: undefined,
@@ -143,7 +143,7 @@ describe('sessionRouter', () => {
 
   it('blocks creating a session when the selected provider is unavailable', async () => {
     const { caller, cliHealthService } = createCaller();
-    mockSessionDataService.findAgentSessionsByWorkspaceId.mockResolvedValue([{ id: 's1' }]);
+    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValue(1);
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CODEX
     );

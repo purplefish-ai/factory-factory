@@ -10,6 +10,8 @@ export type AgentSessionRecordWithWorkspace = Prisma.AgentSessionGetPayload<{
   include: { workspace: true };
 }>;
 
+const ACTIVE_AGENT_SESSION_STATUSES: SessionStatus[] = [SessionStatus.RUNNING, SessionStatus.IDLE];
+
 export interface AgentSessionFilters {
   status?: SessionStatus;
   provider?: SessionProvider;
@@ -59,6 +61,7 @@ export interface AgentSessionAccessor {
     workspaceId: string,
     filters?: AgentSessionFilters
   ): Promise<AgentSessionRecord[]>;
+  countActiveByWorkspaceId(workspaceId: string): Promise<number>;
   update(id: string, data: UpdateAgentSessionInput): Promise<AgentSessionRecord>;
   delete(id: string): Promise<AgentSessionRecord>;
   findWithPid(): Promise<AgentSessionRecord[]>;
@@ -131,6 +134,15 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     });
   }
 
+  countActiveByWorkspaceId(workspaceId: string): Promise<number> {
+    return prisma.agentSession.count({
+      where: {
+        workspaceId,
+        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+      },
+    });
+  }
+
   update(id: string, data: UpdateAgentSessionInput): Promise<AgentSessionRecord> {
     const updateData: Prisma.AgentSessionUpdateInput = {
       name: data.name,
@@ -177,7 +189,7 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
             workspaceId: input.workspaceId,
             workflow: input.workflow,
             provider,
-            status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+            status: { in: ACTIVE_AGENT_SESSION_STATUSES },
           },
           orderBy: { createdAt: 'desc' },
         });
@@ -190,12 +202,14 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
           };
         }
 
-        const allSessions = await tx.agentSession.findMany({
-          where: { workspaceId: input.workspaceId },
-          select: { id: true },
+        const activeSessionCount = await tx.agentSession.count({
+          where: {
+            workspaceId: input.workspaceId,
+            status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+          },
         });
 
-        if (allSessions.length >= input.maxSessions) {
+        if (activeSessionCount >= input.maxSessions) {
           return { outcome: 'limit_reached' as const };
         }
 

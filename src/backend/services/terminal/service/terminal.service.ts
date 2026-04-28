@@ -19,6 +19,7 @@ import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('terminal');
 const require = createRequire(import.meta.url);
+const MAX_TERMINAL_OUTPUT_BUFFER_SIZE = 100 * 1024;
 
 // =============================================================================
 // Types
@@ -48,7 +49,7 @@ export interface TerminalInstance {
   // Last resource usage snapshot
   lastResourceUsage?: TerminalResourceUsage;
   // Rolling output buffer for restoration after reconnect
-  outputBuffer: string;
+  readonly outputBuffer: string;
 }
 
 export interface CreateTerminalOptions {
@@ -69,13 +70,132 @@ export interface TerminalOutput {
   data: string;
 }
 
+class RollingOutputBuffer {
+  private chunks: string[] = [];
+  private startIndex = 0;
+  private bufferedSize = 0;
+
+  constructor(private readonly maxSize: number) {}
+
+  append(data: string): void {
+    if (data.length === 0) {
+      return;
+    }
+
+    if (data.length >= this.maxSize) {
+      const tail = data.slice(-this.maxSize);
+      this.chunks = [tail];
+      this.startIndex = 0;
+      this.bufferedSize = tail.length;
+      return;
+    }
+
+    this.chunks.push(data);
+    this.bufferedSize += data.length;
+    this.trimToMaxSize();
+  }
+
+  clear(): void {
+    this.chunks = [];
+    this.startIndex = 0;
+    this.bufferedSize = 0;
+  }
+
+  toString(): string {
+    if (this.bufferedSize === 0) {
+      return '';
+    }
+
+    return this.chunks.slice(this.startIndex).join('');
+  }
+
+  private trimToMaxSize(): void {
+    while (this.bufferedSize > this.maxSize && this.startIndex < this.chunks.length) {
+      const overflow = this.bufferedSize - this.maxSize;
+      const firstChunk = this.chunks[this.startIndex];
+      if (firstChunk === undefined) {
+        this.clear();
+        return;
+      }
+
+      if (firstChunk.length <= overflow) {
+        this.bufferedSize -= firstChunk.length;
+        this.startIndex += 1;
+        this.compactIfNeeded();
+        continue;
+      }
+
+      this.chunks[this.startIndex] = firstChunk.slice(overflow);
+      this.bufferedSize -= overflow;
+      return;
+    }
+  }
+
+  private compactIfNeeded(): void {
+    if (this.startIndex < 64 || this.startIndex * 2 < this.chunks.length) {
+      return;
+    }
+
+    this.chunks = this.chunks.slice(this.startIndex);
+    this.startIndex = 0;
+  }
+}
+
+interface ManagedTerminalInstance extends TerminalInstance {
+  appendOutput(data: string): void;
+  clearOutput(): void;
+}
+
+class BufferedTerminalInstance implements ManagedTerminalInstance {
+  private readonly output = new RollingOutputBuffer(MAX_TERMINAL_OUTPUT_BUFFER_SIZE);
+
+  id: string;
+  workspaceId: string;
+  pty: IPty;
+  cols: number;
+  rows: number;
+  createdAt: Date;
+  disposables: (() => void)[];
+  lastResourceUsage?: TerminalResourceUsage;
+
+  constructor(options: {
+    id: string;
+    workspaceId: string;
+    pty: IPty;
+    cols: number;
+    rows: number;
+    createdAt: Date;
+    disposables: (() => void)[];
+  }) {
+    this.id = options.id;
+    this.workspaceId = options.workspaceId;
+    this.pty = options.pty;
+    this.cols = options.cols;
+    this.rows = options.rows;
+    this.createdAt = options.createdAt;
+    this.disposables = options.disposables;
+  }
+
+  get outputBuffer(): string {
+    return this.output.toString();
+  }
+
+  appendOutput(data: string): void {
+    this.output.append(data);
+  }
+
+  clearOutput(): void {
+    this.output.clear();
+  }
+}
+
 // =============================================================================
 // Terminal Service Class
 // =============================================================================
 
 export class TerminalService {
   // Map of workspaceId -> Map of terminalId -> TerminalInstance
-  private terminals = new Map<string, Map<string, TerminalInstance>>();
+  private terminals = new Map<string, Map<string, ManagedTerminalInstance>>();
 
   // Output listeners by terminalId
   private outputListeners = new Map<string, Set<(data: string) => void>>();
@@ -89,9 +209,6 @@ export class TerminalService {
   // Resource monitoring interval
   private monitoringInterval: NodeJS.Timeout | null = null;
   private static readonly MONITORING_INTERVAL_MS = 5000; // 5 seconds
-
-  // Max output buffer size per terminal (100KB) for restoration after reconnect
-  private static readonly MAX_OUTPUT_BUFFER_SIZE = 100 * 1024;
 
   /**
    * Set the active terminal for a workspace.
@@ -261,13 +378,7 @@ export class TerminalService {
         // Accumulate output in buffer for restoration after reconnect
         const instance = this.terminals.get(workspaceId)?.get(terminalId);
         if (instance) {
-          instance.outputBuffer += data;
-          // Limit buffer size by trimming from the beginning
-          if (instance.outputBuffer.length > TerminalService.MAX_OUTPUT_BUFFER_SIZE) {
-            instance.outputBuffer = instance.outputBuffer.slice(
-              -TerminalService.MAX_OUTPUT_BUFFER_SIZE
-            );
-          }
+          instance.appendOutput(data);
         }
 
         const listeners = this.outputListeners.get(terminalId);
@@ -296,7 +407,7 @@ export class TerminalService {
       disposables.push(() => exitDisposable.dispose());
 
       // Create terminal instance
-      const instance: TerminalInstance = {
+      const instance = new BufferedTerminalInstance({
         id: terminalId,
         workspaceId,
         pty,
@@ -304,8 +415,7 @@ export class TerminalService {
         rows,
         createdAt: new Date(),
         disposables,
-        outputBuffer: '',
-      };
+      });
 
       // Store in workspace terminals map
       if (!this.terminals.has(workspaceId)) {
@@ -403,7 +513,7 @@ export class TerminalService {
 
     // Clear retained output aggressively to release memory even if external
     // references to the instance survive map removal.
-    instance.outputBuffer = '';
+    instance.clearOutput();
 
     logger.info('Terminal destroyed', { terminalId, workspaceId });
     return true;
