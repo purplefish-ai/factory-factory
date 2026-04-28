@@ -294,10 +294,10 @@ describe('GitHubCLIService', () => {
       expect(result).toBe('UNKNOWN');
     });
 
-    it('should return UNKNOWN when statusCheckRollup is empty', () => {
+    it('should return SUCCESS when statusCheckRollup is empty', () => {
       const result = githubCLIService.computeCIStatus([]);
 
-      expect(result).toBe('UNKNOWN');
+      expect(result).toBe('SUCCESS');
     });
 
     it('should return FAILURE when any check fails', () => {
@@ -336,14 +336,14 @@ describe('GitHubCLIService', () => {
       expect(result).toBe('SUCCESS');
     });
 
-    it('should treat CANCELLED or NEUTRAL as non-blocking when a passing check exists', () => {
+    it('should treat CANCELLED as failure even when passing checks exist', () => {
       const result = githubCLIService.computeCIStatus([
         { status: 'COMPLETED', conclusion: 'SUCCESS' },
         { status: 'COMPLETED', conclusion: 'NEUTRAL' },
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
       ]);
 
-      expect(result).toBe('SUCCESS');
+      expect(result).toBe('FAILURE');
     });
   });
 
@@ -737,22 +737,22 @@ describe('GitHubCLIService', () => {
       expect(result).toBe('FAILURE');
     });
 
-    it('should return UNKNOWN when all checks are CANCELLED', () => {
+    it('should return FAILURE when all checks are CANCELLED', () => {
       const result = githubCLIService.computeCIStatus([
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
       ]);
-      expect(result).toBe('UNKNOWN');
+      expect(result).toBe('FAILURE');
     });
 
-    it('should return SUCCESS for mixed SUCCESS/SKIPPED/NEUTRAL/CANCELLED checks', () => {
+    it('should return FAILURE for mixed SUCCESS/SKIPPED/NEUTRAL/CANCELLED checks', () => {
       const result = githubCLIService.computeCIStatus([
         { status: 'COMPLETED', conclusion: 'SUCCESS' },
         { status: 'COMPLETED', conclusion: 'SKIPPED' },
         { status: 'COMPLETED', conclusion: 'NEUTRAL' },
         { status: 'COMPLETED', conclusion: 'CANCELLED' },
       ]);
-      expect(result).toBe('SUCCESS');
+      expect(result).toBe('FAILURE');
     });
 
     it('should prefer the latest run attempt for the same check identity', () => {
