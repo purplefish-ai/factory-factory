@@ -395,6 +395,28 @@ describe('TerminalService', () => {
       expect(instance?.outputBuffer.endsWith('B'.repeat(50 * 1024))).toBe(true);
     });
 
+    it('keeps only the tail of a single oversized data event', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      onDataCallback?.('A'.repeat(40 * 1024) + 'B'.repeat(100 * 1024));
+
+      const instance = service.getTerminal('ws-1', terminalId);
+      expect(instance?.outputBuffer).toBe('B'.repeat(100 * 1024));
+    });
+
+    it('preserves the most recent chunks after many small data events', async () => {
+      const { terminalId } = await service.createTerminal(defaultOpts);
+
+      for (let index = 0; index < 120; index += 1) {
+        onDataCallback?.(`${index.toString().padStart(4, '0')}:${'x'.repeat(1019)}`);
+      }
+
+      const instance = service.getTerminal('ws-1', terminalId);
+      expect(instance?.outputBuffer.length).toBe(100 * 1024);
+      expect(instance?.outputBuffer.startsWith('0020:')).toBe(true);
+      expect(instance?.outputBuffer.endsWith('x'.repeat(1019))).toBe(true);
+    });
+
     it('preserves output buffer below the limit', async () => {
       const { terminalId } = await service.createTerminal(defaultOpts);
 
