@@ -5,6 +5,7 @@ import {
   deriveCiStatusFromCheckRollup,
   deriveCiVisualStateFromChecks,
   getCiVisualLabel,
+  reduceCheckRollupToLatestRunAttempts,
 } from '@/shared/ci-status';
 import type { GitHubStatusCheck, ReviewDecision } from '@/shared/github-types';
 
@@ -63,6 +64,7 @@ export function CIStatusDot({ checks, size = 'sm' }: CIStatusDotProps) {
 // Deduplicate checks by name, keeping the most relevant status
 function deduplicateChecks(checks: GitHubStatusCheck[]): GitHubStatusCheck[] {
   const checkMap = new Map<string, GitHubStatusCheck>();
+  const latestAttemptChecks = reduceCheckRollupToLatestRunAttempts(checks) ?? checks;
 
   const getPriority = (check: GitHubStatusCheck): number => {
     const ciStatus = getSingleCheckCiStatus(check);
@@ -81,7 +83,7 @@ function deduplicateChecks(checks: GitHubStatusCheck[]): GitHubStatusCheck[] {
     return 1;
   };
 
-  for (const check of checks) {
+  for (const check of latestAttemptChecks) {
     const existing = checkMap.get(check.name);
     if (!existing || getPriority(check) > getPriority(existing)) {
       checkMap.set(check.name, check);

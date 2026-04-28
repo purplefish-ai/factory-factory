@@ -4,13 +4,15 @@ import { CIChecksSection, CIStatusBadge } from './pr-status-badges';
 
 function createCheck(
   name: string,
-  conclusion: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'CANCELLED' | 'NEUTRAL'
+  conclusion: 'SUCCESS' | 'FAILURE' | 'SKIPPED' | 'CANCELLED' | 'NEUTRAL',
+  detailsUrl?: string
 ) {
   return {
     __typename: 'CheckRun' as const,
     name,
     status: 'COMPLETED' as const,
     conclusion,
+    detailsUrl,
   };
 }
 
@@ -88,7 +90,21 @@ describe('CIStatusBadge', () => {
     expect(markup).not.toContain('0 passed');
   });
 
-  it('prefers cancelled duplicate check runs over success as a failure signal', () => {
+  it('prefers latest successful rerun over an earlier cancelled duplicate check run', () => {
+    const markup = renderToStaticMarkup(
+      <CIStatusBadge
+        checks={[
+          createCheck('build', 'CANCELLED', 'https://github.com/org/repo/actions/runs/100'),
+          createCheck('build', 'SUCCESS', 'https://github.com/org/repo/actions/runs/101'),
+        ]}
+      />
+    );
+
+    expect(markup).toContain('1 passed');
+    expect(markup).not.toContain('1 failed');
+  });
+
+  it('uses failure priority for duplicate check names without run metadata', () => {
     const markup = renderToStaticMarkup(
       <CIStatusBadge
         checks={[createCheck('build', 'CANCELLED'), createCheck('build', 'SUCCESS')]}
