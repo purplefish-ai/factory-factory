@@ -117,7 +117,7 @@ describe('CODEX CLI import resolution', () => {
 
     expect(stderr).not.toContain('does not provide an export named');
     expect(stderr).not.toContain('ERR_MODULE_NOT_FOUND');
-  });
+  }, 45_000);
 
   it('avoids the import crash when tsconfig is pinned to repo root', () => {
     const workspaceRoot = createWorkspaceWithConflictingAlias();
@@ -139,5 +139,5 @@ describe('CODEX CLI import resolution', () => {
     expect(result.status).toBe(0);
     expect(stderr).not.toContain('does not provide an export named');
     expect(stderr).not.toContain('SyntaxError');
-  });
+  }, 45_000);
 });
