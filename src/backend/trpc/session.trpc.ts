@@ -75,11 +75,11 @@ export const sessionRouter = router({
       const { configService, sessionDomainService } = ctx.appContext.services;
       // Check per-workspace session limit
       const maxSessions = configService.getMaxSessionsPerWorkspace();
-      const existingSessions = await sessionDataService.findAgentSessionsByWorkspaceId(
+      const activeSessionCount = await sessionDataService.countActiveAgentSessionsByWorkspaceId(
         input.workspaceId
       );
 
-      if (existingSessions.length >= maxSessions) {
+      if (activeSessionCount >= maxSessions) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
           message: `Maximum sessions per workspace (${maxSessions}) reached`,
