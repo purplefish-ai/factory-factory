@@ -1,4 +1,5 @@
 import type { ContentBlock, SessionConfigOption } from '@agentclientprotocol/sdk';
+import pLimit, { type LimitFunction } from 'p-limit';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type { AcpRuntimeManager } from '@/backend/services/session/service/acp';
@@ -50,6 +51,7 @@ export class SessionService {
   private readonly promptTurnCompletionService: SessionPromptTurnCompletionService;
   private readonly retryService: SessionRetryService;
   private readonly lifecycleService: SessionLifecycleService;
+  private readonly acpPromptLimiters = new Map<string, LimitFunction>();
   /** Cross-domain bridge for workspace activity (injected by orchestration layer) */
   private workspaceBridge: SessionLifecycleWorkspaceBridge | null = null;
 
@@ -277,7 +279,35 @@ export class SessionService {
    * The prompt() call blocks until the turn completes; streaming events arrive
    * concurrently via the AcpClientHandler.sessionUpdate callback.
    */
-  async sendAcpMessage(
+  sendAcpMessage(sessionId: string, prompt: ContentBlock[], timeoutMs?: number): Promise<string> {
+    return this.withSerializedAcpPrompt(sessionId, () =>
+      this.executeAcpMessage(sessionId, prompt, timeoutMs)
+    );
+  }
+
+  private withSerializedAcpPrompt<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
+    const limiter = this.getAcpPromptLimiter(sessionId);
+    const result = limiter(task);
+    const cleanup = () => {
+      if (limiter.activeCount === 0 && limiter.pendingCount === 0) {
+        this.acpPromptLimiters.delete(sessionId);
+      }
+    };
+    result.then(cleanup, cleanup);
+    return result;
+  }
+
+  private getAcpPromptLimiter(sessionId: string): LimitFunction {
+    const existing = this.acpPromptLimiters.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+    const limiter = pLimit(1);
+    this.acpPromptLimiters.set(sessionId, limiter);
+    return limiter;
+  }
+
+  private async executeAcpMessage(
     sessionId: string,
     prompt: ContentBlock[],
     timeoutMs?: number
