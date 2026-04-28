@@ -298,6 +298,7 @@ function SingleSelectQuestion({
 }: SingleQuestionProps) {
   const selectedValue = typeof value === 'string' ? value : '';
   const idPrefix = `${requestId}-${index}`;
+  const options = Array.isArray(question.options) ? question.options : [];
 
   return (
     <div className="space-y-1.5">
@@ -307,7 +308,7 @@ function SingleSelectQuestion({
       <p className="text-sm font-medium break-words">{question.question}</p>
 
       <RadioGroup value={selectedValue} onValueChange={onChange} className="space-y-1.5">
-        {question.options.map((option) => (
+        {options.map((option) => (
           <label
             key={`${index}-${option.label}`}
             htmlFor={`question-${idPrefix}-option-${option.label}`}
@@ -392,6 +393,7 @@ function MultiSelectQuestion({
 }: SingleQuestionProps) {
   const selectedValues = Array.isArray(value) ? value : [];
   const idPrefix = `${requestId}-${index}`;
+  const options = Array.isArray(question.options) ? question.options : [];
 
   const handleCheckboxChange = useCallback(
     (optionLabel: string, checked: boolean) => {
@@ -412,7 +414,7 @@ function MultiSelectQuestion({
       <p className="text-sm font-medium break-words">{question.question}</p>
 
       <div className="space-y-1.5">
-        {question.options.map((option) => {
+        {options.map((option) => {
           const isSelected = selectedValues.includes(option.label);
 
           return (

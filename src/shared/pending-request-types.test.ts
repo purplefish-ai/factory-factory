@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { hasAskUserQuestionInput, isUserQuestionRequest } from './pending-request-types';
+import {
+  hasAskUserQuestionInput,
+  hasExitPlanModeInput,
+  isExitPlanModeRequest,
+  isUserQuestionRequest,
+} from './pending-request-types';
 
 describe('pending-request-types helpers', () => {
   it('detects AskUserQuestion-style input shape', () => {
@@ -22,6 +27,17 @@ describe('pending-request-types helpers', () => {
       isUserQuestionRequest({
         toolName: 'Tool input request',
         input: { questions: [{ question: 'Q1' }] },
+      })
+    ).toBe(true);
+  });
+
+  it('detects ExitPlanMode by stable input type', () => {
+    expect(hasExitPlanModeInput({ type: 'ExitPlanMode' })).toBe(true);
+    expect(hasExitPlanModeInput({ type: 'Review Proposed Plan' })).toBe(false);
+    expect(
+      isExitPlanModeRequest({
+        toolName: 'Review Proposed Plan',
+        input: { type: 'ExitPlanMode' },
       })
     ).toBe(true);
   });
