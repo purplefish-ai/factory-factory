@@ -3,12 +3,16 @@ import { deriveCiStatusFromCheckRollup } from './ci-status';
 import { CIStatus } from './enums';
 
 describe('deriveCiStatusFromCheckRollup', () => {
-  it('does not return SUCCESS when all checks are CANCELLED', () => {
+  it('returns SUCCESS when there are no checks', () => {
+    expect(deriveCiStatusFromCheckRollup([])).toBe(CIStatus.SUCCESS);
+  });
+
+  it('treats CANCELLED checks as failures', () => {
     const result = deriveCiStatusFromCheckRollup([
       { status: 'COMPLETED', conclusion: 'CANCELLED' },
     ]);
 
-    expect(result).toBe(CIStatus.UNKNOWN);
+    expect(result).toBe(CIStatus.FAILURE);
   });
 
   it('is case-insensitive for completed conclusions', () => {
@@ -32,14 +36,19 @@ describe('deriveCiStatusFromCheckRollup', () => {
     expect(result).toBe(CIStatus.SUCCESS);
   });
 
-  it('treats NEUTRAL and CANCELLED as non-blocking when a passing check exists', () => {
-    const result = deriveCiStatusFromCheckRollup([
-      { status: 'completed', conclusion: 'cancelled' },
-      { status: 'completed', conclusion: 'neutral' },
-      { status: 'completed', conclusion: 'success' },
-    ]);
+  it('treats NEUTRAL checks as successful', () => {
+    const result = deriveCiStatusFromCheckRollup([{ status: 'completed', conclusion: 'neutral' }]);
 
     expect(result).toBe(CIStatus.SUCCESS);
+  });
+
+  it('keeps pending checks non-terminal when NEUTRAL checks are present', () => {
+    const result = deriveCiStatusFromCheckRollup([
+      { status: 'completed', conclusion: 'neutral' },
+      { status: 'in_progress' },
+    ]);
+
+    expect(result).toBe(CIStatus.PENDING);
   });
 
   it('uses the latest GitHub Actions run per check identity before classifying', () => {
