@@ -438,7 +438,7 @@ describe('resource accessors integration', () => {
       });
     });
 
-    it('returns limit_reached when session cap is already met', async () => {
+    it('returns limit_reached when active session cap is already met', async () => {
       const project = await createProjectFixture();
       const workspace = await createWorkspaceFixture(project.id);
 
@@ -447,14 +447,14 @@ describe('resource accessors integration', () => {
           {
             workspaceId: workspace.id,
             workflow: 'explore',
-            status: SessionStatus.COMPLETED,
+            status: SessionStatus.RUNNING,
             model: 'sonnet',
             provider: 'CLAUDE',
           },
           {
             workspaceId: workspace.id,
             workflow: 'feature',
-            status: SessionStatus.COMPLETED,
+            status: SessionStatus.IDLE,
             model: 'opus',
             provider: 'CLAUDE',
           },
@@ -470,6 +470,40 @@ describe('resource accessors integration', () => {
       });
 
       expect(acquired).toEqual({ outcome: 'limit_reached' });
+    });
+
+    it('ignores completed and failed sessions when enforcing fixer session cap', async () => {
+      const project = await createProjectFixture();
+      const workspace = await createWorkspaceFixture(project.id);
+
+      await prisma.agentSession.createMany({
+        data: [
+          {
+            workspaceId: workspace.id,
+            workflow: 'explore',
+            status: SessionStatus.COMPLETED,
+            model: 'sonnet',
+            provider: 'CLAUDE',
+          },
+          {
+            workspaceId: workspace.id,
+            workflow: 'feature',
+            status: SessionStatus.FAILED,
+            model: 'opus',
+            provider: 'CLAUDE',
+          },
+        ],
+      });
+
+      const acquired = await agentSessionAccessor.acquireFixerSession({
+        workspaceId: workspace.id,
+        workflow: 'ci-fix',
+        sessionName: 'CI Fixer',
+        maxSessions: 2,
+        providerProjectPath: null,
+      });
+
+      expect(acquired.outcome).toBe('created');
     });
 
     it('creates fixer session and reuses recent model preference', async () => {

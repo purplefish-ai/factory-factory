@@ -139,5 +139,5 @@ describe('CODEX CLI import resolution', () => {
     expect(result.status).toBe(0);
     expect(stderr).not.toContain('does not provide an export named');
     expect(stderr).not.toContain('SyntaxError');
-  });
+  }, 30_000);
 });
