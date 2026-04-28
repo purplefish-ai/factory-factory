@@ -1,4 +1,4 @@
-import { isUserQuestionRequest } from '@/shared/pending-request-types';
+import { isExitPlanModeRequest, isUserQuestionRequest } from '@/shared/pending-request-types';
 
 export type WorkspacePendingRequestType =
   | 'plan_approval'
@@ -27,7 +27,7 @@ export function computePendingRequestType(
       continue;
     }
 
-    if (request.toolName === 'ExitPlanMode') {
+    if (isExitPlanModeRequest({ toolName: request.toolName, input: request.input })) {
       return 'plan_approval';
     }
     if (isUserQuestionRequest({ toolName: request.toolName, input: request.input })) {
