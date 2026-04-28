@@ -1,5 +1,5 @@
-import { homedir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { expandEnvVars, getDefaultBaseDir } from '@/backend/lib/env';
 
 interface ResolveDatabasePathOptions {
   databasePath?: string;
@@ -21,26 +21,6 @@ export function resolveDatabasePath({
   return resolve(configuredPath);
 }
 
-function getDefaultBaseDir(): string {
-  return join(homedir(), 'factory-factory');
-}
-
 function getBaseDir(env: Record<string, string | undefined>): string {
   return env.BASE_DIR ? expandEnvVars(env.BASE_DIR, env) : getDefaultBaseDir();
-}
-
-function expandEnvVars(value: string, env: Record<string, string | undefined>): string {
-  return value.replace(/\$\{([A-Z_][A-Z0-9_]*)\}|\$([A-Z_][A-Z0-9_]*)/gi, (match, braced, bare) => {
-    const varName = braced || bare;
-    const envValue = env[varName];
-    if (envValue !== undefined) {
-      return envValue;
-    }
-
-    if (varName.toUpperCase() === 'USER') {
-      return basename(homedir()) || 'user';
-    }
-
-    return match;
-  });
 }
