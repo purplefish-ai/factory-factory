@@ -37,6 +37,26 @@ export function hasAskUserQuestionInput(
 }
 
 /**
+ * Returns true when the tool input identifies an ACP ExitPlanMode request.
+ * ACP tool titles are display labels, so request classification should prefer
+ * the stable input type when it is present.
+ */
+export function hasExitPlanModeInput(input: Record<string, unknown> | null | undefined): boolean {
+  return input?.type === 'ExitPlanMode';
+}
+
+/**
+ * Returns true when a pending request should be treated as plan approval.
+ */
+export function isExitPlanModeRequest(
+  request: Pick<PendingInteractiveRequest, 'toolName'> & {
+    input?: Record<string, unknown>;
+  }
+): boolean {
+  return request.toolName === 'ExitPlanMode' || hasExitPlanModeInput(request.input);
+}
+
+/**
  * Returns true when a pending request should be treated as a user-question prompt.
  */
 export function isUserQuestionRequest(
