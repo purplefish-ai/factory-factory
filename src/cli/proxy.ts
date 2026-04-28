@@ -3,7 +3,6 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
@@ -26,6 +25,7 @@ import {
   toSafeRedirectPath,
   verifySessionValue,
 } from '@/shared/proxy-utils';
+import { resolveDatabasePath } from './database-path';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
 
 const execFileAsync = promisify(execFile);
@@ -201,10 +201,6 @@ class BruteForceGuard {
 
     return { ipLocked };
   }
-}
-
-function getDefaultDatabasePath(): string {
-  return process.env.DATABASE_PATH || join(homedir(), 'factory-factory', 'data.db');
 }
 
 function runMigrations(projectRoot: string, databasePath: string): void {
@@ -908,7 +904,7 @@ export async function runProxyCommand({
 
   await ensureCloudflaredInstalled();
 
-  const databasePath = getDefaultDatabasePath();
+  const databasePath = resolveDatabasePath();
   ensureDataDir(databasePath);
   try {
     runMigrations(projectRoot, databasePath);
