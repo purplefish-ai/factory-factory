@@ -76,6 +76,81 @@ describe('createSetupTerminalUpgradeHandler', () => {
     mockPtySpawn.mockReturnValue(createMockPty());
   });
 
+  it('rejects upgrades from unauthorized origins before opening a WebSocket', () => {
+    const logger = createLogger();
+    const configService = {
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: ['http://localhost:3000'] })),
+    };
+    const appContext = {
+      services: {
+        createLogger: vi.fn(() => logger),
+        configService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createSetupTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {
+      headers: { origin: 'https://evil-attacker.com' },
+    } as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/setup-terminal'),
+      wss,
+      wsAliveMap
+    );
+
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Rejected setup terminal connection from unauthorized origin',
+      { origin: 'https://evil-attacker.com' }
+    );
+  });
+
+  it('accepts upgrades from configured allowed origins', () => {
+    const logger = createLogger();
+    const configService = {
+      getShellPath: vi.fn(() => '/bin/zsh'),
+      getChildProcessEnv: vi.fn(() => ({ PATH: '/usr/bin' })),
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: ['http://localhost:3000'] })),
+    };
+    const appContext = {
+      services: {
+        createLogger: vi.fn(() => logger),
+        configService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createSetupTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {
+      headers: { origin: 'http://localhost:3000' },
+    } as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/setup-terminal'),
+      wss,
+      wsAliveMap
+    );
+
+    expect(wss.handleUpgrade).toHaveBeenCalledTimes(1);
+    expect(socket.destroy).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith('Setup terminal WebSocket connected');
+  });
+
   it('creates terminal and routes lifecycle messages', () => {
     const logger = createLogger();
     const configService = {
