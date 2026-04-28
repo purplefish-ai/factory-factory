@@ -562,6 +562,7 @@ export class AcpRuntimeManager {
   private readonly sessions = new Map<string, AcpProcessHandle>();
   private readonly pendingCreation = new Map<string, Promise<AcpProcessHandle>>();
   private readonly stoppingInProgress = new Set<string>();
+  private readonly managedStopChildren = new WeakSet<ChildProcess>();
   private readonly creationLocks = new Map<string, ReturnType<typeof pLimit>>();
   private readonly lockRefCounts = new Map<string, number>();
   private onClientCreatedCallback: AcpRuntimeCreatedCallback | null = null;
@@ -872,13 +873,7 @@ export class AcpRuntimeManager {
     handlers: AcpRuntimeEventHandlers
   ): void {
     child.on('exit', async (code) => {
-      const current = this.sessions.get(sessionId);
-      if (current?.child === child) {
-        this.sessions.delete(sessionId);
-      }
-
-      if (this.stoppingInProgress.has(sessionId)) {
-        logger.debug('Skipping exit handler - stop in progress', { sessionId, code });
+      if (this.shouldSkipChildExitHandler(sessionId, child, code)) {
         return;
       }
 
@@ -895,6 +890,37 @@ export class AcpRuntimeManager {
         }
       }
     });
+  }
+
+  private shouldSkipChildExitHandler(
+    sessionId: string,
+    child: ChildProcess,
+    code: number | null
+  ): boolean {
+    const current = this.sessions.get(sessionId);
+    const isCurrentProcess = current?.child === child;
+    const isManagedStopProcess = this.managedStopChildren.delete(child);
+
+    if (isCurrentProcess) {
+      this.sessions.delete(sessionId);
+    }
+
+    if (current && !isCurrentProcess) {
+      logger.debug('Skipping exit handler - stale ACP process exited', {
+        sessionId,
+        code,
+        pid: child.pid,
+        currentPid: current.getPid(),
+      });
+      return true;
+    }
+
+    if (isManagedStopProcess || this.stoppingInProgress.has(sessionId)) {
+      logger.debug('Skipping exit handler - managed stop process exited', { sessionId, code });
+      return true;
+    }
+
+    return false;
   }
 
   private async notifyClientCreated(
@@ -1018,6 +1044,7 @@ export class AcpRuntimeManager {
     }
 
     this.stoppingInProgress.add(sessionId);
+    this.managedStopChildren.add(handle.child);
     try {
       // Cancel prompt if in flight
       if (handle.isPromptInFlight) {
