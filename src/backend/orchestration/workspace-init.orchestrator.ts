@@ -18,6 +18,7 @@ import {
 } from '@/backend/services/session';
 import { terminalService } from '@/backend/services/terminal';
 import {
+  assertWorktreePathSafe,
   workspaceAccessor,
   workspaceStateMachine,
   worktreeLifecycleService,
@@ -31,6 +32,16 @@ import { executeStartupScriptPipeline } from './workspace-init-script-pipeline';
 
 const logger = createLogger('workspace-init-orchestrator');
 const initialAttachmentsSchema = AttachmentSchema.array();
+
+type CreatedWorktreeInfo = {
+  worktreePath: string;
+  branchName: string;
+};
+
+type UnregisteredWorktreeCleanupCandidate = {
+  project: WorkspaceWithProject['project'];
+  worktreeInfo: CreatedWorktreeInfo;
+};
 
 type CachedGitHubUsernameEntry = {
   value: string | null;
@@ -127,10 +138,17 @@ async function readFactoryConfigSafe(
 async function handleWorkspaceInitFailure(
   workspaceId: string,
   error: Error,
-  autoCreatedTerminalId?: string
+  autoCreatedTerminalId?: string,
+  unregisteredWorktreeCleanupCandidate?: UnregisteredWorktreeCleanupCandidate
 ): Promise<void> {
   logger.error('Failed to initialize workspace worktree', error, { workspaceId });
   await workspaceStateMachine.markFailed(workspaceId, error.message);
+  if (unregisteredWorktreeCleanupCandidate) {
+    await cleanupUnregisteredWorktreeAfterInitFailure(
+      workspaceId,
+      unregisteredWorktreeCleanupCandidate
+    );
+  }
   if (autoCreatedTerminalId) {
     try {
       terminalService.destroyTerminal(workspaceId, autoCreatedTerminalId);
@@ -157,6 +175,43 @@ async function handleWorkspaceInitFailure(
     logger.warn('Failed to stop Claude sessions after init failure', {
       workspaceId,
       error: stopError instanceof Error ? stopError.message : String(stopError),
+    });
+  }
+}
+
+async function cleanupUnregisteredWorktreeAfterInitFailure(
+  workspaceId: string,
+  candidate: UnregisteredWorktreeCleanupCandidate
+): Promise<void> {
+  const { project, worktreeInfo } = candidate;
+
+  try {
+    const workspace = await workspaceAccessor.findById(workspaceId);
+    if (workspace?.worktreePath === worktreeInfo.worktreePath) {
+      return;
+    }
+
+    if (workspace?.worktreePath) {
+      logger.warn('Skipping unregistered worktree cleanup because workspace has another path', {
+        workspaceId,
+        createdWorktreePath: worktreeInfo.worktreePath,
+        persistedWorktreePath: workspace.worktreePath,
+      });
+      return;
+    }
+
+    assertWorktreePathSafe(worktreeInfo.worktreePath, project.worktreeBasePath);
+    await gitOpsService.removeWorktree(worktreeInfo.worktreePath, project);
+    logger.info('Removed unregistered worktree after init failure', {
+      workspaceId,
+      worktreePath: worktreeInfo.worktreePath,
+      branchName: worktreeInfo.branchName,
+    });
+  } catch (cleanupError) {
+    logger.warn('Failed to remove unregistered worktree after init failure', {
+      workspaceId,
+      worktreePath: worktreeInfo.worktreePath,
+      error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
     });
   }
 }
@@ -968,6 +1023,19 @@ async function resolveWorkspaceWorktree(input: {
   };
 }
 
+function getCreatedWorktreeCleanupCandidate(
+  worktreeInfo: Awaited<ReturnType<typeof resolveWorkspaceWorktree>>,
+  baseBranch: string
+): CreatedWorktreeInfo | undefined {
+  if (!worktreeInfo.created) {
+    return undefined;
+  }
+  return {
+    worktreePath: worktreeInfo.worktreePath,
+    branchName: worktreeInfo.branchName ?? baseBranch,
+  };
+}
+
 async function awaitSessionAndDispatchIfSuccess(
   workspaceId: string,
   agentSessionPromise: Promise<string | null>,
@@ -1043,6 +1111,8 @@ export async function initializeWorkspaceWorktree(
 
   let project: WorkspaceWithProject['project'] | undefined;
   let worktreeCreated = false;
+  let worktreeRegistered = false;
+  let createdWorktreeInfo: CreatedWorktreeInfo | undefined;
   let agentSessionPromise: Promise<string | null> = Promise.resolve(null);
   let autoCreatedTerminalId: string | undefined;
 
@@ -1064,6 +1134,7 @@ export async function initializeWorkspaceWorktree(
       useExistingBranch,
     });
     worktreeCreated = worktreeInfo.created;
+    createdWorktreeInfo = getCreatedWorktreeCleanupCandidate(worktreeInfo, baseBranch);
 
     const factoryConfig = await readFactoryConfigSafe(worktreeInfo.worktreePath, workspaceId);
 
@@ -1089,6 +1160,7 @@ export async function initializeWorkspaceWorktree(
         });
       },
     });
+    worktreeRegistered = true;
 
     const defaultTerminal = await startDefaultTerminal(workspaceId, worktreeInfo.worktreePath);
     if (defaultTerminal?.autoCreated) {
@@ -1137,7 +1209,14 @@ export async function initializeWorkspaceWorktree(
     // Ensure any eager session start attempt has settled before cleanup so we
     // do not race stopWorkspaceSessions() with a late startSession() call.
     await agentSessionPromise;
-    await handleWorkspaceInitFailure(workspaceId, toError(error), autoCreatedTerminalId);
+    await handleWorkspaceInitFailure(
+      workspaceId,
+      toError(error),
+      autoCreatedTerminalId,
+      project && createdWorktreeInfo && !worktreeRegistered
+        ? { project, worktreeInfo: createdWorktreeInfo }
+        : undefined
+    );
   } finally {
     if (worktreeCreated) {
       await worktreeLifecycleService.clearInitMode(workspaceId);

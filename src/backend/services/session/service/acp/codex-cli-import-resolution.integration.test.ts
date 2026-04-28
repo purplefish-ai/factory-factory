@@ -79,10 +79,14 @@ function spawnCodexCliWithRetry(
   args: string[]
 ): ReturnType<typeof spawnSync> {
   let result = spawnCodexCli(workspaceRoot, args, 10_000);
-  if (result.status === null) {
+  if (didSpawnTimeout(result)) {
     result = spawnCodexCli(workspaceRoot, args, 30_000);
   }
   return result;
+}
+
+function didSpawnTimeout(result: ReturnType<typeof spawnSync>): boolean {
+  return result.status === null || result.signal !== null || result.status === 143;
 }
 
 describe('CODEX CLI import resolution', () => {
@@ -101,7 +105,7 @@ describe('CODEX CLI import resolution', () => {
     ]);
     const stderr = String(result.stderr ?? '');
 
-    if (result.status === null) {
+    if (didSpawnTimeout(result)) {
       throw new Error(
         `Unpinned-tsconfig CLI run exited without status (signal=${String(result.signal ?? 'none')}). stderr: ${stderr}`
       );
@@ -117,7 +121,7 @@ describe('CODEX CLI import resolution', () => {
 
     expect(stderr).not.toContain('does not provide an export named');
     expect(stderr).not.toContain('ERR_MODULE_NOT_FOUND');
-  });
+  }, 45_000);
 
   it('avoids the import crash when tsconfig is pinned to repo root', () => {
     const workspaceRoot = createWorkspaceWithConflictingAlias();
@@ -130,7 +134,7 @@ describe('CODEX CLI import resolution', () => {
     ]);
     const stderr = String(result.stderr ?? '');
 
-    if (result.status === null) {
+    if (didSpawnTimeout(result)) {
       throw new Error(
         `Pinned-tsconfig CLI run exited without status (signal=${String(result.signal ?? 'none')}). stderr: ${stderr}`
       );
@@ -146,5 +150,5 @@ describe('CODEX CLI import resolution', () => {
     expect(result.status).toBe(0);
     expect(stderr).not.toContain('does not provide an export named');
     expect(stderr).not.toContain('SyntaxError');
-  }, 35_000);
+  }, 45_000);
 });

@@ -7,7 +7,7 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { expandEnvVars } from '@/backend/lib/env';
+import { expandEnvVars, getDefaultBaseDir } from '@/backend/lib/env';
 import { ConfigEnvSchema } from './env-schemas';
 import { createLogger } from './logger.service';
 
@@ -243,13 +243,6 @@ function buildCorsConfig(env: ConfigEnv): CorsConfig {
   return {
     allowedOrigins: originsEnv ? originsEnv.split(',').map((o) => o.trim()) : defaultOrigins,
   };
-}
-
-/**
- * Get default base directory
- */
-function getDefaultBaseDir(): string {
-  return join(homedir(), 'factory-factory');
 }
 
 /**

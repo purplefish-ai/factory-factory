@@ -49,6 +49,7 @@ vi.mock('@/backend/services/terminal', () => ({
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
+  assertWorktreePathSafe: vi.fn(),
   workspaceStateMachine: {
     startProvisioning: vi.fn(),
     markFailed: vi.fn(),
@@ -77,6 +78,7 @@ vi.mock('@/backend/services/git-ops.service', () => ({
     ensureBaseBranchExists: vi.fn(),
     createWorktree: vi.fn(),
     createWorktreeFromExistingBranch: vi.fn(),
+    removeWorktree: vi.fn(),
   },
 }));
 
@@ -150,8 +152,9 @@ function makeWorkspaceWithProject(overrides = {}) {
     githubIssueUrl: null,
     project: {
       id: 'proj-1',
+      repoPath: '/repo',
       defaultBranch: 'main',
-      worktreeBasePath: '/base',
+      worktreeBasePath: '/worktrees',
       githubOwner: 'owner',
       githubRepo: 'repo',
       startupScriptCommand: null,
@@ -168,6 +171,7 @@ function setupHappyPath(overrides = {}) {
   vi.mocked(workspaceAccessor.findById).mockResolvedValue(workspace as never);
   vi.mocked(workspaceAccessor.update).mockResolvedValue(workspace as never);
   vi.mocked(gitOpsService.ensureBaseBranchExists).mockResolvedValue(undefined);
+  vi.mocked(gitOpsService.removeWorktree).mockResolvedValue(undefined);
   vi.mocked(gitOpsService.createWorktree).mockResolvedValue({
     worktreePath: '/worktrees/workspace-ws-1',
     branchName: 'user/test-workspace',
@@ -1134,6 +1138,9 @@ describe('initializeWorkspaceWorktree', () => {
     it('clears init mode even when error occurs after worktree creation', async () => {
       setupHappyPath();
       vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db error'));
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+        unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
+      );
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
@@ -1141,9 +1148,53 @@ describe('initializeWorkspaceWorktree', () => {
       expect(worktreeLifecycleService.clearInitMode).toHaveBeenCalledWith(WORKSPACE_ID);
     });
 
+    it('removes unregistered worktree when persistence fails after creation', async () => {
+      const workspace = setupHappyPath();
+      vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+        unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
+      );
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(gitOpsService.removeWorktree).toHaveBeenCalledWith(
+        '/worktrees/workspace-ws-1',
+        workspace.project
+      );
+    });
+
+    it('does not remove worktree when failure occurs after persistence succeeds', async () => {
+      setupHappyPath();
+      vi.mocked(workspaceStateMachine.markReady).mockRejectedValue(new Error('ready failed'));
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(gitOpsService.removeWorktree).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when unregistered worktree cleanup fails', async () => {
+      setupHappyPath();
+      vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+        unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
+      );
+      vi.mocked(gitOpsService.removeWorktree).mockRejectedValue(new Error('remove failed'));
+
+      await initializeWorkspaceWorktree(WORKSPACE_ID);
+
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        'db update error'
+      );
+      expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
+    });
+
     it('marks workspace failed when workspace update throws', async () => {
       setupHappyPath();
       vi.mocked(workspaceAccessor.update).mockRejectedValue(new Error('db update error'));
+      vi.mocked(workspaceAccessor.findById).mockResolvedValue(
+        unsafeCoerce({ id: WORKSPACE_ID, worktreePath: null })
+      );
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 

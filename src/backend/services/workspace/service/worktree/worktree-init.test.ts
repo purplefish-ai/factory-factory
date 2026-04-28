@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   ensureBaseBranchExists: vi.fn(),
   createWorktree: vi.fn(),
   createWorktreeFromExistingBranch: vi.fn(),
+  removeWorktree: vi.fn(),
   getAuthenticatedUsername: vi.fn(),
   getIssue: vi.fn(),
   readConfig: vi.fn(),
@@ -34,9 +35,11 @@ const mocks = vi.hoisted(() => ({
   markFailed: vi.fn(),
   getInitMode: vi.fn(),
   clearInitMode: vi.fn(),
+  assertWorktreePathSafe: vi.fn(),
 }));
 
 vi.mock('@/backend/services/workspace', () => ({
+  assertWorktreePathSafe: mocks.assertWorktreePathSafe,
   workspaceStateMachine: {
     startProvisioning: mocks.startProvisioning,
     markReady: mocks.markReady,
@@ -89,6 +92,7 @@ vi.mock('@/backend/services/git-ops.service', () => ({
     ensureBaseBranchExists: mocks.ensureBaseBranchExists,
     createWorktree: mocks.createWorktree,
     createWorktreeFromExistingBranch: mocks.createWorktreeFromExistingBranch,
+    removeWorktree: mocks.removeWorktree,
   },
 }));
 
@@ -150,6 +154,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
       worktreePath: '/worktrees/workspace-1',
       branchName: 'feature-1',
     });
+    mocks.removeWorktree.mockResolvedValue(undefined);
     mocks.getAuthenticatedUsername.mockResolvedValue(null);
     mocks.getIssue.mockResolvedValue(null);
     mocks.updateWorkspace.mockResolvedValue(undefined);
