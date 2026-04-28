@@ -112,6 +112,9 @@ export class SessionService {
       acpEventProcessor: this.acpEventProcessor,
       promptTurnCompletionService: this.promptTurnCompletionService,
       retryService: this.retryService,
+      onBeforeStopSession: (sessionId) => {
+        this.clearQueuedAcpPrompts(sessionId);
+      },
     });
   }
 
@@ -289,7 +292,11 @@ export class SessionService {
     const limiter = this.getAcpPromptLimiter(sessionId);
     const result = limiter(task);
     const cleanup = () => {
-      if (limiter.activeCount === 0 && limiter.pendingCount === 0) {
+      if (
+        this.acpPromptLimiters.get(sessionId) === limiter &&
+        limiter.activeCount === 0 &&
+        limiter.pendingCount === 0
+      ) {
         this.acpPromptLimiters.delete(sessionId);
       }
     };
@@ -297,12 +304,21 @@ export class SessionService {
     return result;
   }
 
+  private clearQueuedAcpPrompts(sessionId: string): void {
+    const limiter = this.acpPromptLimiters.get(sessionId);
+    if (!limiter) {
+      return;
+    }
+    limiter.clearQueue();
+    this.acpPromptLimiters.delete(sessionId);
+  }
+
   private getAcpPromptLimiter(sessionId: string): LimitFunction {
     const existing = this.acpPromptLimiters.get(sessionId);
     if (existing) {
       return existing;
     }
-    const limiter = pLimit(1);
+    const limiter = pLimit({ concurrency: 1, rejectOnClear: true });
     this.acpPromptLimiters.set(sessionId, limiter);
     return limiter;
   }

@@ -119,6 +119,20 @@ function mockCreatedAcpClient(acpHandle: AcpProcessHandle): void {
   });
 }
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return { promise, resolve: resolvePromise, reject: rejectPromise };
+}
+
 describe('SessionService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -704,6 +718,35 @@ describe('SessionService', () => {
     await sessionService.stopSession('session-1');
 
     expect(clearQueuedWorkSpy).toHaveBeenCalledWith('session-1', { emitSnapshot: true });
+  });
+
+  it('rejects queued ACP prompts during manual stop', async () => {
+    const firstPrompt = createDeferred<{ stopReason: string }>();
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.sendPrompt).mockReturnValueOnce(firstPrompt.promise as never);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    const firstSend = sessionService.sendAcpMessage('session-queued-stop', [
+      { type: 'text', text: 'first' },
+    ]);
+    await Promise.resolve();
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+
+    const secondSend = sessionService.sendAcpMessage('session-queued-stop', [
+      { type: 'text', text: 'second' },
+    ]);
+    const secondRejection = expect(secondSend).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.resolve();
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+
+    await sessionService.stopSession('session-queued-stop');
+    await secondRejection;
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+
+    firstPrompt.resolve({ stopReason: 'end_turn' });
+    await expect(firstSend).resolves.toBe('end_turn');
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
   });
 
   it('clears in-memory session state after manual stop when no clients are connected', async () => {
