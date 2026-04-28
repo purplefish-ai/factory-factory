@@ -15,7 +15,7 @@ function createCheck(
 }
 
 describe('CIChecksSection', () => {
-  it('renders skipped, cancelled, and neutral checks with neutral icon and text color', () => {
+  it('renders skipped, cancelled, and neutral checks with their derived states', () => {
     const markup = renderToStaticMarkup(
       <CIChecksSection
         checks={[
@@ -28,11 +28,16 @@ describe('CIChecksSection', () => {
 
     expect(markup).toContain('text-gray-400');
     expect(markup).toContain('text-gray-500');
+    expect(markup).toContain('text-red-500');
+    expect(markup).toContain('text-red-600');
+    expect(markup).toContain('text-green-500');
+    expect(markup).toContain('text-green-600');
     expect(markup).toContain('○');
-    expect(markup).not.toContain('✓');
+    expect(markup).toContain('✗');
+    expect(markup).toContain('✓');
   });
 
-  it('does not count skipped, cancelled, and neutral checks as passed in section summary', () => {
+  it('counts cancelled as failed and neutral as passed in section summary', () => {
     const markup = renderToStaticMarkup(
       <CIChecksSection
         checks={[
@@ -44,14 +49,15 @@ describe('CIChecksSection', () => {
       />
     );
 
-    expect(markup).toContain('1 passed');
-    expect(markup).toContain('3 skipped');
-    expect(markup).not.toContain('3 passed');
+    expect(markup).toContain('2 passed');
+    expect(markup).toContain('1 failed');
+    expect(markup).toContain('1 skipped');
+    expect(markup).not.toContain('4 passed');
   });
 });
 
 describe('CIStatusBadge', () => {
-  it('does not count skipped, cancelled, or neutral checks as passed', () => {
+  it('shows failed when any check is cancelled', () => {
     const markup = renderToStaticMarkup(
       <CIStatusBadge
         checks={[
@@ -63,11 +69,11 @@ describe('CIStatusBadge', () => {
       />
     );
 
-    expect(markup).toContain('1 passed');
+    expect(markup).toContain('1 failed');
     expect(markup).not.toContain('4 passed');
   });
 
-  it('shows skipped when all checks are non-passing terminal outcomes', () => {
+  it('shows failed when all terminal checks include a cancellation', () => {
     const markup = renderToStaticMarkup(
       <CIStatusBadge
         checks={[
@@ -78,18 +84,18 @@ describe('CIStatusBadge', () => {
       />
     );
 
-    expect(markup).toContain('3 skipped');
+    expect(markup).toContain('1 failed');
     expect(markup).not.toContain('0 passed');
   });
 
-  it('prefers true success over skipped or cancelled duplicate check runs', () => {
+  it('prefers cancelled duplicate check runs over success as a failure signal', () => {
     const markup = renderToStaticMarkup(
       <CIStatusBadge
         checks={[createCheck('build', 'CANCELLED'), createCheck('build', 'SUCCESS')]}
       />
     );
 
-    expect(markup).toContain('1 passed');
+    expect(markup).toContain('1 failed');
     expect(markup).not.toContain('1 skipped');
   });
 });

@@ -170,13 +170,16 @@ export function reduceCheckRollupToLatestRunAttempts<T extends CheckLike>(
 export function deriveCiStatusFromCheckRollup(
   checks: CheckLike[] | null | undefined
 ): CIStatusValue {
-  if (!checks || checks.length === 0) {
+  if (!checks) {
     return CIStatus.UNKNOWN;
   }
 
   const checksForClassification = reduceCheckRollupToLatestRunAttempts(checks);
-  if (!checksForClassification || checksForClassification.length === 0) {
+  if (!checksForClassification) {
     return CIStatus.UNKNOWN;
+  }
+  if (checksForClassification.length === 0) {
+    return CIStatus.SUCCESS;
   }
 
   const hasFailure = checksForClassification.some((check) => {
@@ -185,7 +188,9 @@ export function deriveCiStatusFromCheckRollup(
       state === 'FAILURE' ||
       state === 'ERROR' ||
       state === 'ACTION_REQUIRED' ||
-      state === 'TIMED_OUT'
+      state === 'TIMED_OUT' ||
+      state === 'CANCELLED' ||
+      state === 'STARTUP_FAILURE'
     );
   });
   if (hasFailure) {
@@ -204,16 +209,10 @@ export function deriveCiStatusFromCheckRollup(
 
   const allTerminalNonFail = checksForClassification.every((check) => {
     const state = getEffectiveState(check);
-    return (
-      state === 'SUCCESS' || state === 'SKIPPED' || state === 'NEUTRAL' || state === 'CANCELLED'
-    );
-  });
-  const hasPassingSignal = checksForClassification.some((check) => {
-    const state = getEffectiveState(check);
-    return state === 'SUCCESS' || state === 'SKIPPED';
+    return state === 'SUCCESS' || state === 'SKIPPED' || state === 'NEUTRAL';
   });
 
-  if (allTerminalNonFail && hasPassingSignal) {
+  if (allTerminalNonFail) {
     return CIStatus.SUCCESS;
   }
 

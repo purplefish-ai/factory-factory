@@ -18,17 +18,12 @@ function getSingleCheckCiStatus(check: GitHubStatusCheck) {
   return deriveCiStatusFromCheckRollup([check]);
 }
 
-function isNonPassingCompletedCheck(check: GitHubStatusCheck): boolean {
-  return (
-    check.status === 'COMPLETED' &&
-    (check.conclusion === 'SKIPPED' ||
-      check.conclusion === 'CANCELLED' ||
-      check.conclusion === 'NEUTRAL')
-  );
+function isSkippedCheck(check: GitHubStatusCheck): boolean {
+  return check.status === 'COMPLETED' && check.conclusion === 'SKIPPED';
 }
 
 function isPassedCheck(check: GitHubStatusCheck): boolean {
-  return check.status === 'COMPLETED' && check.conclusion === 'SUCCESS';
+  return getSingleCheckCiStatus(check) === 'SUCCESS' && !isSkippedCheck(check);
 }
 
 interface CIStatusDotProps {
@@ -80,7 +75,7 @@ function deduplicateChecks(checks: GitHubStatusCheck[]): GitHubStatusCheck[] {
     if (isPassedCheck(check)) {
       return 3;
     }
-    if (isNonPassingCompletedCheck(check)) {
+    if (isSkippedCheck(check)) {
       return 2;
     }
     return 1;
@@ -114,7 +109,7 @@ export function CIStatusBadge({ checks }: CIStatusBadgeProps) {
   const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
   const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
   const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
-  const skipped = uniqueChecks.filter((c) => isNonPassingCompletedCheck(c)).length;
+  const skipped = uniqueChecks.filter((c) => isSkippedCheck(c)).length;
 
   if (failed > 0) {
     return (
@@ -192,7 +187,7 @@ function CICheckItem({ check }: CICheckItemProps) {
   const ciStatus = getSingleCheckCiStatus(check);
 
   const getStatusIcon = () => {
-    if (isNonPassingCompletedCheck(check)) {
+    if (isSkippedCheck(check)) {
       return <span className="text-gray-400">○</span>;
     }
     if (ciStatus === 'SUCCESS') {
@@ -205,7 +200,7 @@ function CICheckItem({ check }: CICheckItemProps) {
   };
 
   const getStatusColor = () => {
-    if (isNonPassingCompletedCheck(check)) {
+    if (isSkippedCheck(check)) {
       return 'text-gray-500';
     }
     if (ciStatus === 'SUCCESS') {
@@ -258,7 +253,7 @@ export function CIChecksSection({ checks, defaultExpanded = true }: CIChecksSect
   const passed = uniqueChecks.filter((c) => isPassedCheck(c)).length;
   const failed = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'FAILURE').length;
   const pending = uniqueChecks.filter((c) => getSingleCheckCiStatus(c) === 'PENDING').length;
-  const skipped = uniqueChecks.filter((c) => isNonPassingCompletedCheck(c)).length;
+  const skipped = uniqueChecks.filter((c) => isSkippedCheck(c)).length;
 
   return (
     <div className="border-b">

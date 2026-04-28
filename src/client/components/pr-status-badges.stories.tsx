@@ -253,6 +253,18 @@ export const ChecksSectionMixed: StoryObj<typeof CIChecksSection> = {
         status: 'COMPLETED',
         conclusion: 'SKIPPED',
       },
+      {
+        __typename: 'CheckRun',
+        name: 'Security scan',
+        status: 'COMPLETED',
+        conclusion: 'CANCELLED',
+      },
+      {
+        __typename: 'CheckRun',
+        name: 'CodeQL',
+        status: 'COMPLETED',
+        conclusion: 'NEUTRAL',
+      },
     ];
     return (
       <div className="w-[400px] border rounded">
