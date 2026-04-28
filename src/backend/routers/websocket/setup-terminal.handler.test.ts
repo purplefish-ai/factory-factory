@@ -107,6 +107,8 @@ describe('createSetupTerminalUpgradeHandler', () => {
     );
 
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
     expect(socket.destroy).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
       'Rejected setup terminal connection from unauthorized origin',
