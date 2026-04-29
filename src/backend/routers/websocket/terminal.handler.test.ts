@@ -322,6 +322,67 @@ describe('createTerminalUpgradeHandler', () => {
     expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
   });
 
+  it('echoes create requestIds when terminal creation completes out of order', async () => {
+    const workspaceId = 'workspace-1';
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      id: workspaceId,
+      worktreePath: '/tmp/worktree',
+    } as never);
+
+    const { terminalService } = createTerminalService();
+    const createResolvers: Array<(value: { terminalId: string; pid: number }) => void> = [];
+    terminalService.createTerminal.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          createResolvers.push(resolve);
+        })
+    );
+
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+
+    const handler = createTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {} as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL(`http://localhost/terminal?workspaceId=${workspaceId}`),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    ws.emit('message', JSON.stringify({ type: 'create', requestId: 'req-a' }));
+    ws.emit('message', JSON.stringify({ type: 'create', requestId: 'req-b' }));
+
+    await vi.waitFor(() => {
+      expect(createResolvers).toHaveLength(2);
+    });
+
+    createResolvers[1]?.({ terminalId: 'terminal-b', pid: 2222 });
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'created', terminalId: 'terminal-b', requestId: 'req-b' })
+      );
+    });
+
+    createResolvers[0]?.({ terminalId: 'terminal-a', pid: 1111 });
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'created', terminalId: 'terminal-a', requestId: 'req-a' })
+      );
+    });
+  });
+
   it('sends structured errors for invalid or failed terminal operations', async () => {
     const workspaceId = 'workspace-1';
     vi.mocked(workspaceDataService.findById).mockResolvedValue(null as never);

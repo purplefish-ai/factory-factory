@@ -55,6 +55,24 @@ export interface TerminalPanelRef {
   createNewTerminal: () => void;
 }
 
+function removePendingRequestForTab(pendingTabIds: Map<string, string>, tabId: string): void {
+  for (const [requestId, pendingTabId] of pendingTabIds) {
+    if (pendingTabId === tabId) {
+      pendingTabIds.delete(requestId);
+      return;
+    }
+  }
+}
+
+function getActiveTabAfterClose(
+  previousTabs: TerminalTab[],
+  remainingTabs: TerminalTab[],
+  closedTabId: string
+): TerminalTab | undefined {
+  const closedIndex = previousTabs.findIndex((tab) => tab.id === closedTabId);
+  return remainingTabs[closedIndex - 1] ?? remainingTabs[0];
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -64,8 +82,10 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     const [tabs, setTabs] = useState<TerminalTab[]>([]);
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
-    // Track pending tab that's waiting for a terminalId from the server
-    const pendingTabIdRef = useRef<string | null>(null);
+    // Track pending tabs waiting for terminalIds from the server.
+    const pendingTabIdsRef = useRef<Map<string, string>>(new Map());
+    const terminalTabIdsRef = useRef<Map<string, string>>(new Map());
+    const createRequestCounterRef = useRef(0);
 
     // Buffer output for terminals that haven't been associated with a tab yet
     // This handles the race condition where output arrives before the 'created' message
@@ -73,49 +93,72 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
     // Ref to hold setActive function to break circular dependency with callbacks
     const setActiveRef = useRef<(terminalId: string) => void>(() => undefined);
+    const destroyRef = useRef<(terminalId: string) => void>(() => undefined);
 
     // Handle terminal output - route to correct tab by terminalId
     const handleOutput = useCallback((terminalId: string, data: string) => {
-      setTabs((prev) => {
-        const tab = prev.find((t) => t.terminalId === terminalId);
-        if (tab) {
-          // Terminal is associated with a tab - append output
-          return prev.map((t) =>
-            t.terminalId === terminalId ? { ...t, output: t.output + data } : t
-          );
-        }
+      const tabId = terminalTabIdsRef.current.get(terminalId);
+      if (!tabId) {
         // Terminal not yet associated - buffer the output
         const existingBuffer = outputBufferRef.current.get(terminalId) ?? '';
         outputBufferRef.current.set(terminalId, existingBuffer + data);
-        return prev;
-      });
+        return;
+      }
+
+      setTabs((prev) =>
+        prev.map((tab) => (tab.id === tabId ? { ...tab, output: tab.output + data } : tab))
+      );
     }, []);
 
-    // Handle terminal created - associate server terminalId with pending tab
-    const handleCreated = useCallback((terminalId: string) => {
-      const pendingTabId = pendingTabIdRef.current;
-      if (pendingTabId) {
+    // Handle terminal created - associate server terminalId with its requested tab
+    const handleCreated = useCallback(
+      (terminalId: string, requestId?: string) => {
+        let pendingTabId: string | undefined;
+        if (requestId) {
+          pendingTabId = pendingTabIdsRef.current.get(requestId);
+          pendingTabIdsRef.current.delete(requestId);
+        } else if (pendingTabIdsRef.current.size === 1) {
+          const fallbackEntry = pendingTabIdsRef.current.entries().next().value;
+          if (fallbackEntry) {
+            const [fallbackRequestId, fallbackTabId] = fallbackEntry;
+            pendingTabId = fallbackTabId;
+            pendingTabIdsRef.current.delete(fallbackRequestId);
+          }
+        }
+
+        if (!pendingTabId) {
+          outputBufferRef.current.delete(terminalId);
+          destroyRef.current(terminalId);
+          return;
+        }
+
         // Get any buffered output for this terminal
         const bufferedOutput = outputBufferRef.current.get(terminalId) ?? '';
         outputBufferRef.current.delete(terminalId);
+        terminalTabIdsRef.current.set(terminalId, pendingTabId);
 
         setTabs((prev) =>
           prev.map((tab) =>
             tab.id === pendingTabId ? { ...tab, terminalId, output: bufferedOutput } : tab
           )
         );
-        pendingTabIdRef.current = null;
 
-        // Notify backend that this terminal is now active
-        setActiveRef.current(terminalId);
-      }
-    }, []);
+        if (pendingTabId === activeTabId) {
+          setActiveRef.current(terminalId);
+        }
+      },
+      [activeTabId]
+    );
 
     // Handle terminal exit
     const handleExit = useCallback((terminalId: string, exitCode: number) => {
+      const tabId = terminalTabIdsRef.current.get(terminalId);
+      if (!tabId) {
+        return;
+      }
       setTabs((prev) =>
         prev.map((tab) =>
-          tab.terminalId === terminalId
+          tab.id === tabId
             ? { ...tab, output: `${tab.output}\r\n[Process exited with code ${exitCode}]\r\n` }
             : tab
         )
@@ -123,13 +166,21 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     }, []);
 
     // Handle terminal error
-    const handleError = useCallback((message: string) => {
-      // Show error in pending tab if there is one
-      const pendingTabId = pendingTabIdRef.current;
-      if (pendingTabId) {
-        // Clear the pending tab ref since creation failed
-        pendingTabIdRef.current = null;
+    const handleError = useCallback((message: string, requestId?: string) => {
+      let pendingTabId: string | undefined;
+      if (requestId) {
+        pendingTabId = pendingTabIdsRef.current.get(requestId);
+        pendingTabIdsRef.current.delete(requestId);
+      } else if (pendingTabIdsRef.current.size === 1) {
+        const fallbackEntry = pendingTabIdsRef.current.entries().next().value;
+        if (fallbackEntry) {
+          const [fallbackRequestId, fallbackTabId] = fallbackEntry;
+          pendingTabId = fallbackTabId;
+          pendingTabIdsRef.current.delete(fallbackRequestId);
+        }
+      }
 
+      if (pendingTabId) {
         setTabs((prev) =>
           prev.map((tab) =>
             tab.id === pendingTabId
@@ -139,9 +190,9 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
         );
       }
 
-      // Clear any orphaned buffer entries that won't be claimed
-      // This prevents memory leaks when terminal creation fails
-      outputBufferRef.current.clear();
+      if (!requestId) {
+        outputBufferRef.current.clear();
+      }
     }, []);
 
     // Handle terminal list restoration (after page refresh)
@@ -160,6 +211,12 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
             terminalId: terminal.id,
             output: terminal.outputBuffer ?? '',
           }));
+
+          for (const tab of restoredTabs) {
+            if (tab.terminalId) {
+              terminalTabIdsRef.current.set(tab.terminalId, tab.id);
+            }
+          }
 
           // Set the first tab as active
           if (restoredTabs.length > 0 && restoredTabs[0]?.terminalId) {
@@ -189,24 +246,28 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
     // Update ref so callbacks can access setActive
     setActiveRef.current = setActive;
+    destroyRef.current = destroy;
 
     // Create new terminal tab - extracted so it can be exposed via ref
     const handleNewTab = useCallback(() => {
-      const id = `tab-${Date.now()}`;
-      const newTab: TerminalTab = {
-        id,
-        label: `Terminal ${tabs.length + 1}`,
-        terminalId: null,
-        output: '',
-      };
+      createRequestCounterRef.current += 1;
+      const requestId = `terminal-create-${Date.now()}-${createRequestCounterRef.current}`;
+      const id = `tab-${requestId}`;
 
-      // Track this as the pending tab waiting for a terminalId
-      pendingTabIdRef.current = id;
+      pendingTabIdsRef.current.set(requestId, id);
 
-      setTabs((prev) => [...prev, newTab]);
+      setTabs((prev) => [
+        ...prev,
+        {
+          id,
+          label: `Terminal ${prev.length + 1}`,
+          terminalId: null,
+          output: '',
+        },
+      ]);
       setActiveTabId(id);
-      create();
-    }, [tabs.length, create]);
+      create(80, 24, requestId);
+    }, [create]);
 
     // Expose createNewTerminal to parent via ref
     useImperativeHandle(
@@ -221,36 +282,27 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     const handleCloseTab = useCallback(
       (id: string) => {
         setTabs((prev) => {
-          // Find the tab to get its terminalId before removing it
           const tab = prev.find((t) => t.id === id);
           if (tab?.terminalId) {
-            // Destroy the server-side terminal process
             destroy(tab.terminalId);
-            // Clean up any buffered output for this terminal
             outputBufferRef.current.delete(tab.terminalId);
+            terminalTabIdsRef.current.delete(tab.terminalId);
+          } else {
+            removePendingRequestForTab(pendingTabIdsRef.current, id);
           }
 
           const filtered = prev.filter((t) => t.id !== id);
-
-          // Update active tab if we're closing the current one
-          // Use setTimeout to avoid state update during render
-          if (activeTabId === id && filtered.length > 0) {
-            const closedIndex = prev.findIndex((t) => t.id === id);
-            // Prefer the tab before the closed one, or the first remaining tab
-            const newActiveTab = filtered[closedIndex - 1] ?? filtered[0];
-            if (!newActiveTab) {
-              return filtered;
-            }
-            setTimeout(() => {
-              setActiveTabId(newActiveTab.id);
-              // Notify backend of new active terminal
-              if (newActiveTab.terminalId) {
-                setActive(newActiveTab.terminalId);
-              }
-            }, 0);
-          } else if (activeTabId === id) {
-            setTimeout(() => setActiveTabId(null), 0);
+          if (activeTabId !== id) {
+            return filtered;
           }
+
+          const newActiveTab = getActiveTabAfterClose(prev, filtered, id);
+          setTimeout(() => {
+            setActiveTabId(newActiveTab?.id ?? null);
+            if (newActiveTab?.terminalId) {
+              setActive(newActiveTab.terminalId);
+            }
+          }, 0);
 
           return filtered;
         });
