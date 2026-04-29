@@ -1,15 +1,17 @@
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AcpClientHandler, type AcpEventCallback, type AcpLogCallback } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 
+const mockLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  createLogger: () => mockLogger,
 }));
 
 function createMockPermissionRequest(
@@ -34,6 +36,10 @@ function createMockPermissionRequest(
 describe('AcpClientHandler', () => {
   const onEvent: AcpEventCallback = vi.fn();
   const onLog: AcpLogCallback = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   describe('requestPermission with autoApprovePolicy', () => {
     it('auto-approves with allow_always when autoApprovePolicy is "all"', async () => {
@@ -186,6 +192,18 @@ describe('AcpClientHandler', () => {
       expect(response.outcome).toEqual({
         outcome: 'cancelled',
       });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Permission bridge missing; cancelling ACP permission request',
+        expect.objectContaining({
+          sessionId: 'session-1',
+          toolCallId: 'tc-001',
+          requestType: 'permission',
+        })
+      );
+      expect(mockLogger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('rejecting ACP permission request'),
+        expect.anything()
+      );
     });
 
     it('does not auto-approve ExitPlanMode requests even in "all" mode', async () => {

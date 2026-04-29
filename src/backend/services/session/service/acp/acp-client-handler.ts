@@ -158,11 +158,12 @@ function resolveMissingBridgeOutcome(params: {
     request: params.request,
     sessionId: params.sessionId,
   });
+  const failClosedAction = outcome.outcome.outcome === 'cancelled' ? 'cancelling' : 'rejecting';
 
   logger.warn(
     params.bypassesAutoApprove
-      ? 'Permission bridge missing; rejecting interactive ACP permission request'
-      : 'Permission bridge missing; rejecting ACP permission request',
+      ? `Permission bridge missing; ${failClosedAction} interactive ACP permission request`
+      : `Permission bridge missing; ${failClosedAction} ACP permission request`,
     {
       sessionId: params.sessionId,
       toolCallId: params.request.toolCall.toolCallId,
