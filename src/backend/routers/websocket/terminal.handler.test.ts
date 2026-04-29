@@ -322,6 +322,73 @@ describe('createTerminalUpgradeHandler', () => {
     expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
   });
 
+  it('destroys a newly created terminal when session persistence fails', async () => {
+    const workspaceId = 'workspace-1';
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      id: workspaceId,
+      worktreePath: '/tmp/worktree',
+    } as never);
+    vi.mocked(sessionDataService.createTerminalSession).mockRejectedValueOnce(
+      new Error('database locked')
+    );
+
+    const terminalInstances = new Map<string, { id: string; pid: number }>();
+    const { terminalService } = createTerminalService();
+    terminalService.createTerminal.mockImplementationOnce(() => {
+      const terminalId = 'terminal-1';
+      terminalInstances.set(terminalId, { id: terminalId, pid: 4321 });
+      return Promise.resolve({ terminalId, pid: 4321 });
+    });
+    terminalService.destroyTerminal.mockImplementationOnce((_wsId, terminalId) => {
+      terminalInstances.delete(terminalId);
+      return true;
+    });
+
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+
+    const handler = createTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {} as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL(`http://localhost/terminal?workspaceId=${workspaceId}`),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    ws.emit('message', JSON.stringify({ type: 'create', cols: 80, rows: 24 }));
+
+    await vi.waitFor(() => {
+      expect(sessionDataService.createTerminalSession).toHaveBeenCalledWith({
+        workspaceId,
+        name: 'terminal-1',
+        pid: 4321,
+      });
+      expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
+    });
+
+    expect(terminalInstances.size).toBe(0);
+    expect(terminalService.onOutput).not.toHaveBeenCalled();
+    expect(terminalService.onExit).not.toHaveBeenCalled();
+    expect(ws.send).not.toHaveBeenCalledWith(
+      JSON.stringify({ type: 'created', terminalId: 'terminal-1' })
+    );
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({ type: 'error', message: 'Operation failed: database locked' })
+    );
+  });
+
   it('sends structured errors for invalid or failed terminal operations', async () => {
     const workspaceId = 'workspace-1';
     vi.mocked(workspaceDataService.findById).mockResolvedValue(null as never);
