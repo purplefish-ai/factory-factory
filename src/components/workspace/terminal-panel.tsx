@@ -66,7 +66,12 @@ export interface TerminalPanelRef {
 export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
   function TerminalPanel({ workspaceId, className, hideHeader = false, onStateChange }, ref) {
     const [tabs, setTabs] = useState<TerminalTab[]>([]);
-    const [activeTabId, setActiveTabId] = useState<string | null>(null);
+    const [activeTabId, setActiveTabIdState] = useState<string | null>(null);
+    const activeTabIdRef = useRef<string | null>(null);
+    const setActiveTabId = useCallback((tabId: string | null) => {
+      activeTabIdRef.current = tabId;
+      setActiveTabIdState(tabId);
+    }, []);
 
     // Track pending tabs by create request so out-of-order responses attach correctly.
     const pendingTabIdsByRequestRef = useRef<Map<string, string>>(new Map());
@@ -110,8 +115,10 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           )
         );
 
-        // Notify backend that this terminal is now active
-        setActiveRef.current(terminalId);
+        if (activeTabIdRef.current === pendingTabId) {
+          // Notify backend only when this response belongs to the selected tab.
+          setActiveRef.current(terminalId);
+        }
       } else {
         // The pending tab was closed before creation completed; avoid an orphaned PTY.
         outputBufferRef.current.delete(terminalId);
@@ -182,7 +189,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           return restoredTabs;
         });
       },
-      []
+      [setActiveTabId]
     );
 
     const { connected, create, sendInput, resize, destroy, setActive } = useTerminalWebSocket({
@@ -215,7 +222,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
       ]);
       setActiveTabId(id);
       create(requestId);
-    }, [create]);
+    }, [create, setActiveTabId]);
 
     // Expose createNewTerminal to parent via ref
     useImperativeHandle(
@@ -265,7 +272,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           return filtered;
         });
       },
-      [activeTabId, destroy, setActive]
+      [activeTabId, destroy, setActive, setActiveTabId]
     );
 
     // Handle terminal input - send to the active tab's terminal
@@ -299,7 +306,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
           setActive(tab.terminalId);
         }
       },
-      [tabs, setActive]
+      [tabs, setActive, setActiveTabId]
     );
 
     // Notify parent of state changes for inline tab rendering
