@@ -1625,7 +1625,7 @@ describe('AcpClientHandler', () => {
     });
   });
 
-  it('requestPermission auto-approves with allow_always option', async () => {
+  it('requestPermission fails closed by default when no bridge exists', async () => {
     const onEvent = vi.fn();
 
     const handler = new AcpClientHandler('test-session', onEvent);
@@ -1643,12 +1643,12 @@ describe('AcpClientHandler', () => {
     expect(result).toEqual({
       outcome: {
         outcome: 'selected',
-        optionId: 'allow-1',
+        optionId: 'reject-1',
       },
     });
   });
 
-  it('requestPermission falls back to first option when no allow option exists', async () => {
+  it('requestPermission selects a reject option when no bridge exists', async () => {
     const onEvent = vi.fn();
 
     const handler = new AcpClientHandler('test-session', onEvent);

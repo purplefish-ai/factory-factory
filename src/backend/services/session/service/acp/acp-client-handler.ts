@@ -48,15 +48,11 @@ function isUserInputPermissionRequest(params: RequestPermissionRequest): boolean
   return Array.isArray(questions);
 }
 
-function resolveFailClosedOptionId(params: RequestPermissionRequest): string {
+function resolveRejectOptionId(params: RequestPermissionRequest): string | null {
   const rejectOption = params.options.find(
     (option) => option.kind === 'reject_once' || option.kind === 'reject_always'
   );
-  if (rejectOption) {
-    return rejectOption.optionId;
-  }
-
-  return params.options[0]?.optionId ?? 'unknown';
+  return rejectOption?.optionId ?? null;
 }
 
 function resolveAllowOptionId(params: RequestPermissionRequest): string | null {
@@ -73,6 +69,32 @@ function resolveInteractiveRequestTypeLabel(
     return 'ExitPlanMode';
   }
   return 'requestUserInput';
+}
+
+function resolveFailClosedOutcome(params: {
+  request: RequestPermissionRequest;
+  sessionId: string;
+}): RequestPermissionResponse {
+  const rejectOptionId = resolveRejectOptionId(params.request);
+  if (rejectOptionId) {
+    return {
+      outcome: {
+        outcome: 'selected',
+        optionId: rejectOptionId,
+      },
+    };
+  }
+
+  logger.warn('Permission request has no reject option; cancelling to fail closed', {
+    sessionId: params.sessionId,
+    toolCallId: params.request.toolCall.toolCallId,
+    availableOptions: params.request.options.map((option) => option.kind),
+  });
+  return {
+    outcome: {
+      outcome: 'cancelled',
+    },
+  };
 }
 
 function tryAutoApprovePermission(params: {
@@ -113,14 +135,16 @@ function resolveMissingBridgeOutcome(params: {
   isPlanApproval: boolean;
   sessionId: string;
 }): RequestPermissionResponse {
-  const optionId = params.bypassesAutoApprove
-    ? resolveFailClosedOptionId(params.request)
-    : (resolveAllowOptionId(params.request) ?? resolveFailClosedOptionId(params.request));
+  const outcome = resolveFailClosedOutcome({
+    request: params.request,
+    sessionId: params.sessionId,
+  });
+  const failClosedAction = outcome.outcome.outcome === 'cancelled' ? 'cancelling' : 'rejecting';
 
   logger.warn(
     params.bypassesAutoApprove
-      ? 'Permission bridge missing; rejecting interactive ACP permission request'
-      : 'Permission bridge missing; auto-approving ACP permission request',
+      ? `Permission bridge missing; ${failClosedAction} interactive ACP permission request`
+      : `Permission bridge missing; ${failClosedAction} ACP permission request`,
     {
       sessionId: params.sessionId,
       toolCallId: params.request.toolCall.toolCallId,
@@ -130,12 +154,7 @@ function resolveMissingBridgeOutcome(params: {
     }
   );
 
-  return {
-    outcome: {
-      outcome: 'selected',
-      optionId,
-    },
-  };
+  return outcome;
 }
 
 export class AcpClientHandler implements Client {
