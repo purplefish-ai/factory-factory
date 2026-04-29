@@ -25,7 +25,7 @@ There is no timeout, heartbeat, or watchdog at the ACP prompt level.
 
 The loop state lives entirely in memory (the `this.loops` Map in `AutoIterationService`). The database field `autoIterationStatus` is set to `RUNNING`, but on server restart nothing detects or resets these stale records. The workspace appears running forever with no active loop behind it.
 
-By contrast, run-scripts have `recoverStaleStates()` called at startup (`server.ts:336`) that resets transient `STARTING`/`STOPPING` states to `IDLE`.
+By contrast, run-scripts have `recoverStaleStates()` called at startup (`server.ts:362`) that resets transient `STARTING`/`STOPPING` states to `IDLE`.
 
 ### P3: No periodic health check
 
@@ -125,8 +125,8 @@ A periodic watchdog becomes a defense-in-depth measure rather than a necessity. 
 **Low complexity, high impact.** Should be implemented first.
 
 **Files:**
-- `src/backend/services/workspace/resources/workspace.accessor.ts` — Add `resetStaleAutoIterationStatuses()` following the pattern at lines 304-321 (`resetStaleRunScriptStatuses`)
-- `src/backend/server.ts` — Call `workspaceAccessor.resetStaleAutoIterationStatuses()` directly after existing `runScriptStateMachine.recoverStaleStates()` (~line 336)
+- `src/backend/services/workspace/resources/workspace.accessor.ts` — Add `resetStaleAutoIterationStatuses()` following the pattern at lines 340-366 (`resetStaleRunScriptStatuses`)
+- `src/backend/server.ts` — Call `workspaceAccessor.resetStaleAutoIterationStatuses()` directly after existing `runScriptStateMachine.recoverStaleStates()` (~line 362)
 
 Note: Unlike run-script recovery (which goes through `runScriptStateMachine.recoverStaleStates()`), auto-iteration recovery is called directly from `server.ts` via `workspaceAccessor` to avoid a circular dependency (auto-iteration ↔ workspace). The recovery is purely a database operation with no in-memory loop manipulation needed.
 
