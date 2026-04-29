@@ -18,6 +18,7 @@ import {
   RunScriptStatus as CoreRunScriptStatus,
   SessionStatus as CoreSessionStatus,
   WorkspaceCreationSource as CoreWorkspaceCreationSource,
+  WorkspaceMode as CoreWorkspaceMode,
   WorkspaceStatus as CoreWorkspaceStatus,
 } from '@/shared/core';
 
@@ -30,6 +31,7 @@ const WorkspaceStatus = z.enum(enumValues(CoreWorkspaceStatus));
 const WorkspaceCreationSource = z.enum(enumValues(CoreWorkspaceCreationSource));
 const IssueProvider = z.enum(enumValues(CoreIssueProvider));
 const RunScriptStatus = z.enum(enumValues(CoreRunScriptStatus));
+const WorkspaceMode = z.enum(enumValues(CoreWorkspaceMode));
 const PRState = z.enum(enumValues(CorePRState));
 const CIStatus = z.enum(enumValues(CoreCIStatus));
 const KanbanColumn = z.enum(enumValues(CoreKanbanColumn));
@@ -80,6 +82,8 @@ const exportedWorkspaceSchema = z.object({
   runScriptPort: z.number().nullable(),
   runScriptStartedAt: z.string().nullable(),
   runScriptStatus: RunScriptStatus,
+  mode: WorkspaceMode.optional().default('STANDARD'),
+  autoIterationConfig: z.unknown().nullable().optional().default(null),
   prUrl: z.string().nullable(),
   githubIssueNumber: z.number().nullable(),
   githubIssueUrl: z.string().nullable(),
