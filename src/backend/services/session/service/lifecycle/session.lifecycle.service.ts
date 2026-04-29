@@ -682,10 +682,11 @@ export class SessionLifecycleService {
     }
 
     try {
+      await this.persistRatchetTranscript(sessionId, session);
       await this.repository.deleteSession(sessionId);
       logger.debug('Deleted transient ratchet session after stop', { sessionId });
     } catch (error) {
-      logger.warn('Failed deleting transient ratchet session during stop', {
+      logger.warn('Failed persisting or deleting transient ratchet session during stop', {
         sessionId,
         error: error instanceof Error ? error.message : String(error),
       });

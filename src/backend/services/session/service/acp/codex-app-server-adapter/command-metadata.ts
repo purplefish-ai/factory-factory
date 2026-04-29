@@ -46,13 +46,6 @@ function pushCommandToken(state: CommandTokenizeState): void {
   state.hasTokenContent = false;
 }
 
-function unescapeSingleQuotedChar(char: string): string {
-  if (char === "'" || char === '\\') {
-    return char;
-  }
-  return `\\${char}`;
-}
-
 function unescapeGeneralCommandChar(char: string): string {
   if (
     char === '"' ||
@@ -79,9 +72,7 @@ function consumeEscapedTokenChar(state: CommandTokenizeState, char: string): boo
   if (!state.escaped) {
     return false;
   }
-  if (state.quote === "'") {
-    state.current += unescapeSingleQuotedChar(char);
-  } else if (state.quote === '"') {
+  if (state.quote === '"') {
     state.current += unescapeDoubleQuotedChar(char);
   } else {
     state.current += unescapeGeneralCommandChar(char);
@@ -95,9 +86,7 @@ function consumeSingleQuotedTokenChar(state: CommandTokenizeState, char: string)
   if (state.quote !== "'") {
     return false;
   }
-  if (char === '\\') {
-    state.escaped = true;
-  } else if (char === "'") {
+  if (char === "'") {
     state.quote = null;
   } else {
     state.current += char;
@@ -273,25 +262,12 @@ function consumeEscapeInitiator(state: CommandChainSplitState, char: string): bo
   return true;
 }
 
-function hasOddTrailingBackslashes(value: string): boolean {
-  let count = 0;
-  for (let index = value.length - 1; index >= 0; index -= 1) {
-    if (value[index] !== '\\') {
-      break;
-    }
-    count += 1;
-  }
-  return count % 2 === 1;
-}
-
 function consumeQuotedCommandChar(state: CommandChainSplitState, char: string): boolean {
   if (!state.quote) {
     return false;
   }
-  const escapedSingleQuote =
-    state.quote === "'" && char === "'" && hasOddTrailingBackslashes(state.current);
   state.current += char;
-  if (char === state.quote && !escapedSingleQuote) {
+  if (char === state.quote) {
     state.quote = null;
   }
   return true;

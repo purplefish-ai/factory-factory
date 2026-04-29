@@ -165,6 +165,11 @@ async function importWorkspaces(
         runScriptPort: workspace.runScriptPort,
         runScriptStartedAt: parseDate(workspace.runScriptStartedAt),
         runScriptStatus: workspace.runScriptStatus,
+        mode: workspace.mode,
+        autoIterationConfig:
+          workspace.autoIterationConfig != null
+            ? (workspace.autoIterationConfig as Prisma.InputJsonValue)
+            : undefined,
         prUrl: workspace.prUrl,
         githubIssueNumber: workspace.githubIssueNumber,
         githubIssueUrl: workspace.githubIssueUrl,
@@ -390,6 +395,8 @@ class DataBackupService {
           runScriptPort: w.runScriptPort,
           runScriptStartedAt: toISOString(w.runScriptStartedAt),
           runScriptStatus: w.runScriptStatus,
+          mode: w.mode,
+          autoIterationConfig: w.autoIterationConfig,
           prUrl: w.prUrl,
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,

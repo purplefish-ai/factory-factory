@@ -8,6 +8,7 @@ import {
   WorkspaceProviderSelection,
 } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { z } from 'zod';
 import {
   CIStatus,
   KanbanColumn,
@@ -15,6 +16,7 @@ import {
   RatchetState,
   RunScriptStatus,
   WorkspaceCreationSource,
+  WorkspaceMode,
   WorkspaceStatus,
 } from '@/shared/core';
 import type { ExportData } from '@/shared/schemas/export-data.schema';
@@ -143,13 +145,22 @@ const mockWorkspace: Workspace = {
   hasHadSessions: true,
   cachedKanbanColumn: KanbanColumn.WORKING,
   stateComputedAt: new Date('2025-01-01T00:35:00.000Z'),
-  mode: 'STANDARD',
+  mode: WorkspaceMode.STANDARD,
   autoIterationStatus: null,
   autoIterationConfig: null,
   autoIterationProgress: null,
   autoIterationSessionId: null,
   createdAt: new Date('2025-01-01T00:00:00.000Z'),
   updatedAt: new Date('2025-01-01T00:35:00.000Z'),
+};
+
+const mockAutoIterationConfig = {
+  testCommand: 'pnpm test:coverage',
+  targetDescription: 'Raise covered statements above 90%',
+  maxIterations: 5,
+  testTimeoutSeconds: 600,
+  sessionRecycleInterval: 3,
+  promptTimeoutSeconds: 900,
 };
 
 const mockAgentSession: AgentSession = {
@@ -198,8 +209,10 @@ const mockUserSettings: UserSettings = {
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
 
-function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
-  return {
+function createImportData(
+  overrides?: Partial<z.input<typeof exportDataSchema>['data']>
+): ExportData {
+  return exportDataSchema.parse({
     meta: {
       exportedAt: '2025-01-01T00:00:00.000Z',
       version: '1.0.0',
@@ -321,7 +334,7 @@ function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
       },
       ...overrides,
     },
-  };
+  });
 }
 
 describe('DataBackupService', () => {
@@ -373,6 +386,56 @@ describe('DataBackupService', () => {
 
       expect(result.data.userSettings).toBeNull();
     });
+
+    it('exports and imports auto-iteration workspace configuration', async () => {
+      const autoIterationWorkspace: Workspace = {
+        ...mockWorkspace,
+        mode: WorkspaceMode.AUTO_ITERATION,
+        autoIterationConfig: mockAutoIterationConfig,
+        autoIterationStatus: 'RUNNING',
+        autoIterationProgress: { currentIteration: 2 },
+        autoIterationSessionId: 'auto-session-1',
+      };
+
+      vi.mocked(prisma.project.findMany).mockResolvedValue([mockProject]);
+      vi.mocked(prisma.workspace.findMany).mockResolvedValue([autoIterationWorkspace]);
+      vi.mocked(prisma.agentSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.terminalSession.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.userSettings.findFirst).mockResolvedValue(null);
+
+      const exported = await dataBackupService.exportData('1.0.0');
+      const exportedWorkspace = exported.data.workspaces[0];
+
+      expect(exportedWorkspace).toEqual(
+        expect.objectContaining({
+          mode: WorkspaceMode.AUTO_ITERATION,
+          autoIterationConfig: mockAutoIterationConfig,
+        })
+      );
+      expect(exportedWorkspace).not.toHaveProperty('autoIterationStatus');
+      expect(exportedWorkspace).not.toHaveProperty('autoIterationProgress');
+      expect(exportedWorkspace).not.toHaveProperty('autoIterationSessionId');
+      expect(exportDataSchema.safeParse(exported).success).toBe(true);
+
+      vi.mocked(mockTx.project.findUnique)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(mockProject);
+      vi.mocked(mockTx.project.create).mockResolvedValue(mockProject);
+      vi.mocked(mockTx.workspace.findUnique).mockResolvedValue(null);
+      vi.mocked(mockTx.workspace.create).mockResolvedValue(autoIterationWorkspace);
+
+      const result = await dataBackupService.importData(exported);
+
+      expect(result.workspaces.imported).toBe(1);
+      expect(mockTx.workspace.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          id: 'ws-1',
+          mode: WorkspaceMode.AUTO_ITERATION,
+          autoIterationConfig: mockAutoIterationConfig,
+        }),
+      });
+    });
   });
 
   describe('importData', () => {
@@ -412,6 +475,7 @@ describe('DataBackupService', () => {
         data: expect.objectContaining({
           id: 'ws-1',
           runScriptStatus: RunScriptStatus.RUNNING,
+          mode: WorkspaceMode.STANDARD,
           ratchetState: RatchetState.READY,
         }),
       });
