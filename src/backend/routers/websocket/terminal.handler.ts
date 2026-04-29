@@ -123,9 +123,9 @@ function parseTerminalMessage(
   return parseResult.data;
 }
 
-function sendSocketError(ws: WebSocket, message: string): void {
+function sendSocketError(ws: WebSocket, message: string, requestId?: string): void {
   if (ws.readyState === WS_READY_STATE.OPEN) {
-    ws.send(JSON.stringify({ type: 'error', message }));
+    ws.send(JSON.stringify({ type: 'error', message, requestId }));
   }
 }
 
@@ -138,13 +138,14 @@ async function handleCreateMessage(
 ): Promise<void> {
   logger.info('Creating terminal', {
     workspaceId,
+    requestId: message.requestId,
     cols: message.cols,
     rows: message.rows,
   });
   const workspace = await workspaceDataService.findById(workspaceId);
   if (!workspace?.worktreePath) {
     logger.warn('Workspace not found or has no worktree', { workspaceId });
-    sendSocketError(ws, 'Workspace not found or has no worktree');
+    sendSocketError(ws, 'Workspace not found or has no worktree', message.requestId);
     return;
   }
 
@@ -173,8 +174,8 @@ async function handleCreateMessage(
   const cleanupMap = terminalListenerCleanup.get(ws);
   attachTerminalListeners(ws, terminalId, terminalService, logger, cleanupMap);
 
-  logger.info('Sending created message to client', { terminalId });
-  ws.send(JSON.stringify({ type: 'created', terminalId }));
+  logger.info('Sending created message to client', { terminalId, requestId: message.requestId });
+  ws.send(JSON.stringify({ type: 'created', terminalId, requestId: message.requestId }));
 }
 
 function attachTerminalListeners(
@@ -307,11 +308,21 @@ async function handleTerminalMessage(
     workspaceId,
     type: message.type,
     terminalId: 'terminalId' in message ? message.terminalId : undefined,
+    requestId: 'requestId' in message ? message.requestId : undefined,
   });
 
   switch (message.type) {
     case 'create':
-      await handleCreateMessage(ws, workspaceId, message, terminalService, logger);
+      try {
+        await handleCreateMessage(ws, workspaceId, message, terminalService, logger);
+      } catch (error) {
+        const err = toError(error);
+        logger.error('Error handling terminal create message', err, {
+          workspaceId,
+          requestId: message.requestId,
+        });
+        sendSocketError(ws, `Operation failed: ${err.message}`, message.requestId);
+      }
       break;
     case 'input':
       handleInputMessage(workspaceId, message, terminalService, logger);

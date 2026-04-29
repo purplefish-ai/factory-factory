@@ -18,6 +18,7 @@ const TerminalMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('created'),
     terminalId: z.string().optional(),
+    requestId: z.string().optional(),
   }),
   z.object({
     type: z.literal('exit'),
@@ -27,6 +28,7 @@ const TerminalMessageSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('error'),
     message: z.string().optional(),
+    requestId: z.string().optional(),
   }),
   z.object({
     type: z.literal('terminal_list'),
@@ -43,9 +45,9 @@ type TerminalMessage = z.infer<typeof TerminalMessageSchema>;
 interface UseTerminalWebSocketOptions {
   workspaceId: string;
   onOutput?: (terminalId: string, data: string) => void;
-  onCreated?: (terminalId: string) => void;
+  onCreated?: (terminalId: string, requestId?: string) => void;
   onExit?: (terminalId: string, exitCode: number) => void;
-  onError?: (message: string) => void;
+  onError?: (message: string, requestId?: string) => void;
   onTerminalList?: (
     terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
   ) => void;
@@ -53,7 +55,7 @@ interface UseTerminalWebSocketOptions {
 
 interface UseTerminalWebSocketReturn {
   connected: boolean;
-  create: (cols?: number, rows?: number) => void;
+  create: (requestId: string, cols?: number, rows?: number) => void;
   sendInput: (terminalId: string, data: string) => void;
   resize: (terminalId: string, cols: number, rows: number) => void;
   destroy: (terminalId: string) => void;
@@ -66,9 +68,9 @@ interface UseTerminalWebSocketReturn {
 
 interface MessageHandlerCallbacks {
   onOutput?: (terminalId: string, data: string) => void;
-  onCreated?: (terminalId: string) => void;
+  onCreated?: (terminalId: string, requestId?: string) => void;
   onExit?: (terminalId: string, exitCode: number) => void;
-  onError?: (message: string) => void;
+  onError?: (message: string, requestId?: string) => void;
   onTerminalList?: (
     terminals: Array<{ id: string; createdAt: string; outputBuffer?: string }>
   ) => void;
@@ -85,7 +87,7 @@ function handleTerminalMessage(message: TerminalMessage, callbacks: MessageHandl
       break;
     case 'created':
       if (message.terminalId) {
-        onCreated?.(message.terminalId);
+        onCreated?.(message.terminalId, message.requestId);
       }
       break;
     case 'exit':
@@ -95,7 +97,7 @@ function handleTerminalMessage(message: TerminalMessage, callbacks: MessageHandl
       break;
     case 'error':
       if (message.message) {
-        onError?.(message.message);
+        onError?.(message.message, message.requestId);
       }
       break;
     case 'terminal_list':
@@ -139,8 +141,8 @@ export function useTerminalWebSocket({
   });
 
   const create = useCallback(
-    (cols = 80, rows = 24) => {
-      send({ type: 'create', cols, rows });
+    (requestId: string, cols = 80, rows = 24) => {
+      send({ type: 'create', requestId, cols, rows });
     },
     [send]
   );
