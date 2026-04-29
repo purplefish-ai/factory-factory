@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatConnectionService } from '@/backend/services/session/service/chat/chat-connection.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
+import type { ChatMessage } from '@/shared/acp-protocol';
 import { SessionStatus } from '@/shared/core';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
@@ -1071,26 +1072,87 @@ describe('SessionService', () => {
     expect(pendingToolCalls.has('session-1')).toBe(false);
   });
 
-  it('deletes ratchet session record during manual stop', async () => {
+  it('persists transcript before deleting ratchet session record during manual stop', async () => {
+    const startedAt = new Date('2026-02-25T12:00:00.000Z');
+    const transcript: ChatMessage[] = [
+      unsafeCoerce({
+        id: 'message-1',
+        source: 'assistant',
+        text: 'Fixed the failing check',
+        timestamp: '2026-02-25T12:01:00.000Z',
+        order: 0,
+      }),
+    ];
+    const transcriptSpy = vi
+      .spyOn(sessionDomainService, 'getTranscriptSnapshot')
+      .mockReturnValue(transcript);
+
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
     vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
     vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
       unsafeCoerce({
         id: 'session-1',
         workspaceId: 'workspace-1',
+        name: 'Auto-Fix',
         workflow: 'ratchet',
+        provider: 'CLAUDE',
+        model: 'sonnet',
+        createdAt: startedAt,
       })
     );
     vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
     vi.mocked(sessionRepository.deleteSession).mockResolvedValue({} as never);
 
+    try {
+      await sessionService.stopSession('session-1');
+
+      expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
+        'workspace-1',
+        'session-1'
+      );
+      expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        workspaceId: 'workspace-1',
+        worktreePath: '/tmp/work',
+        name: 'Auto-Fix',
+        workflow: 'ratchet',
+        provider: 'CLAUDE',
+        model: 'sonnet',
+        startedAt,
+        messages: transcript,
+      });
+      expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
+      expect(
+        vi.mocked(closedSessionPersistenceService.persistClosedSession).mock.invocationCallOrder[0]
+      ).toBeLessThan(vi.mocked(sessionRepository.deleteSession).mock.invocationCallOrder[0]!);
+    } finally {
+      transcriptSpy.mockRestore();
+    }
+  });
+
+  it('does not delete ratchet session during manual stop when transcript persistence fails', async () => {
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.getSessionById).mockResolvedValue(
+      unsafeCoerce({
+        id: 'session-1',
+        workspaceId: 'workspace-1',
+        name: 'Auto-Fix',
+        workflow: 'ratchet',
+        provider: 'CLAUDE',
+        model: 'sonnet',
+        createdAt: new Date('2026-02-25T12:00:00.000Z'),
+      })
+    );
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+    vi.mocked(closedSessionPersistenceService.persistClosedSession).mockRejectedValue(
+      new Error('Disk full')
+    );
+
     await sessionService.stopSession('session-1');
 
-    expect(mockClearRatchetActiveSessionIfMatching).toHaveBeenCalledWith(
-      'workspace-1',
-      'session-1'
-    );
-    expect(sessionRepository.deleteSession).toHaveBeenCalledWith('session-1');
+    expect(closedSessionPersistenceService.persistClosedSession).toHaveBeenCalledTimes(1);
+    expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 
   it('does not delete non-ratchet session during manual stop', async () => {
@@ -1130,6 +1192,7 @@ describe('SessionService', () => {
       'workspace-1',
       'session-3'
     );
+    expect(closedSessionPersistenceService.persistClosedSession).not.toHaveBeenCalled();
     expect(sessionRepository.deleteSession).not.toHaveBeenCalled();
   });
 

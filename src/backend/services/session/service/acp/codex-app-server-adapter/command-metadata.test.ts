@@ -22,9 +22,9 @@ describe('command-metadata', () => {
     });
   });
 
-  it('parses escaped single quotes and escaped spaces', () => {
+  it('parses POSIX single-quote reopening for apostrophes', () => {
     const parsed = resolveCommandDisplay({
-      command: "cat 'it\\'s file.txt'",
+      command: "cat 'it'\\''s file.txt'",
       cwd: '/tmp/workspace',
     });
 
@@ -48,9 +48,9 @@ describe('command-metadata', () => {
     });
   });
 
-  it('keeps escaped apostrophes inside chained single-quoted args', () => {
+  it('parses POSIX apostrophes inside chained single-quoted args', () => {
     const parsed = resolveCommandDisplay({
-      command: "cat 'it\\'s file.txt' && rg TODO README.md",
+      command: "cat 'it'\\''s file.txt' && rg TODO README.md",
       cwd: '/tmp/workspace',
     });
 
@@ -59,6 +59,35 @@ describe('command-metadata', () => {
       kind: 'read',
       locations: [{ path: "/tmp/workspace/it's file.txt" }, { path: '/tmp/workspace/README.md' }],
     });
+  });
+
+  it('does not hide command separators after backslashes in single quotes', () => {
+    const command = "ls 'a\\' ; rm -rf /";
+
+    const parsed = resolveCommandDisplay({
+      command,
+      cwd: '/tmp/workspace',
+    });
+    const scopeKey = buildCommandApprovalScopeKey({
+      command,
+      cwd: '/tmp/workspace',
+    });
+
+    expect(parsed.title).toContain('rm -rf /');
+    expect(parseScopeKey(scopeKey, '/tmp/workspace')).toEqual([
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace',
+        tokens: ['ls', 'a\\'],
+        separator: ';',
+      },
+      {
+        type: 'cmd',
+        cwd: '/tmp/workspace',
+        tokens: ['rm', '/'],
+        separator: null,
+      },
+    ]);
   });
 
   it('builds command approval scope keys with cwd transitions', () => {
