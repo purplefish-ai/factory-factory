@@ -62,6 +62,7 @@ export type MergeStateStatus =
   | 'BLOCKED'
   | 'CLEAN'
   | 'DIRTY'
+  | 'DRAFT'
   | 'HAS_HOOKS'
   | 'UNKNOWN'
   | 'UNSTABLE';

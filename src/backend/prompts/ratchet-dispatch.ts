@@ -77,6 +77,19 @@ class RatchetDispatchTemplateCache {
 
 const templateCache = new RatchetDispatchTemplateCache();
 
+type RatchetDispatchTemplatePlaceholder =
+  | '{{PR_URL}}'
+  | '{{PR_NUMBER}}'
+  | '{{REVIEW_COMMENTS}}'
+  | '{{MERGE_CONFLICT_STATUS}}'
+  | '{{REVIEW_REPLY_INSTRUCTION}}'
+  | '{{RE_REVIEW_COMMENT_INSTRUCTION}}'
+  | '{{REVIEW_REPLY_COMPLETION}}'
+  | '{{RE_REVIEW_COMMENT_COMPLETION}}';
+
+const RATCHET_DISPATCH_PLACEHOLDER_PATTERN =
+  /\{\{(?:PR_URL|PR_NUMBER|REVIEW_COMMENTS|MERGE_CONFLICT_STATUS|REVIEW_REPLY_INSTRUCTION|RE_REVIEW_COMMENT_INSTRUCTION|REVIEW_REPLY_COMPLETION|RE_REVIEW_COMMENT_COMPLETION)\}\}/g;
+
 export interface ReviewCommentForPrompt {
   author: string;
   body: string;
@@ -141,6 +154,16 @@ function formatReviewComments(comments: ReviewCommentForPrompt[]): string {
     .join('\n\n');
 }
 
+function renderRatchetDispatchTemplate(
+  template: string,
+  replacements: Record<RatchetDispatchTemplatePlaceholder, string>
+): string {
+  return template.replace(
+    RATCHET_DISPATCH_PLACEHOLDER_PATTERN,
+    (placeholder) => replacements[placeholder as RatchetDispatchTemplatePlaceholder]
+  );
+}
+
 export function buildRatchetDispatchPrompt(
   prUrl: string,
   prNumber: number,
@@ -152,22 +175,16 @@ export function buildRatchetDispatchPrompt(
     ? 'WARNING: This PR has merge conflicts with the base branch. Resolving these conflicts is the top priority.'
     : 'No merge conflicts detected.';
   const replyInstructions = getReplyInstructions(context?.replyToPrComments ?? true, prNumber);
-  return templateCache
-    .getTemplate()
-    .replaceAll('{{PR_URL}}', () => prUrl)
-    .replaceAll('{{PR_NUMBER}}', () => String(prNumber))
-    .replaceAll('{{REVIEW_COMMENTS}}', () => comments)
-    .replaceAll('{{MERGE_CONFLICT_STATUS}}', () => mergeConflictNotice)
-    .replaceAll('{{REVIEW_REPLY_INSTRUCTION}}', () => replyInstructions.reviewReplyInstruction)
-    .replaceAll(
-      '{{RE_REVIEW_COMMENT_INSTRUCTION}}',
-      () => replyInstructions.reReviewCommentInstruction
-    )
-    .replaceAll('{{REVIEW_REPLY_COMPLETION}}', () => replyInstructions.reviewReplyCompletion)
-    .replaceAll(
-      '{{RE_REVIEW_COMMENT_COMPLETION}}',
-      () => replyInstructions.reReviewCommentCompletion
-    );
+  return renderRatchetDispatchTemplate(templateCache.getTemplate(), {
+    '{{PR_URL}}': prUrl,
+    '{{PR_NUMBER}}': String(prNumber),
+    '{{REVIEW_COMMENTS}}': comments,
+    '{{MERGE_CONFLICT_STATUS}}': mergeConflictNotice,
+    '{{REVIEW_REPLY_INSTRUCTION}}': replyInstructions.reviewReplyInstruction,
+    '{{RE_REVIEW_COMMENT_INSTRUCTION}}': replyInstructions.reReviewCommentInstruction,
+    '{{REVIEW_REPLY_COMPLETION}}': replyInstructions.reviewReplyCompletion,
+    '{{RE_REVIEW_COMMENT_COMPLETION}}': replyInstructions.reReviewCommentCompletion,
+  });
 }
 
 export function clearRatchetDispatchPromptCache(): void {

@@ -602,6 +602,29 @@ describe('RunScriptService.stopRunScript', () => {
     expect(result).toEqual({ success: false, error: 'No run script is running' });
   });
 
+  it('returns success and transitions to IDLE when stopping STARTING with no process', async () => {
+    mockFindById.mockResolvedValue({
+      id: 'ws-1',
+      runScriptStatus: 'STARTING',
+      runScriptPid: null,
+      runScriptCommand: 'pnpm dev',
+      runScriptPostRunCommand: null,
+      runScriptCleanupCommand: null,
+      worktreePath: '/tmp/ws-1',
+      runScriptPort: null,
+    });
+    mockBeginStopping.mockResolvedValue(undefined);
+    mockCompleteStopping.mockResolvedValue(undefined);
+
+    const service = new RunScriptService();
+    const result = await service.stopRunScript('ws-1');
+
+    expect(result).toEqual({ success: true });
+    expect(mockBeginStopping).toHaveBeenCalledWith('ws-1');
+    expect(mockCompleteStopping).toHaveBeenCalledWith('ws-1');
+    expect(mockTreeKill).not.toHaveBeenCalled();
+  });
+
   it('handles beginStopping race where state moved to COMPLETED', async () => {
     mockFindById
       .mockResolvedValueOnce({

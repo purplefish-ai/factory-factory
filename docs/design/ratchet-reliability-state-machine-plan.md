@@ -342,8 +342,8 @@ Implement one global long-lived task and one per-workspace single-pass handler.
 
 Definition for this design:
 
-1. A session is **active** when `isSessionRunning(session)` is true (session process is running).
-2. A session that is `RUNNING` is considered active and blocks ratchet dispatch, regardless of whether it is working or idle.
+1. A session is **active** when `isSessionWorking(session)` is true.
+2. A live but idle session does not block ratchet dispatch; this matches the workspace UI state users see after a chat turn finishes.
 3. Ratchet must call one canonical helper for this decision (do not duplicate ad-hoc status checks in ratchet service).
 4. Add tests that pin this behavior so future session-state refactors do not accidentally change ratchet blocking behavior.
 

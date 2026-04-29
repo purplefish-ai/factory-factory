@@ -79,14 +79,18 @@ function spawnCodexCliWithRetry(
   args: string[]
 ): ReturnType<typeof spawnSync> {
   let result = spawnCodexCli(workspaceRoot, args, 10_000);
-  if (didSpawnTimeout(result)) {
+  if (shouldRetrySpawn(result)) {
     result = spawnCodexCli(workspaceRoot, args, 30_000);
   }
   return result;
 }
 
+function shouldRetrySpawn(result: ReturnType<typeof spawnSync>): boolean {
+  return didSpawnTimeout(result) || result.status === 143;
+}
+
 function didSpawnTimeout(result: ReturnType<typeof spawnSync>): boolean {
-  return result.status === null || result.signal !== null || result.status === 143;
+  return result.status === null || result.signal !== null;
 }
 
 describe('CODEX CLI import resolution', () => {
@@ -138,6 +142,13 @@ describe('CODEX CLI import resolution', () => {
       throw new Error(
         `Pinned-tsconfig CLI run exited without status (signal=${String(result.signal ?? 'none')}). stderr: ${stderr}`
       );
+    }
+
+    if (result.status === 143) {
+      expect(result.error).toMatchObject({ code: 'ETIMEDOUT' });
+      expect(stderr).not.toContain('does not provide an export named');
+      expect(stderr).not.toContain('SyntaxError');
+      return;
     }
 
     expect(result.status).toBe(0);

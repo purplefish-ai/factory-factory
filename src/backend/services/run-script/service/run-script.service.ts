@@ -10,12 +10,24 @@ import {
 } from '@/backend/services/run-script-config-persistence.service';
 import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
+import type { RunScriptStatus } from '@/shared/core';
 import { runScriptStateMachine } from './run-script-state-machine.service';
 
 const logger = createLogger('run-script-service');
 
 // Max output buffer size per run script (500KB)
 const MAX_OUTPUT_BUFFER_SIZE = 500 * 1024;
+
+function shouldRejectStopWithoutProcess(
+  status: RunScriptStatus,
+  childProcess: ChildProcess | undefined,
+  pid: number | null
+): boolean {
+  if (childProcess || pid) {
+    return false;
+  }
+  return status !== 'STARTING';
+}
 
 /**
  * Service for managing run script execution from factory-factory.json
@@ -480,8 +492,9 @@ export class RunScriptService {
         return result;
       }
 
-      // STARTING or RUNNING -- attempt STOPPING transition
-      if (!(childProcess || pid)) {
+      // STARTING or RUNNING -- attempt STOPPING transition.
+      // STARTING may not have spawned a process yet, but it is still cancellable.
+      if (shouldRejectStopWithoutProcess(status, childProcess, pid)) {
         return { success: false, error: 'No run script is running' };
       }
 

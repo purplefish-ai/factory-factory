@@ -194,6 +194,47 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
+  it('listWithKanbanState returns only workspaces matching the requested live kanbanColumn', async () => {
+    mockFindByProjectIdWithSessions.mockResolvedValue([
+      {
+        id: 'w1',
+        status: WorkspaceStatus.READY,
+        prUrl: null,
+        prState: PRState.NONE,
+        prCiStatus: CIStatus.UNKNOWN,
+        ratchetState: RatchetState.IDLE,
+        hasHadSessions: true,
+        cachedKanbanColumn: 'WAITING',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    ]);
+
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: ['s-1'],
+      isSessionWorking: true,
+      isWorking: true,
+      flowState: {
+        hasActivePr: false,
+        isWorking: true,
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'NONE',
+      },
+    });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+
+    const result = await workspaceQueryService.listWithKanbanState({
+      projectId: 'proj-1',
+      kanbanColumn: 'WAITING',
+    });
+
+    expect(result).toHaveLength(0);
+    expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
+      kanbanColumn: 'WAITING',
+      excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+  });
+
   it('getProjectSummaryState computes git stats and caches review count', async () => {
     mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
     mockFindByProjectIdWithSessions.mockResolvedValue([
