@@ -115,6 +115,9 @@ export class SessionService {
       onBeforeStopSession: (sessionId) => {
         this.clearQueuedAcpPrompts(sessionId);
       },
+      onSessionExit: (sessionId) => {
+        this.clearQueuedAcpPrompts(sessionId);
+      },
     });
   }
 
