@@ -103,24 +103,7 @@ The ACP protocol's `NewSessionRequest` type does not include permission-specific
 
 ### Root Cause 4: No auto-approve path in the permission bridge
 
-**Location:** `src/backend/domains/session/acp/acp-client-handler.ts:52-86`
-
-```typescript
-requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
-  if (!this.permissionBridge) {
-    // Auto-approve only when bridge is missing (non-interactive contexts)
-    const allowOption = params.options.find(
-      (o) => o.kind === 'allow_always' || o.kind === 'allow_once'
-    );
-    return Promise.resolve({
-      outcome: { outcome: 'selected', optionId: allowOption?.optionId ?? ... },
-    });
-  }
-
-  // Always suspends and waits for user response — no YOLO bypass
-  return this.permissionBridge.waitForUserResponse(requestId, params);
-}
-```
+**Location:** `src/backend/domains/session/acp/acp-client-handler.ts`
 
 When a `permissionBridge` is present (i.e., all interactive sessions), every `requestPermission` call suspends and waits for user input. There is no check against the configured permission preset to auto-approve.
 
@@ -282,7 +265,7 @@ export class AcpClientHandler implements Client {
     }
 
     if (!this.permissionBridge) {
-      // Existing fallback for non-interactive contexts
+      // Fail closed when bridge is missing
       // ...
     }
 
