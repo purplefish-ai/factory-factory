@@ -4,6 +4,9 @@ import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import type { WorkspaceWithProject } from './types';
 
 vi.mock('@/backend/services/workspace', () => ({
+  workspaceAccessor: {
+    findStaleArchivingWithProject: vi.fn(),
+  },
   workspaceStateMachine: {
     isValidTransition: vi.fn(),
     startArchiving: vi.fn(),
@@ -25,9 +28,16 @@ vi.mock('@/backend/services/logger.service', () => ({
   }),
 }));
 
-import { workspaceStateMachine, worktreeLifecycleService } from '@/backend/services/workspace';
+import {
+  workspaceAccessor,
+  workspaceStateMachine,
+  worktreeLifecycleService,
+} from '@/backend/services/workspace';
 import type { ArchiveWorkspaceDependencies } from './workspace-archive.orchestrator';
-import { archiveWorkspace as archiveWorkspaceWithServices } from './workspace-archive.orchestrator';
+import {
+  archiveWorkspace as archiveWorkspaceWithServices,
+  recoverStaleArchivingWorkspaces,
+} from './workspace-archive.orchestrator';
 
 function makeWorkspace(overrides: Partial<WorkspaceWithProject> = {}): WorkspaceWithProject {
   return unsafeCoerce<WorkspaceWithProject>({
@@ -86,6 +96,7 @@ describe('archiveWorkspace', () => {
     vi.mocked(workspaceStateMachine.transition).mockResolvedValue(
       unsafeCoerce({ id: 'ws-1', status: 'READY' })
     );
+    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([]);
     vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
     vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
     vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
@@ -456,6 +467,94 @@ describe('archiveWorkspace', () => {
         'markArchived',
         'addIssueComment',
       ]);
+    });
+  });
+});
+
+describe('recoverStaleArchivingWorkspaces', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([]);
+    vi.mocked(workspaceStateMachine.markArchived).mockResolvedValue(
+      unsafeCoerce({ id: 'ws-1', status: 'ARCHIVED' })
+    );
+    vi.mocked(workspaceStateMachine.transition).mockResolvedValue(
+      unsafeCoerce({ id: 'ws-1', status: 'FAILED' })
+    );
+    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockResolvedValue(undefined);
+    vi.mocked(services.sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
+    vi.mocked(services.runScriptService.stopRunScript).mockResolvedValue(
+      unsafeCoerce({ success: true } as const)
+    );
+    vi.mocked(services.runScriptService.evictWorkspaceBuffers).mockReturnValue(undefined);
+    vi.mocked(services.terminalService.destroyWorkspaceTerminals).mockReturnValue(undefined);
+  });
+
+  it('returns empty result when no stale archiving workspaces exist', async () => {
+    const result = await recoverStaleArchivingWorkspaces(services);
+
+    expect(result).toEqual({ archived: [], failed: [] });
+    expect(workspaceAccessor.findStaleArchivingWithProject).toHaveBeenCalledOnce();
+    expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
+  });
+
+  it('resumes stale ARCHIVING workspaces without starting archiving again', async () => {
+    const workspace = makeWorkspace({ status: 'ARCHIVING' as never });
+    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([workspace]);
+
+    const result = await recoverStaleArchivingWorkspaces(services);
+
+    expect(result).toEqual({ archived: ['ws-1'], failed: [] });
+    expect(workspaceStateMachine.startArchivingWithSourceStatus).not.toHaveBeenCalled();
+    expect(services.sessionService.stopWorkspaceSessions).toHaveBeenCalledWith('ws-1');
+    expect(services.runScriptService.stopRunScript).toHaveBeenCalledWith('ws-1');
+    expect(services.terminalService.destroyWorkspaceTerminals).toHaveBeenCalledWith('ws-1');
+    expect(worktreeLifecycleService.cleanupWorkspaceWorktree).toHaveBeenCalledWith(workspace, {
+      commitUncommitted: true,
+    });
+    expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
+    expect(services.runScriptService.evictWorkspaceBuffers).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('marks a stale ARCHIVING workspace as FAILED when recovery cannot complete', async () => {
+    const workspace = makeWorkspace({ status: 'ARCHIVING' as never });
+    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([workspace]);
+    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
+      new Error('worktree cleanup failed')
+    );
+
+    const result = await recoverStaleArchivingWorkspaces(services);
+
+    expect(result).toEqual({
+      archived: [],
+      failed: [{ id: 'ws-1', error: 'worktree cleanup failed' }],
+    });
+    expect(workspaceStateMachine.markArchived).not.toHaveBeenCalled();
+    expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-1', 'FAILED', {
+      errorMessage: 'Archive recovery failed after restart: worktree cleanup failed',
+    });
+  });
+
+  it('continues recovering remaining stale workspaces after one failure', async () => {
+    const failedWorkspace = makeWorkspace({ id: 'ws-failed', status: 'ARCHIVING' as never });
+    const archivedWorkspace = makeWorkspace({ id: 'ws-archived', status: 'ARCHIVING' as never });
+    vi.mocked(workspaceAccessor.findStaleArchivingWithProject).mockResolvedValue([
+      failedWorkspace,
+      archivedWorkspace,
+    ]);
+    vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree)
+      .mockRejectedValueOnce(new Error('cleanup failed'))
+      .mockResolvedValueOnce(undefined);
+
+    const result = await recoverStaleArchivingWorkspaces(services);
+
+    expect(result).toEqual({
+      archived: ['ws-archived'],
+      failed: [{ id: 'ws-failed', error: 'cleanup failed' }],
+    });
+    expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-archived');
+    expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-failed', 'FAILED', {
+      errorMessage: 'Archive recovery failed after restart: cleanup failed',
     });
   });
 });

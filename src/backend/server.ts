@@ -38,6 +38,7 @@ import {
   configureSnapshotReconciliation,
   snapshotReconciliationService,
 } from './orchestration/snapshot-reconciliation.orchestrator';
+import { recoverStaleArchivingWorkspaces } from './orchestration/workspace-archive.orchestrator';
 import { createHealthRouter } from './routers/health.router';
 import {
   createChatUpgradeHandler,
@@ -271,6 +272,34 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // ============================================================================
   const SHUTDOWN_TIMEOUT_MS = 5000;
 
+  const runStartupTask = async (errorMessage: string, task: () => Promise<void>): Promise<void> => {
+    try {
+      await task();
+    } catch (error) {
+      logger.error(errorMessage, toError(error));
+    }
+  };
+
+  const recoverStaleArchivingOnStartup = async (): Promise<void> => {
+    const recovered = await recoverStaleArchivingWorkspaces(context.services);
+    if (recovered.archived.length > 0 || recovered.failed.length > 0) {
+      logger.info('Recovered stale archiving workspaces on startup', {
+        archived: recovered.archived,
+        failed: recovered.failed,
+      });
+    }
+  };
+
+  const recoverStaleAutoIterationOnStartup = async (): Promise<void> => {
+    const recovered = await workspaceAccessor.resetStaleAutoIterationStatuses();
+    if (recovered.length > 0) {
+      logger.info('Recovered stale auto-iteration states on startup', {
+        count: recovered.length,
+        workspaceIds: recovered.map((w) => w.id),
+      });
+    }
+  };
+
   const performCleanup = async () => {
     logger.info('Starting graceful cleanup');
 
@@ -318,39 +347,32 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       }
 
       const runStartupReconciliation = async (): Promise<void> => {
-        try {
-          await reconciliationService.cleanupOrphans();
-        } catch (error) {
-          logger.error('Failed to cleanup orphan sessions on startup', toError(error));
-        }
+        await runStartupTask('Failed to cleanup orphan sessions on startup', () =>
+          reconciliationService.cleanupOrphans()
+        );
 
         // Reconcile workspaces that may have been left in inconsistent states
         // (e.g., stuck in PROVISIONING due to server crash)
-        try {
-          await reconciliationService.reconcile();
-        } catch (error) {
-          logger.error('Failed to reconcile workspaces on startup', toError(error));
-        }
+        await runStartupTask('Failed to reconcile workspaces on startup', () =>
+          reconciliationService.reconcile()
+        );
+
+        // Resume workspace archives abandoned by a prior process exit.
+        await runStartupTask(
+          'Failed to recover stale archiving workspaces on startup',
+          recoverStaleArchivingOnStartup
+        );
 
         // Reset run script states left in transient STARTING/STOPPING by a prior crash
-        try {
-          await runScriptStateMachine.recoverStaleStates();
-        } catch (error) {
-          logger.error('Failed to recover stale run script states on startup', toError(error));
-        }
+        await runStartupTask('Failed to recover stale run script states on startup', () =>
+          runScriptStateMachine.recoverStaleStates()
+        );
 
         // Reset auto-iteration states left in RUNNING by a prior crash
-        try {
-          const recovered = await workspaceAccessor.resetStaleAutoIterationStatuses();
-          if (recovered.length > 0) {
-            logger.info('Recovered stale auto-iteration states on startup', {
-              count: recovered.length,
-              workspaceIds: recovered.map((w) => w.id),
-            });
-          }
-        } catch (error) {
-          logger.error('Failed to recover stale auto-iteration states on startup', toError(error));
-        }
+        await runStartupTask(
+          'Failed to recover stale auto-iteration states on startup',
+          recoverStaleAutoIterationOnStartup
+        );
       };
 
       return new Promise((resolve, reject) => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockCreate = vi.fn();
 const mockFindMany = vi.fn();
@@ -175,6 +175,51 @@ describe('workspaceAccessor', () => {
           runScriptStartedAt: null,
         },
       });
+    });
+  });
+
+  describe('findStaleArchivingWithProject', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('queries ARCHIVING workspaces older than the stale threshold with project data', async () => {
+      const now = new Date('2024-01-15T12:00:00Z');
+      vi.setSystemTime(now);
+      const staleWorkspace = {
+        id: 'ws-archiving',
+        status: 'ARCHIVING',
+        updatedAt: new Date('2024-01-15T11:40:00Z'),
+        project: { id: 'proj-1' },
+      };
+      mockFindMany.mockResolvedValue([staleWorkspace]);
+
+      const result = await workspaceAccessor.findStaleArchivingWithProject();
+
+      expect(result).toEqual([staleWorkspace]);
+      expect(mockFindMany).toHaveBeenCalledWith({
+        where: {
+          status: 'ARCHIVING',
+          updatedAt: { lt: expect.any(Date) },
+        },
+        include: { project: true },
+        orderBy: { updatedAt: 'asc' },
+      });
+
+      const callArgs = mockFindMany.mock.calls[0]![0];
+      expect(callArgs.where.updatedAt.lt.getTime()).toBe(now.getTime() - 10 * 60 * 1000);
+    });
+
+    it('returns an empty array when no stale ARCHIVING workspaces exist', async () => {
+      mockFindMany.mockResolvedValue([]);
+
+      const result = await workspaceAccessor.findStaleArchivingWithProject();
+
+      expect(result).toEqual([]);
     });
   });
 

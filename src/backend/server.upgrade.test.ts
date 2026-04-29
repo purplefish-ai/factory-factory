@@ -15,6 +15,7 @@ import {
   configureSnapshotReconciliation,
   snapshotReconciliationService,
 } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
+import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { reconciliationService } from '@/backend/services/ratchet';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
@@ -50,6 +51,10 @@ vi.mock('@/backend/orchestration/snapshot-reconciliation.orchestrator', () => ({
   snapshotReconciliationService: {
     stop: vi.fn(async () => undefined),
   },
+}));
+
+vi.mock('@/backend/orchestration/workspace-archive.orchestrator', () => ({
+  recoverStaleArchivingWorkspaces: vi.fn(async () => ({ archived: [], failed: [] })),
 }));
 
 vi.mock('@/backend/services/ratchet', async (importOriginal) => {
@@ -351,6 +356,7 @@ describe('server websocket upgrade routing', () => {
     expect(configureSnapshotReconciliation).toHaveBeenCalledWith(harness.context.services);
     expect(reconciliationService.cleanupOrphans).toHaveBeenCalledOnce();
     expect(reconciliationService.reconcile).toHaveBeenCalledOnce();
+    expect(recoverStaleArchivingWorkspaces).toHaveBeenCalledWith(harness.context.services);
     expect(startInterceptors).toHaveBeenCalledOnce();
     expect(reconciliationService.startPeriodicCleanup).toHaveBeenCalledOnce();
     expect(harness.services.rateLimiter.start).toHaveBeenCalledOnce();
@@ -377,6 +383,9 @@ describe('server websocket upgrade routing', () => {
       new Error('cleanup failed')
     );
     vi.mocked(reconciliationService.reconcile).mockRejectedValueOnce(new Error('reconcile failed'));
+    vi.mocked(recoverStaleArchivingWorkspaces).mockRejectedValueOnce(
+      new Error('archive recovery failed')
+    );
 
     const harness = createTestHarness({ requestedPortResult: 0 });
     const server = createTestServer(harness.context, 0);
@@ -388,6 +397,10 @@ describe('server websocket upgrade routing', () => {
     );
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to reconcile workspaces on startup',
+      expect.any(Object)
+    );
+    expect(harness.logger.error).toHaveBeenCalledWith(
+      'Failed to recover stale archiving workspaces on startup',
       expect.any(Object)
     );
   });
