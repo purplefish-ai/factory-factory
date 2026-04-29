@@ -134,26 +134,7 @@ function resolveMissingBridgeOutcome(params: {
   bypassesAutoApprove: boolean;
   isPlanApproval: boolean;
   sessionId: string;
-  autoApprovePolicy: AutoApprovePolicy;
 }): RequestPermissionResponse {
-  const shouldAutoApprove = !params.bypassesAutoApprove && params.autoApprovePolicy === 'all';
-  const allowOptionId = shouldAutoApprove ? resolveAllowOptionId(params.request) : null;
-
-  if (allowOptionId) {
-    logger.warn('Permission bridge missing; auto-approving ACP permission request', {
-      sessionId: params.sessionId,
-      toolCallId: params.request.toolCall.toolCallId,
-      requestType: 'permission',
-    });
-
-    return {
-      outcome: {
-        outcome: 'selected',
-        optionId: allowOptionId,
-      },
-    };
-  }
-
   const outcome = resolveFailClosedOutcome({
     request: params.request,
     sessionId: params.sessionId,
@@ -251,7 +232,6 @@ export class AcpClientHandler implements Client {
           bypassesAutoApprove,
           isPlanApproval,
           sessionId: this.sessionId,
-          autoApprovePolicy: this.autoApprovePolicy,
         })
       );
     }
