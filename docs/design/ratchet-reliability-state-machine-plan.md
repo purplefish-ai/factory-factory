@@ -468,7 +468,7 @@ Deliver the heartbeat dispatcher model in one phase.
    - Implement `didPush` tri-state verification + transient recovery/backoff.
    - Implement post-green grace window and blocked-merge wait state.
    - Implement heartbeat-side conflict-only status/log update path (`PAUSED_WAIT_CONFLICT_ONLY`) without fixer dispatch.
-   - Use canonical `isSessionRunning()` semantics for `hasActiveSession()`.
+   - Use canonical `isSessionWorking()` semantics for `hasActiveSession()`.
 
 5. `src/backend/services/fixer-session.service.ts`
    - Add `waitForCompletion(sessionId)` (with timeout).
@@ -496,7 +496,7 @@ Deliver the heartbeat dispatcher model in one phase.
    - Ratchet disabled → `PAUSE(PAUSED_DISABLED)`.
 
 2. `src/backend/services/ratchet.service.test.ts`
-   - `hasActiveSession()` uses `isSessionRunning()` semantics; `RUNNING` sessions block ratchet dispatch.
+   - `hasActiveSession()` uses `isSessionWorking()` semantics; working sessions block ratchet dispatch.
    - `PAUSED_USER_WORKING` does not update last-known GitHub markers (delta preserved for next tick).
    - User session exit triggers force re-evaluation on next heartbeat tick.
    - CI reaches terminal state while user session active → user session ends → workspace dispatched and CI failure acted on.
@@ -568,7 +568,7 @@ Structured logs at each decision point:
    - **Mitigation:** Add a stale CI timeout window (for example 5 minutes). If run ID never changes, move to `PAUSED_ATTENTION_STALE_CI_TIMEOUT` and surface manual attention required.
 
 3. **Risk:** session activity guard blocks ratchet while user is interactively working.
-   - **Mitigation:** `hasActiveSession()` delegates to canonical `isSessionRunning()` semantics. `RUNNING` sessions block ratchet to avoid interfering with user work.
+   - **Mitigation:** `hasActiveSession()` delegates to canonical `isSessionWorking()` semantics. Working sessions block ratchet to avoid interfering with user work.
 
 4. **Risk:** Fixup session hangs and `waitForCompletion` never resolves.
    - **Mitigation:** `waitForCompletion` has a timeout (e.g., 30 minutes). On timeout, the session is terminated, `clearRatchetSessions()` cleans up, and the attempt counter increments. The next iteration re-evaluates fresh state.
@@ -617,7 +617,7 @@ Structured logs at each decision point:
 10. Add mandatory transition/audit logging for every wait, dispatch, pause, and terminal-attention state.
 11. Add heartbeat scheduler + per-workspace single-flight/coalescing registry.
 12. Add UI status fields + API wiring so workspace view can show current ratchet activity and recent transitions.
-13. Add canonical active-session predicate usage (`isSessionRunning`) and tests for active session blocking behavior.
+13. Add canonical active-session predicate usage (`isSessionWorking`) and tests for active session blocking behavior.
 14. Ensure `PAUSED_USER_WORKING` does not update last-known GitHub markers (delta preservation).
 15. Add session-exit force re-evaluation hook: `onExit` → `heartbeat.scheduleReEvaluation(workspaceId)` when `ratchetEnabled`.
 16. Add `didPush` tri-state verification with retry/backoff on transient failures.
