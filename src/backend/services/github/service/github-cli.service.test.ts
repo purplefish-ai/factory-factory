@@ -560,6 +560,39 @@ describe('GitHubCLIService', () => {
     });
 
     describe('getPRFullDetails with malformed data', () => {
+      it('accepts DRAFT mergeStateStatus for draft PRs', async () => {
+        const fullPRData = {
+          number: 123,
+          title: 'Draft PR',
+          url: 'https://github.com/owner/repo/pull/123',
+          author: { login: 'octocat' },
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-02T00:00:00Z',
+          isDraft: true,
+          state: 'OPEN',
+          reviewDecision: null,
+          statusCheckRollup: null,
+          reviews: [],
+          comments: [],
+          labels: [],
+          additions: 10,
+          deletions: 2,
+          changedFiles: 1,
+          headRefName: 'feature-branch',
+          baseRefName: 'main',
+          mergeStateStatus: 'DRAFT',
+        };
+
+        mockExecFile.mockResolvedValue({
+          stdout: JSON.stringify(fullPRData),
+          stderr: '',
+        });
+
+        const result = await githubCLIService.getPRFullDetails('owner/repo', 123);
+
+        expect(result.mergeStateStatus).toBe('DRAFT');
+      });
+
       it('normalizes status check casing in statusCheckRollup entries', async () => {
         const fullPRData = {
           number: 123,
