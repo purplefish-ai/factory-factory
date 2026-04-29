@@ -158,6 +158,36 @@ describe('AcpClientHandler', () => {
       });
     });
 
+    it('fails closed when permission bridge is missing and autoApprovePolicy is "none"', async () => {
+      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'none');
+      const params = createMockPermissionRequest({
+        options: [
+          { optionId: 'opt-allow', kind: 'allow_once', name: 'Allow' },
+          { optionId: 'opt-reject', kind: 'reject_once', name: 'Reject' },
+        ],
+      } as Partial<RequestPermissionRequest>);
+
+      const response = await handler.requestPermission(params);
+
+      expect(response.outcome).toEqual({
+        outcome: 'selected',
+        optionId: 'opt-reject',
+      });
+    });
+
+    it('cancels when failing closed and no reject option is available', async () => {
+      const handler = new AcpClientHandler('session-1', onEvent, undefined, onLog, 'none');
+      const params = createMockPermissionRequest({
+        options: [{ optionId: 'opt-allow', kind: 'allow_once', name: 'Allow' }],
+      } as Partial<RequestPermissionRequest>);
+
+      const response = await handler.requestPermission(params);
+
+      expect(response.outcome).toEqual({
+        outcome: 'cancelled',
+      });
+    });
+
     it('does not auto-approve ExitPlanMode requests even in "all" mode', async () => {
       const bridge = {
         waitForUserResponse: vi.fn().mockResolvedValue({
