@@ -26,7 +26,7 @@ export function reduceMessageSnapshotSlice(state: ChatState, action: ChatAction)
         sessionRuntime: action.payload.sessionRuntime,
         toolUseIdToIndex: new Map(),
         pendingMessages: newPendingMessages,
-        lastRejectedMessage: null,
+        lastRejectedMessage: state.lastRejectedMessage,
         messageIdToUuid: new Map(),
         pendingUserMessageUuids: [],
         localUserMessageIds: new Set(),

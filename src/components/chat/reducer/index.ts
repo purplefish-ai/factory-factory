@@ -96,6 +96,8 @@ function createReplayBaseState(state: ChatState): ChatState {
     // Preserve queued messages - they will be reconstructed from replay events,
     // but preserving them ensures they remain visible during replay processing.
     queuedMessages: state.queuedMessages,
+    // Preserve rejected-message recovery content until the UI effect restores it.
+    lastRejectedMessage: state.lastRejectedMessage,
     sessionStatus: { phase: 'loading' },
     processStatus: { state: 'unknown' },
     sessionRuntime: {

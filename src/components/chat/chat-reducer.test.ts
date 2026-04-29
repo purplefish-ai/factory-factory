@@ -1082,6 +1082,49 @@ describe('chatReducer', () => {
   });
 
   // -------------------------------------------------------------------------
+  // SESSION_SNAPSHOT Action
+  // -------------------------------------------------------------------------
+
+  describe('SESSION_SNAPSHOT action', () => {
+    it('should preserve lastRejectedMessage for recovery', () => {
+      let state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([['msg-1', { text: 'My important message', attachments: [] }]]),
+      };
+
+      state = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.REJECTED,
+          errorMessage: 'Unsupported image type',
+        },
+      });
+
+      expect(state.pendingMessages.size).toBe(0);
+      expect(state.queuedMessages.size).toBe(0);
+      expect(state.lastRejectedMessage?.text).toBe('My important message');
+
+      const newState = chatReducer(state, {
+        type: 'SESSION_SNAPSHOT',
+        payload: {
+          messages: [],
+          queuedMessages: [],
+          sessionRuntime: {
+            phase: 'idle',
+            processState: 'alive',
+            activity: 'IDLE',
+            updatedAt: '2026-02-08T00:00:00.000Z',
+          },
+        },
+      });
+
+      expect(newState.lastRejectedMessage?.text).toBe('My important message');
+      expect(newState.lastRejectedMessage?.error).toBe('Unsupported image type');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // TOOL_INPUT_UPDATE Action (O(1) optimization)
   // -------------------------------------------------------------------------
 
@@ -1921,6 +1964,36 @@ describe('chatReducer', () => {
 
       expect(newState.sessionStatus).toEqual({ phase: 'running' });
       expect(newState.sessionRuntime.phase).toBe('running');
+    });
+
+    it('should preserve lastRejectedMessage for recovery', () => {
+      let state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([['msg-1', { text: 'My important message', attachments: [] }]]),
+      };
+
+      state = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.REJECTED,
+          errorMessage: 'Unsupported image type',
+        },
+      });
+
+      expect(state.pendingMessages.size).toBe(0);
+      expect(state.queuedMessages.size).toBe(0);
+      expect(state.lastRejectedMessage?.text).toBe('My important message');
+
+      const newState = chatReducer(state, {
+        type: 'SESSION_REPLAY_BATCH',
+        payload: {
+          replayEvents: [],
+        },
+      });
+
+      expect(newState.lastRejectedMessage?.text).toBe('My important message');
+      expect(newState.lastRejectedMessage?.error).toBe('Unsupported image type');
     });
   });
 
