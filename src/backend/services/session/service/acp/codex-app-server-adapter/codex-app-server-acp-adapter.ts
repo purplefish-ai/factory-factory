@@ -44,7 +44,7 @@ import type {
   SandboxMode,
   ToolCallState,
 } from './adapter-state';
-import { CodexRequestError, CodexRpcClient } from './codex-rpc-client';
+import { CodexRequestError, CodexRpcClient, type CodexRpcExitEvent } from './codex-rpc-client';
 import { turnStartResponseSchema } from './codex-zod';
 import { resolveCommandDisplay } from './command-metadata';
 import { handleCodexServerPermissionRequest } from './protocol-permission-handler';
@@ -335,6 +335,9 @@ export class CodexAppServerAcpAdapter implements Agent {
               data: { error: message },
             });
           });
+        },
+        onExit: (event) => {
+          this.handleCodexExit(event);
         },
         onProtocolError: (error) => {
           process.stderr.write(`[codex-app-server-acp] protocol-error: ${error.reason}\n`);
@@ -1183,6 +1186,22 @@ export class CodexAppServerAcpAdapter implements Agent {
       emitSessionUpdate: (sessionId, update) => this.emitSessionUpdate(sessionId, update),
       reportShapeDrift: (event, details) => this.reportShapeDrift(event, details),
     });
+  }
+
+  private handleCodexExit(event: CodexRpcExitEvent): void {
+    const activeSessions = [...this.sessions.values()].filter(
+      (session) => session.activeTurn && !session.activeTurn.settled
+    );
+    if (activeSessions.length === 0) {
+      return;
+    }
+
+    process.stderr.write(
+      `[codex-app-server-acp] ${event.reason}; settling ${activeSessions.length} active turn(s)\n`
+    );
+    for (const session of activeSessions) {
+      this.settleTurn(session, session.activeTurn?.cancelRequested ? 'cancelled' : 'end_turn');
+    }
   }
 
   private settleTurn(session: AdapterSession, stopReason: StopReason): void {

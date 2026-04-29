@@ -2521,6 +2521,64 @@ describe('CodexAppServerAcpAdapter', () => {
     ).resolves.toEqual({ stopReason: 'end_turn' });
   });
 
+  it('settles active prompts when codex exits after turn/start returns', async () => {
+    const { connection } = createMockConnection();
+    const { client: codexClient, mocks: codex } = createMockCodexClient();
+    const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
+
+    await initializeAdapterWithDefaultModel(adapter, codex);
+
+    codex.request.mockResolvedValueOnce({
+      thread: { id: 'thread_exit', cwd: '/tmp/workspace' },
+      approvalPolicy: DEFAULT_APPROVAL_POLICY,
+      reasoningEffort: 'medium',
+    });
+    const session = await adapter.newSession({
+      cwd: '/tmp/workspace',
+      mcpServers: [],
+    });
+
+    codex.request.mockResolvedValueOnce({
+      turn: { id: 'turn_exit', status: 'inProgress' },
+    });
+
+    const promptPromise = adapter.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'hello' }],
+    });
+
+    await vi.waitFor(() => {
+      const adapterSession = (
+        adapter as unknown as {
+          sessions: Map<string, { activeTurn: { turnId: string } | null }>;
+        }
+      ).sessions.get(session.sessionId);
+      expect(adapterSession?.activeTurn?.turnId).toBe('turn_exit');
+    });
+
+    (
+      adapter as unknown as {
+        handleCodexExit: (event: {
+          code: number | null;
+          signal: NodeJS.Signals | null;
+          reason: string;
+        }) => void;
+      }
+    ).handleCodexExit({
+      code: 1,
+      signal: null,
+      reason: 'codex app-server exited (code=1, signal=null)',
+    });
+
+    await expect(promptPromise).resolves.toEqual({ stopReason: 'end_turn' });
+    const adapterSession = (
+      adapter as unknown as {
+        sessions: Map<string, { activeTurn: { turnId: string } | null }>;
+      }
+    ).sessions.get(session.sessionId);
+    expect(adapterSession?.activeTurn).toBeNull();
+  });
+
   it('clears stale tool call state when a turn ends without item/completed events', async () => {
     const { connection } = createMockConnection();
     const { client: codexClient, mocks: codex } = createMockCodexClient();
