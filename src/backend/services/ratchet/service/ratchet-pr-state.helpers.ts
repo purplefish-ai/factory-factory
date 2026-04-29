@@ -27,6 +27,7 @@ const FAILURE_CONCLUSIONS = new Set([
   'CANCELLED',
   'ERROR',
   'ACTION_REQUIRED',
+  'STARTUP_FAILURE',
 ]);
 
 export function determineRatchetState(pr: PRStateInfo): RatchetState {
