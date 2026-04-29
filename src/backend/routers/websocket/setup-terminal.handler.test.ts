@@ -10,6 +10,7 @@ const mockPtyWrite = vi.fn();
 const mockPtyResize = vi.fn();
 const mockPtyKill = vi.fn();
 const mockPtySpawn = vi.fn();
+const allowedOrigin = 'http://localhost:3000';
 
 let onDataCallback: ((data: string) => void) | null = null;
 let onExitCallback: ((event: { exitCode: number }) => void) | null = null;
@@ -79,7 +80,7 @@ describe('createSetupTerminalUpgradeHandler', () => {
   it('rejects upgrades from unauthorized origins before opening a WebSocket', () => {
     const logger = createLogger();
     const configService = {
-      getCorsConfig: vi.fn(() => ({ allowedOrigins: ['http://localhost:3000'] })),
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
     };
     const appContext = {
       services: {
@@ -116,12 +117,49 @@ describe('createSetupTerminalUpgradeHandler', () => {
     );
   });
 
+  it('rejects upgrades without an Origin header before opening a WebSocket', () => {
+    const logger = createLogger();
+    const configService = {
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+    };
+    const appContext = {
+      services: {
+        createLogger: vi.fn(() => logger),
+        configService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createSetupTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {} as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/setup-terminal'),
+      wss,
+      wsAliveMap
+    );
+
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('400 Bad Request'));
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Missing Origin header'));
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Rejected setup terminal connection without Origin header'
+    );
+  });
+
   it('accepts upgrades from configured allowed origins', () => {
     const logger = createLogger();
     const configService = {
       getShellPath: vi.fn(() => '/bin/zsh'),
       getChildProcessEnv: vi.fn(() => ({ PATH: '/usr/bin' })),
-      getCorsConfig: vi.fn(() => ({ allowedOrigins: ['http://localhost:3000'] })),
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
     };
     const appContext = {
       services: {
@@ -134,7 +172,7 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const ws = new MockWebSocket();
     const wss = createWss(ws);
     const request = {
-      headers: { origin: 'http://localhost:3000' },
+      headers: { origin: allowedOrigin },
     } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
@@ -158,6 +196,7 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const configService = {
       getShellPath: vi.fn(() => '/bin/zsh'),
       getChildProcessEnv: vi.fn(() => ({ PATH: '/usr/bin' })),
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
     };
     const appContext = {
       services: {
@@ -169,7 +208,9 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const handler = createSetupTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = {} as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+    } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
@@ -231,6 +272,7 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const configService = {
       getShellPath: vi.fn(() => '/bin/zsh'),
       getChildProcessEnv: vi.fn(() => ({})),
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
     };
     const appContext = {
       services: {
@@ -242,7 +284,9 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const handler = createSetupTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = {} as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+    } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
@@ -270,6 +314,7 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const configService = {
       getShellPath: vi.fn(() => '/bin/zsh'),
       getChildProcessEnv: vi.fn(() => ({})),
+      getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
     };
     const appContext = {
       services: {
@@ -281,7 +326,9 @@ describe('createSetupTerminalUpgradeHandler', () => {
     const handler = createSetupTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = {} as IncomingMessage;
+    const request = {
+      headers: { origin: allowedOrigin },
+    } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
