@@ -1,238 +1,282 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-02-10
+**Analysis Date:** 2026-04-29
 
 ## Tech Debt
 
-**In-Memory State Not Shared Across Processes:**
-- Issue: Multiple in-memory Maps track critical state (locks, sessions, terminals) that isn't shared between Node.js processes. File-based persistence helps on restart but doesn't provide cross-process synchronization during runtime.
-- Files: `src/backend/services/file-lock.service.ts` (lines 13-16), `src/backend/services/session.process-manager.ts` (multiple Map fields), `src/backend/services/terminal.service.ts` (line 77-86), `src/backend/services/worktree-lifecycle.service.ts` (lines 24, 27)
-- Impact: If the application ever scales to multiple processes or restarts frequently, file locks, session state, and terminal references may become stale or inconsistent
-- Fix approach: Consider Redis or shared lock files for cross-process coordination. Document single-process assumption clearly in server startup
+**Codex ACP adapter schema drift:**
+- Issue: The checked-in Codex app-server method snapshot does not match the installed `codex` CLI. `pnpm check:codex-schema` reports expected `codex-cli 0.101.0` and detected `codex-cli 0.125.0`, with many changed client methods and new server request methods.
+- Files: `scripts/check-codex-schema-drift.mjs`, `src/backend/services/session/service/acp/codex-app-server-adapter/schema-snapshots/app-server-methods.snapshot.json`, `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.ts`, `src/backend/services/session/service/acp/codex-app-server-adapter/protocol-permission-handler.ts`, `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts`
+- Impact: Current Codex app-server requests such as `item/permissions/requestApproval` and `mcpServer/elicitation/request` are outside the local Zod schemas and can fail as unsupported requests instead of producing normal permission or input flows.
+- Fix approach: Update the schema snapshot against the supported `codex` CLI version, add handlers for new server request methods, and add adapter tests that exercise permission, filesystem, MCP, and shell-command request paths.
 
-**Unsafe Type Coercion Throughout Codebase:**
-- Issue: 92 uses of `as any`, `as unknown`, or the `unsafeCoerce` utility function that bypasses TypeScript's type system
-- Files: `src/test-utils/unsafe-coerce.ts` (defined but used extensively across backend)
-- Impact: Loses type safety guarantees, making code vulnerable to runtime errors that TypeScript could catch at compile time
-- Fix approach: Eliminate uses of `unsafeCoerce`. Use proper Zod schemas and type guards instead. This is particularly important in data serialization/deserialization paths
+**ACP runtime compatibility shims:**
+- Issue: The ACP runtime mutates incoming session update payloads before SDK validation to compensate for malformed `claude-agent-acp` location line values.
+- Files: `src/backend/services/session/service/acp/acp-runtime-manager.ts`
+- Impact: Protocol compatibility behavior is embedded in the runtime manager and depends on manual payload normalization with casts.
+- Fix approach: Keep compatibility logic isolated behind a named normalizer, cover it with focused tests, and remove it only when the upstream provider contract is verified.
 
-**JSON.parse Without Comprehensive Error Handling:**
-- Issue: Multiple locations parse JSON without schema validation in fallback paths
-- Files: `src/backend/services/file-lock.service.ts` (line 248), `src/backend/services/worktree-lifecycle.service.ts` (line 337), `src/backend/claude/protocol.ts` (line 500), `src/backend/claude/session.ts` (lines 85, 154)
-- Impact: Malformed JSON silently falls back to empty state or defaults. Could mask data corruption or partial initialization issues
-- Fix approach: Always validate JSON.parse output with schemas. Log failures explicitly rather than silently degrading
+**In-memory runtime state:**
+- Issue: Active sessions, terminals, process handles, output buffers, advisory locks, and workspace snapshots live primarily in process memory.
+- Files: `src/backend/services/session/service/acp/acp-runtime-manager.ts`, `src/backend/services/terminal/service/terminal.service.ts`, `src/backend/services/run-script/service/run-script.service.ts`, `src/backend/services/session/service/store/file-lock.service.ts`, `src/backend/services/workspace-snapshot-store.service.ts`, `src/backend/orchestration/event-collector.orchestrator.ts`
+- Impact: Server restart or multi-process deployment loses live process handles, pending permission prompts, active terminal state, in-memory output listeners, and event coalescing state. The file lock service explicitly coordinates only within a single Node process.
+- Fix approach: Treat the backend as single-process in deployment docs, persist only authoritative state, reconcile process-backed state on startup, and use a real distributed lock if multiple server processes are introduced.
 
-**Static Maps in Service Classes:**
-- Issue: Services like `RunScriptService` use `static` class-level Maps to store process references, output buffers, and listeners
-- Files: `src/backend/services/run-script.service.ts` (lines 19-25)
-- Impact: Makes testing difficult, creates global state, prevents instance-level isolation
-- Fix approach: Refactor to instance-based services with dependency injection instead of static state
+**Shell execution safety policy has exceptions:**
+- Issue: `src/backend/lib/shell.ts` documents the preferred safe execution layer, but run scripts, startup scripts, auto-iteration tests, terminals, and ACP providers intentionally execute configured shell commands or subprocesses directly.
+- Files: `src/backend/lib/shell.ts`, `src/backend/services/run-script/service/run-script.service.ts`, `src/backend/services/run-script/service/startup-script.service.ts`, `src/backend/services/auto-iteration/service/test-runner.service.ts`, `src/backend/services/terminal/service/terminal.service.ts`, `src/backend/services/session/service/acp/acp-runtime-manager.ts`
+- Impact: Arbitrary project-defined commands run through `bash -c` or interactive shells, inherit broad environment by default, and are easy to expand without a shared risk checklist.
+- Fix approach: Document these as trusted-command boundaries, centralize environment filtering and logging redaction, and add tests for command validation, process cleanup, and timeout behavior.
 
-**Resume Mode Lock Implementation with Manual Synchronization:**
-- Issue: Resume mode tracking uses file-based locks with manual retry logic, stale threshold configuration, and multiple cleanup paths
-- Files: `src/backend/services/worktree-lifecycle.service.ts` (lines 29-36, 72-80)
-- Impact: Complex state machine for something that could be simpler. Risk of deadlock or stale lock accumulation if timing assumptions break
-- Fix approach: Consider using a proper locking library or simplifying the resume mode logic
+**Large service and orchestration modules:**
+- Issue: Several production modules exceed 1,000 lines and combine state transitions, process management, external calls, and persistence.
+- Files: `src/backend/services/session/service/acp/acp-runtime-manager.ts`, `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.ts`, `src/backend/orchestration/workspace-init.orchestrator.ts`, `src/backend/services/session/service/lifecycle/session.config.service.ts`, `src/backend/services/run-script/service/run-script.service.ts`, `src/backend/services/ratchet/service/ratchet.service.ts`, `src/cli/proxy.ts`, `src/client/routes/admin-page.tsx`, `src/components/chat/chat-input/chat-input.tsx`
+- Impact: Behavioral changes require broad review, test setup is heavy, and small fixes can accidentally alter unrelated state paths.
+- Fix approach: Extract process lifecycle, provider negotiation, permission bridging, and UI subpanels into narrower modules with tests around each extracted boundary.
+
+**Custom migration runner limitations:**
+- Issue: The Electron migration runner parses SQL line by line and rejects multiline string literals.
+- Files: `src/backend/migrate.ts`, `prisma/migrations/`
+- Impact: Prisma-generated or hand-written migrations that rely on multiline string literals can fail in the packaged app even if they pass the normal Prisma CLI workflow.
+- Fix approach: Keep migration SQL simple, add CI coverage that runs `src/backend/migrate.ts` against a temporary SQLite database, and document unsupported SQL constructs near migration authoring guidance.
 
 ## Known Bugs
 
-**Resource Cleanup Error Handling is Inconsistent:**
-- Symptoms: Error handlers that silently catch and ignore cleanup failures (e.g., file handle closing, process termination)
-- Files: `src/backend/services/terminal.service.ts`, `src/backend/services/session-file-logger.service.ts`, `src/backend/services/session.process-manager.ts` (comments about ignoring disposal errors)
-- Trigger: Process termination, terminal disconnection, or file operations failing during cleanup
-- Workaround: None - errors are silently suppressed. If cleanup fails, resources may leak
+**Codex schema drift check fails:**
+- Symptoms: `pnpm check:codex-schema` reports method drift and a CLI version mismatch.
+- Files: `scripts/check-codex-schema-drift.mjs`, `src/backend/services/session/service/acp/codex-app-server-adapter/schema-snapshots/app-server-methods.snapshot.json`
+- Trigger: Run `pnpm check:codex-schema` with the currently installed `codex` CLI.
+- Workaround: Pin the expected `codex` CLI version or update the snapshot and adapter implementation together.
 
-**Race Condition in Resume Mode File Lock:**
-- Symptoms: File-based lock could be removed by one process while another still holds it (inode mismatch detection)
-- Files: `src/backend/services/worktree-lifecycle.service.ts` (lines 72-80, lock stale threshold logic)
-- Trigger: Multiple processes accessing same workspace simultaneously or clock skew
-- Workaround: Current code uses 25-second stale threshold (5x acquire timeout) to minimize false positives, but timing is fragile
+**Unsupported Codex server requests fail closed:**
+- Symptoms: Unknown Codex app-server request payloads return an unsupported-request error instead of entering the app permission UI.
+- Files: `src/backend/services/session/service/acp/codex-app-server-adapter/codex-zod.ts`, `src/backend/services/session/service/acp/codex-app-server-adapter/protocol-permission-handler.ts`, `src/backend/services/session/service/acp/codex-app-server-adapter/codex-rpc-client.ts`
+- Trigger: A newer Codex app-server emits request methods not represented in `KnownServerRequestSchema`.
+- Workaround: Keep the CLI pinned to the snapshot version until the adapter supports the new methods.
 
-**Run Script Process Exit Handler State Race:**
-- Symptoms: Process exit event handler checks workspace state and transitions it, but this could race with concurrent operations
-- Files: `src/backend/services/run-script.service.ts` (lines 106-149, exit handler)
-- Trigger: Rapid start/stop of run script or state machine transitions happening concurrently with exit event
-- Workaround: State machine transitions check current state before progressing, so most races are caught. But error handling just warns and continues
+**Ratchet timeout does not cancel underlying checks:**
+- Symptoms: A workspace check can time out and clear its in-flight marker while the underlying async GitHub or workspace operation continues.
+- Files: `src/backend/services/ratchet/service/ratchet.service.ts`, `src/backend/services/github/service/github-cli.service.ts`
+- Trigger: Slow `gh` calls or a long ratchet check that exceeds the workspace check timeout.
+- Workaround: The per-workspace in-flight map reduces duplicate checks during the timeout window, but the timed-out operation is not cancelled.
+
+**Run-script stop can leave descendant processes:**
+- Symptoms: A process tree that ignores `SIGTERM` can keep running after stop returns or after process exit cleanup.
+- Files: `src/backend/services/run-script/service/run-script.service.ts`
+- Trigger: Run scripts, cleanup scripts, or post-run scripts that fork child processes or ignore termination.
+- Workaround: Normal stop uses `tree-kill` with `SIGTERM`; synchronous server-exit cleanup kills only the direct child with `SIGKILL`.
+
+**Snapshot reconciliation concurrency comment does not match code:**
+- Symptoms: The comment says git stats use `p-limit(3)`, while the code sets `GIT_CONCURRENCY = 10`.
+- Files: `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`
+- Trigger: Read or tune snapshot reconciliation behavior.
+- Workaround: Treat the constant as authoritative and update the comment when changing reconciliation load.
 
 ## Security Considerations
 
-**Shell Command Execution via spawn:**
-- Risk: Commands passed to `spawn('bash', ['-c', command], ...)` are user-provided and could be exploited if not validated
-- Files: `src/backend/services/run-script.service.ts` (line 86), `src/backend/services/startup-script.service.ts` (line 204)
-- Current mitigation: Commands come from Prisma-stored configuration and workspace setup, not direct user input. But no validation of command content (e.g., forbidden patterns)
-- Recommendations: Add allowlist of command patterns or run in restricted environment. Document security assumption that stored commands are trustworthy
+**Backend API and WebSockets are unauthenticated:**
+- Risk: Any caller that can reach the backend can invoke public tRPC procedures and WebSocket handlers for projects, sessions, terminals, setup terminals, dev logs, post-run logs, and snapshots.
+- Files: `src/backend/trpc/trpc.ts`, `src/backend/trpc/procedures/project-scoped.ts`, `src/backend/server.ts`, `src/backend/trpc/project.trpc.ts`, `src/backend/trpc/linear.trpc.ts`, `src/cli/proxy.ts`
+- Current mitigation: CORS defaults are localhost-oriented, project-scoped procedures require an `X-Project-Id` header, and `src/cli/proxy.ts` provides a private proxy mode.
+- Recommendations: Add backend authentication for HTTP and WebSocket upgrades, make project access authorization explicit, reject non-loopback exposure unless auth is configured, and keep `ff proxy` private mode as the default remote access path.
 
-**GitHub CLI Authentication:**
-- Risk: Uses local `gh` CLI authentication, which relies on system credential storage
-- Files: `src/backend/services/github-cli.service.ts` (numerous `gh` invocations)
-- Current mitigation: Assumes `gh auth` is already configured on the system. No validation that auth succeeded
-- Recommendations: Add explicit auth validation at startup. Consider caching auth status to avoid repeated failures
+**Project-defined commands inherit the server environment:**
+- Risk: Run scripts, startup scripts, auto-iteration test commands, terminal shells, and ACP agent subprocesses can read any secret present in the server process environment.
+- Files: `src/backend/services/run-script/service/run-script.service.ts`, `src/backend/services/run-script/service/startup-script.service.ts`, `src/backend/services/auto-iteration/service/test-runner.service.ts`, `src/backend/services/terminal/service/terminal.service.ts`, `src/backend/services/session/service/acp/acp-runtime-manager.ts`
+- Current mitigation: The app is local-first, permissions are configurable, startup script file paths are constrained to the repository, and ACP permission prompts exist for strict flows.
+- Recommendations: Use an environment allowlist for subprocesses, redact command logs, warn before running repository-supplied commands, and avoid putting durable API keys in the backend process environment.
 
-**Command Substitution in Run Script:**
-- Risk: Run script command can contain `{port}` placeholder that gets substituted
-- Files: `src/backend/services/run-script.service.ts` (lines 70-77)
-- Current mitigation: Only `{port}` is substituted; other placeholders are not processed
-- Recommendations: Document supported placeholders clearly. Consider whitelist approach for future placeholders
+**Ratchet defaults can run high-permission automated sessions:**
+- Risk: Ratchet/autofix sessions default to broad permissions and operate on PR, CI, and review-comment content that may be authored by untrusted contributors.
+- Files: `prisma/schema.prisma`, `src/backend/services/session/service/lifecycle/session.config.service.ts`, `src/backend/services/session/service/acp/acp-client-handler.ts`, `src/backend/services/ratchet/service/ratchet.service.ts`
+- Current mitigation: Workspace-level ratchet toggles and settings control default permissions; strict and relaxed modes are available.
+- Recommendations: Make high-permission ratchet behavior opt-in per trusted project, record the effective permission preset in session metadata, and gate autofix on repository trust rules.
 
-**Workspace Path Traversal:**
-- Risk: File operations use user-provided file paths which could contain `..` to escape worktree
-- Files: `src/backend/services/file-lock.service.ts` (normalizes paths), `src/backend/trpc/workspace/git.trpc.ts` (validates with "Invalid file path")
-- Current mitigation: File lock service normalizes paths with `path.normalize()` and strips leading slashes. Git trpc validates paths
-- Recommendations: Add explicit validation that normalized paths stay within worktree bounds. Use `path.resolve()` and `path.relative()` to verify containment
+**Linear API key encryption key is stored beside local data:**
+- Risk: A backup or compromise of the app base directory can include both encrypted Linear API keys and the local encryption key.
+- Files: `src/backend/services/crypto.service.ts`, `src/backend/trpc/project.trpc.ts`, `src/backend/trpc/linear.trpc.ts`, `prisma/schema.prisma`
+- Current mitigation: API keys are encrypted with AES-256-GCM and new key files are written with `0600` permissions.
+- Recommendations: Validate permissions on existing key files at startup, support OS keychain or externally supplied encryption keys, and document backup handling for `encryption.key`.
+
+**Bearer tokens appear in proxy URLs:**
+- Risk: Private proxy and run-script proxy direct links include bearer tokens in URLs that can be copied, saved in shell history, or exposed through browser history.
+- Files: `src/cli/proxy.ts`, `src/backend/services/run-script-proxy.service.ts`, `src/shared/proxy-utils.ts`
+- Current mitigation: Tokens are random, token query parameters are stripped before proxying, and authenticated sessions switch to signed `HttpOnly` cookies.
+- Recommendations: Prefer password entry links over direct token links, rotate tokens when tunnels restart or after first use, and avoid logging token-bearing URLs outside explicit user-facing output.
 
 ## Performance Bottlenecks
 
-**GitHub CLI Service JSON Parsing:**
-- Problem: Large PR diffs can be up to 10MB and are parsed and validated with Zod schemas synchronously
-- Files: `src/backend/services/github-cli.service.ts` (lines 28-30: 10MB buffer, line 310-330: parseGhJson function)
-- Cause: `JSON.parse()` blocks the event loop for large payloads
-- Improvement path: Consider streaming JSON parsing for diff operations or chunking large diffs. Add progress indicator to UI for large operations
+**Ratchet polling scales with active PR workspaces:**
+- Problem: Each scheduler cycle fetches all READY workspaces with PRs and queues checks with `Promise.all`.
+- Files: `src/backend/services/ratchet/service/ratchet.service.ts`, `src/backend/services/github/service/github-cli.service.ts`
+- Cause: Workspaces are checked by polling instead of webhook-driven events, and timed-out checks are not cancelled.
+- Improvement path: Add bounded per-cycle concurrency, cancellation with `AbortSignal`, webhook/event triggers, and metrics for queue length and check duration.
 
-**Terminal Output Buffer Growth:**
-- Problem: Terminal output buffers accumulate data with a hard size limit (100KB per terminal) enforced by a ring buffer
-- Files: `src/backend/services/terminal.service.ts` (RollingOutputBuffer class)
-- Current state: Ring buffer implementation ensures buffer never exceeds limit, even with rapid output
-- Improvement path: Limit total terminals per workspace. Add metrics to monitor buffer sizes
+**Snapshot reconciliation does git work for all active workspaces:**
+- Problem: Periodic reconciliation computes workspace runtime state and git stats for all non-archived workspaces.
+- Files: `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`, `src/backend/services/workspace-snapshot-store.service.ts`
+- Cause: Reconciliation is authoritative and uses a fixed git concurrency value.
+- Improvement path: Reconcile dirty workspaces preferentially, tune `GIT_CONCURRENCY`, and expose reconciliation duration metrics.
 
-**Workspace State Machine Queries:**
-- Problem: State machine transitions query workspace by ID multiple times in sequence (read for validation, update for transition)
-- Files: `src/backend/services/workspace-state-machine.service.ts`
-- Cause: Each state transition is separate database call pattern
-- Improvement path: Use transactional updates or batch queries when multiple transitions happen in sequence
+**Repository file autocomplete can walk large repos:**
+- Problem: File listing recursively scans a project repository, then filters and sorts before returning a limited result set.
+- Files: `src/backend/trpc/project.trpc.ts`
+- Cause: The implementation enumerates filesystem entries directly for each request.
+- Improvement path: Add cancellation, cache indexed file paths per project, skip large ignored directories aggressively, and enforce a traversal budget before sorting.
 
-**Ratchet Service PR Polling:**
-- Problem: Ratchet service polls all workspaces with PRs on an interval, making GitHub CLI calls for each workspace
-- Files: `src/backend/services/ratchet.service.ts` (polling loop using `SERVICE_INTERVAL_MS`)
-- Cause: GitHub API rate limiting could become bottleneck with many workspaces
-- Improvement path: Implement exponential backoff and caching. Consider webhook-based PR updates instead of polling
+**Terminal resource monitoring is O(active terminals):**
+- Problem: The terminal service polls resource usage for all active terminals every five seconds.
+- Files: `src/backend/services/terminal/service/terminal.service.ts`
+- Cause: A single interval walks every active terminal and calls process resource inspection.
+- Improvement path: Add global and per-workspace terminal limits, prevent overlapping resource polls, and degrade resource collection under load.
+
+**Command output buffers can grow under concurrent workloads:**
+- Problem: Run scripts, startup scripts, auto-iteration tests, and terminals all buffer output in memory or database fields with separate caps.
+- Files: `src/backend/services/run-script/service/run-script.service.ts`, `src/backend/services/run-script/service/startup-script.service.ts`, `src/backend/services/auto-iteration/service/test-runner.service.ts`, `src/backend/services/terminal/service/terminal.service.ts`, `prisma/schema.prisma`
+- Cause: Output capture is local to each subsystem and not globally budgeted.
+- Improvement path: Track total output memory per workspace, stream large logs to files, and store only bounded excerpts in Prisma.
 
 ## Fragile Areas
 
-**GitHub CLI Service - External Command Dependency:**
-- Files: `src/backend/services/github-cli.service.ts` (all operations)
-- Why fragile: Entire GitHub integration depends on system `gh` CLI being installed and authenticated. If `gh` changes output format, many operations break silently due to Zod validation errors
-- Safe modification: All changes to gh command invocation must include test cases with mocked output. Add integration tests that validate against real GitHub API output format periodically
-- Test coverage: 57 test files exist but github-cli.service.test.ts tests are comprehensive with JSON schema validation tests
+**ACP provider runtime and Codex adapter:**
+- Files: `src/backend/services/session/service/acp/acp-runtime-manager.ts`, `src/backend/services/session/service/acp/acp-client-handler.ts`, `src/backend/services/session/service/acp/codex-app-server-adapter/`
+- Why fragile: It bridges multiple evolving protocols, subprocess lifecycle, permission approval semantics, JSON-RPC message parsing, and provider-specific workarounds.
+- Safe modification: Run `pnpm check:codex-schema`, add fixtures for new provider payloads, test unknown request handling, and verify strict, relaxed, and yolo permission modes.
+- Test coverage: Adapter unit tests exist, but the currently failing schema drift check indicates compatibility coverage is not current with the installed CLI.
 
-**File Lock Service Cross-Process Behavior:**
-- Files: `src/backend/services/file-lock.service.ts` (persistence, inode tracking)
-- Why fragile: File-based locking with inode tracking is fragile across filesystem types (NFS vs local) and different OS implementations. Stale lock detection is timing-dependent
-- Safe modification: Any changes to lock expiration or stale detection must be accompanied by analysis of timing guarantees. Add filesystem-specific testing
-- Test coverage: Comprehensive file-lock.service.test.ts exists with mocked fs operations
+**Run-script state machine:**
+- Files: `src/backend/services/run-script/service/run-script.service.ts`, `src/backend/services/run-script/service/startup-script.service.ts`
+- Why fragile: Start, stop, cleanup, post-run, output listeners, database state, PID handling, and race recovery are interleaved in one service.
+- Safe modification: Add regression tests for concurrent start/stop, fast-exiting commands, commands that ignore `SIGTERM`, cleanup timeouts, and server restart recovery.
+- Test coverage: Unit tests cover core run-script behavior, but OS-level process tree and restart scenarios need targeted coverage.
 
-**Resume Mode File Lock with Manual Cleanup:**
-- Files: `src/backend/services/worktree-lifecycle.service.ts` (lines 29-150, especially lock functions)
-- Why fragile: Manual lock file creation, inode verification, and cleanup is error-prone. Relies on `fs.rename` atomicity which varies by filesystem
-- Safe modification: Keep lock acquisition and release as separate, clear functions. Any changes to retry logic or stale threshold must include detailed comments explaining timing assumptions
-- Test coverage: Test coverage exists but consider adding stress tests with concurrent lock attempts
+**Advisory file locking:**
+- Files: `src/backend/services/session/service/store/file-lock.service.ts`
+- Why fragile: Locks are in-memory for coordination and persisted only as advisory restart metadata; persistence errors are logged and do not fail acquisition.
+- Safe modification: Preserve single-process assumptions, fail loud on malformed lock files only where user action is required, and introduce a database-backed lock before multi-process deployment.
+- Test coverage: Add tests for persistence failure, stale lock cleanup, and multi-process warning paths.
 
-**Terminal Resource Monitoring Interval:**
-- Files: `src/backend/services/terminal.service.ts` (lines 124-150, monitoring setup)
-- Why fragile: Terminal monitoring uses `setInterval` that could accumulate if monitoring callback takes longer than interval
-- Safe modification: Ensure monitoring callback is wrapped in try-catch and completed before next interval fires. Use `setTimeout` recursion pattern instead of `setInterval`
-- Test coverage: Interval management is not extensively tested in provided test files
+**Workspace snapshots and event coalescing:**
+- Files: `src/backend/services/workspace-snapshot-store.service.ts`, `src/backend/orchestration/event-collector.orchestrator.ts`, `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`
+- Why fragile: Derived UI state depends on event ordering, timestamp-based field merges, periodic reconciliation, and in-memory indexes.
+- Safe modification: Prefer authoritative database writes for durable state, keep event payloads small, and test merge ordering with out-of-order timestamps.
+- Test coverage: Add reconciliation tests for archived workspaces, hidden READY workspaces, terminal/session state changes, and delayed git stats.
+
+**Custom migration execution:**
+- Files: `src/backend/migrate.ts`, `prisma/schema.prisma`, `prisma/migrations/`
+- Why fragile: Packaged-app migrations do not use Prisma's normal runner directly and have parser constraints.
+- Safe modification: Run migrations through both Prisma CLI and `src/backend/migrate.ts` before shipping schema changes.
+- Test coverage: Add a fixture migration suite that exercises comments, blank lines, PRAGMA statements, and unsupported multiline strings.
 
 ## Scaling Limits
 
-**Database - SQLite Concurrency:**
-- Current capacity: SQLite with default single-writer limit
-- Limit: High concurrent write load will hit SQLite's writer queue limit
-- Scaling path: Migrate to PostgreSQL if concurrent workspace creation/session updates become bottleneck. Add connection pooling (currently missing)
+**SQLite local database:**
+- Current capacity: Suitable for local single-user operation with moderate projects, workspaces, sessions, terminal output, and ratchet state.
+- Limit: SQLite write contention grows with concurrent sessions, run-script output writes, terminal state updates, auto-iteration progress, and ratchet polling.
+- Scaling path: Keep local-first defaults, batch high-frequency writes, move large logs out of Prisma, and consider a server database only with auth and distributed locking.
 
-**Terminal Processes Per Workspace:**
-- Current capacity: Unlimited terminals per workspace stored in Map
-- Limit: Memory usage grows linearly with terminal count. Resource monitoring loop O(n) per workspace
-- Scaling path: Add configurable limit on terminals per workspace (e.g., max 5). Implement lazy resource monitoring only for active terminals
+**Single-process runtime model:**
+- Current capacity: One backend process owns ACP sessions, terminals, run scripts, file locks, and snapshot events.
+- Limit: Multiple Node processes cannot share live process handles or advisory locks.
+- Scaling path: Add a durable process registry, database/distributed locks, external queues, and explicit leader election before horizontal scaling.
 
-**File Lock Storage:**
-- Current capacity: In-memory Maps + file-based persistence for advisory locks
-- Limit: 10,000+ locked files per workspace will cause memory overhead and slow persistence operations
-- Scaling path: Implement cleanup of expired locks more aggressively. Consider hash-based file organization for lock persistence
+**External CLI dependencies:**
+- Current capacity: GitHub, tunnel, terminal, and process-tree operations depend on local CLIs or native modules.
+- Limit: Missing or changed `gh`, `cloudflared`, `node-pty`, native SQLite modules, or `tree-kill` behavior breaks features at runtime.
+- Scaling path: Add startup diagnostics, version checks, graceful feature degradation, and installation repair guidance.
 
-**GitHub API Rate Limits:**
-- Current capacity: Ratchet service polls all workspaces on interval (SERVICE_INTERVAL_MS)
-- Limit: GitHub API has 5,000 requests/hour limit. With 100+ workspaces checking PRs, could exceed quota
-- Scaling path: Implement exponential backoff with RateLimitBackoff (already exists). Add webhook support for real-time PR updates. Batch PR status requests where possible
-
-**Chat Session Process Count:**
-- Current capacity: Session process manager maintains ClaudeClient instances in Maps per session
-- Limit: Node.js process handles ~10,000 open file descriptors by default. Each Claude process spawns shell + file access
-- Scaling path: Implement process pooling or recycling. Add configurable MAX_SESSIONS_PER_WORKSPACE (already in config, see `src/backend/services/config.service.ts` line 341)
+**Workspace process count:**
+- Current capacity: Session count is configurable, but terminals, run scripts, startup scripts, post-run scripts, tests, and agent subprocesses share local CPU, memory, PTYs, and file descriptors.
+- Limit: No single global scheduler budgets all workspace subprocesses together.
+- Scaling path: Track all subprocesses per workspace, enforce global process limits, and surface backpressure in the UI.
 
 ## Dependencies at Risk
 
-**node-pty for Terminal Support:**
-- Risk: Native module dependency that may not compile on all platforms/Node versions
-- Impact: If node-pty fails to build, terminal feature is completely unavailable (code has graceful fallback but feature is broken)
-- Files: `src/backend/services/terminal.service.ts` (runtime require fallback on lines 125-138)
-- Migration plan: Already has graceful degradation (logs warning if native module missing). Document terminal feature as optional
+**`codex` CLI app-server protocol:**
+- Risk: The local adapter trails the installed CLI schema.
+- Impact: Permission prompts, filesystem operations, MCP requests, and shell-command flows can fail or be silently unsupported.
+- Migration plan: Pin supported CLI versions in development, regenerate snapshots on upgrade, and land adapter handlers in the same change as schema updates.
 
-**tree-kill for Process Cleanup:**
-- Risk: External process tree termination may not work on all OSes, especially Windows
-- Impact: Run script processes might not fully terminate, leaving zombie processes
-- Files: `src/backend/services/run-script.service.ts` (import line 2)
-- Migration plan: tree-kill is well-maintained but consider platform detection tests. Add integration tests on Windows/Linux/macOS
+**`@agentclientprotocol/claude-agent-acp`:**
+- Risk: The runtime contains a provider-specific compatibility workaround for malformed location line fields.
+- Impact: Removing or changing the workaround without fixture coverage can break message validation.
+- Migration plan: Keep provider payload fixtures and delete the workaround only after upstream behavior is verified.
 
-**GitHub CLI (gh command):**
-- Risk: System dependency not bundled. If gh is not installed or updated, GitHub features fail
-- Impact: Entire GitHub integration is unavailable
-- Files: `src/backend/services/github-cli.service.ts` (all operations)
-- Migration plan: Could fallback to Octokit SDK instead of gh CLI, but would be significant refactor. Document gh installation requirement prominently
+**`gh` CLI:**
+- Risk: GitHub integration relies on local authentication, command output shape, and CLI rate-limit behavior.
+- Impact: Issue fetch, PR status, ratchet checks, comments, and auto-fix workflows degrade when `gh` changes or loses auth.
+- Migration plan: Keep `gh` health checks, parse output defensively, and consider direct GitHub API clients for high-volume ratchet paths.
+
+**`cloudflared`:**
+- Risk: Remote access and run-script tunnels require a local `cloudflared` binary and stable output parsing.
+- Impact: Proxy features fail when the binary is missing, unavailable, or output format changes.
+- Migration plan: Improve diagnostics, pin tested versions where packaged, and keep a local-only fallback path clear in the UI.
+
+**Native modules (`better-sqlite3`, `node-pty`):**
+- Risk: Native modules can break after Node, Electron, or platform upgrades.
+- Impact: Database access and terminal sessions can fail at startup or packaging time.
+- Migration plan: Keep `scripts/ensure-native-modules.mjs`, postinstall checks, and packaged-app smoke tests current.
 
 ## Missing Critical Features
 
-**No Webhook Support for GitHub Events:**
-- Problem: Application polls GitHub API for PR changes instead of receiving webhooks. Creates latency and API usage waste
-- Blocks: Real-time PR updates, efficient auto-fix triggering, timely review notifications
-- Workaround: Currently uses polling interval (visible in ratchet service). Acceptable for small deployments
+**Backend authorization layer:**
+- Problem: Project scoping is header-based and does not authenticate callers.
+- Blocks: Safe non-local hosting, team deployments, and secure public tunnels.
 
-**No Distributed Lock Mechanism:**
-- Problem: File locks are single-process only. Cannot coordinate between multiple Node.js processes
-- Blocks: Horizontal scaling, process isolation, reliable multi-machine deployment
-- Workaround: Currently assumes single process. Works for desktop app but limits server deployments
+**Webhook-driven ratchet updates:**
+- Problem: Ratchet relies on polling GitHub PR state and review comments.
+- Blocks: Low-latency autofix at scale and efficient API usage across many workspaces.
 
-**No Persistent Session State Across Server Restarts:**
-- Problem: Claude sessions are tracked in memory and Maps. Session state is lost if server restarts during active session
-- Blocks: Robust handling of server updates/crashes with active user sessions
-- Workaround: Client reconnects trigger new session creation
+**Durable operation cancellation:**
+- Problem: Timed-out ratchet checks and many spawned commands do not share a unified cancellation contract.
+- Blocks: Reliable cleanup under slow external APIs, hung subprocesses, and server shutdown.
 
-**No Configuration Validation at Startup:**
-- Problem: Many required environment variables and feature flags are parsed at runtime (config.service.ts)
-- Blocks: Detecting misconfiguration early instead of at runtime
-- Workaround: Document all required settings in comments
+**Central subprocess security policy:**
+- Problem: Multiple services independently decide environment inheritance, command logging, timeouts, and process-tree cleanup.
+- Blocks: Consistent hardening for run scripts, startup scripts, tests, terminals, and agent providers.
+
+**External secret/key management:**
+- Problem: Local encrypted settings depend on a local key stored in the same app data area.
+- Blocks: Strong protection for synced or backed-up app data directories.
 
 ## Test Coverage Gaps
 
-**GitHub CLI Service Integration:**
-- What's not tested: Real github API integration (only mocked). Command output format changes would not be caught until runtime
-- Files: `src/backend/services/github-cli.service.ts` and corresponding .test.ts
-- Risk: GitHub API output format changes break parsing silently
-- Priority: High - GitHub integration is critical path for PR features
+**Current Codex CLI compatibility:**
+- What's not tested: End-to-end behavior against the installed `codex` app-server schema and new request methods.
+- Files: `src/backend/services/session/service/acp/codex-app-server-adapter/`, `scripts/check-codex-schema-drift.mjs`
+- Risk: Permission and MCP flows break after CLI upgrades.
+- Priority: High
 
-**File-Based Lock Stale Detection Logic:**
-- What's not tested: Actual filesystem behavior across NFS, concurrent process scenarios, clock skew situations
-- Files: `src/backend/services/file-lock.service.ts` (inode tracking, stale threshold)
-- Risk: Locks could accumulate if stale threshold is miscalibrated
-- Priority: Medium - only critical if multi-process deployment is planned
+**Unauthenticated backend exposure:**
+- What's not tested: HTTP and WebSocket rejection behavior for unauthenticated remote callers.
+- Files: `src/backend/server.ts`, `src/backend/trpc/trpc.ts`, `src/backend/trpc/procedures/project-scoped.ts`
+- Risk: Future deployment or proxy changes expose full local control surfaces.
+- Priority: High
 
-**Terminal Cleanup Under Load:**
-- What's not tested: Resource monitoring loop behavior when terminals are created/destroyed rapidly
-- Files: `src/backend/services/terminal.service.ts` (monitoring setup and resource updates)
-- Risk: Memory leak if terminals don't clean up listeners properly
-- Priority: Medium - only shows under high load with many terminal sessions
+**Process lifecycle edge cases:**
+- What's not tested: Process trees that ignore `SIGTERM`, fork children, exit during stop, or leave stale PIDs after restart.
+- Files: `src/backend/services/run-script/service/run-script.service.ts`, `src/backend/services/auto-iteration/service/test-runner.service.ts`, `src/backend/services/terminal/service/terminal.service.ts`
+- Risk: Orphaned processes, sticky states, and misleading UI status.
+- Priority: High
 
-**Race Conditions in State Machines:**
-- What's not tested: Concurrent state transitions when multiple sessions/workspaces transition simultaneously
-- Files: `src/backend/services/workspace-state-machine.service.ts`, `src/backend/services/run-script-state-machine.service.ts`
-- Risk: Invalid state transitions slip through if concurrency assumptions break
-- Priority: Medium - rare but could cause undefined behavior
+**Multi-process locking assumptions:**
+- What's not tested: Two backend processes acquiring or persisting advisory locks for the same session context.
+- Files: `src/backend/services/session/service/store/file-lock.service.ts`
+- Risk: Concurrent agents edit the same context files when deployment assumptions change.
+- Priority: Medium
 
-**Session Process Manager Crash Scenarios:**
-- What's not tested: Behavior when Claude process crashes during message send or while handling interrupt
-- Files: `src/backend/services/session.process-manager.ts`
-- Risk: Session state becomes inconsistent with actual process state
-- Priority: High - crashes should be handled gracefully
+**Large workspace load:**
+- What's not tested: Hundreds of workspaces, many active terminals, many ratchet PRs, and large repositories under snapshot reconciliation.
+- Files: `src/backend/services/ratchet/service/ratchet.service.ts`, `src/backend/orchestration/snapshot-reconciliation.orchestrator.ts`, `src/backend/trpc/project.trpc.ts`, `src/backend/services/terminal/service/terminal.service.ts`
+- Risk: Slow UI updates, API rate-limit pressure, and high local CPU usage.
+- Priority: Medium
+
+**Packaged-app migration parity:**
+- What's not tested: Every Prisma migration running through the custom Electron migration runner.
+- Files: `src/backend/migrate.ts`, `prisma/migrations/`
+- Risk: A migration succeeds in development and fails in packaged app startup.
+- Priority: Medium
 
 ---
 
-*Concerns audit: 2026-02-10*
+*Concerns audit: 2026-04-29*
