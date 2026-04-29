@@ -13,6 +13,7 @@ export const TerminalMessageSchema = z.discriminatedUnion('type', [
   // Create a new terminal
   z.object({
     type: z.literal('create'),
+    requestId: z.string().optional(),
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional(),
   }),

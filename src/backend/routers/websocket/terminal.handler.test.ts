@@ -322,6 +322,92 @@ describe('createTerminalUpgradeHandler', () => {
     expect(terminalService.destroyTerminal).toHaveBeenCalledWith(workspaceId, 'terminal-1');
   });
 
+  it('echoes create request ids when terminal creations resolve out of order', async () => {
+    const workspaceId = 'workspace-1';
+    vi.mocked(workspaceDataService.findById).mockResolvedValue({
+      id: workspaceId,
+      worktreePath: '/tmp/worktree',
+    } as never);
+
+    const { terminalService } = createTerminalService();
+    type CreateResult = { terminalId: string; pid: number };
+    let resolveFirst: ((value: CreateResult | PromiseLike<CreateResult>) => void) | undefined;
+    let resolveSecond: ((value: CreateResult | PromiseLike<CreateResult>) => void) | undefined;
+
+    terminalService.createTerminal
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          })
+      );
+
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+
+    const handler = createTerminalUpgradeHandler(appContext);
+    const ws = new MockWebSocket();
+    const wss = createWss(ws);
+    const request = {} as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL(`http://localhost/terminal?workspaceId=${workspaceId}`),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    ws.emit(
+      'message',
+      JSON.stringify({ type: 'create', requestId: 'request-1', cols: 80, rows: 24 })
+    );
+    ws.emit(
+      'message',
+      JSON.stringify({ type: 'create', requestId: 'request-2', cols: 80, rows: 24 })
+    );
+
+    await vi.waitFor(() => {
+      expect(resolveFirst).toBeDefined();
+      expect(resolveSecond).toBeDefined();
+    });
+
+    resolveSecond?.({ terminalId: 'terminal-2', pid: 4322 });
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'created',
+          terminalId: 'terminal-2',
+          requestId: 'request-2',
+        })
+      );
+    });
+
+    resolveFirst?.({ terminalId: 'terminal-1', pid: 4321 });
+    await vi.waitFor(() => {
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'created',
+          terminalId: 'terminal-1',
+          requestId: 'request-1',
+        })
+      );
+    });
+  });
+
   it('destroys a newly created terminal when session persistence fails', async () => {
     const workspaceId = 'workspace-1';
     vi.mocked(workspaceDataService.findById).mockResolvedValue({
