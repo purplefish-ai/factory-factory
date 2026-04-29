@@ -64,6 +64,30 @@ function removePendingRequestForTab(pendingTabIds: Map<string, string>, tabId: s
   }
 }
 
+function consumePendingTab(
+  pendingTabIds: Map<string, string>,
+  requestId?: string
+): string | undefined {
+  if (requestId) {
+    const pendingTabId = pendingTabIds.get(requestId);
+    pendingTabIds.delete(requestId);
+    return pendingTabId;
+  }
+
+  if (pendingTabIds.size !== 1) {
+    return undefined;
+  }
+
+  const fallbackEntry = pendingTabIds.entries().next().value;
+  if (!fallbackEntry) {
+    return undefined;
+  }
+
+  const [fallbackRequestId, pendingTabId] = fallbackEntry;
+  pendingTabIds.delete(fallbackRequestId);
+  return pendingTabId;
+}
+
 function getActiveTabAfterClose(
   previousTabs: TerminalTab[],
   remainingTabs: TerminalTab[],
@@ -113,18 +137,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     // Handle terminal created - associate server terminalId with its requested tab
     const handleCreated = useCallback(
       (terminalId: string, requestId?: string) => {
-        let pendingTabId: string | undefined;
-        if (requestId) {
-          pendingTabId = pendingTabIdsRef.current.get(requestId);
-          pendingTabIdsRef.current.delete(requestId);
-        } else if (pendingTabIdsRef.current.size === 1) {
-          const fallbackEntry = pendingTabIdsRef.current.entries().next().value;
-          if (fallbackEntry) {
-            const [fallbackRequestId, fallbackTabId] = fallbackEntry;
-            pendingTabId = fallbackTabId;
-            pendingTabIdsRef.current.delete(fallbackRequestId);
-          }
-        }
+        const pendingTabId = consumePendingTab(pendingTabIdsRef.current, requestId);
 
         if (!pendingTabId) {
           outputBufferRef.current.delete(terminalId);
@@ -167,18 +180,7 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
 
     // Handle terminal error
     const handleError = useCallback((message: string, requestId?: string) => {
-      let pendingTabId: string | undefined;
-      if (requestId) {
-        pendingTabId = pendingTabIdsRef.current.get(requestId);
-        pendingTabIdsRef.current.delete(requestId);
-      } else if (pendingTabIdsRef.current.size === 1) {
-        const fallbackEntry = pendingTabIdsRef.current.entries().next().value;
-        if (fallbackEntry) {
-          const [fallbackRequestId, fallbackTabId] = fallbackEntry;
-          pendingTabId = fallbackTabId;
-          pendingTabIdsRef.current.delete(fallbackRequestId);
-        }
-      }
+      const pendingTabId = consumePendingTab(pendingTabIdsRef.current, requestId);
 
       if (pendingTabId) {
         setTabs((prev) =>
