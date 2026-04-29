@@ -5,6 +5,57 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.15] - 2026-04-29
+
+### Added
+
+- Add ACP stale exit regression test (#1548)
+
+### Changed
+
+- Make PR status sync non-blocking on app load (#1496)
+- Stop archived workspace sessions (#1498)
+- Retry auto-iteration on prompt timeout and allow resume from failed state (#1500)
+- Resolve Dependabot dependency alerts (#1499, #1505)
+- Optimize terminal output buffering (#1509)
+- Correct ratchet active session and terminal buffer documentation (#1515, #1516)
+- Accept draft PR merge state (#1536)
+- Allow ratchet when sessions are idle (#1547)
+
+### Fixed
+
+- Fix init failure banner layout (#1497)
+- Drop stale WebSocket events (#1501)
+- Fix ACP permission question handling (#1502)
+- Fix ratchet active session detection (#1503)
+- Validate setup terminal WebSocket origins and require Origin headers (#1504, #1533)
+- Handle terminal CI check outcomes (#1508)
+- Guard stopped ACP exits (#1510)
+- Fix active session limit checks and UI (#1511, #1537)
+- Clean up unregistered init worktrees (#1512)
+- Resolve CLI database paths absolutely (#1513)
+- Serialize ACP prompts per session (#1507)
+- Retry workspace init through the orchestration layer (#1506)
+- Handle Codex exit during active prompts (#1552)
+- Preserve auto-iteration backup config (#1544)
+- Fix ACP single-quote command parsing (#1549)
+- Persist ratchet transcript before cleanup (#1550)
+- Fix ratchet review comment placeholders (#1546)
+- Fix starting run script stop (#1545)
+- Preserve rejected chat message recovery (#1543)
+- Fix terminal cleanup on session persist failure (#1542)
+- Handle startup failure CI and ratchet snapshots (#1534, #1540)
+- Fix live kanban column filtering (#1539)
+- Clear queued ACP prompts on exit (#1535)
+- Fix Electron fatal error shutdown (#1541)
+- Recover stale archiving workspaces (#1554)
+- Correlate terminal create responses (#1553)
+- Fail closed for missing ACP permission bridge (#1551)
+
+### Documentation
+
+- Update PostCSS version in STACK.md (#1514)
+
 ## [0.3.14] - 2026-04-09
 
 ### Added
