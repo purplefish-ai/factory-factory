@@ -240,7 +240,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(result).toMatchObject({
       action: {
         type: 'WAITING',
-        reason: 'Workspace is not idle (active session)',
+        reason: 'Workspace has another working session',
       },
     });
   });
@@ -300,7 +300,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     );
   });
 
-  it('does not dispatch when session is running but idle', async () => {
+  it('dispatches when session is running but idle', async () => {
     const workspace = {
       id: 'ws-idle-session',
       prUrl: 'https://github.com/example/repo/pull/44',
@@ -337,19 +337,21 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     ] as never);
     vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
     vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'ratchet-session',
+      promptSent: true,
+    } as never);
 
     const result = await unsafeCoerce<{
       processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
     }>(ratchetService).processWorkspace(workspace);
 
     expect(result).toMatchObject({
-      action: {
-        type: 'WAITING',
-        reason: 'Workspace is not idle (active session)',
-      },
+      action: { type: 'TRIGGERED_FIXER' },
     });
-    expect(mockSessionBridge.isSessionRunning).toHaveBeenCalledWith('chat-idle-1');
-    expect(fixerSessionService.acquireAndDispatch).not.toHaveBeenCalled();
+    expect(mockSessionBridge.isSessionWorking).toHaveBeenCalledWith('chat-idle-1');
+    expect(fixerSessionService.acquireAndDispatch).toHaveBeenCalled();
   });
 
   it('does not dispatch when PR state unchanged since last dispatch', async () => {
@@ -1463,7 +1465,7 @@ describe('ratchet service (state-change + idle dispatch)', () => {
         hasStateChangedSinceLastDispatch: true,
         hasOtherActiveSession: true,
       }) as { type: string; action?: { reason: string } };
-      expect(result.action?.reason).toBe('Workspace is not idle (active session)');
+      expect(result.action?.reason).toBe('Workspace has another working session');
     });
 
     it('returns WAITING when there are no CI failures or PR review comments', () => {

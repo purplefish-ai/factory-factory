@@ -760,7 +760,7 @@ class RatchetService extends EventEmitter {
         type: 'RETURN_ACTION',
         action: {
           type: 'WAITING',
-          reason: 'Workspace is not idle (active session)',
+          reason: 'Workspace has another working session',
         },
       };
     }
