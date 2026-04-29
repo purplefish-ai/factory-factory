@@ -167,13 +167,17 @@ describe('SessionService coverage wrappers', () => {
       { type: 'unsupported' } as never,
     ] as never);
 
-    expect(sendAcpMessageSpy).toHaveBeenCalledWith('session-1', [
-      { type: 'text', text: 'hello' },
-      { type: 'text', text: 'analyzing' },
-      { type: 'image', data: 'abc', mimeType: 'image/png' },
-      { type: 'text', text: 'tool output' },
-      { type: 'text', text: '{"ok":true}' },
-    ]);
+    expect(sendAcpMessageSpy).toHaveBeenCalledWith(
+      'session-1',
+      [
+        { type: 'text', text: 'hello' },
+        { type: 'text', text: 'analyzing' },
+        { type: 'image', data: 'abc', mimeType: 'image/png' },
+        { type: 'text', text: 'tool output' },
+        { type: 'text', text: '{"ok":true}' },
+      ],
+      3_600_000
+    );
   });
 
   it('falls back to text placeholder for images when provider lacks support', async () => {
@@ -188,10 +192,14 @@ describe('SessionService coverage wrappers', () => {
       { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc' } },
     ] as never);
 
-    expect(sendAcpMessageSpy).toHaveBeenCalledWith('session-1', [
-      { type: 'text', text: 'hello' },
-      { type: 'text', text: '[Image: not supported by this provider]' },
-    ]);
+    expect(sendAcpMessageSpy).toHaveBeenCalledWith(
+      'session-1',
+      [
+        { type: 'text', text: 'hello' },
+        { type: 'text', text: '[Image: not supported by this provider]' },
+      ],
+      3_600_000
+    );
   });
 
   it('propagates sendAcpMessage errors', async () => {

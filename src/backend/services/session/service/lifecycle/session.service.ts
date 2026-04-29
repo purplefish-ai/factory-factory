@@ -31,6 +31,7 @@ import { sessionRepository } from './session.repository';
 import { SessionRetryService } from './session.retry.service';
 
 const logger = createLogger('session');
+const DEFAULT_USER_PROMPT_TIMEOUT_MS = 60 * 60 * 1000;
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
 
@@ -226,7 +227,7 @@ export class SessionService {
         typeof content === 'string'
           ? [{ type: 'text', text: content }]
           : this.toContentBlocks(content, acpClient.supportsImages());
-      return this.sendAcpMessage(sessionId, prompt)
+      return this.sendAcpMessage(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS)
         .then(() => undefined)
         .catch((error) => {
           logger.error('ACP prompt failed', {
