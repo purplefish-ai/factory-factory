@@ -21,7 +21,7 @@
 - Use `camelCase` for local values and parameters: `workspaceId`, `selectedProvider`, `cleanupPromise`.
 - Use `UPPER_SNAKE_CASE` for true constants and env-like values: `STALE_PROVISIONING_THRESHOLD_MS` in `src/backend/services/workspace/resources/workspace.accessor.ts`, `MIGRATIONS_PATH` in `src/backend/testing/integration-db.ts`.
 - Use `mock*` prefixes for Vitest mock functions: `mockFindMany` in `src/backend/services/workspace/resources/workspace.accessor.test.ts`, `mockSessionDataService` in `src/backend/trpc/session.router.test.ts`.
-- Use `*_SCHEMA`-like exported names sparingly; actual schemas use PascalCase names ending in `Schema`: `ConfigEnvSchema` in `src/backend/services/env-schemas.ts`, `exportDataSchema` in `src/shared/schemas/export-data.schema.ts`.
+- Use `*_SCHEMA`-style exported names sparingly; exported Zod schema identifiers usually end in `Schema` but follow local module convention, so both PascalCase service schemas and camelCase shared schemas appear: `ConfigEnvSchema` in `src/backend/services/env-schemas.ts`, `exportDataSchema` in `src/shared/schemas/export-data.schema.ts`.
 
 **Types:**
 - Use PascalCase for interfaces, type aliases, enums, and React props: `UseSessionManagementReturn`, `ExecResult`, `Context`.
