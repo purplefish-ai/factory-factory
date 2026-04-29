@@ -1,276 +1,131 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-02-10
+**Analysis Date:** 2026-04-29
 
 ## Naming Patterns
 
 **Files:**
-- Services: `{name}.service.ts` (e.g., `chat-connection.service.ts`, `logger.service.ts`)
-- Clients: `{name}.client.ts` (e.g., `git.client.ts`)
-- Routers/Endpoints: `{name}.router.ts` or `{name}.trpc.ts` (e.g., `workspace.trpc.ts`, `health.router.ts`)
-- Accessors: `{name}.accessor.ts` (e.g., `project.accessor.ts`, `workspace.accessor.ts`)
-- Interceptors: `{name}.interceptor.ts` (e.g., `branch-rename.interceptor.ts`)
-- Middleware: `{name}.middleware.ts` (e.g., `cors.middleware.ts`)
-- Handlers: `{name}.handler.ts` (e.g., `chat.handler.ts`)
-- Test files: `{name}.test.ts` or `{name}.test.tsx` (co-located with source)
-- Story files: `{name}.stories.tsx`
+- Use kebab-case or domain-qualified filenames for implementation modules: `src/backend/services/git-ops.service.ts`, `src/backend/trpc/project.trpc.ts`, `src/backend/lib/workspace-derived-state.ts`.
+- Use `.service.ts` for backend business services and `.accessor.ts` for Prisma-backed resource access: `src/backend/services/ratchet/service/reconciliation.service.ts`, `src/backend/services/workspace/resources/workspace.accessor.ts`.
+- Use `.trpc.ts` for tRPC routers and keep matching tests as `.router.test.ts`: `src/backend/trpc/session.trpc.ts`, `src/backend/trpc/session.router.test.ts`.
+- Use `.test.ts` and `.test.tsx` for Vitest files colocated with the subject module: `src/backend/services/workspace/resources/workspace.accessor.test.ts`, `src/components/chat/permission-prompt.test.tsx`.
+- Use `.stories.tsx` for Storybook stories beside UI components: `src/components/ui/button.stories.tsx`, `src/client/components/kanban/kanban-board.stories.tsx`.
 
 **Functions:**
-- camelCase for all functions: `generateBranchName()`, `pathExists()`, `createLogger()`
-- Private/internal functions use camelCase with underscore prefix is avoided; use private keyword instead
-- Async functions use `async` keyword: `async function getWorkspace()`
-- Factory functions prefix with `create`: `createLogger()`, `createChatMessageHandlerRegistry()`
+- Use `camelCase` for functions and hooks: `createContext` in `src/backend/trpc/trpc.ts`, `resolveExplicitSessionProvider` in `src/client/routes/projects/workspaces/use-workspace-detail.ts`.
+- Use `use*` names for React hooks: `useWorkspaceData` and `useSessionManagement` in `src/client/routes/projects/workspaces/use-workspace-detail.ts`.
+- Use verb-object names for service methods and helpers: `findByProjectIdWithSessions`, `startPeriodicCleanup`, `validateBranchName`, `execCommand`.
+- Prefer small local factory helpers in tests with explicit names: `createCaller` in `src/backend/trpc/session.router.test.ts`, `createProjectFixture` in `src/backend/services/resources.integration.test.ts`.
 
-**Variables & Constants:**
-- camelCase for variables: `dispatchInProgress`, `chatWsMsgCounter`
-- CONSTANT_CASE for true constants: `MAX_FILE_SIZE`, `LIB_LIMITS`, `DEBUG_CHAT_WS`
-- Object keys follow camelCase: `baseRepoPath`, `worktreeBase`, `dbSessionId`
-- Interface properties use camelCase: `workingDir`, `branchName`, `connectionId`
+**Variables:**
+- Use `camelCase` for local values and parameters: `workspaceId`, `selectedProvider`, `cleanupPromise`.
+- Use `UPPER_SNAKE_CASE` for true constants and env-like values: `STALE_PROVISIONING_THRESHOLD_MS` in `src/backend/services/workspace/resources/workspace.accessor.ts`, `MIGRATIONS_PATH` in `src/backend/testing/integration-db.ts`.
+- Use `mock*` prefixes for Vitest mock functions: `mockFindMany` in `src/backend/services/workspace/resources/workspace.accessor.test.ts`, `mockSessionDataService` in `src/backend/trpc/session.router.test.ts`.
+- Use `*_SCHEMA`-like exported names sparingly; actual schemas use PascalCase names ending in `Schema`: `ConfigEnvSchema` in `src/backend/services/env-schemas.ts`, `exportDataSchema` in `src/shared/schemas/export-data.schema.ts`.
 
-**Types & Interfaces:**
-- PascalCase for type names: `ConnectionInfo`, `FileEntry`, `GitWorktreeInfo`, `LogEntry`
-- Type names are exported and used explicitly: `export interface ConnectionInfo`
-- Discriminated unions use `type` field with string literals: `z.discriminatedUnion('type', [...])`
-- Readonly properties marked with `readonly`: `readonly connections: Map<...>`
-- Optional properties use `?`: `context?: Record<string, unknown>`
-
-**Classes:**
-- PascalCase for class names: `ChatConnectionService`, `GitClient`, `ChatMessageHandlerService`
-- Private properties are prefixed with nothing, marked with `private` keyword: `private connections = new Map()`
-- Instance methods use camelCase: `register()`, `unregister()`, `tryDispatchNextMessage()`
-- Static methods on factories: `GitClientFactory.forProject()`, `GitClientFactory.clearCache()`
+**Types:**
+- Use PascalCase for interfaces, type aliases, enums, and React props: `UseSessionManagementReturn`, `ExecResult`, `Context`.
+- Use `Input` suffix for command/query payload types: `CreateWorkspaceInput`, `UpdateWorkspaceInput`, `FindByProjectIdFilters` in `src/backend/services/workspace/resources/workspace.accessor.ts`.
+- Use `*With*` names for Prisma payload projections: `WorkspaceWithSessions`, `WorkspaceWithSessionsAndProject` in `src/backend/services/workspace/resources/workspace.accessor.ts`.
+- Export public types from service barrels, not from internal paths. Service capsules expose their API through `src/backend/services/{name}/index.ts`.
 
 ## Code Style
 
 **Formatting:**
-- Tool: Biome v2.3.13
-- Indent: 2 spaces
-- Line width: 100 characters
-- Quotes: Single quotes (`'string'`) for JavaScript/TypeScript
-- Semicolons: Always required
-- Trailing commas: ES5 style (in objects/arrays, not function params)
+- Use Biome formatting via `pnpm check:fix`; config lives in `biome.json`.
+- Use 2-space indentation, 100-character line width, LF endings, UTF-8, final newline, and trimmed trailing whitespace from `.editorconfig` and `biome.json`.
+- Use single quotes, semicolons, and trailing commas where valid in ES5 positions from `biome.json`.
+- Keep JSX concise and let Biome enforce self-closing fragments/elements where possible.
 
 **Linting:**
-- Tool: Biome (integrated, runs on `pnpm check:fix`)
-- Strict rules enforced via `biome.json`:
-  - `noUnusedVariables: error`
-  - `noUnusedImports: error`
-  - `useConst: error`
-  - `useImportType: error`
-  - `noNonNullAssertion: error` (disabled in test files and stories)
-  - `noConsole: error` (disabled in logger.service.ts, debug.ts, cli/**, scripts/**, electron/**)
-  - `noExplicitAny: error`
-  - `useAwait: error`
-  - `useOptionalChain: error`
-  - Cognitive complexity limit enforced with exceptions for known complex files
-
-**Type Checking:**
-- Strict TypeScript mode enabled (`strict: true`)
-- No implicit any (`noImplicitAny: true`)
-- Strict null checks enforced (`strictNullChecks: true`)
-- Exhaustive dependencies for React hooks required by linter
+- Use `pnpm check` for Biome, environment access checks, and ownership checks as defined in `package.json`.
+- Biome recommended rules are enabled in `biome.json`; notable enforced rules include no unused imports/variables, exhaustive hook deps, top-level hooks, `useImportType`, no explicit `any`, no non-null assertions, no console, no floating promises, no misused promises, no dangerous HTML, and no accumulating spread.
+- Test and story files may use non-null assertions under the override in `biome.json`: `**/*.test.ts`, `**/*.test.tsx`, `**/*.stories.tsx`.
+- Console usage is restricted to explicit infrastructure allowlists in `biome.json`: `src/backend/services/logger.service.ts`, `src/lib/debug.ts`, `src/cli/**/*.ts`, `scripts/**/*.ts`, `electron/**/*.ts`.
+- Cognitive complexity exceptions are file-specific in `biome.json`; avoid adding new exceptions unless the local code path genuinely cannot be simplified.
+- Custom Biome Grit rules live in `biome-rules/` and enforce local constraints such as no native dialogs, no Next directives, no `z.any`, no unsafe JSON parse casts, and no unsafe resolver casts.
 
 ## Import Organization
 
 **Order:**
-1. Node.js built-in modules: `import * as path from 'node:path'`
-2. Third-party packages: `import { z } from 'zod'`
-3. Type-only imports from packages: `import type { WebSocket } from 'ws'`
-4. Absolute path imports from `@/`: `import { logger } from '@/backend/services/logger.service'`
-5. Relative imports: `import { someHelper } from './helpers'`
+1. Node built-ins with `node:` protocol, usually first: `import path from 'node:path';` in `scripts/check-service-registry.ts`.
+2. External packages and generated clients: `@trpc/server`, `@prisma-gen/client`, `react`, `vitest`.
+3. Absolute project aliases: `@/backend/...`, `@/client/...`, `@/shared/...`, `@/lib/...`.
+4. Local same-directory imports with `./...` only: `./workspace.accessor`, `./trpc`, `./reconciliation.service`.
 
 **Path Aliases:**
-- `@/*` → `src/` (used throughout: `@/backend/`, `@/client/`, `@/shared/`, `@/components/`)
-- `@prisma-gen/*` → `prisma/generated/`
+- Use `@/*` for `src/*`, configured in `tsconfig.json`, `vitest.config.ts`, and Vite.
+- Use `@prisma-gen/*` for `prisma/generated/*`.
+- Use `@factory-factory/core-types/*` for `packages/core/src/types/*`.
+- Parent-relative imports (`../`) are disallowed by `scripts/check-ambiguous-relative-imports.mjs`; use aliases for non-local modules.
+- Relative imports are allowed for same-directory modules and explicit local barrels, as seen in `src/backend/trpc/session.trpc.ts` importing `./trpc`.
 
-**Import Style:**
-- Prefer named imports: `import { createLogger } from './logger.service'`
-- Destructuring in imports: `const { projectId, ...filters } = input`
-- Group imports by category (built-in, third-party, internal, relative)
-- Use `import type` for type-only imports: `import type { QueuedMessage } from '@/shared/claude'`
-- Organize imports automatically: Biome's `organizeImports: on` handles this
+**Boundary Rules:**
+- Frontend files in `src/client/`, `src/components/`, and legacy `src/frontend/` must not import backend modules, except `src/client/lib/trpc.ts` may import backend tRPC types. This is enforced in `.dependency-cruiser.cjs`.
+- Backend files must not import UI layers from `src/client/`, `src/components/`, or `src/frontend/`.
+- `src/shared/` must stay framework/domain neutral and must not import backend, client, frontend, or component layers.
+- tRPC and orchestration consumers must import service capsule barrels such as `@/backend/services/session`, not service internals. This is enforced in `.dependency-cruiser.cjs` and `scripts/check-service-registry.ts`.
+- Service-to-service imports must go through barrels and match `dependsOn` in `src/backend/services/registry.ts`.
+- Database access belongs in service resource layers under `src/backend/services/{name}/resources/`; direct `@/backend/db` imports are otherwise restricted by `.dependency-cruiser.cjs`.
 
 ## Error Handling
 
 **Patterns:**
-- Throw descriptive errors with context: `throw new Error('baseRepoPath is required')`
-- Use try-catch in async functions where error classification is needed
-- Classify errors by type (see `classifyError()` in `github-cli.service.ts`)
-- Log errors with context before throwing: Log message + context object + error details
-- Custom error detection methods (private): `isCliNotInstalledError()`, `isAuthRequiredError()`
-
-**Error Messages:**
-- Include what failed and why: `Failed to parse gh CLI JSON for ${context}`
-- Include the operation context: `throw new Error('Invalid gh CLI response for ${context}')`
-- Avoid generic messages; be specific about cause
-
-**Example:**
-```typescript
-private classifyError(error: unknown): GitHubCLIErrorType {
-  const lowerMessage = String(error).toLowerCase();
-
-  if (this.isCliNotInstalledError(lowerMessage)) {
-    return 'CLI_NOT_INSTALLED';
-  }
-  if (this.isAuthRequiredError(lowerMessage)) {
-    return 'AUTH_REQUIRED';
-  }
-  // ... more classification
-  return 'UNKNOWN';
-}
-```
+- Use `TRPCError` for client-facing tRPC failures with explicit codes, such as `PRECONDITION_FAILED` in `src/backend/trpc/session.trpc.ts` and `BAD_REQUEST` in `src/backend/trpc/procedures/project-scoped.ts`.
+- Use plain `Error` for internal invariants and missing state: `Session not found` in `src/backend/trpc/session.trpc.ts`, bridge configuration checks in `src/backend/services/ratchet/service/reconciliation.service.ts`.
+- Convert unknown caught values with `toError` before structured logging: `src/backend/lib/error-utils.ts` and `src/backend/services/ratchet/service/reconciliation.service.ts`.
+- Catch and log non-fatal background work so service loops continue running: `reconcileWorkspaces` and `startPeriodicCleanup` in `src/backend/services/ratchet/service/reconciliation.service.ts`.
+- Use Zod for validation and normalization at API, env, and shared-data boundaries: `src/backend/services/env-schemas.ts`, `src/shared/schemas/export-data.schema.ts`, `src/shared/websocket/chat-message.schema.ts`.
+- Avoid raw typecasts in production paths. When a cast is unavoidable in tests, keep it in test utilities such as `src/test-utils/unsafe-coerce.ts`.
+- For shell execution, use `execCommand(command, args)` and typed validators from `src/backend/lib/shell.ts`; use shell strings only through `execShell` when shell features are required.
 
 ## Logging
 
-**Framework:** Custom structured logger in `src/backend/services/logger.service.ts`
+**Framework:** Custom structured logger from `src/backend/services/logger.service.ts`.
 
 **Patterns:**
-- Create named loggers: `const logger = createLogger('module-name')`
-- Log levels: error, warn, info, debug
-- Include context object in logs: `logger.info('message', { key: value })`
-- Log full error objects with stack traces when catching exceptions
-- In production, logs write to file (`~/factory-factory/logs/server.log`), errors also to stderr
-- Debug flags control verbose output: `if (DEBUG_CHAT_WS) { logger.info(...) }`
-
-**Console usage:**
-- Allowed in: `src/backend/services/logger.service.ts`, `src/lib/debug.ts`, `src/cli/**`, `scripts/**`, `electron/**`
-- Forbidden elsewhere (linter enforces)
-
-**Example:**
-```typescript
-const logger = createLogger('chat-connection');
-const DEBUG_CHAT_WS = configService.getDebugConfig().chatWebSocket;
-
-if (DEBUG_CHAT_WS) {
-  logger.info('[Chat WS] Dispatch already in progress', { dbSessionId });
-}
-```
+- Create component loggers with `createLogger('component-name')`, as in `src/backend/services/ratchet/service/reconciliation.service.ts`.
+- Log structured context objects rather than interpolating operational data into messages: `logger.warn('Marked stale provisioning workspace as failed', { workspaceId, initStartedAt })`.
+- Pass real `Error` objects to `logger.error(message, error, context)` after converting unknown catches with `toError`.
+- Do not use `console.*` in application code outside the allowlisted logger, CLI, Electron, scripts, and debug files declared in `biome.json`.
+- Production logger output writes JSON to `~/factory-factory/logs/server.log` via `src/backend/services/logger.service.ts`; development output is pretty-printed and also written to the file.
 
 ## Comments
 
 **When to Comment:**
-- Complex algorithms or non-obvious logic
-- Important invariants or constraints (marked with NOTE, IMPORTANT)
-- Section headers in services: `// ============================================================================`
-- Explaining "why", not "what" (code shows what; comments explain why)
-- Business logic that isn't obvious from code
+- Use comments for behavior that prevents incorrect future edits, such as stale workspace thresholds in `src/backend/services/workspace/resources/workspace.accessor.ts`.
+- Use comments around non-obvious lifecycle or concurrency decisions, such as avoiding overlapping cleanup runs in `src/backend/services/ratchet/service/reconciliation.service.ts`.
+- Prefer comments that explain constraints or intent, not line-by-line restatements.
 
 **JSDoc/TSDoc:**
-- Used for public APIs and service methods
-- Example:
-```typescript
-/**
- * Validate that a file path doesn't escape the worktree directory.
- * Uses path normalization and realpath to handle encoded sequences,
- * symlinks, and other bypass attempts.
- */
-export async function isPathSafe(worktreePath: string, filePath: string): Promise<boolean>
-```
-
-**Section Headers:**
-Services use visual section separators for readability:
-```typescript
-// ============================================================================
-// Types
-// ============================================================================
-
-// ============================================================================
-// Service
-// ============================================================================
-```
+- Public utilities and services often include JSDoc blocks for usage and safety contracts: `execCommand`, `escapeShellArg`, and `validateBranchName` in `src/backend/lib/shell.ts`.
+- Types exposed across module boundaries include concise field comments when context matters: `Context` in `src/backend/trpc/trpc.ts`, `UseSessionManagementReturn` in `src/client/routes/projects/workspaces/use-workspace-detail.ts`.
+- Test helper comments are acceptable when a helper encodes a fixture shape or setup constraint, as in `src/components/chat/chat-reducer.test.ts`.
 
 ## Function Design
 
-**Size:**
-- Keep functions focused; extract complex logic to separate functions
-- Large functions (like `protocol.ts`, `run-script.service.ts`) have exceptions noted in `biome.json` for `noExcessiveCognitiveComplexity`
+**Size:** Keep pure helpers compact and extract repeated logic when behavior repeats. Larger services are class-based when they hold lifecycle state, for example `ReconciliationService` in `src/backend/services/ratchet/service/reconciliation.service.ts`.
 
-**Parameters:**
-- Use object destructuring for multiple parameters: `{ projectId, ...filters } = input`
-- Required params first, optional params in object at end
-- Type parameters explicitly: all params have types
+**Parameters:** Use object parameters for multi-field commands and React hooks: `useWorkspaceData({ workspaceId })`, `workspaceAccessor.create({ projectId, name, ... })`. Use positional parameters for simple, stable helper APIs such as `validateBranchName(name)` and `gitCommand(args, cwd)`.
 
-**Return Values:**
-- Async functions return `Promise<T>`
-- Use `Promise.resolve()` or direct return in async functions
-- Explicitly type return values in signatures
-- Use discriminated unions for complex return types (like workspace state)
+**Return Values:** Return typed promises from async services and accessors. Use explicit return interfaces for hooks that expose complex values to avoid leaking internal tRPC types, as in `UseSessionManagementReturn`.
 
-**Example:**
-```typescript
-async function tryDispatchNextMessage(dbSessionId: string): Promise<void> {
-  if (this.dispatchInProgress.get(dbSessionId)) {
-    return; // Early return for guard clause
-  }
+**Async Work:** Await promises or intentionally discard with `void` when a fire-and-forget client invalidation/navigation is expected, as in `src/client/routes/projects/workspaces/use-workspace-detail.ts`.
 
-  const msg = sessionDomainService.dequeueNext(dbSessionId, { emitSnapshot: false });
-  if (!msg) {
-    return; // No message to dispatch
-  }
-
-  // ... rest of logic
-}
-```
+**Stateful Services:** Encapsulate mutable runtime state as private class fields, expose a singleton instance, and keep configuration explicit through methods such as `configure` in `src/backend/services/ratchet/service/reconciliation.service.ts`.
 
 ## Module Design
 
-**Exports:**
-- Named exports preferred: `export const workspaceRouter = router({...})`
-- Export types alongside implementation: `export type ChatMessage = ChatMessageInput`
-- Singleton instances exported: `export const chatConnectionService = new ChatConnectionService()`
-- Factory instances exported: `export const GitClientFactory = { forProject, removeProject, ... }`
+**Exports:** Export named values and singleton instances. Avoid default exports except where framework conventions use them, such as route components and config files (`vitest.config.ts`, `playwright.mobile.config.ts`).
 
-**Barrel Files:**
-- Used in `src/backend/resource_accessors/index.ts`, `src/backend/routers/index.ts`
-- Re-export all public modules: `export * from './workspace.accessor'`
-- Simplifies imports for consumers
+**Barrel Files:** Service capsules must expose public API through `src/backend/services/{name}/index.ts`; consumers import `@/backend/services/workspace`, not `@/backend/services/workspace/resources/workspace.accessor`.
 
-**Service Pattern:**
-- Services are singletons, instantiated once and exported
-- Example from `chat-connection.service.ts`:
-```typescript
-class ChatConnectionService {
-  private connections = new Map<string, ConnectionInfo>();
+**Layering:** Keep resource access in `resources/`, business logic in `service/`, cross-service coordination in `src/backend/orchestration/`, transport in `src/backend/trpc/` and `src/backend/routers/`, client route state in `src/client/`, and shared UI in `src/components/`.
 
-  register(connectionId: string, info: ConnectionInfo): void { ... }
-  unregister(connectionId: string): void { ... }
-}
+**Validation:** Put reusable browser-safe schemas under `src/shared/schemas/` or `src/shared/websocket/`; put backend-specific env schemas in `src/backend/services/env-schemas.ts`.
 
-export const chatConnectionService = new ChatConnectionService();
-```
-
-## Zod Validation
-
-**Pattern:**
-- All input validation uses Zod schemas
-- Schemas are defined inline in procedures or extracted to constants
-- Discriminated unions for complex types: `z.discriminatedUnion('type', [...])`
-- Use `z.object()` for request/response validation
-- Example:
-```typescript
-export const workspaceRouter = router({
-  list: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        status: z.nativeEnum(WorkspaceStatus).optional(),
-        limit: z.number().min(1).max(100).optional(),
-      })
-    )
-    .query(({ input }) => { ... })
-});
-```
-
-## Database & Prisma
-
-**ORM:** Prisma with better-sqlite3 adapter
-
-**Patterns:**
-- Types generated to `@prisma-gen/*`: `import { KanbanColumn } from '@prisma-gen/client'`
-- Client accessed from context in tRPC procedures: `prisma.workspace.findUnique(...)`
-- Migrations in `prisma/migrations/`
-- Schema in `prisma/schema.prisma`
+**Configuration Access:** Backend production code should read environment variables through `configService` and Zod schemas. `scripts/check-no-direct-process-env.mjs` enforces this, with a narrow allowlist for config, logger, terminal/runtime adapters, and similar infrastructure.
 
 ---
 
-*Convention analysis: 2026-02-10*
+*Convention analysis: 2026-04-29*
