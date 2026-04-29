@@ -128,9 +128,11 @@ describe('CodexRpcClient', () => {
   it('rejects pending requests when codex process exits', async () => {
     const child = createMockChild();
     mockSpawn.mockReturnValue(child);
+    const onExit = vi.fn();
     const client = new CodexRpcClient({
       cwd: '/tmp/workspace',
       env: {},
+      onExit,
     });
 
     client.start();
@@ -138,6 +140,35 @@ describe('CodexRpcClient', () => {
     child.emit('exit', 1, null);
 
     await expect(responsePromise).rejects.toThrow(/codex app-server exited/);
+    expect(onExit).toHaveBeenCalledWith({
+      code: 1,
+      signal: null,
+      reason: 'codex app-server exited (code=1, signal=null)',
+    });
+  });
+
+  it('notifies exit listeners once when codex process errors then exits', () => {
+    const child = createMockChild();
+    mockSpawn.mockReturnValue(child);
+    const onExit = vi.fn();
+    const client = new CodexRpcClient({
+      cwd: '/tmp/workspace',
+      env: {},
+      onExit,
+    });
+
+    client.start();
+    const error = new Error('spawn failed');
+    child.emit('error', error);
+    child.emit('exit', 1, null);
+
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(onExit).toHaveBeenCalledWith({
+      code: null,
+      signal: null,
+      reason: 'codex app-server error: spawn failed',
+      error,
+    });
   });
 
   it('rejects new requests after codex process exits', async () => {

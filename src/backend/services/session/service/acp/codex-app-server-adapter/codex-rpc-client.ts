@@ -18,6 +18,13 @@ type CodexJsonRpcError = {
   data?: unknown;
 };
 
+export type CodexRpcExitEvent = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  reason: string;
+  error?: Error;
+};
+
 export class CodexRequestError extends Error {
   readonly code: number;
   readonly data: unknown;
@@ -35,6 +42,7 @@ export type CodexRpcClientOptions = {
   onStderr?: (line: string) => void;
   onNotification?: (notification: { method: string; params: unknown }) => void;
   onRequest?: (request: CodexRpcServerRequest) => void;
+  onExit?: (event: CodexRpcExitEvent) => void;
   onProtocolError?: (error: { reason: string; payload?: unknown }) => void;
 };
 
@@ -92,23 +100,43 @@ export class CodexRpcClient {
     this.lineReader = createInterface({ input: stdout, crlfDelay: Number.POSITIVE_INFINITY });
     this.lineReader.on('line', (line) => this.handleLine(line));
 
-    child.on('exit', (code, signal) => {
+    let exitHandled = false;
+    const handleExit = (event: CodexRpcExitEvent, rejectError: Error) => {
+      if (exitHandled) {
+        return;
+      }
+      exitHandled = true;
       if (this.child === child) {
         this.child = null;
       }
       this.lineReader?.close();
       this.lineReader = null;
+      this.rejectPending(rejectError);
+      try {
+        this.options.onExit?.(event);
+      } catch (error) {
+        this.options.onProtocolError?.({
+          reason: 'exit_callback_error',
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+
+    child.on('exit', (code, signal) => {
       const reason = `codex app-server exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
-      this.rejectPending(new Error(reason));
+      handleExit({ code, signal, reason }, new Error(reason));
     });
 
     child.on('error', (error) => {
-      if (this.child === child) {
-        this.child = null;
-      }
-      this.lineReader?.close();
-      this.lineReader = null;
-      this.rejectPending(error);
+      handleExit(
+        {
+          code: null,
+          signal: null,
+          reason: `codex app-server error: ${error.message}`,
+          error,
+        },
+        error
+      );
     });
 
     this.child = child;
