@@ -983,6 +983,49 @@ describe('AcpRuntimeManager', () => {
       expect(manager.getClient('session-1')).toBe(restartedHandle);
     });
 
+    it('does not call onExit for stale SIGKILL exit after stop completes and session restarts', async () => {
+      const firstChild = setupSuccessfulSpawn();
+      const handlers = defaultHandlers();
+
+      await manager.getOrCreateClient('session-1', defaultOptions(), handlers, defaultContext());
+
+      firstChild.kill = vi.fn((signal?: string) => {
+        if (signal) {
+          firstChild.killed = true;
+        }
+        if (signal === 'SIGKILL') {
+          firstChild.exitCode = 137;
+        }
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      const stopPromise = manager.stopClient('session-1');
+      await vi.advanceTimersByTimeAsync(5100);
+      await stopPromise;
+
+      vi.useRealTimers();
+
+      const secondChild = createMockChildProcess();
+      mockSpawn.mockReturnValueOnce(secondChild);
+
+      const newHandle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        handlers,
+        defaultContext()
+      );
+      expect(newHandle.child).toBe(secondChild);
+
+      (handlers.onExit as ReturnType<typeof vi.fn>).mockClear();
+      firstChild.emit('exit', 137, 'SIGKILL');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(handlers.onExit).not.toHaveBeenCalled();
+      expect(manager.getClient('session-1')).toBe(newHandle);
+    });
+
     it('keeps newer client tracked when old stop exits later', async () => {
       const firstChild = setupSuccessfulSpawn();
 
