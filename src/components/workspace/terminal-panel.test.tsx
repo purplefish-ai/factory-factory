@@ -203,4 +203,34 @@ describe('TerminalPanel terminal creation', () => {
     expect(terminalSocketMock.destroy).toHaveBeenCalledWith('terminal-orphan');
     cleanup();
   });
+
+  it('activates a terminal created through a stale websocket callback', () => {
+    const ref = createRef<TerminalPanelRef>();
+    const cleanup = renderInDom((root) => {
+      flushSync(() => {
+        root.render(
+          createElement(TerminalPanel, {
+            ref,
+            workspaceId: 'workspace-1',
+            hideHeader: true,
+          })
+        );
+      });
+    });
+    const initialOnCreated = terminalSocketMock.options?.onCreated;
+
+    flushSync(() => {
+      ref.current?.createNewTerminal();
+    });
+
+    const requestId = terminalSocketMock.create.mock.calls[0]?.[2];
+    expect(requestId).toEqual(expect.any(String));
+
+    flushSync(() => {
+      initialOnCreated?.('terminal-1', requestId);
+    });
+
+    expect(terminalSocketMock.setActive).toHaveBeenCalledWith('terminal-1');
+    cleanup();
+  });
 });
