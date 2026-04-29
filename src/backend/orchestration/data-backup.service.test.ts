@@ -8,6 +8,7 @@ import {
   WorkspaceProviderSelection,
 } from '@prisma-gen/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { z } from 'zod';
 import {
   CIStatus,
   KanbanColumn,
@@ -208,8 +209,10 @@ const mockUserSettings: UserSettings = {
   updatedAt: new Date('2025-01-01T00:00:00.000Z'),
 };
 
-function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
-  return {
+function createImportData(
+  overrides?: Partial<z.input<typeof exportDataSchema>['data']>
+): ExportData {
+  return exportDataSchema.parse({
     meta: {
       exportedAt: '2025-01-01T00:00:00.000Z',
       version: '1.0.0',
@@ -259,8 +262,6 @@ function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
           runScriptPort: 3000,
           runScriptStartedAt: '2025-01-01T00:10:00.000Z',
           runScriptStatus: RunScriptStatus.RUNNING,
-          mode: WorkspaceMode.STANDARD,
-          autoIterationConfig: null,
           prUrl: 'https://github.com/test/repo/pull/1',
           githubIssueNumber: 123,
           githubIssueUrl: 'https://github.com/test/repo/issues/123',
@@ -333,7 +334,7 @@ function createImportData(overrides?: Partial<ExportData['data']>): ExportData {
       },
       ...overrides,
     },
-  };
+  });
 }
 
 describe('DataBackupService', () => {
