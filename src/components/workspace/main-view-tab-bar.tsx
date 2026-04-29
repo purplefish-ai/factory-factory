@@ -13,6 +13,7 @@ import type { SessionStatus as DbSessionStatus } from '@/shared/core';
 import { ClosedSessionsDropdown } from './closed-sessions-dropdown';
 import { QuickActionsMenu } from './quick-actions-menu';
 import { RatchetWrenchIcon } from './ratchet-wrench-icon';
+import { isWorkspaceSessionLimitReached } from './session-limit';
 import {
   deriveSessionTabRuntime,
   type WorkspaceSessionRuntimeSummary,
@@ -222,9 +223,8 @@ export function MainViewTabBar({
   // Filter out the default 'chat' tab since we're showing sessions instead
   const nonChatTabs = tabs.filter((tab) => tab.type !== 'chat');
 
-  // Check if session limit is reached
-  const sessionCount = sessions?.length ?? 0;
-  const isAtLimit = maxSessions !== undefined && sessionCount >= maxSessions;
+  // Check if active session limit is reached
+  const isAtLimit = isWorkspaceSessionLimitReached(sessions, maxSessions);
   const isButtonDisabled = disabled || isAtLimit;
   const providerTriggerLabel = getSessionProviderLabel(selectedProvider);
 

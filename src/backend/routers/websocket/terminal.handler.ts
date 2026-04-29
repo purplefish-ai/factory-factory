@@ -167,11 +167,16 @@ async function handleCreateMessage(
       rows: message.rows ?? 24,
     });
 
-    await sessionDataService.createTerminalSession({
-      workspaceId,
-      name: terminalId,
-      pid,
-    });
+    try {
+      await sessionDataService.createTerminalSession({
+        workspaceId,
+        name: terminalId,
+        pid,
+      });
+    } catch (error) {
+      terminalService.destroyTerminal(workspaceId, terminalId);
+      throw error;
+    }
 
     const cleanupMap = terminalListenerCleanup.get(ws);
     attachTerminalListeners(ws, terminalId, terminalService, logger, cleanupMap);

@@ -144,13 +144,17 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
     const origin = request.headers?.origin;
-    if (origin) {
-      const allowedOrigins = configService.getCorsConfig().allowedOrigins;
-      if (!allowedOrigins.includes(origin)) {
-        logger.warn('Rejected setup terminal connection from unauthorized origin', { origin });
-        sendBadRequest(socket, 'Unauthorized origin');
-        return;
-      }
+    if (!origin) {
+      logger.warn('Rejected setup terminal connection without Origin header');
+      sendBadRequest(socket, 'Missing Origin header');
+      return;
+    }
+
+    const allowedOrigins = configService.getCorsConfig().allowedOrigins;
+    if (!allowedOrigins.includes(origin)) {
+      logger.warn('Rejected setup terminal connection from unauthorized origin', { origin });
+      sendBadRequest(socket, 'Unauthorized origin');
+      return;
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {

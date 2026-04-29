@@ -137,7 +137,7 @@ export const fullPRDetailsSchema = z.object({
   headRefName: z.string().optional(),
   baseRefName: z.string().optional(),
   mergeStateStatus: z
-    .enum(['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'])
+    .enum(['BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'DRAFT', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'])
     .optional(),
 });
 

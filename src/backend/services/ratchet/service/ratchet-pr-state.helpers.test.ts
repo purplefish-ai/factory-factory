@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { PRStateInfo } from './ratchet.types';
 import {
+  buildFailedCheckDiagnostics,
   computeCiSnapshotKey,
   computeDispatchSnapshotKey,
   determineRatchetState,
@@ -146,6 +147,21 @@ describe('computeDispatchSnapshotKey', () => {
 });
 
 describe('computeCiSnapshotKey', () => {
+  it('includes STARTUP_FAILURE checks in the failure signature', () => {
+    const key = computeCiSnapshotKey(CIStatus.FAILURE, [
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'STARTUP_FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+      },
+    ]);
+
+    expect(key).toBe('ci:FAILURE:ci:STARTUP_FAILURE:100');
+    expect(key).not.toBe('ci:FAILURE:unknown');
+  });
+
   it('ignores stale failures from superseded runs of the same check', () => {
     const key = computeCiSnapshotKey(CIStatus.FAILURE, [
       {
@@ -174,5 +190,75 @@ describe('computeCiSnapshotKey', () => {
     expect(key).toContain('commitlint:FAILURE');
     expect(key).not.toContain('ci:FAILURE:100');
     expect(key).toBe('ci:FAILURE:commitlint:FAILURE:101');
+  });
+
+  it('includes STARTUP_FAILURE checks in failure snapshot keys', () => {
+    const key = computeCiSnapshotKey(CIStatus.FAILURE, [
+      {
+        name: 'ci',
+        workflowName: 'CI',
+        status: 'COMPLETED',
+        conclusion: 'STARTUP_FAILURE',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+      },
+    ]);
+
+    expect(key).toBe('ci:FAILURE:ci:STARTUP_FAILURE:100');
+  });
+});
+
+describe('buildFailedCheckDiagnostics', () => {
+  it('includes STARTUP_FAILURE checks in failed check diagnostics', () => {
+    const diagnostics = buildFailedCheckDiagnostics(
+      makePRState({
+        statusCheckRollup: [
+          {
+            name: 'ci',
+            workflowName: 'CI',
+            status: 'COMPLETED',
+            conclusion: 'STARTUP_FAILURE',
+            detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+          },
+        ],
+      })
+    );
+
+    expect(diagnostics).toEqual([
+      {
+        name: 'ci',
+        status: 'COMPLETED',
+        conclusion: 'STARTUP_FAILURE',
+        runId: '100',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+      },
+    ]);
+  });
+});
+
+describe('buildFailedCheckDiagnostics', () => {
+  it('includes STARTUP_FAILURE checks in failed check diagnostics', () => {
+    const diagnostics = buildFailedCheckDiagnostics(
+      makePRState({
+        statusCheckRollup: [
+          {
+            name: 'ci',
+            workflowName: 'CI',
+            status: 'COMPLETED',
+            conclusion: 'STARTUP_FAILURE',
+            detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+          },
+        ],
+      })
+    );
+
+    expect(diagnostics).toEqual([
+      {
+        name: 'ci',
+        status: 'COMPLETED',
+        conclusion: 'STARTUP_FAILURE',
+        runId: '100',
+        detailsUrl: 'https://github.com/org/repo/actions/runs/100/job/1',
+      },
+    ]);
   });
 });
