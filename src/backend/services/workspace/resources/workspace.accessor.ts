@@ -16,6 +16,13 @@ import type {
  */
 const STALE_PROVISIONING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Threshold for considering an ARCHIVING workspace as stale.
+ * ARCHIVING is a persisted transient state; after this threshold, no
+ * in-flight archive from the current process should still be active.
+ */
+const STALE_ARCHIVING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
 interface CreateWorkspaceInput {
   projectId: string;
   name: string;
@@ -454,6 +461,25 @@ class WorkspaceAccessor {
         project: true,
       },
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Find ARCHIVING workspaces that have been stuck long enough to recover.
+   * Includes project data so the archive workflow can safely clean up worktrees.
+   */
+  findStaleArchivingWithProject(): Promise<WorkspaceWithProject[]> {
+    const staleThreshold = new Date(Date.now() - STALE_ARCHIVING_THRESHOLD_MS);
+
+    return prisma.workspace.findMany({
+      where: {
+        status: 'ARCHIVING',
+        updatedAt: { lt: staleThreshold },
+      },
+      include: {
+        project: true,
+      },
+      orderBy: { updatedAt: 'asc' },
     });
   }
 
