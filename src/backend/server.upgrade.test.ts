@@ -17,6 +17,7 @@ import {
 } from '@/backend/orchestration/snapshot-reconciliation.orchestrator';
 import { recoverStaleArchivingWorkspaces } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { reconciliationService } from '@/backend/services/ratchet';
+import { runScriptStateMachine } from '@/backend/services/run-script';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 
 const handlers = vi.hoisted(() => ({
@@ -66,6 +67,19 @@ vi.mock('@/backend/services/ratchet', async (importOriginal) => {
       reconcile: vi.fn(async () => undefined),
       startPeriodicCleanup: vi.fn(),
       stopPeriodicCleanup: vi.fn(async () => undefined),
+    },
+  };
+});
+
+vi.mock('@/backend/services/run-script', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/backend/services/run-script')>();
+  return {
+    ...actual,
+    runScriptStateMachine: {
+      ...actual.runScriptStateMachine,
+      removeAllListeners: vi.fn(),
+      on: vi.fn(),
+      recoverStaleStates: vi.fn(async () => undefined),
     },
   };
 });
@@ -356,7 +370,15 @@ describe('server websocket upgrade routing', () => {
     expect(configureSnapshotReconciliation).toHaveBeenCalledWith(harness.context.services);
     expect(reconciliationService.cleanupOrphans).toHaveBeenCalledOnce();
     expect(reconciliationService.reconcile).toHaveBeenCalledOnce();
+    expect(runScriptStateMachine.recoverStaleStates).toHaveBeenCalledOnce();
     expect(recoverStaleArchivingWorkspaces).toHaveBeenCalledWith(harness.context.services);
+    const runScriptRecoveryOrder = vi.mocked(runScriptStateMachine.recoverStaleStates).mock
+      .invocationCallOrder[0];
+    const archiveRecoveryOrder = vi.mocked(recoverStaleArchivingWorkspaces).mock
+      .invocationCallOrder[0];
+    expect(runScriptRecoveryOrder).toBeDefined();
+    expect(archiveRecoveryOrder).toBeDefined();
+    expect(runScriptRecoveryOrder ?? 0).toBeLessThan(archiveRecoveryOrder ?? 0);
     expect(startInterceptors).toHaveBeenCalledOnce();
     expect(reconciliationService.startPeriodicCleanup).toHaveBeenCalledOnce();
     expect(harness.services.rateLimiter.start).toHaveBeenCalledOnce();
@@ -383,6 +405,9 @@ describe('server websocket upgrade routing', () => {
       new Error('cleanup failed')
     );
     vi.mocked(reconciliationService.reconcile).mockRejectedValueOnce(new Error('reconcile failed'));
+    vi.mocked(runScriptStateMachine.recoverStaleStates).mockRejectedValueOnce(
+      new Error('run script recovery failed')
+    );
     vi.mocked(recoverStaleArchivingWorkspaces).mockRejectedValueOnce(
       new Error('archive recovery failed')
     );
@@ -397,6 +422,10 @@ describe('server websocket upgrade routing', () => {
     );
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to reconcile workspaces on startup',
+      expect.any(Object)
+    );
+    expect(harness.logger.error).toHaveBeenCalledWith(
+      'Failed to recover stale run script states on startup',
       expect.any(Object)
     );
     expect(harness.logger.error).toHaveBeenCalledWith(

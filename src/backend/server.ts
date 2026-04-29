@@ -357,15 +357,15 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           reconciliationService.reconcile()
         );
 
+        // Reset run script states left in transient STARTING/STOPPING by a prior crash
+        await runStartupTask('Failed to recover stale run script states on startup', () =>
+          runScriptStateMachine.recoverStaleStates()
+        );
+
         // Resume workspace archives abandoned by a prior process exit.
         await runStartupTask(
           'Failed to recover stale archiving workspaces on startup',
           recoverStaleArchivingOnStartup
-        );
-
-        // Reset run script states left in transient STARTING/STOPPING by a prior crash
-        await runStartupTask('Failed to recover stale run script states on startup', () =>
-          runScriptStateMachine.recoverStaleStates()
         );
 
         // Reset auto-iteration states left in RUNNING by a prior crash
