@@ -12,7 +12,10 @@ const mocks = vi.hoisted(() => ({
   resize: vi.fn(),
   destroy: vi.fn(),
   setActive: vi.fn(),
-  options: null as { onCreated?: (terminalId: string, requestId?: string) => void } | null,
+  options: null as {
+    onCreated?: (terminalId: string, requestId?: string) => void;
+    onError?: (message: string, requestId?: string) => void;
+  } | null,
 }));
 
 vi.mock('lucide-react', () => ({
@@ -85,6 +88,34 @@ describe('TerminalPanel', () => {
 
     expect(mocks.setActive).toHaveBeenCalledTimes(1);
     expect(mocks.setActive).toHaveBeenCalledWith('terminal-b');
+
+    root.unmount();
+  });
+
+  it('does not consume a pending tab when an uncorrelated error arrives', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const panelRef = createRef<TerminalPanelRef>();
+
+    flushSync(() => {
+      root.render(createElement(TerminalPanel, { workspaceId: 'workspace-1', ref: panelRef }));
+    });
+
+    flushSync(() => {
+      panelRef.current?.createNewTerminal();
+    });
+
+    const requestId = mocks.create.mock.calls[0]?.[0] as string;
+
+    flushSync(() => {
+      mocks.options?.onError?.('unscoped failure');
+      mocks.options?.onCreated?.('terminal-a', requestId);
+    });
+
+    expect(mocks.destroy).not.toHaveBeenCalled();
+    expect(mocks.setActive).toHaveBeenCalledTimes(1);
+    expect(mocks.setActive).toHaveBeenCalledWith('terminal-a');
 
     root.unmount();
   });

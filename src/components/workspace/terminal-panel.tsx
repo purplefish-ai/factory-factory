@@ -140,8 +140,12 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
     // Handle terminal error
     const handleError = useCallback((message: string, requestId?: string) => {
       // Show request-scoped create errors in the tab that initiated them.
-      const pendingTabId = claimPendingTerminalTab(pendingTabIdsByRequestRef.current, requestId);
-      if (pendingTabId) {
+      if (requestId) {
+        const pendingTabId = claimPendingTerminalTab(pendingTabIdsByRequestRef.current, requestId);
+        if (!pendingTabId) {
+          return;
+        }
+
         setTabs((prev) =>
           prev.map((tab) =>
             tab.id === pendingTabId
@@ -152,10 +156,8 @@ export const TerminalPanel = forwardRef<TerminalPanelRef, TerminalPanelProps>(
         return;
       }
 
-      if (!requestId) {
-        // Legacy uncorrelated errors cannot be tied to one create request.
-        outputBufferRef.current.clear();
-      }
+      // Legacy uncorrelated errors cannot be tied to one create request.
+      outputBufferRef.current.clear();
     }, []);
 
     // Handle terminal list restoration (after page refresh)
