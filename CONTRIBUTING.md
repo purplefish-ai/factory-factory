@@ -112,9 +112,10 @@ Write clear, descriptive commit messages:
 ```
 src/
 ├── backend/          # Express + tRPC server
-│   ├── claude/       # Claude Code integration
+│   ├── services/     # Service capsules and infrastructure services
+│   ├── orchestration/  # Cross-service coordination layer
 │   ├── trpc/         # tRPC routers
-│   └── resource_accessors/  # Database queries
+│   └── routers/      # REST/WebSocket route handlers
 ├── client/           # React frontend
 │   ├── components/   # UI components
 │   └── routes/       # Page routes
