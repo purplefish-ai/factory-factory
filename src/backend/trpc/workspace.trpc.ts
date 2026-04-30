@@ -298,8 +298,17 @@ export const workspaceRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
       const result = await prSnapshotService.attachAndRefreshPR(input.id, input.prUrl);
-      if (!result.success && result.reason === 'workspace_not_found') {
-        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      if (!result.success) {
+        if (result.reason === 'workspace_not_found') {
+          throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message:
+            result.reason === 'fetch_failed'
+              ? `PR was associated but snapshot fetch failed for: ${input.prUrl}`
+              : `Failed to attach PR: ${input.prUrl}`,
+        });
       }
       return workspaceDataService.findById(input.id);
     }),
