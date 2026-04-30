@@ -310,7 +310,11 @@ export const workspaceRouter = router({
               : `Failed to attach PR: ${input.prUrl}`,
         });
       }
-      return workspaceDataService.findById(input.id);
+      const updatedWorkspace = await workspaceDataService.findById(input.id);
+      if (!updatedWorkspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      }
+      return updatedWorkspace;
     }),
 
   // Toggle workspace-level ratcheting
