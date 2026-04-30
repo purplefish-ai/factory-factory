@@ -12,6 +12,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS, SERVICE_TIMEOUT_MS } from '@/backend/services/constants';
 import { createLogger } from '@/backend/services/logger.service';
 import { RateLimitBackoff } from '@/backend/services/rate-limit-backoff';
+import { userSettingsAccessor } from '@/backend/services/settings';
 import { workspaceAccessor } from '@/backend/services/workspace';
 import { CIStatus, RatchetState } from '@/shared/core';
 import type { RatchetGitHubBridge, RatchetPRSnapshotBridge, RatchetSessionBridge } from './bridges';
@@ -21,6 +22,7 @@ import type {
   RatchetCheckResult,
   RatchetDecision,
   RatchetDecisionContext,
+  RatchetTriggerSettings,
   ReviewPollResult,
   ReviewPollTracker,
   WorkspaceRatchetResult,
@@ -431,7 +433,10 @@ class RatchetService extends EventEmitter {
 
       if (prStateInfo.prState === 'MERGED') {
         this.reviewPollTrackers.delete(workspace.id);
-      } else if (decisionContext.isCleanPrWithNoNewReviewActivity) {
+      } else if (
+        decisionContext.isCleanPrWithNoNewReviewActivity &&
+        decisionContext.triggerSettings.reviewResponseEnabled
+      ) {
         const pollDispatch = await this.processReviewCommentPoll(
           workspace,
           prStateInfo,
@@ -440,7 +445,7 @@ class RatchetService extends EventEmitter {
         if (pollDispatch) {
           return pollDispatch;
         }
-      } else {
+      } else if (!decisionContext.isCleanPrWithNoNewReviewActivity) {
         this.reviewPollTrackers.delete(workspace.id);
       }
 
@@ -619,6 +624,20 @@ class RatchetService extends EventEmitter {
     throw new Error(`Unhandled ratchet action: ${JSON.stringify(exhaustiveCheck)}`);
   }
 
+  private async resolveRatchetTriggerSettings(
+    workspace: WorkspaceWithPR
+  ): Promise<RatchetTriggerSettings> {
+    const settings = await userSettingsAccessor.get();
+    return {
+      ciResponseEnabled: workspace.ratchetCiResponseEnabled ?? settings.ratchetCiResponseEnabled,
+      mergeConflictResponseEnabled:
+        workspace.ratchetMergeConflictResponseEnabled ??
+        settings.ratchetMergeConflictResponseEnabled,
+      reviewResponseEnabled:
+        workspace.ratchetReviewResponseEnabled ?? settings.ratchetReviewResponseEnabled,
+    };
+  }
+
   private async buildRatchetDecisionContext(
     workspace: WorkspaceWithPR,
     prStateInfo: PRStateInfo
@@ -635,6 +654,7 @@ class RatchetService extends EventEmitter {
       prStateInfo
     );
     const isCleanPrWithNoNewReviewActivity = this.shouldSkipCleanPR(workspace, prStateInfo);
+    const triggerSettings = await this.resolveRatchetTriggerSettings(workspace);
 
     const activityChecks = await this.collectRatchetingActivityChecks(
       workspace,
@@ -654,6 +674,7 @@ class RatchetService extends EventEmitter {
       isCleanPrWithNoNewReviewActivity,
       activeRatchetSession: activityChecks.activeRatchetSession,
       hasOtherActiveSession: activityChecks.hasOtherActiveSession,
+      triggerSettings,
     };
   }
 
@@ -737,7 +758,7 @@ class RatchetService extends EventEmitter {
       };
     }
 
-    if (!this.hasActionableFixTrigger(context.prStateInfo)) {
+    if (!this.hasActionableFixTrigger(context.prStateInfo, context.triggerSettings)) {
       return {
         type: 'RETURN_ACTION',
         action: { type: 'WAITING', reason: 'No CI failures or PR review comments to address' },
@@ -779,16 +800,23 @@ class RatchetService extends EventEmitter {
     return await this.triggerFixer(context.workspace, context.prStateInfo);
   }
 
-  private hasActionableFixTrigger(prStateInfo: PRStateInfo): boolean {
-    if (prStateInfo.ciStatus === CIStatus.FAILURE) {
+  private hasActionableFixTrigger(
+    prStateInfo: PRStateInfo,
+    triggerSettings: RatchetTriggerSettings
+  ): boolean {
+    if (triggerSettings.ciResponseEnabled && prStateInfo.ciStatus === CIStatus.FAILURE) {
       return true;
     }
 
-    if (prStateInfo.hasMergeConflict) {
+    if (triggerSettings.mergeConflictResponseEnabled && prStateInfo.hasMergeConflict) {
       return true;
     }
 
-    return (prStateInfo.reviewComments?.length ?? 0) > 0;
+    if (triggerSettings.reviewResponseEnabled && (prStateInfo.reviewComments?.length ?? 0) > 0) {
+      return true;
+    }
+
+    return false;
   }
 
   private shouldSkipCleanPR(workspace: WorkspaceWithPR, prStateInfo: PRStateInfo): boolean {

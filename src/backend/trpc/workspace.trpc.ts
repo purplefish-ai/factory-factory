@@ -317,11 +317,31 @@ export const workspaceRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const updated = await workspaceDataService.update(input.workspaceId, {
-        defaultSessionProvider: input.defaultSessionProvider,
-        ratchetSessionProvider: input.ratchetSessionProvider,
-      });
+      const updated = await workspaceDataService.updateProviderDefaults(
+        input.workspaceId,
+        input.defaultSessionProvider,
+        input.ratchetSessionProvider
+      );
       return updated;
+    }),
+
+  // Update workspace-level ratchet trigger controls
+  updateRatchetTriggers: publicProcedure
+    .input(
+      z.object({
+        workspaceId: z.string(),
+        ratchetCiResponseEnabled: z.boolean().nullable().optional(),
+        ratchetMergeConflictResponseEnabled: z.boolean().nullable().optional(),
+        ratchetReviewResponseEnabled: z.boolean().nullable().optional(),
+      })
+    )
+    .mutation(({ input }) => {
+      return workspaceDataService.updateRatchetTriggers(
+        input.workspaceId,
+        input.ratchetCiResponseEnabled,
+        input.ratchetMergeConflictResponseEnabled,
+        input.ratchetReviewResponseEnabled
+      );
     }),
 
   // Archive a workspace
