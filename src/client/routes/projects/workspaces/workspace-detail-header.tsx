@@ -1,5 +1,5 @@
-import { Info, Pencil } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { GitPullRequest, Info, Pencil } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   HeaderLeftExtraSlot,
@@ -10,7 +10,15 @@ import {
 import { ProjectSelectorDropdown } from '@/client/components/project-selector';
 import { trpc } from '@/client/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { RunScriptButton, RunScriptPortBadge } from '@/components/workspace';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -60,6 +68,7 @@ export function WorkspaceDetailHeaderSlot({
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(workspace.name);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [attachPrOpen, setAttachPrOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleStartEdit = () => {
@@ -157,6 +166,17 @@ export function WorkspaceDetailHeaderSlot({
               >
                 <Info className="h-3 w-3" />
               </Button>
+              {!isArchived && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => setAttachPrOpen(true)}
+                  aria-label={workspace.prUrl ? 'Edit associated PR' : 'Associate a PR'}
+                >
+                  <GitPullRequest className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -218,7 +238,99 @@ export function WorkspaceDetailHeaderSlot({
         onOpenChange={setDetailsOpen}
         workspace={workspace}
       />
+      <AttachPrDialog
+        open={attachPrOpen}
+        onOpenChange={setAttachPrOpen}
+        workspaceId={workspaceId}
+        currentPrUrl={workspace.prUrl ?? undefined}
+      />
     </>
+  );
+}
+
+function AttachPrDialog({
+  open,
+  onOpenChange,
+  workspaceId,
+  currentPrUrl,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaceId: string;
+  currentPrUrl?: string;
+}) {
+  const utils = trpc.useUtils();
+  const [value, setValue] = useState(currentPrUrl ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const attachPrMutation = trpc.workspace.attachPR.useMutation({
+    onSuccess: async () => {
+      await utils.workspace.get.invalidate({ id: workspaceId });
+      onOpenChange(false);
+      toast.success('PR associated successfully');
+    },
+    onError: (err) => {
+      setError(err.message);
+    },
+  });
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      setValue(currentPrUrl ?? '');
+      setError(null);
+    }
+    onOpenChange(next);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    attachPrMutation.mutate({ id: workspaceId, prUrl: value.trim() });
+  };
+
+  // Sync input value when dialog opens
+  useEffect(() => {
+    if (open) {
+      setValue(currentPrUrl ?? '');
+      setError(null);
+    }
+  }, [open, currentPrUrl]);
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-md" aria-describedby="attach-pr-description">
+        <DialogHeader>
+          <DialogTitle>{currentPrUrl ? 'Edit associated PR' : 'Associate a PR'}</DialogTitle>
+          <DialogDescription id="attach-pr-description">
+            Enter the GitHub PR URL to link it to this workspace. The ratchet will use this PR to
+            monitor CI and review status.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Input
+              type="url"
+              placeholder="https://github.com/owner/repo/pull/123"
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                setError(null);
+              }}
+              autoFocus
+            />
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!value.trim() || attachPrMutation.isPending}>
+              {attachPrMutation.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
