@@ -10,6 +10,7 @@ import { assembleWorkspaceDerivedState } from '@/backend/lib/workspace-derived-s
 import { archiveWorkspace } from '@/backend/orchestration/workspace-archive.orchestrator';
 import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
 import { DEFAULT_FOLLOWUP } from '@/backend/prompts/workflows';
+import { prSnapshotService } from '@/backend/services/github';
 import { ratchetService } from '@/backend/services/ratchet';
 import {
   sessionDataService,
@@ -275,6 +276,45 @@ export const workspaceRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
       }
       return workspaceDataService.rename(input.id, input.name);
+    }),
+
+  // Manually associate a GitHub PR URL with a workspace
+  attachPR: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        prUrl: z
+          .string()
+          .trim()
+          .regex(
+            /^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/,
+            'Must be a valid GitHub PR URL (https://github.com/owner/repo/pull/N)'
+          ),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const workspace = await workspaceDataService.findById(input.id);
+      if (!workspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      }
+      const result = await prSnapshotService.attachAndRefreshPR(input.id, input.prUrl);
+      if (!result.success) {
+        if (result.reason === 'workspace_not_found') {
+          throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message:
+            result.reason === 'fetch_failed'
+              ? `PR was associated but snapshot fetch failed for: ${input.prUrl}`
+              : `Failed to attach PR: ${input.prUrl}`,
+        });
+      }
+      const updatedWorkspace = await workspaceDataService.findById(input.id);
+      if (!updatedWorkspace) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: `Workspace not found: ${input.id}` });
+      }
+      return updatedWorkspace;
     }),
 
   // Toggle workspace-level ratcheting
