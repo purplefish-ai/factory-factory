@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { trpc } from '@/client/lib/trpc';
 
+import {
+  forgetSetupWarningDismissed,
+  isSetupWarningDismissed,
+  rememberSetupWarningDismissed,
+} from './setup-warning-storage';
 import type { useWorkspaceData } from './use-workspace-detail';
 
 export function useWorkspaceInitStatus(
@@ -60,17 +65,31 @@ export function useWorkspaceInitStatus(
   const isScriptFailed =
     (status === 'FAILED' && hasWorktreePath) || (status === 'READY' && !!initErrorMessage);
 
-  // Ephemeral dismiss state — resets when the error message changes (e.g. after a retry).
+  // Persisted per workspace/error so navigating away and back does not resurface dismissed warnings.
   const [setupWarningDismissed, setSetupWarningDismissed] = useState(false);
-  const prevErrorMessageRef = useRef<string | null>(null);
   useEffect(() => {
-    if (initErrorMessage !== prevErrorMessageRef.current) {
-      setSetupWarningDismissed(false);
-      prevErrorMessageRef.current = initErrorMessage;
+    if (!workspaceInitStatus) {
+      return;
     }
-  }, [initErrorMessage]);
 
-  const dismissSetupWarning = useCallback(() => setSetupWarningDismissed(true), []);
+    if (!initErrorMessage) {
+      forgetSetupWarningDismissed(workspaceId);
+      setSetupWarningDismissed(false);
+      return;
+    }
+
+    if (workspaceInitStatus.chatBanner?.showDismiss !== true) {
+      setSetupWarningDismissed(false);
+      return;
+    }
+
+    setSetupWarningDismissed(isSetupWarningDismissed(workspaceId, initErrorMessage));
+  }, [workspaceId, workspaceInitStatus, initErrorMessage]);
+
+  const dismissSetupWarning = useCallback(() => {
+    rememberSetupWarningDismissed(workspaceId, initErrorMessage);
+    setSetupWarningDismissed(true);
+  }, [workspaceId, initErrorMessage]);
 
   return {
     workspaceInitStatus,

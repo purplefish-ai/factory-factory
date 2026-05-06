@@ -338,6 +338,10 @@ export function WorkspaceDetailContainer() {
   );
 
   const chatTabId = selectedDbSessionId ? `chat-${selectedDbSessionId}` : null;
+  const initBanner =
+    setupWarningDismissed && workspaceInitStatus?.chatBanner?.showDismiss
+      ? null
+      : (workspaceInitStatus?.chatBanner ?? null);
 
   const { persistCurrent: persistChatScroll } = usePersistentScroll({
     tabId: chatTabId,
@@ -413,7 +417,7 @@ export function WorkspaceDetailContainer() {
     acpConfigOptions,
     setConfigOption,
     autoStartPending: isIssueAutoStartPending,
-    initBanner: workspaceInitStatus?.chatBanner ?? null,
+    initBanner,
   };
 
   return (
