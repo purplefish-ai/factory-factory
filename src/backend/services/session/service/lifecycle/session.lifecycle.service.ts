@@ -217,7 +217,7 @@ export class SessionLifecycleService {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      this.finalizeOrphanedToolCallsOnStop(sessionId);
+      this.finalizeOrphanedToolCalls(sessionId, 'session_stop');
       await this.updateStoppedSessionState(sessionId);
       this.sessionDomainService.clearQueuedWork(sessionId, { emitSnapshot: true });
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
@@ -425,6 +425,7 @@ export class SessionLifecycleService {
       onExit: async (sid: string, exitCode: number | null) => {
         this.promptTurnCompletionService.clearSession(sid);
         this.onSessionExit?.(sid);
+        this.finalizeOrphanedToolCalls(sid, 'runtime_exit');
         this.acpEventProcessor.clearSessionState(sid);
         this.sessionPermissionService.cancelPendingRequests(sid);
         acpTraceLogger.log(sid, 'runtime_exit', { exitCode });
@@ -593,12 +594,13 @@ export class SessionLifecycleService {
     );
   }
 
-  private finalizeOrphanedToolCallsOnStop(sessionId: string): void {
+  private finalizeOrphanedToolCalls(sessionId: string, reason: string): void {
     try {
-      this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'session_stop');
+      this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, reason);
     } catch (error) {
-      logger.warn('Failed finalizing orphaned ACP tool calls during stop', {
+      logger.warn('Failed finalizing orphaned ACP tool calls', {
         sessionId,
+        reason,
         error: error instanceof Error ? error.message : String(error),
       });
       this.acpEventProcessor.clearPendingToolCalls(sessionId);
