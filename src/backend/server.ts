@@ -48,6 +48,7 @@ import {
   createSnapshotsUpgradeHandler,
   createTerminalUpgradeHandler,
 } from './routers/websocket';
+import { periodicTaskService } from './services/periodic-task';
 import { reconciliationService } from './services/ratchet';
 import { runScriptStateMachine } from './services/run-script';
 import { workspaceAccessor } from './services/workspace';
@@ -322,6 +323,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     stopEventCollector();
     await snapshotReconciliationService.stop();
     await ratchetService.stop();
+    await periodicTaskService.stop();
     await reconciliationService.stopPeriodicCleanup();
     await prisma.$disconnect();
 
@@ -419,6 +421,7 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
               rateLimiter.start();
               schedulerService.start();
               ratchetService.start();
+              periodicTaskService.start();
 
               logger.info('Server endpoints available', {
                 server: `http://${ENDPOINT_HOST}:${actualPort}`,

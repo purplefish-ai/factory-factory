@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import { ChevronDown, Loader2, Paperclip, RefreshCw } from 'lucide-react';
+import { Calendar, ChevronDown, Loader2, Paperclip, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { AppRouter } from '@/client/lib/trpc';
@@ -47,6 +47,26 @@ interface InlineWorkspaceFormProps {
 
 const ATTACHMENT_ACCEPT_TYPES = [...SUPPORTED_IMAGE_TYPES, ...SUPPORTED_TEXT_EXTENSIONS].join(',');
 const MAX_PROMPT_TEXTAREA_HEIGHT_PX = 240;
+
+async function processFileInput(event: React.ChangeEvent<HTMLInputElement>) {
+  const files = event.target.files;
+  if (!files || files.length === 0) {
+    return null;
+  }
+  const { attachments: newAttachments, errors } = await collectAttachments(files);
+  if (errors.length > 0) {
+    const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
+    toast.error(`Could not add ${errors.length} file(s): ${formattedErrors.join('; ')}`);
+  }
+  event.target.value = '';
+  return { newAttachments };
+}
+
+const launchButtonLabels: Record<string, string> = {
+  STANDARD: 'Launch',
+  AUTO_ITERATION: 'Launch (auto-iterate)',
+  PERIODIC_TASK: 'Create Periodic Task',
+};
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type KanbanWorkspace = RouterOutputs['workspace']['listWithKanbanState'][number];
@@ -118,11 +138,12 @@ function createOptimisticWorkingWorkspace(params: {
     hasHadSessions: false,
     cachedKanbanColumn: 'WORKING',
     stateComputedAt: null,
-    mode: (params.mode ?? 'STANDARD') as 'STANDARD' | 'AUTO_ITERATION',
+    mode: params.mode ?? 'STANDARD',
     autoIterationStatus: null,
     autoIterationConfig: null,
     autoIterationProgress: null,
     autoIterationSessionId: null,
+    periodicTaskId: null,
     agentSessions: [],
     terminalSessions: [],
     kanbanColumn: 'WORKING',
@@ -133,6 +154,174 @@ function createOptimisticWorkingWorkspace(params: {
     isArchived: false,
     pendingRequestType: null,
   };
+}
+
+function ModeConfigPanel({
+  mode,
+  cadence,
+  setCadence,
+  isCreating,
+  testCommand,
+  setTestCommand,
+  targetDescription,
+  setTargetDescription,
+  maxIterations,
+  setMaxIterations,
+  unlimitedIterations,
+  setUnlimitedIterations,
+  testTimeoutSeconds,
+  setTestTimeoutSeconds,
+  baseBranch,
+  setBaseBranch,
+}: {
+  mode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK';
+  cadence: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  setCadence: (v: 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
+  isCreating: boolean;
+  testCommand: string;
+  setTestCommand: (v: string) => void;
+  targetDescription: string;
+  setTargetDescription: (v: string) => void;
+  maxIterations: number;
+  setMaxIterations: (v: number) => void;
+  unlimitedIterations: boolean;
+  setUnlimitedIterations: (v: boolean) => void;
+  testTimeoutSeconds: number;
+  setTestTimeoutSeconds: (v: number) => void;
+  baseBranch: string;
+  setBaseBranch: (v: string) => void;
+}) {
+  if (mode === 'PERIODIC_TASK') {
+    return (
+      <PeriodicTaskConfigPanel cadence={cadence} setCadence={setCadence} isCreating={isCreating} />
+    );
+  }
+  if (mode === 'AUTO_ITERATION') {
+    return (
+      <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+          <RefreshCw className="h-3 w-3" />
+          Auto-iteration config
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Test command</Label>
+          <Input
+            className="h-7 text-xs font-mono"
+            placeholder="e.g. pnpm test"
+            value={testCommand}
+            onChange={(e) => setTestCommand(e.target.value)}
+            disabled={isCreating}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Target description</Label>
+          <Input
+            className="h-7 text-xs"
+            placeholder="e.g. All tests pass with no regressions"
+            value={targetDescription}
+            onChange={(e) => setTargetDescription(e.target.value)}
+            disabled={isCreating}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Max iterations</Label>
+            <Input
+              className="h-7 w-20 text-xs"
+              type="number"
+              min={1}
+              value={unlimitedIterations ? '' : maxIterations}
+              onChange={(e) => {
+                if (e.target.value === '') {
+                  return;
+                }
+                const val = Number(e.target.value);
+                setMaxIterations(Number.isNaN(val) ? 25 : Math.max(1, val));
+              }}
+              disabled={isCreating || unlimitedIterations}
+              placeholder="25"
+            />
+          </div>
+          <label className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Checkbox
+              checked={unlimitedIterations}
+              onCheckedChange={(checked) => setUnlimitedIterations(checked === true)}
+              disabled={isCreating}
+              className="h-3.5 w-3.5"
+            />
+            Unlimited
+          </label>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Test timeout (s)</Label>
+            <Input
+              className="h-7 w-20 text-xs"
+              type="number"
+              min={1}
+              value={testTimeoutSeconds}
+              onChange={(e) => {
+                if (e.target.value === '') {
+                  return;
+                }
+                const val = Number(e.target.value);
+                setTestTimeoutSeconds(Number.isNaN(val) ? 300 : Math.max(1, val));
+              }}
+              disabled={isCreating}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Base branch (optional)</Label>
+          <Input
+            className="h-7 text-xs font-mono"
+            placeholder="defaults to project default branch"
+            value={baseBranch}
+            onChange={(e) => setBaseBranch(e.target.value)}
+            disabled={isCreating}
+          />
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function PeriodicTaskConfigPanel({
+  cadence,
+  setCadence,
+  isCreating,
+}: {
+  cadence: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  setCadence: (v: 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
+  isCreating: boolean;
+}) {
+  return (
+    <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+        <Calendar className="h-3 w-3" />
+        Periodic task config
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Cadence</Label>
+        <Select
+          value={cadence}
+          onValueChange={(v) => setCadence(v as 'DAILY' | 'WEEKLY' | 'MONTHLY')}
+          disabled={isCreating}
+        >
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="DAILY">Daily</SelectItem>
+            <SelectItem value="WEEKLY">Weekly</SelectItem>
+            <SelectItem value="MONTHLY">Monthly</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Creates a new workspace on this schedule. The first run starts immediately.
+      </p>
+    </div>
+  );
 }
 
 export function InlineWorkspaceForm({
@@ -158,7 +347,8 @@ export function InlineWorkspaceForm({
   const [startupModePreset, setStartupModePreset] = useState<'non_interactive' | 'plan'>(
     'non_interactive'
   );
-  const [mode, setMode] = useState<'STANDARD' | 'AUTO_ITERATION'>('STANDARD');
+  const [mode, setMode] = useState<'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK'>('STANDARD');
+  const [cadence, setCadence] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('DAILY');
   const [testCommand, setTestCommand] = useState('');
   const [targetDescription, setTargetDescription] = useState('');
   const [maxIterations, setMaxIterations] = useState(25);
@@ -256,7 +446,18 @@ export function InlineWorkspaceForm({
     },
   });
 
-  const isCreating = createWorkspaceMutation.isPending;
+  const createPeriodicTaskMutation = trpc.periodicTask.create.useMutation({
+    onSuccess: (task) => {
+      toast.success(`Periodic task "${task.name}" created`);
+      utils.periodicTask.list.invalidate({ projectId });
+      onCancel();
+    },
+    onError: (error) => {
+      toast.error(`Failed to create periodic task: ${error.message}`);
+    },
+  });
+
+  const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
@@ -264,22 +465,11 @@ export function InlineWorkspaceForm({
   });
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) {
-      return;
+    const result = await processFileInput(event);
+    const newFiles = result?.newAttachments ?? [];
+    if (newFiles.length > 0) {
+      setAttachments((prev) => [...prev, ...newFiles]);
     }
-
-    const { attachments: newAttachments, errors } = await collectAttachments(files);
-    if (newAttachments.length > 0) {
-      setAttachments((prev) => [...prev, ...newAttachments]);
-    }
-
-    if (errors.length > 0) {
-      const formattedErrors = errors.map(({ fileName, message }) => `${fileName}: ${message}`);
-      toast.error(`Could not add ${errors.length} file(s): ${formattedErrors.join('; ')}`);
-    }
-
-    event.target.value = '';
   };
 
   const buildAutoIterationConfig = () => ({
@@ -294,15 +484,20 @@ export function InlineWorkspaceForm({
     return trimmed || undefined;
   };
 
-  const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' = mode) => {
-    if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
-      toast.error('Auto-iteration requires a test command and target description.');
+  const launchPeriodicTask = (trimmedPrompt: string) => {
+    if (!trimmedPrompt) {
+      toast.error('Periodic task requires a prompt.');
       return;
     }
-    const trimmedPrompt = initialPrompt.trim();
+    const name = generateWorkspaceNameFromPrompt(trimmedPrompt, availableWorkspaceNames);
+    createPeriodicTaskMutation.mutate({ projectId, name, prompt: trimmedPrompt, cadence });
+  };
+
+  const launchWorkspace = (trimmedPrompt: string, launchMode: 'STANDARD' | 'AUTO_ITERATION') => {
     const name = trimmedPrompt
       ? generateWorkspaceNameFromPrompt(trimmedPrompt, availableWorkspaceNames)
       : generateUniqueWorkspaceName(availableWorkspaceNames);
+    const isAutoIterate = launchMode === 'AUTO_ITERATION';
     createWorkspaceMutation.mutate({
       type: 'MANUAL',
       projectId,
@@ -313,9 +508,22 @@ export function InlineWorkspaceForm({
       ratchetEnabled,
       provider,
       mode: launchMode,
-      autoIterationConfig: launchMode === 'AUTO_ITERATION' ? buildAutoIterationConfig() : undefined,
-      branchName: launchMode === 'AUTO_ITERATION' ? getAutoIterationBranchName() : undefined,
+      autoIterationConfig: isAutoIterate ? buildAutoIterationConfig() : undefined,
+      branchName: isAutoIterate ? getAutoIterationBranchName() : undefined,
     });
+  };
+
+  const handleLaunch = (launchMode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK' = mode) => {
+    if (launchMode === 'AUTO_ITERATION' && !(testCommand.trim() && targetDescription.trim())) {
+      toast.error('Auto-iteration requires a test command and target description.');
+      return;
+    }
+    const trimmedPrompt = initialPrompt.trim();
+    if (launchMode === 'PERIODIC_TASK') {
+      launchPeriodicTask(trimmedPrompt);
+    } else {
+      launchWorkspace(trimmedPrompt, launchMode);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -383,90 +591,24 @@ export function InlineWorkspaceForm({
             }
           />
         ) : null}
-        {mode === 'AUTO_ITERATION' && (
-          <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-              <RefreshCw className="h-3 w-3" />
-              Auto-iteration config
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Test command</Label>
-              <Input
-                className="h-7 text-xs font-mono"
-                placeholder="e.g. pnpm test"
-                value={testCommand}
-                onChange={(e) => setTestCommand(e.target.value)}
-                disabled={isCreating}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Target description</Label>
-              <Input
-                className="h-7 text-xs"
-                placeholder="e.g. All tests pass with no regressions"
-                value={targetDescription}
-                onChange={(e) => setTargetDescription(e.target.value)}
-                disabled={isCreating}
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Max iterations</Label>
-                <Input
-                  className="h-7 w-20 text-xs"
-                  type="number"
-                  min={1}
-                  value={unlimitedIterations ? '' : maxIterations}
-                  onChange={(e) => {
-                    if (e.target.value === '') {
-                      return;
-                    }
-                    const val = Number(e.target.value);
-                    setMaxIterations(Number.isNaN(val) ? 25 : Math.max(1, val));
-                  }}
-                  disabled={isCreating || unlimitedIterations}
-                  placeholder="25"
-                />
-              </div>
-              <label className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Checkbox
-                  checked={unlimitedIterations}
-                  onCheckedChange={(checked) => setUnlimitedIterations(checked === true)}
-                  disabled={isCreating}
-                  className="h-3.5 w-3.5"
-                />
-                Unlimited
-              </label>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Test timeout (s)</Label>
-                <Input
-                  className="h-7 w-20 text-xs"
-                  type="number"
-                  min={1}
-                  value={testTimeoutSeconds}
-                  onChange={(e) => {
-                    if (e.target.value === '') {
-                      return;
-                    }
-                    const val = Number(e.target.value);
-                    setTestTimeoutSeconds(Number.isNaN(val) ? 300 : Math.max(1, val));
-                  }}
-                  disabled={isCreating}
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Base branch (optional)</Label>
-              <Input
-                className="h-7 text-xs font-mono"
-                placeholder="defaults to project default branch"
-                value={baseBranch}
-                onChange={(e) => setBaseBranch(e.target.value)}
-                disabled={isCreating}
-              />
-            </div>
-          </div>
-        )}
+        <ModeConfigPanel
+          mode={mode}
+          cadence={cadence}
+          setCadence={setCadence}
+          isCreating={isCreating}
+          testCommand={testCommand}
+          setTestCommand={setTestCommand}
+          targetDescription={targetDescription}
+          setTargetDescription={setTargetDescription}
+          maxIterations={maxIterations}
+          setMaxIterations={setMaxIterations}
+          unlimitedIterations={unlimitedIterations}
+          setUnlimitedIterations={setUnlimitedIterations}
+          testTimeoutSeconds={testTimeoutSeconds}
+          setTestTimeoutSeconds={setTestTimeoutSeconds}
+          baseBranch={baseBranch}
+          setBaseBranch={setBaseBranch}
+        />
         <div className="space-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5">
@@ -540,7 +682,7 @@ export function InlineWorkspaceForm({
                 size="sm"
                 className={cn(
                   'h-7 text-xs whitespace-nowrap rounded-r-none',
-                  mode === 'AUTO_ITERATION' && 'bg-primary/90'
+                  mode !== 'STANDARD' && 'bg-primary/90'
                 )}
                 onClick={() => handleLaunch(mode)}
                 disabled={
@@ -550,7 +692,7 @@ export function InlineWorkspaceForm({
                 }
               >
                 {isCreating ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                {mode === 'AUTO_ITERATION' ? 'Launch (auto-iterate)' : 'Launch'}
+                {launchButtonLabels[mode]}
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -573,6 +715,10 @@ export function InlineWorkspaceForm({
                   <DropdownMenuItem className="text-xs" onClick={() => setMode('AUTO_ITERATION')}>
                     <RefreshCw className="mr-1.5 h-3 w-3" />
                     Launch as Auto-Iteration Workspace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onClick={() => setMode('PERIODIC_TASK')}>
+                    <Calendar className="mr-1.5 h-3 w-3" />
+                    Create Periodic Task
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

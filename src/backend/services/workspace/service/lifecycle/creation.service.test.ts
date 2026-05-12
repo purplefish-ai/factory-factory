@@ -75,6 +75,7 @@ describe('WorkspaceCreationService', () => {
     autoIterationConfig: null,
     autoIterationProgress: null,
     autoIterationSessionId: null,
+    periodicTaskId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

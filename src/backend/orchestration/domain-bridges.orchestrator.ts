@@ -17,6 +17,7 @@ import {
   logbookService,
 } from '@/backend/services/auto-iteration';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { periodicTaskService } from '@/backend/services/periodic-task';
 import {
   fixerSessionService,
   type RatchetGitHubBridge,
@@ -357,6 +358,50 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     autoIterationWorkspaceBridge,
     autoIterationLogbookBridge
   );
+
+  // === Periodic task domain bridges ===
+  periodicTaskService.configure({
+    workspace: {
+      async createWorkspaceForTask({ projectId, name, prompt, periodicTaskId }) {
+        // Create workspace directly with periodicTaskId and PERIODIC_TASK source
+        const workspace = await workspaceAccessor.create({
+          projectId,
+          name,
+          creationSource: 'PERIODIC_TASK',
+          periodicTaskId,
+          ratchetEnabled: true,
+          creationMetadata: { initialPrompt: prompt },
+        });
+
+        // Create default session
+        await sessionDataService.createAgentSession({
+          workspaceId: workspace.id,
+          workflow: 'implement',
+          name: 'Periodic task',
+        });
+
+        // Initialize worktree in background
+        void initializeWorkspaceWorktree(workspace.id).catch(() => {
+          // Best-effort: errors are logged inside initializeWorkspaceWorktree
+        });
+
+        return { workspaceId: workspace.id };
+      },
+    },
+    status: {
+      async getWorkspaceStatus(workspaceId) {
+        const ws = await workspaceAccessor.findRawById(workspaceId);
+        if (!ws) {
+          return null;
+        }
+        return {
+          status: ws.status,
+          prUrl: ws.prUrl,
+          prNumber: ws.prNumber,
+        };
+      },
+    },
+  });
 
   // === Snapshot store derivation functions ===
   workspaceSnapshotStore.configure({

@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('lucide-react', () => ({
+  Calendar: () => null,
   ChevronDown: () => null,
   Loader2: () => null,
   Paperclip: () => null,
@@ -47,6 +48,9 @@ vi.mock('@/client/lib/trpc', () => ({
         },
         list: { invalidate: mocks.listInvalidateMock },
         getProjectSummaryState: { invalidate: mocks.getProjectSummaryStateInvalidateMock },
+      },
+      periodicTask: {
+        list: { invalidate: vi.fn() },
       },
     }),
     userSettings: {
@@ -75,6 +79,14 @@ vi.mock('@/client/lib/trpc', () => ({
             isPending: false,
           };
         },
+      },
+    },
+    periodicTask: {
+      create: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
       },
     },
   },
