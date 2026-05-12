@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   getSessionRuntimeErrorMessage,
   getSessionSummaryErrorMessage,
+  hasWorkingSessionSummary,
+  isSessionSummaryWorking,
   type SessionRuntimeLastExit,
   type SessionRuntimePhase,
 } from './session-runtime';
@@ -69,4 +71,27 @@ describe('session runtime error message helpers', () => {
       ).toBe(testCase.expected);
     });
   }
+});
+
+describe('session runtime working helpers', () => {
+  it('treats activity WORKING as working even when lifecycle phase has not caught up', () => {
+    expect(isSessionSummaryWorking({ activity: 'WORKING', runtimePhase: 'idle' })).toBe(true);
+  });
+
+  it('treats runtime phase running as working even when activity has not caught up', () => {
+    expect(isSessionSummaryWorking({ activity: 'IDLE', runtimePhase: 'running' })).toBe(true);
+  });
+
+  it('treats idle activity and idle phase as not working', () => {
+    expect(isSessionSummaryWorking({ activity: 'IDLE', runtimePhase: 'idle' })).toBe(false);
+  });
+
+  it('detects any working summary in a list', () => {
+    expect(
+      hasWorkingSessionSummary([
+        { activity: 'IDLE', runtimePhase: 'idle' },
+        { activity: 'IDLE', runtimePhase: 'running' },
+      ])
+    ).toBe(true);
+  });
 });

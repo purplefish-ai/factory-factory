@@ -95,6 +95,20 @@ export function getSessionRuntimeErrorMessage(
   return resolveSessionRuntimeErrorMessage(runtime.phase, runtime.errorMessage, runtime.lastExit);
 }
 
+export function isSessionSummaryWorking(
+  summary: Pick<SessionSummary, 'activity' | 'runtimePhase'>
+): boolean {
+  // activity tracks prompt/work-in-flight state; runtimePhase tracks process lifecycle.
+  // Persisted or merged snapshots can briefly expose only one of these signals.
+  return summary.activity === 'WORKING' || summary.runtimePhase === 'running';
+}
+
+export function hasWorkingSessionSummary(
+  summaries: Pick<SessionSummary, 'activity' | 'runtimePhase'>[]
+): boolean {
+  return summaries.some((summary) => isSessionSummaryWorking(summary));
+}
+
 export function findWorkspaceSessionRuntimeError(
   summaries: SessionSummary[] | undefined
 ): { sessionId: string; message: string } | null {
