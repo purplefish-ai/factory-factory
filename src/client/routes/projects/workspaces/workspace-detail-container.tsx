@@ -11,7 +11,7 @@ import {
   resolveEffectiveSessionProvider,
   type SessionProviderValue,
 } from '@/lib/session-provider-selection';
-import type { SessionRuntimeState } from '@/shared/session-runtime';
+import { isSessionSummaryWorking, type SessionRuntimeState } from '@/shared/session-runtime';
 import { forgetResumeWorkspace } from './resume-workspace-storage';
 import { useSessionManagement, useWorkspaceData } from './use-workspace-detail';
 import {
@@ -20,6 +20,7 @@ import {
   useWorkspaceInitStatus,
 } from './use-workspace-detail-hooks';
 import type { ChatContentProps } from './workspace-detail-chat-content';
+import { hasUserMessageWithoutAgentMessage } from './workspace-detail-container.utils';
 import { WorkspaceDetailView } from './workspace-detail-view';
 
 function areRuntimeStatesEqual(
@@ -220,8 +221,7 @@ export function WorkspaceDetailContainer() {
     selectedDbSessionId !== null &&
     (sessionStatus.phase === 'loading' || sessionStatus.phase === 'ready') &&
     processStatus.state === 'unknown' &&
-    messages.some((message) => message.source === 'user') &&
-    !messages.some((message) => message.source === 'agent');
+    hasUserMessageWithoutAgentMessage(messages);
 
   const [liveSessionRuntimeById, setLiveSessionRuntimeById] = useState<
     Map<string, SessionRuntimeState>
@@ -271,9 +271,7 @@ export function WorkspaceDetailContainer() {
   );
   const workspaceRunning = useMemo(
     () =>
-      Array.from(sessionSummariesById.values()).some(
-        (summary) => summary.activity === 'WORKING' || summary.runtimePhase === 'running'
-      ),
+      Array.from(sessionSummariesById.values()).some((summary) => isSessionSummaryWorking(summary)),
     [sessionSummariesById]
   );
 

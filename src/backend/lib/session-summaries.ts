@@ -1,6 +1,10 @@
 import type { WorkspaceSessionSummary } from '@/backend/services/workspace-snapshot-store.service';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
-import type { SessionRuntimeState } from '@/shared/session-runtime';
+import {
+  hasWorkingSessionSummary as hasWorkingRuntimeSessionSummary,
+  isSessionSummaryWorking as isRuntimeSessionSummaryWorking,
+  type SessionRuntimeState,
+} from '@/shared/session-runtime';
 
 interface SessionLike {
   id: string;
@@ -35,9 +39,9 @@ export function buildWorkspaceSessionSummaries(
 }
 
 export function isSessionSummaryWorking(summary: WorkspaceSessionSummary): boolean {
-  return summary.activity === 'WORKING' || summary.runtimePhase === 'running';
+  return isRuntimeSessionSummaryWorking(summary);
 }
 
 export function hasWorkingSessionSummary(summaries: WorkspaceSessionSummary[]): boolean {
-  return summaries.some((summary) => isSessionSummaryWorking(summary));
+  return hasWorkingRuntimeSessionSummary(summaries);
 }

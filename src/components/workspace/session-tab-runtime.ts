@@ -8,7 +8,11 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { SessionStatus as DbSessionStatus } from '@/shared/core';
-import { getSessionSummaryErrorMessage, type SessionSummary } from '@/shared/session-runtime';
+import {
+  getSessionSummaryErrorMessage,
+  isSessionSummaryWorking,
+  type SessionSummary,
+} from '@/shared/session-runtime';
 
 export type WorkspaceSessionRuntimeSummary = SessionSummary;
 
@@ -168,7 +172,7 @@ export function deriveSessionTabRuntime(
     };
   }
 
-  if (summary.activity === 'WORKING' || summary.runtimePhase === 'running') {
+  if (isSessionSummaryWorking(summary)) {
     return {
       color: 'text-brand',
       pulse: true,
