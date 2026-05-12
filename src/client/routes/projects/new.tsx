@@ -1,8 +1,9 @@
-import { ArrowLeftIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { useAppHeader } from '@/client/components/app-header-context';
+import { HeaderLeftStartSlot, useAppHeader } from '@/client/components/app-header-context';
 import { Logo } from '@/client/components/logo';
+import { ProjectSelectorDropdown } from '@/client/components/project-selector';
+import { useProjectHeaderNavigation } from '@/client/hooks/use-project-header-navigation';
 import { trpc } from '@/client/lib/trpc';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { GithubUrlForm } from '@/components/project/github-url-form';
@@ -32,10 +33,10 @@ function parseGithubUrl(url: string): { owner: string; repo: string } | null {
 }
 
 export default function NewProjectPage() {
-  useAppHeader({ title: 'New Project' });
-
   const navigate = useNavigate();
   const [source, setSource] = useState<ProjectSource>('github');
+  const { selectedProjectSlug, projects, handleProjectChange, handleCurrentProjectSelect } =
+    useProjectHeaderNavigation();
 
   // Local path state
   const [repoPath, setRepoPath] = useState('');
@@ -101,8 +102,13 @@ export default function NewProjectPage() {
     }
   };
 
-  const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
   const hasExistingProjects = projects && projects.length > 0;
+  const selectedProject = projects?.find((project) => project.slug === selectedProjectSlug);
+  const selectedProjectHref = selectedProject
+    ? `/projects/${selectedProject.slug}/workspaces`
+    : '/projects';
+
+  useAppHeader({ title: hasExistingProjects ? '' : 'New Project' });
 
   const utils = trpc.useUtils();
 
@@ -289,12 +295,18 @@ export default function NewProjectPage() {
   // Normal view when projects already exist
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-3 md:p-6">
-      <div className="flex items-center gap-2 md:gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/projects">
-            <ArrowLeftIcon className="h-5 w-5" />
-          </Link>
-        </Button>
+      <HeaderLeftStartSlot>
+        <ProjectSelectorDropdown
+          selectedProjectSlug={selectedProjectSlug}
+          onProjectChange={handleProjectChange}
+          onCurrentProjectSelect={handleCurrentProjectSelect}
+          projects={projects}
+          showLeadingSlash
+          triggerId="new-project-header-project-select"
+        />
+      </HeaderLeftStartSlot>
+
+      <div>
         <div>
           <h1 className="text-2xl font-bold">Add Project</h1>
           <p className="text-muted-foreground mt-1">
@@ -325,7 +337,7 @@ export default function NewProjectPage() {
                 idPrefix="new"
                 footerActions={
                   <Button variant="secondary" asChild>
-                    <Link to="/projects">Cancel</Link>
+                    <Link to={selectedProjectHref}>Cancel</Link>
                   </Button>
                 }
               />
@@ -336,7 +348,7 @@ export default function NewProjectPage() {
                 idPrefix="new-gh"
                 footerActions={
                   <Button variant="secondary" asChild>
-                    <Link to="/projects">Cancel</Link>
+                    <Link to={selectedProjectHref}>Cancel</Link>
                   </Button>
                 }
               />

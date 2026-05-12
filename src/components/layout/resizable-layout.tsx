@@ -2,7 +2,10 @@ import type { ReactNode } from 'react';
 import { AppHeader } from '@/client/components/app-header';
 import { AppHeaderProvider } from '@/client/components/app-header-context';
 import { AppSidebar } from '@/client/components/app-sidebar';
-import { useAppNavigationData } from '@/client/hooks/use-app-navigation-data';
+import {
+  AppNavigationDataProvider,
+  useAppNavigationData,
+} from '@/client/hooks/use-app-navigation-data';
 import { useRouteSidebarState } from '@/client/hooks/use-sidebar-default-open';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -25,15 +28,17 @@ export function AppLayout({ children, className }: AppLayoutProps) {
           onOpenChange={setSidebarOpen}
           className="flex-1 flex-col min-h-0"
         >
-          <AppHeaderProvider>
-            <AppHeader />
-            <div className="flex flex-1 min-h-0 overflow-hidden">
-              <AppSidebar navData={navData} />
-              <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-                {children}
-              </main>
-            </div>
-          </AppHeaderProvider>
+          <AppNavigationDataProvider value={navData}>
+            <AppHeaderProvider>
+              <AppHeader />
+              <div className="flex flex-1 min-h-0 overflow-hidden">
+                <AppSidebar navData={navData} />
+                <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+                  {children}
+                </main>
+              </div>
+            </AppHeaderProvider>
+          </AppNavigationDataProvider>
         </SidebarProvider>
       </TooltipProvider>
     </div>

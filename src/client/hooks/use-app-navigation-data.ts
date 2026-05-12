@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  createElement,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
@@ -8,17 +17,22 @@ import { trpc } from '@/client/lib/trpc';
 
 const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
-function getProjectSlugFromPath(pathname: string): string | null {
+export function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
-  return match ? (match[1] as string) : null;
+  const slug = match?.[1];
+  return slug && slug !== 'new' ? slug : null;
+}
+
+function persistSelectedProjectSlug(slug: string) {
+  localStorage.setItem(SELECTED_PROJECT_KEY, slug);
 }
 
 function getInitialProjectSlug(): string {
-  const slugFromPath = getProjectSlugFromPath(window.location.pathname);
-  if (slugFromPath && slugFromPath !== 'new') {
-    return slugFromPath;
-  }
-  return localStorage.getItem(SELECTED_PROJECT_KEY) || '';
+  return (
+    getProjectSlugFromPath(window.location.pathname) ??
+    localStorage.getItem(SELECTED_PROJECT_KEY) ??
+    ''
+  );
 }
 
 /**
@@ -45,35 +59,34 @@ function useProjectSlugSync(
   pathname: string,
   projects: Array<{ id: string; slug: string; name: string }> | undefined,
   selectedProjectSlug: string,
-  setSelectedProjectSlug: (slug: string) => void
+  selectProjectSlug: (slug: string) => void
 ) {
   useEffect(() => {
     const slugFromPath = getProjectSlugFromPath(pathname);
-    const hasValidSlugInPath = slugFromPath && slugFromPath !== 'new';
-
-    if (hasValidSlugInPath) {
-      setSelectedProjectSlug(slugFromPath);
-      localStorage.setItem(SELECTED_PROJECT_KEY, slugFromPath);
+    if (slugFromPath) {
+      selectProjectSlug(slugFromPath);
     } else {
       const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
       if (stored) {
-        setSelectedProjectSlug(stored);
+        selectProjectSlug(stored);
       }
     }
-  }, [pathname, setSelectedProjectSlug]);
+  }, [pathname, selectProjectSlug]);
 
-  // Select first project if none selected
   useEffect(() => {
-    if (!projects || projects.length === 0 || selectedProjectSlug) {
+    if (!projects || projects.length === 0 || getProjectSlugFromPath(pathname)) {
+      return;
+    }
+
+    if (selectedProjectSlug && projects.some((project) => project.slug === selectedProjectSlug)) {
       return;
     }
 
     const firstSlug = projects[0]?.slug;
     if (firstSlug) {
-      setSelectedProjectSlug(firstSlug);
-      localStorage.setItem(SELECTED_PROJECT_KEY, firstSlug);
+      selectProjectSlug(firstSlug);
     }
-  }, [projects, selectedProjectSlug, setSelectedProjectSlug]);
+  }, [pathname, projects, selectedProjectSlug, selectProjectSlug]);
 }
 
 /**
@@ -86,6 +99,10 @@ export function useAppNavigationData() {
   const { setProjectContext } = useProjectContext();
 
   const { data: projects } = trpc.project.list.useQuery({ isArchived: false });
+  const selectProjectSlug = useCallback((slug: string) => {
+    setSelectedProjectSlug(slug);
+    persistSelectedProjectSlug(slug);
+  }, []);
 
   const selectedProject = projects?.find((p) => p.slug === selectedProjectSlug);
   const selectedProjectId = selectedProject?.id;
@@ -111,8 +128,8 @@ export function useAppNavigationData() {
   // Track workspaces that need user attention
   const { needsAttention, clearAttention } = useWorkspaceAttention();
 
-  // Sync slug from URL
-  useProjectSlugSync(pathname, projects, selectedProjectSlug, setSelectedProjectSlug);
+  // Sync slug from URL/localStorage and keep stale selections from surviving project changes.
+  useProjectSlugSync(pathname, projects, selectedProjectSlug, selectProjectSlug);
 
   // Set project context for tRPC headers
   useEffect(() => {
@@ -138,6 +155,7 @@ export function useAppNavigationData() {
   return {
     projects,
     selectedProjectSlug,
+    selectProjectSlug,
     selectedProjectId,
     issueProvider,
     serverWorkspaces,
@@ -146,4 +164,26 @@ export function useAppNavigationData() {
     clearAttention,
     currentWorkspaceId,
   };
+}
+
+export type AppNavigationData = ReturnType<typeof useAppNavigationData>;
+
+const AppNavigationDataContext = createContext<AppNavigationData | null>(null);
+
+export function AppNavigationDataProvider({
+  children,
+  value,
+}: {
+  children?: ReactNode;
+  value: AppNavigationData;
+}) {
+  return createElement(AppNavigationDataContext.Provider, { value }, children);
+}
+
+export function useAppNavigationDataContext() {
+  const context = useContext(AppNavigationDataContext);
+  if (!context) {
+    throw new Error('useAppNavigationDataContext must be used within AppNavigationDataProvider');
+  }
+  return context;
 }
