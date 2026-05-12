@@ -65,6 +65,12 @@ export type WorkspaceWithPR = NonNullable<
   Awaited<ReturnType<(typeof workspaceAccessor)['findForRatchetById']>>
 >;
 
+export interface RatchetTriggerSettings {
+  ciResponseEnabled: boolean;
+  mergeConflictResponseEnabled: boolean;
+  reviewResponseEnabled: boolean;
+}
+
 export interface RatchetDecisionContext {
   workspace: WorkspaceWithPR;
   prStateInfo: PRStateInfo;
@@ -76,6 +82,7 @@ export interface RatchetDecisionContext {
   isCleanPrWithNoNewReviewActivity: boolean;
   activeRatchetSession: RatchetAction | null;
   hasOtherActiveSession: boolean;
+  triggerSettings: RatchetTriggerSettings;
 }
 
 export type RatchetDecision =

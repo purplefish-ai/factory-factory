@@ -51,16 +51,27 @@ class WorkspaceDataService {
     });
   }
 
-  update(
+  updateProviderDefaults(
     id: string,
-    data: {
-      defaultSessionProvider?: WorkspaceProviderSelection;
-      ratchetSessionProvider?: WorkspaceProviderSelection;
-    }
+    defaultSessionProvider?: WorkspaceProviderSelection,
+    ratchetSessionProvider?: WorkspaceProviderSelection
   ) {
     return workspaceAccessor.update(id, {
-      defaultSessionProvider: data.defaultSessionProvider,
-      ratchetSessionProvider: data.ratchetSessionProvider,
+      defaultSessionProvider,
+      ratchetSessionProvider,
+    });
+  }
+
+  updateRatchetTriggers(
+    id: string,
+    ratchetCiResponseEnabled: boolean | null | undefined,
+    ratchetMergeConflictResponseEnabled: boolean | null | undefined,
+    ratchetReviewResponseEnabled: boolean | null | undefined
+  ) {
+    return workspaceAccessor.update(id, {
+      ratchetCiResponseEnabled,
+      ratchetMergeConflictResponseEnabled,
+      ratchetReviewResponseEnabled,
     });
   }
 

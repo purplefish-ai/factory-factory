@@ -16,6 +16,9 @@ interface UpdateUserSettingsInput {
   cachedSlashCommands?: Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput;
   // Ratchet settings
   ratchetEnabled?: boolean;
+  ratchetCiResponseEnabled?: boolean;
+  ratchetMergeConflictResponseEnabled?: boolean;
+  ratchetReviewResponseEnabled?: boolean;
   ratchetReplyToPrComments?: boolean;
   defaultSessionProvider?: SessionProvider;
   defaultClaudeModel?: string;
@@ -114,6 +117,10 @@ class UserSettingsAccessor {
         customIdeCommand: data.customIdeCommand ?? null,
         playSoundOnComplete: data.playSoundOnComplete ?? true,
         cachedSlashCommands: data.cachedSlashCommands ?? undefined,
+        ratchetEnabled: data.ratchetEnabled ?? false,
+        ratchetCiResponseEnabled: data.ratchetCiResponseEnabled ?? true,
+        ratchetMergeConflictResponseEnabled: data.ratchetMergeConflictResponseEnabled ?? true,
+        ratchetReviewResponseEnabled: data.ratchetReviewResponseEnabled ?? true,
         defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
         defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
         defaultCodexModel: normalizedCodexModel ?? 'default',
