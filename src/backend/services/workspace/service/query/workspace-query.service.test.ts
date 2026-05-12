@@ -364,7 +364,7 @@ describe('WorkspaceQueryService', () => {
     mockDeriveWorkspaceRuntimeState.mockReturnValue({
       sessionIds: ['s-eq'],
       isSessionWorking: false,
-      isWorking: flowState.isWorking,
+      isWorking: false,
       flowState,
     });
 

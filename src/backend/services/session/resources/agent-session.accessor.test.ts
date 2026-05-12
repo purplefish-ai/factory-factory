@@ -8,6 +8,7 @@ const mockFindUnique = vi.fn();
 const mockFindMany = vi.fn();
 const mockCount = vi.fn();
 const mockUpdate = vi.fn();
+const mockUpdateMany = vi.fn();
 const mockDelete = vi.fn();
 const mockUserSettingsGet = vi.fn();
 
@@ -19,6 +20,7 @@ vi.mock('@/backend/db', () => ({
       findMany: (...args: unknown[]) => mockFindMany(...args),
       count: (...args: unknown[]) => mockCount(...args),
       update: (...args: unknown[]) => mockUpdate(...args),
+      updateMany: (...args: unknown[]) => mockUpdateMany(...args),
       delete: (...args: unknown[]) => mockDelete(...args),
     },
     $transaction: vi.fn(),
@@ -201,6 +203,22 @@ describe('agentSessionAccessor', () => {
         providerProcessPid: { not: null },
       },
       orderBy: { updatedAt: 'desc' },
+    });
+  });
+
+  it('recoverStaleRunning marks persisted running sessions idle and clears pids', async () => {
+    mockUpdateMany.mockResolvedValue({ count: 2 });
+
+    await expect(agentSessionAccessor.recoverStaleRunning()).resolves.toBe(2);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        status: SessionStatus.RUNNING,
+      },
+      data: {
+        status: SessionStatus.IDLE,
+        providerProcessPid: null,
+      },
     });
   });
 });

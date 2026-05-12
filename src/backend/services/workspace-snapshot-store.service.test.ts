@@ -412,7 +412,7 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.sidebarStatus.ciState).toBe('RUNNING');
     });
 
-    it('kanbanColumn reflects isWorking from flow state', () => {
+    it('kanbanColumn does not treat PR flow as live agent work', () => {
       store.upsert(
         'ws-1',
         makeUpdate({
@@ -424,10 +424,10 @@ describe('WorkspaceSnapshotStore', () => {
       );
 
       const entry = store.getByWorkspaceId('ws-1');
-      // Flow state returns isWorking=true (prUrl set + PENDING)
-      // Effective isWorking = session(false) OR flow(true) = true
-      expect(entry!.isWorking).toBe(true);
-      expect(entry!.kanbanColumn).toBe('WORKING');
+      expect(entry!.flowPhase).toBe('CI_WAIT');
+      expect(entry!.isWorking).toBe(false);
+      expect(entry!.sidebarStatus.activityState).toBe('IDLE');
+      expect(entry!.kanbanColumn).toBe('WAITING');
     });
 
     it('does not latch flow-derived isWorking across PR-only updates', () => {
@@ -442,12 +442,12 @@ describe('WorkspaceSnapshotStore', () => {
         100
       );
 
-      // Initial effective isWorking is true because flow is active.
-      expect(store.getByWorkspaceId('ws-1')!.isWorking).toBe(true);
+      // PR flow can be active without making the workspace look like an agent is working.
+      expect(store.getByWorkspaceId('ws-1')!.isWorking).toBe(false);
 
       store.upsert('ws-1', { prCiStatus: 'SUCCESS' }, 'test', 200);
 
-      // Session signal remains false, so effective isWorking should clear.
+      // Session signal remains false, so visible isWorking should stay clear.
       const entry = store.getByWorkspaceId('ws-1');
       expect(entry!.isWorking).toBe(false);
       expect(entry!.sidebarStatus.activityState).toBe('IDLE');
@@ -470,13 +470,11 @@ describe('WorkspaceSnapshotStore', () => {
       expect(entry!.ratchetButtonAnimated).toBe(true);
     });
 
-    it('derived state uses effective isWorking (session OR flow)', () => {
+    it('derived state uses session activity for visible working state', () => {
       // isWorking=true from session, prUrl=null so flow isWorking=false
-      // Effective isWorking should be true (session OR flow)
       store.upsert('ws-1', makeUpdate({ isWorking: true, prUrl: null }), 'test', 100);
 
       const entry = store.getByWorkspaceId('ws-1');
-      // sidebarStatus should reflect effective isWorking=true
       expect(entry!.sidebarStatus.activityState).toBe('WORKING');
     });
 

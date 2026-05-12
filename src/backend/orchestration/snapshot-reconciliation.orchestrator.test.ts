@@ -670,6 +670,43 @@ describe('SnapshotReconciliationService', () => {
       expect(upsertFields.isWorking).toBe(true);
     });
 
+    it('does not treat stale persisted RUNNING sessions as working after restart', async () => {
+      const ws = createMockWorkspace({
+        id: 'ws-1',
+        worktreePath: null,
+        agentSessions: [
+          {
+            id: 'cs-stale',
+            name: 'Stale Chat',
+            workflow: 'followup',
+            model: 'claude-sonnet',
+            status: 'RUNNING',
+            updatedAt: new Date('2026-01-03T15:00:00.000Z'),
+          },
+        ],
+      });
+      mockFindAllNonArchived.mockResolvedValue([ws]);
+      vi.mocked(bridges.session.getRuntimeSnapshot).mockReturnValue({
+        phase: 'idle',
+        processState: 'stopped',
+        activity: 'IDLE',
+        updatedAt: '2026-01-03T15:00:00.000Z',
+      });
+
+      await service.reconcile();
+
+      const upsertFields = mockUpsert.mock.calls[0]![1] as SnapshotUpdateInput;
+      expect(upsertFields.sessionSummaries).toEqual([
+        expect.objectContaining({
+          sessionId: 'cs-stale',
+          persistedStatus: 'RUNNING',
+          runtimePhase: 'idle',
+          activity: 'IDLE',
+        }),
+      ]);
+      expect(upsertFields.isWorking).toBe(false);
+    });
+
     it('returns ReconciliationResult with correct counts', async () => {
       const ws1 = createMockWorkspace({
         id: 'ws-1',

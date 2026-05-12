@@ -65,6 +65,7 @@ export interface AgentSessionAccessor {
   update(id: string, data: UpdateAgentSessionInput): Promise<AgentSessionRecord>;
   delete(id: string): Promise<AgentSessionRecord>;
   findWithPid(): Promise<AgentSessionRecord[]>;
+  recoverStaleRunning(): Promise<number>;
   acquireFixerSession(input: AcquireFixerAgentSessionInput): Promise<FixerAgentSessionAcquisition>;
 }
 
@@ -178,6 +179,20 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
       },
       orderBy: { updatedAt: 'desc' },
     });
+  }
+
+  async recoverStaleRunning(): Promise<number> {
+    const result = await prisma.agentSession.updateMany({
+      where: {
+        status: SessionStatus.RUNNING,
+      },
+      data: {
+        status: SessionStatus.IDLE,
+        providerProcessPid: null,
+      },
+    });
+
+    return result.count;
   }
 
   acquireFixerSession(input: AcquireFixerAgentSessionInput): Promise<FixerAgentSessionAcquisition> {

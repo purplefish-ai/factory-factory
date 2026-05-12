@@ -351,6 +351,13 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
           reconciliationService.cleanupOrphans()
         );
 
+        // Reset agent sessions that were persisted as RUNNING by a prior process.
+        // Live ACP runtimes are in-memory only, so after a backend restart these
+        // records must not drive workspace "Working" state.
+        await runStartupTask('Failed to recover stale agent sessions on startup', async () => {
+          await sessionService.recoverStaleSessionStates();
+        });
+
         // Reconcile workspaces that may have been left in inconsistent states
         // (e.g., stuck in PROVISIONING due to server crash)
         await runStartupTask('Failed to reconcile workspaces on startup', () =>
@@ -376,45 +383,60 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       };
 
       return new Promise((resolve, reject) => {
-        server.listen(actualPort, REQUESTED_HOST, async () => {
-          logger.info('Backend server started', {
-            port: actualPort,
-            environment: configService.getEnvironment(),
-          });
-          if (configService.isRunScriptProxyEnabled()) {
-            process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
-          }
-
-          configureDomainBridges(context.services);
-          configureEventCollector(context.services);
-          configureSnapshotReconciliation(context.services);
-
-          await runStartupReconciliation();
-
-          sessionFileLogger.cleanupOldLogs();
-          acpTraceLogger.cleanupOldLogs();
-          await startInterceptors();
-          reconciliationService.startPeriodicCleanup();
-          rateLimiter.start();
-          schedulerService.start();
-          ratchetService.start();
-
-          logger.info('Server endpoints available', {
-            server: `http://${ENDPOINT_HOST}:${actualPort}`,
-            health: `http://${ENDPOINT_HOST}:${actualPort}/health`,
-            healthAll: `http://${ENDPOINT_HOST}:${actualPort}/health/all`,
-            trpc: `http://${ENDPOINT_HOST}:${actualPort}/api/trpc`,
-            wsChat: `ws://${ENDPOINT_HOST}:${actualPort}/chat`,
-            wsTerminal: `ws://${ENDPOINT_HOST}:${actualPort}/terminal`,
-            wsSnapshots: `ws://${ENDPOINT_HOST}:${actualPort}/snapshots`,
-          });
-
-          resolve(`http://${ENDPOINT_HOST}:${actualPort}`);
-        });
-
-        server.on('error', (error) => {
+        let startupFailed = false;
+        const onServerError = (error: Error) => {
+          startupFailed = true;
           reject(error);
-        });
+        };
+        server.once('error', onServerError);
+
+        void (async () => {
+          try {
+            configureDomainBridges(context.services);
+            configureEventCollector(context.services);
+
+            await runStartupReconciliation();
+
+            configureSnapshotReconciliation(context.services);
+
+            if (startupFailed) {
+              return;
+            }
+
+            server.listen(actualPort, REQUESTED_HOST, async () => {
+              logger.info('Backend server started', {
+                port: actualPort,
+                environment: configService.getEnvironment(),
+              });
+              if (configService.isRunScriptProxyEnabled()) {
+                process.stdout.write(`BACKEND_PORT:${actualPort}\n`);
+              }
+
+              sessionFileLogger.cleanupOldLogs();
+              acpTraceLogger.cleanupOldLogs();
+              await startInterceptors();
+              reconciliationService.startPeriodicCleanup();
+              rateLimiter.start();
+              schedulerService.start();
+              ratchetService.start();
+
+              logger.info('Server endpoints available', {
+                server: `http://${ENDPOINT_HOST}:${actualPort}`,
+                health: `http://${ENDPOINT_HOST}:${actualPort}/health`,
+                healthAll: `http://${ENDPOINT_HOST}:${actualPort}/health/all`,
+                trpc: `http://${ENDPOINT_HOST}:${actualPort}/api/trpc`,
+                wsChat: `ws://${ENDPOINT_HOST}:${actualPort}/chat`,
+                wsTerminal: `ws://${ENDPOINT_HOST}:${actualPort}/terminal`,
+                wsSnapshots: `ws://${ENDPOINT_HOST}:${actualPort}/snapshots`,
+              });
+
+              resolve(`http://${ENDPOINT_HOST}:${actualPort}`);
+            });
+          } catch (error) {
+            server.off('error', onServerError);
+            reject(error);
+          }
+        })();
       });
     },
 

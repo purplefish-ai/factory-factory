@@ -28,6 +28,7 @@ describe('SessionRepository', () => {
     findByWorkspaceId: vi.fn<() => Promise<AgentSessionRecord[]>>(),
     update: vi.fn<() => Promise<AgentSessionRecord>>(),
     delete: vi.fn<() => Promise<AgentSessionRecord>>(),
+    recoverStaleRunning: vi.fn<() => Promise<number>>(),
   };
 
   const workspaces = {
@@ -84,5 +85,13 @@ describe('SessionRepository', () => {
       /immutable/
     );
     expect(sessions.update).not.toHaveBeenCalled();
+  });
+
+  it('delegates stale running session recovery to the session accessor', async () => {
+    sessions.recoverStaleRunning.mockResolvedValue(3);
+
+    await expect(repository.recoverStaleRunningSessions()).resolves.toBe(3);
+
+    expect(sessions.recoverStaleRunning).toHaveBeenCalledOnce();
   });
 });

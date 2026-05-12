@@ -23,6 +23,7 @@ type SessionAccessor = {
     >
   ): Promise<AgentSessionRecord>;
   delete(id: string): Promise<AgentSessionRecord>;
+  recoverStaleRunning(): Promise<number>;
 };
 
 type WorkspaceAccessor = {
@@ -111,6 +112,10 @@ export class SessionRepository {
 
   deleteSession(sessionId: string): Promise<AgentSessionRecord> {
     return this.sessions.delete(sessionId);
+  }
+
+  recoverStaleRunningSessions(): Promise<number> {
+    return this.sessions.recoverStaleRunning();
   }
 }
 
