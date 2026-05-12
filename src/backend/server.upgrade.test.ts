@@ -459,6 +459,7 @@ describe('server websocket upgrade routing', () => {
     httpServer.emit('error', new Error('listen failed'));
 
     await expect(startPromise).rejects.toThrow('listen failed');
+    expect(configureSnapshotReconciliation).not.toHaveBeenCalled();
   });
 
   it('runs cleanup fan-out when server stops', async () => {

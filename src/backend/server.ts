@@ -397,13 +397,13 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
 
             await runStartupReconciliation();
 
-            configureSnapshotReconciliation(context.services);
-
             if (startupFailed) {
               return;
             }
 
             server.listen(actualPort, REQUESTED_HOST, async () => {
+              configureSnapshotReconciliation(context.services);
+
               logger.info('Backend server started', {
                 port: actualPort,
                 environment: configService.getEnvironment(),
