@@ -4,10 +4,15 @@ import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  type AppNavigationData,
+  AppNavigationDataProvider,
+} from '@/client/hooks/use-app-navigation-data';
 import NewProjectPage from './new';
 
 const navigateMock = vi.fn();
 const useAppHeaderMock = vi.fn();
+const selectProjectSlugMock = vi.fn();
 const projects = [
   { id: 'project-1', slug: 'alpha', name: 'Alpha' },
   { id: 'project-2', slug: 'beta', name: 'Beta' },
@@ -136,9 +141,27 @@ function renderPage() {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
+  const navigationData = {
+    projects,
+    selectedProjectSlug: 'beta',
+    selectProjectSlug: selectProjectSlugMock,
+    selectedProjectId: 'project-2',
+    issueProvider: 'GITHUB',
+    serverWorkspaces: undefined,
+    reviewCount: 0,
+    needsAttention: () => false,
+    clearAttention: vi.fn(),
+    currentWorkspaceId: undefined,
+  } as unknown as AppNavigationData;
 
   flushSync(() => {
-    root.render(createElement(NewProjectPage));
+    root.render(
+      createElement(
+        AppNavigationDataProvider,
+        { value: navigationData },
+        createElement(NewProjectPage)
+      )
+    );
   });
 
   return { container, root };
@@ -153,6 +176,7 @@ beforeEach(() => {
   localStorage.setItem('factoryfactory_selected_project_slug', 'beta');
   navigateMock.mockClear();
   useAppHeaderMock.mockClear();
+  selectProjectSlugMock.mockClear();
 });
 
 afterEach(() => {
