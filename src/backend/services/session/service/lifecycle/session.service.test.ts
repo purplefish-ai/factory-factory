@@ -69,6 +69,7 @@ vi.mock('./session.repository', () => ({
     markWorkspaceHasHadSessions: vi.fn(),
     updateSession: vi.fn(),
     deleteSession: vi.fn(),
+    recoverStaleRunningSessions: vi.fn(),
   },
 }));
 

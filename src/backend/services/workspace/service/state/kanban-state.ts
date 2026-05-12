@@ -3,7 +3,6 @@ import { createLogger } from '@/backend/services/logger.service';
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import type { WorkspaceSessionBridge } from '@/backend/services/workspace/service/bridges';
 import { KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
-import { deriveWorkspaceFlowStateFromWorkspace } from './flow-state';
 import { deriveWorkspaceRuntimeState } from './workspace-runtime-state';
 
 const logger = createLogger('kanban-state');
@@ -175,12 +174,12 @@ class KanbanStateService {
       return;
     }
 
-    const flowState = deriveWorkspaceFlowStateFromWorkspace(workspace);
-
-    // For cached column, include flow-state working but not in-memory session activity.
+    // Cached columns cannot know in-memory session activity. Do not treat PR/CI
+    // flow progress as live agent work, or restarted processes can remain in
+    // the Working column without an active prompt.
     const cachedColumn = computeKanbanColumn({
       lifecycle: workspace.status,
-      isWorking: flowState.isWorking,
+      isWorking: false,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
       hasHadSessions: workspace.hasHadSessions,

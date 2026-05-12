@@ -165,6 +165,7 @@ function createTestHarness(options: TestHarnessOptions = {}) {
     },
     sessionService: {
       stopAllClients: vi.fn(async () => undefined),
+      recoverStaleSessionStates: vi.fn(async () => 0),
     },
     terminalService: {
       cleanup: vi.fn(),
@@ -369,6 +370,7 @@ describe('server websocket upgrade routing', () => {
     expect(configureEventCollector).toHaveBeenCalledWith(harness.context.services);
     expect(configureSnapshotReconciliation).toHaveBeenCalledWith(harness.context.services);
     expect(reconciliationService.cleanupOrphans).toHaveBeenCalledOnce();
+    expect(harness.services.sessionService.recoverStaleSessionStates).toHaveBeenCalledOnce();
     expect(reconciliationService.reconcile).toHaveBeenCalledOnce();
     expect(runScriptStateMachine.recoverStaleStates).toHaveBeenCalledOnce();
     expect(recoverStaleArchivingWorkspaces).toHaveBeenCalledWith(harness.context.services);
@@ -376,9 +378,13 @@ describe('server websocket upgrade routing', () => {
       .invocationCallOrder[0];
     const archiveRecoveryOrder = vi.mocked(recoverStaleArchivingWorkspaces).mock
       .invocationCallOrder[0];
+    const snapshotReconciliationOrder = vi.mocked(configureSnapshotReconciliation).mock
+      .invocationCallOrder[0];
     expect(runScriptRecoveryOrder).toBeDefined();
     expect(archiveRecoveryOrder).toBeDefined();
+    expect(snapshotReconciliationOrder).toBeDefined();
     expect(runScriptRecoveryOrder ?? 0).toBeLessThan(archiveRecoveryOrder ?? 0);
+    expect(archiveRecoveryOrder ?? 0).toBeLessThan(snapshotReconciliationOrder ?? 0);
     expect(startInterceptors).toHaveBeenCalledOnce();
     expect(reconciliationService.startPeriodicCleanup).toHaveBeenCalledOnce();
     expect(harness.services.rateLimiter.start).toHaveBeenCalledOnce();
@@ -401,8 +407,12 @@ describe('server websocket upgrade routing', () => {
   });
 
   it('logs startup reconciliation failures and continues starting', async () => {
+    const harness = createTestHarness({ requestedPortResult: 0 });
     vi.mocked(reconciliationService.cleanupOrphans).mockRejectedValueOnce(
       new Error('cleanup failed')
+    );
+    vi.mocked(harness.services.sessionService.recoverStaleSessionStates).mockRejectedValueOnce(
+      new Error('session recovery failed')
     );
     vi.mocked(reconciliationService.reconcile).mockRejectedValueOnce(new Error('reconcile failed'));
     vi.mocked(runScriptStateMachine.recoverStaleStates).mockRejectedValueOnce(
@@ -412,12 +422,15 @@ describe('server websocket upgrade routing', () => {
       new Error('archive recovery failed')
     );
 
-    const harness = createTestHarness({ requestedPortResult: 0 });
     const server = createTestServer(harness.context, 0);
 
     await expect(server.start()).resolves.toBe('http://localhost:0');
     expect(harness.logger.error).toHaveBeenCalledWith(
       'Failed to cleanup orphan sessions on startup',
+      expect.any(Object)
+    );
+    expect(harness.logger.error).toHaveBeenCalledWith(
+      'Failed to recover stale agent sessions on startup',
       expect.any(Object)
     );
     expect(harness.logger.error).toHaveBeenCalledWith(
@@ -446,6 +459,7 @@ describe('server websocket upgrade routing', () => {
     httpServer.emit('error', new Error('listen failed'));
 
     await expect(startPromise).rejects.toThrow('listen failed');
+    expect(configureSnapshotReconciliation).not.toHaveBeenCalled();
   });
 
   it('runs cleanup fan-out when server stops', async () => {

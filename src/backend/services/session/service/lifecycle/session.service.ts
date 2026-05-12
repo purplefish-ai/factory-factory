@@ -168,6 +168,16 @@ export class SessionService {
     await this.lifecycleService.stopWorkspaceSessions(workspaceId);
   }
 
+  async recoverStaleSessionStates(): Promise<number> {
+    const recoveredCount = await this.repository.recoverStaleRunningSessions();
+    if (recoveredCount > 0) {
+      logger.info('Recovered stale agent session states on startup', {
+        recoveredCount,
+      });
+    }
+    return recoveredCount;
+  }
+
   getOrCreateSessionClient(
     sessionId: string,
     options?: {

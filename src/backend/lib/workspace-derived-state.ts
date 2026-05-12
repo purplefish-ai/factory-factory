@@ -59,7 +59,7 @@ export function assembleWorkspaceDerivedState(
   input: WorkspaceDerivedStateInput,
   fns: WorkspaceDerivedStateFns
 ): WorkspaceDerivedState {
-  const isWorking = input.sessionIsWorking || input.flowState.isWorking;
+  const isWorking = input.sessionIsWorking;
 
   return {
     isWorking,

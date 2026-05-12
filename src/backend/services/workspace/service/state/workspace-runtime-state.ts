@@ -27,6 +27,6 @@ export function deriveWorkspaceRuntimeState(
     sessionIds,
     isSessionWorking,
     flowState,
-    isWorking: isSessionWorking || flowState.isWorking,
+    isWorking: isSessionWorking,
   };
 }
