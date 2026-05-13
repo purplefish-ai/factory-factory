@@ -55,6 +55,10 @@ type DispatchGateResult =
   | { policy: 'manual_resume' }
   | { policy: 'blocked'; permanent: boolean; reason: string | null };
 
+type DispatchOptions = {
+  bypassTurnInProgressBackoff?: boolean;
+};
+
 function isClaudeCompactionClient(value: unknown): value is ClaudeCompactionClient {
   if (!value || typeof value !== 'object') {
     return false;
@@ -172,9 +176,13 @@ class ChatMessageHandlerService {
    * The message stays in the queue (visible in snapshots) until we're ready
    * to dispatch, so a page refresh during auto-start won't lose it.
    */
-  async tryDispatchNextMessage(dbSessionId: string): Promise<void> {
+  async tryDispatchNextMessage(dbSessionId: string, options: DispatchOptions = {}): Promise<void> {
     if (this.turnInProgressRetryTimers.has(dbSessionId)) {
-      return;
+      if (options.bypassTurnInProgressBackoff) {
+        this.clearTurnInProgressRetry(dbSessionId);
+      } else {
+        return;
+      }
     }
 
     // Guard against concurrent dispatch calls for the same session

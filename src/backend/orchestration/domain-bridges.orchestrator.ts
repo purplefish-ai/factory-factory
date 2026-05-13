@@ -227,7 +227,9 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
     },
   });
   sessionService.setPromptTurnCompleteHandler((sessionId) =>
-    chatMessageHandlerService.tryDispatchNextMessage(sessionId)
+    chatMessageHandlerService.tryDispatchNextMessage(sessionId, {
+      bypassTurnInProgressBackoff: true,
+    })
   );
 
   // === Run-script domain bridges ===
