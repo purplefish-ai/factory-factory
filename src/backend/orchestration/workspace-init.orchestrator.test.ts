@@ -53,7 +53,6 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceStateMachine: {
     startProvisioning: vi.fn(),
     markFailed: vi.fn(),
-    markFailedIfProvisioning: vi.fn(),
     markReady: vi.fn(),
     markReadyWithWarning: vi.fn(),
   },
@@ -199,7 +198,6 @@ function setupHappyPath(overrides = {}) {
   vi.mocked(workspaceStateMachine.markReady).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(workspaceStateMachine.markReadyWithWarning).mockResolvedValue(unsafeCoerce(workspace));
   vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce(workspace));
-  vi.mocked(workspaceStateMachine.markFailedIfProvisioning).mockResolvedValue(true);
   vi.mocked(githubCLIService.getAuthenticatedUsername).mockResolvedValue('testuser');
   vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([]);
   vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
@@ -250,13 +248,13 @@ describe('initializeWorkspaceWorktree', () => {
     it('marks failed when workspace has no project', async () => {
       vi.mocked(workspaceStateMachine.startProvisioning).mockResolvedValue(unsafeCoerce({}));
       vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(null);
-      vi.mocked(workspaceStateMachine.markFailedIfProvisioning).mockResolvedValue(true);
+      vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce({}));
       vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
       vi.mocked(worktreeLifecycleService.clearInitMode).mockResolvedValue(undefined);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalledWith(
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(
         WORKSPACE_ID,
         'Workspace project not found'
       );
@@ -267,13 +265,13 @@ describe('initializeWorkspaceWorktree', () => {
       vi.mocked(workspaceAccessor.findByIdWithProject).mockResolvedValue(
         unsafeCoerce({ id: WORKSPACE_ID, project: null })
       );
-      vi.mocked(workspaceStateMachine.markFailedIfProvisioning).mockResolvedValue(true);
+      vi.mocked(workspaceStateMachine.markFailed).mockResolvedValue(unsafeCoerce({}));
       vi.mocked(sessionService.stopWorkspaceSessions).mockResolvedValue(undefined as never);
       vi.mocked(worktreeLifecycleService.clearInitMode).mockResolvedValue(undefined);
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalledWith(
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(
         WORKSPACE_ID,
         'Workspace project not found'
       );
@@ -1095,7 +1093,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalledWith(
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(
         WORKSPACE_ID,
         'git worktree add failed'
       );
@@ -1122,7 +1120,7 @@ describe('initializeWorkspaceWorktree', () => {
       // Should not throw
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalled();
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalled();
     });
 
     it('does not clear init mode when worktree was never created', async () => {
@@ -1184,7 +1182,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalledWith(
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(
         WORKSPACE_ID,
         'db update error'
       );
@@ -1200,7 +1198,7 @@ describe('initializeWorkspaceWorktree', () => {
 
       await initializeWorkspaceWorktree(WORKSPACE_ID);
 
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalledWith(
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(
         WORKSPACE_ID,
         'db update error'
       );
@@ -1232,10 +1230,7 @@ describe('initializeWorkspaceWorktree', () => {
       expect(sessionService.stopWorkspaceSessions).toHaveBeenCalledWith(WORKSPACE_ID);
       expect(terminalService.destroyTerminal).toHaveBeenCalledWith(WORKSPACE_ID, 'term-default');
       expect(sessionDataService.clearTerminalPid).toHaveBeenCalledWith('term-default');
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalledWith(
-        WORKSPACE_ID,
-        'script boom'
-      );
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
 
     it('does not destroy an existing terminal after init failure', async () => {
@@ -1253,10 +1248,7 @@ describe('initializeWorkspaceWorktree', () => {
       expect(terminalService.createTerminal).not.toHaveBeenCalled();
       expect(terminalService.destroyTerminal).not.toHaveBeenCalled();
       expect(sessionDataService.clearTerminalPid).not.toHaveBeenCalled();
-      expect(workspaceStateMachine.markFailedIfProvisioning).toHaveBeenCalledWith(
-        WORKSPACE_ID,
-        'script boom'
-      );
+      expect(workspaceStateMachine.markFailed).toHaveBeenCalledWith(WORKSPACE_ID, 'script boom');
     });
   });
 

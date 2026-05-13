@@ -33,7 +33,6 @@ const mocks = vi.hoisted(() => ({
   markReady: vi.fn(),
   markReadyWithWarning: vi.fn(),
   markFailed: vi.fn(),
-  markFailedIfProvisioning: vi.fn(),
   getInitMode: vi.fn(),
   clearInitMode: vi.fn(),
   assertWorktreePathSafe: vi.fn(),
@@ -46,7 +45,6 @@ vi.mock('@/backend/services/workspace', () => ({
     markReady: mocks.markReady,
     markReadyWithWarning: mocks.markReadyWithWarning,
     markFailed: mocks.markFailed,
-    markFailedIfProvisioning: mocks.markFailedIfProvisioning,
   },
   worktreeLifecycleService: {
     getInitMode: mocks.getInitMode,
@@ -180,7 +178,6 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     });
     mocks.getTerminalsForWorkspace.mockReturnValue([]);
     mocks.onExit.mockImplementation(() => vi.fn());
-    mocks.markFailedIfProvisioning.mockResolvedValue(true);
     mocks.getInitMode.mockResolvedValue(undefined);
     mocks.clearInitMode.mockResolvedValue(undefined);
   });
@@ -316,7 +313,7 @@ describe('initializeWorkspaceWorktree orchestrator', () => {
     expect(mocks.stopWorkspaceSessions).toHaveBeenCalledWith('workspace-1');
     expect(mocks.destroyTerminal).toHaveBeenCalledWith('workspace-1', 'term-default');
     expect(mocks.clearTerminalPid).toHaveBeenCalledWith('term-default');
-    expect(mocks.markFailedIfProvisioning).toHaveBeenCalled();
+    expect(mocks.markFailed).toHaveBeenCalled();
   });
 
   it('continues session normally when startup script reports failure (non-blocking)', async () => {

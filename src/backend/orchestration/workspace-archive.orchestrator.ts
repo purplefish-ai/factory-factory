@@ -162,15 +162,12 @@ export async function archiveWorkspace(
   try {
     return await completeArchive(workspace, options, services);
   } catch (error) {
-    // If archive was triggered from PROVISIONING, we cannot resume provisioning,
-    // so roll back to FAILED instead (ARCHIVING → PROVISIONING is not a valid transition).
-    const rollbackStatus = statusBeforeArchive === 'PROVISIONING' ? 'FAILED' : statusBeforeArchive;
     try {
-      await workspaceStateMachine.transition(workspace.id, rollbackStatus);
+      await workspaceStateMachine.transition(workspace.id, statusBeforeArchive);
     } catch (rollbackError) {
       logger.error('Failed to rollback workspace status after archive failure', {
         workspaceId: workspace.id,
-        rollbackTo: rollbackStatus,
+        rollbackTo: statusBeforeArchive,
         error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
       });
     }

@@ -135,27 +135,6 @@ async function readFactoryConfigSafe(
   }
 }
 
-async function cleanupAutoCreatedTerminal(workspaceId: string, terminalId: string): Promise<void> {
-  try {
-    terminalService.destroyTerminal(workspaceId, terminalId);
-  } catch (destroyError) {
-    logger.warn('Failed to destroy default terminal after init failure', {
-      workspaceId,
-      terminalId,
-      error: destroyError instanceof Error ? destroyError.message : String(destroyError),
-    });
-  }
-  try {
-    await sessionDataService.clearTerminalPid(terminalId);
-  } catch (clearPidError) {
-    logger.warn('Failed to clear default terminal PID after init failure', {
-      workspaceId,
-      terminalId,
-      error: clearPidError instanceof Error ? clearPidError.message : String(clearPidError),
-    });
-  }
-}
-
 async function handleWorkspaceInitFailure(
   workspaceId: string,
   error: Error,
@@ -163,34 +142,32 @@ async function handleWorkspaceInitFailure(
   unregisteredWorktreeCleanupCandidate?: UnregisteredWorktreeCleanupCandidate
 ): Promise<void> {
   logger.error('Failed to initialize workspace worktree', error, { workspaceId });
-
-  // Always clean up unregistered worktrees: the archive handler only cleans up worktrees
-  // recorded on the workspace record (worktreePath), so a worktree created but not yet
-  // registered would be orphaned on disk.
+  await workspaceStateMachine.markFailed(workspaceId, error.message);
   if (unregisteredWorktreeCleanupCandidate) {
     await cleanupUnregisteredWorktreeAfterInitFailure(
       workspaceId,
       unregisteredWorktreeCleanupCandidate
     );
   }
-
-  // Use a conditional CAS transition so we don't fight an archive request that may have
-  // already moved this workspace out of PROVISIONING (e.g. user triggered archive while
-  // provisioning was in progress). If the workspace is no longer PROVISIONING, the archive
-  // handler owns cleanup and we should stand down.
-  const transitioned = await workspaceStateMachine.markFailedIfProvisioning(
-    workspaceId,
-    error.message
-  );
-  if (!transitioned) {
-    logger.info(
-      'Workspace no longer in PROVISIONING state during init failure handler, skipping cleanup',
-      { workspaceId }
-    );
-    return;
-  }
   if (autoCreatedTerminalId) {
-    await cleanupAutoCreatedTerminal(workspaceId, autoCreatedTerminalId);
+    try {
+      terminalService.destroyTerminal(workspaceId, autoCreatedTerminalId);
+    } catch (destroyError) {
+      logger.warn('Failed to destroy default terminal after init failure', {
+        workspaceId,
+        terminalId: autoCreatedTerminalId,
+        error: destroyError instanceof Error ? destroyError.message : String(destroyError),
+      });
+    }
+    try {
+      await sessionDataService.clearTerminalPid(autoCreatedTerminalId);
+    } catch (clearPidError) {
+      logger.warn('Failed to clear default terminal PID after init failure', {
+        workspaceId,
+        terminalId: autoCreatedTerminalId,
+        error: clearPidError instanceof Error ? clearPidError.message : String(clearPidError),
+      });
+    }
   }
   try {
     await sessionService.stopWorkspaceSessions(workspaceId);
