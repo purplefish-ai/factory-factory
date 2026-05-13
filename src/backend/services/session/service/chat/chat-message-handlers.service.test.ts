@@ -63,6 +63,7 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    chatMessageHandlerService.resetDispatchState('s1');
     // Configure the init policy bridge (replaces direct import of getWorkspaceInitPolicy)
     chatMessageHandlerService.configure({
       initPolicy: {
@@ -136,6 +137,78 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     });
     expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+  });
+
+  it('backs off instead of immediately retrying when ACP reports an active turn', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = {
+        isCompactingActive: vi.fn().mockReturnValue(false),
+        startCompaction: vi.fn(),
+        endCompaction: vi.fn(),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockSessionService.getSessionClient.mockReturnValue(client);
+      mockSessionService.sendSessionMessage
+        .mockRejectedValueOnce({
+          code: -32_600,
+          message: 'Invalid request',
+          data: { reason: 'A turn is already in progress for this session' },
+        })
+        .mockResolvedValueOnce(undefined);
+
+      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+      expect(mockSessionDomainService.markRunning).toHaveBeenCalledWith('s1');
+      expect(mockSessionDomainService.markIdle).not.toHaveBeenCalled();
+      expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
+
+      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.waitFor(() => {
+        expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
+      });
+    } finally {
+      chatMessageHandlerService.resetDispatchState('s1');
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets prompt-turn completion bypass a pending active-turn backoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = {
+        isCompactingActive: vi.fn().mockReturnValue(false),
+        startCompaction: vi.fn(),
+        endCompaction: vi.fn(),
+        setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+      };
+      mockSessionService.getSessionClient.mockReturnValue(client);
+      mockSessionService.sendSessionMessage
+        .mockRejectedValueOnce({
+          code: -32_600,
+          message: 'Invalid request',
+          data: { reason: 'A turn is already in progress for this session' },
+        })
+        .mockResolvedValueOnce(undefined);
+
+      await chatMessageHandlerService.tryDispatchNextMessage('s1');
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(1);
+
+      await chatMessageHandlerService.tryDispatchNextMessage('s1', {
+        bypassTurnInProgressBackoff: true,
+      });
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(mockSessionService.sendSessionMessage).toHaveBeenCalledTimes(2);
+    } finally {
+      chatMessageHandlerService.resetDispatchState('s1');
+      vi.useRealTimers();
+    }
   });
 
   it('marks runtime as error when auto-start cannot run because client creator is missing', async () => {

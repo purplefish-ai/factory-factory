@@ -328,7 +328,9 @@ describe('configureDomainBridges', () => {
 
       expect(onPromptTurnComplete).toBeTypeOf('function');
       await onPromptTurnComplete?.('s1');
-      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1');
+      expect(chatMessageHandlerService.tryDispatchNextMessage).toHaveBeenCalledWith('s1', {
+        bypassTurnInProgressBackoff: true,
+      });
     });
   });
 
