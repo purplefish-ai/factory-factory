@@ -70,6 +70,9 @@ export interface AgentSessionAccessor {
 }
 
 class PrismaAgentSessionAccessor implements AgentSessionAccessor {
+  /** Serialises acquireFixerSession per workspace to prevent count-then-create races. */
+  private readonly workspaceAcquisitionQueue = new Map<string, Promise<unknown>>();
+
   private async getConfiguredDefaultModel(provider: SessionProvider): Promise<string> {
     const settings = await userSettingsAccessor.get();
     return resolveSessionModelForProvider(
@@ -195,69 +198,90 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     return result.count;
   }
 
-  acquireFixerSession(input: AcquireFixerAgentSessionInput): Promise<FixerAgentSessionAcquisition> {
-    const provider = input.provider ?? 'CLAUDE';
-    return this.getConfiguredDefaultModel(provider).then((fallbackModel) =>
-      prisma.$transaction(async (tx) => {
-        const existingSession = await tx.agentSession.findFirst({
-          where: {
-            workspaceId: input.workspaceId,
-            workflow: input.workflow,
-            provider,
-            status: { in: ACTIVE_AGENT_SESSION_STATUSES },
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (existingSession) {
-          return {
-            outcome: 'existing' as const,
-            sessionId: existingSession.id,
-            status: existingSession.status,
-          };
-        }
-
-        const activeSessionCount = await tx.agentSession.count({
-          where: {
-            workspaceId: input.workspaceId,
-            status: { in: ACTIVE_AGENT_SESSION_STATUSES },
-          },
-        });
-
-        if (activeSessionCount >= input.maxSessions) {
-          return { outcome: 'limit_reached' as const };
-        }
-
-        const recentSession = await tx.agentSession.findFirst({
-          where: {
-            workspaceId: input.workspaceId,
-            workflow: { not: input.workflow },
-            provider,
-          },
-          orderBy: { updatedAt: 'desc' },
-          select: { model: true },
-        });
-
-        const model = resolveSessionModelForProvider(recentSession?.model, provider, fallbackModel);
-
-        const newSession = await tx.agentSession.create({
-          data: {
-            workspaceId: input.workspaceId,
-            workflow: input.workflow,
-            name: input.sessionName,
-            model,
-            status: SessionStatus.IDLE,
-            provider,
-            providerProjectPath: input.providerProjectPath,
-          },
-        });
-
-        return {
-          outcome: 'created' as const,
-          sessionId: newSession.id,
-        };
+  async acquireFixerSession(
+    input: AcquireFixerAgentSessionInput
+  ): Promise<FixerAgentSessionAcquisition> {
+    // Chain per-workspace to serialise the count-then-create sequence and
+    // prevent concurrent workflows from exceeding maxSessions.
+    const prev = this.workspaceAcquisitionQueue.get(input.workspaceId) ?? Promise.resolve();
+    const current = prev
+      .catch(() => {
+        /* swallow so previous failure doesn't block queue */
       })
-    );
+      .then(() => this.doAcquireFixerSession(input));
+    this.workspaceAcquisitionQueue.set(input.workspaceId, current);
+    try {
+      return await current;
+    } finally {
+      if (this.workspaceAcquisitionQueue.get(input.workspaceId) === current) {
+        this.workspaceAcquisitionQueue.delete(input.workspaceId);
+      }
+    }
+  }
+
+  private async doAcquireFixerSession(
+    input: AcquireFixerAgentSessionInput
+  ): Promise<FixerAgentSessionAcquisition> {
+    const provider = input.provider ?? 'CLAUDE';
+    const fallbackModel = await this.getConfiguredDefaultModel(provider);
+
+    const existingSession = await prisma.agentSession.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        workflow: input.workflow,
+        provider,
+        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingSession) {
+      return {
+        outcome: 'existing',
+        sessionId: existingSession.id,
+        status: existingSession.status,
+      };
+    }
+
+    const activeSessionCount = await prisma.agentSession.count({
+      where: {
+        workspaceId: input.workspaceId,
+        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+      },
+    });
+
+    if (activeSessionCount >= input.maxSessions) {
+      return { outcome: 'limit_reached' };
+    }
+
+    const recentSession = await prisma.agentSession.findFirst({
+      where: {
+        workspaceId: input.workspaceId,
+        workflow: { not: input.workflow },
+        provider,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: { model: true },
+    });
+
+    const model = resolveSessionModelForProvider(recentSession?.model, provider, fallbackModel);
+
+    const newSession = await prisma.agentSession.create({
+      data: {
+        workspaceId: input.workspaceId,
+        workflow: input.workflow,
+        name: input.sessionName,
+        model,
+        status: SessionStatus.IDLE,
+        provider,
+        providerProjectPath: input.providerProjectPath,
+      },
+    });
+
+    return {
+      outcome: 'created',
+      sessionId: newSession.id,
+    };
   }
 }
 
