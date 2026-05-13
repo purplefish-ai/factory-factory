@@ -70,6 +70,9 @@ export interface AgentSessionAccessor {
 }
 
 class PrismaAgentSessionAccessor implements AgentSessionAccessor {
+  /** Serialises acquireFixerSession per workspace to prevent count-then-create races. */
+  private readonly workspaceAcquisitionQueue = new Map<string, Promise<unknown>>();
+
   private async getConfiguredDefaultModel(provider: SessionProvider): Promise<string> {
     const settings = await userSettingsAccessor.get();
     return resolveSessionModelForProvider(
@@ -196,6 +199,27 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
   }
 
   async acquireFixerSession(
+    input: AcquireFixerAgentSessionInput
+  ): Promise<FixerAgentSessionAcquisition> {
+    // Chain per-workspace to serialise the count-then-create sequence and
+    // prevent concurrent workflows from exceeding maxSessions.
+    const prev = this.workspaceAcquisitionQueue.get(input.workspaceId) ?? Promise.resolve();
+    const current = prev
+      .catch(() => {
+        /* swallow so previous failure doesn't block queue */
+      })
+      .then(() => this.doAcquireFixerSession(input));
+    this.workspaceAcquisitionQueue.set(input.workspaceId, current);
+    try {
+      return await current;
+    } finally {
+      if (this.workspaceAcquisitionQueue.get(input.workspaceId) === current) {
+        this.workspaceAcquisitionQueue.delete(input.workspaceId);
+      }
+    }
+  }
+
+  private async doAcquireFixerSession(
     input: AcquireFixerAgentSessionInput
   ): Promise<FixerAgentSessionAcquisition> {
     const provider = input.provider ?? 'CLAUDE';
