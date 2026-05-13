@@ -45,7 +45,7 @@ factory-factory-2/
 
 **`src/backend/services/`:**
 - Purpose: Hold domain capsules plus root infrastructure services.
-- Contains: service capsule directories `src/backend/services/session/`, `src/backend/services/workspace/`, `src/backend/services/github/`, `src/backend/services/linear/`, `src/backend/services/ratchet/`, `src/backend/services/terminal/`, `src/backend/services/run-script/`, `src/backend/services/settings/`, `src/backend/services/decision-log/`, and `src/backend/services/auto-iteration/`; root infrastructure services such as `src/backend/services/logger.service.ts`, `src/backend/services/config.service.ts`, `src/backend/services/git-ops.service.ts`, and `src/backend/services/rate-limiter.service.ts`.
+- Contains: service capsule directories `src/backend/services/session/`, `src/backend/services/workspace/`, `src/backend/services/github/`, `src/backend/services/linear/`, `src/backend/services/ratchet/`, `src/backend/services/terminal/`, `src/backend/services/run-script/`, `src/backend/services/settings/`, `src/backend/services/decision-log/`, `src/backend/services/auto-iteration/`, and `src/backend/services/periodic-task/`; root infrastructure services such as `src/backend/services/logger.service.ts`, `src/backend/services/config.service.ts`, `src/backend/services/git-ops.service.ts`, and `src/backend/services/rate-limiter.service.ts`.
 - Key files: `src/backend/services/registry.ts`, `src/backend/services/workspace/index.ts`, `src/backend/services/session/index.ts`, `src/backend/services/ratchet/index.ts`, `src/backend/services/workspace-snapshot-store.service.ts`
 
 **`src/backend/services/{name}/`:**

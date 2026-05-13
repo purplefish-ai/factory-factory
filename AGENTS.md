@@ -31,7 +31,7 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Prefer existing patterns and directory conventions; keep backend logic in `src/backend/` and UI in `src/client/`.
 
 ## Backend Service Capsule Pattern
-- **Service capsules:** session, workspace, github, linear, ratchet, terminal, run-script, settings, decision-log (under `src/backend/services/{name}/`)
+- **Service capsules:** session, workspace, github, linear, ratchet, terminal, run-script, settings, decision-log, periodic-task (under `src/backend/services/{name}/`)
 - Each capsule has an `index.ts` barrel file as the sole public API
 - Consumers must import from barrel (`@/backend/services/session`), never from internal paths
 - Service-to-service imports must go through barrel imports and follow `dependsOn` in `src/backend/services/registry.ts`
@@ -79,4 +79,5 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - **Linear integration:** Per-project issue provider can be set to Linear with encrypted API key + team selection. Kanban intake uses Linear issues assigned to the configured viewer. Starting from an issue creates a linked workspace (`linearIssueId`, `linearIssueIdentifier`, `linearIssueUrl`) and workspace lifecycle events best-effort sync issue state in Linear.
 - **Kanban model:** UI has a provider-driven intake column (`GitHub Issues` or `Linear Issues`) plus DB columns `WORKING`, `WAITING`, `DONE`. Column state is derived, not manually set; READY workspaces with no prior sessions are intentionally hidden, and archived workspaces preserve cached pre-archive column.
 - **Quick actions:** Workspace quick actions are markdown-driven from `prompts/quick-actions/` (frontmatter metadata + prompt body). Agent quick actions create follow-up sessions and auto-send prompt content when session is ready.
+- **Periodic Tasks:** Scheduled recurring tasks that create a fresh workspace on a configured cadence (daily, weekly, monthly, or testing cadences every minute/five minutes). Each execution runs the configured prompt, monitors for PR creation, and advances the schedule. Concurrent runs are skipped. Managed via the "Periodic Tasks" admin tab and created from the Kanban launch dropdown. Workspace right panel shows execution history for periodic-task-sourced workspaces. Service capsule: `src/backend/services/periodic-task/`.
 - **ACP Runtime:** All agent sessions use the Agent Client Protocol (ACP) via `@agentclientprotocol/sdk`. CLAUDE sessions spawn `claude-agent-acp`; CODEX sessions spawn Factory Factory's internal `codex-app-server-acp` adapter, both over stdio JSON-RPC. Session init/load is fail-fast and requires provider `configOptions` with model/mode categories. Permission requests present multi-option selection (`allow_once`, `allow_always`, `deny_once`, `deny_always`) and are bridged through ACP permission response handlers.

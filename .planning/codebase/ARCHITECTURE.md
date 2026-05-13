@@ -66,7 +66,7 @@
 
 **Domain Service Capsule Layer:**
 - Purpose: Own business behavior, state machines, bridge interfaces, and service-specific resources.
-- Location: `src/backend/services/{session,workspace,github,linear,ratchet,terminal,run-script,settings,decision-log,auto-iteration}/`
+- Location: `src/backend/services/{session,workspace,github,linear,ratchet,terminal,run-script,settings,decision-log,auto-iteration,periodic-task}/`
 - Contains: public barrels in `src/backend/services/{name}/index.ts`, business logic under `src/backend/services/{name}/service/`, resource accessors under `src/backend/services/{name}/resources/`, and co-located tests.
 - Depends on: same-capsule internals, declared service dependencies from `src/backend/services/registry.ts` through public barrels, and root infrastructure services such as `src/backend/services/logger.service.ts`.
 - Used by: tRPC routers, WebSocket handlers, orchestration modules, and `src/backend/app-context.ts`.
