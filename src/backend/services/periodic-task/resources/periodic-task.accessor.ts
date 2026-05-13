@@ -13,9 +13,15 @@ function computeNextRunAt(cadence: PeriodicTaskCadence, from: Date = new Date())
     case 'WEEKLY':
       next.setDate(next.getDate() + 7);
       break;
-    case 'MONTHLY':
-      next.setMonth(next.getMonth() + 1);
+    case 'MONTHLY': {
+      const targetMonth = next.getMonth() + 1;
+      next.setDate(1); // Avoid overflow when advancing month
+      next.setMonth(targetMonth);
+      // Clamp to the last day of the target month if the original day exceeds it
+      const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      next.setDate(Math.min(from.getDate(), lastDay));
       break;
+    }
   }
   return next;
 }

@@ -11,8 +11,8 @@
 import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import type { createLogger } from '@/backend/services/logger.service';
+import { periodicTaskAccessor } from '@/backend/services/periodic-task/resources/periodic-task.accessor';
 import type { PeriodicTaskCadence } from '@/shared/core';
-import { periodicTaskAccessor } from '../resources/periodic-task.accessor';
 
 type Logger = ReturnType<typeof createLogger>;
 
@@ -147,6 +147,10 @@ export class PeriodicTaskService {
 
     this.logger.info('Dispatching periodic task', { taskId, name });
 
+    // Advance nextRunAt first so a crash after this point won't re-dispatch
+    // the same due window on the next poll (at worst we miss one run).
+    await periodicTaskAccessor.markDispatched(taskId, cadence);
+
     const result = await this.workspaceBridge.createWorkspaceForTask({
       projectId,
       name: `${name} — ${new Date().toLocaleDateString()}`,
@@ -159,8 +163,6 @@ export class PeriodicTaskService {
       workspaceId: result.workspaceId,
       status: 'RUNNING',
     });
-
-    await periodicTaskAccessor.markDispatched(taskId, cadence);
 
     this.logger.info('Periodic task dispatched', {
       taskId,
