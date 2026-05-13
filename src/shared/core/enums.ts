@@ -59,6 +59,7 @@ export const WorkspaceCreationSource = {
   RESUME_BRANCH: 'RESUME_BRANCH',
   GITHUB_ISSUE: 'GITHUB_ISSUE',
   LINEAR_ISSUE: 'LINEAR_ISSUE',
+  PERIODIC_TASK: 'PERIODIC_TASK',
 } as const;
 export type WorkspaceCreationSource =
   (typeof WorkspaceCreationSource)[keyof typeof WorkspaceCreationSource];
@@ -84,6 +85,24 @@ export const WorkspaceMode = {
   AUTO_ITERATION: 'AUTO_ITERATION',
 } as const;
 export type WorkspaceMode = (typeof WorkspaceMode)[keyof typeof WorkspaceMode];
+
+export const PeriodicTaskCadence = {
+  EVERY_MINUTE: 'EVERY_MINUTE',
+  EVERY_FIVE_MINUTES: 'EVERY_FIVE_MINUTES',
+  DAILY: 'DAILY',
+  WEEKLY: 'WEEKLY',
+  MONTHLY: 'MONTHLY',
+} as const;
+export type PeriodicTaskCadence = (typeof PeriodicTaskCadence)[keyof typeof PeriodicTaskCadence];
+
+export const PeriodicTaskExecutionStatus = {
+  RUNNING: 'RUNNING',
+  PR_CREATED: 'PR_CREATED',
+  FAILED: 'FAILED',
+  SKIPPED: 'SKIPPED',
+} as const;
+export type PeriodicTaskExecutionStatus =
+  (typeof PeriodicTaskExecutionStatus)[keyof typeof PeriodicTaskExecutionStatus];
 
 export const AutoIterationStatus = {
   IDLE: 'IDLE',

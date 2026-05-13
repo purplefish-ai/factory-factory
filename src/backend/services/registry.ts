@@ -6,6 +6,8 @@ export const prismaModelNames = [
   'TerminalSession',
   'ClosedSession',
   'UserSettings',
+  'PeriodicTask',
+  'PeriodicTaskExecution',
 ] as const;
 
 export type PrismaModelName = (typeof prismaModelNames)[number];
@@ -21,6 +23,7 @@ export const serviceNames = [
   'settings',
   'decision-log',
   'auto-iteration',
+  'periodic-task',
 ] as const;
 
 export type ServiceName = (typeof serviceNames)[number];
@@ -70,5 +73,9 @@ export const serviceRegistry = {
   'auto-iteration': {
     dependsOn: [],
     ownsModels: [],
+  },
+  'periodic-task': {
+    dependsOn: ['workspace', 'settings'],
+    ownsModels: ['PeriodicTask', 'PeriodicTaskExecution'],
   },
 } as const satisfies Record<ServiceName, ServiceDefinition>;

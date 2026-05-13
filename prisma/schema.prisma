@@ -84,6 +84,7 @@ enum WorkspaceCreationSource {
   RESUME_BRANCH   // Created from existing branch
   GITHUB_ISSUE    // Created from GitHub issue
   LINEAR_ISSUE    // Created from Linear issue
+  PERIODIC_TASK   // Created by a periodic task execution
 }
 
 enum IssueProvider {
@@ -103,6 +104,21 @@ enum RunScriptStatus {
 enum WorkspaceMode {
   STANDARD
   AUTO_ITERATION
+}
+
+enum PeriodicTaskCadence {
+  EVERY_MINUTE
+  EVERY_FIVE_MINUTES
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum PeriodicTaskExecutionStatus {
+  RUNNING       // Workspace created, agent working
+  PR_CREATED    // Agent created a PR
+  FAILED        // Workspace failed or errored
+  SKIPPED       // Skipped (previous run still active)
 }
 
 enum AutoIterationStatus {
@@ -142,6 +158,7 @@ model Project {
 
   // Relations
   workspaces        Workspace[]
+  periodicTasks     PeriodicTask[]
 
   @@index([slug])
   @@index([isArchived])
@@ -233,6 +250,11 @@ model Workspace {
   autoIterationConfig       Json?                 // { testCommand, targetDescription, maxIterations, testTimeoutSeconds, sessionRecycleInterval }
   autoIterationProgress     Json?                 // { currentIteration, baselineMetricSummary, currentMetricSummary, counts, timestamps }
   autoIterationSessionId    String?               // Active ACP session for auto-iteration loop
+
+  // Periodic task link
+  periodicTaskId        String?
+  periodicTask          PeriodicTask?           @relation(fields: [periodicTaskId], references: [id])
+  periodicTaskExecution PeriodicTaskExecution?
 
   // Activity tracking
   hasHadSessions      Boolean           @default(false)
@@ -345,4 +367,48 @@ model UserSettings {
   updatedAt             DateTime @updatedAt
 
   @@index([userId])
+}
+
+model PeriodicTask {
+  id          String               @id @default(cuid())
+  projectId   String
+  project     Project              @relation(fields: [projectId], references: [id])
+
+  name        String
+  prompt      String
+  cadence     PeriodicTaskCadence
+
+  isEnabled   Boolean              @default(true)
+  nextRunAt   DateTime
+  lastRunAt   DateTime?
+
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  executions  PeriodicTaskExecution[]
+  workspaces  Workspace[]
+
+  @@index([projectId])
+  @@index([isEnabled, nextRunAt])
+}
+
+model PeriodicTaskExecution {
+  id              String                       @id @default(cuid())
+  periodicTaskId  String
+  periodicTask    PeriodicTask                 @relation(fields: [periodicTaskId], references: [id], onDelete: Cascade)
+
+  workspaceId     String?                      @unique
+  workspace       Workspace?                   @relation(fields: [workspaceId], references: [id])
+
+  status          PeriodicTaskExecutionStatus
+  prUrl           String?
+  prNumber        Int?
+  errorMessage    String?
+
+  startedAt       DateTime                     @default(now())
+  completedAt     DateTime?
+
+  @@index([periodicTaskId])
+  @@index([periodicTaskId, status])
+  @@index([status])
 }

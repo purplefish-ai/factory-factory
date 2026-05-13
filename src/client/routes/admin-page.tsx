@@ -1,4 +1,5 @@
 import {
+  Calendar,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -8,6 +9,7 @@ import {
   Pencil,
   RefreshCw,
   Terminal,
+  Trash2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -37,6 +39,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { RatchetWrenchIcon, WorkspacesBackLink } from '@/components/workspace';
 import { DevServerSetupPanel } from '@/components/workspace/dev-server-setup-panel';
 import type { PublicIssueTrackerConfig } from '@/shared/schemas/issue-tracker-config.schema';
@@ -46,6 +49,27 @@ import {
   ProcessesSectionSkeleton,
   ProjectIssueTrackingCard,
 } from './admin/index';
+
+function formatRelativeTime(date: Date): string {
+  const diffMs = date.getTime() - Date.now();
+  const diffSec = Math.round(diffMs / 1000);
+  if (diffSec < 0) {
+    return 'now';
+  }
+  if (diffSec < 60) {
+    return `in ${diffSec}s`;
+  }
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) {
+    return `in ${diffMin}m`;
+  }
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) {
+    return `in ${diffHr}h`;
+  }
+  const diffDays = Math.round(diffHr / 24);
+  return `in ${diffDays}d`;
+}
 
 function formatPortLabel(
   port: number | null | undefined,
@@ -972,9 +996,341 @@ function ServerLogsSection() {
   );
 }
 
+// ============================================================================
+// Periodic Tasks Section
+// ============================================================================
+
+function PeriodicTasksSection({
+  projects,
+}: {
+  projects: Array<{ id: string; slug: string; name: string }>;
+}) {
+  const [selectedSlug, setSelectedSlug] = useState<string>(
+    () => localStorage.getItem(SELECTED_PROJECT_KEY) || projects[0]?.slug || ''
+  );
+  const selectedProject = projects.find((p) => p.slug === selectedSlug) ?? projects[0];
+
+  if (!selectedProject) {
+    return <p className="text-sm text-muted-foreground">No projects found.</p>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Select value={selectedProject.slug} onValueChange={setSelectedSlug}>
+          <SelectTrigger className="w-auto max-w-xs">
+            <SelectValue placeholder="Select a project" />
+          </SelectTrigger>
+          <SelectContent>
+            {projects.map((project) => (
+              <SelectItem key={project.id} value={project.slug}>
+                {project.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <PeriodicTaskList projectId={selectedProject.id} />
+    </div>
+  );
+}
+
+function PeriodicTaskList({ projectId }: { projectId: string }) {
+  const utils = trpc.useUtils();
+  const { data: tasks, isLoading } = trpc.periodicTask.list.useQuery(
+    { projectId },
+    { refetchInterval: 10_000 }
+  );
+
+  const deleteMutation = trpc.periodicTask.delete.useMutation({
+    onSuccess: () => {
+      toast.success('Periodic task deleted');
+      utils.periodicTask.list.invalidate({ projectId });
+    },
+    onError: (error) => toast.error(`Delete failed: ${error.message}`),
+  });
+
+  const toggleMutation = trpc.periodicTask.toggleEnabled.useMutation({
+    onSuccess: () => {
+      utils.periodicTask.list.invalidate({ projectId });
+    },
+    onError: (error) => toast.error(`Toggle failed: ${error.message}`),
+  });
+
+  const updateMutation = trpc.periodicTask.update.useMutation({
+    onSuccess: () => {
+      toast.success('Periodic task updated');
+      utils.periodicTask.list.invalidate({ projectId });
+    },
+    onError: (error) => toast.error(`Update failed: ${error.message}`),
+  });
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="w-5 h-5" />
+            Periodic Tasks
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-20 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Calendar className="w-5 h-5" />
+          Periodic Tasks
+        </CardTitle>
+        <CardDescription>Recurring tasks that create workspaces on a schedule</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!tasks || tasks.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            No periodic tasks yet. Create one from the workspace launch dropdown.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {tasks.map((task) => (
+              <PeriodicTaskRow
+                key={task.id}
+                task={task}
+                onToggle={(enabled) => toggleMutation.mutate({ id: task.id, enabled })}
+                onDelete={() => deleteMutation.mutate({ id: task.id })}
+                onUpdate={(data) => updateMutation.mutate({ id: task.id, ...data })}
+                isUpdating={updateMutation.isPending || toggleMutation.isPending}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExecutionStatusBadge({ status }: { status: string }) {
+  const variantMap: Record<string, 'default' | 'secondary' | 'destructive'> = {
+    PR_CREATED: 'default',
+    RUNNING: 'secondary',
+  };
+  const labelMap: Record<string, string> = {
+    PR_CREATED: 'PR Created',
+    RUNNING: 'Running',
+    FAILED: 'Failed',
+    SKIPPED: 'Skipped',
+  };
+  return (
+    <Badge variant={variantMap[status] ?? 'destructive'} className="text-[10px]">
+      {labelMap[status] ?? status}
+    </Badge>
+  );
+}
+
+function PeriodicTaskRow({
+  task,
+  onToggle,
+  onDelete,
+  onUpdate,
+  isUpdating,
+}: {
+  task: {
+    id: string;
+    name: string;
+    prompt: string;
+    cadence: string;
+    isEnabled: boolean;
+    nextRunAt: Date;
+    lastRunAt: Date | null;
+    executions: Array<{
+      id: string;
+      status: string;
+      prUrl: string | null;
+      startedAt: Date;
+      completedAt: Date | null;
+    }>;
+  };
+  onToggle: (enabled: boolean) => void;
+  onDelete: () => void;
+  onUpdate: (data: {
+    name?: string;
+    prompt?: string;
+    cadence?: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  }) => void;
+  isUpdating: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(task.name);
+  const [editPrompt, setEditPrompt] = useState(task.prompt);
+  const [editCadence, setEditCadence] = useState(task.cadence);
+  const [showExecutions, setShowExecutions] = useState(false);
+
+  const handleSave = () => {
+    onUpdate({
+      name: editName !== task.name ? editName : undefined,
+      prompt: editPrompt !== task.prompt ? editPrompt : undefined,
+      cadence:
+        editCadence !== task.cadence
+          ? (editCadence as 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY')
+          : undefined,
+    });
+    setEditing(false);
+  };
+
+  const cadenceLabels: Record<string, string> = {
+    EVERY_MINUTE: 'Every minute',
+    EVERY_FIVE_MINUTES: 'Every 5 minutes',
+    DAILY: 'Daily',
+    WEEKLY: 'Weekly',
+    MONTHLY: 'Monthly',
+  };
+  const cadenceLabel = cadenceLabels[task.cadence] ?? task.cadence;
+  const latestExecution = task.executions[0];
+
+  const toggleEdit = () => {
+    setEditName(task.name);
+    setEditPrompt(task.prompt);
+    setEditCadence(task.cadence);
+    setEditing(!editing);
+  };
+
+  return (
+    <div className="rounded-md border p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Switch
+            checked={task.isEnabled}
+            onCheckedChange={onToggle}
+            disabled={isUpdating}
+            className="shrink-0"
+          />
+          <span className="font-medium text-sm truncate">{task.name}</span>
+          <Badge variant="secondary" className="shrink-0 text-[10px]">
+            {cadenceLabel}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleEdit}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground line-clamp-2">{task.prompt}</p>
+
+      <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        {task.lastRunAt && <span>Last run: {new Date(task.lastRunAt).toLocaleString()}</span>}
+        <span title={new Date(task.nextRunAt).toLocaleString()}>
+          Next run: {formatRelativeTime(new Date(task.nextRunAt))}
+        </span>
+        {latestExecution && <ExecutionStatusBadge status={latestExecution.status} />}
+      </div>
+
+      {editing && (
+        <div className="space-y-2 pt-2 border-t">
+          <div className="space-y-1">
+            <Label className="text-xs">Name</Label>
+            <Input
+              className="h-7 text-xs"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Prompt</Label>
+            <Textarea
+              className="text-xs min-h-[60px]"
+              value={editPrompt}
+              onChange={(e) => setEditPrompt(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Cadence</Label>
+            <Select value={editCadence} onValueChange={setEditCadence}>
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="EVERY_MINUTE">Every minute (testing)</SelectItem>
+                <SelectItem value="EVERY_FIVE_MINUTES">Every 5 minutes (testing)</SelectItem>
+                <SelectItem value="DAILY">Daily</SelectItem>
+                <SelectItem value="WEEKLY">Weekly</SelectItem>
+                <SelectItem value="MONTHLY">Monthly</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setEditing(false)}
+            >
+              Cancel
+            </Button>
+            <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={isUpdating}>
+              Save
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {task.executions.length > 0 && (
+        <div>
+          <button
+            type="button"
+            className="text-[10px] text-muted-foreground hover:text-foreground underline"
+            onClick={() => setShowExecutions(!showExecutions)}
+          >
+            {showExecutions ? 'Hide' : 'Show'} execution history ({task.executions.length})
+          </button>
+          {showExecutions && (
+            <div className="mt-2 space-y-1">
+              {task.executions.map((exec) => (
+                <div
+                  key={exec.id}
+                  className="flex items-center gap-2 text-[10px] text-muted-foreground"
+                >
+                  <ExecutionStatusBadge status={exec.status} />
+                  <span>{new Date(exec.startedAt).toLocaleString()}</span>
+                  {exec.prUrl && (
+                    <a
+                      href={exec.prUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      PR
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   useAppHeader({ title: 'Settings' });
-  const [settingsTab, setSettingsTab] = useState<'general' | 'project'>('general');
+  const [settingsTab, setSettingsTab] = useState<'general' | 'project' | 'periodic-tasks'>(
+    'general'
+  );
 
   const {
     data: stats,
@@ -1017,7 +1373,9 @@ export default function AdminDashboardPage() {
       <div className="space-y-6 p-3 md:p-6">
         <Tabs
           value={settingsTab}
-          onValueChange={(value) => setSettingsTab(value as 'general' | 'project')}
+          onValueChange={(value) =>
+            setSettingsTab(value as 'general' | 'project' | 'periodic-tasks')
+          }
         >
           <TabsList className="w-full sm:w-auto">
             <TabsTrigger value="general" className="flex-1 sm:flex-initial">
@@ -1025,6 +1383,9 @@ export default function AdminDashboardPage() {
             </TabsTrigger>
             <TabsTrigger value="project" className="flex-1 sm:flex-initial">
               Project Settings
+            </TabsTrigger>
+            <TabsTrigger value="periodic-tasks" className="flex-1 sm:flex-initial">
+              Periodic Tasks
             </TabsTrigger>
           </TabsList>
 
@@ -1064,6 +1425,14 @@ export default function AdminDashboardPage() {
           <TabsContent value="project" className="mt-4">
             {projects ? (
               <ProjectSettingsSection projects={projects} />
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading projects...</p>
+            )}
+          </TabsContent>
+
+          <TabsContent value="periodic-tasks" className="mt-4">
+            {projects ? (
+              <PeriodicTasksSection projects={projects} />
             ) : (
               <p className="text-sm text-muted-foreground">Loading projects...</p>
             )}

@@ -37,10 +37,11 @@ interface CreateWorkspaceInput {
   ratchetEnabled?: boolean;
   defaultSessionProvider?: Prisma.WorkspaceCreateInput['defaultSessionProvider'];
   ratchetSessionProvider?: Prisma.WorkspaceCreateInput['ratchetSessionProvider'];
-  creationSource?: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
+  creationSource?: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE' | 'PERIODIC_TASK';
   creationMetadata?: Prisma.InputJsonValue;
   mode?: 'STANDARD' | 'AUTO_ITERATION';
   autoIterationConfig?: Prisma.InputJsonValue;
+  periodicTaskId?: string;
 }
 
 interface UpdateWorkspaceInput {
@@ -155,6 +156,7 @@ class WorkspaceAccessor {
         creationMetadata: data.creationMetadata,
         mode: data.mode,
         autoIterationConfig: data.autoIterationConfig,
+        periodicTaskId: data.periodicTaskId,
       },
     });
   }

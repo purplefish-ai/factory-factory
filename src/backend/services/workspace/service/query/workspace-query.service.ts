@@ -214,6 +214,7 @@ class WorkspaceQueryService {
           linearIssueId: w.linearIssueId,
           linearIssueIdentifier: w.linearIssueIdentifier,
           linearIssueUrl: w.linearIssueUrl,
+          creationSource: w.creationSource,
           sidebarStatus: derivedState.sidebarStatus,
           ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
           flowPhase: derivedState.flowPhase,
