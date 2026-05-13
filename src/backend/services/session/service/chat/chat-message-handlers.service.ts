@@ -31,6 +31,8 @@ import { createChatMessageHandlerRegistry } from './chat-message-handlers/regist
 import type { ClientCreator } from './chat-message-handlers/types';
 
 const logger = createLogger('chat-message-handlers');
+const TURN_IN_PROGRESS_RETRY_BASE_MS = 1000;
+const TURN_IN_PROGRESS_RETRY_MAX_MS = 30_000;
 
 // ============================================================================
 // Types
@@ -82,6 +84,9 @@ class ChatMessageHandlerService {
   private dispatchInProgress = new Map<string, number>();
   /** Monotonic token to invalidate stale dispatch completions. */
   private nextDispatchToken = 1;
+  /** Retry timers for provider-side busy responses that are not reflected locally yet. */
+  private turnInProgressRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private turnInProgressRetryAttempts = new Map<string, number>();
 
   /** Client creator function - injected to avoid circular dependencies */
   private clientCreator: ClientCreator | null = null;
@@ -132,6 +137,7 @@ class ChatMessageHandlerService {
 
   resetDispatchState(sessionId: string): void {
     this.dispatchInProgress.delete(sessionId);
+    this.clearTurnInProgressRetry(sessionId);
   }
 
   private isDispatchInProgress(dbSessionId: string): boolean {
@@ -167,6 +173,10 @@ class ChatMessageHandlerService {
    * to dispatch, so a page refresh during auto-start won't lose it.
    */
   async tryDispatchNextMessage(dbSessionId: string): Promise<void> {
+    if (this.turnInProgressRetryTimers.has(dbSessionId)) {
+      return;
+    }
+
     // Guard against concurrent dispatch calls for the same session
     if (this.isDispatchInProgress(dbSessionId)) {
       return;
@@ -178,6 +188,7 @@ class ChatMessageHandlerService {
       // Peek first — message stays in queue (visible in snapshots during auto-start).
       const peeked = sessionDomainService.peekNextMessage(dbSessionId);
       if (!peeked) {
+        this.turnInProgressRetryAttempts.delete(dbSessionId);
         return;
       }
 
@@ -200,6 +211,7 @@ class ChatMessageHandlerService {
 
       try {
         await this.dispatchMessage(dbSessionId, msg, clientResult.client);
+        this.turnInProgressRetryAttempts.delete(dbSessionId);
       } catch (error) {
         this.handleDispatchError(dbSessionId, msg, error);
       }
@@ -274,13 +286,31 @@ class ChatMessageHandlerService {
       });
       return;
     }
+
+    if (this.isTurnAlreadyInProgressError(error)) {
+      logger.warn('[Chat WS] ACP turn already in progress, retrying queued message later', {
+        dbSessionId,
+        messageId: msg.id,
+        error: this.formatDispatchError(error),
+      });
+      sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
+        emitSnapshot: false,
+      });
+      if (sessionService.isSessionRunning(dbSessionId)) {
+        sessionDomainService.markRunning(dbSessionId);
+      }
+      sessionDomainService.requeueFront(dbSessionId, msg);
+      this.scheduleTurnInProgressRetry(dbSessionId);
+      return;
+    }
+
     // Transient errors: dispatch can fail after we pessimistically committed the
     // user message to transcript for refresh safety. Roll it back before
     // re-queueing so clients do not see the same message as both queued and committed.
     logger.error('[Chat WS] Failed to dispatch message, re-queueing', {
       dbSessionId,
       messageId: msg.id,
-      error: error instanceof Error ? error.message : String(error),
+      error: this.formatDispatchError(error),
     });
     sessionDomainService.removeTranscriptMessageById(dbSessionId, msg.id, {
       emitSnapshot: false,
@@ -291,6 +321,53 @@ class ChatMessageHandlerService {
       sessionDomainService.markIdle(dbSessionId, 'alive');
     }
     sessionDomainService.requeueFront(dbSessionId, msg);
+  }
+
+  private scheduleTurnInProgressRetry(dbSessionId: string): void {
+    if (this.turnInProgressRetryTimers.has(dbSessionId)) {
+      return;
+    }
+
+    const attempts = this.turnInProgressRetryAttempts.get(dbSessionId) ?? 0;
+    const delayMs = Math.min(
+      TURN_IN_PROGRESS_RETRY_BASE_MS * 2 ** attempts,
+      TURN_IN_PROGRESS_RETRY_MAX_MS
+    );
+    this.turnInProgressRetryAttempts.set(dbSessionId, attempts + 1);
+
+    const timer = setTimeout(() => {
+      this.turnInProgressRetryTimers.delete(dbSessionId);
+      void this.tryDispatchNextMessage(dbSessionId);
+    }, delayMs);
+    this.turnInProgressRetryTimers.set(dbSessionId, timer);
+  }
+
+  private clearTurnInProgressRetry(dbSessionId: string): void {
+    const timer = this.turnInProgressRetryTimers.get(dbSessionId);
+    if (timer) {
+      clearTimeout(timer);
+      this.turnInProgressRetryTimers.delete(dbSessionId);
+    }
+    this.turnInProgressRetryAttempts.delete(dbSessionId);
+  }
+
+  private isTurnAlreadyInProgressError(error: unknown): boolean {
+    const message = this.formatDispatchError(error);
+    return message.includes('A turn is already in progress for this session');
+  }
+
+  private formatDispatchError(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    if (error !== null && typeof error === 'object') {
+      try {
+        return JSON.stringify(error);
+      } catch {
+        return String(error);
+      }
+    }
+    return String(error);
   }
 
   /**
