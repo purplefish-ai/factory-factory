@@ -83,9 +83,7 @@ Current behavior:
 - `null`: hidden `READY` workspaces with no prior sessions
 
 Important: derived `isWorking` is:
-- `sessionService.isAnySessionWorking(...) OR flowState.isWorking`
-
-This keeps workspace position stable while ratchet is progressing even when no chat session is actively running.
+- `sessionService.isAnySessionWorking(...)`
 
 ## Ratchet Animation Rules
 
@@ -101,11 +99,9 @@ No push-based animation remains:
 These invariants should always hold:
 
 1. If `workspace.status !== READY`, workspace lifecycle controls board placement.
-2. If PR is active and `prCiStatus === PENDING`, workspace is `WORKING` regardless of ratchet toggle.
-3. Ratchet button animation only occurs during CI wait with ratchet enabled.
-4. If ratchet is enabled and PR is active after CI pending clears, workspace remains `WORKING` until ratchet reaches `READY` or `MERGED`.
-5. Enabling ratchet should trigger immediate ratchet evaluation.
-6. `CIStatus.UNKNOWN` must be interpreted through `ciObservation` (`NOT_FETCHED` vs `NO_CHECKS`).
+2. Ratchet button animation only occurs during CI wait with ratchet enabled.
+3. Enabling ratchet should trigger immediate ratchet evaluation.
+4. `CIStatus.UNKNOWN` must be interpreted through `ciObservation` (`NOT_FETCHED` vs `NO_CHECKS`).
 
 ## Edge Cases And Current Handling
 
