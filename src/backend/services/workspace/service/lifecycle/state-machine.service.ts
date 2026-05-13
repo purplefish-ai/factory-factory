@@ -14,7 +14,6 @@
  *   READY → PROVISIONING (retry setup script when workspace is READY+warning)
  *   READY → ARCHIVING → ARCHIVED
  *   FAILED → ARCHIVING → ARCHIVED
- *   PROVISIONING → ARCHIVING → ARCHIVED (user-initiated archive during provisioning)
  *   ARCHIVING → READY/FAILED (rollback on archive failure)
  */
 
@@ -31,7 +30,7 @@ const logger = createLogger('workspace-state-machine');
  */
 const VALID_TRANSITIONS: Record<WorkspaceStatus, WorkspaceStatus[]> = {
   NEW: ['PROVISIONING'],
-  PROVISIONING: ['READY', 'FAILED', 'ARCHIVING'],
+  PROVISIONING: ['READY', 'FAILED'],
   READY: ['ARCHIVING', 'PROVISIONING'],
   FAILED: ['PROVISIONING', 'NEW', 'ARCHIVING'],
   ARCHIVING: ['READY', 'FAILED', 'ARCHIVED'],
@@ -80,7 +79,7 @@ export interface StartProvisioningOptions {
   maxRetries?: number;
 }
 
-type ArchivingSourceStatus = Extract<WorkspaceStatus, 'READY' | 'FAILED' | 'PROVISIONING'>;
+type ArchivingSourceStatus = Extract<WorkspaceStatus, 'READY' | 'FAILED'>;
 
 export interface StartArchivingResult {
   workspace: Workspace;
@@ -289,40 +288,6 @@ class WorkspaceStateMachineService extends EventEmitter {
   }
 
   /**
-   * Conditionally mark workspace as FAILED only if it is still in PROVISIONING state.
-   * Returns true if the transition was applied, false if the workspace has already moved on
-   * (e.g. an archive request took over mid-provisioning).
-   * Uses an atomic CAS so it is safe to call concurrently with archive.
-   */
-  async markFailedIfProvisioning(workspaceId: string, errorMessage?: string): Promise<boolean> {
-    const now = new Date();
-    const result = await workspaceAccessor.transitionWithCas(workspaceId, 'PROVISIONING', {
-      status: 'FAILED',
-      initCompletedAt: now,
-      initErrorMessage: errorMessage ?? null,
-    });
-
-    if (result.count > 0) {
-      this.emit(WORKSPACE_STATE_CHANGED, {
-        workspaceId,
-        fromStatus: 'PROVISIONING',
-        toStatus: 'FAILED',
-      } satisfies WorkspaceStateChangedEvent);
-      logger.debug('Workspace status transitioned', {
-        workspaceId,
-        from: 'PROVISIONING',
-        to: 'FAILED',
-      });
-      return true;
-    }
-
-    logger.debug('markFailedIfProvisioning: workspace no longer in PROVISIONING state', {
-      workspaceId,
-    });
-    return false;
-  }
-
-  /**
    * Mark a workspace as archiving.
    * Can only begin archiving from READY or FAILED status.
    */
@@ -335,9 +300,7 @@ class WorkspaceStateMachineService extends EventEmitter {
 
     const currentStatus = workspace.status;
 
-    if (
-      !(currentStatus === 'READY' || currentStatus === 'FAILED' || currentStatus === 'PROVISIONING')
-    ) {
+    if (!(currentStatus === 'READY' || currentStatus === 'FAILED')) {
       throw new WorkspaceStateMachineError(
         workspaceId,
         currentStatus,
