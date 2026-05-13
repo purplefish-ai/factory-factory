@@ -52,23 +52,25 @@ import {
 
 function formatRelativeTime(date: Date): string {
   const diffMs = date.getTime() - Date.now();
-  const diffSec = Math.round(diffMs / 1000);
-  if (diffSec < 0) {
+  const absSec = Math.abs(Math.round(diffMs / 1000));
+  const suffix = diffMs < 0 ? 'ago' : '';
+  const prefix = diffMs >= 0 ? 'in ' : '';
+  if (absSec < 5) {
     return 'now';
   }
-  if (diffSec < 60) {
-    return `in ${diffSec}s`;
+  if (absSec < 60) {
+    return `${prefix}${absSec}s${suffix ? ` ${suffix}` : ''}`;
   }
-  const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) {
-    return `in ${diffMin}m`;
+  const absMin = Math.round(absSec / 60);
+  if (absMin < 60) {
+    return `${prefix}${absMin}m${suffix ? ` ${suffix}` : ''}`;
   }
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) {
-    return `in ${diffHr}h`;
+  const absHr = Math.round(absMin / 60);
+  if (absHr < 24) {
+    return `${prefix}${absHr}h${suffix ? ` ${suffix}` : ''}`;
   }
-  const diffDays = Math.round(diffHr / 24);
-  return `in ${diffDays}d`;
+  const absDays = Math.round(absHr / 24);
+  return `${prefix}${absDays}d${suffix ? ` ${suffix}` : ''}`;
 }
 
 function formatPortLabel(
