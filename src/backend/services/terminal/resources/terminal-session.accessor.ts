@@ -81,6 +81,15 @@ class TerminalSessionAccessor {
     });
   }
 
+  updateManyByIds(ids: string[], data: UpdateTerminalSessionInput): Promise<number> {
+    return prisma.terminalSession
+      .updateMany({
+        where: { id: { in: ids } },
+        data,
+      })
+      .then((r) => r.count);
+  }
+
   delete(id: string): Promise<TerminalSession> {
     return prisma.terminalSession.delete({
       where: { id },

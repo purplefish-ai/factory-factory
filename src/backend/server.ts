@@ -277,6 +277,15 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       await task();
     } catch (error) {
       logger.error(errorMessage, toError(error));
+      // A failed write can corrupt the shared Prisma connection's internal
+      // transaction state (e.g., better-sqlite3 commits synchronously while
+      // Prisma's async timeout fires a rollback against an already-committed
+      // tx). Disconnect so the next task gets a clean connection.
+      try {
+        await prisma.$disconnect();
+      } catch {
+        // Ignore disconnect errors during recovery
+      }
     }
   };
 
@@ -347,16 +356,25 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       }
 
       const runStartupReconciliation = async (): Promise<void> => {
-        await runStartupTask('Failed to cleanup orphan sessions on startup', () =>
-          reconciliationService.cleanupOrphans()
-        );
+        // Enable WAL journal mode so readers don't block writers and vice versa,
+        // reducing SQLITE_BUSY errors when a previous unclean shutdown left a
+        // WAL/journal file being recovered.
+        await runStartupTask('Failed to configure SQLite WAL mode on startup', async () => {
+          await prisma.$queryRawUnsafe('PRAGMA journal_mode=WAL');
+        });
 
         // Reset agent sessions that were persisted as RUNNING by a prior process.
         // Live ACP runtimes are in-memory only, so after a backend restart these
         // records must not drive workspace "Working" state.
+        // Run BEFORE cleanupOrphans: this is a fast single updateMany and should
+        // not be blocked by the per-row loop that is prone to lock contention.
         await runStartupTask('Failed to recover stale agent sessions on startup', async () => {
           await sessionService.recoverStaleSessionStates();
         });
+
+        await runStartupTask('Failed to cleanup orphan sessions on startup', () =>
+          reconciliationService.cleanupOrphans()
+        );
 
         // Reconcile workspaces that may have been left in inconsistent states
         // (e.g., stuck in PROVISIONING due to server crash)

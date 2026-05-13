@@ -38,8 +38,14 @@ function createPrismaClient(): PrismaClient {
   // Create Prisma adapter with SQLite configuration
   // Note: The adapter expects a raw file path, not a file: URL
   // (getDatabaseUrl() with file: prefix is for Prisma CLI configuration)
+  //
+  // timeout: busy_timeout in ms — how long better-sqlite3 waits for a write
+  // lock before throwing SQLITE_BUSY. Without this, a brief lock held during
+  // WAL recovery or by another process causes an immediate "Operation has
+  // timed out" error and corrupts the shared Prisma connection state.
   const adapter = new PrismaBetterSqlite3({
     url: databasePath,
+    timeout: 5000,
   });
 
   return new PrismaClient({ adapter });

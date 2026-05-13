@@ -151,19 +151,16 @@ class ReconciliationService {
     // Terminal sessions are still PID-tracked and may become orphaned.
     const terminalSessionsWithPid = await terminalSessionAccessor.findWithPid();
 
-    for (const session of terminalSessionsWithPid) {
-      if (session.pid) {
-        const isRunning = this.isProcessRunning(session.pid);
-        if (!isRunning) {
-          await terminalSessionAccessor.update(session.id, {
-            status: SessionStatus.IDLE,
-            pid: null,
-          });
-          logger.info('Marked orphaned terminal session as idle', {
-            sessionId: session.id,
-          });
-        }
-      }
+    const orphanIds = terminalSessionsWithPid
+      .filter((s) => s.pid != null && !this.isProcessRunning(s.pid))
+      .map((s) => s.id);
+
+    if (orphanIds.length > 0) {
+      await terminalSessionAccessor.updateManyByIds(orphanIds, {
+        status: SessionStatus.IDLE,
+        pid: null,
+      });
+      logger.info('Marked orphaned terminal sessions as idle', { count: orphanIds.length });
     }
   }
 
