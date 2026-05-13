@@ -1,4 +1,13 @@
-import { Camera, FileQuestion, Files, ListTodo, Plus, RefreshCw, Terminal } from 'lucide-react';
+import {
+  Calendar,
+  Camera,
+  FileQuestion,
+  Files,
+  ListTodo,
+  Plus,
+  RefreshCw,
+  Terminal,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from '@/client/lib/trpc';
 import type { ChatMessage } from '@/components/chat';
@@ -11,6 +20,7 @@ import { AutoIterationPanel } from './auto-iteration-panel';
 import { CombinedChangesPanel } from './combined-changes-panel';
 import { DevLogsPanel } from './dev-logs-panel';
 import { FileBrowserPanel } from './file-browser-panel';
+import { PeriodicTaskPanel } from './periodic-task-panel';
 import { ScreenshotsPanel } from './screenshots-panel';
 import { SetupLogsPanel } from './setup-logs-panel';
 import { TerminalPanel, type TerminalPanelRef, type TerminalTabState } from './terminal-panel';
@@ -30,7 +40,13 @@ const STORAGE_KEY_TOP_TAB_PREFIX = 'workspace-right-panel-tab-';
 // Types
 // =============================================================================
 
-type TopPanelTab = 'changes' | 'files' | 'tasks' | 'screenshots' | 'auto-iteration';
+type TopPanelTab =
+  | 'changes'
+  | 'files'
+  | 'tasks'
+  | 'screenshots'
+  | 'auto-iteration'
+  | 'periodic-task';
 type LogsBottomTab = Exclude<BottomPanelTab, 'terminal'>;
 
 interface PersistedTopPanelState {
@@ -47,7 +63,8 @@ function parseStoredTopTab(value: string | null): TopPanelTab | null {
     value === 'files' ||
     value === 'tasks' ||
     value === 'screenshots' ||
-    value === 'auto-iteration'
+    value === 'auto-iteration' ||
+    value === 'periodic-task'
   ) {
     return value;
   }
@@ -101,6 +118,7 @@ interface TopPanelAreaProps {
   onTopTabChange: (tab: TopPanelTab) => void;
   onTakeScreenshots: () => void;
   isAutoIteration: boolean;
+  periodicTaskId: string | null;
 }
 
 function TopPanelArea({
@@ -110,12 +128,14 @@ function TopPanelArea({
   onTopTabChange,
   onTakeScreenshots,
   isAutoIteration,
+  periodicTaskId,
 }: TopPanelAreaProps) {
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
   const showTasks = activeTopTab === 'tasks';
   const showScreenshots = activeTopTab === 'screenshots';
   const showAutoIteration = isAutoIteration && activeTopTab === 'auto-iteration';
+  const showPeriodicTask = !!periodicTaskId && activeTopTab === 'periodic-task';
 
   const screenshotsButtonClassName = cn(
     'h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors',
@@ -154,6 +174,14 @@ function TopPanelArea({
             onSelect={() => onTopTabChange('auto-iteration')}
           />
         )}
+        {periodicTaskId && (
+          <TabButton
+            label="Periodic Task"
+            icon={<Calendar className="h-3.5 w-3.5" />}
+            isActive={showPeriodicTask}
+            onSelect={() => onTopTabChange('periodic-task')}
+          />
+        )}
 
         <div className="flex-1" />
 
@@ -185,6 +213,9 @@ function TopPanelArea({
           <ScreenshotsPanel workspaceId={workspaceId} onTakeScreenshots={onTakeScreenshots} />
         )}
         {showAutoIteration && <AutoIterationPanel workspaceId={workspaceId} />}
+        {showPeriodicTask && periodicTaskId && (
+          <PeriodicTaskPanel periodicTaskId={periodicTaskId} />
+        )}
       </div>
     </div>
   );
@@ -221,6 +252,8 @@ export function RightPanel({
     { enabled: !!workspaceId }
   );
   const isAutoIteration = workspace?.mode === 'AUTO_ITERATION';
+  const periodicTaskId =
+    (workspace as { periodicTaskId?: string | null } | undefined)?.periodicTaskId ?? null;
 
   const { data: initStatus } = trpc.workspace.getInitStatus.useQuery(
     { id: workspaceId },
@@ -272,32 +305,41 @@ export function RightPanel({
     onTakeScreenshots?.();
   }, [handleTopTabChange, onTakeScreenshots]);
 
-  // Auto-select the auto-iteration tab on first load for auto-iteration workspaces,
+  // Auto-select the auto-iteration or periodic-task tab on first load,
   // but only when the user has no persisted tab preference for this workspace.
   const autoIterationTabSelectedRef = useRef(false);
+  const periodicTaskTabSelectedRef = useRef(false);
   const prevWorkspaceIdRef = useRef(workspaceId);
   useEffect(() => {
     if (prevWorkspaceIdRef.current !== workspaceId) {
       prevWorkspaceIdRef.current = workspaceId;
       autoIterationTabSelectedRef.current = false;
+      periodicTaskTabSelectedRef.current = false;
     }
+    const hasPersistedTabCheck = () => {
+      if (typeof window === 'undefined') {
+        return false;
+      }
+      try {
+        return localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) != null;
+      } catch {
+        return false;
+      }
+    };
+
     if (isAutoIteration && !autoIterationTabSelectedRef.current) {
       autoIterationTabSelectedRef.current = true;
-      // Only auto-select when the user has no persisted tab for this workspace
-      let hasPersistedTab = false;
-      if (typeof window !== 'undefined') {
-        try {
-          hasPersistedTab =
-            localStorage.getItem(`${STORAGE_KEY_TOP_TAB_PREFIX}${workspaceId}`) != null;
-        } catch {
-          hasPersistedTab = false;
-        }
-      }
-      if (!hasPersistedTab) {
+      if (!hasPersistedTabCheck()) {
         handleTopTabChange('auto-iteration');
       }
     }
-  }, [isAutoIteration, handleTopTabChange, workspaceId]);
+    if (periodicTaskId && !periodicTaskTabSelectedRef.current) {
+      periodicTaskTabSelectedRef.current = true;
+      if (!hasPersistedTabCheck()) {
+        handleTopTabChange('periodic-task');
+      }
+    }
+  }, [isAutoIteration, periodicTaskId, handleTopTabChange, workspaceId]);
 
   const handleBottomTabChange = useCallback(
     (tab: BottomPanelTab) => {
@@ -363,6 +405,7 @@ export function RightPanel({
           onTopTabChange={handleTopTabChange}
           onTakeScreenshots={handleTakeScreenshots}
           isAutoIteration={isAutoIteration}
+          periodicTaskId={periodicTaskId}
         />
       </ResizablePanel>
 

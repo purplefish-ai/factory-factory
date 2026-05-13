@@ -11,6 +11,8 @@ export {
   CIStatus,
   IssueProvider,
   KanbanColumn,
+  PeriodicTaskCadence,
+  PeriodicTaskExecutionStatus,
   PRState,
   RatchetState,
   RunScriptStatus,

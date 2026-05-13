@@ -78,7 +78,7 @@ type PreparedWorkspaceCreation = {
     linearIssueId?: string;
     linearIssueIdentifier?: string;
     linearIssueUrl?: string;
-    creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE';
+    creationSource: 'MANUAL' | 'RESUME_BRANCH' | 'GITHUB_ISSUE' | 'LINEAR_ISSUE' | 'PERIODIC_TASK';
     creationMetadata?: Prisma.InputJsonValue;
     mode?: 'STANDARD' | 'AUTO_ITERATION';
     autoIterationConfig?: Prisma.InputJsonValue;
