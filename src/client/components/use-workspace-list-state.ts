@@ -48,6 +48,7 @@ export interface ServerWorkspace {
   linearIssueId?: string | null;
   linearIssueIdentifier?: string | null;
   linearIssueUrl?: string | null;
+  creationSource?: string | null;
 }
 
 export interface WorkspaceListItem extends ServerWorkspace {

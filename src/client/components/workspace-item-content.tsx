@@ -1,7 +1,32 @@
-import { CircleDot, GitBranch, GitPullRequest } from 'lucide-react';
+import { CircleDot, Clock, GitBranch, GitPullRequest } from 'lucide-react';
 import { PendingRequestBadge } from '@/client/components/pending-request-badge';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
+
+function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => void }) {
+  const content = (
+    <>
+      <GitPullRequest className="h-2.5 w-2.5" />
+      <span>#{prNumber}</span>
+    </>
+  );
+  if (onOpenPr) {
+    return (
+      <button
+        type="button"
+        className="flex items-center gap-0.5 hover:text-foreground"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onOpenPr();
+        }}
+      >
+        {content}
+      </button>
+    );
+  }
+  return <span className="flex items-center gap-0.5">{content}</span>;
+}
 
 export function WorkspaceItemContent({
   workspace,
@@ -28,6 +53,7 @@ export function WorkspaceItemContent({
       ? `#${workspace.githubIssueNumber}`
       : workspace.linearIssueId;
   const hasIssue = Boolean(issueLabel);
+  const isPeriodicTask = workspace.creationSource === 'PERIODIC_TASK';
 
   return (
     <div className="flex flex-col gap-0.5 min-w-0 w-full">
@@ -36,6 +62,7 @@ export function WorkspaceItemContent({
           pendingRequestType={workspace.pendingRequestType}
           isWorking={workspace.isWorking}
         />
+        {isPeriodicTask && <Clock className="h-3 w-3 shrink-0 text-muted-foreground" />}
         <span className="truncate text-sm">{workspace.name}</span>
       </div>
       {hasMetaRow && (
@@ -57,26 +84,9 @@ export function WorkspaceItemContent({
             )}
           </span>
           <span className="shrink-0 justify-self-end">
-            {showPR &&
-              (onOpenPr ? (
-                <button
-                  type="button"
-                  className="flex items-center gap-0.5 hover:text-foreground"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onOpenPr();
-                  }}
-                >
-                  <GitPullRequest className="h-2.5 w-2.5" />
-                  <span>#{workspace.prNumber}</span>
-                </button>
-              ) : (
-                <span className="flex items-center gap-0.5">
-                  <GitPullRequest className="h-2.5 w-2.5" />
-                  <span>#{workspace.prNumber}</span>
-                </span>
-              ))}
+            {showPR && workspace.prNumber != null && (
+              <PrLink prNumber={workspace.prNumber} onOpenPr={onOpenPr} />
+            )}
           </span>
         </div>
       )}
