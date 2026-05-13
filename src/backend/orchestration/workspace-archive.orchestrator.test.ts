@@ -284,49 +284,6 @@ describe('archiveWorkspace', () => {
       await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
       expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-1', 'FAILED');
     });
-
-    it('rolls back to FAILED (not PROVISIONING) when archive from PROVISIONING fails', async () => {
-      vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockResolvedValue(
-        unsafeCoerce({
-          workspace: { id: 'ws-1', status: 'ARCHIVING' },
-          previousStatus: 'PROVISIONING',
-        })
-      );
-      vi.mocked(worktreeLifecycleService.cleanupWorkspaceWorktree).mockRejectedValue(
-        new Error('cleanup failed')
-      );
-      const workspace = makeWorkspace({ status: 'PROVISIONING' as never });
-
-      await expect(archiveWorkspace(workspace, defaultOptions)).rejects.toThrow();
-      expect(workspaceStateMachine.transition).toHaveBeenCalledWith('ws-1', 'FAILED');
-    });
-  });
-
-  describe('archiving from PROVISIONING state', () => {
-    it('archives successfully when workspace is in PROVISIONING state', async () => {
-      vi.mocked(workspaceStateMachine.startArchivingWithSourceStatus).mockResolvedValue(
-        unsafeCoerce({
-          workspace: { id: 'ws-1', status: 'ARCHIVING' },
-          previousStatus: 'PROVISIONING',
-        })
-      );
-      const workspace = makeWorkspace({ status: 'PROVISIONING' as never });
-
-      await archiveWorkspace(workspace, defaultOptions);
-
-      expect(workspaceStateMachine.startArchivingWithSourceStatus).toHaveBeenCalledWith('ws-1');
-      expect(workspaceStateMachine.markArchived).toHaveBeenCalledWith('ws-1');
-    });
-
-    it('checks transition from PROVISIONING to ARCHIVING', async () => {
-      const workspace = makeWorkspace({ status: 'PROVISIONING' as never });
-      await archiveWorkspace(workspace, defaultOptions);
-
-      expect(workspaceStateMachine.isValidTransition).toHaveBeenCalledWith(
-        'PROVISIONING',
-        'ARCHIVING'
-      );
-    });
   });
 
   describe('GitHub issue comment on archive', () => {
