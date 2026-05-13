@@ -27,7 +27,15 @@ export function PeriodicTaskPanel({ periodicTaskId }: PeriodicTaskPanelProps) {
   }
 
   const cadenceLabel =
-    { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly' }[task.cadence] ?? task.cadence;
+    (
+      {
+        EVERY_MINUTE: 'Every minute',
+        EVERY_FIVE_MINUTES: 'Every 5 minutes',
+        DAILY: 'Daily',
+        WEEKLY: 'Weekly',
+        MONTHLY: 'Monthly',
+      } as Record<string, string>
+    )[task.cadence] ?? task.cadence;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">

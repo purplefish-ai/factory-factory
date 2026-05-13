@@ -175,8 +175,8 @@ function ModeConfigPanel({
   setBaseBranch,
 }: {
   mode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK';
-  cadence: 'DAILY' | 'WEEKLY' | 'MONTHLY';
-  setCadence: (v: 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
+  cadence: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  setCadence: (v: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
   isCreating: boolean;
   testCommand: string;
   setTestCommand: (v: string) => void;
@@ -290,8 +290,8 @@ function PeriodicTaskConfigPanel({
   setCadence,
   isCreating,
 }: {
-  cadence: 'DAILY' | 'WEEKLY' | 'MONTHLY';
-  setCadence: (v: 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
+  cadence: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
+  setCadence: (v: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
   isCreating: boolean;
 }) {
   return (
@@ -304,13 +304,17 @@ function PeriodicTaskConfigPanel({
         <Label className="text-xs text-muted-foreground">Cadence</Label>
         <Select
           value={cadence}
-          onValueChange={(v) => setCadence(v as 'DAILY' | 'WEEKLY' | 'MONTHLY')}
+          onValueChange={(v) =>
+            setCadence(v as 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY')
+          }
           disabled={isCreating}
         >
           <SelectTrigger className="h-7 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="EVERY_MINUTE">Every minute (testing)</SelectItem>
+            <SelectItem value="EVERY_FIVE_MINUTES">Every 5 minutes (testing)</SelectItem>
             <SelectItem value="DAILY">Daily</SelectItem>
             <SelectItem value="WEEKLY">Weekly</SelectItem>
             <SelectItem value="MONTHLY">Monthly</SelectItem>
@@ -348,7 +352,9 @@ export function InlineWorkspaceForm({
     'non_interactive'
   );
   const [mode, setMode] = useState<'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK'>('STANDARD');
-  const [cadence, setCadence] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('DAILY');
+  const [cadence, setCadence] = useState<
+    'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
+  >('DAILY');
   const [testCommand, setTestCommand] = useState('');
   const [targetDescription, setTargetDescription] = useState('');
   const [maxIterations, setMaxIterations] = useState(25);

@@ -1139,7 +1139,7 @@ function PeriodicTaskRow({
   onUpdate: (data: {
     name?: string;
     prompt?: string;
-    cadence?: 'DAILY' | 'WEEKLY' | 'MONTHLY';
+    cadence?: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
   }) => void;
   isUpdating: boolean;
 }) {
@@ -1154,12 +1154,16 @@ function PeriodicTaskRow({
       name: editName !== task.name ? editName : undefined,
       prompt: editPrompt !== task.prompt ? editPrompt : undefined,
       cadence:
-        editCadence !== task.cadence ? (editCadence as 'DAILY' | 'WEEKLY' | 'MONTHLY') : undefined,
+        editCadence !== task.cadence
+          ? (editCadence as 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY')
+          : undefined,
     });
     setEditing(false);
   };
 
   const cadenceLabels: Record<string, string> = {
+    EVERY_MINUTE: 'Every minute',
+    EVERY_FIVE_MINUTES: 'Every 5 minutes',
     DAILY: 'Daily',
     WEEKLY: 'Weekly',
     MONTHLY: 'Monthly',
@@ -1237,6 +1241,8 @@ function PeriodicTaskRow({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="EVERY_MINUTE">Every minute (testing)</SelectItem>
+                <SelectItem value="EVERY_FIVE_MINUTES">Every 5 minutes (testing)</SelectItem>
                 <SelectItem value="DAILY">Daily</SelectItem>
                 <SelectItem value="WEEKLY">Weekly</SelectItem>
                 <SelectItem value="MONTHLY">Monthly</SelectItem>

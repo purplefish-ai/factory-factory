@@ -7,6 +7,12 @@ import type { PeriodicTaskCadence, PeriodicTaskExecutionStatus } from '@/shared/
 function computeNextRunAt(cadence: PeriodicTaskCadence, from: Date = new Date()): Date {
   const next = new Date(from);
   switch (cadence) {
+    case 'EVERY_MINUTE':
+      next.setMinutes(next.getMinutes() + 1);
+      break;
+    case 'EVERY_FIVE_MINUTES':
+      next.setMinutes(next.getMinutes() + 5);
+      break;
     case 'DAILY':
       next.setDate(next.getDate() + 1);
       break;

@@ -87,6 +87,8 @@ export const WorkspaceMode = {
 export type WorkspaceMode = (typeof WorkspaceMode)[keyof typeof WorkspaceMode];
 
 export const PeriodicTaskCadence = {
+  EVERY_MINUTE: 'EVERY_MINUTE',
+  EVERY_FIVE_MINUTES: 'EVERY_FIVE_MINUTES',
   DAILY: 'DAILY',
   WEEKLY: 'WEEKLY',
   MONTHLY: 'MONTHLY',
