@@ -50,6 +50,27 @@ import {
   ProjectIssueTrackingCard,
 } from './admin/index';
 
+function formatRelativeTime(date: Date): string {
+  const diffMs = date.getTime() - Date.now();
+  const diffSec = Math.round(diffMs / 1000);
+  if (diffSec < 0) {
+    return 'now';
+  }
+  if (diffSec < 60) {
+    return `in ${diffSec}s`;
+  }
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) {
+    return `in ${diffMin}m`;
+  }
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) {
+    return `in ${diffHr}h`;
+  }
+  const diffDays = Math.round(diffHr / 24);
+  return `in ${diffDays}d`;
+}
+
 function formatPortLabel(
   port: number | null | undefined,
   missingLabel = '(restart to detect)'
@@ -1212,7 +1233,9 @@ function PeriodicTaskRow({
 
       <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
         {task.lastRunAt && <span>Last run: {new Date(task.lastRunAt).toLocaleString()}</span>}
-        {task.isEnabled && <span>Next run: {new Date(task.nextRunAt).toLocaleString()}</span>}
+        <span title={new Date(task.nextRunAt).toLocaleString()}>
+          Next run: {formatRelativeTime(new Date(task.nextRunAt))}
+        </span>
         {latestExecution && <ExecutionStatusBadge status={latestExecution.status} />}
       </div>
 
