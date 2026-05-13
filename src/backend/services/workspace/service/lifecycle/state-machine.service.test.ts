@@ -548,13 +548,17 @@ describe('WorkspaceStateMachineService', () => {
       );
     });
 
-    it('should throw error when trying to start archiving from PROVISIONING', async () => {
+    it('should allow starting archiving from PROVISIONING', async () => {
       const workspace = { id: 'ws-1', status: 'PROVISIONING' };
-      mockFindUnique.mockResolvedValue(workspace);
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
 
-      await expect(workspaceStateMachine.startArchiving('ws-1')).rejects.toThrow(
-        WorkspaceStateMachineError
-      );
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.startArchiving('ws-1');
+
+      expect(result.status).toBe('ARCHIVING');
     });
   });
 
@@ -587,6 +591,20 @@ describe('WorkspaceStateMachineService', () => {
       expect(result.workspace.status).toBe('ARCHIVING');
     });
 
+    it('should return previous PROVISIONING status when starting archiving', async () => {
+      const workspace = { id: 'ws-1', status: 'PROVISIONING' };
+      const updatedWorkspace = { ...workspace, status: 'ARCHIVING' };
+
+      mockFindUnique.mockResolvedValue(workspace);
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+      mockFindUniqueOrThrow.mockResolvedValue(updatedWorkspace);
+
+      const result = await workspaceStateMachine.startArchivingWithSourceStatus('ws-1');
+
+      expect(result.previousStatus).toBe('PROVISIONING');
+      expect(result.workspace.status).toBe('ARCHIVING');
+    });
+
     it('should fail when status changes during start archiving CAS', async () => {
       const workspace = { id: 'ws-1', status: 'READY' };
 
@@ -595,6 +613,42 @@ describe('WorkspaceStateMachineService', () => {
 
       await expect(workspaceStateMachine.startArchivingWithSourceStatus('ws-1')).rejects.toThrow(
         /Transition failed: status changed by another process/
+      );
+    });
+  });
+
+  describe('markFailedIfProvisioning', () => {
+    it('transitions to FAILED and returns true when workspace is PROVISIONING', async () => {
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      const result = await workspaceStateMachine.markFailedIfProvisioning('ws-1', 'init error');
+
+      expect(result).toBe(true);
+      expect(mockUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'ws-1', status: 'PROVISIONING' }),
+          data: expect.objectContaining({ status: 'FAILED', initErrorMessage: 'init error' }),
+        })
+      );
+    });
+
+    it('returns false without transitioning when workspace is no longer PROVISIONING', async () => {
+      mockUpdateMany.mockResolvedValue({ count: 0 });
+
+      const result = await workspaceStateMachine.markFailedIfProvisioning('ws-1', 'init error');
+
+      expect(result).toBe(false);
+    });
+
+    it('sets initErrorMessage to null when no error message provided', async () => {
+      mockUpdateMany.mockResolvedValue({ count: 1 });
+
+      await workspaceStateMachine.markFailedIfProvisioning('ws-1');
+
+      expect(mockUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ initErrorMessage: null }),
+        })
       );
     });
   });
