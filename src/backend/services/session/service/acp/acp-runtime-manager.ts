@@ -147,6 +147,48 @@ function normalizeSessionUpdateMessage(message: unknown): unknown {
   };
 }
 
+function createNormalizedAcpReadableStream<T>(readable: ReadableStream<T>): ReadableStream<T> {
+  if (typeof readable.getReader !== 'function') {
+    return readable;
+  }
+
+  let reader: ReadableStreamDefaultReader<T> | null = null;
+  return new ReadableStream<T>({
+    start() {
+      reader = readable.getReader();
+    },
+    async pull(controller) {
+      if (!reader) {
+        reader = readable.getReader();
+      }
+      const currentReader = reader;
+
+      try {
+        const { done, value } = await currentReader.read();
+        if (done) {
+          controller.close();
+          currentReader.releaseLock();
+          reader = null;
+          return;
+        }
+        controller.enqueue(normalizeSessionUpdateMessage(value) as T);
+      } catch (error) {
+        currentReader.releaseLock();
+        controller.error(error);
+        reader = null;
+      }
+    },
+    async cancel(reason) {
+      try {
+        await reader?.cancel(reason);
+      } finally {
+        reader?.releaseLock();
+        reader = null;
+      }
+    },
+  });
+}
+
 function hasUsableWorkingDir(workingDir: string | null | undefined): boolean {
   return typeof workingDir === 'string' && workingDir.trim().length > 0;
 }
@@ -180,8 +222,9 @@ async function withTimeout<T>(params: {
       clearTimeout(timeout);
     };
 
-    if (typeof params.cancelOn !== 'undefined') {
-      void params.cancelOn.finally(clearTimer).catch(() => {
+    const cancelOn = params.cancelOn;
+    if (cancelOn !== undefined) {
+      void cancelOn.finally(clearTimer).catch(() => {
         // cancelOn is best-effort cancellation; ignore its rejection.
       });
     }
@@ -743,13 +786,7 @@ export class AcpRuntimeManager {
     // Workaround: claude-agent-acp sends `line: [start, end]` arrays instead of numbers.
     const normalizedStream = {
       writable: stream.writable,
-      readable: stream.readable.pipeThrough(
-        new TransformStream({
-          transform(message, controller) {
-            controller.enqueue(normalizeSessionUpdateMessage(message));
-          },
-        })
-      ),
+      readable: createNormalizedAcpReadableStream(stream.readable),
     };
 
     // Create event callback that routes to handlers

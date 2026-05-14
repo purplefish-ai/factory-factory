@@ -6,7 +6,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { configService } from './config.service';
 import { createLogger } from './logger.service';
@@ -32,26 +32,45 @@ class CryptoService {
 
     const keyPath = this.getKeyPath();
 
-    if (existsSync(keyPath)) {
-      this.encryptionKey = readFileSync(keyPath);
-      if (this.encryptionKey.length !== KEY_LENGTH) {
+    try {
+      const key = readFileSync(keyPath);
+      if (key.length !== KEY_LENGTH) {
         throw new Error(
-          `Encryption key at ${keyPath} has invalid length: ${this.encryptionKey.length} (expected ${KEY_LENGTH})`
+          `Encryption key at ${keyPath} has invalid length: ${key.length} (expected ${KEY_LENGTH})`
         );
       }
-      return this.encryptionKey;
+      this.encryptionKey = key;
+      return key;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
 
     // Auto-generate a new key
     logger.info('Generating new encryption key', { path: keyPath });
     const key = randomBytes(KEY_LENGTH);
     const dir = dirname(keyPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true });
+
+    try {
+      writeFileSync(keyPath, key, { mode: 0o600, flag: 'wx' });
+      this.encryptionKey = key;
+      return key;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw error;
+      }
     }
-    writeFileSync(keyPath, key, { mode: 0o600 });
-    this.encryptionKey = key;
-    return key;
+
+    const existingKey = readFileSync(keyPath);
+    if (existingKey.length !== KEY_LENGTH) {
+      throw new Error(
+        `Encryption key at ${keyPath} has invalid length: ${existingKey.length} (expected ${KEY_LENGTH})`
+      );
+    }
+    this.encryptionKey = existingKey;
+    return existingKey;
   }
 
   /**

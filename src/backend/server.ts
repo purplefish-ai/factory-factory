@@ -13,7 +13,7 @@
  * - NODE_ENV: Environment (development/production)
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import type { Server as HttpServer } from 'node:http';
 import { createServer as createHttpServer } from 'node:http';
 import { join } from 'node:path';
@@ -144,8 +144,32 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // Static File Serving (Production Mode)
   // ============================================================================
   const frontendStaticPath = configService.getFrontendStaticPath();
+  let indexHtmlReloadInterval: NodeJS.Timeout | null = null;
   if (frontendStaticPath && existsSync(frontendStaticPath)) {
     logger.info('Serving static files from', { path: frontendStaticPath });
+    const indexHtmlPath = join(frontendStaticPath, 'index.html');
+    let indexHtml: string | null = null;
+    const loadStaticIndexHtml = (message: string) => {
+      try {
+        indexHtml = readFileSync(indexHtmlPath, 'utf8');
+        if (indexHtmlReloadInterval) {
+          clearInterval(indexHtmlReloadInterval);
+          indexHtmlReloadInterval = null;
+        }
+      } catch (error) {
+        logger.debug(message, {
+          path: indexHtmlPath,
+          error: toError(error).message,
+        });
+      }
+    };
+    loadStaticIndexHtml('Failed to load static index.html for SPA fallback');
+    if (indexHtml === null) {
+      indexHtmlReloadInterval = setInterval(() => {
+        loadStaticIndexHtml('Failed to reload static index.html for SPA fallback');
+      }, 5000);
+      indexHtmlReloadInterval.unref?.();
+    }
 
     // Serve hashed assets (JS, CSS in /assets/) with long cache - they have content hashes
     app.use(
@@ -192,21 +216,15 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.set('Pragma', 'no-cache');
       res.set('Expires', '0');
-      // Express 5 requires the root option for sendFile to work correctly
-      res.sendFile('index.html', { root: frontendStaticPath }, (err) => {
-        if (err) {
-          // File not found or read error - log at debug level since this can happen
-          // during page refresh timing issues and is usually transient
-          logger.debug('Failed to serve index.html for SPA fallback', {
-            path: req.path,
-            error: err.message,
-          });
-          // Return 503 to indicate temporary unavailability (browser may retry)
-          if (!res.headersSent) {
-            res.status(503).send('Service temporarily unavailable. Please refresh the page.');
-          }
-        }
-      });
+      if (indexHtml === null) {
+        logger.debug('Failed to serve index.html for SPA fallback', {
+          path: req.path,
+          error: 'index.html was not loaded at startup',
+        });
+        res.status(503).send('Service temporarily unavailable. Please refresh the page.');
+        return;
+      }
+      res.type('html').send(indexHtml);
     });
   }
 
@@ -305,6 +323,10 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     logger.info('Starting graceful cleanup');
 
     clearInterval(heartbeatInterval);
+    if (indexHtmlReloadInterval) {
+      clearInterval(indexHtmlReloadInterval);
+      indexHtmlReloadInterval = null;
+    }
     await stopInterceptors();
 
     // Close WebSocket server

@@ -4,7 +4,7 @@
  * Provides admin operations for managing system health.
  */
 
-import { open, stat } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import type { DecisionLog } from '@prisma-gen/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -337,10 +337,10 @@ export const adminRouter = router({
     const filePath = getLogFilePath();
     const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
     try {
-      const fileStats = await stat(filePath);
-      const startByte = Math.max(0, fileStats.size - MAX_DOWNLOAD_BYTES);
       const fh = await open(filePath, 'r');
       try {
+        const fileStats = await fh.stat();
+        const startByte = Math.max(0, fileStats.size - MAX_DOWNLOAD_BYTES);
         const buf = Buffer.alloc(fileStats.size - startByte);
         await fh.read(buf, 0, buf.length, startByte);
         let content = buf.toString('utf-8');

@@ -1,6 +1,11 @@
 import type { IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
-import { authenticateRequest, createSessionValue, sanitizePathWithoutToken } from './proxy-utils';
+import {
+  authenticateRequest,
+  createSessionValue,
+  parseCookieHeader,
+  sanitizePathWithoutToken,
+} from './proxy-utils';
 
 describe('proxy-utils', () => {
   it('falls back to root path when sanitizing malformed URLs', () => {
@@ -76,5 +81,16 @@ describe('proxy-utils', () => {
       invalidToken: false,
       sanitizedPath: '/bar?next=1',
     });
+  });
+
+  it('returns null-prototype cookie maps for empty and parsed headers', () => {
+    const emptyCookies = parseCookieHeader(undefined);
+    const parsedCookies = parseCookieHeader('session=abc; theme=dark');
+
+    expect(Object.getPrototypeOf(emptyCookies)).toBeNull();
+    expect(Object.getPrototypeOf(parsedCookies)).toBeNull();
+    expect(emptyCookies.constructor).toBeUndefined();
+    expect(parsedCookies.session).toBe('abc');
+    expect(parsedCookies.theme).toBe('dark');
   });
 });
