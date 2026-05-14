@@ -107,6 +107,80 @@ describe('prDetectionInterceptor', () => {
     );
   });
 
+  it('detects PR URL from GitHub MCP create_pull_request results', async () => {
+    const event = createEvent({
+      toolName: 'mcpToolCall:codex_apps/github_create_pull_request',
+      input: {
+        type: 'mcpToolCall',
+        id: 'call_oensfoBCcJ33zeogkYFUkfw4',
+        server: 'codex_apps',
+        tool: 'github_create_pull_request',
+        arguments: {
+          repository_full_name: 'purplefish-ai/factory-factory',
+          base_branch: 'main',
+          head_branch: 'fix-npm-publish-release-version-output',
+          title: 'Fix npm publish release version output',
+        },
+      },
+      output: {
+        content: JSON.stringify({
+          type: 'mcpToolCall',
+          id: 'call_oensfoBCcJ33zeogkYFUkfw4',
+          server: 'codex_apps',
+          tool: 'github_create_pull_request',
+          status: 'completed',
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  url: 'https://github.com/purplefish-ai/factory-factory/pull/1581',
+                  number: 1581,
+                  state: 'open',
+                  display_url: 'https://github.com/purplefish-ai/factory-factory/pull/1581',
+                }),
+              },
+            ],
+            structuredContent: {
+              url: 'https://github.com/purplefish-ai/factory-factory/pull/1581',
+              number: 1581,
+            },
+          },
+        }),
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/1581'
+    );
+  });
+
+  it('detects PR URL from GitHub MCP create_pull_request display tool names', async () => {
+    const event = createEvent({
+      toolName: 'mcpToolCall:github/create_pull_request',
+      input: {},
+      output: {
+        content: JSON.stringify({
+          structuredContent: {
+            url: 'https://github.com/purplefish-ai/factory-factory/pull/1582',
+          },
+        }),
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/1582'
+    );
+  });
+
   it('detects PR URL when command is provided as cmd', async () => {
     const event = createEvent({
       toolName: 'exec_command',
@@ -171,6 +245,29 @@ describe('prDetectionInterceptor', () => {
       output: {
         content: 'error: remote: Repository not found.',
         isError: true,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+  });
+
+  it('does not attach arbitrary PR URLs from non-create MCP tools', async () => {
+    const event = createEvent({
+      toolName: 'mcpToolCall:codex_apps/github_fetch_pull_request',
+      input: {
+        type: 'mcpToolCall',
+        server: 'codex_apps',
+        tool: 'github_fetch_pull_request',
+      },
+      output: {
+        content: JSON.stringify({
+          structuredContent: {
+            url: 'https://github.com/purplefish-ai/factory-factory/pull/1583',
+          },
+        }),
+        isError: false,
       },
     });
 
