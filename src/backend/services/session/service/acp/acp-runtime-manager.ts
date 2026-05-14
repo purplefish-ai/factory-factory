@@ -147,6 +147,33 @@ function normalizeSessionUpdateMessage(message: unknown): unknown {
   };
 }
 
+function createNormalizedAcpReadableStream<T>(readable: ReadableStream<T>): ReadableStream<T> {
+  let reader: ReadableStreamDefaultReader<T> | null = null;
+  return new ReadableStream<T>({
+    async start(controller) {
+      reader = readable.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            break;
+          }
+          controller.enqueue(normalizeSessionUpdateMessage(value) as T);
+        }
+      } catch (error) {
+        controller.error(error);
+      } finally {
+        reader.releaseLock();
+        reader = null;
+      }
+    },
+    cancel(reason) {
+      return reader?.cancel(reason);
+    },
+  });
+}
+
 function hasUsableWorkingDir(workingDir: string | null | undefined): boolean {
   return typeof workingDir === 'string' && workingDir.trim().length > 0;
 }
@@ -180,8 +207,9 @@ async function withTimeout<T>(params: {
       clearTimeout(timeout);
     };
 
-    if (typeof params.cancelOn !== 'undefined') {
-      void params.cancelOn.finally(clearTimer).catch(() => {
+    const cancelOn = params.cancelOn;
+    if (cancelOn !== undefined) {
+      void cancelOn.finally(clearTimer).catch(() => {
         // cancelOn is best-effort cancellation; ignore its rejection.
       });
     }
@@ -743,13 +771,7 @@ export class AcpRuntimeManager {
     // Workaround: claude-agent-acp sends `line: [start, end]` arrays instead of numbers.
     const normalizedStream = {
       writable: stream.writable,
-      readable: stream.readable.pipeThrough(
-        new TransformStream({
-          transform(message, controller) {
-            controller.enqueue(normalizeSessionUpdateMessage(message));
-          },
-        })
-      ),
+      readable: createNormalizedAcpReadableStream(stream.readable),
     };
 
     // Create event callback that routes to handlers

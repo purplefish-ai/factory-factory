@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { type FactoryConfig, FactoryConfigSchema } from '@/shared/schemas/factory-config.schema';
@@ -21,14 +21,6 @@ export class FactoryConfigService {
   static async readConfig(repoPath: string): Promise<FactoryConfig | null> {
     const configPath = join(repoPath, FactoryConfigService.CONFIG_FILENAME);
 
-    // Check if file exists
-    try {
-      await access(configPath);
-    } catch {
-      // File doesn't exist - this is OK
-      return null;
-    }
-
     // Read and parse file
     try {
       const content = await readFile(configPath, 'utf-8');
@@ -36,6 +28,9 @@ export class FactoryConfigService {
       const validated = FactoryConfigSchema.parse(parsed);
       return validated;
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
       if (error instanceof SyntaxError) {
         throw new Error(
           `Invalid JSON in ${FactoryConfigService.CONFIG_FILENAME}: ${error.message}`

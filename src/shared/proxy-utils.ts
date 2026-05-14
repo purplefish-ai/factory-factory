@@ -26,6 +26,9 @@ const HOP_BY_HOP_HEADERS = new Set([
   'upgrade',
 ]);
 
+const VALID_COOKIE_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+const BLOCKED_COOKIE_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
+
 export interface ProxySession {
   id: string;
   signature: string;
@@ -94,20 +97,23 @@ export function parseCookieHeader(cookieHeader: string | undefined): Record<stri
     .split(';')
     .map((part) => part.trim())
     .filter(Boolean)
-    .reduce<Record<string, string>>((acc, part) => {
-      const separator = part.indexOf('=');
-      if (separator <= 0) {
+    .reduce<Record<string, string>>(
+      (acc, part) => {
+        const separator = part.indexOf('=');
+        if (separator <= 0) {
+          return acc;
+        }
+
+        const key = part.slice(0, separator).trim();
+        const value = part.slice(separator + 1).trim();
+        if (key && VALID_COOKIE_NAME.test(key) && !BLOCKED_COOKIE_NAMES.has(key.toLowerCase())) {
+          acc[key] = value;
+        }
+
         return acc;
-      }
-
-      const key = part.slice(0, separator).trim();
-      const value = part.slice(separator + 1).trim();
-      if (key) {
-        acc[key] = value;
-      }
-
-      return acc;
-    }, {});
+      },
+      Object.create(null) as Record<string, string>
+    );
 }
 
 export function mergeSetCookieValues(

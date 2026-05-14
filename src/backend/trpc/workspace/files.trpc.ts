@@ -1,4 +1,4 @@
-import { readdir, readFile, stat, unlink } from 'node:fs/promises';
+import { open, readdir, readFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
@@ -194,17 +194,21 @@ export const workspaceFilesRouter = router({
 
       const fullPath = path.join(worktreePath, input.path);
 
-      // Get file stats to check size
-      const stats = await stat(fullPath);
-      if (stats.isDirectory()) {
-        throw new Error('Path is a directory');
+      const fh = await open(fullPath, 'r');
+      let fileSize: number;
+      let buffer: Buffer;
+      try {
+        const stats = await fh.stat();
+        if (stats.isDirectory()) {
+          throw new Error('Path is a directory');
+        }
+        fileSize = stats.size;
+        buffer = await fh.readFile();
+      } finally {
+        await fh.close();
       }
 
-      const fileSize = stats.size;
       const truncated = fileSize > MAX_FILE_SIZE;
-
-      // Read file content
-      const buffer = await readFile(fullPath);
 
       // Check if binary
       if (isBinaryContent(buffer)) {

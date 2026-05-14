@@ -210,6 +210,7 @@ describe('adminRouter', () => {
     mockFsRead.mockResolvedValue({ bytesRead: 0 });
     mockFsClose.mockResolvedValue(undefined);
     mockOpen.mockResolvedValue({
+      stat: (...args: unknown[]) => mockStat(...args),
       read: (...args: unknown[]) => mockFsRead(...args),
       close: (...args: unknown[]) => mockFsClose(...args),
     });
