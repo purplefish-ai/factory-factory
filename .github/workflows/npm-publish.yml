@@ -81,7 +81,9 @@ jobs:
       - name: Compute release version
         if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
         id: release_version
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
         if: ${{ matrix.node-version == '20' && github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run != 'true' }}
