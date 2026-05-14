@@ -316,7 +316,10 @@ export class SessionService {
       return;
     }
     limiter.clearQueue();
-    this.deleteAcpPromptLimiterIfDrained(sessionId, limiter);
+    // A stop can kill the ACP process while the active prompt promise never
+    // settles. Drop the limiter so a later restart is not queued behind that
+    // stale in-flight turn.
+    this.acpPromptLimiters.delete(sessionId);
   }
 
   private deleteAcpPromptLimiterIfDrained(sessionId: string, limiter: LimitFunction): void {

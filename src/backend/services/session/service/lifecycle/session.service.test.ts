@@ -751,6 +751,35 @@ describe('SessionService', () => {
     expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
   });
 
+  it('does not queue restarted prompts behind an unresolved stopped prompt', async () => {
+    const firstPrompt = createDeferred<{ stopReason: string }>();
+    vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
+    vi.mocked(acpRuntimeManager.sendPrompt)
+      .mockReturnValueOnce(firstPrompt.promise as never)
+      .mockResolvedValueOnce({ stopReason: 'end_turn' });
+    vi.mocked(acpRuntimeManager.stopClient).mockResolvedValue();
+    vi.mocked(sessionRepository.updateSession).mockResolvedValue({} as never);
+
+    const firstSend = sessionService.sendAcpMessage('session-restarted-after-stop', [
+      { type: 'text', text: 'first' },
+    ]);
+    await Promise.resolve();
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+
+    await sessionService.stopSession('session-restarted-after-stop');
+
+    const restartedSend = sessionService.sendAcpMessage('session-restarted-after-stop', [
+      { type: 'text', text: 'after restart' },
+    ]);
+    await Promise.resolve();
+
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+    await expect(restartedSend).resolves.toBe('end_turn');
+
+    firstPrompt.resolve({ stopReason: 'end_turn' });
+    await expect(firstSend).resolves.toBe('end_turn');
+  });
+
   it('rejects queued ACP prompts during unexpected runtime exit', async () => {
     const session = unsafeCoerce<
       NonNullable<Awaited<ReturnType<typeof sessionRepository.getSessionById>>>
@@ -928,7 +957,7 @@ describe('SessionService', () => {
     expect(pendingToolCalls.has('session-runtime-exit')).toBe(false);
   });
 
-  it('keeps active ACP prompt serialization during manual stop', async () => {
+  it('drops active ACP prompt serialization during manual stop', async () => {
     const firstPrompt = createDeferred<{ stopReason: string }>();
     const thirdPrompt = createDeferred<{ stopReason: string }>();
     vi.mocked(acpRuntimeManager.isStopInProgress).mockReturnValue(false);
@@ -958,15 +987,13 @@ describe('SessionService', () => {
       { type: 'text', text: 'third' },
     ]);
     await Promise.resolve();
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(1);
+    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
+
+    thirdPrompt.resolve({ stopReason: 'end_turn' });
+    await expect(thirdSend).resolves.toBe('end_turn');
 
     firstPrompt.resolve({ stopReason: 'end_turn' });
     await expect(firstSend).resolves.toBe('end_turn');
-    await Promise.resolve();
-
-    expect(acpRuntimeManager.sendPrompt).toHaveBeenCalledTimes(2);
-    thirdPrompt.resolve({ stopReason: 'end_turn' });
-    await expect(thirdSend).resolves.toBe('end_turn');
   });
 
   it('clears in-memory session state after manual stop when no clients are connected', async () => {
