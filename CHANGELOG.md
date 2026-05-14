@@ -5,6 +5,40 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.16] - 2026-05-14
+
+### Added
+
+- Add manual PR association for workspaces (#1561)
+- Add periodic tasks feature (#1572)
+
+### Changed
+
+- Persist init warning dismissal (#1562)
+- Finalize tool calls on session exit (#1563)
+- Clarify workspace runtime activity checks (#1567)
+
+### Fixed
+
+- Fix new project header navigation (#1564)
+- Fix stale workspace working state after restart (#1565)
+- Fix nested transaction crash on workspace creation (#1574)
+- Back off busy ACP chat dispatches (#1575)
+
+### Security
+
+- Fix security dependency alerts (#1568)
+
+### Documentation
+
+- Refresh codebase map (#1556)
+- Update ratchet active session semantics references (#1557)
+- Correct ACP permission bridge behavior in design doc (#1558)
+- Update line number references in auto-iteration resilience docs (#1559)
+- Update backend structure in CONTRIBUTING.md (#1560)
+- Register periodic-task service capsule in AGENTS.md and planning docs (#1578)
+- Remove stale flowState.isWorking references from workspaces.md (#1577)
+
 ## [0.3.15] - 2026-04-29
 
 ### Added
