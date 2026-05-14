@@ -5,6 +5,21 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.17] - 2026-05-14
+
+### Changed
+
+- Detect PRs created through GitHub MCP (#1583)
+
+### Fixed
+
+- Fix npm publish release version output (#1581)
+- Fix session restart after stop (#1582)
+
+### Security
+
+- Add CodeQL scanning and fix findings (#1584)
+
 ## [0.3.16] - 2026-05-14
 
 ### Added
