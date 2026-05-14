@@ -33,13 +33,14 @@ class CryptoService {
     const keyPath = this.getKeyPath();
 
     try {
-      this.encryptionKey = readFileSync(keyPath);
-      if (this.encryptionKey.length !== KEY_LENGTH) {
+      const key = readFileSync(keyPath);
+      if (key.length !== KEY_LENGTH) {
         throw new Error(
-          `Encryption key at ${keyPath} has invalid length: ${this.encryptionKey.length} (expected ${KEY_LENGTH})`
+          `Encryption key at ${keyPath} has invalid length: ${key.length} (expected ${KEY_LENGTH})`
         );
       }
-      return this.encryptionKey;
+      this.encryptionKey = key;
+      return key;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
@@ -62,13 +63,14 @@ class CryptoService {
       }
     }
 
-    this.encryptionKey = readFileSync(keyPath);
-    if (this.encryptionKey.length !== KEY_LENGTH) {
+    const existingKey = readFileSync(keyPath);
+    if (existingKey.length !== KEY_LENGTH) {
       throw new Error(
-        `Encryption key at ${keyPath} has invalid length: ${this.encryptionKey.length} (expected ${KEY_LENGTH})`
+        `Encryption key at ${keyPath} has invalid length: ${existingKey.length} (expected ${KEY_LENGTH})`
       );
     }
-    return this.encryptionKey;
+    this.encryptionKey = existingKey;
+    return existingKey;
   }
 
   /**

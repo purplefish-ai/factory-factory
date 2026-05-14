@@ -148,28 +148,43 @@ function normalizeSessionUpdateMessage(message: unknown): unknown {
 }
 
 function createNormalizedAcpReadableStream<T>(readable: ReadableStream<T>): ReadableStream<T> {
+  if (typeof readable.getReader !== 'function') {
+    return readable;
+  }
+
   let reader: ReadableStreamDefaultReader<T> | null = null;
   return new ReadableStream<T>({
-    async start(controller) {
+    start() {
       reader = readable.getReader();
+    },
+    async pull(controller) {
+      if (!reader) {
+        reader = readable.getReader();
+      }
+      const currentReader = reader;
+
       try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            controller.close();
-            break;
-          }
-          controller.enqueue(normalizeSessionUpdateMessage(value) as T);
+        const { done, value } = await currentReader.read();
+        if (done) {
+          controller.close();
+          currentReader.releaseLock();
+          reader = null;
+          return;
         }
+        controller.enqueue(normalizeSessionUpdateMessage(value) as T);
       } catch (error) {
+        currentReader.releaseLock();
         controller.error(error);
-      } finally {
-        reader.releaseLock();
         reader = null;
       }
     },
-    cancel(reason) {
-      return reader?.cancel(reason);
+    async cancel(reason) {
+      try {
+        await reader?.cancel(reason);
+      } finally {
+        reader?.releaseLock();
+        reader = null;
+      }
     },
   });
 }

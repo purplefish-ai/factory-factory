@@ -1,0 +1,9 @@
+name: Factory Factory CodeQL config
+
+paths-ignore:
+  - "coverage/**"
+  - "dist/**"
+  - "prisma/generated/**"
+  - "storybook-static/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"

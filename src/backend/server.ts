@@ -144,16 +144,31 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
   // Static File Serving (Production Mode)
   // ============================================================================
   const frontendStaticPath = configService.getFrontendStaticPath();
+  let indexHtmlReloadInterval: NodeJS.Timeout | null = null;
   if (frontendStaticPath && existsSync(frontendStaticPath)) {
     logger.info('Serving static files from', { path: frontendStaticPath });
+    const indexHtmlPath = join(frontendStaticPath, 'index.html');
     let indexHtml: string | null = null;
-    try {
-      indexHtml = readFileSync(join(frontendStaticPath, 'index.html'), 'utf8');
-    } catch (error) {
-      logger.debug('Failed to load static index.html for SPA fallback', {
-        path: join(frontendStaticPath, 'index.html'),
-        error: toError(error).message,
-      });
+    const loadStaticIndexHtml = (message: string) => {
+      try {
+        indexHtml = readFileSync(indexHtmlPath, 'utf8');
+        if (indexHtmlReloadInterval) {
+          clearInterval(indexHtmlReloadInterval);
+          indexHtmlReloadInterval = null;
+        }
+      } catch (error) {
+        logger.debug(message, {
+          path: indexHtmlPath,
+          error: toError(error).message,
+        });
+      }
+    };
+    loadStaticIndexHtml('Failed to load static index.html for SPA fallback');
+    if (indexHtml === null) {
+      indexHtmlReloadInterval = setInterval(() => {
+        loadStaticIndexHtml('Failed to reload static index.html for SPA fallback');
+      }, 5000);
+      indexHtmlReloadInterval.unref?.();
     }
 
     // Serve hashed assets (JS, CSS in /assets/) with long cache - they have content hashes
@@ -308,6 +323,10 @@ export function createServer(requestedPort?: number, appContext?: AppContext): S
     logger.info('Starting graceful cleanup');
 
     clearInterval(heartbeatInterval);
+    if (indexHtmlReloadInterval) {
+      clearInterval(indexHtmlReloadInterval);
+      indexHtmlReloadInterval = null;
+    }
     await stopInterceptors();
 
     // Close WebSocket server
