@@ -13,6 +13,8 @@ import type { InterceptorContext, ToolEvent, ToolInterceptor } from './types';
 const logger = createLogger('pr-detection');
 const GH_PR_CREATE_REGEX = /\bgh\s+pr\s+create\b/;
 const GITHUB_PR_URL_REGEX = /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/;
+const GITHUB_CREATE_PULL_REQUEST_TOOL = 'github_create_pull_request';
+const CREATE_PULL_REQUEST_TOOL = 'create_pull_request';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -40,6 +42,60 @@ function extractCommand(event: ToolEvent): string | undefined {
   }
 
   return directCommand ?? cmd ?? title;
+}
+
+function normalizeToolName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function extractMcpToolNameFromDisplayName(toolName: string): string | undefined {
+  const slashIndex = toolName.lastIndexOf('/');
+  if (slashIndex === -1 || slashIndex === toolName.length - 1) {
+    return undefined;
+  }
+  return toolName.slice(slashIndex + 1);
+}
+
+function extractMcpServerNameFromDisplayName(toolName: string): string | undefined {
+  const prefix = 'mcpToolCall:';
+  if (!toolName.startsWith(prefix)) {
+    return undefined;
+  }
+
+  const slashIndex = toolName.indexOf('/', prefix.length);
+  if (slashIndex === -1) {
+    return undefined;
+  }
+
+  return toolName.slice(prefix.length, slashIndex);
+}
+
+function isGithubCreatePullRequestTool(event: ToolEvent): boolean {
+  const inputTool = extractInputValue(event.input, 'tool', isString, event.toolName, logger);
+  if (inputTool === GITHUB_CREATE_PULL_REQUEST_TOOL) {
+    return true;
+  }
+
+  const inputServer = extractInputValue(event.input, 'server', isString, event.toolName, logger);
+  if (inputTool === CREATE_PULL_REQUEST_TOOL && inputServer?.toLowerCase().includes('github')) {
+    return true;
+  }
+
+  const displayToolName = extractMcpToolNameFromDisplayName(event.toolName) ?? event.toolName;
+  if (displayToolName === GITHUB_CREATE_PULL_REQUEST_TOOL) {
+    return true;
+  }
+
+  const displayServerName = extractMcpServerNameFromDisplayName(event.toolName);
+  if (
+    displayToolName === CREATE_PULL_REQUEST_TOOL &&
+    displayServerName?.toLowerCase().includes('github')
+  ) {
+    return true;
+  }
+
+  const normalizedToolName = normalizeToolName(event.toolName);
+  return normalizedToolName.endsWith(normalizeToolName(GITHUB_CREATE_PULL_REQUEST_TOOL));
 }
 
 function extractPrUrlFromEvent(event: ToolEvent): string | null {
@@ -97,7 +153,9 @@ export const prDetectionInterceptor: ToolInterceptor = {
     // non-zero (e.g. "A pull request for branch 'x' already exists") while still
     // printing the PR URL in its output. We only bail if no URL is found.
     const command = extractCommand(event);
-    if (!(command && GH_PR_CREATE_REGEX.test(command))) {
+    const isGhPrCreate = command ? GH_PR_CREATE_REGEX.test(command) : false;
+    const isMcpPrCreate = isGithubCreatePullRequestTool(event);
+    if (!(isGhPrCreate || isMcpPrCreate)) {
       return;
     }
 
