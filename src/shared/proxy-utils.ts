@@ -89,31 +89,30 @@ export function verifySessionValue(value: string | undefined, secret: Buffer): b
 }
 
 export function parseCookieHeader(cookieHeader: string | undefined): Record<string, string> {
+  const cookies = Object.create(null) as Record<string, string>;
+
   if (!cookieHeader) {
-    return {};
+    return cookies;
   }
 
   return cookieHeader
     .split(';')
     .map((part) => part.trim())
     .filter(Boolean)
-    .reduce<Record<string, string>>(
-      (acc, part) => {
-        const separator = part.indexOf('=');
-        if (separator <= 0) {
-          return acc;
-        }
-
-        const key = part.slice(0, separator).trim();
-        const value = part.slice(separator + 1).trim();
-        if (key && VALID_COOKIE_NAME.test(key) && !BLOCKED_COOKIE_NAMES.has(key.toLowerCase())) {
-          acc[key] = value;
-        }
-
+    .reduce<Record<string, string>>((acc, part) => {
+      const separator = part.indexOf('=');
+      if (separator <= 0) {
         return acc;
-      },
-      Object.create(null) as Record<string, string>
-    );
+      }
+
+      const key = part.slice(0, separator).trim();
+      const value = part.slice(separator + 1).trim();
+      if (key && VALID_COOKIE_NAME.test(key) && !BLOCKED_COOKIE_NAMES.has(key.toLowerCase())) {
+        acc[key] = value;
+      }
+
+      return acc;
+    }, cookies);
 }
 
 export function mergeSetCookieValues(
