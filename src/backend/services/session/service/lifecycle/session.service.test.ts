@@ -1876,6 +1876,49 @@ describe('SessionService', () => {
     }
   });
 
+  it('does not schedule prompt-turn completion callbacks after provider busy errors', async () => {
+    vi.useFakeTimers();
+    try {
+      const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
+      sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
+      vi.mocked(acpRuntimeManager.sendPrompt).mockRejectedValue({
+        code: -32_600,
+        message: 'Invalid request',
+        data: { reason: 'A turn is already in progress for this session' },
+      } as never);
+
+      await expect(
+        sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
+      ).rejects.toMatchObject({
+        data: { reason: 'A turn is already in progress for this session' },
+      });
+
+      await vi.runOnlyPendingTimersAsync();
+      expect(onPromptTurnComplete).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('schedules prompt-turn completion callbacks after non-busy prompt errors', async () => {
+    vi.useFakeTimers();
+    try {
+      const onPromptTurnComplete = vi.fn().mockResolvedValue(undefined);
+      sessionService.setPromptTurnCompleteHandler(onPromptTurnComplete);
+      vi.mocked(acpRuntimeManager.sendPrompt).mockRejectedValue(new Error('network blip'));
+
+      await expect(
+        sessionService.sendAcpMessage('session-1', [{ type: 'text', text: 'hello' }])
+      ).rejects.toThrow('network blip');
+
+      expect(onPromptTurnComplete).not.toHaveBeenCalled();
+      await vi.runOnlyPendingTimersAsync();
+      expect(onPromptTurnComplete).toHaveBeenCalledWith('session-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('cancels scheduled prompt-turn completion callback when session stops first', async () => {
     vi.useFakeTimers();
     try {

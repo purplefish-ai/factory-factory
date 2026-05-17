@@ -32,6 +32,7 @@ import { SessionRetryService } from './session.retry.service';
 
 const logger = createLogger('session');
 const DEFAULT_USER_PROMPT_TIMEOUT_MS = 60 * 60 * 1000;
+const TURN_ALREADY_IN_PROGRESS_REASON = 'A turn is already in progress for this session';
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 type PromptTurnCompleteHandler = (sessionId: string) => Promise<void> | void;
 
@@ -240,10 +241,18 @@ export class SessionService {
       return this.sendAcpMessage(sessionId, prompt, DEFAULT_USER_PROMPT_TIMEOUT_MS)
         .then(() => undefined)
         .catch((error) => {
-          logger.error('ACP prompt failed', {
-            sessionId,
-            error: toErrorMessage(error),
-          });
+          const errorMessage = toErrorMessage(error);
+          if (this.isTurnAlreadyInProgressError(error)) {
+            logger.debug('ACP prompt deferred because a turn is already in progress', {
+              sessionId,
+              error: errorMessage,
+            });
+          } else {
+            logger.error('ACP prompt failed', {
+              sessionId,
+              error: errorMessage,
+            });
+          }
           throw error;
         });
     }
@@ -348,6 +357,9 @@ export class SessionService {
     timeoutMs?: number
   ): Promise<string> {
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
+    let promptCompleted = false;
+    let promptError: unknown;
+    let promptErrorSet = false;
     // Scope orphan detection to each prompt turn.
     this.acpEventProcessor.beginPromptTurn(sessionId);
 
@@ -364,6 +376,7 @@ export class SessionService {
 
     try {
       const result = await this.runtimeManager.sendPrompt(sessionId, prompt, timeoutMs);
+      promptCompleted = true;
       this.acpEventProcessor.finalizeOrphanedToolCalls(
         sessionId,
         `stop_reason:${result.stopReason}`
@@ -376,6 +389,8 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
+      promptError = error;
+      promptErrorSet = true;
       this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
@@ -389,8 +404,14 @@ export class SessionService {
       if (workspaceId && this.workspaceBridge) {
         this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
       }
-      this.promptTurnCompletionService.schedule(sessionId);
+      if (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) {
+        this.promptTurnCompletionService.schedule(sessionId);
+      }
     }
+  }
+
+  private isTurnAlreadyInProgressError(error: unknown): boolean {
+    return toErrorMessage(error).includes(TURN_ALREADY_IN_PROGRESS_REASON);
   }
 
   /**

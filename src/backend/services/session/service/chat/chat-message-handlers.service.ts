@@ -12,6 +12,7 @@ import type { WebSocket } from 'ws';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
@@ -365,17 +366,7 @@ class ChatMessageHandlerService {
   }
 
   private formatDispatchError(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-    if (error !== null && typeof error === 'object') {
-      try {
-        return JSON.stringify(error);
-      } catch {
-        return String(error);
-      }
-    }
-    return String(error);
+    return toErrorMessage(error);
   }
 
   /**
