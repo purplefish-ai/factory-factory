@@ -62,13 +62,6 @@ export function getInitialProjectSlug(
   return readSelectedProjectSlug(storage) || projects[0]?.slug || '';
 }
 
-export function persistSelectedProjectSlug(
-  slug: string,
-  storage: Pick<Storage, 'setItem'> = localStorage
-): void {
-  writeSelectedProjectSlug(slug, storage);
-}
-
 export function PeriodicTasksSection({ projects }: { projects: AdminProject[] }) {
   const [selectedSlug, setSelectedSlug] = useState<string>(() => getInitialProjectSlug(projects));
   const selectedProject = projects.find((p) => p.slug === selectedSlug) ?? projects[0];
@@ -78,12 +71,12 @@ export function PeriodicTasksSection({ projects }: { projects: AdminProject[] })
       return;
     }
     setSelectedSlug(selectedProject.slug);
-    persistSelectedProjectSlug(selectedProject.slug);
+    writeSelectedProjectSlug(selectedProject.slug);
   }, [selectedProject, selectedSlug]);
 
   const handleProjectChange = (slug: string) => {
     setSelectedSlug(slug);
-    persistSelectedProjectSlug(slug);
+    writeSelectedProjectSlug(slug);
   };
 
   if (!selectedProject) {

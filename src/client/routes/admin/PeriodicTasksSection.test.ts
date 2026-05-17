@@ -1,10 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
-import {
-  formatRelativeTime,
-  getInitialProjectSlug,
-  persistSelectedProjectSlug,
-} from './PeriodicTasksSection';
+import { describe, expect, it } from 'vitest';
+import { formatRelativeTime, getInitialProjectSlug } from './PeriodicTasksSection';
 
 const projects = [
   { id: 'project-1', slug: 'alpha', name: 'Alpha' },
@@ -32,13 +27,5 @@ describe('PeriodicTasksSection helpers', () => {
         getItem: () => null,
       })
     ).toBe('alpha');
-  });
-
-  it('persists project selection changes to storage', () => {
-    const storage = { setItem: vi.fn() };
-
-    persistSelectedProjectSlug('beta', storage);
-
-    expect(storage.setItem).toHaveBeenCalledWith(SELECTED_PROJECT_KEY, 'beta');
   });
 });
