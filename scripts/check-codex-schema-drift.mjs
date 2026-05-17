@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import process from 'node:process';
 
 const SNAPSHOT_PATH = resolve(
   'src/backend/services/session/service/acp/codex-app-server-adapter/schema-snapshots/app-server-methods.snapshot.json'
@@ -11,11 +12,35 @@ const SNAPSHOT_PATH = resolve(
 
 const SCHEMA_FILES = ['ClientRequest.ts', 'ServerRequest.ts', 'ClientNotification.ts'];
 
+function isStrictCheck() {
+  return process.env.CI === 'true' || process.env.CODEX_SCHEMA_CHECK === 'strict';
+}
+
 function runCommand(command, args) {
   return execFileSync(command, args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim();
+}
+
+function commandErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function skipLocalCheck(reason) {
+  process.stderr.write(`${reason}\n`);
+  process.stderr.write(
+    [
+      'Skipping Codex app-server schema drift check locally.',
+      'CI installs the pinned Codex CLI and enforces this check.\n',
+    ].join(' ')
+  );
+  process.stderr.write(
+    [
+      'To enforce it locally, install the pinned @openai/codex version',
+      'and run CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema.\n',
+    ].join(' ')
+  );
 }
 
 function extractMethods(source) {
@@ -102,13 +127,33 @@ function printDrift(current, expected) {
 
 function main() {
   const updateSnapshot = process.argv.includes('--update');
+  const expectedSnapshot = updateSnapshot
+    ? undefined
+    : JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
 
   let codexVersion;
   try {
     codexVersion = runCommand('codex', ['--version']);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`failed to run codex --version: ${message}`);
+    const message = `failed to run codex --version: ${commandErrorMessage(error)}`;
+    if (updateSnapshot || isStrictCheck()) {
+      throw new Error(message);
+    }
+    skipLocalCheck(message);
+    return;
+  }
+
+  if (
+    !updateSnapshot &&
+    expectedSnapshot?.codexCliVersion &&
+    codexVersion !== expectedSnapshot.codexCliVersion
+  ) {
+    const message = `codex-cli version changed: expected ${expectedSnapshot.codexCliVersion}, got ${codexVersion}`;
+    if (isStrictCheck()) {
+      throw new Error(message);
+    }
+    skipLocalCheck(message);
+    return;
   }
 
   const tempRoot = mkdtempSync(join(tmpdir(), 'codex-ts-schema-'));
@@ -123,7 +168,6 @@ function main() {
       return;
     }
 
-    const expectedSnapshot = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8'));
     const identical = JSON.stringify(currentSnapshot) === JSON.stringify(expectedSnapshot);
     if (identical) {
       // eslint-disable-next-line no-console
