@@ -23,7 +23,7 @@ describe('toErrorMessage', () => {
       .spyOn(JSON, 'stringify')
       .mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
         const [value] = args;
-        if (value === null || (typeof value === 'object' && value !== null)) {
+        if (value == null || typeof value === 'object') {
           throw new Error('objects should not be stringified');
         }
         return originalStringify(...args);

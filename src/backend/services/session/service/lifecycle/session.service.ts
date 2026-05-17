@@ -358,6 +358,8 @@ export class SessionService {
   ): Promise<string> {
     const workspaceId = this.acpEventProcessor.getWorkspaceId(sessionId);
     let promptCompleted = false;
+    let promptError: unknown;
+    let promptErrorSet = false;
     // Scope orphan detection to each prompt turn.
     this.acpEventProcessor.beginPromptTurn(sessionId);
 
@@ -387,6 +389,8 @@ export class SessionService {
       });
       return result.stopReason;
     } catch (error) {
+      promptError = error;
+      promptErrorSet = true;
       this.acpEventProcessor.finalizeOrphanedToolCalls(sessionId, 'prompt_error');
       this.sessionDomainService.setRuntimeSnapshot(sessionId, {
         phase: 'error',
@@ -400,7 +404,7 @@ export class SessionService {
       if (workspaceId && this.workspaceBridge) {
         this.workspaceBridge.markSessionIdle(workspaceId, sessionId);
       }
-      if (promptCompleted) {
+      if (promptCompleted || (promptErrorSet && !this.isTurnAlreadyInProgressError(promptError))) {
         this.promptTurnCompletionService.schedule(sessionId);
       }
     }

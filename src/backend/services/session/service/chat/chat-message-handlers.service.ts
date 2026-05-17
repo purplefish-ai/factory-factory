@@ -12,6 +12,7 @@ import type { WebSocket } from 'ws';
 import { createLogger } from '@/backend/services/logger.service';
 import type { SessionInitPolicyBridge } from '@/backend/services/session/service/bridges';
 import { sessionDataService } from '@/backend/services/session/service/data/session-data.service';
+import { toErrorMessage } from '@/backend/services/session/service/lifecycle/session.error-message';
 import { sessionService } from '@/backend/services/session/service/lifecycle/session.service';
 import { sessionDomainService } from '@/backend/services/session/service/session-domain.service';
 import {
@@ -22,7 +23,6 @@ import {
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
-import { toErrorMessage } from '../lifecycle/session.error-message';
 import {
   processAttachmentsAndBuildContent,
   UnsupportedImageTypeError,
