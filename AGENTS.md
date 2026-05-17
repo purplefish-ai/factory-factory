@@ -21,6 +21,7 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - `pnpm start`: Run production server
 - `pnpm dev:electron`: Electron app with hot reload
 - `pnpm test`: Run Vitest test suite
+- `pnpm check`: Run standard guardrails (Biome, env, ownership, dependency boundaries, Codex schema)
 - `pnpm typecheck`: TypeScript checks only
 - `pnpm check:fix`: Lint + format with Biome
 - `pnpm db:migrate`, `pnpm db:generate`, `pnpm db:studio`: Prisma workflows
@@ -65,7 +66,7 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 ## Contributor Checklist
 - Add or update tests and run `pnpm test` (use `pnpm test:watch` during development).
 - Add or update Storybook stories when UI changes are introduced (`pnpm storybook`).
-- Run `pnpm typecheck` and `pnpm check:fix`.
+- Run `pnpm check`, `pnpm typecheck`, and `pnpm check:fix`.
 - Ensure schemas use Zod and avoid raw typecasts.
 - Update docs if behavior or commands change.
 
