@@ -14,6 +14,18 @@ describe('auto-iteration response parsing', () => {
     });
   });
 
+  it('ignores braces inside JSON strings while finding the object boundary', () => {
+    const result = parseMetricEvaluation(
+      'Result: {"metricSummary":"kept { nested } text and an escaped quote: \\"ok\\"","improved":true,"targetReached":true} trailing'
+    );
+
+    expect(result).toEqual({
+      metricSummary: 'kept { nested } text and an escaped quote: "ok"',
+      improved: true,
+      targetReached: true,
+    });
+  });
+
   it('falls back to a rejected metric evaluation when JSON is absent', () => {
     const result = parseMetricEvaluation('plain text response');
 
