@@ -5,8 +5,8 @@ export function parseMetricEvaluation(response: string): MetricEvaluation {
     const json = extractJson(response);
     return {
       metricSummary: String(json.metricSummary ?? 'Unknown'),
-      improved: Boolean(json.improved),
-      targetReached: Boolean(json.targetReached),
+      improved: parseExplicitBoolean(json.improved),
+      targetReached: parseExplicitBoolean(json.targetReached),
     };
   } catch {
     return {
@@ -21,7 +21,7 @@ export function parseCritiqueResult(response: string): CritiqueResult {
   try {
     const json = extractJson(response);
     return {
-      approved: Boolean(json.approved),
+      approved: parseExplicitBoolean(json.approved),
       notes: String(json.notes ?? ''),
     };
   } catch {
@@ -30,6 +30,10 @@ export function parseCritiqueResult(response: string): CritiqueResult {
       notes: `Could not parse critique response: ${response.slice(0, 200)}`,
     };
   }
+}
+
+function parseExplicitBoolean(value: unknown): boolean {
+  return value === true;
 }
 
 interface JsonScanState {

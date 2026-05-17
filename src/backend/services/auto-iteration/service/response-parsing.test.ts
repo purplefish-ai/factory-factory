@@ -36,12 +36,33 @@ describe('auto-iteration response parsing', () => {
     });
   });
 
+  it('treats non-boolean metric flags as false', () => {
+    const result = parseMetricEvaluation(
+      '{"metricSummary":"string flags","improved":"false","targetReached":"true"}'
+    );
+
+    expect(result).toEqual({
+      metricSummary: 'string flags',
+      improved: false,
+      targetReached: false,
+    });
+  });
+
   it('rejects critique responses that cannot be parsed', () => {
     const result = parseCritiqueResult('not json');
 
     expect(result).toEqual({
       approved: false,
       notes: 'Could not parse critique response: not json',
+    });
+  });
+
+  it('treats non-boolean critique approval as false', () => {
+    const result = parseCritiqueResult('{"approved":"false","notes":"not approved"}');
+
+    expect(result).toEqual({
+      approved: false,
+      notes: 'not approved',
     });
   });
 });

@@ -1,5 +1,5 @@
 import { Calendar, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -18,37 +18,81 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
-const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
+export const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
+const NOW_THRESHOLD_SECONDS = 5;
 
-type AdminProject = { id: string; slug: string; name: string };
+export type AdminProject = { id: string; slug: string; name: string };
 type PeriodicTaskCadence = 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
 
-function formatRelativeTime(date: Date): string {
-  const diffMs = date.getTime() - Date.now();
+export function formatRelativeTime(date: Date, nowMs = Date.now()): string {
+  const diffMs = date.getTime() - nowMs;
   const diffSec = Math.round(diffMs / 1000);
-  if (diffSec < 0) {
+  if (Math.abs(diffSec) <= NOW_THRESHOLD_SECONDS) {
     return 'now';
   }
-  if (diffSec < 60) {
-    return `in ${diffSec}s`;
+
+  const duration = formatDuration(Math.abs(diffSec));
+  if (diffSec < 0) {
+    return `${duration} overdue`;
   }
-  const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) {
-    return `in ${diffMin}m`;
+
+  return `in ${duration}`;
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}s`;
   }
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) {
-    return `in ${diffHr}h`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m`;
   }
-  const diffDays = Math.round(diffHr / 24);
-  return `in ${diffDays}d`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+  const days = Math.round(hours / 24);
+  return `${days}d`;
+}
+
+export function getInitialProjectSlug(
+  projects: AdminProject[],
+  storage: Pick<Storage, 'getItem'> = localStorage
+): string {
+  try {
+    return storage.getItem(SELECTED_PROJECT_KEY) || projects[0]?.slug || '';
+  } catch {
+    return projects[0]?.slug || '';
+  }
+}
+
+export function persistSelectedProjectSlug(
+  slug: string,
+  storage: Pick<Storage, 'setItem'> = localStorage
+): void {
+  try {
+    storage.setItem(SELECTED_PROJECT_KEY, slug);
+  } catch {
+    // Non-blocking: selection still updates even if localStorage is unavailable.
+  }
 }
 
 export function PeriodicTasksSection({ projects }: { projects: AdminProject[] }) {
-  const [selectedSlug, setSelectedSlug] = useState<string>(
-    () => localStorage.getItem(SELECTED_PROJECT_KEY) || projects[0]?.slug || ''
-  );
+  const [selectedSlug, setSelectedSlug] = useState<string>(() => getInitialProjectSlug(projects));
   const selectedProject = projects.find((p) => p.slug === selectedSlug) ?? projects[0];
+
+  useEffect(() => {
+    if (!selectedProject || selectedProject.slug === selectedSlug) {
+      return;
+    }
+    setSelectedSlug(selectedProject.slug);
+    persistSelectedProjectSlug(selectedProject.slug);
+  }, [selectedProject, selectedSlug]);
+
+  const handleProjectChange = (slug: string) => {
+    setSelectedSlug(slug);
+    persistSelectedProjectSlug(slug);
+  };
 
   if (!selectedProject) {
     return <p className="text-sm text-muted-foreground">No projects found.</p>;
@@ -57,7 +101,7 @@ export function PeriodicTasksSection({ projects }: { projects: AdminProject[] })
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Select value={selectedProject.slug} onValueChange={setSelectedSlug}>
+        <Select value={selectedProject.slug} onValueChange={handleProjectChange}>
           <SelectTrigger className="w-auto max-w-xs">
             <SelectValue placeholder="Select a project" />
           </SelectTrigger>
