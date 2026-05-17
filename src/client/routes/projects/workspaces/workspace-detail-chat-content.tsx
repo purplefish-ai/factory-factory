@@ -291,12 +291,13 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         </div>
       )}
 
-      <div className="z-20 border-t bg-background pb-safe">
+      <div className="z-20 flex max-h-full min-h-0 flex-col border-t bg-background pb-safe">
         <PermissionPrompt
           permission={
             props.pendingRequest.type === 'permission' ? props.pendingRequest.request : null
           }
           onApprove={props.approvePermission}
+          className="min-h-0 shrink overflow-y-auto"
         />
         <QuestionPrompt
           question={props.pendingRequest.type === 'question' ? props.pendingRequest.request : null}
@@ -304,6 +305,7 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
         />
 
         <ChatInput
+          className="shrink-0"
           onSend={props.sendMessage}
           onStop={props.stopChat}
           disabled={!props.connected || loadingSession}
