@@ -2,7 +2,6 @@ import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
 import { toError } from '@/backend/lib/error-utils';
 import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import { autoIterationService } from '@/backend/services/auto-iteration';
-import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { gitOpsService } from '@/backend/services/git-ops.service';
 import { githubCLIService } from '@/backend/services/github';
@@ -28,6 +27,7 @@ import { SessionStatus, WorkspaceMode } from '@/shared/core';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getDecryptedLinearConfig, getWorkspaceLinearContext } from './linear-config.helper';
 import type { WorkspaceWithProject } from './types';
+import { GitHubUsernameCache } from './workspace-init-github-username-cache';
 import { executeStartupScriptPipeline } from './workspace-init-script-pipeline';
 
 const logger = createLogger('workspace-init-orchestrator');
@@ -42,43 +42,6 @@ type UnregisteredWorktreeCleanupCandidate = {
   project: WorkspaceWithProject['project'];
   worktreeInfo: CreatedWorktreeInfo;
 };
-
-type CachedGitHubUsernameEntry = {
-  value: string | null;
-  fetchedAtMs: number;
-  expiresAtMs: number;
-};
-
-class GitHubUsernameCache {
-  private cachedEntry: CachedGitHubUsernameEntry | null = null;
-
-  constructor(
-    private readonly githubService: Pick<typeof githubCLIService, 'getAuthenticatedUsername'>
-  ) {}
-
-  async getCachedUsername(): Promise<string | null> {
-    const nowMs = Date.now();
-    if (
-      this.cachedEntry &&
-      nowMs >= this.cachedEntry.fetchedAtMs &&
-      nowMs < this.cachedEntry.expiresAtMs
-    ) {
-      return this.cachedEntry.value;
-    }
-
-    const value = await this.githubService.getAuthenticatedUsername();
-    this.cachedEntry = {
-      value: value ?? null,
-      fetchedAtMs: nowMs,
-      expiresAtMs: nowMs + SERVICE_CACHE_TTL_MS.ratchetAuthenticatedUsername,
-    };
-    return this.cachedEntry.value;
-  }
-
-  clear(): void {
-    this.cachedEntry = null;
-  }
-}
 
 const gitHubUsernameCache = new GitHubUsernameCache(githubCLIService);
 

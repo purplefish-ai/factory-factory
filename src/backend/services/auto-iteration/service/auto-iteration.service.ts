@@ -5,9 +5,7 @@ import type {
   AutoIterationConfig,
   AutoIterationProgress,
   AutoIterationSnapshot,
-  CritiqueResult,
   IterationPhase,
-  MetricEvaluation,
   TestCommandResult,
 } from './auto-iteration.types';
 import type {
@@ -34,6 +32,7 @@ import {
   buildStrategyFileTemplate,
   buildSystemPrompt,
 } from './prompts';
+import { parseCritiqueResult, parseMetricEvaluation } from './response-parsing';
 import { runTestCommand, truncateTestOutput } from './test-runner.service';
 
 type Logger = ReturnType<typeof createLogger>;
@@ -920,78 +919,4 @@ export class AutoIterationService {
     await this.workspace.updateAutoIterationSessionId(loop.workspaceId, null);
     this.loops.delete(loop.workspaceId);
   }
-}
-
-// --- JSON parsing helpers ---
-
-function parseMetricEvaluation(response: string): MetricEvaluation {
-  try {
-    const json = extractJson(response);
-    return {
-      metricSummary: String(json.metricSummary ?? 'Unknown'),
-      improved: Boolean(json.improved),
-      targetReached: Boolean(json.targetReached),
-    };
-  } catch {
-    return {
-      metricSummary: response.slice(0, 200),
-      improved: false,
-      targetReached: false,
-    };
-  }
-}
-
-function parseCritiqueResult(response: string): CritiqueResult {
-  try {
-    const json = extractJson(response);
-    return {
-      approved: Boolean(json.approved),
-      notes: String(json.notes ?? ''),
-    };
-  } catch {
-    // If we can't parse, reject — silently accepting unreviewed changes is riskier than blocking
-    return {
-      approved: false,
-      notes: `Could not parse critique response: ${response.slice(0, 200)}`,
-    };
-  }
-}
-
-function extractJson(text: string): Record<string, unknown> {
-  // Find the first balanced JSON object in the response (may be wrapped in markdown code blocks).
-  // Uses brace counting instead of greedy regex to avoid matching from first `{` to last `}`.
-  const start = text.indexOf('{');
-  if (start === -1) {
-    throw new Error('No JSON found');
-  }
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (ch === '\\' && inString) {
-      escaped = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) {
-      continue;
-    }
-    if (ch === '{') {
-      depth++;
-    } else if (ch === '}') {
-      depth--;
-      if (depth === 0) {
-        return JSON.parse(text.slice(start, i + 1));
-      }
-    }
-  }
-  throw new Error('No JSON found');
 }

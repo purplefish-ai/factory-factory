@@ -69,6 +69,7 @@ vi.mock('@/components/project/setup-terminal-modal', () => ({
 
 vi.mock('./admin/index', () => ({
   ApiUsageSection: () => createElement('section', null, 'API Usage'),
+  PeriodicTasksSection: () => createElement('section', null, 'Periodic Tasks'),
   ProcessesSection: () => createElement('section', null, 'Processes'),
   ProcessesSectionSkeleton: () => createElement('section', null, 'Processes Loading'),
   ProjectIssueTrackingCard: () => createElement('section', null, 'Issue Tracking Card'),
