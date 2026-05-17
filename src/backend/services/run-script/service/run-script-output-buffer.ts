@@ -1,6 +1,6 @@
 export class RunScriptOutputBuffer {
-  readonly buffers = new Map<string, string>();
-  readonly listeners = new Map<string, Set<(data: string) => void>>();
+  private readonly buffers = new Map<string, string>();
+  private readonly listeners = new Map<string, Set<(data: string) => void>>();
 
   constructor(private readonly maxBufferSize: number) {}
 
@@ -26,6 +26,10 @@ export class RunScriptOutputBuffer {
 
   clearBuffer(workspaceId: string): void {
     this.buffers.delete(workspaceId);
+  }
+
+  clearListeners(workspaceId: string): void {
+    this.listeners.delete(workspaceId);
   }
 
   subscribe(workspaceId: string, listener: (data: string) => void): () => void {

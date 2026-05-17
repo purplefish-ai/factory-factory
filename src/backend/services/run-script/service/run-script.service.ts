@@ -43,18 +43,6 @@ export class RunScriptService {
   private readonly runOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
   private readonly postRunOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
 
-  // Output buffers by workspace ID (persists even after process stops)
-  readonly outputBuffers = this.runOutput.buffers;
-
-  // Output listeners by workspace ID
-  private readonly outputListeners = this.runOutput.listeners;
-
-  // PostRun output buffers (separate from main dev logs)
-  readonly postRunOutputBuffers = this.postRunOutput.buffers;
-
-  // PostRun output listeners (separate from main dev logs)
-  readonly postRunOutputListeners = this.postRunOutput.listeners;
-
   // Track whether we're shutting down to prevent double cleanup
   private isShuttingDown = false;
 
@@ -242,7 +230,7 @@ export class RunScriptService {
     }
 
     this.runningProcesses.delete(workspaceId);
-    this.outputListeners.delete(workspaceId);
+    this.runOutput.clearListeners(workspaceId);
     await this.killPostRunProcess(workspaceId);
     await runScriptProxyService.stopTunnel(workspaceId);
 
