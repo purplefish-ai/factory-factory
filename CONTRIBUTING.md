@@ -103,6 +103,7 @@ Write clear, descriptive commit messages:
 
 - We use [Biome](https://biomejs.dev/) for linting and formatting
 - Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically fix Biome issues
+- `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped unless the pinned Codex CLI is installed; use `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
 - Follow existing patterns in the codebase
 - Use TypeScript strict mode
 - Prefer Zod for schemas and validation; avoid raw typecasts
