@@ -25,6 +25,7 @@ import {
   workspaceQueryService,
 } from '@/backend/services/workspace';
 import { KanbanColumn, WorkspaceStatus } from '@/shared/core';
+import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { AttachmentSchema } from '@/shared/websocket';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { type Context, publicProcedure, router } from './trpc';
@@ -53,15 +54,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
       startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
       provider: z.nativeEnum(SessionProvider).optional(),
       mode: z.enum(['STANDARD', 'AUTO_ITERATION']).optional(),
-      autoIterationConfig: z
-        .object({
-          testCommand: z.string().min(1),
-          targetDescription: z.string().min(1),
-          maxIterations: z.number().int().min(0).optional().default(25),
-          testTimeoutSeconds: z.number().int().min(1).optional().default(600),
-          sessionRecycleInterval: z.number().int().min(1).optional().default(10),
-        })
-        .optional(),
+      autoIterationConfig: autoIterationConfigSchema.optional(),
     })
     .superRefine((data, ctx) => {
       if (data.mode === 'AUTO_ITERATION' && !data.autoIterationConfig) {

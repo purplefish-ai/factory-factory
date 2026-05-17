@@ -8,6 +8,7 @@ import { projectAccessor } from '@/backend/services/workspace/resources/project.
 import { workspaceAccessor } from '@/backend/services/workspace/resources/workspace.accessor';
 import { worktreeLifecycleService } from '@/backend/services/workspace/service/worktree/worktree-lifecycle.service';
 import type { MessageAttachment } from '@/shared/acp-protocol';
+import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 
 type Logger = ReturnType<typeof createLogger>;
 
@@ -161,6 +162,16 @@ export class WorkspaceCreationService {
         message: 'autoIterationConfig is only allowed for AUTO_ITERATION workspaces',
       });
     }
+    const configParsed = source.autoIterationConfig
+      ? autoIterationConfigSchema.safeParse(source.autoIterationConfig)
+      : null;
+    if (configParsed && !configParsed.success) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Invalid auto-iteration config: ${configParsed.error.message}`,
+      });
+    }
+    const autoIterationConfig = configParsed?.success ? configParsed.data : undefined;
 
     const metadata: Record<string, unknown> = {};
     if (source.initialPrompt) {
@@ -184,8 +195,8 @@ export class WorkspaceCreationService {
           ? { creationMetadata: metadata as Prisma.InputJsonValue }
           : {}),
         ...(source.mode ? { mode: source.mode } : {}),
-        ...(source.autoIterationConfig
-          ? { autoIterationConfig: source.autoIterationConfig as unknown as Prisma.InputJsonValue }
+        ...(autoIterationConfig
+          ? { autoIterationConfig: autoIterationConfig as unknown as Prisma.InputJsonValue }
           : {}),
       },
     };

@@ -21,6 +21,7 @@ import {
   WorkspaceMode as CoreWorkspaceMode,
   WorkspaceStatus as CoreWorkspaceStatus,
 } from '@/shared/core';
+import { autoIterationConfigSchema } from './auto-iteration.schema';
 
 function enumValues<const T extends Record<string, string>>(enumObject: T) {
   return Object.values(enumObject) as [T[keyof T], ...T[keyof T][]];
@@ -83,7 +84,7 @@ const exportedWorkspaceSchema = z.object({
   runScriptStartedAt: z.string().nullable(),
   runScriptStatus: RunScriptStatus,
   mode: WorkspaceMode.optional().default('STANDARD'),
-  autoIterationConfig: z.unknown().nullable().optional().default(null),
+  autoIterationConfig: autoIterationConfigSchema.nullable().optional().default(null),
   prUrl: z.string().nullable(),
   githubIssueNumber: z.number().nullable(),
   githubIssueUrl: z.string().nullable(),

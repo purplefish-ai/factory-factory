@@ -287,6 +287,50 @@ describe('WorkspaceCreationService', () => {
           })
         );
       });
+
+      it('defaults and persists auto-iteration config for auto-iteration workspaces', async () => {
+        const source = unsafeCoerce<WorkspaceCreationSource>({
+          type: 'MANUAL',
+          projectId: 'proj-1',
+          name: 'Auto Iteration Workspace',
+          mode: 'AUTO_ITERATION',
+          autoIterationConfig: {
+            testCommand: 'pnpm test',
+            targetDescription: 'Improve coverage',
+          },
+        });
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            mode: 'AUTO_ITERATION',
+            autoIterationConfig: {
+              testCommand: 'pnpm test',
+              targetDescription: 'Improve coverage',
+              maxIterations: 25,
+              testTimeoutSeconds: 600,
+              sessionRecycleInterval: 10,
+            },
+          })
+        );
+      });
+
+      it('rejects invalid auto-iteration config for auto-iteration workspaces', async () => {
+        const source = unsafeCoerce<WorkspaceCreationSource>({
+          type: 'MANUAL',
+          projectId: 'proj-1',
+          name: 'Auto Iteration Workspace',
+          mode: 'AUTO_ITERATION',
+          autoIterationConfig: {
+            testCommand: '',
+            targetDescription: 'Improve coverage',
+          },
+        });
+
+        await expect(service.create(source)).rejects.toThrow('Invalid auto-iteration config');
+        expect(workspaceAccessorModule.workspaceAccessor.create).not.toHaveBeenCalled();
+      });
     });
 
     describe('RESUME_BRANCH source', () => {
