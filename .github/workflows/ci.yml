@@ -47,7 +47,7 @@ jobs:
             --to-migrations prisma/migrations \
             --exit-code
 
-      - name: Run Biome check
+      - name: Run verification checks
         run: pnpm check
 
       - name: Check ambiguous relative imports
@@ -56,17 +56,11 @@ jobs:
       - name: Enforce Biome ignore budget
         run: pnpm check:biome-ignores
 
-      - name: Check dependency architecture
-        run: pnpm deps:check
-
       - name: Run Knip (unused files & dependencies)
         run: pnpm knip --include files,dependencies,unlisted
 
       - name: Run TypeScript check
         run: pnpm typecheck
-
-      - name: Check Codex app-server schema drift
-        run: pnpm check:codex-schema
 
   build:
     name: Build
@@ -161,9 +155,6 @@ jobs:
 
       - name: Run tests with coverage
         run: pnpm test:coverage
-
-      - name: Enforce critical backend coverage
-        run: pnpm check:coverage:critical
 
       - name: Report Coverage
         if: always() && github.event_name == 'pull_request'

@@ -48,6 +48,10 @@ describe('PermissionPrompt', () => {
     expect(container.textContent).toContain('Approve and switch to Default');
     expect(container.textContent).toContain('Keep planning');
 
+    const planPrompt = container.querySelector('[aria-label="Plan approval request"]');
+    expect(planPrompt?.className).toContain('min-h-0');
+    expect(planPrompt?.className).toContain('overflow-y-auto');
+
     const renderedMarkdown = container.querySelector('.prose');
     expect(renderedMarkdown?.className).toContain('overflow-hidden');
 

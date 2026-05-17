@@ -84,7 +84,7 @@ pnpm storybook
 
 1. **Fork the repository** and create a new branch from `main`
 2. **Make your changes** with clear, focused commits
-3. **Run all checks** (`pnpm test`, `pnpm typecheck`, `pnpm check:fix`)
+3. **Run all checks** (`pnpm check`, `pnpm typecheck`, `pnpm test`)
 4. **Write or update tests** for your changes
 5. **Add or update Storybook stories** for UI changes
 6. **Update documentation** if needed
@@ -102,7 +102,8 @@ Write clear, descriptive commit messages:
 ### Code Style
 
 - We use [Biome](https://biomejs.dev/) for linting and formatting
-- Run `pnpm check:fix` to automatically fix issues
+- Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically fix Biome issues
+- `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped unless the pinned Codex CLI is installed; use `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
 - Follow existing patterns in the codebase
 - Use TypeScript strict mode
 - Prefer Zod for schemas and validation; avoid raw typecasts

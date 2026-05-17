@@ -214,8 +214,9 @@ pnpm build:electron          # Build distributable package
 # Quality
 pnpm test                    # Run tests
 pnpm test:watch              # Run tests in watch mode
-pnpm test:coverage           # Run tests with coverage
+pnpm test:coverage           # Run tests with coverage and critical coverage guardrails
 pnpm typecheck               # TypeScript checking
+pnpm check                   # Standard guardrails: Biome, env, ownership, dependency boundaries, Codex schema
 pnpm check:fix               # Lint + format with Biome
 
 # Database
