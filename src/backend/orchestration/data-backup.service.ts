@@ -9,6 +9,7 @@ import type { Prisma } from '@prisma-gen/client';
 import type { z } from 'zod';
 import { createLogger } from '@/backend/services/logger.service';
 import { type DataBackupTransactionClient, dataBackupAccessor } from '@/backend/services/settings';
+import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import type {
   ExportData,
   exportedAgentSessionSchema,
@@ -52,6 +53,8 @@ type ExportedUserSettings = z.infer<typeof exportedUserSettingsSchema>;
 
 const toISOString = (date: Date | null): string | null => (date ? date.toISOString() : null);
 const parseDate = (str: string | null): Date | null => (str ? new Date(str) : null);
+const parseAutoIterationConfigForExport = (value: unknown) =>
+  value == null ? null : autoIterationConfigSchema.parse(value);
 
 /** Strip the encrypted API key from issueTrackerConfig for safe export. */
 function sanitizeIssueTrackerConfigForExport(config: unknown): unknown {
@@ -396,7 +399,7 @@ class DataBackupService {
           runScriptStartedAt: toISOString(w.runScriptStartedAt),
           runScriptStatus: w.runScriptStatus,
           mode: w.mode,
-          autoIterationConfig: w.autoIterationConfig,
+          autoIterationConfig: parseAutoIterationConfigForExport(w.autoIterationConfig),
           prUrl: w.prUrl,
           githubIssueNumber: w.githubIssueNumber,
           githubIssueUrl: w.githubIssueUrl,

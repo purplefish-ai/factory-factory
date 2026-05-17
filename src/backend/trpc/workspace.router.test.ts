@@ -291,6 +291,36 @@ describe('workspaceRouter', () => {
     );
   });
 
+  it('defaults auto-iteration config before workspace creation', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+
+    await caller.create({
+      type: 'MANUAL',
+      projectId: 'p1',
+      name: 'Auto Iteration Workspace',
+      mode: 'AUTO_ITERATION',
+      autoIterationConfig: {
+        testCommand: 'pnpm test',
+        targetDescription: 'Improve coverage',
+      },
+    });
+
+    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'MANUAL',
+        mode: 'AUTO_ITERATION',
+        autoIterationConfig: {
+          testCommand: 'pnpm test',
+          targetDescription: 'Improve coverage',
+          maxIterations: 25,
+          testTimeoutSeconds: 600,
+          sessionRecycleInterval: 10,
+        },
+      })
+    );
+  });
+
   it('passes startup mode preset through GitHub issue workspace creation', async () => {
     const { caller } = createCaller();
     mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });

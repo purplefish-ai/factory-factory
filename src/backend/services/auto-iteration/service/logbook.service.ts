@@ -1,6 +1,10 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import {
+  agentLogbookEntrySchema,
+  agentLogbookSchema,
+} from '@/shared/schemas/auto-iteration.schema';
 import type { AgentLogbook, AgentLogbookEntry, AutoIterationConfig } from './auto-iteration.types';
 
 const LOGBOOK_DIR = '.factory-factory';
@@ -35,11 +39,12 @@ export class LogbookService {
 
   /** Append an iteration entry to the logbook. */
   async appendEntry(worktreePath: string, entry: AgentLogbookEntry): Promise<void> {
+    const parsedEntry = agentLogbookEntrySchema.parse(entry);
     const logbook = await this.read(worktreePath);
     if (!logbook) {
       throw new Error('Logbook not found — was it initialized?');
     }
-    logbook.iterations.push(entry);
+    logbook.iterations.push(parsedEntry);
     await this.write(worktreePath, logbook);
   }
 
@@ -49,16 +54,7 @@ export class LogbookService {
     try {
       const raw = await fs.readFile(filePath, 'utf-8');
       const parsed = JSON.parse(raw);
-      // Validate minimal expected shape before returning
-      if (
-        typeof parsed !== 'object' ||
-        parsed === null ||
-        typeof parsed.workspaceId !== 'string' ||
-        !Array.isArray(parsed.iterations)
-      ) {
-        throw new Error(`Invalid logbook structure in ${filePath}`);
-      }
-      return parsed as AgentLogbook;
+      return agentLogbookSchema.parse(parsed);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;
@@ -96,12 +92,13 @@ export class LogbookService {
   }
 
   private async write(worktreePath: string, logbook: AgentLogbook): Promise<void> {
+    const parsedLogbook = agentLogbookSchema.parse(logbook);
     const filePath = getLogbookPath(worktreePath);
     const dir = path.dirname(filePath);
     await fs.mkdir(dir, { recursive: true });
     // Atomic write: write to a temp file then rename to prevent corruption on interruption
     const tmpPath = `${filePath}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    await fs.writeFile(tmpPath, JSON.stringify(logbook, null, 2), 'utf-8');
+    await fs.writeFile(tmpPath, JSON.stringify(parsedLogbook, null, 2), 'utf-8');
     await fs.rename(tmpPath, filePath);
   }
 }

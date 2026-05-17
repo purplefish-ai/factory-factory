@@ -1,6 +1,5 @@
 import { FACTORY_SIGNATURE } from '@/backend/lib/constants';
 import { toError } from '@/backend/lib/error-utils';
-import type { AutoIterationConfig } from '@/backend/services/auto-iteration';
 import { autoIterationService } from '@/backend/services/auto-iteration';
 import { SERVICE_CACHE_TTL_MS } from '@/backend/services/constants';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
@@ -25,6 +24,7 @@ import {
 } from '@/backend/services/workspace';
 import { type MessageAttachment, MessageState, resolveSelectedModel } from '@/shared/acp-protocol';
 import { SessionStatus, WorkspaceMode } from '@/shared/core';
+import { autoIterationConfigSchema } from '@/shared/schemas/auto-iteration.schema';
 import { AttachmentSchema } from '@/shared/websocket';
 import { getDecryptedLinearConfig, getWorkspaceLinearContext } from './linear-config.helper';
 import type { WorkspaceWithProject } from './types';
@@ -1062,7 +1062,15 @@ async function maybeStartAutoIteration(workspaceId: string): Promise<boolean> {
       return false;
     }
 
-    const config = workspace.autoIterationConfig as unknown as AutoIterationConfig;
+    const configParsed = autoIterationConfigSchema.safeParse(workspace.autoIterationConfig);
+    if (!configParsed.success) {
+      logger.error('Auto-iteration workspace has invalid config, skipping auto-start', {
+        workspaceId,
+        error: configParsed.error.message,
+      });
+      return false;
+    }
+    const config = configParsed.data;
     logger.info('Starting auto-iteration loop for workspace', { workspaceId, config });
     await autoIterationService.start(workspaceId, config);
     return true;
