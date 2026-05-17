@@ -33,7 +33,15 @@ export function parseCritiqueResult(response: string): CritiqueResult {
 }
 
 function parseExplicitBoolean(value: unknown): boolean {
-  return value === true;
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase() === 'true';
+  }
+
+  return value === 1;
 }
 
 interface JsonScanState {

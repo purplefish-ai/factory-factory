@@ -8,6 +8,7 @@ import {
   type AppNavigationData,
   AppNavigationDataProvider,
 } from '@/client/hooks/use-app-navigation-data';
+import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import NewProjectPage from './new';
 
 const navigateMock = vi.fn();
@@ -173,7 +174,7 @@ beforeEach(() => {
     writable: true,
     value: createStorageStub(),
   });
-  localStorage.setItem('factoryfactory_selected_project_slug', 'beta');
+  localStorage.setItem(SELECTED_PROJECT_KEY, 'beta');
   navigateMock.mockClear();
   useAppHeaderMock.mockClear();
   selectProjectSlugMock.mockClear();

@@ -12,10 +12,9 @@ import { useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { useProjectSnapshotSync } from '@/client/hooks/use-project-snapshot-sync';
 import { useWorkspaceAttention } from '@/client/hooks/use-workspace-attention';
+import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { useProjectContext } from '@/client/lib/providers';
 import { trpc } from '@/client/lib/trpc';
-
-const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 
 export function getProjectSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/projects\/([^/]+)/);
@@ -24,15 +23,11 @@ export function getProjectSlugFromPath(pathname: string): string | null {
 }
 
 function persistSelectedProjectSlug(slug: string) {
-  localStorage.setItem(SELECTED_PROJECT_KEY, slug);
+  writeSelectedProjectSlug(slug);
 }
 
 function getInitialProjectSlug(): string {
-  return (
-    getProjectSlugFromPath(window.location.pathname) ??
-    localStorage.getItem(SELECTED_PROJECT_KEY) ??
-    ''
-  );
+  return getProjectSlugFromPath(window.location.pathname) ?? readSelectedProjectSlug() ?? '';
 }
 
 /**
@@ -66,7 +61,7 @@ function useProjectSlugSync(
     if (slugFromPath) {
       selectProjectSlug(slugFromPath);
     } else {
-      const stored = localStorage.getItem(SELECTED_PROJECT_KEY);
+      const stored = readSelectedProjectSlug();
       if (stored) {
         selectProjectSlug(stored);
       }

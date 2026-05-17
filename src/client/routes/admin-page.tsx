@@ -17,6 +17,7 @@ import { Loading } from '@/client/components/loading';
 import { ProviderCliWarning } from '@/client/components/provider-cli-warning';
 import { useDownloadServerLog } from '@/client/hooks/use-download-server-log';
 import { downloadFile } from '@/client/lib/download-file';
+import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { DataImportButton } from '@/components/data-import/data-import-button';
 import { FactoryConfigScripts } from '@/components/factory-config-scripts';
@@ -178,8 +179,6 @@ function ProjectFactoryConfigCard({
   );
 }
 
-const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
-
 function resolveSelectedProjectSlug(
   projects: Array<{ slug: string }> | undefined
 ): string | undefined {
@@ -187,7 +186,7 @@ function resolveSelectedProjectSlug(
     return undefined;
   }
 
-  const storedSlug = localStorage.getItem(SELECTED_PROJECT_KEY);
+  const storedSlug = readSelectedProjectSlug();
   if (storedSlug && projects.some((project) => project.slug === storedSlug)) {
     return storedSlug;
   }
@@ -207,10 +206,15 @@ function ProjectSettingsSection({
   }>;
 }) {
   const [selectedSlug, setSelectedSlug] = useState<string>(
-    () => localStorage.getItem(SELECTED_PROJECT_KEY) || projects[0]?.slug || ''
+    () => readSelectedProjectSlug() || projects[0]?.slug || ''
   );
 
   const selectedProject = projects.find((p) => p.slug === selectedSlug) ?? projects[0];
+
+  const handleProjectChange = (slug: string) => {
+    setSelectedSlug(slug);
+    writeSelectedProjectSlug(slug);
+  };
 
   if (!selectedProject) {
     return <p className="text-sm text-muted-foreground">No projects found.</p>;
@@ -219,7 +223,7 @@ function ProjectSettingsSection({
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Select value={selectedProject.slug} onValueChange={setSelectedSlug}>
+        <Select value={selectedProject.slug} onValueChange={handleProjectChange}>
           <SelectTrigger className="w-auto max-w-xs">
             <SelectValue placeholder="Select a project" />
           </SelectTrigger>

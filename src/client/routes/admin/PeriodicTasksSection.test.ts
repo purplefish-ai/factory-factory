@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import {
   formatRelativeTime,
   getInitialProjectSlug,
   persistSelectedProjectSlug,
-  SELECTED_PROJECT_KEY,
 } from './PeriodicTasksSection';
 
 const projects = [

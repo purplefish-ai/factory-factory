@@ -36,7 +36,7 @@ describe('auto-iteration response parsing', () => {
     });
   });
 
-  it('treats non-boolean metric flags as false', () => {
+  it('parses explicit string metric flags', () => {
     const result = parseMetricEvaluation(
       '{"metricSummary":"string flags","improved":"false","targetReached":"true"}'
     );
@@ -44,6 +44,18 @@ describe('auto-iteration response parsing', () => {
     expect(result).toEqual({
       metricSummary: 'string flags',
       improved: false,
+      targetReached: true,
+    });
+  });
+
+  it('parses numeric true metric flags without treating other numbers as true', () => {
+    const result = parseMetricEvaluation(
+      '{"metricSummary":"numeric flags","improved":1,"targetReached":2}'
+    );
+
+    expect(result).toEqual({
+      metricSummary: 'numeric flags',
+      improved: true,
       targetReached: false,
     });
   });
@@ -63,6 +75,15 @@ describe('auto-iteration response parsing', () => {
     expect(result).toEqual({
       approved: false,
       notes: 'not approved',
+    });
+  });
+
+  it('accepts explicit string true critique approval', () => {
+    const result = parseCritiqueResult('{"approved":"true","notes":"approved"}');
+
+    expect(result).toEqual({
+      approved: true,
+      notes: 'approved',
     });
   });
 });

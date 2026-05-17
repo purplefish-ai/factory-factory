@@ -1,6 +1,7 @@
 import { Calendar, Pencil, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { readSelectedProjectSlug, writeSelectedProjectSlug } from '@/client/lib/project-selection';
 import { trpc } from '@/client/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
-export const SELECTED_PROJECT_KEY = 'factoryfactory_selected_project_slug';
 const NOW_THRESHOLD_SECONDS = 5;
 
 export type AdminProject = { id: string; slug: string; name: string };
@@ -59,22 +59,14 @@ export function getInitialProjectSlug(
   projects: AdminProject[],
   storage: Pick<Storage, 'getItem'> = localStorage
 ): string {
-  try {
-    return storage.getItem(SELECTED_PROJECT_KEY) || projects[0]?.slug || '';
-  } catch {
-    return projects[0]?.slug || '';
-  }
+  return readSelectedProjectSlug(storage) || projects[0]?.slug || '';
 }
 
 export function persistSelectedProjectSlug(
   slug: string,
   storage: Pick<Storage, 'setItem'> = localStorage
 ): void {
-  try {
-    storage.setItem(SELECTED_PROJECT_KEY, slug);
-  } catch {
-    // Non-blocking: selection still updates even if localStorage is unavailable.
-  }
+  writeSelectedProjectSlug(slug, storage);
 }
 
 export function PeriodicTasksSection({ projects }: { projects: AdminProject[] }) {
