@@ -22,6 +22,7 @@ import {
   resolveSelectedModel,
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
+import { toErrorMessage } from '../lifecycle/session.error-message';
 import {
   processAttachmentsAndBuildContent,
   UnsupportedImageTypeError,
@@ -365,17 +366,7 @@ class ChatMessageHandlerService {
   }
 
   private formatDispatchError(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-    if (error !== null && typeof error === 'object') {
-      try {
-        return JSON.stringify(error);
-      } catch {
-        return String(error);
-      }
-    }
-    return String(error);
+    return toErrorMessage(error);
   }
 
   /**
