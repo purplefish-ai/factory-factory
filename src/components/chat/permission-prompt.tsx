@@ -235,7 +235,6 @@ function PlanViewToggle({ value, onChange }: PlanViewToggleProps) {
  * Displays the plan content with expand/collapse functionality.
  */
 function PlanApprovalPrompt({ permission, onApprove, className }: PermissionPromptProps) {
-  const firstActionButtonRef = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(true);
   const [viewMode, setViewMode] = usePlanViewMode();
 
@@ -316,13 +315,12 @@ function PlanApprovalPrompt({ permission, onApprove, className }: PermissionProm
 
         {/* Actions */}
         <div className="flex flex-wrap justify-end gap-2">
-          {options.map((option, index) => {
+          {options.map((option) => {
             const style = getPermissionOptionStyle(option.kind);
             const Icon = style.icon;
             return (
               <Button
                 key={option.optionId}
-                ref={index === 0 ? firstActionButtonRef : undefined}
                 variant={style.variant}
                 size="sm"
                 onClick={() => handleOptionClick(option)}
