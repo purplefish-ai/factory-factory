@@ -46,6 +46,7 @@ import {
   workspaceStateMachine,
 } from '@/backend/services/workspace';
 import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-store.service';
+import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
 
@@ -254,8 +255,9 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
       await workspaceAccessor.update(workspaceId, { autoIterationStatus: status });
     },
     async updateAutoIterationProgress(workspaceId, progress) {
+      const parsedProgress = autoIterationProgressSchema.parse(progress);
       await workspaceAccessor.update(workspaceId, {
-        autoIterationProgress: progress as unknown as Prisma.InputJsonValue,
+        autoIterationProgress: parsedProgress as unknown as Prisma.InputJsonValue,
       });
     },
     async updateAutoIterationSessionId(workspaceId, sessionId) {

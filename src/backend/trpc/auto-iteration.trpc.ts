@@ -6,15 +6,33 @@ import {
   logbookService,
 } from '@/backend/services/auto-iteration';
 import { workspaceDataService } from '@/backend/services/workspace';
+import {
+  autoIterationConfigSchema,
+  autoIterationProgressSchema,
+} from '@/shared/schemas/auto-iteration.schema';
 import { publicProcedure, router } from './trpc';
 
-const autoIterationConfigSchema = z.object({
-  testCommand: z.string().min(1),
-  targetDescription: z.string().min(1),
-  maxIterations: z.number().int().min(0).default(25),
-  testTimeoutSeconds: z.number().int().min(1).default(600),
-  sessionRecycleInterval: z.number().int().min(1).default(10),
-});
+function parseAutoIterationConfig(value: unknown) {
+  const parsed = autoIterationConfigSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Invalid auto-iteration config: ${parsed.error.message}`,
+    });
+  }
+  return parsed.data;
+}
+
+function parseAutoIterationProgress(value: unknown) {
+  const parsed = autoIterationProgressSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Invalid auto-iteration progress: ${parsed.error.message}`,
+    });
+  }
+  return parsed.data;
+}
 
 /** Handle resume-from-failed: validate config/progress and delegate to service. */
 async function handleResumeFromFailed(
@@ -27,26 +45,16 @@ async function handleResumeFromFailed(
       message: 'Workspace has no auto-iteration config',
     });
   }
-  const configParsed = autoIterationConfigSchema.safeParse(workspace.autoIterationConfig);
-  if (!configParsed.success) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: `Invalid auto-iteration config: ${configParsed.error.message}`,
-    });
-  }
-  const progress = workspace.autoIterationProgress as Record<string, unknown> | null;
-  if (!progress) {
+  const config = parseAutoIterationConfig(workspace.autoIterationConfig);
+  if (!workspace.autoIterationProgress) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: 'No progress data to resume from — use restart instead',
     });
   }
+  const progress = parseAutoIterationProgress(workspace.autoIterationProgress);
   try {
-    await autoIterationService.resumeFromFailed(
-      workspaceId,
-      configParsed.data,
-      progress as unknown as Parameters<typeof autoIterationService.resumeFromFailed>[2]
-    );
+    await autoIterationService.resumeFromFailed(workspaceId, config, progress);
   } catch (err) {
     if (err instanceof Error && err.message.includes('already running')) {
       throw new TRPCError({ code: 'CONFLICT', message: err.message });
@@ -83,15 +91,9 @@ export const autoIterationRouter = router({
         });
       }
 
-      const configParsed = autoIterationConfigSchema.safeParse(workspace.autoIterationConfig);
-      if (!configParsed.success) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Invalid auto-iteration config: ${configParsed.error.message}`,
-        });
-      }
+      const config = parseAutoIterationConfig(workspace.autoIterationConfig);
       try {
-        await autoIterationService.start(input.workspaceId, configParsed.data);
+        await autoIterationService.start(input.workspaceId, config);
       } catch (err) {
         if (err instanceof Error && err.message.includes('already running')) {
           throw new TRPCError({ code: 'CONFLICT', message: err.message });
@@ -183,8 +185,12 @@ export const autoIterationRouter = router({
       }
       return {
         status: workspace.autoIterationStatus ?? null,
-        config: workspace.autoIterationConfig ?? null,
-        progress: workspace.autoIterationProgress ?? null,
+        config: workspace.autoIterationConfig
+          ? parseAutoIterationConfig(workspace.autoIterationConfig)
+          : null,
+        progress: workspace.autoIterationProgress
+          ? parseAutoIterationProgress(workspace.autoIterationProgress)
+          : null,
       };
     }),
 
