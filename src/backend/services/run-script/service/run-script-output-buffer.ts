@@ -24,6 +24,10 @@ export class RunScriptOutputBuffer {
     return this.buffers.get(workspaceId) ?? '';
   }
 
+  clearBuffer(workspaceId: string): void {
+    this.buffers.delete(workspaceId);
+  }
+
   subscribe(workspaceId: string, listener: (data: string) => void): () => void {
     let listeners = this.listeners.get(workspaceId);
     if (!listeners) {

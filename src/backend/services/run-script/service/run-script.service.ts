@@ -140,7 +140,7 @@ export class RunScriptService {
       // Clear and initialize output buffers for new run
       const startMessage = `\x1b[36m[Factory Factory]\x1b[0m Starting ${command}\n\n`;
       this.runOutput.set(workspaceId, startMessage);
-      this.postRunOutput.evict(workspaceId);
+      this.postRunOutput.clearBuffer(workspaceId);
 
       // Register event handlers BEFORE async state transition to avoid missing events
       this.registerProcessHandlers(workspaceId, childProcess, pid);
