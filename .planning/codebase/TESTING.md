@@ -1,55 +1,59 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-04-29
+**Analysis Date:** 2026-05-17
 
 ## Test Framework
 
 **Runner:**
-- Vitest 4.0.18 from `package.json`.
+- Vitest 4.0.18 for unit and integration tests.
 - Root config: `vitest.config.ts`.
-- Package config: `packages/core/vitest.config.ts`.
-- Default environment is `node`; DOM tests opt into jsdom per file with `// @vitest-environment jsdom`.
-- Global setup file: `src/backend/testing/setup.ts`.
+- Core package config: `packages/core/package.json` uses Vitest scripts for `packages/core/src/**/*.test.ts`.
+- Playwright 1.58.2 for mobile visual baseline tests.
+- Playwright config: `playwright.mobile.config.ts`.
 
 **Assertion Library:**
-- Vitest `expect`, including async matchers such as `resolves`, `rejects`, `toMatchObject`, `toHaveBeenCalledWith`, and `toHaveBeenNthCalledWith`.
-- Playwright `expect` for e2e mobile screenshots in `e2e/mobile-baseline.spec.ts`.
+- Vitest `expect` for unit, integration, jsdom, and backend tests.
+- Playwright `expect` for browser and screenshot assertions in `e2e/mobile-baseline.spec.ts`.
+- Supertest is available and used for Express route tests such as `src/backend/routers/health.router.test.ts` and `src/backend/server.upgrade.test.ts`.
 
 **Run Commands:**
 ```bash
-pnpm test                    # Run all Vitest tests
-pnpm test:watch              # Run Vitest in watch mode
-pnpm test:coverage           # Run Vitest with V8 coverage
-pnpm test:coverage:backend   # Run backend coverage only
-pnpm test:integration        # Run backend *.integration.test.ts files
-pnpm test:e2e:mobile         # Run Playwright mobile baseline tests
+pnpm test                         # Run root Vitest suite for src/**/*.test.* and electron/**/*.test.ts
+pnpm test:watch                   # Run Vitest in watch mode
+pnpm test:coverage                # Run Vitest with v8 coverage
+pnpm test:coverage:backend        # Run backend coverage only
+pnpm check:coverage:critical      # Enforce critical backend coverage groups
+pnpm test:integration             # Run src/backend/**/*.integration.test.ts
+pnpm test:e2e:mobile              # Run Playwright mobile baseline screenshots
+pnpm --filter @factory-factory/core test # Run package-local core tests
 ```
 
 ## Test File Organization
 
 **Location:**
-- Tests are mostly colocated with implementation files: `src/backend/services/workspace/resources/workspace.accessor.test.ts`, `src/backend/trpc/session.router.test.ts`, `src/components/chat/permission-prompt.test.tsx`.
-- Backend service capsule tests live under the same capsule folder they cover: `src/backend/services/ratchet/service/reconciliation.service.test.ts`, `src/backend/services/session/resources/agent-session.accessor.test.ts`.
-- Shared library tests live beside shared modules: `src/shared/websocket/chat-message.schema.test.ts`, `src/shared/core/enums.drift.test.ts`.
-- E2E tests live in `e2e/`, with snapshots beside the spec under `e2e/mobile-baseline.spec.ts-snapshots/`.
+- Co-locate tests next to the module they cover. Examples: `src/backend/services/workspace/service/state/kanban-state.test.ts`, `src/lib/formatters.test.ts`, `src/client/components/kanban/issue-card.test.tsx`.
+- Keep backend service tests inside the relevant service capsule: `src/backend/services/session/service/lifecycle/session.service.test.ts`, `src/backend/services/workspace/resources/workspace.accessor.test.ts`.
+- Keep reusable test infrastructure in `src/backend/testing/` and `src/test-utils/`.
+- Keep Playwright specs under `e2e/`; mobile snapshots live beside the spec in `e2e/mobile-baseline.spec.ts-snapshots/`.
+- Keep Storybook stories beside UI components as `*.stories.tsx`, e.g. `src/components/chat/chat-input.stories.tsx`.
 
 **Naming:**
-- Use `.test.ts` for Node, pure helper, backend, and hook tests without JSX.
-- Use `.test.tsx` for React component tests and DOM-rendered hook/component tests.
-- Use `.integration.test.ts` for tests that exercise a real integration boundary such as SQLite migrations and accessors: `src/backend/services/resources.integration.test.ts`.
-- Manual integration tests use `.manual.integration.test.ts` and env gates, such as Codex app-server runtime tests under `src/backend/services/session/service/acp/`.
+- Use `*.test.ts` for node/unit tests and pure helpers.
+- Use `*.test.tsx` for React/component/jsdom tests.
+- Use `*.integration.test.ts` for integration suites that use real database, WebSocket, or multi-module runtime behavior.
+- Use `*.manual.integration.test.ts` for opt-in tests that require a real external runtime, such as `src/backend/services/session/service/acp/codex-app-server-adapter/codex-app-server-acp-adapter.manual.integration.test.ts`.
+- Use `*.spec.ts` for Playwright specs, e.g. `e2e/mobile-baseline.spec.ts`.
 
 **Structure:**
 ```text
-src/backend/services/{service}/service/*.test.ts
-src/backend/services/{service}/resources/*.test.ts
-src/backend/trpc/*.router.test.ts
-src/backend/routers/websocket/*.test.ts
-src/client/**/*.test.ts
+src/backend/services/{service}/service/**/*.test.ts
+src/backend/services/{service}/resources/**/*.test.ts
+src/backend/trpc/**/*.router.test.ts
+src/backend/routers/websocket/*.handler.test.ts
 src/client/**/*.test.tsx
-src/components/**/*.test.ts
 src/components/**/*.test.tsx
 src/shared/**/*.test.ts
+electron/**/*.test.ts
 e2e/*.spec.ts
 packages/core/src/**/*.test.ts
 ```
@@ -60,79 +64,65 @@ packages/core/src/**/*.test.ts
 ```typescript
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('workspaceAccessor', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  describe('create', () => {
-    it('passes ratchetEnabled when provided', async () => {
-      mockCreate.mockResolvedValue({ id: 'ws-1' });
-
-      await workspaceAccessor.create({
-        projectId: 'project-1',
-        name: 'Issue workspace',
-        ratchetEnabled: false,
-      });
-
-      expect(mockCreate).toHaveBeenCalledWith({
-        data: expect.objectContaining({ ratchetEnabled: false }),
-      });
-    });
+describe('computeKanbanColumn', () => {
+  it('maps initializing or active work to WORKING', () => {
+    expect(
+      computeKanbanColumn({
+        lifecycle: 'NEW',
+        isWorking: false,
+        prState: 'NONE',
+        ratchetState: 'IDLE',
+        hasHadSessions: false,
+      })
+    ).toBe('WORKING');
   });
 });
 ```
 
 **Patterns:**
-- Group by public function, endpoint, reducer state, or flow with nested `describe` blocks, as in `src/backend/services/workspace/resources/workspace.accessor.test.ts` and `src/components/chat/chat-reducer.test.ts`.
-- Use Arrange/Act/Assert layout without section labels unless the setup is long.
-- Use realistic IDs and dates: `ws-1`, `project-1`, `2024-01-15T12:00:00Z`.
-- Use `vi.useFakeTimers()` and `vi.setSystemTime()` for time-dependent logic, then restore with `vi.useRealTimers()` in `afterEach`: `src/backend/services/workspace/resources/workspace.accessor.test.ts`, `src/backend/services/ratchet/service/reconciliation.service.test.ts`.
-- Use `await expect(promise).resolves...` and `await expect(promise).rejects...` for async behavior rather than manual try/catch.
-- Assert side effects on mocks directly, including skipped work with `not.toHaveBeenCalled()`.
+- Group by exported function or service behavior with `describe`, then write behavior-oriented `it` names. Use examples from `src/backend/services/workspace/service/state/kanban-state.test.ts`.
+- Test pure functions with direct input/output assertions before service integration behavior. `src/backend/services/workspace/service/state/kanban-state.test.ts` tests `computeKanbanColumn` separately from `kanbanStateService`.
+- For tRPC routers, create a caller helper with `router.createCaller(...)`, mock service dependencies, and assert resolved data plus thrown errors. See `src/backend/trpc/project.router.test.ts` and `src/backend/trpc/linear.router.test.ts`.
+- For React/jsdom tests, opt into jsdom with `// @vitest-environment jsdom`, create a DOM container, render with `createRoot`, wrap rendering in `flushSync`, and clean `document.body.innerHTML` in `afterEach`. See `src/client/routes/reviews.test.tsx` and `src/components/agent-activity/tool-renderers/tool-result-renderer.test.tsx`.
+- For server-rendered presentational components, use `renderToStaticMarkup` when DOM interactivity is not required. Examples: `src/client/components/workspace-status-icon.test.tsx`, `src/client/components/pr-status-badges.test.tsx`.
+- For WebSocket behavior, use helpers from `src/backend/testing/websocket-test-utils.ts` and close sockets/servers in `afterEach`.
+- For database integration, use helpers from `src/backend/testing/integration-db.ts`, create fixtures in the test file, clear database rows in `afterEach`, and destroy the DB in `afterAll`.
 
 ## Mocking
 
-**Framework:** Vitest mocks: `vi.fn`, `vi.mock`, `vi.hoisted`, `vi.mocked`, `vi.spyOn`, `vi.importActual`.
+**Framework:** Vitest `vi`.
 
 **Patterns:**
 ```typescript
-const mockFindMany = vi.fn();
+const mockFindById = vi.hoisted(() => vi.fn());
 
-vi.mock('@/backend/db', () => ({
-  prisma: {
-    workspace: {
-      findMany: (...args: unknown[]) => mockFindMany(...args),
-    },
+vi.mock('@/backend/services/workspace/resources/workspace.accessor', () => ({
+  workspaceAccessor: {
+    findById: (...args: unknown[]) => mockFindById(...args),
   },
 }));
-
-import { workspaceAccessor } from './workspace.accessor';
 ```
 
 ```typescript
-const mockSessionDataService = vi.hoisted(() => ({
-  findAgentSessionsByWorkspaceId: vi.fn(),
-  createAgentSession: vi.fn(),
-}));
-
-vi.mock('@/backend/services/session', () => ({
-  sessionDataService: mockSessionDataService,
-}));
+const actual = await vi.importActual<typeof import('./image-utils')>('./image-utils');
+return {
+  ...actual,
+  isImageFile: vi.fn(),
+};
 ```
 
 **What to Mock:**
-- Mock Prisma access for unit tests of accessors and services: `src/backend/services/workspace/resources/workspace.accessor.test.ts`.
-- Mock service barrels when testing tRPC router behavior: `src/backend/trpc/session.router.test.ts`, `src/backend/trpc/project.router.test.ts`.
-- Mock logger services in unit tests when asserting behavior rather than output: `src/backend/services/ratchet/service/reconciliation.service.test.ts`.
-- Mock UI primitives and heavy child components in focused DOM tests: `src/client/components/kanban/inline-workspace-form.test.tsx`.
-- Mock filesystem, shell, and process boundaries when the test is about command construction or branch behavior: `src/backend/lib/ide-helpers.test.ts`, `src/backend/prompts/ratchet-dispatch.test.ts`.
+- Mock service barrels and infrastructure boundaries in unit tests: `@/backend/services/workspace`, `@/backend/lib/shell`, `@/backend/services/crypto.service`, `@/client/lib/trpc`.
+- Use `vi.hoisted` for mock functions referenced by `vi.mock` factories, as in `src/backend/trpc/project.router.test.ts` and `src/backend/services/workspace/service/state/kanban-state.test.ts`.
+- Mock React Router, Sonner toasts, tRPC hooks, and heavy UI primitives in jsdom component tests. See `src/client/routes/reviews.test.tsx` and `src/client/components/kanban/inline-workspace-form.test.tsx`.
+- Use small fake classes for eventful collaborators when behavior matters, such as `FakeTerminalService` and `FakeRunScriptService` in `src/backend/routers/websocket/websocket.integration.test.ts`.
+- Use `vi.importActual` after test DB setup when integration tests need real service modules bound to a fresh module cache. See `src/backend/services/resources.integration.test.ts`.
 
 **What NOT to Mock:**
-- Do not mock pure helpers, reducers, schemas, or parser functions under test; call them directly as in `src/components/chat/chat-reducer.test.ts`, `src/shared/websocket/chat-message.schema.test.ts`, and `src/lib/diff/parse.test.ts`.
-- Do not mock Prisma in integration accessor suites; use `src/backend/testing/integration-db.ts` and import actual service barrels after database setup.
-- Do not mock tRPC middleware when the behavior under test is middleware context enforcement; create a small test router as in `src/backend/trpc/procedures/project-scoped.test.ts`.
-- Do not mock real browser layout in Playwright e2e tests; use the Vite route and screenshot assertions in `e2e/mobile-baseline.spec.ts`.
+- Do not mock pure functions under test; call them directly.
+- Do not mock Prisma in integration tests that verify resource accessors. Use `createIntegrationDatabase` from `src/backend/testing/integration-db.ts`.
+- Do not mock service capsule public exports in domain-export boundary tests such as `src/backend/services/workspace/service/workspace-domain-exports.test.ts` and `src/backend/services/ratchet/service/ratchet-domain-exports.test.ts`.
+- Do not use real external Codex app-server behavior in normal CI paths. Keep it behind `RUN_REAL_CODEX_APP_SERVER_TESTS=1` in manual integration tests.
 
 ## Fixtures and Factories
 
@@ -154,15 +144,14 @@ async function createProjectFixture(overrides: Partial<Prisma.ProjectUncheckedCr
 ```
 
 **Location:**
-- Keep one-off factories inside the test file when they are specific to that suite: `src/backend/services/resources.integration.test.ts`, `src/backend/routers/websocket/chat.handler.test.ts`.
-- Put reusable integration database helpers in `src/backend/testing/integration-db.ts`.
-- Put reusable WebSocket server helpers in `src/backend/testing/websocket-test-utils.ts`.
-- Use `src/test-utils/unsafe-coerce.ts` only for test-only type coercion when constructing partial protocol fixtures.
-- Store Playwright snapshots under the generated `e2e/*.spec.ts-snapshots/` directory.
+- Keep narrow fixtures local to the test file, as in `src/backend/services/resources.integration.test.ts` and `src/backend/routers/websocket/websocket.integration.test.ts`.
+- Put reusable infrastructure fixtures in `src/backend/testing/integration-db.ts` and `src/backend/testing/websocket-test-utils.ts`.
+- Put type-boundary helpers in `src/test-utils/unsafe-coerce.ts`.
+- Use temp directories from `mkdtempSync(join(tmpdir(), ...))` and clean with `rmSync(..., { recursive: true, force: true })`. Examples: `src/backend/trpc/project.router.test.ts`, `src/backend/services/resources.integration.test.ts`.
 
 ## Coverage
 
-**Requirements:** No numeric thresholds are enforced in `vitest.config.ts`. Coverage is configured for backend source only and excludes tests, backend entrypoint, testing helpers, index barrels, types, bridges, and constants.
+**Requirements:** Root Vitest coverage uses V8 and reports `text`, `json`, `json-summary`, and `html`; config is `vitest.config.ts`.
 
 **View Coverage:**
 ```bash
@@ -171,95 +160,82 @@ pnpm test:coverage:backend
 pnpm check:coverage:critical
 ```
 
-**Coverage Scope:**
-- Provider: V8 via `@vitest/coverage-v8`.
-- Reporters: text, JSON, JSON summary, and HTML from `vitest.config.ts`.
-- Backend include: `src/backend/**/*.ts`.
-- Focused stable backend coverage command excludes known unstable integration-style backend tests via `test:coverage:backend:stable` in `package.json`.
+**Scope:**
+- Coverage includes `src/backend/**/*.ts`.
+- Coverage excludes backend tests, `src/backend/index.ts`, `src/backend/testing/**`, service and route barrels, type files, bridge files, and constants. See `vitest.config.ts`.
+- General thresholds are not enabled in `vitest.config.ts`.
+- Critical coverage thresholds are enforced by `scripts/check-critical-coverage.mjs` across WebSocket, resource accessor, run-script, workspace runtime, workspace tRPC, and specific backend files.
 
 ## Test Types
 
 **Unit Tests:**
-- Use mocked dependencies and direct function calls for services, helpers, reducers, schemas, hooks, and routers.
-- Examples: `src/backend/services/ratchet/service/ratchet-pr-state.helpers.test.ts`, `src/lib/formatters.test.ts`, `src/components/chat/chat-reducer.test.ts`.
+- Scope pure helpers, state derivation, reducers, schemas, CLI helpers, frontend cache helpers, and service methods with mocked dependencies.
+- Examples: `src/backend/lib/error-utils.test.ts`, `src/shared/session-runtime.test.ts`, `src/components/chat/chat-reducer.test.ts`, `src/client/lib/snapshot-to-kanban.test.ts`.
+- Prefer direct `expect(...).toEqual(...)`, `toMatchObject`, `arrayContaining`, and explicit rejected error assertions.
 
 **Integration Tests:**
-- Use temporary SQLite databases with real migrations through `src/backend/testing/integration-db.ts`.
-- Import actual service barrels after `createIntegrationDatabase()` clears the cached Prisma module: `src/backend/services/resources.integration.test.ts`.
-- Use real WebSocket client/server flows for router integration where needed: `src/backend/routers/websocket/websocket.integration.test.ts`.
+- Use real temporary SQLite databases for resource accessors and persistence behavior via `src/backend/testing/integration-db.ts`.
+- Use real WebSocket server/client flows through `src/backend/testing/websocket-test-utils.ts`.
+- Keep external runtime integrations opt-in with environment variables. Manual Codex adapter tests live in `src/backend/services/session/service/acp/codex-app-server-adapter/*.manual.integration.test.ts` and `src/backend/services/session/service/acp/acp-runtime-manager.manual.integration.test.ts`.
+- Use `pnpm test:integration` for `src/backend/**/*.integration.test.ts`.
 
 **E2E Tests:**
-- Playwright is used for mobile baseline layout and screenshots: `playwright.mobile.config.ts`, `e2e/mobile-baseline.spec.ts`.
-- The Playwright web server starts Vite with `VITE_ENABLE_MOBILE_BASELINE=1` and visits `/__mobile-baseline`.
-- Screenshot comparisons disable animations and allow a small pixel diff ratio in `playwright.mobile.config.ts`.
+- Use Playwright for the mobile baseline only. Config is `playwright.mobile.config.ts`; spec is `e2e/mobile-baseline.spec.ts`.
+- The mobile baseline starts Vite with `VITE_ENABLE_MOBILE_BASELINE=1`, navigates to `/__mobile-baseline`, validates interactions and overflow, and captures screenshots for iPhone SE, iPhone 14, and Pixel 7 sizes.
 
-**Router Tests:**
-- Build callers with `router.createCaller` and pass a minimal typed context cast as `never` when the test only needs a subset of `AppContext`: `src/backend/trpc/session.router.test.ts`, `src/backend/trpc/procedures/project-scoped.test.ts`.
-- Assert tRPC errors by message or code depending on what the caller sees: `rejects.toThrow('Maximum sessions per workspace')`, `rejects.toMatchObject({ code: 'BAD_REQUEST' })`.
-
-**React DOM Tests:**
-- Add `// @vitest-environment jsdom` at the top of DOM tests.
-- Render with `createRoot` and `flushSync` rather than Testing Library: `src/components/chat/permission-prompt.test.tsx`, `src/client/components/kanban/inline-workspace-form.test.tsx`.
-- Clean up with `root.unmount()`, `container.remove()`, or `document.body.innerHTML = ''` in `afterEach`.
-- Use DOM queries and event dispatches directly: `container.querySelector`, `button.click()`, `textarea.dispatchEvent(new Event('input', { bubbles: true }))`.
+**Storybook:**
+- Storybook is configured in `.storybook/main.ts` and `.storybook/preview.ts`.
+- Stories live under `src/components/**/*.stories.tsx`, `src/client/**/*.stories.tsx`, and `src/frontend/components/**/*.stories.tsx`.
+- Storybook decorators provide `MemoryRouter`, `TRPCProvider`, and `TooltipProvider` in `.storybook/preview.ts`.
 
 ## Common Patterns
 
 **Async Testing:**
 ```typescript
-await expect(workspaceAccessor.findByIds([])).resolves.toEqual([]);
-
-await expect(
-  caller.createSession({ workspaceId: 'w1', workflow: 'user' })
-).rejects.toThrow('Maximum sessions per workspace (2) reached');
+await expect(caller.getById({ id: 'missing' })).rejects.toThrow('Project not found: missing');
+await expect(kanbanStateService.getWorkspaceKanbanState('missing')).resolves.toBeNull();
 ```
 
 **Error Testing:**
 ```typescript
-expect(() =>
-  workspaceAccessor.findByProjectIdWithSessions('project-1', {
-    status: 'READY',
-    excludeStatuses: ['FAILED'],
-  })
-).toThrow('Cannot specify both status and excludeStatuses filters');
+mockGitCommandC.mockResolvedValueOnce({
+  code: 1,
+  stdout: '',
+  stderr: 'failed',
+});
+
+await expect(caller.listBranches({ projectId: 'p1' })).rejects.toThrow(
+  'Failed to list branches: failed'
+);
 ```
 
-**Timer Testing:**
+**React DOM Testing:**
 ```typescript
-vi.useFakeTimers();
-vi.setSystemTime(new Date('2024-01-15T12:00:00Z'));
-await vi.advanceTimersToNextTimerAsync();
-vi.useRealTimers();
-```
-
-**DOM Testing:**
-```typescript
+// @vitest-environment jsdom
 const container = document.createElement('div');
 document.body.appendChild(container);
 const root = createRoot(container);
 
 flushSync(() => {
-  root.render(createElement(PermissionPrompt, { permission, onApprove }));
+  root.render(createElement(ReviewsPage));
 });
 
-expect(container.textContent).toContain('Review Plan');
+expect(container.querySelector('a[href="/projects/alpha/workspaces"]')).not.toBeNull();
 root.unmount();
 ```
 
-**Integration Database Testing:**
-```typescript
-db = await createIntegrationDatabase();
-prisma = db.prisma;
-({ workspaceAccessor } = await vi.importActual<typeof import('@/backend/services/workspace')>(
-  '@/backend/services/workspace'
-));
-```
+**Lifecycle Cleanup:**
+- Root `vitest.config.ts` loads `src/backend/testing/setup.ts`, which calls `vi.clearAllMocks()` before each test and `vi.restoreAllMocks()` after each test.
+- Tests that allocate DOM, files, sockets, servers, or DBs must still clean those resources locally. Examples: `src/client/routes/reviews.test.tsx`, `src/backend/trpc/project.router.test.ts`, `src/backend/routers/websocket/websocket.integration.test.ts`, `src/backend/services/resources.integration.test.ts`.
 
-**Environment Testing:**
-- Save and restore `process.env` around config tests: `src/backend/services/config.service.test.ts`.
-- Call `configService.reload()` after env changes.
-- Use `Reflect.deleteProperty(process.env, 'KEY')` when testing absent optional env vars.
+**Type Coercion in Tests:**
+- Use `unsafeCoerce<T>(value)` from `src/test-utils/unsafe-coerce.ts` for intentionally incomplete test doubles. Keep it in tests and fixtures only.
+- Prefer `as never` only for compact mocks where a full domain object is irrelevant, as seen in `src/backend/services/workspace/service/state/kanban-state.test.ts`.
+
+**Environment in Tests:**
+- Direct `process.env` access is allowed in tests and explicit env/config modules. Production backend modules should route environment access through `src/backend/services/config.service.ts`, `src/backend/lib/env.ts`, and `src/backend/services/env-schemas.ts`.
+- Tests that alter process-level state must reset module caches or restore globals. `src/backend/testing/integration-db.ts` uses `vi.resetModules()` and resets `globalThis.prismaGlobal`.
 
 ---
 
-*Testing analysis: 2026-04-29*
+*Testing analysis: 2026-05-17*
