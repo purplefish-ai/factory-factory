@@ -130,6 +130,7 @@ function TopPanelArea({
   isAutoIteration,
   periodicTaskId,
 }: TopPanelAreaProps) {
+  const utils = trpc.useUtils();
   const showChanges = activeTopTab === 'changes';
   const showFiles = activeTopTab === 'files';
   const showTasks = activeTopTab === 'tasks';
@@ -154,6 +155,30 @@ function TopPanelArea({
           isActive={showChanges}
           onSelect={() => onTopTabChange('changes')}
         />
+        {showChanges && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void utils.workspace.getGitStatus.invalidate({ workspaceId });
+                    void utils.workspace.getDiffVsMain.invalidate({ workspaceId });
+                    void utils.workspace.getUnpushedFiles.invalidate({ workspaceId });
+                    void utils.workspace.getFileDiff.invalidate({ workspaceId });
+                  }}
+                  className="h-6 w-6 flex-shrink-0 flex items-center justify-center rounded-md transition-colors text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  aria-label="Refresh changes"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Refresh changes</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
         <TabButton
           label="Files"
           icon={<Files className="h-3.5 w-3.5" />}
