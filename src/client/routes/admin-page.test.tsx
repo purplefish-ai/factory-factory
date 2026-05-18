@@ -4,6 +4,7 @@ import { createElement, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SELECTED_PROJECT_KEY } from '@/client/lib/project-selection';
 import AdminDashboardPage from './admin-page';
 
 vi.mock('react-router', () => ({
@@ -69,6 +70,7 @@ vi.mock('@/components/project/setup-terminal-modal', () => ({
 
 vi.mock('./admin/index', () => ({
   ApiUsageSection: () => createElement('section', null, 'API Usage'),
+  PeriodicTasksSection: () => createElement('section', null, 'Periodic Tasks'),
   ProcessesSection: () => createElement('section', null, 'Processes'),
   ProcessesSectionSkeleton: () => createElement('section', null, 'Processes Loading'),
   ProjectIssueTrackingCard: () => createElement('section', null, 'Issue Tracking Card'),
@@ -232,7 +234,7 @@ describe('AdminDashboardPage settings tabs', () => {
   });
 
   it('renders workspaces back link for the selected project slug from storage', () => {
-    localStorage.setItem('factoryfactory_selected_project_slug', 'beta');
+    localStorage.setItem(SELECTED_PROJECT_KEY, 'beta');
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);

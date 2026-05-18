@@ -175,17 +175,20 @@ describe('RunScriptService.handleProcessExit', () => {
   it('ignores stale process exits when a newer process is tracked', async () => {
     const service = new RunScriptService() as unknown as ExitHandlerCapable & {
       runningProcesses: Map<string, { pid: number }>;
-      outputListeners: Map<string, Set<(data: string) => void>>;
+      appendOutput: (workspaceId: string, output: string) => void;
+      subscribeToOutput: (workspaceId: string, listener: (data: string) => void) => () => void;
     };
     const activeProcess = { pid: 22_222 };
+    const listener = vi.fn();
     service.runningProcesses.set('ws-1', activeProcess);
-    service.outputListeners.set('ws-1', new Set([(data: string) => data]));
+    service.subscribeToOutput('ws-1', listener);
 
     const staleProcess = { pid: 11_111 };
     await service.handleProcessExit('ws-1', staleProcess, 11_111, 0, null);
+    service.appendOutput('ws-1', 'still subscribed');
 
     expect(service.runningProcesses.get('ws-1')).toBe(activeProcess);
-    expect(service.outputListeners.has('ws-1')).toBe(true);
+    expect(listener).toHaveBeenCalledWith('still subscribed');
     expect(mockMarkCompleted).not.toHaveBeenCalled();
     expect(mockMarkFailed).not.toHaveBeenCalled();
     expect(mockStopTunnel).not.toHaveBeenCalled();
@@ -1045,16 +1048,23 @@ describe('RunScriptService.subscribeToOutput', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('cleans up listener set when last listener unsubscribes', () => {
+  it('allows resubscribe after the last listener unsubscribes', () => {
     const service = new RunScriptService();
-    const outputListeners = (service as unknown as { outputListeners: Map<string, Set<unknown>> })
-      .outputListeners;
+    const appendOutput = (
+      service as unknown as { appendOutput: (id: string, data: string) => void }
+    ).appendOutput.bind(service);
+    const firstListener = vi.fn();
+    const secondListener = vi.fn();
 
-    const unsub = service.subscribeToOutput('ws-1', vi.fn());
-    expect(outputListeners.has('ws-1')).toBe(true);
+    const unsub = service.subscribeToOutput('ws-1', firstListener);
+    appendOutput('ws-1', 'first');
 
     unsub();
-    expect(outputListeners.has('ws-1')).toBe(false);
+    service.subscribeToOutput('ws-1', secondListener);
+    appendOutput('ws-1', 'second');
+
+    expect(firstListener).toHaveBeenCalledTimes(1);
+    expect(secondListener).toHaveBeenCalledWith('second');
   });
 });
 
@@ -1205,36 +1215,47 @@ describe('RunScriptService.getRunScriptStatus', () => {
 
 describe('RunScriptService.evictWorkspaceBuffers', () => {
   type BufferEvictionCapable = {
-    outputBuffers: Map<string, string>;
-    outputListeners: Map<string, Set<(data: string) => void>>;
-    postRunOutputBuffers: Map<string, string>;
-    postRunOutputListeners: Map<string, Set<(data: string) => void>>;
+    appendOutput: (workspaceId: string, output: string) => void;
+    appendPostRunOutput: (workspaceId: string, output: string) => void;
+    subscribeToOutput: (workspaceId: string, listener: (data: string) => void) => () => void;
+    subscribeToPostRunOutput: (workspaceId: string, listener: (data: string) => void) => () => void;
+    getOutputBuffer: (workspaceId: string) => string;
+    getPostRunOutputBuffer: (workspaceId: string) => string;
     evictWorkspaceBuffers: (workspaceId: string) => void;
   };
 
   it('evicts output and listener buffers for an archived workspace only', () => {
     const service = new RunScriptService() as unknown as BufferEvictionCapable;
-    service.outputBuffers.set('ws-1', 'main logs');
-    service.postRunOutputBuffers.set('ws-1', 'postRun logs');
-    service.outputListeners.set('ws-1', new Set([vi.fn()]));
-    service.postRunOutputListeners.set('ws-1', new Set([vi.fn()]));
+    const workspaceOneOutputListener = vi.fn();
+    const workspaceOnePostRunListener = vi.fn();
+    const workspaceTwoOutputListener = vi.fn();
+    const workspaceTwoPostRunListener = vi.fn();
 
-    service.outputBuffers.set('ws-2', 'keep');
-    service.postRunOutputBuffers.set('ws-2', 'keep');
-    service.outputListeners.set('ws-2', new Set([vi.fn()]));
-    service.postRunOutputListeners.set('ws-2', new Set([vi.fn()]));
+    service.subscribeToOutput('ws-1', workspaceOneOutputListener);
+    service.subscribeToPostRunOutput('ws-1', workspaceOnePostRunListener);
+    service.subscribeToOutput('ws-2', workspaceTwoOutputListener);
+    service.subscribeToPostRunOutput('ws-2', workspaceTwoPostRunListener);
+    service.appendOutput('ws-1', 'main logs');
+    service.appendPostRunOutput('ws-1', 'postRun logs');
+    service.appendOutput('ws-2', 'keep');
+    service.appendPostRunOutput('ws-2', 'postRun keep');
 
     service.evictWorkspaceBuffers('ws-1');
 
-    expect(service.outputBuffers.has('ws-1')).toBe(false);
-    expect(service.postRunOutputBuffers.has('ws-1')).toBe(false);
-    expect(service.outputListeners.has('ws-1')).toBe(false);
-    expect(service.postRunOutputListeners.has('ws-1')).toBe(false);
+    expect(service.getOutputBuffer('ws-1')).toBe('');
+    expect(service.getPostRunOutputBuffer('ws-1')).toBe('');
+    expect(service.getOutputBuffer('ws-2')).toBe('keep');
+    expect(service.getPostRunOutputBuffer('ws-2')).toBe('postRun keep');
 
-    expect(service.outputBuffers.has('ws-2')).toBe(true);
-    expect(service.postRunOutputBuffers.has('ws-2')).toBe(true);
-    expect(service.outputListeners.has('ws-2')).toBe(true);
-    expect(service.postRunOutputListeners.has('ws-2')).toBe(true);
+    service.appendOutput('ws-1', 'after eviction');
+    service.appendPostRunOutput('ws-1', 'postRun after eviction');
+    service.appendOutput('ws-2', ' still subscribed');
+    service.appendPostRunOutput('ws-2', ' still subscribed');
+
+    expect(workspaceOneOutputListener).toHaveBeenCalledTimes(1);
+    expect(workspaceOnePostRunListener).toHaveBeenCalledTimes(1);
+    expect(workspaceTwoOutputListener).toHaveBeenLastCalledWith(' still subscribed');
+    expect(workspaceTwoPostRunListener).toHaveBeenLastCalledWith(' still subscribed');
   });
 });
 
