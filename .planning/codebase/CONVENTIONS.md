@@ -59,7 +59,7 @@
 
 **Path Aliases:**
 - Use `@/*` for `src/*`, configured in `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`.
-- Use `@prisma-gen/*` for `prisma/generated/*`, configured in `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`.
+- Use `@prisma-gen/*` for `prisma/generated/*`, configured in `tsconfig.json`, `vite.config.ts`, and `vitest.config.ts`. Only the five public entrypoints are valid: `@prisma-gen/browser`, `@prisma-gen/client`, `@prisma-gen/commonInputTypes`, `@prisma-gen/enums`, and `@prisma-gen/models`; `scripts/check-service-registry.ts` rejects other sub-paths including `@prisma-gen/internal`.
 - Use `@factory-factory/core-types/*` for `packages/core/src/types/*`, configured in `tsconfig.json` and `vitest.config.ts`.
 
 **Import Boundaries:**
