@@ -53,7 +53,7 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 ## Commit & Pull Request Guidelines
 - Commit messages are short, imperative, and descriptive (e.g., “Fix session tab close requiring double-click”), often with issue/PR references like `(#123)`.
 - Keep the first line under 72 characters and reference issues when relevant.
-- PRs should include: a clear description, any required tests run (`pnpm test`, `pnpm typecheck`, `pnpm check:fix`), and updated docs when behavior changes.
+- PRs should include: a clear description, any required tests run (`pnpm test`, `pnpm typecheck`, `pnpm check`, `pnpm check:fix`), and updated docs when behavior changes.
 
 ## Git & GitHub CLI
 - Authenticate once: `gh auth login`, verify with `gh auth status`.
