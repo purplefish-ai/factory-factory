@@ -131,7 +131,7 @@ prisma/               # Database schema and migrations
 
 - Add or update tests and run `pnpm test` (use `pnpm test:watch` while developing)
 - Add or update Storybook stories when UI changes are introduced (`pnpm storybook`)
-- Run `pnpm typecheck` and `pnpm check:fix`
+- Run `pnpm check`, `pnpm typecheck`, and `pnpm check:fix`
 - Ensure schemas use Zod and avoid raw typecasts
 - Update docs when behavior or commands change
 

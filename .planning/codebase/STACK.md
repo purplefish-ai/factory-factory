@@ -109,7 +109,7 @@
 
 **Development:**
 - Install with pnpm and run app through `pnpm dev`, `pnpm dev:backend`, `pnpm dev:frontend`, or `pnpm dev:electron`
-- Run validation with `pnpm test`, `pnpm typecheck`, `pnpm check`, `pnpm check:fix`, and `pnpm deps:check`
+- Run validation with `pnpm test`, `pnpm typecheck`, `pnpm check`, and `pnpm check:fix`
 - Generate Prisma client with `pnpm db:generate`; run migrations with `pnpm db:migrate` or CLI `ff db:migrate`
 - Git must be available for project/worktree operations in `src/backend/services/git-ops.service.ts` and `src/backend/clients/git.client.ts`
 - GitHub CLI `gh` must be installed and authenticated for GitHub issue/PR workflows in `src/backend/services/github/service/github-cli.service.ts`

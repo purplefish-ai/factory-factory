@@ -41,7 +41,7 @@
 - Use numeric separators for large numeric constants: `10_000` in `src/client/routes/projects/workspaces/use-workspace-detail.ts`, `30_000` in `src/backend/services/env-schemas.ts`.
 
 **Linting:**
-- Run `pnpm check` for Biome, environment-access checks, and ownership checks; run `pnpm check:fix` for formatting and fixable lints. Scripts are declared in `package.json`.
+- Run `pnpm check` for Biome, environment-access checks, ownership checks, dependency-boundary checks, and Codex schema drift; run `pnpm check:fix` for formatting and fixable lints. Scripts are declared in `package.json`.
 - Keep TypeScript strict and no-implicit-any compliant; `tsconfig.json` enables `strict`, `noImplicitAny`, `strictNullChecks`, `noUncheckedIndexedAccess`, and `noImplicitReturns`.
 - Do not use `any`; Biome enforces `noExplicitAny` in `biome.json`. Use `unknown`, Zod schemas, domain types, or the test-only `unsafeCoerce` helper in `src/test-utils/unsafe-coerce.ts` when a test intentionally crosses a type boundary.
 - Do not use non-null assertions in source. Biome disables `noNonNullAssertion` only for `**/*.test.ts`, `**/*.test.tsx`, and `**/*.stories.tsx` in `biome.json`.
