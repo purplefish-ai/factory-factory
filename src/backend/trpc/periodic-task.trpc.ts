@@ -23,6 +23,12 @@ export const periodicTaskRouter = router({
         name: z.string().min(1),
         prompt: z.string().min(1),
         cadence: z.enum(['EVERY_MINUTE', 'EVERY_FIVE_MINUTES', 'DAILY', 'WEEKLY', 'MONTHLY']),
+        scheduledTime: z
+          .string()
+          .regex(/^\d{2}:\d{2}$/)
+          .nullable()
+          .optional(),
+        timezone: z.string().nullable().optional(),
       })
     )
     .mutation(({ input }) => {
@@ -38,6 +44,12 @@ export const periodicTaskRouter = router({
         cadence: z
           .enum(['EVERY_MINUTE', 'EVERY_FIVE_MINUTES', 'DAILY', 'WEEKLY', 'MONTHLY'])
           .optional(),
+        scheduledTime: z
+          .string()
+          .regex(/^\d{2}:\d{2}$/)
+          .nullable()
+          .optional(),
+        timezone: z.string().nullable().optional(),
       })
     )
     .mutation(({ input }) => {

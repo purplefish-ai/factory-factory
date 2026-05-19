@@ -374,9 +374,11 @@ model PeriodicTask {
   projectId   String
   project     Project              @relation(fields: [projectId], references: [id])
 
-  name        String
-  prompt      String
-  cadence     PeriodicTaskCadence
+  name          String
+  prompt        String
+  cadence       PeriodicTaskCadence
+  scheduledTime String?
+  timezone      String?
 
   isEnabled   Boolean              @default(true)
   nextRunAt   DateTime

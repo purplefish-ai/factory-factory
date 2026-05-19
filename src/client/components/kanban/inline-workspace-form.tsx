@@ -160,6 +160,8 @@ function ModeConfigPanel({
   mode,
   cadence,
   setCadence,
+  scheduledTime,
+  setScheduledTime,
   isCreating,
   testCommand,
   setTestCommand,
@@ -177,6 +179,8 @@ function ModeConfigPanel({
   mode: 'STANDARD' | 'AUTO_ITERATION' | 'PERIODIC_TASK';
   cadence: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
   setCadence: (v: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
+  scheduledTime: string;
+  setScheduledTime: (v: string) => void;
   isCreating: boolean;
   testCommand: string;
   setTestCommand: (v: string) => void;
@@ -193,7 +197,13 @@ function ModeConfigPanel({
 }) {
   if (mode === 'PERIODIC_TASK') {
     return (
-      <PeriodicTaskConfigPanel cadence={cadence} setCadence={setCadence} isCreating={isCreating} />
+      <PeriodicTaskConfigPanel
+        cadence={cadence}
+        setCadence={setCadence}
+        scheduledTime={scheduledTime}
+        setScheduledTime={setScheduledTime}
+        isCreating={isCreating}
+      />
     );
   }
   if (mode === 'AUTO_ITERATION') {
@@ -288,12 +298,17 @@ function ModeConfigPanel({
 function PeriodicTaskConfigPanel({
   cadence,
   setCadence,
+  scheduledTime,
+  setScheduledTime,
   isCreating,
 }: {
   cadence: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY';
   setCadence: (v: 'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY') => void;
+  scheduledTime: string;
+  setScheduledTime: (v: string) => void;
   isCreating: boolean;
 }) {
+  const isLongCadence = cadence === 'DAILY' || cadence === 'WEEKLY' || cadence === 'MONTHLY';
   return (
     <div className="space-y-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-3">
       <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
@@ -321,8 +336,21 @@ function PeriodicTaskConfigPanel({
           </SelectContent>
         </Select>
       </div>
+      {isLongCadence && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Run time (optional)</Label>
+          <Input
+            type="time"
+            className="h-7 text-xs"
+            value={scheduledTime}
+            onChange={(e) => setScheduledTime(e.target.value)}
+            disabled={isCreating}
+          />
+        </div>
+      )}
       <p className="text-[10px] text-muted-foreground">
         Creates a new workspace on this schedule. The first run starts immediately.
+        {isLongCadence && scheduledTime ? ' Subsequent runs will use the time above.' : ''}
       </p>
     </div>
   );
@@ -355,6 +383,7 @@ export function InlineWorkspaceForm({
   const [cadence, setCadence] = useState<
     'EVERY_MINUTE' | 'EVERY_FIVE_MINUTES' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
   >('DAILY');
+  const [scheduledTime, setScheduledTime] = useState('');
   const [testCommand, setTestCommand] = useState('');
   const [targetDescription, setTargetDescription] = useState('');
   const [maxIterations, setMaxIterations] = useState(25);
@@ -496,7 +525,16 @@ export function InlineWorkspaceForm({
       return;
     }
     const name = generateWorkspaceNameFromPrompt(trimmedPrompt, availableWorkspaceNames);
-    createPeriodicTaskMutation.mutate({ projectId, name, prompt: trimmedPrompt, cadence });
+    const isLongCadence = cadence === 'DAILY' || cadence === 'WEEKLY' || cadence === 'MONTHLY';
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    createPeriodicTaskMutation.mutate({
+      projectId,
+      name,
+      prompt: trimmedPrompt,
+      cadence,
+      scheduledTime: isLongCadence && scheduledTime ? scheduledTime : null,
+      timezone: isLongCadence && scheduledTime ? timezone : null,
+    });
   };
 
   const launchWorkspace = (trimmedPrompt: string, launchMode: 'STANDARD' | 'AUTO_ITERATION') => {
@@ -601,6 +639,8 @@ export function InlineWorkspaceForm({
           mode={mode}
           cadence={cadence}
           setCadence={setCadence}
+          scheduledTime={scheduledTime}
+          setScheduledTime={setScheduledTime}
           isCreating={isCreating}
           testCommand={testCommand}
           setTestCommand={setTestCommand}

@@ -201,6 +201,24 @@ function ExecutionStatusBadge({ status }: { status: string }) {
   );
 }
 
+const LONG_CADENCES = new Set(['DAILY', 'WEEKLY', 'MONTHLY']);
+
+function formatScheduledTime(scheduledTime: string, timezone: string): string {
+  const parts = scheduledTime.split(':').map(Number);
+  const hours = parts[0] ?? 0;
+  const minutes = parts[1] ?? 0;
+  const probe = new Date();
+  probe.setHours(hours, minutes, 0, 0);
+  const timePart = probe.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const tzShort = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    timeZoneName: 'short',
+  })
+    .formatToParts(probe)
+    .find((p) => p.type === 'timeZoneName')?.value;
+  return tzShort ? `${timePart} (${tzShort})` : timePart;
+}
+
 function PeriodicTaskRow({
   task,
   onToggle,
@@ -216,6 +234,8 @@ function PeriodicTaskRow({
     isEnabled: boolean;
     nextRunAt: Date;
     lastRunAt: Date | null;
+    scheduledTime: string | null;
+    timezone: string | null;
     executions: Array<{
       id: string;
       status: string;
@@ -226,20 +246,32 @@ function PeriodicTaskRow({
   };
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
-  onUpdate: (data: { name?: string; prompt?: string; cadence?: PeriodicTaskCadence }) => void;
+  onUpdate: (data: {
+    name?: string;
+    prompt?: string;
+    cadence?: PeriodicTaskCadence;
+    scheduledTime?: string | null;
+    timezone?: string | null;
+  }) => void;
   isUpdating: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(task.name);
   const [editPrompt, setEditPrompt] = useState(task.prompt);
   const [editCadence, setEditCadence] = useState(task.cadence);
+  const [editScheduledTime, setEditScheduledTime] = useState(task.scheduledTime ?? '');
   const [showExecutions, setShowExecutions] = useState(false);
 
   const handleSave = () => {
+    const hasSchedule = LONG_CADENCES.has(editCadence) && !!editScheduledTime;
+    const newScheduledTime = hasSchedule ? editScheduledTime : null;
+    const newTimezone = hasSchedule ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
     onUpdate({
       name: editName !== task.name ? editName : undefined,
       prompt: editPrompt !== task.prompt ? editPrompt : undefined,
       cadence: editCadence !== task.cadence ? (editCadence as PeriodicTaskCadence) : undefined,
+      scheduledTime: newScheduledTime !== task.scheduledTime ? newScheduledTime : undefined,
+      timezone: newTimezone !== task.timezone ? newTimezone : undefined,
     });
     setEditing(false);
   };
@@ -258,6 +290,7 @@ function PeriodicTaskRow({
     setEditName(task.name);
     setEditPrompt(task.prompt);
     setEditCadence(task.cadence);
+    setEditScheduledTime(task.scheduledTime ?? '');
     setEditing(!editing);
   };
 
@@ -298,6 +331,9 @@ function PeriodicTaskRow({
         <span title={new Date(task.nextRunAt).toLocaleString()}>
           Next run: {formatRelativeTime(new Date(task.nextRunAt))}
         </span>
+        {LONG_CADENCES.has(task.cadence) && task.scheduledTime && task.timezone && (
+          <span>at {formatScheduledTime(task.scheduledTime, task.timezone)}</span>
+        )}
         {latestExecution && <ExecutionStatusBadge status={latestExecution.status} />}
       </div>
 
@@ -334,6 +370,17 @@ function PeriodicTaskRow({
               </SelectContent>
             </Select>
           </div>
+          {LONG_CADENCES.has(editCadence) && (
+            <div className="space-y-1">
+              <Label className="text-xs">Run time (optional)</Label>
+              <Input
+                type="time"
+                className="h-7 text-xs"
+                value={editScheduledTime}
+                onChange={(e) => setEditScheduledTime(e.target.value)}
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button
               variant="ghost"
