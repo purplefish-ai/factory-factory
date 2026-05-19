@@ -56,11 +56,12 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   const probeMinute = Number(localTimeParts.minute);
 
   let offsetMinutes = (hours - probeHour) * 60 + (minutes - probeMinute);
-  // Normalize: timezone offsets are always within [-12h, +14h]
-  if (offsetMinutes < -12 * 60) {
+  // offsetMinutes is the negation of the timezone offset, so valid range is
+  // [-14h, +12h] (i.e. UTC+14 → −840 min, UTC−12 → +720 min).
+  if (offsetMinutes < -14 * 60) {
     offsetMinutes += 24 * 60;
   }
-  if (offsetMinutes > 14 * 60) {
+  if (offsetMinutes > 12 * 60) {
     offsetMinutes -= 24 * 60;
   }
   const offsetMs = offsetMinutes * 60_000;
