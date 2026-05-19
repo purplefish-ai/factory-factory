@@ -122,7 +122,9 @@ export class PeriodicTaskService {
           task.projectId,
           task.name,
           task.prompt,
-          task.cadence as PeriodicTaskCadence
+          task.cadence as PeriodicTaskCadence,
+          task.scheduledTime,
+          task.timezone
         );
       } catch (error) {
         this.logger.error('Failed to dispatch periodic task', {
@@ -138,7 +140,9 @@ export class PeriodicTaskService {
     projectId: string,
     name: string,
     prompt: string,
-    cadence: PeriodicTaskCadence
+    cadence: PeriodicTaskCadence,
+    scheduledTime: string | null,
+    timezone: string | null
   ): Promise<void> {
     if (!this.workspaceBridge) {
       this.logger.warn('Periodic task service not configured — skipping dispatch');
@@ -149,7 +153,7 @@ export class PeriodicTaskService {
 
     // Advance nextRunAt first so a crash after this point won't re-dispatch
     // the same due window on the next poll (at worst we miss one run).
-    await periodicTaskAccessor.markDispatched(taskId, cadence);
+    await periodicTaskAccessor.markDispatched(taskId, cadence, scheduledTime, timezone);
 
     const result = await this.workspaceBridge.createWorkspaceForTask({
       projectId,
