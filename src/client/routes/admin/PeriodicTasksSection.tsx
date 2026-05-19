@@ -203,6 +203,17 @@ function ExecutionStatusBadge({ status }: { status: string }) {
 
 const LONG_CADENCES = new Set(['DAILY', 'WEEKLY', 'MONTHLY']);
 
+function resolveTimezone(
+  scheduledTime: string,
+  prevScheduledTime: string | null,
+  prevTimezone: string | null
+): string {
+  if (scheduledTime !== prevScheduledTime || !prevTimezone) {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+  return prevTimezone;
+}
+
 function formatScheduledTime(scheduledTime: string, timezone: string): string {
   const parts = scheduledTime.split(':').map(Number);
   const hours = parts[0] ?? 0;
@@ -265,7 +276,9 @@ function PeriodicTaskRow({
   const handleSave = () => {
     const hasSchedule = LONG_CADENCES.has(editCadence) && !!editScheduledTime;
     const newScheduledTime = hasSchedule ? editScheduledTime : null;
-    const newTimezone = hasSchedule ? Intl.DateTimeFormat().resolvedOptions().timeZone : null;
+    const newTimezone = hasSchedule
+      ? resolveTimezone(editScheduledTime, task.scheduledTime, task.timezone)
+      : null;
     onUpdate({
       name: editName !== task.name ? editName : undefined,
       prompt: editPrompt !== task.prompt ? editPrompt : undefined,

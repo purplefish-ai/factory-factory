@@ -3,6 +3,28 @@ import { z } from 'zod';
 import { periodicTaskAccessor } from '@/backend/services/periodic-task';
 import { publicProcedure, router } from './trpc';
 
+const scheduledTimeSchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Must be a valid HH:MM time (00:00–23:59)')
+  .nullable()
+  .optional();
+
+const timezoneSchema = z
+  .string()
+  .refine(
+    (tz) => {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Must be a valid IANA timezone (e.g. America/New_York)' }
+  )
+  .nullable()
+  .optional();
+
 export const periodicTaskRouter = router({
   list: publicProcedure.input(z.object({ projectId: z.string() })).query(({ input }) => {
     return periodicTaskAccessor.listByProject(input.projectId);
@@ -23,12 +45,8 @@ export const periodicTaskRouter = router({
         name: z.string().min(1),
         prompt: z.string().min(1),
         cadence: z.enum(['EVERY_MINUTE', 'EVERY_FIVE_MINUTES', 'DAILY', 'WEEKLY', 'MONTHLY']),
-        scheduledTime: z
-          .string()
-          .regex(/^\d{2}:\d{2}$/)
-          .nullable()
-          .optional(),
-        timezone: z.string().nullable().optional(),
+        scheduledTime: scheduledTimeSchema,
+        timezone: timezoneSchema,
       })
     )
     .mutation(({ input }) => {
@@ -44,12 +62,8 @@ export const periodicTaskRouter = router({
         cadence: z
           .enum(['EVERY_MINUTE', 'EVERY_FIVE_MINUTES', 'DAILY', 'WEEKLY', 'MONTHLY'])
           .optional(),
-        scheduledTime: z
-          .string()
-          .regex(/^\d{2}:\d{2}$/)
-          .nullable()
-          .optional(),
-        timezone: z.string().nullable().optional(),
+        scheduledTime: scheduledTimeSchema,
+        timezone: timezoneSchema,
       })
     )
     .mutation(({ input }) => {
