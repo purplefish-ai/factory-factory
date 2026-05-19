@@ -55,7 +55,15 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   const probeHour = Number(localTimeParts.hour) % 24; // guard against "24" at midnight
   const probeMinute = Number(localTimeParts.minute);
 
-  const offsetMs = ((hours - probeHour) * 60 + (minutes - probeMinute)) * 60_000;
+  let offsetMinutes = (hours - probeHour) * 60 + (minutes - probeMinute);
+  // Normalize: timezone offsets are always within [-12h, +14h]
+  if (offsetMinutes < -12 * 60) {
+    offsetMinutes += 24 * 60;
+  }
+  if (offsetMinutes > 14 * 60) {
+    offsetMinutes -= 24 * 60;
+  }
+  const offsetMs = offsetMinutes * 60_000;
 
   return new Date(utcProbe.getTime() + offsetMs);
 }
