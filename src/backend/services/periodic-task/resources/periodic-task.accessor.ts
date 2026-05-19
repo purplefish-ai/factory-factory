@@ -66,7 +66,34 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   }
   const offsetMs = offsetMinutes * 60_000;
 
-  return new Date(utcProbe.getTime() + offsetMs);
+  const candidate = new Date(utcProbe.getTime() + offsetMs);
+
+  // Validate the candidate's calendar day in the target timezone matches the
+  // intended day. Ambiguous offset boundaries (e.g. UTC-10 at morning hours
+  // where offsetMinutes lands exactly on -840) can cause an off-by-one-day
+  // error; correct by ±24h if needed.
+  const candidateParts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(candidate)
+      .map(({ type, value }) => [type, value])
+  );
+
+  const intendedDate = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+  const candidateDate = `${candidateParts.year}-${candidateParts.month}-${candidateParts.day}`;
+
+  if (candidateDate < intendedDate) {
+    return new Date(candidate.getTime() + 24 * 60 * 60_000);
+  }
+  if (candidateDate > intendedDate) {
+    return new Date(candidate.getTime() - 24 * 60 * 60_000);
+  }
+
+  return candidate;
 }
 
 function computeNextRunAt(

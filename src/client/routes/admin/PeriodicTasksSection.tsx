@@ -218,14 +218,19 @@ function formatScheduledTime(scheduledTime: string, timezone: string): string {
   const parts = scheduledTime.split(':').map(Number);
   const hours = parts[0] ?? 0;
   const minutes = parts[1] ?? 0;
-  const probe = new Date();
-  probe.setHours(hours, minutes, 0, 0);
-  const timePart = probe.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // Use UTC so the displayed clock time matches the stored scheduledTime
+  // regardless of the browser's local timezone.
+  const displayProbe = new Date(Date.UTC(2000, 0, 1, hours, minutes, 0, 0));
+  const timePart = displayProbe.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  });
   const tzShort = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     timeZoneName: 'short',
   })
-    .formatToParts(probe)
+    .formatToParts(displayProbe)
     .find((p) => p.type === 'timeZoneName')?.value;
   return tzShort ? `${timePart} (${tzShort})` : timePart;
 }
