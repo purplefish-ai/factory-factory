@@ -8,6 +8,12 @@ import type {
   IterationPhase,
   TestCommandResult,
 } from './auto-iteration.types';
+import {
+  createFailedResumeRunningLoop,
+  createInitialRunningLoop,
+  getPromptTimeoutMs,
+  type RunningLoop,
+} from './auto-iteration-loop-state';
 import type {
   AutoIterationLogbookBridge,
   AutoIterationSessionBridge,
@@ -37,32 +43,8 @@ import { runTestCommand, truncateTestOutput } from './test-runner.service';
 
 type Logger = ReturnType<typeof createLogger>;
 
-/** Default prompt timeout: 5 minutes. A single focused code change should not take longer. */
-const DEFAULT_PROMPT_TIMEOUT_SECONDS = 300;
-
 /** Stop the loop after this many consecutive prompt timeouts — something is fundamentally wrong. */
 const MAX_CONSECUTIVE_TIMEOUT_RETRIES = 3;
-
-/** Get prompt timeout in milliseconds from config, or the default. */
-function getPromptTimeoutMs(config: AutoIterationConfig): number | undefined {
-  const seconds = config.promptTimeoutSeconds ?? DEFAULT_PROMPT_TIMEOUT_SECONDS;
-  return seconds > 0 ? seconds * 1000 : undefined;
-}
-
-interface RunningLoop {
-  workspaceId: string;
-  sessionId: string;
-  config: AutoIterationConfig;
-  progress: AutoIterationProgress;
-  pauseRequested: boolean;
-  stopRequested: boolean;
-  /** Set when the session died unexpectedly, so the loop finalizes as FAILED, not STOPPED. */
-  failedByDeath: boolean;
-  /** Tracks the active loop promise to prevent concurrent loops on resume. */
-  loopPromise: Promise<void> | null;
-  /** Number of consecutive prompt timeouts. Reset on any successful iteration. */
-  consecutiveTimeoutCount: number;
-}
 
 /**
  * Core auto-iteration loop orchestrator.
@@ -114,30 +96,7 @@ export class AutoIterationService {
     if (this.loops.has(workspaceId)) {
       throw new Error(`Auto-iteration already running for workspace ${workspaceId}`);
     }
-    const placeholder: RunningLoop = {
-      workspaceId,
-      sessionId: '',
-      config,
-      progress: {
-        currentIteration: 0,
-        baselineMetricSummary: '',
-        currentMetricSummary: '',
-        acceptedCount: 0,
-        rejectedRegressionCount: 0,
-        rejectedCritiqueCount: 0,
-        crashedCount: 0,
-        sessionRecycleCount: 0,
-        startedAt: new Date().toISOString(),
-        lastIterationAt: null,
-        currentPhase: 'baseline',
-        lastTestOutput: null,
-      },
-      pauseRequested: false,
-      stopRequested: false,
-      failedByDeath: false,
-      loopPromise: null,
-      consecutiveTimeoutCount: 0,
-    };
+    const placeholder = createInitialRunningLoop(workspaceId, config);
     this.loops.set(workspaceId, placeholder);
 
     try {
@@ -301,17 +260,7 @@ export class AutoIterationService {
     if (this.loops.has(workspaceId)) {
       throw new Error(`Auto-iteration already running for workspace ${workspaceId}`);
     }
-    const placeholder: RunningLoop = {
-      workspaceId,
-      sessionId: '',
-      config,
-      progress: { ...progress, currentPhase: 'idle' },
-      pauseRequested: false,
-      stopRequested: false,
-      failedByDeath: false,
-      loopPromise: null,
-      consecutiveTimeoutCount: 0,
-    };
+    const placeholder = createFailedResumeRunningLoop(workspaceId, config, progress);
     this.loops.set(workspaceId, placeholder);
 
     try {
