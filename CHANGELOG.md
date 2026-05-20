@@ -5,6 +5,32 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.18] - 2026-05-20
+
+### Added
+
+- Add time-of-day scheduling for periodic tasks (#1597)
+
+### Changed
+
+- Persist CLI setup banner dismissal (#1590)
+- Guard Prisma generated imports (#1589)
+- Add missing guardrails to standard checks (#1588)
+- Validate auto-iteration JSON at runtime boundaries (#1593)
+- Split large orchestration and runtime modules (#1592)
+
+### Fixed
+
+- Fix ACP busy-turn retry loop after sleep (#1587)
+- Fix plan approval scrolling (#1591)
+
+### Documentation
+
+- Map existing codebase (#1586)
+- Fix stale pnpm check references after guardrail consolidation (#1596)
+- Update stale large-module file reference in CONCERNS.md (#1595)
+- Document @prisma-gen/* public entrypoint restriction in CONVENTIONS (#1594)
+
 ## [0.3.17] - 2026-05-14
 
 ### Changed
