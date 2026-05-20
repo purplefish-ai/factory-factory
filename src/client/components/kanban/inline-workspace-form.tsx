@@ -493,13 +493,18 @@ export function InlineWorkspaceForm({
   });
 
   const isCreating = createWorkspaceMutation.isPending || createPeriodicTaskMutation.isPending;
+  const supportsWorkspaceOptions = mode !== 'PERIODIC_TASK';
 
   const pasteDropHandler = usePasteDropHandler({
     setAttachments,
-    disabled: isCreating,
+    disabled: isCreating || !supportsWorkspaceOptions,
   });
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!supportsWorkspaceOptions) {
+      event.target.value = '';
+      return;
+    }
     const result = await processFileInput(event);
     const newFiles = result?.newAttachments ?? [];
     if (newFiles.length > 0) {
@@ -627,7 +632,7 @@ export function InlineWorkspaceForm({
             disabled={isCreating}
           />
         </div>
-        {attachments.length > 0 ? (
+        {supportsWorkspaceOptions && attachments.length > 0 ? (
           <AttachmentPreview
             attachments={attachments}
             onRemove={(id) =>
@@ -657,61 +662,65 @@ export function InlineWorkspaceForm({
         />
         <div className="space-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5">
-              <RatchetToggleButton
-                enabled={ratchetEnabled}
-                state="IDLE"
-                className="h-5 w-5"
-                onToggle={setRatchetEnabled}
-                disabled={isLoadingSettings || isCreating}
-              />
-            </div>
-            <Select
-              value={provider}
-              onValueChange={(v) => setProvider(v as 'CLAUDE' | 'CODEX')}
-              disabled={isLoadingSettings || isCreating}
-            >
-              <SelectTrigger className="h-7 w-24 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="CLAUDE">Claude</SelectItem>
-                <SelectItem value="CODEX">Codex</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={startupModePreset}
-              onValueChange={(v) => setStartupModePreset(v as 'non_interactive' | 'plan')}
-              disabled={isCreating}
-            >
-              <SelectTrigger className="h-7 w-24 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="non_interactive">Default</SelectItem>
-                <SelectItem value="plan">Plan</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 shrink-0 px-0"
-              aria-label="Attach files"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isCreating}
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ATTACHMENT_ACCEPT_TYPES}
-              onChange={handleFileSelect}
-              className="hidden"
-              aria-label="Attach files"
-            />
+            {supportsWorkspaceOptions ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <RatchetToggleButton
+                    enabled={ratchetEnabled}
+                    state="IDLE"
+                    className="h-5 w-5"
+                    onToggle={setRatchetEnabled}
+                    disabled={isLoadingSettings || isCreating}
+                  />
+                </div>
+                <Select
+                  value={provider}
+                  onValueChange={(v) => setProvider(v as 'CLAUDE' | 'CODEX')}
+                  disabled={isLoadingSettings || isCreating}
+                >
+                  <SelectTrigger className="h-7 w-24 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CLAUDE">Claude</SelectItem>
+                    <SelectItem value="CODEX">Codex</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={startupModePreset}
+                  onValueChange={(v) => setStartupModePreset(v as 'non_interactive' | 'plan')}
+                  disabled={isCreating}
+                >
+                  <SelectTrigger className="h-7 w-24 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="non_interactive">Default</SelectItem>
+                    <SelectItem value="plan">Plan</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 shrink-0 px-0"
+                  aria-label="Attach files"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isCreating}
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ATTACHMENT_ACCEPT_TYPES}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  aria-label="Attach files"
+                />
+              </>
+            ) : null}
           </div>
           <div className="flex justify-end gap-2">
             <Button
