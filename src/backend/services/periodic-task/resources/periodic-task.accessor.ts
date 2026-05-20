@@ -5,11 +5,14 @@ import type { PeriodicTaskCadence, PeriodicTaskExecutionStatus } from '@/shared/
 // ─── Cadence helpers ────────────────────────────────────────────────────────
 
 const LONG_CADENCES = new Set<PeriodicTaskCadence>(['DAILY', 'WEEKLY', 'MONTHLY']);
+const MIN_TIMEZONE_OFFSET_MINUTES = -14 * 60;
+const MAX_TIMEZONE_OFFSET_MINUTES = 12 * 60;
 
-function getTimeZoneDateParts(
-  date: Date,
-  timezone: string
-): { year: number; month: number; day: number } {
+type TimeZoneDateParts = { year: number; month: number; day: number };
+type TimeZoneDateTimeParts = TimeZoneDateParts & { hour: number; minute: number };
+type ScheduledTimeParts = { hours: number; minutes: number };
+
+function getTimeZoneDateParts(date: Date, timezone: string): TimeZoneDateParts {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone,
@@ -28,14 +31,24 @@ function getTimeZoneDateParts(
   };
 }
 
-function toDateString(parts: { year: number; month: number; day: number }): string {
-  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(
-    2,
-    '0'
-  )}`;
+function getTimeZoneDateTimeParts(
+  date: Date,
+  formatter: Intl.DateTimeFormat
+): TimeZoneDateTimeParts {
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map(({ type, value }) => [type, value])
+  );
+
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour) % 24,
+    minute: Number(parts.minute),
+  };
 }
 
-function parseScheduledTime(scheduledTime: string): { hours: number; minutes: number } {
+function parseScheduledTime(scheduledTime: string): ScheduledTimeParts {
   const parts = scheduledTime.split(':').map(Number);
   return {
     hours: parts[0] ?? 0,
@@ -52,68 +65,69 @@ function daysInMonth(year: number, month: number): number {
  * Uses the Intl API — no extra deps.
  */
 function dateFromTimeZoneDateTime(
-  dateParts: { year: number; month: number; day: number },
-  timeParts: { hours: number; minutes: number },
+  dateParts: TimeZoneDateParts,
+  timeParts: ScheduledTimeParts,
   timezone: string
 ): Date {
-  // Build a UTC probe: treat the target local datetime as if it were UTC.
-  const utcProbe = new Date(
-    Date.UTC(
-      dateParts.year,
-      dateParts.month - 1,
-      dateParts.day,
-      timeParts.hours,
-      timeParts.minutes,
-      0
-    )
+  const utcProbeMs = Date.UTC(
+    dateParts.year,
+    dateParts.month - 1,
+    dateParts.day,
+    timeParts.hours,
+    timeParts.minutes,
+    0
   );
+  const dateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 
-  // Find what hour/minute utcProbe shows in the target timezone so we can
-  // compute the offset and correct back to true UTC.
-  const localTimeParts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-      .formatToParts(utcProbe)
-      .map(({ type, value }) => [type, value])
-  );
+  for (
+    let offsetMinutes = MIN_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes <= MAX_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes += 1
+  ) {
+    const candidate = new Date(utcProbeMs + offsetMinutes * 60_000);
+    const candidateParts = getTimeZoneDateTimeParts(candidate, dateTimeFormatter);
 
-  const probeHour = Number(localTimeParts.hour) % 24; // guard against "24" at midnight
-  const probeMinute = Number(localTimeParts.minute);
-
-  let offsetMinutes = (timeParts.hours - probeHour) * 60 + (timeParts.minutes - probeMinute);
-  // offsetMinutes is the negation of the timezone offset, so valid range is
-  // [-14h, +12h] (i.e. UTC+14 → −840 min, UTC−12 → +720 min).
-  if (offsetMinutes < -14 * 60) {
-    offsetMinutes += 24 * 60;
-  }
-  if (offsetMinutes > 12 * 60) {
-    offsetMinutes -= 24 * 60;
-  }
-  const offsetMs = offsetMinutes * 60_000;
-
-  const candidate = new Date(utcProbe.getTime() + offsetMs);
-
-  // Validate the candidate's calendar day in the target timezone matches the
-  // intended day. Ambiguous offset boundaries (e.g. UTC-10 at morning hours
-  // where offsetMinutes lands exactly on -840) can cause an off-by-one-day
-  // error; correct by ±24h if needed.
-  const candidateParts = getTimeZoneDateParts(candidate, timezone);
-
-  const intendedDate = toDateString(dateParts);
-  const candidateDate = toDateString(candidateParts);
-
-  if (candidateDate < intendedDate) {
-    return new Date(candidate.getTime() + 24 * 60 * 60_000);
-  }
-  if (candidateDate > intendedDate) {
-    return new Date(candidate.getTime() - 24 * 60 * 60_000);
+    if (
+      candidateParts.year === dateParts.year &&
+      candidateParts.month === dateParts.month &&
+      candidateParts.day === dateParts.day &&
+      candidateParts.hour === timeParts.hours &&
+      candidateParts.minute === timeParts.minutes
+    ) {
+      return candidate;
+    }
   }
 
-  return candidate;
+  // The requested local wall-clock time can be nonexistent on spring-forward
+  // transition days. Run at the first valid later local time on that date.
+  for (
+    let offsetMinutes = MIN_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes <= MAX_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes += 1
+  ) {
+    const candidate = new Date(utcProbeMs + offsetMinutes * 60_000);
+    const candidateParts = getTimeZoneDateTimeParts(candidate, dateTimeFormatter);
+    const candidateClockMinutes = candidateParts.hour * 60 + candidateParts.minute;
+
+    if (
+      candidateParts.year === dateParts.year &&
+      candidateParts.month === dateParts.month &&
+      candidateParts.day === dateParts.day &&
+      candidateClockMinutes > timeParts.hours * 60 + timeParts.minutes
+    ) {
+      return candidate;
+    }
+  }
+
+  return new Date(utcProbeMs);
 }
 
 /**
