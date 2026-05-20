@@ -1,4 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const prismaMock = vi.hoisted(() => ({
+  periodicTask: {
+    findUnique: vi.fn(),
+    update: vi.fn(),
+  },
+}));
+
+vi.mock('@/backend/db', () => ({
+  prisma: prismaMock,
+}));
+
 import { periodicTaskAccessor } from './periodic-task.accessor';
 
 function calendarDate(date: Date, timezone = 'UTC'): string {
@@ -16,10 +28,13 @@ function calendarDate(date: Date, timezone = 'UTC'): string {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function localTime(date: Date, timezone: string): string {
-  const parts = Object.fromEntries(
+function getLocalParts(date: Date, timezone: string) {
+  return Object.fromEntries(
     new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -27,7 +42,10 @@ function localTime(date: Date, timezone: string): string {
       .formatToParts(date)
       .map(({ type, value }) => [type, value])
   );
+}
 
+function localTime(date: Date, timezone: string): string {
+  const parts = getLocalParts(date, timezone);
   return `${parts.hour}:${parts.minute}`;
 }
 
@@ -98,5 +116,70 @@ describe('periodicTaskAccessor.computeNextRunAt', () => {
     expect(localTime(february, timezone)).toBe('09:30');
     expect(calendarDate(march, timezone)).toBe('2026-03-31');
     expect(localTime(march, timezone)).toBe('09:30');
+  });
+
+  it('keeps MONTHLY scheduled runs on the local clamped day near UTC rollover', () => {
+    const timezone = 'America/New_York';
+    const from = new Date('2026-01-31T00:05:00.000Z'); // Jan 30 19:05 in New York
+
+    const nextRunAt = periodicTaskAccessor.computeNextRunAt('MONTHLY', from, '09:00', timezone);
+
+    expect(getLocalParts(nextRunAt, timezone)).toMatchObject({
+      year: '2026',
+      month: '02',
+      day: '28',
+      hour: '09',
+      minute: '00',
+    });
+  });
+
+  it('preserves local Date monthly clamping when no timezone is configured', () => {
+    const from = new Date(2026, 0, 31, 9, 5);
+
+    const nextRunAt = periodicTaskAccessor.computeNextRunAt('MONTHLY', from);
+
+    expect(nextRunAt.getTime()).toBe(new Date(2026, 1, 28, 9, 5).getTime());
+  });
+});
+
+describe('periodicTaskAccessor.markDispatched', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-28T15:00:00.000Z'));
+    prismaMock.periodicTask.findUnique.mockReset();
+    prismaMock.periodicTask.update.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lazily backfills a legacy monthly anchor from createdAt in the task timezone', async () => {
+    const timezone = 'America/Los_Angeles';
+    prismaMock.periodicTask.findUnique.mockResolvedValue({
+      createdAt: new Date('2026-02-01T07:30:00.000Z'), // Jan 31 23:30 in Los Angeles
+      scheduledDayOfMonth: null,
+      timezone,
+    });
+    prismaMock.periodicTask.update.mockResolvedValue({});
+
+    await periodicTaskAccessor.markDispatched('task-1', 'MONTHLY', '09:00', timezone, null);
+
+    expect(prismaMock.periodicTask.update).toHaveBeenCalledWith({
+      where: { id: 'task-1' },
+      data: expect.objectContaining({
+        scheduledDayOfMonth: 31,
+      }),
+    });
+
+    const updateArgs = prismaMock.periodicTask.update.mock.calls[0]?.[0];
+    const nextRunAt = updateArgs?.data.nextRunAt as Date;
+    expect(getLocalParts(nextRunAt, timezone)).toMatchObject({
+      year: '2026',
+      month: '03',
+      day: '31',
+      hour: '09',
+      minute: '00',
+    });
   });
 });
