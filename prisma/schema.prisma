@@ -379,6 +379,7 @@ model PeriodicTask {
   cadence       PeriodicTaskCadence
   scheduledTime String?
   timezone      String?
+  scheduledDayOfMonth Int?
 
   isEnabled   Boolean              @default(true)
   nextRunAt   DateTime
