@@ -68,6 +68,9 @@ pnpm db:migrate
 # Generate Prisma client after schema changes
 pnpm db:generate
 
+# Regenerate Prisma output, validate service ownership/imports, and typecheck after schema changes
+pnpm check:prisma-schema
+
 # Open Prisma Studio
 pnpm db:studio
 ```
@@ -104,6 +107,7 @@ Write clear, descriptive commit messages:
 - We use [Biome](https://biomejs.dev/) for linting and formatting
 - Run `pnpm check` for standard guardrails and `pnpm check:fix` to automatically fix Biome issues
 - `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped unless the pinned Codex CLI is installed; use `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
+- `prisma/generated/` is generated and excluded from Biome linting. After changing `prisma/schema.prisma`, run `pnpm check:prisma-schema` to regenerate Prisma output, enforce Prisma import/ownership rules, and typecheck the resulting type surface. CI also runs `pnpm check:prisma-generated` after generation to fail if generated output is not committed.
 - Follow existing patterns in the codebase
 - Use TypeScript strict mode
 - Prefer Zod for schemas and validation; avoid raw typecasts
@@ -132,6 +136,7 @@ prisma/               # Database schema and migrations
 - Add or update tests and run `pnpm test` (use `pnpm test:watch` while developing)
 - Add or update Storybook stories when UI changes are introduced (`pnpm storybook`)
 - Run `pnpm check`, `pnpm typecheck`, and `pnpm check:fix`
+- Run `pnpm check:prisma-schema` when `prisma/schema.prisma` changes
 - Ensure schemas use Zod and avoid raw typecasts
 - Update docs when behavior or commands change
 

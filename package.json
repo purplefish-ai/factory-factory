@@ -63,6 +63,8 @@
     "check:env": "node scripts/check-no-direct-process-env.mjs",
     "check:biome-ignores": "node scripts/check-biome-ignores.mjs",
     "check:service-registry": "tsx scripts/check-service-registry.ts",
+    "check:prisma-generated": "node scripts/check-prisma-generated-drift.mjs",
+    "check:prisma-schema": "pnpm db:generate && pnpm check:service-registry && pnpm typecheck",
     "check:ownership": "node scripts/check-single-writer.mjs && pnpm check:service-registry",
     "check:codex-schema": "node scripts/check-codex-schema-drift.mjs",
     "check:codex-schema:update": "node scripts/check-codex-schema-drift.mjs --update",
