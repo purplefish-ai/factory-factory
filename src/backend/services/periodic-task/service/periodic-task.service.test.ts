@@ -16,6 +16,7 @@ import {
 } from './periodic-task.service';
 
 type Logger = ReturnType<typeof createLogger>;
+const now = new Date('2026-05-20T12:00:00Z');
 const logger = {
   info: vi.fn(),
   debug: vi.fn(),
@@ -44,6 +45,7 @@ function createServiceWithWorkspaceStatus(status: {
   prUrl: string | null;
   prNumber: number | null;
   isAgentWorking: boolean;
+  initCompletedAt?: Date | null;
 }): PeriodicTaskService {
   const service = new PeriodicTaskService(logger);
   service.configure({
@@ -51,7 +53,10 @@ function createServiceWithWorkspaceStatus(status: {
       createWorkspaceForTask: vi.fn(),
     },
     status: {
-      getWorkspaceStatus: vi.fn().mockResolvedValue(status),
+      getWorkspaceStatus: vi.fn().mockResolvedValue({
+        initCompletedAt: now,
+        ...status,
+      }),
     },
   });
   return service;
@@ -61,7 +66,7 @@ describe('PeriodicTaskService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-05-20T12:00:00Z'));
+    vi.setSystemTime(now);
   });
 
   afterEach(() => {
@@ -74,6 +79,7 @@ describe('PeriodicTaskService', () => {
       prUrl: null,
       prNumber: null,
       isAgentWorking: false,
+      initCompletedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
     });
 
     await checkSingleExecution(service, {
@@ -98,12 +104,49 @@ describe('PeriodicTaskService', () => {
       prUrl: null,
       prNumber: null,
       isAgentWorking: false,
+      initCompletedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS + 1),
     });
 
     await checkSingleExecution(service, {
       id: 'exec-1',
       workspaceId: 'ws-1',
-      startedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS + 1),
+      startedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
+    });
+
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
+  });
+
+  it('does not count provisioning time against the READY without PR grace period', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      initCompletedAt: new Date(Date.now() - 1),
+    });
+
+    await checkSingleExecution(service, {
+      id: 'exec-1',
+      workspaceId: 'ws-1',
+      startedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
+    });
+
+    expect(mockUpdateExecution).not.toHaveBeenCalled();
+  });
+
+  it('keeps READY executions running when workspace readiness time is unavailable', async () => {
+    const service = createServiceWithWorkspaceStatus({
+      status: WorkspaceStatus.READY,
+      prUrl: null,
+      prNumber: null,
+      isAgentWorking: false,
+      initCompletedAt: null,
+    });
+
+    await checkSingleExecution(service, {
+      id: 'exec-1',
+      workspaceId: 'ws-1',
+      startedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
     });
 
     expect(mockUpdateExecution).not.toHaveBeenCalled();
@@ -115,6 +158,7 @@ describe('PeriodicTaskService', () => {
       prUrl: null,
       prNumber: null,
       isAgentWorking: true,
+      initCompletedAt: new Date(Date.now() - PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS - 1),
     });
 
     await checkSingleExecution(service, {

@@ -341,6 +341,7 @@ describe('configureDomainBridges', () => {
         status: 'READY',
         prUrl: null,
         prNumber: null,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
       } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
       vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
         { id: 'session-1' },
@@ -356,6 +357,7 @@ describe('configureDomainBridges', () => {
         prUrl: null,
         prNumber: null,
         isAgentWorking: true,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
       });
       expect(sessionService.isAnySessionWorking).toHaveBeenCalledWith(['session-1', 'session-2']);
     });

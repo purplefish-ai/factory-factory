@@ -410,6 +410,7 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
           prUrl: ws.prUrl,
           prNumber: ws.prNumber,
           isAgentWorking: sessionService.isAnySessionWorking(sessions.map((session) => session.id)),
+          initCompletedAt: ws.initCompletedAt,
         };
       },
     },

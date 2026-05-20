@@ -35,6 +35,7 @@ export interface PeriodicTaskWorkspaceStatusBridge {
     prUrl: string | null;
     prNumber: number | null;
     isAgentWorking: boolean;
+    initCompletedAt: Date | null;
   } | null>;
 }
 
@@ -236,7 +237,8 @@ export class PeriodicTaskService {
       }
 
       const readyWithoutPrGraceElapsed =
-        Date.now() - execution.startedAt.getTime() >= PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS;
+        ws.initCompletedAt !== null &&
+        Date.now() - ws.initCompletedAt.getTime() >= PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS;
       if (ws.status === WorkspaceStatus.READY && !ws.isAgentWorking && readyWithoutPrGraceElapsed) {
         await periodicTaskAccessor.updateExecution(execution.id, {
           status: 'FAILED',
