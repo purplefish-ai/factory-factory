@@ -5,6 +5,29 @@ All notable changes to Factory Factory will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.19] - 2026-05-20
+
+### Changed
+
+- Add Prisma generated drift guardrail (#1614)
+- Require workspace field ownership policies (#1617)
+- Extract runtime orchestration collaborators (#1616)
+
+### Fixed
+
+- Hide periodic task workspace controls (#1612)
+- Fix monthly periodic task timezone scheduling (#1609)
+- Fix PR detection MCP false positives (#1608)
+- Fix plan approval prompt autofocus (#1607)
+- Fix ratchet active session cleanup (#1606)
+- Preserve monthly periodic task day (#1610)
+- Recover stuck periodic task executions (#1613)
+- Fix periodic task DST scheduling (#1611)
+
+### Documentation
+
+- Add time-of-day scheduling to Periodic Tasks feature note in AGENTS.md (#1615)
+
 ## [0.3.18] - 2026-05-20
 
 ### Added
