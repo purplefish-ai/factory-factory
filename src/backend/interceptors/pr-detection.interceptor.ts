@@ -15,6 +15,7 @@ const GH_PR_CREATE_REGEX = /\bgh\s+pr\s+create\b/;
 const GITHUB_PR_URL_REGEX = /https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+/;
 const GITHUB_CREATE_PULL_REQUEST_TOOL = 'github_create_pull_request';
 const CREATE_PULL_REQUEST_TOOL = 'create_pull_request';
+const OFFICIAL_GITHUB_MCP_SERVERS = new Set(['github', 'codex_apps']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -44,10 +45,6 @@ function extractCommand(event: ToolEvent): string | undefined {
   return directCommand ?? cmd ?? title;
 }
 
-function normalizeToolName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
 function extractMcpToolNameFromDisplayName(toolName: string): string | undefined {
   const slashIndex = toolName.lastIndexOf('/');
   if (slashIndex === -1 || slashIndex === toolName.length - 1) {
@@ -70,6 +67,10 @@ function extractMcpServerNameFromDisplayName(toolName: string): string | undefin
   return toolName.slice(prefix.length, slashIndex);
 }
 
+function isOfficialGithubMcpServer(serverName: string): boolean {
+  return OFFICIAL_GITHUB_MCP_SERVERS.has(serverName.toLowerCase());
+}
+
 function isGithubCreatePullRequestTool(event: ToolEvent): boolean {
   const inputTool = extractInputValue(event.input, 'tool', isString, event.toolName, logger);
   if (inputTool === GITHUB_CREATE_PULL_REQUEST_TOOL) {
@@ -77,7 +78,11 @@ function isGithubCreatePullRequestTool(event: ToolEvent): boolean {
   }
 
   const inputServer = extractInputValue(event.input, 'server', isString, event.toolName, logger);
-  if (inputTool === CREATE_PULL_REQUEST_TOOL && inputServer?.toLowerCase().includes('github')) {
+  if (
+    inputTool === CREATE_PULL_REQUEST_TOOL &&
+    inputServer &&
+    isOfficialGithubMcpServer(inputServer)
+  ) {
     return true;
   }
 
@@ -89,13 +94,13 @@ function isGithubCreatePullRequestTool(event: ToolEvent): boolean {
   const displayServerName = extractMcpServerNameFromDisplayName(event.toolName);
   if (
     displayToolName === CREATE_PULL_REQUEST_TOOL &&
-    displayServerName?.toLowerCase().includes('github')
+    displayServerName &&
+    isOfficialGithubMcpServer(displayServerName)
   ) {
     return true;
   }
 
-  const normalizedToolName = normalizeToolName(event.toolName);
-  return normalizedToolName.endsWith(normalizeToolName(GITHUB_CREATE_PULL_REQUEST_TOOL));
+  return false;
 }
 
 function extractPrUrlFromEvent(event: ToolEvent): string | null {

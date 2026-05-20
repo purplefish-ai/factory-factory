@@ -8,8 +8,12 @@ const LONG_CADENCES = new Set<PeriodicTaskCadence>(['DAILY', 'WEEKLY', 'MONTHLY'
 const MIN_TIMEZONE_OFFSET_MINUTES = -14 * 60;
 const MAX_TIMEZONE_OFFSET_MINUTES = 12 * 60;
 
-function getTimezoneDateParts(date: Date, timezone: string): Record<string, string> {
-  return Object.fromEntries(
+type TimeZoneDateParts = { year: number; month: number; day: number };
+type TimeZoneDateTimeParts = TimeZoneDateParts & { hour: number; minute: number };
+type ScheduledTimeParts = { hours: number; minutes: number };
+
+function getTimeZoneDateParts(date: Date, timezone: string): TimeZoneDateParts {
+  const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone,
       year: 'numeric',
@@ -19,44 +23,69 @@ function getTimezoneDateParts(date: Date, timezone: string): Record<string, stri
       .formatToParts(date)
       .map(({ type, value }) => [type, value])
   );
+
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+  };
 }
 
-function getTimezoneDateTimeParts(date: Date, timezone: string): Record<string, string> {
-  return Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-      .formatToParts(date)
-      .map(({ type, value }) => [type, value])
+function getTimeZoneDateTimeParts(
+  date: Date,
+  formatter: Intl.DateTimeFormat
+): TimeZoneDateTimeParts {
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map(({ type, value }) => [type, value])
   );
+
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour) % 24,
+    minute: Number(parts.minute),
+  };
+}
+
+function parseScheduledTime(scheduledTime: string): ScheduledTimeParts {
+  const parts = scheduledTime.split(':').map(Number);
+  return {
+    hours: parts[0] ?? 0,
+    minutes: parts[1] ?? 0,
+  };
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
 }
 
 /**
- * When a task has a scheduledTime + timezone, snap the computed next date to
- * that clock time in the user's timezone. Uses the Intl API — no extra deps.
+ * Convert an intended local datetime in the user's timezone to UTC.
+ * Uses the Intl API — no extra deps.
  */
-function applyScheduledTime(date: Date, scheduledTime: string, timezone: string): Date {
-  const parts = scheduledTime.split(':').map(Number);
-  const hours = parts[0] ?? 0;
-  const minutes = parts[1] ?? 0;
-
-  // Get the calendar date (Y/M/D) in the target timezone.
-  const dateParts = getTimezoneDateParts(date, timezone);
-
+function dateFromTimeZoneDateTime(
+  dateParts: TimeZoneDateParts,
+  timeParts: ScheduledTimeParts,
+  timezone: string
+): Date {
   const utcProbeMs = Date.UTC(
-    Number(dateParts.year),
-    Number(dateParts.month) - 1,
-    Number(dateParts.day),
-    hours,
-    minutes,
+    dateParts.year,
+    dateParts.month - 1,
+    dateParts.day,
+    timeParts.hours,
+    timeParts.minutes,
     0
   );
+  const dateTimeFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 
   for (
     let offsetMinutes = MIN_TIMEZONE_OFFSET_MINUTES;
@@ -64,15 +93,14 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
     offsetMinutes += 1
   ) {
     const candidate = new Date(utcProbeMs + offsetMinutes * 60_000);
-    const candidateParts = getTimezoneDateTimeParts(candidate, timezone);
-    const candidateHour = Number(candidateParts.hour) % 24; // guard against "24" at midnight
+    const candidateParts = getTimeZoneDateTimeParts(candidate, dateTimeFormatter);
 
     if (
       candidateParts.year === dateParts.year &&
       candidateParts.month === dateParts.month &&
       candidateParts.day === dateParts.day &&
-      candidateHour === hours &&
-      Number(candidateParts.minute) === minutes
+      candidateParts.hour === timeParts.hours &&
+      candidateParts.minute === timeParts.minutes
     ) {
       return candidate;
     }
@@ -86,21 +114,32 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
     offsetMinutes += 1
   ) {
     const candidate = new Date(utcProbeMs + offsetMinutes * 60_000);
-    const candidateParts = getTimezoneDateTimeParts(candidate, timezone);
-    const candidateHour = Number(candidateParts.hour) % 24;
-    const candidateClockMinutes = candidateHour * 60 + Number(candidateParts.minute);
+    const candidateParts = getTimeZoneDateTimeParts(candidate, dateTimeFormatter);
+    const candidateClockMinutes = candidateParts.hour * 60 + candidateParts.minute;
 
     if (
       candidateParts.year === dateParts.year &&
       candidateParts.month === dateParts.month &&
       candidateParts.day === dateParts.day &&
-      candidateClockMinutes > hours * 60 + minutes
+      candidateClockMinutes > timeParts.hours * 60 + timeParts.minutes
     ) {
       return candidate;
     }
   }
 
   return new Date(utcProbeMs);
+}
+
+/**
+ * When a task has a scheduledTime + timezone, snap the computed next date to
+ * that clock time in the user's timezone.
+ */
+function applyScheduledTime(date: Date, scheduledTime: string, timezone: string): Date {
+  return dateFromTimeZoneDateTime(
+    getTimeZoneDateParts(date, timezone),
+    parseScheduledTime(scheduledTime),
+    timezone
+  );
 }
 
 function computeNextRunAt(
@@ -124,11 +163,24 @@ function computeNextRunAt(
       next.setDate(next.getDate() + 7);
       break;
     case 'MONTHLY': {
+      if (scheduledTime && timezone) {
+        const fromParts = getTimeZoneDateParts(from, timezone);
+        const targetYear = fromParts.month === 12 ? fromParts.year + 1 : fromParts.year;
+        const targetMonth = fromParts.month === 12 ? 1 : fromParts.month + 1;
+        const targetDay = Math.min(fromParts.day, daysInMonth(targetYear, targetMonth));
+
+        return dateFromTimeZoneDateTime(
+          { year: targetYear, month: targetMonth, day: targetDay },
+          parseScheduledTime(scheduledTime),
+          timezone
+        );
+      }
+
       const targetMonth = next.getMonth() + 1;
       next.setDate(1); // Avoid overflow when advancing month
       next.setMonth(targetMonth);
       // Clamp to the last day of the target month if the original day exceeds it
-      const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      const lastDay = daysInMonth(next.getFullYear(), next.getMonth() + 1);
       next.setDate(Math.min(from.getDate(), lastDay));
       break;
     }
