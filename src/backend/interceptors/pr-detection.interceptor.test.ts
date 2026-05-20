@@ -181,6 +181,115 @@ describe('prDetectionInterceptor', () => {
     );
   });
 
+  it('detects PR URL from codex_apps MCP create_pull_request display tool names', async () => {
+    const event = createEvent({
+      toolName: 'mcpToolCall:codex_apps/create_pull_request',
+      input: {},
+      output: {
+        content: JSON.stringify({
+          structuredContent: {
+            url: 'https://github.com/purplefish-ai/factory-factory/pull/1584',
+          },
+        }),
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/1584'
+    );
+  });
+
+  it('detects PR URL from codex_apps MCP create_pull_request input fields', async () => {
+    const event = createEvent({
+      toolName: 'mcpToolCall',
+      input: {
+        type: 'mcpToolCall',
+        server: 'codex_apps',
+        tool: 'create_pull_request',
+      },
+      output: {
+        content: JSON.stringify({
+          structuredContent: {
+            url: 'https://github.com/purplefish-ai/factory-factory/pull/1585',
+          },
+        }),
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).toHaveBeenCalledWith(
+      'workspace-1',
+      'https://github.com/purplefish-ai/factory-factory/pull/1585'
+    );
+  });
+
+  it('does not detect create_pull_request from custom servers containing github', async () => {
+    const event = createEvent({
+      toolName: 'mcpToolCall:company_github/create_pull_request',
+      input: {
+        type: 'mcpToolCall',
+        server: 'company_github',
+        tool: 'create_pull_request',
+      },
+      output: {
+        content: JSON.stringify({
+          structuredContent: {
+            url: 'https://github.com/purplefish-ai/factory-factory/pull/1586',
+          },
+        }),
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+  });
+
+  it('does not detect create_pull_request from display servers containing github', async () => {
+    const event = createEvent({
+      toolName: 'mcpToolCall:x_github/create_pull_request',
+      input: {},
+      output: {
+        content: JSON.stringify({
+          structuredContent: {
+            url: 'https://github.com/purplefish-ai/factory-factory/pull/1587',
+          },
+        }),
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+  });
+
+  it('does not detect unrelated tool names ending in github_create_pull_request', async () => {
+    const event = createEvent({
+      toolName: 'company_github_create_pull_request',
+      input: {},
+      output: {
+        content: JSON.stringify({
+          structuredContent: {
+            url: 'https://github.com/purplefish-ai/factory-factory/pull/1588',
+          },
+        }),
+        isError: false,
+      },
+    });
+
+    await prDetectionInterceptor.onToolComplete!(event, context);
+
+    expect(mockAttachAndRefreshPR).not.toHaveBeenCalled();
+  });
+
   it('detects PR URL when command is provided as cmd', async () => {
     const event = createEvent({
       toolName: 'exec_command',
