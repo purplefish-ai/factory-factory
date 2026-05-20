@@ -92,8 +92,11 @@ class ReconciliationService {
   }
 
   private async runPeriodicReconciliation(): Promise<void> {
-    await this.reconcile();
-    await this.cleanupOrphans();
+    try {
+      await this.reconcile();
+    } finally {
+      await this.cleanupOrphans();
+    }
   }
 
   /**

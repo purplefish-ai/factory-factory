@@ -405,11 +405,14 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
           return null;
         }
         const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
+        const sessionIds = sessions.map((session) => session.id);
         return {
           status: ws.status,
           prUrl: ws.prUrl,
           prNumber: ws.prNumber,
-          isAgentWorking: sessionService.isAnySessionWorking(sessions.map((session) => session.id)),
+          isAgentWorking:
+            sessionService.isAnySessionWorking(sessionIds) ||
+            sessionIds.some((sessionId) => sessionDomainService.getQueueLength(sessionId) > 0),
           initCompletedAt: ws.initCompletedAt,
         };
       },

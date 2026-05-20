@@ -52,7 +52,11 @@ vi.mock('@/backend/services/session', () => ({
     sendSessionMessage: vi.fn(),
     sendAcpMessage: vi.fn(),
   },
-  sessionDomainService: { injectCommittedUserMessage: vi.fn(), getTranscriptSnapshot: vi.fn() },
+  sessionDomainService: {
+    injectCommittedUserMessage: vi.fn(),
+    getTranscriptSnapshot: vi.fn(),
+    getQueueLength: vi.fn(),
+  },
   chatEventForwarderService: { configure: vi.fn(), getAllPendingRequests: vi.fn() },
   chatMessageHandlerService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
 }));
@@ -360,6 +364,34 @@ describe('configureDomainBridges', () => {
         initCompletedAt: new Date('2026-05-20T12:00:00Z'),
       });
       expect(sessionService.isAnySessionWorking).toHaveBeenCalledWith(['session-1', 'session-2']);
+    });
+
+    it('treats queued periodic task session messages as active agent work', async () => {
+      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+        { id: 'session-1' },
+        { id: 'session-2' },
+      ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
+      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(sessionDomainService.getQueueLength).mockReturnValueOnce(0).mockReturnValueOnce(1);
+
+      configureDomainBridges();
+      const bridge = getBridge(periodicTaskService.configure);
+
+      await expect(bridge.status.getWorkspaceStatus('ws-periodic')).resolves.toEqual({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        isAgentWorking: true,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      });
+      expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-1');
+      expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-2');
     });
   });
 

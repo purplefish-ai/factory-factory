@@ -195,6 +195,16 @@ describe('ReconciliationService', () => {
       expect(cleanupSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('still runs orphan cleanup when workspace reconciliation fails', async () => {
+      vi.spyOn(reconciliationService, 'reconcile').mockRejectedValue(new Error('reconcile failed'));
+      const cleanupSpy = vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersToNextTimerAsync();
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('does not start overlapping reconciliation runs while one is in progress', async () => {
       const releaseReconciliation: { current: (() => void) | null } = { current: null };
       const reconciliationSpy = vi
