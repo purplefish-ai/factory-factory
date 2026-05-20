@@ -9,9 +9,9 @@ import type { RatchetWorkspaceBridge } from './bridges';
 const logger = createLogger('reconciliation');
 
 class ReconciliationService {
-  private cleanupInterval: NodeJS.Timeout | null = null;
+  private reconciliationInterval: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
-  private cleanupInProgress: Promise<void> | null = null;
+  private reconciliationInProgress: Promise<void> | null = null;
   private _workspace: RatchetWorkspaceBridge | null = null;
 
   configure(bridges: { workspace: RatchetWorkspaceBridge }): void {
@@ -33,62 +33,67 @@ class ReconciliationService {
   }
 
   /**
-   * Start periodic orphan cleanup
+   * Start periodic reconciliation and orphan cleanup.
    */
   startPeriodicCleanup(): void {
-    if (this.cleanupInterval) {
+    if (this.reconciliationInterval) {
       return; // Already running
     }
 
     this.isShuttingDown = false;
 
-    this.cleanupInterval = setInterval(() => {
+    this.reconciliationInterval = setInterval(() => {
       // Skip if shutdown has started
       if (this.isShuttingDown) {
         return;
       }
 
-      // Avoid overlapping cleanup runs.
-      if (this.cleanupInProgress !== null) {
+      // Avoid overlapping reconciliation runs.
+      if (this.reconciliationInProgress !== null) {
         return;
       }
 
-      // Track the cleanup promise so we can wait for it during shutdown
-      const cleanupPromise = this.cleanupOrphans()
+      // Track the reconciliation promise so we can wait for it during shutdown
+      const reconciliationPromise = this.runPeriodicReconciliation()
         .catch((err) => {
-          logger.error('Periodic orphan cleanup failed', toError(err));
+          logger.error('Periodic reconciliation failed', toError(err));
         })
         .finally(() => {
-          if (this.cleanupInProgress === cleanupPromise) {
-            this.cleanupInProgress = null;
+          if (this.reconciliationInProgress === reconciliationPromise) {
+            this.reconciliationInProgress = null;
           }
         });
-      this.cleanupInProgress = cleanupPromise;
+      this.reconciliationInProgress = reconciliationPromise;
     }, SERVICE_INTERVAL_MS.reconciliationCleanup);
 
-    logger.info('Started periodic orphan cleanup', {
+    logger.info('Started periodic reconciliation', {
       intervalMs: SERVICE_INTERVAL_MS.reconciliationCleanup,
     });
   }
 
   /**
-   * Stop periodic orphan cleanup and wait for any in-flight cleanup to complete
+   * Stop periodic reconciliation and wait for any in-flight run to complete
    */
   async stopPeriodicCleanup(): Promise<void> {
     this.isShuttingDown = true;
 
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
+    if (this.reconciliationInterval) {
+      clearInterval(this.reconciliationInterval);
+      this.reconciliationInterval = null;
     }
 
-    // Wait for any in-flight cleanup to complete
-    if (this.cleanupInProgress !== null) {
-      logger.debug('Waiting for in-flight cleanup to complete');
-      await this.cleanupInProgress;
+    // Wait for any in-flight reconciliation to complete
+    if (this.reconciliationInProgress !== null) {
+      logger.debug('Waiting for in-flight reconciliation to complete');
+      await this.reconciliationInProgress;
     }
 
-    logger.info('Stopped periodic orphan cleanup');
+    logger.info('Stopped periodic reconciliation');
+  }
+
+  private async runPeriodicReconciliation(): Promise<void> {
+    await this.reconcile();
+    await this.cleanupOrphans();
   }
 
   /**
