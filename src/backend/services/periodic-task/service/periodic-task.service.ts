@@ -12,9 +12,11 @@ import { toError } from '@/backend/lib/error-utils';
 import { SERVICE_INTERVAL_MS } from '@/backend/services/constants';
 import type { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskAccessor } from '@/backend/services/periodic-task/resources/periodic-task.accessor';
-import type { PeriodicTaskCadence } from '@/shared/core';
+import { type PeriodicTaskCadence, WorkspaceStatus } from '@/shared/core';
 
 type Logger = ReturnType<typeof createLogger>;
+
+export const PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS = 5 * 60_000;
 
 /** Bridge for workspace creation — wired by orchestration layer. */
 export interface PeriodicTaskWorkspaceBridge {
@@ -29,9 +31,11 @@ export interface PeriodicTaskWorkspaceBridge {
 /** Bridge for checking workspace PR state. */
 export interface PeriodicTaskWorkspaceStatusBridge {
   getWorkspaceStatus(workspaceId: string): Promise<{
-    status: string;
+    status: WorkspaceStatus;
     prUrl: string | null;
     prNumber: number | null;
+    isAgentWorking: boolean;
+    initCompletedAt: Date | null;
   } | null>;
 }
 
@@ -201,6 +205,7 @@ export class PeriodicTaskService {
   private async checkSingleExecution(execution: {
     id: string;
     workspaceId: string | null;
+    startedAt: Date;
   }): Promise<void> {
     try {
       if (!(execution.workspaceId && this.statusBridge)) {
@@ -226,13 +231,29 @@ export class PeriodicTaskService {
         return;
       }
 
-      if (ws.status === 'FAILED' || ws.status === 'ARCHIVED') {
+      if (ws.status === WorkspaceStatus.FAILED || ws.status === WorkspaceStatus.ARCHIVED) {
         await periodicTaskAccessor.updateExecution(execution.id, {
           status: 'FAILED',
           errorMessage: `Workspace ended in ${ws.status} state`,
           completedAt: new Date(),
         });
         this.logger.warn('Periodic task execution failed', {
+          executionId: execution.id,
+          workspaceStatus: ws.status,
+        });
+        return;
+      }
+
+      const readyWithoutPrGraceElapsed =
+        ws.initCompletedAt !== null &&
+        Date.now() - ws.initCompletedAt.getTime() >= PERIODIC_TASK_READY_WITHOUT_PR_GRACE_MS;
+      if (ws.status === WorkspaceStatus.READY && !ws.isAgentWorking && readyWithoutPrGraceElapsed) {
+        await periodicTaskAccessor.updateExecution(execution.id, {
+          status: 'FAILED',
+          errorMessage: 'Workspace is READY without a PR and no agent work is active',
+          completedAt: new Date(),
+        });
+        this.logger.warn('Periodic task execution finished without PR', {
           executionId: execution.id,
           workspaceStatus: ws.status,
         });
