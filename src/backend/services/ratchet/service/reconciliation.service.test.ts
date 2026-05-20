@@ -221,6 +221,18 @@ describe('ReconciliationService', () => {
       expect(cleanupSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('preserves falsy reconciliation errors after orphan cleanup runs', async () => {
+      vi.spyOn(reconciliationService, 'reconcile').mockRejectedValue(undefined);
+      const cleanupSpy = vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
+      const runPeriodicReconciliation = Reflect.get(
+        reconciliationService,
+        'runPeriodicReconciliation'
+      ) as () => Promise<void>;
+
+      await expect(runPeriodicReconciliation.call(reconciliationService)).rejects.toBeUndefined();
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('does not start overlapping reconciliation runs while one is in progress', async () => {
       const releaseReconciliation: { current: (() => void) | null } = { current: null };
       const reconciliationSpy = vi
