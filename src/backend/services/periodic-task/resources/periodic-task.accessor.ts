@@ -6,17 +6,11 @@ import type { PeriodicTaskCadence, PeriodicTaskExecutionStatus } from '@/shared/
 
 const LONG_CADENCES = new Set<PeriodicTaskCadence>(['DAILY', 'WEEKLY', 'MONTHLY']);
 
-/**
- * When a task has a scheduledTime + timezone, snap the computed next date to
- * that clock time in the user's timezone. Uses the Intl API — no extra deps.
- */
-function applyScheduledTime(date: Date, scheduledTime: string, timezone: string): Date {
-  const parts = scheduledTime.split(':').map(Number);
-  const hours = parts[0] ?? 0;
-  const minutes = parts[1] ?? 0;
-
-  // Get the calendar date (Y/M/D) in the target timezone.
-  const dateParts = Object.fromEntries(
+function getTimeZoneDateParts(
+  date: Date,
+  timezone: string
+): { year: number; month: number; day: number } {
+  const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
       timeZone: timezone,
       year: 'numeric',
@@ -27,14 +21,49 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
       .map(({ type, value }) => [type, value])
   );
 
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+  };
+}
+
+function toDateString(parts: { year: number; month: number; day: number }): string {
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(
+    2,
+    '0'
+  )}`;
+}
+
+function parseScheduledTime(scheduledTime: string): { hours: number; minutes: number } {
+  const parts = scheduledTime.split(':').map(Number);
+  return {
+    hours: parts[0] ?? 0,
+    minutes: parts[1] ?? 0,
+  };
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/**
+ * Convert an intended local datetime in the user's timezone to UTC.
+ * Uses the Intl API — no extra deps.
+ */
+function dateFromTimeZoneDateTime(
+  dateParts: { year: number; month: number; day: number },
+  timeParts: { hours: number; minutes: number },
+  timezone: string
+): Date {
   // Build a UTC probe: treat the target local datetime as if it were UTC.
   const utcProbe = new Date(
     Date.UTC(
-      Number(dateParts.year),
-      Number(dateParts.month) - 1,
-      Number(dateParts.day),
-      hours,
-      minutes,
+      dateParts.year,
+      dateParts.month - 1,
+      dateParts.day,
+      timeParts.hours,
+      timeParts.minutes,
       0
     )
   );
@@ -55,7 +84,7 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   const probeHour = Number(localTimeParts.hour) % 24; // guard against "24" at midnight
   const probeMinute = Number(localTimeParts.minute);
 
-  let offsetMinutes = (hours - probeHour) * 60 + (minutes - probeMinute);
+  let offsetMinutes = (timeParts.hours - probeHour) * 60 + (timeParts.minutes - probeMinute);
   // offsetMinutes is the negation of the timezone offset, so valid range is
   // [-14h, +12h] (i.e. UTC+14 → −840 min, UTC−12 → +720 min).
   if (offsetMinutes < -14 * 60) {
@@ -72,19 +101,10 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   // intended day. Ambiguous offset boundaries (e.g. UTC-10 at morning hours
   // where offsetMinutes lands exactly on -840) can cause an off-by-one-day
   // error; correct by ±24h if needed.
-  const candidateParts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(candidate)
-      .map(({ type, value }) => [type, value])
-  );
+  const candidateParts = getTimeZoneDateParts(candidate, timezone);
 
-  const intendedDate = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
-  const candidateDate = `${candidateParts.year}-${candidateParts.month}-${candidateParts.day}`;
+  const intendedDate = toDateString(dateParts);
+  const candidateDate = toDateString(candidateParts);
 
   if (candidateDate < intendedDate) {
     return new Date(candidate.getTime() + 24 * 60 * 60_000);
@@ -94,6 +114,18 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   }
 
   return candidate;
+}
+
+/**
+ * When a task has a scheduledTime + timezone, snap the computed next date to
+ * that clock time in the user's timezone.
+ */
+function applyScheduledTime(date: Date, scheduledTime: string, timezone: string): Date {
+  return dateFromTimeZoneDateTime(
+    getTimeZoneDateParts(date, timezone),
+    parseScheduledTime(scheduledTime),
+    timezone
+  );
 }
 
 function computeNextRunAt(
@@ -117,11 +149,24 @@ function computeNextRunAt(
       next.setDate(next.getDate() + 7);
       break;
     case 'MONTHLY': {
+      if (scheduledTime && timezone) {
+        const fromParts = getTimeZoneDateParts(from, timezone);
+        const targetYear = fromParts.month === 12 ? fromParts.year + 1 : fromParts.year;
+        const targetMonth = fromParts.month === 12 ? 1 : fromParts.month + 1;
+        const targetDay = Math.min(fromParts.day, daysInMonth(targetYear, targetMonth));
+
+        return dateFromTimeZoneDateTime(
+          { year: targetYear, month: targetMonth, day: targetDay },
+          parseScheduledTime(scheduledTime),
+          timezone
+        );
+      }
+
       const targetMonth = next.getMonth() + 1;
       next.setDate(1); // Avoid overflow when advancing month
       next.setMonth(targetMonth);
       // Clamp to the last day of the target month if the original day exceeds it
-      const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+      const lastDay = daysInMonth(next.getFullYear(), next.getMonth() + 1);
       next.setDate(Math.min(from.getDate(), lastDay));
       break;
     }
