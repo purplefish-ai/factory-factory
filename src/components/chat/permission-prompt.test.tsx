@@ -15,6 +15,7 @@ function findButtonByText(container: HTMLElement, text: string): HTMLButtonEleme
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   document.body.innerHTML = '';
 });
 
@@ -108,6 +109,38 @@ describe('PermissionPrompt', () => {
     expect(longLabelButton?.className).toContain('max-w-full');
     const promptLayout = container.querySelector('[role="alertdialog"] > div');
     expect(promptLayout?.className).toContain('flex-col');
+
+    root.unmount();
+  });
+
+  it('focuses the first plan approval action after render', async () => {
+    vi.useFakeTimers();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onApprove = vi.fn();
+
+    const permission: PermissionRequest = {
+      requestId: 'req-plan-focus-1',
+      toolName: 'ExitPlanMode',
+      toolInput: {
+        plan: 'Focus the first plan action.',
+      },
+      timestamp: '2026-05-20T00:00:00.000Z',
+      planContent: 'Focus the first plan action.',
+      acpOptions: [
+        { optionId: 'plan', name: 'Keep planning', kind: 'reject_once' },
+        { optionId: 'default', name: 'Approve Plan', kind: 'allow_once' },
+      ],
+    };
+
+    flushSync(() => {
+      root.render(createElement(PermissionPrompt, { permission, onApprove }));
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(document.activeElement).toBe(findButtonByText(container, 'Approve Plan'));
 
     root.unmount();
   });
