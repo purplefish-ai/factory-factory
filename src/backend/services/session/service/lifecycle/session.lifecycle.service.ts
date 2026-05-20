@@ -1,4 +1,3 @@
-import { githubCLIService, prSnapshotService } from '@/backend/services/github';
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentSessionRecord } from '@/backend/services/session/resources/agent-session.accessor';
 import type {
@@ -36,9 +35,10 @@ import type { SessionPromptBuilder } from './session.prompt-builder';
 import type { SessionPromptTurnCompletionService } from './session.prompt-turn-completion.service';
 import type { SessionRepository } from './session.repository';
 import type { SessionRetryService } from './session.retry.service';
+import { maybeDiscoverPROnSessionEnd as maybeDiscoverPROnSessionEndHelper } from './session-pr-discovery.service';
+import { isStaleLoadingRuntime } from './session-runtime-state.helpers';
 
 const logger = createLogger('session');
-const STALE_LOADING_RUNTIME_MAX_AGE_MS = 30_000;
 
 type SessionStartupModePreset = 'non_interactive' | 'plan';
 
@@ -341,7 +341,7 @@ export class SessionLifecycleService {
       };
     }
 
-    if (this.isStaleLoadingRuntime(base)) {
+    if (isStaleLoadingRuntime(base)) {
       return {
         ...base,
         phase: 'idle',
@@ -383,19 +383,6 @@ export class SessionLifecycleService {
       });
       throw error;
     }
-  }
-
-  private isStaleLoadingRuntime(runtime: SessionRuntimeState): boolean {
-    if (runtime.phase !== 'loading' || runtime.processState === 'alive') {
-      return false;
-    }
-
-    const updatedAtMs = Date.parse(runtime.updatedAt);
-    if (Number.isNaN(updatedAtMs)) {
-      return false;
-    }
-
-    return Date.now() - updatedAtMs > STALE_LOADING_RUNTIME_MAX_AGE_MS;
   }
 
   private setupAcpEventHandler(sessionId: string): AcpRuntimeEventHandlers {
@@ -706,50 +693,8 @@ export class SessionLifecycleService {
     await this.workspaceBridge.clearRatchetActiveSessionIfMatching(workspaceId, sessionId);
   }
 
-  /**
-   * After a session ends, check if a PR was created for the workspace's branch
-   * that the interceptor may have missed. This is a fast fallback that avoids
-   * waiting for the 3-minute periodic scheduler.
-   */
   private async maybeDiscoverPROnSessionEnd(workspaceId: string): Promise<void> {
-    try {
-      const workspace = await workspaceAccessor.findByIdWithProject(workspaceId);
-      if (!workspace) {
-        return;
-      }
-      // Already associated — nothing to do
-      if (workspace.prUrl) {
-        return;
-      }
-      const { branchName, createdAt, project } = workspace;
-      if (!(branchName && project?.githubOwner && project?.githubRepo)) {
-        return;
-      }
-      const pr = await githubCLIService.findPRForBranch(
-        project.githubOwner,
-        project.githubRepo,
-        branchName,
-        createdAt
-      );
-      if (!pr) {
-        return;
-      }
-      const result = await prSnapshotService.attachAndRefreshPR(workspaceId, pr.url);
-      if (result.success) {
-        logger.info('Discovered PR for workspace on session end', {
-          workspaceId,
-          branchName,
-          prNumber: result.snapshot.prNumber,
-          prUrl: pr.url,
-        });
-      }
-    } catch (error) {
-      // Fire-and-forget: log but don't surface to caller
-      logger.debug('PR discovery on session end failed', {
-        workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await maybeDiscoverPROnSessionEndHelper(workspaceId, logger);
   }
 
   private clearSessionStoreIfInactive(

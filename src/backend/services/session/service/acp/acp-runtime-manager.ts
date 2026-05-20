@@ -1,8 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
-import { fileURLToPath } from 'node:url';
 import {
   ClientSideConnection,
   type ContentBlock,
@@ -17,6 +14,14 @@ import { AcpClientHandler, type AutoApprovePolicy } from './acp-client-handler';
 import type { AcpPermissionBridge } from './acp-permission-bridge';
 import { AcpProcessHandle } from './acp-process-handle';
 import type { AcpRuntimeEvent } from './acp-runtime-events';
+import {
+  createAcpSpawnError,
+  hasUsableWorkingDir,
+  resolveAcpBinary,
+  resolveInternalCodexAcpSpawnCommand,
+  type SpawnCommand,
+  withTimeout,
+} from './acp-runtime-spawn';
 import { requireSessionConfigOptions } from './acp-session-config-options';
 import { createNormalizedAcpReadableStream, normalizeUnknownError } from './acp-stream-normalizer';
 import type { AcpClientOptions, PermissionPreset } from './types';
@@ -54,202 +59,13 @@ function resolveAutoApprovePolicy(preset: PermissionPreset | undefined): AutoApp
   return 'none';
 }
 
-/**
- * Resolves the full path to an ACP adapter binary by finding its package
- * directory and reading the bin field from package.json.
- * Falls back to the bare command name (relies on PATH).
- */
-function resolveAcpBinary(packageName: string, binaryName: string): string {
-  try {
-    const packageJsonPath = require.resolve(`${packageName}/package.json`);
-    const packageDir = dirname(packageJsonPath);
-    const pkg = require(packageJsonPath) as {
-      bin?: string | Record<string, string | undefined>;
-    };
-    const binPath =
-      typeof pkg.bin === 'string'
-        ? pkg.bin
-        : typeof pkg.bin?.[binaryName] === 'string'
-          ? pkg.bin[binaryName]
-          : undefined;
-    if (binPath) {
-      return join(packageDir, binPath);
-    }
-  } catch {
-    logger.debug('Could not resolve binary via package.json, falling back to PATH', {
-      packageName,
-      binaryName,
-    });
-  }
-  return binaryName;
-}
+const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
 
 type AcpErrorLogDetails = {
   message: string;
   code?: number | string;
   data?: unknown;
 };
-
-function hasUsableWorkingDir(workingDir: string | null | undefined): boolean {
-  return typeof workingDir === 'string' && workingDir.trim().length > 0;
-}
-
-function createAcpSpawnError(commandLabel: string, error: unknown): Error {
-  const normalized = normalizeUnknownError(error);
-  return new Error(`Failed to spawn ACP adapter "${commandLabel}": ${normalized.message}`);
-}
-
-type SpawnCommand = {
-  command: string;
-  args: string[];
-  commandLabel: string;
-};
-
-const DEFAULT_ACP_STARTUP_TIMEOUT_MS = 30_000;
-const MAX_FACTORY_ROOT_SEARCH_DEPTH = 20;
-
-async function withTimeout<T>(params: {
-  promise: Promise<T>;
-  timeoutMs: number;
-  description: string;
-  cancelOn?: Promise<unknown>;
-}): Promise<T> {
-  return await new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error(`ACP ${params.description} timed out after ${params.timeoutMs}ms`));
-    }, params.timeoutMs);
-    timeout.unref?.();
-    const clearTimer = () => {
-      clearTimeout(timeout);
-    };
-
-    const cancelOn = params.cancelOn;
-    if (cancelOn !== undefined) {
-      void cancelOn.finally(clearTimer).catch(() => {
-        // cancelOn is best-effort cancellation; ignore its rejection.
-      });
-    }
-
-    params.promise.then(
-      (value) => {
-        clearTimer();
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimer();
-        reject(error);
-      }
-    );
-  });
-}
-
-function findFactoryRoot(startDir: string): string | null {
-  let currentDir = startDir;
-  for (let depth = 0; depth < MAX_FACTORY_ROOT_SEARCH_DEPTH; depth += 1) {
-    const hasPackageJson = existsSync(join(currentDir, 'package.json'));
-    const hasCliDistEntrypoint = existsSync(join(currentDir, 'dist', 'src', 'cli', 'index.js'));
-    const hasCliSourceEntrypoint = existsSync(join(currentDir, 'src', 'cli', 'index.ts'));
-    if (hasPackageJson && (hasCliDistEntrypoint || hasCliSourceEntrypoint)) {
-      return currentDir;
-    }
-
-    const parentDir = dirname(currentDir);
-    if (parentDir === currentDir) {
-      return null;
-    }
-    currentDir = parentDir;
-  }
-  return null;
-}
-
-function resolveFactoryRootForInternalCodexAdapter(): string {
-  const moduleDir = dirname(fileURLToPath(import.meta.url));
-  const candidateStarts = [process.cwd(), moduleDir];
-
-  for (const candidate of candidateStarts) {
-    const root = findFactoryRoot(candidate);
-    if (root) {
-      return root;
-    }
-  }
-
-  throw new Error('Cannot resolve Factory Factory root for CODEX ACP adapter spawn');
-}
-
-function resolveInternalCodexAcpSpawnCommand(preferSourceEntrypoint: boolean): SpawnCommand {
-  const projectRoot = resolveFactoryRootForInternalCodexAdapter();
-  const cliSourceEntrypoint = join(projectRoot, 'src', 'cli', 'index.ts');
-  const cliDistEntrypoint = join(projectRoot, 'dist', 'src', 'cli', 'index.js');
-  const tsconfigPath = join(projectRoot, 'tsconfig.json');
-  const tsxBin = join(
-    projectRoot,
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'tsx.cmd' : 'tsx'
-  );
-  const hasTypeScriptRuntime =
-    process.execArgv.some((arg) => arg.includes('tsx')) ||
-    process.execArgv.some((arg) => arg.includes('ts-node'));
-
-  const buildNodeSpawnCommand = (entrypoint: string): SpawnCommand => {
-    const args = [entrypoint, 'internal', 'codex-app-server-acp'];
-    return {
-      command: process.execPath,
-      args,
-      commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
-    };
-  };
-
-  const resolveSourceSpawnCommand = (): SpawnCommand | null => {
-    if (!existsSync(cliSourceEntrypoint)) {
-      return null;
-    }
-    if (existsSync(tsxBin)) {
-      const args = [
-        ...(existsSync(tsconfigPath) ? ['--tsconfig', tsconfigPath] : []),
-        cliSourceEntrypoint,
-        'internal',
-        'codex-app-server-acp',
-      ];
-      return {
-        command: tsxBin,
-        args,
-        commandLabel: `${tsxBin} ${args.join(' ')}`.trim(),
-      };
-    }
-    if (hasTypeScriptRuntime) {
-      const args = [...process.execArgv, cliSourceEntrypoint, 'internal', 'codex-app-server-acp'];
-      return {
-        command: process.execPath,
-        args,
-        commandLabel: `${process.execPath} ${args.join(' ')}`.trim(),
-      };
-    }
-    return null;
-  };
-
-  if (preferSourceEntrypoint) {
-    const sourceCommand = resolveSourceSpawnCommand();
-    if (sourceCommand) {
-      return sourceCommand;
-    }
-
-    if (existsSync(cliDistEntrypoint)) {
-      return buildNodeSpawnCommand(cliDistEntrypoint);
-    }
-  } else {
-    if (existsSync(cliDistEntrypoint)) {
-      return buildNodeSpawnCommand(cliDistEntrypoint);
-    }
-
-    const sourceCommand = resolveSourceSpawnCommand();
-    if (sourceCommand) {
-      return sourceCommand;
-    }
-  }
-
-  throw new Error('Cannot resolve CLI entrypoint for CODEX ACP adapter spawn');
-}
 
 function getAcpErrorLogDetails(error: unknown): AcpErrorLogDetails {
   if (error instanceof Error) {

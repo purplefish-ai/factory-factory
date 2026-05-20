@@ -25,13 +25,7 @@ import {
   type SetSessionModeResponse,
   type StopReason,
 } from '@agentclientprotocol/sdk';
-import {
-  asString,
-  dedupeStrings,
-  extractLocations,
-  isRecord,
-  resolveToolCallId,
-} from './acp-adapter-utils';
+import { asString, extractLocations, isRecord, resolveToolCallId } from './acp-adapter-utils';
 import type {
   AdapterSession,
   ApprovalPolicy,
@@ -44,9 +38,20 @@ import type {
   SandboxMode,
   ToolCallState,
 } from './adapter-state';
+import {
+  extractReasoningText,
+  parseTextFromPromptBlock,
+  toCodexMcpConfigMap,
+} from './codex-adapter-parsing';
 import { CodexRequestError, CodexRpcClient, type CodexRpcExitEvent } from './codex-rpc-client';
 import { turnStartResponseSchema } from './codex-zod';
 import { resolveCommandDisplay } from './command-metadata';
+import {
+  hasPendingPlanApprovals,
+  holdTurnUntilPlanApprovalResolves,
+  maybeRequestPlanApproval,
+  shouldHoldTurnForPlanApproval,
+} from './plan-approval-handler';
 import { handleCodexServerPermissionRequest } from './protocol-permission-handler';
 import { attachCloseWatcherWithRetry } from './retry-logic';
 import {
@@ -56,7 +61,6 @@ import {
   getExecutionPresets,
   isKnownModel,
   isReasoningEffortSupportedForModel,
-  resolveCollaborationModeLabel,
   resolveDefaultCollaborationMode,
   resolveDefaultModel,
   resolveReasoningEffortForModel,
@@ -77,205 +81,7 @@ import { CodexStreamEventHandler } from './stream-event-handler';
 
 const PENDING_TURN_ID = '__pending_turn__';
 
-type PromptContentBlock = PromptRequest['prompt'][number];
 type TurnStartResponse = ReturnType<typeof turnStartResponseSchema.parse>;
-
-function isPlanLikeMode(mode: string): boolean {
-  return /plan/i.test(mode);
-}
-
-const PLAN_EXIT_MODE_PREFERENCE = ['default', 'code', 'acceptEdits', 'ask'] as const;
-
-const PLAN_TEXT_MAX_DEPTH = 8;
-const PLAN_TEXT_PREFERRED_KEYS = [
-  'plan',
-  'text',
-  'content',
-  'markdown',
-  'value',
-  'message',
-] as const;
-const REASONING_TEXT_MAX_DEPTH = 8;
-const REASONING_TEXT_PREFERRED_KEYS = [
-  'summary',
-  'summaryText',
-  'text',
-  'delta',
-  'message',
-  'content',
-  'reasoning',
-] as const;
-
-function extractFirstPlanText(values: Iterable<unknown>, depth: number): string | null {
-  for (const entry of values) {
-    const extracted = extractPlanTextLocal(entry, depth + 1);
-    if (extracted) {
-      return extracted;
-    }
-  }
-  return null;
-}
-
-function extractPlanTextFromRecord(value: Record<string, unknown>, depth: number): string | null {
-  const preferred = extractFirstPlanText(
-    PLAN_TEXT_PREFERRED_KEYS.map((key) => value[key]),
-    depth
-  );
-  if (preferred) {
-    return preferred;
-  }
-  return extractFirstPlanText(Object.values(value), depth);
-}
-
-function extractPlanTextLocal(value: unknown, depth = 0): string | null {
-  if (depth > PLAN_TEXT_MAX_DEPTH) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? value : null;
-  }
-
-  if (Array.isArray(value)) {
-    return extractFirstPlanText(value, depth);
-  }
-
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  return extractPlanTextFromRecord(value, depth);
-}
-
-function collectReasoningText(values: string[], value: unknown, depth = 0): void {
-  if (depth > REASONING_TEXT_MAX_DEPTH) {
-    return;
-  }
-
-  if (typeof value === 'string') {
-    if (value.trim().length > 0) {
-      values.push(value);
-    }
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      collectReasoningText(values, entry, depth + 1);
-    }
-    return;
-  }
-
-  if (!isRecord(value)) {
-    return;
-  }
-
-  for (const key of REASONING_TEXT_PREFERRED_KEYS) {
-    collectReasoningText(values, value[key], depth + 1);
-  }
-}
-
-function extractReasoningTextLocal(value: unknown): string | null {
-  const collected: string[] = [];
-  collectReasoningText(collected, value);
-  if (collected.length === 0) {
-    return null;
-  }
-
-  return dedupeStrings(collected).join('\n\n');
-}
-
-function toMcpEnvRecord(envVars: Array<{ name: string; value: string }>): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const entry of envVars) {
-    env[entry.name] = entry.value;
-  }
-  return env;
-}
-
-function toMcpHeadersRecord(
-  headers: Array<{ name: string; value: string }>
-): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const header of headers) {
-    result[header.name] = header.value;
-  }
-  return result;
-}
-
-function sanitizeMcpServerName(name: string, index: number): string {
-  const trimmed = name.trim();
-  return trimmed.length > 0 ? trimmed : `mcp_server_${index + 1}`;
-}
-
-function toCodexMcpServerConfig(server: McpServer): CodexMcpServerConfig {
-  if ('command' in server) {
-    const env = toMcpEnvRecord(server.env);
-    return {
-      enabled: true,
-      command: server.command,
-      args: [...server.args],
-      ...(Object.keys(env).length > 0 ? { env } : {}),
-    };
-  }
-
-  const httpHeaders = toMcpHeadersRecord(server.headers);
-  return {
-    enabled: true,
-    url: server.url,
-    ...(Object.keys(httpHeaders).length > 0 ? { http_headers: httpHeaders } : {}),
-    ...(server.type === 'sse' ? { transport: 'sse' as const } : {}),
-  };
-}
-
-function toCodexMcpConfigMap(mcpServers: McpServer[]): Record<string, CodexMcpServerConfig> {
-  const mcpServersByName: Record<string, CodexMcpServerConfig> = {};
-  const usedNames = new Set<string>();
-
-  for (const [index, server] of mcpServers.entries()) {
-    const baseName = sanitizeMcpServerName(server.name, index);
-    let nextName = baseName;
-    let suffix = 2;
-    while (usedNames.has(nextName)) {
-      nextName = `${baseName}_${suffix}`;
-      suffix += 1;
-    }
-    usedNames.add(nextName);
-    mcpServersByName[nextName] = toCodexMcpServerConfig(server);
-  }
-
-  return mcpServersByName;
-}
-
-function parseTextFromPromptBlock(block: PromptContentBlock): string {
-  if (block.type === 'text') {
-    return block.text;
-  }
-
-  if (block.type === 'resource_link') {
-    return `[ACP_RESOURCE_LINK uri="${block.uri}" name="${block.name}"]\n[/ACP_RESOURCE_LINK]`;
-  }
-
-  if (block.type === 'resource') {
-    const resource = block.resource;
-    const mime = resource.mimeType ?? 'unknown';
-    const payload =
-      'text' in resource && typeof resource.text === 'string'
-        ? resource.text
-        : 'blob' in resource && typeof resource.blob === 'string'
-          ? resource.blob
-          : JSON.stringify(resource);
-    return `[ACP_RESOURCE uri="${resource.uri}" mime="${mime}"]\n${payload}\n[/ACP_RESOURCE]`;
-  }
-
-  if (block.type === 'image') {
-    const mime = block.mimeType ?? 'application/octet-stream';
-    return `[ACP_IMAGE mime="${mime}" bytes=${block.data.length}]`;
-  }
-
-  return JSON.stringify(block);
-}
 
 export class CodexAppServerAcpAdapter implements Agent {
   private readonly connection: AgentSideConnection;
@@ -875,7 +681,7 @@ export class CodexAppServerAcpAdapter implements Agent {
     sessionId: string,
     item: Record<string, unknown>
   ): Promise<void> {
-    const text = extractReasoningTextLocal(item);
+    const text = extractReasoningText(item);
     if (!text) {
       return;
     }
@@ -891,134 +697,15 @@ export class CodexAppServerAcpAdapter implements Agent {
     item: { type: string; id: string } & Record<string, unknown>,
     turnId: string
   ): boolean {
-    return (
-      item.type === 'plan' &&
-      isPlanLikeMode(session.defaults.collaborationMode) &&
-      !session.planApprovalRequestedByTurnId.has(turnId) &&
-      this.extractPlanApprovalText(session, item) !== null
-    );
-  }
-
-  private buildPlanApprovalInput(planText: string, sourceItemId: string): Record<string, unknown> {
-    return {
-      type: 'ExitPlanMode',
-      plan: { type: 'text', text: planText },
-      reason: 'Plan proposed. Approve to exit plan mode and continue implementation.',
-      source: 'codex_plan_completion',
-      sourceItemId,
-    };
-  }
-
-  private extractPlanApprovalText(
-    session: AdapterSession,
-    item: { id: string } & Record<string, unknown>
-  ): string | null {
-    const bufferedText = session.planTextByItemId.get(item.id);
-    if (bufferedText && bufferedText.trim().length > 0) {
-      return bufferedText;
-    }
-    const fromPlanField = extractPlanTextLocal(item.plan);
-    if (fromPlanField && fromPlanField.trim().length > 0) {
-      return fromPlanField;
-    }
-    const fromTextField = extractPlanTextLocal(item.text);
-    if (fromTextField && fromTextField.trim().length > 0) {
-      return fromTextField;
-    }
-    return null;
-  }
-
-  private getPlanExitModePriority(modeId: string): number {
-    const normalized = modeId.toLowerCase();
-    const index = PLAN_EXIT_MODE_PREFERENCE.findIndex(
-      (preferred) => preferred.toLowerCase() === normalized
-    );
-    return index >= 0 ? index : PLAN_EXIT_MODE_PREFERENCE.length;
-  }
-
-  private comparePlanExitModePreference(left: string, right: string): number {
-    const priorityDiff = this.getPlanExitModePriority(left) - this.getPlanExitModePriority(right);
-    if (priorityDiff !== 0) {
-      return priorityDiff;
-    }
-    return left.localeCompare(right);
-  }
-
-  private resolveCollaborationModeLabel(modeId: string): string {
-    return resolveCollaborationModeLabel(this.collaborationModes, modeId);
-  }
-
-  private buildPlanApprovalOptions(session: AdapterSession): {
-    options: Array<{
-      optionId: string;
-      name: string;
-      kind: 'allow_once' | 'reject_once';
-    }>;
-    approvableModeIds: Set<string>;
-  } {
-    const currentMode = session.defaults.collaborationMode;
-    const availableModes = this.getCollaborationModeValues(currentMode);
-    const nonPlanModes = availableModes
-      .filter((modeId) => !isPlanLikeMode(modeId))
-      .sort((left, right) => this.comparePlanExitModePreference(left, right));
-
-    const approvableModeIds = new Set<string>(nonPlanModes);
-    const options: Array<{ optionId: string; name: string; kind: 'allow_once' | 'reject_once' }> =
-      nonPlanModes.map((modeId) => ({
-        optionId: modeId,
-        name: `Approve and switch to ${this.resolveCollaborationModeLabel(modeId)}`,
-        kind: 'allow_once' as const,
-      }));
-
-    options.push({
-      optionId: currentMode,
-      name: 'Keep planning',
-      kind: 'reject_once',
-    });
-
-    return { options, approvableModeIds };
+    return shouldHoldTurnForPlanApproval(session, item, turnId);
   }
 
   private holdTurnUntilPlanApprovalResolves(session: AdapterSession, turnId: string): void {
-    if (this.hasPendingPlanApprovals(session, turnId)) {
-      return;
-    }
-    session.pendingPlanApprovalsByTurnId.set(turnId, 1);
+    holdTurnUntilPlanApprovalResolves(session, turnId);
   }
 
   private hasPendingPlanApprovals(session: AdapterSession, turnId: string): boolean {
-    return (session.pendingPlanApprovalsByTurnId.get(turnId) ?? 0) > 0;
-  }
-
-  private async releaseTurnHoldForPlanApproval(
-    session: AdapterSession,
-    turnId: string
-  ): Promise<void> {
-    const pendingCount = session.pendingPlanApprovalsByTurnId.get(turnId) ?? 0;
-    if (pendingCount <= 1) {
-      session.pendingPlanApprovalsByTurnId.delete(turnId);
-    } else {
-      session.pendingPlanApprovalsByTurnId.set(turnId, pendingCount - 1);
-    }
-
-    if (this.hasPendingPlanApprovals(session, turnId)) {
-      return;
-    }
-
-    if (!session.activeTurn || session.activeTurn.settled || session.activeTurn.turnId !== turnId) {
-      return;
-    }
-
-    const deferredCompletion = session.pendingTurnCompletionsByTurnId.get(turnId);
-    if (!deferredCompletion) {
-      return;
-    }
-
-    session.pendingTurnCompletionsByTurnId.delete(turnId);
-    if (deferredCompletion.errorMessage) {
-      await this.emitTurnFailureMessage(session.sessionId, deferredCompletion.errorMessage);
-    }
-    this.settleTurn(session, deferredCompletion.stopReason);
+    return hasPendingPlanApprovals(session, turnId);
   }
 
   private async maybeRequestPlanApproval(
@@ -1027,98 +714,19 @@ export class CodexAppServerAcpAdapter implements Agent {
     turnId: string,
     completedPlanToolCall: ToolCallState
   ): Promise<void> {
-    if (item.type !== 'plan') {
-      return;
-    }
-    if (!isPlanLikeMode(session.defaults.collaborationMode)) {
-      return;
-    }
-    if (session.planApprovalRequestedByTurnId.has(turnId)) {
-      return;
-    }
-
-    const planText = this.extractPlanApprovalText(session, item);
-    if (!planText) {
-      return;
-    }
-
-    session.planApprovalRequestedByTurnId.add(turnId);
-    this.holdTurnUntilPlanApprovalResolves(session, turnId);
-    const approvalToolCallId = `${completedPlanToolCall.toolCallId}:exit-plan`;
-    const approvalInput = this.buildPlanApprovalInput(planText, item.id);
-
-    await this.emitSessionUpdate(session.sessionId, {
-      sessionUpdate: 'tool_call',
-      toolCallId: approvalToolCallId,
-      title: 'ExitPlanMode',
-      kind: 'switch_mode',
-      status: 'pending',
-      rawInput: approvalInput,
+    await maybeRequestPlanApproval({
+      session,
+      item,
+      turnId,
+      completedPlanToolCall,
+      connection: this.connection,
+      collaborationModes: this.collaborationModes,
+      buildConfigOptions: (targetSession) => this.buildConfigOptions(targetSession),
+      emitSessionUpdate: (sessionId, update) => this.emitSessionUpdate(sessionId, update),
+      emitTurnFailureMessage: (sessionId, errorMessage) =>
+        this.emitTurnFailureMessage(sessionId, errorMessage),
+      settleTurn: (targetSession, stopReason) => this.settleTurn(targetSession, stopReason),
     });
-
-    try {
-      const { options: planApprovalOptions, approvableModeIds } =
-        this.buildPlanApprovalOptions(session);
-      if (approvableModeIds.size === 0) {
-        await this.emitSessionUpdate(session.sessionId, {
-          sessionUpdate: 'tool_call_update',
-          toolCallId: approvalToolCallId,
-          kind: 'switch_mode',
-          title: 'ExitPlanMode',
-          status: 'failed',
-          rawOutput: 'Plan proposed, but no non-plan collaboration mode is available.',
-        });
-        return;
-      }
-
-      const permissionResult = await this.connection.requestPermission({
-        sessionId: session.sessionId,
-        toolCall: {
-          toolCallId: approvalToolCallId,
-          title: 'ExitPlanMode',
-          kind: 'switch_mode',
-          status: 'pending',
-          rawInput: approvalInput,
-        },
-        options: planApprovalOptions,
-      });
-
-      const selectedMode =
-        permissionResult.outcome.outcome === 'selected' &&
-        approvableModeIds.has(permissionResult.outcome.optionId)
-          ? permissionResult.outcome.optionId
-          : null;
-      const approved = selectedMode !== null;
-
-      if (selectedMode && session.defaults.collaborationMode !== selectedMode) {
-        session.defaults.collaborationMode = selectedMode;
-        await this.emitSessionUpdate(session.sessionId, {
-          sessionUpdate: 'config_option_update',
-          configOptions: this.buildConfigOptions(session),
-        });
-      }
-
-      await this.emitSessionUpdate(session.sessionId, {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: approvalToolCallId,
-        kind: 'switch_mode',
-        title: 'ExitPlanMode',
-        status: approved ? 'completed' : 'failed',
-        rawOutput: approved ? 'Plan approved' : 'Plan approval rejected',
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await this.emitSessionUpdate(session.sessionId, {
-        sessionUpdate: 'tool_call_update',
-        toolCallId: approvalToolCallId,
-        kind: 'switch_mode',
-        title: 'ExitPlanMode',
-        status: 'failed',
-        rawOutput: `Plan approval failed: ${message}`,
-      });
-    } finally {
-      await this.releaseTurnHoldForPlanApproval(session, turnId);
-    }
   }
 
   private buildToolCallState(

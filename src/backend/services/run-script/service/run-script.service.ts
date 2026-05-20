@@ -1,5 +1,4 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import treeKill from 'tree-kill';
 import { toError } from '@/backend/lib/error-utils';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -10,43 +9,27 @@ import {
 } from '@/backend/services/run-script-config-persistence.service';
 import { runScriptProxyService } from '@/backend/services/run-script-proxy.service';
 import { workspaceAccessor } from '@/backend/services/workspace';
-import type { RunScriptStatus } from '@/shared/core';
 import { RunScriptOutputBuffer } from './run-script-output-buffer';
+import {
+  runCleanupScriptProcess,
+  shouldRejectStopWithoutProcess,
+  treeKillProcess,
+  waitForChildProcessExit,
+} from './run-script-process-utils';
 import { runScriptStateMachine } from './run-script-state-machine.service';
 
 const logger = createLogger('run-script-service');
 
-// Max output buffer size per run script (500KB)
 const MAX_OUTPUT_BUFFER_SIZE = 500 * 1024;
 
-function shouldRejectStopWithoutProcess(
-  status: RunScriptStatus,
-  childProcess: ChildProcess | undefined,
-  pid: number | null
-): boolean {
-  if (childProcess || pid) {
-    return false;
-  }
-  return status !== 'STARTING';
-}
-
-/**
- * Service for managing run script execution from factory-factory.json
- */
 export class RunScriptService {
-  // Track running processes by workspace ID
   private readonly runningProcesses = new Map<string, ChildProcess>();
-
-  // Track postRun sidecar processes by workspace ID
   private readonly postRunProcesses = new Map<string, ChildProcess>();
 
   private readonly runOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
   private readonly postRunOutput = new RunScriptOutputBuffer(MAX_OUTPUT_BUFFER_SIZE);
 
-  // Track whether we're shutting down to prevent double cleanup
   private isShuttingDown = false;
-
-  // Guard against duplicate handler registration on module reload
   private shutdownHandlersRegistered = false;
 
   /**
@@ -578,54 +561,7 @@ export class RunScriptService {
       runScriptPort: number | null;
     }
   ): Promise<void> {
-    logger.info('Running cleanup script before stopping', {
-      workspaceId,
-      cleanupCommand: workspace.runScriptCleanupCommand,
-    });
-
-    try {
-      const cleanupCommand = workspace.runScriptPort
-        ? FactoryConfigService.substitutePort(
-            workspace.runScriptCleanupCommand,
-            workspace.runScriptPort
-          )
-        : workspace.runScriptCleanupCommand;
-
-      const cleanupProcess = spawn('bash', ['-c', cleanupCommand], {
-        cwd: workspace.worktreePath,
-        detached: false,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      cleanupProcess.stdout?.on('error', (error) => {
-        logger.warn('Cleanup script stdout stream error', { workspaceId, error });
-      });
-      cleanupProcess.stderr?.on('error', (error) => {
-        logger.warn('Cleanup script stderr stream error', { workspaceId, error });
-      });
-
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          logger.warn('Cleanup script timed out, proceeding anyway', { workspaceId });
-          cleanupProcess.kill('SIGTERM');
-          resolve();
-        }, 5000);
-
-        cleanupProcess.on('exit', (code) => {
-          clearTimeout(timeout);
-          logger.info('Cleanup script completed', { workspaceId, exitCode: code });
-          resolve();
-        });
-
-        cleanupProcess.on('error', (error) => {
-          clearTimeout(timeout);
-          logger.error('Cleanup script error', error, { workspaceId });
-          resolve();
-        });
-      });
-    } catch (error) {
-      logger.error('Failed to run cleanup script', toError(error), { workspaceId });
-    }
+    await runCleanupScriptProcess(workspaceId, workspace, logger);
   }
 
   private async spawnPostRunScript(
@@ -704,23 +640,20 @@ export class RunScriptService {
 
     logger.info('Stopping postRun process', { workspaceId, pid: postRunPid });
 
-    await new Promise<void>((resolve) => {
-      treeKill(postRunPid, 'SIGTERM', (err) => {
-        if (err) {
-          const errorCode = (err as NodeJS.ErrnoException).code;
-          const message = err.message;
-          if (errorCode !== 'ESRCH' && !message.includes('No such process')) {
-            logger.warn('Failed to tree-kill postRun process', {
-              workspaceId,
-              pid: postRunPid,
-              error: message,
-            });
-          }
+    await treeKillProcess(
+      postRunPid,
+      'SIGTERM',
+      (message, errorCode) => {
+        if (errorCode !== 'ESRCH' && !message.includes('No such process')) {
+          logger.warn('Failed to tree-kill postRun process', {
+            workspaceId,
+            pid: postRunPid,
+            error: message,
+          });
         }
-        this.postRunProcesses.delete(workspaceId);
-        resolve();
-      });
-    });
+      },
+      () => this.postRunProcesses.delete(workspaceId)
+    );
   }
 
   private async killProcessTree(
@@ -736,29 +669,26 @@ export class RunScriptService {
     const source = childProcess?.pid ? 'stored process' : 'PID';
     logger.info(`Stopping run script via ${source}`, { workspaceId, pid: targetPid });
 
-    await new Promise<void>((resolve) => {
-      treeKill(targetPid, 'SIGTERM', (err) => {
-        if (err) {
-          const errorCode = (err as NodeJS.ErrnoException).code;
-          const message = err.message;
-          if (errorCode === 'ESRCH' || message.includes('No such process')) {
-            logger.debug('Run script process already exited before tree-kill', {
-              workspaceId,
-              pid: targetPid,
-              error: message,
-            });
-          } else {
-            logger.warn('Failed to tree-kill run script process', {
-              workspaceId,
-              pid: targetPid,
-              error: message,
-            });
-          }
+    await treeKillProcess(
+      targetPid,
+      'SIGTERM',
+      (message, errorCode) => {
+        if (errorCode === 'ESRCH' || message.includes('No such process')) {
+          logger.debug('Run script process already exited before tree-kill', {
+            workspaceId,
+            pid: targetPid,
+            error: message,
+          });
+          return;
         }
-        this.runningProcesses.delete(workspaceId);
-        resolve();
-      });
-    });
+        logger.warn('Failed to tree-kill run script process', {
+          workspaceId,
+          pid: targetPid,
+          error: message,
+        });
+      },
+      () => this.runningProcesses.delete(workspaceId)
+    );
   }
 
   private async waitForProcessExit(
@@ -766,58 +696,7 @@ export class RunScriptService {
     childProcess: ChildProcess | undefined,
     pid: number | null
   ): Promise<void> {
-    if (!childProcess) {
-      return;
-    }
-
-    if (childProcess.exitCode !== null) {
-      return;
-    }
-
-    if (typeof childProcess.once !== 'function' || typeof childProcess.off !== 'function') {
-      return;
-    }
-
-    const waitPid = childProcess.pid ?? pid ?? undefined;
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        logger.warn('Timed out waiting for run script process exit after stop', {
-          workspaceId,
-          pid: waitPid,
-        });
-        resolve();
-      }, 10_000);
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        childProcess.off('exit', onExit);
-        childProcess.off('error', onError);
-      };
-
-      const onExit = () => {
-        cleanup();
-        resolve();
-      };
-
-      const onError = (error: Error) => {
-        cleanup();
-        logger.warn('Run script process emitted error while waiting for exit', {
-          workspaceId,
-          pid: waitPid,
-          error,
-        });
-        resolve();
-      };
-
-      childProcess.once('exit', onExit);
-      childProcess.once('error', onError);
-
-      if (childProcess.exitCode !== null) {
-        cleanup();
-        resolve();
-      }
-    });
+    await waitForChildProcessExit({ workspaceId, childProcess, pid, logger });
   }
 
   /**
