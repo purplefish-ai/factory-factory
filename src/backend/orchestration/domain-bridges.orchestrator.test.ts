@@ -2,6 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Module mocks (inline vi.fn() - no top-level variable references) ---
 
+const mockLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  debug: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock('@/backend/services/logger.service', () => ({
+  createLogger: () => mockLogger,
+}));
+
 vi.mock('@/backend/services/ratchet', () => ({
   ratchetService: { configure: vi.fn(), clearRatchetActiveSessionIfMatching: vi.fn() },
   fixerSessionService: {
@@ -14,7 +25,7 @@ vi.mock('@/backend/services/ratchet', () => ({
 
 vi.mock('@/backend/services/workspace', () => ({
   kanbanStateService: { configure: vi.fn(), updateCachedKanbanColumn: vi.fn() },
-  workspaceAccessor: { findRawById: vi.fn(), update: vi.fn() },
+  workspaceAccessor: { create: vi.fn(), findRawById: vi.fn(), update: vi.fn() },
   workspaceQueryService: { configure: vi.fn() },
   workspaceActivityService: {
     markSessionRunning: vi.fn(),
@@ -26,7 +37,10 @@ vi.mock('@/backend/services/workspace', () => ({
 }));
 
 vi.mock('@/backend/services/session', () => ({
-  sessionDataService: { createAgentSession: vi.fn() },
+  sessionDataService: {
+    createAgentSession: vi.fn(),
+    findAgentSessionsByWorkspaceId: vi.fn(),
+  },
   sessionService: {
     configure: vi.fn(),
     setPromptTurnCompleteHandler: vi.fn(),
@@ -38,7 +52,11 @@ vi.mock('@/backend/services/session', () => ({
     sendSessionMessage: vi.fn(),
     sendAcpMessage: vi.fn(),
   },
-  sessionDomainService: { injectCommittedUserMessage: vi.fn(), getTranscriptSnapshot: vi.fn() },
+  sessionDomainService: {
+    injectCommittedUserMessage: vi.fn(),
+    getTranscriptSnapshot: vi.fn(),
+    getQueueLength: vi.fn(),
+  },
   chatEventForwarderService: { configure: vi.fn(), getAllPendingRequests: vi.fn() },
   chatMessageHandlerService: { configure: vi.fn(), tryDispatchNextMessage: vi.fn() },
 }));
@@ -57,6 +75,10 @@ vi.mock('@/backend/services/github', () => ({
   prSnapshotService: { configure: vi.fn(), refreshWorkspace: vi.fn() },
 }));
 
+vi.mock('@/backend/services/periodic-task', () => ({
+  periodicTaskService: { configure: vi.fn() },
+}));
+
 vi.mock('@/backend/services/run-script', () => ({
   startupScriptService: { configure: vi.fn() },
 }));
@@ -68,6 +90,7 @@ vi.mock('./workspace-init.orchestrator', () => ({
 // --- Import mocked modules to get references ---
 
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { periodicTaskService } from '@/backend/services/periodic-task';
 import {
   fixerSessionService,
   ratchetService,
@@ -77,12 +100,14 @@ import { startupScriptService } from '@/backend/services/run-script';
 import {
   chatEventForwarderService,
   chatMessageHandlerService,
+  sessionDataService,
   sessionDomainService,
   sessionService,
 } from '@/backend/services/session';
 import {
   getWorkspaceInitPolicy,
   kanbanStateService,
+  workspaceAccessor,
   workspaceActivityService,
   workspaceQueryService,
   workspaceStateMachine,
@@ -134,6 +159,12 @@ describe('configureDomainBridges', () => {
     configureDomainBridges();
 
     expect(startupScriptService.configure).toHaveBeenCalledTimes(1);
+  });
+
+  it('configures periodic task domain services', () => {
+    configureDomainBridges();
+
+    expect(periodicTaskService.configure).toHaveBeenCalledTimes(1);
   });
 
   describe('ratchet bridge delegation', () => {
@@ -260,6 +291,131 @@ describe('configureDomainBridges', () => {
 
       bridge.prSnapshot.refreshWorkspace('ws1', 'https://pr.url');
       expect(prSnapshotService.refreshWorkspace).toHaveBeenCalledWith('ws1', 'https://pr.url');
+    });
+  });
+
+  describe('periodic task bridge delegation', () => {
+    it('creates periodic task workspaces and logs background init failures', async () => {
+      const workspace = {
+        id: 'ws-periodic',
+      } as Awaited<ReturnType<typeof workspaceAccessor.create>>;
+      vi.mocked(workspaceAccessor.create).mockResolvedValue(workspace);
+      vi.mocked(sessionDataService.createAgentSession).mockResolvedValue({
+        id: 'session-1',
+      } as Awaited<ReturnType<typeof sessionDataService.createAgentSession>>);
+      vi.mocked(initializeWorkspaceWorktree).mockRejectedValue(new Error('init failed'));
+
+      configureDomainBridges();
+      const bridge = getBridge(periodicTaskService.configure);
+
+      await expect(
+        bridge.workspace.createWorkspaceForTask({
+          projectId: 'project-1',
+          name: 'Periodic task run',
+          prompt: 'Do the recurring work',
+          periodicTaskId: 'periodic-task-1',
+        })
+      ).resolves.toEqual({ workspaceId: 'ws-periodic' });
+      await Promise.resolve();
+
+      expect(workspaceAccessor.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: 'project-1',
+          name: 'Periodic task run',
+          creationSource: 'PERIODIC_TASK',
+          periodicTaskId: 'periodic-task-1',
+          ratchetEnabled: true,
+          creationMetadata: { initialPrompt: 'Do the recurring work' },
+        })
+      );
+      expect(sessionDataService.createAgentSession).toHaveBeenCalledWith({
+        workspaceId: 'ws-periodic',
+        workflow: 'implement',
+        name: 'Periodic task',
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to initialize workspace for periodic task',
+        expect.any(Error),
+        { workspaceId: 'ws-periodic' }
+      );
+    });
+
+    it('includes agent working state in periodic task workspace status', async () => {
+      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+        { id: 'session-1' },
+        { id: 'session-2' },
+      ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
+      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(true);
+
+      configureDomainBridges();
+      const bridge = getBridge(periodicTaskService.configure);
+
+      await expect(bridge.status.getWorkspaceStatus('ws-periodic')).resolves.toEqual({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        isAgentWorking: true,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      });
+      expect(sessionService.isAnySessionWorking).toHaveBeenCalledWith(['session-1', 'session-2']);
+    });
+
+    it('treats queued periodic task session messages as active agent work', async () => {
+      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+        { id: 'session-1' },
+        { id: 'session-2' },
+      ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
+      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
+      vi.mocked(sessionDomainService.getQueueLength).mockReturnValueOnce(0).mockReturnValueOnce(1);
+
+      configureDomainBridges();
+      const bridge = getBridge(periodicTaskService.configure);
+
+      await expect(bridge.status.getWorkspaceStatus('ws-periodic')).resolves.toEqual({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        isAgentWorking: true,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      });
+      expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-1');
+      expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-2');
+    });
+
+    it('does not read queued messages for stopped periodic task sessions', async () => {
+      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+        { id: 'session-1' },
+      ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
+      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+
+      configureDomainBridges();
+      const bridge = getBridge(periodicTaskService.configure);
+
+      await expect(bridge.status.getWorkspaceStatus('ws-periodic')).resolves.toMatchObject({
+        isAgentWorking: false,
+      });
+      expect(sessionService.isSessionRunning).toHaveBeenCalledWith('session-1');
+      expect(sessionDomainService.getQueueLength).not.toHaveBeenCalled();
     });
   });
 

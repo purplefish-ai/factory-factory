@@ -9,6 +9,7 @@
  */
 
 import type { Prisma } from '@prisma-gen/client';
+import { toError } from '@/backend/lib/error-utils';
 import {
   type AutoIterationLogbookBridge,
   type AutoIterationSessionBridge,
@@ -17,6 +18,7 @@ import {
   logbookService,
 } from '@/backend/services/auto-iteration';
 import { githubCLIService, prSnapshotService } from '@/backend/services/github';
+import { createLogger } from '@/backend/services/logger.service';
 import { periodicTaskService } from '@/backend/services/periodic-task';
 import {
   fixerSessionService,
@@ -49,6 +51,8 @@ import { workspaceSnapshotStore } from '@/backend/services/workspace-snapshot-st
 import { autoIterationProgressSchema } from '@/shared/schemas/auto-iteration.schema';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 import { initializeWorkspaceWorktree } from './workspace-init.orchestrator';
+
+const logger = createLogger('domain-bridges');
 
 type BridgeServices = {
   autoIterationService: typeof autoIterationService;
@@ -385,8 +389,10 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
         });
 
         // Initialize worktree in background
-        void initializeWorkspaceWorktree(workspace.id).catch(() => {
-          // Best-effort: errors are logged inside initializeWorkspaceWorktree
+        void initializeWorkspaceWorktree(workspace.id).catch((error) => {
+          logger.error('Failed to initialize workspace for periodic task', toError(error), {
+            workspaceId: workspace.id,
+          });
         });
 
         return { workspaceId: workspace.id };
@@ -398,10 +404,20 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
         if (!ws) {
           return null;
         }
+        const sessions = await sessionDataService.findAgentSessionsByWorkspaceId(workspaceId);
+        const sessionIds = sessions.map((session) => session.id);
         return {
           status: ws.status,
           prUrl: ws.prUrl,
           prNumber: ws.prNumber,
+          isAgentWorking:
+            sessionService.isAnySessionWorking(sessionIds) ||
+            sessionIds.some(
+              (sessionId) =>
+                sessionService.isSessionRunning(sessionId) &&
+                sessionDomainService.getQueueLength(sessionId) > 0
+            ),
+          initCompletedAt: ws.initCompletedAt,
         };
       },
     },
