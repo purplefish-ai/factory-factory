@@ -777,6 +777,60 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     expect(mockSnapshotBridge.recordReviewCheck).not.toHaveBeenCalled();
   });
 
+  it('cleans up completed ratchet sessions before skipping clean PRs', async () => {
+    const workspace = {
+      id: 'ws-clean-active',
+      prUrl: 'https://github.com/example/repo/pull/13',
+      prNumber: 13,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.SUCCESS,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: 'ratchet-session',
+      ratchetLastCiRunId: 'clean-snapshot',
+      prReviewLastCheckedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+    const prStateInfo = {
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'clean-snapshot',
+      hasChangesRequested: false,
+      latestReviewActivityAtMs: null,
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 13,
+      reviewComments: [],
+    };
+
+    vi.mocked(agentSessionAccessor.findById).mockResolvedValue({
+      id: 'ratchet-session',
+      provider: 'CLAUDE',
+      status: SessionStatus.RUNNING,
+    } as never);
+    vi.mocked(mockSessionBridge.isSessionRunning).mockReturnValue(true);
+    vi.mocked(mockSessionBridge.isSessionWorking).mockReturnValue(false);
+    vi.mocked(mockSessionBridge.stopSession).mockResolvedValue();
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+
+    const result = await unsafeCoerce<{
+      collectRatchetingActivityChecks: (
+        workspaceArg: typeof workspace,
+        prStateInfoArg: typeof prStateInfo,
+        isCleanPrWithNoNewReviewActivity: boolean,
+        hasStateChangedSinceLastDispatch: boolean
+      ) => Promise<unknown>;
+    }>(ratchetService).collectRatchetingActivityChecks(workspace, prStateInfo, true, false);
+
+    expect(result).toEqual({
+      activeRatchetSession: null,
+      hasOtherActiveSession: false,
+    });
+    expect(workspaceAccessor.update).toHaveBeenCalledWith(workspace.id, {
+      ratchetActiveSessionId: null,
+    });
+    expect(mockSessionBridge.stopSession).toHaveBeenCalledWith('ratchet-session');
+    expect(agentSessionAccessor.findByWorkspaceId).not.toHaveBeenCalled();
+  });
+
   it('decides to trigger fixer when context is actionable', () => {
     const decision = unsafeCoerce<{
       decideRatchetAction: (context: unknown) => { type: string };

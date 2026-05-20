@@ -666,21 +666,27 @@ class RatchetService extends EventEmitter {
     activeRatchetSession: RatchetAction | null;
     hasOtherActiveSession: boolean;
   }> {
-    if (
-      !workspace.ratchetEnabled ||
-      prStateInfo.prState !== 'OPEN' ||
-      isCleanPrWithNoNewReviewActivity
-    ) {
+    if (!workspace.ratchetEnabled || prStateInfo.prState !== 'OPEN') {
       return {
         activeRatchetSession: null,
         hasOtherActiveSession: false,
       };
     }
 
-    const activeRatchetSession = await this.getActiveRatchetSession(workspace);
-    if (activeRatchetSession) {
+    let activeRatchetSession: RatchetAction | null = null;
+    if (workspace.ratchetActiveSessionId) {
+      activeRatchetSession = await this.getActiveRatchetSession(workspace);
+      if (activeRatchetSession) {
+        return {
+          activeRatchetSession,
+          hasOtherActiveSession: false,
+        };
+      }
+    }
+
+    if (isCleanPrWithNoNewReviewActivity) {
       return {
-        activeRatchetSession,
+        activeRatchetSession: null,
         hasOtherActiveSession: false,
       };
     }
@@ -730,6 +736,10 @@ class RatchetService extends EventEmitter {
       };
     }
 
+    if (context.activeRatchetSession) {
+      return { type: 'RETURN_ACTION', action: context.activeRatchetSession };
+    }
+
     if (context.isCleanPrWithNoNewReviewActivity) {
       return {
         type: 'RETURN_ACTION',
@@ -742,10 +752,6 @@ class RatchetService extends EventEmitter {
         type: 'RETURN_ACTION',
         action: { type: 'WAITING', reason: 'No CI failures or PR review comments to address' },
       };
-    }
-
-    if (context.activeRatchetSession) {
-      return { type: 'RETURN_ACTION', action: context.activeRatchetSession };
     }
 
     if (!context.hasStateChangedSinceLastDispatch) {
