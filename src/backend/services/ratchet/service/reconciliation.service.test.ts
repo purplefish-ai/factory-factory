@@ -53,6 +53,7 @@ describe('ReconciliationService', () => {
 
   afterEach(async () => {
     await reconciliationService.stopPeriodicCleanup();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -183,44 +184,95 @@ describe('ReconciliationService', () => {
   });
 
   describe('periodic cleanup', () => {
-    it('does not start overlapping cleanup runs while one is in progress', async () => {
-      const releaseCleanup: { current: (() => void) | null } = { current: null };
+    it('runs workspace reconciliation and orphan cleanup on the periodic timer', async () => {
+      mockFindMany.mockResolvedValue([]);
+      const cleanupSpy = vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersToNextTimerAsync();
+
+      expect(mockFindMany).toHaveBeenCalled();
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('still runs orphan cleanup when workspace reconciliation fails', async () => {
+      vi.spyOn(reconciliationService, 'reconcile').mockRejectedValue(new Error('reconcile failed'));
+      const cleanupSpy = vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
+
+      reconciliationService.startPeriodicCleanup();
+      await vi.advanceTimersToNextTimerAsync();
+
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves the reconciliation error when orphan cleanup also fails', async () => {
+      vi.spyOn(reconciliationService, 'reconcile').mockRejectedValue(new Error('reconcile failed'));
       const cleanupSpy = vi
         .spyOn(reconciliationService, 'cleanupOrphans')
+        .mockRejectedValue(new Error('cleanup failed'));
+      const runPeriodicReconciliation = Reflect.get(
+        reconciliationService,
+        'runPeriodicReconciliation'
+      ) as () => Promise<void>;
+
+      await expect(runPeriodicReconciliation.call(reconciliationService)).rejects.toThrow(
+        'reconcile failed'
+      );
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves falsy reconciliation errors after orphan cleanup runs', async () => {
+      vi.spyOn(reconciliationService, 'reconcile').mockRejectedValue(undefined);
+      const cleanupSpy = vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
+      const runPeriodicReconciliation = Reflect.get(
+        reconciliationService,
+        'runPeriodicReconciliation'
+      ) as () => Promise<void>;
+
+      await expect(runPeriodicReconciliation.call(reconciliationService)).rejects.toBeUndefined();
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not start overlapping reconciliation runs while one is in progress', async () => {
+      const releaseReconciliation: { current: (() => void) | null } = { current: null };
+      const reconciliationSpy = vi
+        .spyOn(reconciliationService, 'reconcile')
         .mockImplementationOnce(
           () =>
             new Promise<void>((resolve) => {
-              releaseCleanup.current = () => resolve();
+              releaseReconciliation.current = () => resolve();
             })
         )
         .mockResolvedValue(undefined);
+      vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
 
       reconciliationService.startPeriodicCleanup();
       await vi.advanceTimersToNextTimerAsync();
       await vi.advanceTimersToNextTimerAsync();
 
-      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+      expect(reconciliationSpy).toHaveBeenCalledTimes(1);
 
-      if (releaseCleanup.current) {
-        releaseCleanup.current();
+      if (releaseReconciliation.current) {
+        releaseReconciliation.current();
       }
       await Promise.resolve();
       await vi.advanceTimersToNextTimerAsync();
 
-      expect(cleanupSpy).toHaveBeenCalledTimes(2);
+      expect(reconciliationSpy).toHaveBeenCalledTimes(2);
     });
 
-    it('waits for in-flight cleanup before stopping', async () => {
-      const releaseCleanup: { current: (() => void) | null } = { current: null };
-      const cleanupSpy = vi
-        .spyOn(reconciliationService, 'cleanupOrphans')
+    it('waits for in-flight reconciliation before stopping', async () => {
+      const releaseReconciliation: { current: (() => void) | null } = { current: null };
+      const reconciliationSpy = vi
+        .spyOn(reconciliationService, 'reconcile')
         .mockImplementationOnce(
           () =>
             new Promise<void>((resolve) => {
-              releaseCleanup.current = () => resolve();
+              releaseReconciliation.current = () => resolve();
             })
         )
         .mockResolvedValue(undefined);
+      vi.spyOn(reconciliationService, 'cleanupOrphans').mockResolvedValue();
 
       reconciliationService.startPeriodicCleanup();
       await vi.advanceTimersToNextTimerAsync();
@@ -232,14 +284,14 @@ describe('ReconciliationService', () => {
 
       await Promise.resolve();
       expect(stopped).toBe(false);
-      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+      expect(reconciliationSpy).toHaveBeenCalledTimes(1);
 
-      if (releaseCleanup.current) {
-        releaseCleanup.current();
+      if (releaseReconciliation.current) {
+        releaseReconciliation.current();
       }
       await stopPromise;
       expect(stopped).toBe(true);
-      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+      expect(reconciliationSpy).toHaveBeenCalledTimes(1);
     });
   });
 });
