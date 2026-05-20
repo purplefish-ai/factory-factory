@@ -142,11 +142,48 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   );
 }
 
+function getDayOfMonth(date: Date, timezone?: string | null): number {
+  if (!timezone) {
+    return date.getDate();
+  }
+
+  const day = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    day: 'numeric',
+  }).format(date);
+
+  return Number(day);
+}
+
+function assignIfDefined<T>(
+  data: Record<string, unknown>,
+  key: string,
+  value: T | undefined
+): void {
+  if (value !== undefined) {
+    data[key] = value;
+  }
+}
+
+function resolveScheduledDayOfMonth(
+  cadence: PeriodicTaskCadence,
+  existingDay: number | null | undefined,
+  timezone: string | null | undefined,
+  anchorDate: Date
+): number | null {
+  if (cadence !== 'MONTHLY') {
+    return null;
+  }
+
+  return existingDay ?? getDayOfMonth(anchorDate, timezone);
+}
+
 function computeNextRunAt(
   cadence: PeriodicTaskCadence,
   from: Date = new Date(),
   scheduledTime?: string | null,
-  timezone?: string | null
+  timezone?: string | null,
+  scheduledDayOfMonth?: number | null
 ): Date {
   const next = new Date(from);
   switch (cadence) {
@@ -167,7 +204,10 @@ function computeNextRunAt(
         const fromParts = getTimeZoneDateParts(from, timezone);
         const targetYear = fromParts.month === 12 ? fromParts.year + 1 : fromParts.year;
         const targetMonth = fromParts.month === 12 ? 1 : fromParts.month + 1;
-        const targetDay = Math.min(fromParts.day, daysInMonth(targetYear, targetMonth));
+        const targetDay = Math.min(
+          scheduledDayOfMonth ?? fromParts.day,
+          daysInMonth(targetYear, targetMonth)
+        );
 
         return dateFromTimeZoneDateTime(
           { year: targetYear, month: targetMonth, day: targetDay },
@@ -179,9 +219,9 @@ function computeNextRunAt(
       const targetMonth = next.getMonth() + 1;
       next.setDate(1); // Avoid overflow when advancing month
       next.setMonth(targetMonth);
-      // Clamp to the last day of the target month if the original day exceeds it
+      const targetDay = scheduledDayOfMonth ?? getDayOfMonth(from, timezone);
       const lastDay = daysInMonth(next.getFullYear(), next.getMonth() + 1);
-      next.setDate(Math.min(from.getDate(), lastDay));
+      next.setDate(Math.min(targetDay, lastDay));
       break;
     }
   }
@@ -223,6 +263,10 @@ export const periodicTaskAccessor = {
   computeNextRunAt,
 
   async create(input: CreatePeriodicTaskInput): Promise<PeriodicTask> {
+    const now = new Date();
+    const scheduledDayOfMonth =
+      input.cadence === 'MONTHLY' ? getDayOfMonth(now, input.timezone) : null;
+
     return await prisma.periodicTask.create({
       data: {
         projectId: input.projectId,
@@ -231,7 +275,8 @@ export const periodicTaskAccessor = {
         cadence: input.cadence,
         scheduledTime: input.scheduledTime ?? null,
         timezone: input.timezone ?? null,
-        nextRunAt: new Date(), // Run immediately for first execution
+        scheduledDayOfMonth,
+        nextRunAt: now, // Run immediately for first execution
       },
     });
   },
@@ -253,15 +298,9 @@ export const periodicTaskAccessor = {
 
   async update(id: string, input: UpdatePeriodicTaskInput): Promise<PeriodicTask> {
     const data: Record<string, unknown> = {};
-    if (input.name !== undefined) {
-      data.name = input.name;
-    }
-    if (input.prompt !== undefined) {
-      data.prompt = input.prompt;
-    }
-    if (input.isEnabled !== undefined) {
-      data.isEnabled = input.isEnabled;
-    }
+    assignIfDefined(data, 'name', input.name);
+    assignIfDefined(data, 'prompt', input.prompt);
+    assignIfDefined(data, 'isEnabled', input.isEnabled);
 
     const needsNextRunAt =
       input.cadence !== undefined ||
@@ -274,12 +313,20 @@ export const periodicTaskAccessor = {
       const scheduledTime =
         input.scheduledTime !== undefined ? input.scheduledTime : existing.scheduledTime;
       const timezone = input.timezone !== undefined ? input.timezone : existing.timezone;
+      const now = new Date();
+      const scheduledDayOfMonth = resolveScheduledDayOfMonth(
+        cadence,
+        existing.scheduledDayOfMonth,
+        timezone,
+        existing.cadence === 'MONTHLY' ? existing.createdAt : now
+      );
 
       Object.assign(data, {
         ...(input.cadence !== undefined && { cadence: input.cadence }),
         ...(input.scheduledTime !== undefined && { scheduledTime: input.scheduledTime }),
         ...(input.timezone !== undefined && { timezone: input.timezone }),
-        nextRunAt: computeNextRunAt(cadence, new Date(), scheduledTime, timezone),
+        scheduledDayOfMonth,
+        nextRunAt: computeNextRunAt(cadence, now, scheduledTime, timezone, scheduledDayOfMonth),
       });
     }
 
@@ -294,11 +341,19 @@ export const periodicTaskAccessor = {
     const data: Record<string, unknown> = { isEnabled: enabled };
     if (enabled) {
       const task = await prisma.periodicTask.findUniqueOrThrow({ where: { id } });
+      const scheduledDayOfMonth = resolveScheduledDayOfMonth(
+        task.cadence as PeriodicTaskCadence,
+        task.scheduledDayOfMonth,
+        task.timezone,
+        task.createdAt
+      );
+      data.scheduledDayOfMonth = scheduledDayOfMonth;
       data.nextRunAt = computeNextRunAt(
         task.cadence as PeriodicTaskCadence,
         new Date(),
         task.scheduledTime,
-        task.timezone
+        task.timezone,
+        scheduledDayOfMonth
       );
     }
     return await prisma.periodicTask.update({ where: { id }, data });
@@ -317,13 +372,35 @@ export const periodicTaskAccessor = {
     id: string,
     cadence: PeriodicTaskCadence,
     scheduledTime: string | null,
-    timezone: string | null
+    timezone: string | null,
+    scheduledDayOfMonth: number | null
   ): Promise<void> {
+    let resolvedScheduledDayOfMonth = scheduledDayOfMonth;
+    if (cadence === 'MONTHLY' && resolvedScheduledDayOfMonth == null) {
+      const task = await prisma.periodicTask.findUnique({
+        where: { id },
+        select: { createdAt: true, scheduledDayOfMonth: true, timezone: true },
+      });
+      resolvedScheduledDayOfMonth = resolveScheduledDayOfMonth(
+        cadence,
+        task?.scheduledDayOfMonth,
+        task?.timezone ?? timezone,
+        task?.createdAt ?? new Date()
+      );
+    }
+
     await prisma.periodicTask.update({
       where: { id },
       data: {
         lastRunAt: new Date(),
-        nextRunAt: computeNextRunAt(cadence, new Date(), scheduledTime, timezone),
+        scheduledDayOfMonth: resolvedScheduledDayOfMonth,
+        nextRunAt: computeNextRunAt(
+          cadence,
+          new Date(),
+          scheduledTime,
+          timezone,
+          resolvedScheduledDayOfMonth
+        ),
       },
     });
   },
