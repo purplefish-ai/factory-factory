@@ -27,7 +27,7 @@ function runGit(args) {
 
 const unstagedFiles = runGit(['diff', '--name-only', '--', generatedPath]);
 const stagedFiles = runGit(['diff', '--cached', '--name-only', '--', generatedPath]);
-const untrackedFiles = runGit(['ls-files', '--others', '--exclude-standard', '--', generatedPath]);
+const untrackedFiles = runGit(['ls-files', '--others', '--', generatedPath]);
 const driftedFiles = Array.from(new Set([...unstagedFiles, ...stagedFiles, ...untrackedFiles]));
 
 if (driftedFiles.length > 0) {
