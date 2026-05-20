@@ -5,6 +5,37 @@ import type { PeriodicTaskCadence, PeriodicTaskExecutionStatus } from '@/shared/
 // ─── Cadence helpers ────────────────────────────────────────────────────────
 
 const LONG_CADENCES = new Set<PeriodicTaskCadence>(['DAILY', 'WEEKLY', 'MONTHLY']);
+const MIN_TIMEZONE_OFFSET_MINUTES = -14 * 60;
+const MAX_TIMEZONE_OFFSET_MINUTES = 12 * 60;
+
+function getTimezoneDateParts(date: Date, timezone: string): Record<string, string> {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .formatToParts(date)
+      .map(({ type, value }) => [type, value])
+  );
+}
+
+function getTimezoneDateTimeParts(date: Date, timezone: string): Record<string, string> {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+      .formatToParts(date)
+      .map(({ type, value }) => [type, value])
+  );
+}
 
 /**
  * When a task has a scheduledTime + timezone, snap the computed next date to
@@ -16,84 +47,60 @@ function applyScheduledTime(date: Date, scheduledTime: string, timezone: string)
   const minutes = parts[1] ?? 0;
 
   // Get the calendar date (Y/M/D) in the target timezone.
-  const dateParts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(date)
-      .map(({ type, value }) => [type, value])
+  const dateParts = getTimezoneDateParts(date, timezone);
+
+  const utcProbeMs = Date.UTC(
+    Number(dateParts.year),
+    Number(dateParts.month) - 1,
+    Number(dateParts.day),
+    hours,
+    minutes,
+    0
   );
 
-  // Build a UTC probe: treat the target local datetime as if it were UTC.
-  const utcProbe = new Date(
-    Date.UTC(
-      Number(dateParts.year),
-      Number(dateParts.month) - 1,
-      Number(dateParts.day),
-      hours,
-      minutes,
-      0
-    )
-  );
+  for (
+    let offsetMinutes = MIN_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes <= MAX_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes += 1
+  ) {
+    const candidate = new Date(utcProbeMs + offsetMinutes * 60_000);
+    const candidateParts = getTimezoneDateTimeParts(candidate, timezone);
+    const candidateHour = Number(candidateParts.hour) % 24; // guard against "24" at midnight
 
-  // Find what hour/minute utcProbe shows in the target timezone so we can
-  // compute the offset and correct back to true UTC.
-  const localTimeParts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-      .formatToParts(utcProbe)
-      .map(({ type, value }) => [type, value])
-  );
-
-  const probeHour = Number(localTimeParts.hour) % 24; // guard against "24" at midnight
-  const probeMinute = Number(localTimeParts.minute);
-
-  let offsetMinutes = (hours - probeHour) * 60 + (minutes - probeMinute);
-  // offsetMinutes is the negation of the timezone offset, so valid range is
-  // [-14h, +12h] (i.e. UTC+14 → −840 min, UTC−12 → +720 min).
-  if (offsetMinutes < -14 * 60) {
-    offsetMinutes += 24 * 60;
-  }
-  if (offsetMinutes > 12 * 60) {
-    offsetMinutes -= 24 * 60;
-  }
-  const offsetMs = offsetMinutes * 60_000;
-
-  const candidate = new Date(utcProbe.getTime() + offsetMs);
-
-  // Validate the candidate's calendar day in the target timezone matches the
-  // intended day. Ambiguous offset boundaries (e.g. UTC-10 at morning hours
-  // where offsetMinutes lands exactly on -840) can cause an off-by-one-day
-  // error; correct by ±24h if needed.
-  const candidateParts = Object.fromEntries(
-    new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(candidate)
-      .map(({ type, value }) => [type, value])
-  );
-
-  const intendedDate = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
-  const candidateDate = `${candidateParts.year}-${candidateParts.month}-${candidateParts.day}`;
-
-  if (candidateDate < intendedDate) {
-    return new Date(candidate.getTime() + 24 * 60 * 60_000);
-  }
-  if (candidateDate > intendedDate) {
-    return new Date(candidate.getTime() - 24 * 60 * 60_000);
+    if (
+      candidateParts.year === dateParts.year &&
+      candidateParts.month === dateParts.month &&
+      candidateParts.day === dateParts.day &&
+      candidateHour === hours &&
+      Number(candidateParts.minute) === minutes
+    ) {
+      return candidate;
+    }
   }
 
-  return candidate;
+  // The requested local wall-clock time can be nonexistent on spring-forward
+  // transition days. Run at the first valid later local time on that date.
+  for (
+    let offsetMinutes = MIN_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes <= MAX_TIMEZONE_OFFSET_MINUTES;
+    offsetMinutes += 1
+  ) {
+    const candidate = new Date(utcProbeMs + offsetMinutes * 60_000);
+    const candidateParts = getTimezoneDateTimeParts(candidate, timezone);
+    const candidateHour = Number(candidateParts.hour) % 24;
+    const candidateClockMinutes = candidateHour * 60 + Number(candidateParts.minute);
+
+    if (
+      candidateParts.year === dateParts.year &&
+      candidateParts.month === dateParts.month &&
+      candidateParts.day === dateParts.day &&
+      candidateClockMinutes > hours * 60 + minutes
+    ) {
+      return candidate;
+    }
+  }
+
+  return new Date(utcProbeMs);
 }
 
 function computeNextRunAt(
