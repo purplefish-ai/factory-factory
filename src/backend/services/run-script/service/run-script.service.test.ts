@@ -1442,7 +1442,7 @@ describe('RunScriptService.cleanup/postRun internals', () => {
     );
   });
 
-  it('runs cleanup script with substituted port and handles stream errors', async () => {
+  it('runs cleanup script with substituted port and ignored output', async () => {
     const cleanupProcess = new FakeChildProcess(55_555);
     mockSpawn.mockReturnValue(cleanupProcess);
     const service = new RunScriptService() as unknown as {
@@ -1461,15 +1461,13 @@ describe('RunScriptService.cleanup/postRun internals', () => {
       worktreePath: '/tmp/ws-1',
       runScriptPort: 3000,
     });
-    cleanupProcess.stdout.emit('error', new Error('stdout fail'));
-    cleanupProcess.stderr.emit('error', new Error('stderr fail'));
     cleanupProcess.emit('exit', 0);
     await promise;
 
     expect(mockSpawn).toHaveBeenCalledWith('bash', ['-c', 'echo cleanup 3000'], {
       cwd: '/tmp/ws-1',
       detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: 'ignore',
     });
   });
 

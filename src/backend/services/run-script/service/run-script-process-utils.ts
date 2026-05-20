@@ -44,14 +44,7 @@ export async function runCleanupScriptProcess(
     const cleanupProcess = spawn('bash', ['-c', cleanupCommand], {
       cwd: workspace.worktreePath,
       detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    cleanupProcess.stdout?.on('error', (error) => {
-      logger.warn('Cleanup script stdout stream error', { workspaceId, error });
-    });
-    cleanupProcess.stderr?.on('error', (error) => {
-      logger.warn('Cleanup script stderr stream error', { workspaceId, error });
+      stdio: 'ignore',
     });
 
     await new Promise<void>((resolve) => {

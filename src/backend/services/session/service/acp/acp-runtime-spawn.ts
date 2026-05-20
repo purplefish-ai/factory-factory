@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createLogger } from '@/backend/services/logger.service';
@@ -6,6 +7,7 @@ import { normalizeUnknownError } from './acp-stream-normalizer';
 
 const logger = createLogger('acp-runtime-manager');
 const MAX_FACTORY_ROOT_SEARCH_DEPTH = 20;
+const requireFromCurrentModule = createRequire(import.meta.url);
 
 export type SpawnCommand = {
   command: string;
@@ -29,9 +31,9 @@ export function createAcpSpawnError(commandLabel: string, error: unknown): Error
  */
 export function resolveAcpBinary(packageName: string, binaryName: string): string {
   try {
-    const packageJsonPath = require.resolve(`${packageName}/package.json`);
+    const packageJsonPath = requireFromCurrentModule.resolve(`${packageName}/package.json`);
     const packageDir = dirname(packageJsonPath);
-    const pkg = require(packageJsonPath) as {
+    const pkg = requireFromCurrentModule(packageJsonPath) as {
       bin?: string | Record<string, string | undefined>;
     };
     const binPath =

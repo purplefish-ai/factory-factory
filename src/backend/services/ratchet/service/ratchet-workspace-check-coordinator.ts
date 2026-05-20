@@ -11,7 +11,7 @@ export class RatchetWorkspaceCheckCoordinator {
   ): Promise<WorkspaceRatchetResult> {
     const existing = this.inFlightWorkspaceChecks.get(workspace.id);
     if (existing) {
-      return existing;
+      return this.withTimeout(workspace, existing);
     }
 
     const inFlight = runner().finally(() => {

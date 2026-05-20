@@ -196,16 +196,16 @@ export async function maybeRequestPlanApproval(params: {
   const approvalToolCallId = `${completedPlanToolCall.toolCallId}:exit-plan`;
   const approvalInput = buildPlanApprovalInput(planText, item.id);
 
-  await emitSessionUpdate(session.sessionId, {
-    sessionUpdate: 'tool_call',
-    toolCallId: approvalToolCallId,
-    title: 'ExitPlanMode',
-    kind: 'switch_mode',
-    status: 'pending',
-    rawInput: approvalInput,
-  });
-
   try {
+    await emitSessionUpdate(session.sessionId, {
+      sessionUpdate: 'tool_call',
+      toolCallId: approvalToolCallId,
+      title: 'ExitPlanMode',
+      kind: 'switch_mode',
+      status: 'pending',
+      rawInput: approvalInput,
+    });
+
     const { options: planApprovalOptions, approvableModeIds } = buildPlanApprovalOptions(
       session,
       collaborationModes
