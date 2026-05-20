@@ -205,6 +205,22 @@ describe('ReconciliationService', () => {
       expect(cleanupSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('preserves the reconciliation error when orphan cleanup also fails', async () => {
+      vi.spyOn(reconciliationService, 'reconcile').mockRejectedValue(new Error('reconcile failed'));
+      const cleanupSpy = vi
+        .spyOn(reconciliationService, 'cleanupOrphans')
+        .mockRejectedValue(new Error('cleanup failed'));
+      const runPeriodicReconciliation = Reflect.get(
+        reconciliationService,
+        'runPeriodicReconciliation'
+      ) as () => Promise<void>;
+
+      await expect(runPeriodicReconciliation.call(reconciliationService)).rejects.toThrow(
+        'reconcile failed'
+      );
+      expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('does not start overlapping reconciliation runs while one is in progress', async () => {
       const releaseReconciliation: { current: (() => void) | null } = { current: null };
       const reconciliationSpy = vi

@@ -378,6 +378,7 @@ describe('configureDomainBridges', () => {
         { id: 'session-2' },
       ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
       vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(sessionService.isSessionRunning).mockReturnValue(true);
       vi.mocked(sessionDomainService.getQueueLength).mockReturnValueOnce(0).mockReturnValueOnce(1);
 
       configureDomainBridges();
@@ -392,6 +393,29 @@ describe('configureDomainBridges', () => {
       });
       expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-1');
       expect(sessionDomainService.getQueueLength).toHaveBeenCalledWith('session-2');
+    });
+
+    it('does not read queued messages for stopped periodic task sessions', async () => {
+      vi.mocked(workspaceAccessor.findRawById).mockResolvedValue({
+        status: 'READY',
+        prUrl: null,
+        prNumber: null,
+        initCompletedAt: new Date('2026-05-20T12:00:00Z'),
+      } as Awaited<ReturnType<typeof workspaceAccessor.findRawById>>);
+      vi.mocked(sessionDataService.findAgentSessionsByWorkspaceId).mockResolvedValue([
+        { id: 'session-1' },
+      ] as Awaited<ReturnType<typeof sessionDataService.findAgentSessionsByWorkspaceId>>);
+      vi.mocked(sessionService.isAnySessionWorking).mockReturnValue(false);
+      vi.mocked(sessionService.isSessionRunning).mockReturnValue(false);
+
+      configureDomainBridges();
+      const bridge = getBridge(periodicTaskService.configure);
+
+      await expect(bridge.status.getWorkspaceStatus('ws-periodic')).resolves.toMatchObject({
+        isAgentWorking: false,
+      });
+      expect(sessionService.isSessionRunning).toHaveBeenCalledWith('session-1');
+      expect(sessionDomainService.getQueueLength).not.toHaveBeenCalled();
     });
   });
 

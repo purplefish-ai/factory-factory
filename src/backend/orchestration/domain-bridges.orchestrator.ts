@@ -412,7 +412,11 @@ export function configureDomainBridges(services: Partial<BridgeServices> = {}): 
           prNumber: ws.prNumber,
           isAgentWorking:
             sessionService.isAnySessionWorking(sessionIds) ||
-            sessionIds.some((sessionId) => sessionDomainService.getQueueLength(sessionId) > 0),
+            sessionIds.some(
+              (sessionId) =>
+                sessionService.isSessionRunning(sessionId) &&
+                sessionDomainService.getQueueLength(sessionId) > 0
+            ),
           initCompletedAt: ws.initCompletedAt,
         };
       },

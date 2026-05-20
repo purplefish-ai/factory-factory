@@ -92,10 +92,26 @@ class ReconciliationService {
   }
 
   private async runPeriodicReconciliation(): Promise<void> {
+    let reconciliationError: unknown;
+
     try {
       await this.reconcile();
-    } finally {
+    } catch (error) {
+      reconciliationError = error;
+    }
+
+    try {
       await this.cleanupOrphans();
+    } catch (error) {
+      if (reconciliationError) {
+        logger.error('Periodic orphan cleanup failed after reconciliation failure', toError(error));
+      } else {
+        throw error;
+      }
+    }
+
+    if (reconciliationError) {
+      throw reconciliationError;
     }
   }
 
