@@ -11,6 +11,7 @@ describe('check-single-writer', () => {
     path.join(process.cwd(), 'src/backend/services/workspace/resources/workspace.accessor.ts'),
     'utf8'
   );
+  const schemaSource = readFileSync(path.join(process.cwd(), 'prisma/schema.prisma'), 'utf8');
 
   afterEach(() => {
     for (const dir of tempDirs) {
@@ -26,6 +27,10 @@ describe('check-single-writer', () => {
     const accessorDir = path.join(tempRoot, 'src/backend/services/workspace/resources');
     mkdirSync(accessorDir, { recursive: true });
     writeFileSync(path.join(accessorDir, 'workspace.accessor.ts'), accessorSource);
+
+    const prismaDir = path.join(tempRoot, 'prisma');
+    mkdirSync(prismaDir, { recursive: true });
+    writeFileSync(path.join(prismaDir, 'schema.prisma'), schemaSource);
 
     for (const file of sourceFiles) {
       const fullPath = path.join(tempRoot, file.relPath);
@@ -155,6 +160,9 @@ export const workspaceAccessor = new WorkspaceAccessor();
     );
 
     writeFileSync(path.join(accessorDir, 'workspace.accessor.ts'), accessorWithNewMutator);
+    const prismaDir = path.join(tempRoot, 'prisma');
+    mkdirSync(prismaDir, { recursive: true });
+    writeFileSync(path.join(prismaDir, 'schema.prisma'), schemaSource);
     const sessionDir = path.join(tempRoot, 'src/backend/services/session/service/lifecycle');
     mkdirSync(sessionDir, { recursive: true });
     writeFileSync(path.join(sessionDir, 'session.service.ts'), 'export const marker = "noop";\n');
@@ -164,6 +172,29 @@ export const workspaceAccessor = new WorkspaceAccessor();
     expect(result.status).toBe(1);
     expect(result.output).toContain(
       'workspace mutator(s) missing from checker rules: unsafeExtraMutator'
+    );
+  });
+
+  it('fails when a Workspace scalar field is missing ownership policy coverage', () => {
+    const tempRoot = createTempBackend([
+      {
+        relPath: 'src/backend/services/workspace/service/lifecycle/data.service.ts',
+        content: 'export const marker = "noop";\n',
+      },
+    ]);
+
+    const schemaPath = path.join(tempRoot, 'prisma/schema.prisma');
+    const schemaWithNewField = schemaSource.replace(
+      '  stateComputedAt     DateTime?         // Last kanban column computation',
+      '  stateComputedAt     DateTime?         // Last kanban column computation\n  uncheckedMutableField String?'
+    );
+    writeFileSync(schemaPath, schemaWithNewField);
+
+    const result = runChecker(tempRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.output).toContain(
+      'Workspace field(s) missing ownership policy: uncheckedMutableField'
     );
   });
 });

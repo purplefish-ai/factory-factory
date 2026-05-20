@@ -218,6 +218,7 @@ pnpm test:coverage           # Run tests with coverage and critical coverage gua
 pnpm typecheck               # TypeScript checking
 pnpm check                   # Standard guardrails: Biome, env, ownership, dependency boundaries, Codex schema
 pnpm check:fix               # Lint + format with Biome
+pnpm check:prisma-schema     # Prisma schema guardrail: generate, service imports, typecheck
 
 # Database
 pnpm db:migrate              # Run migrations

@@ -37,6 +37,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Check generated Prisma client is committed
+        run: pnpm check:prisma-generated
+
       - name: Build core library
         run: pnpm --filter @factory-factory/core build
 
