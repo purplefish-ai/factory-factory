@@ -33,7 +33,7 @@
 **Periodic task executions can remain RUNNING and block future schedules:**
 - Symptoms: A periodic task with a RUNNING execution is skipped by later scheduler passes even if the associated workspace stops making progress without creating a PR.
 - Files: `src/backend/services/periodic-task/service/periodic-task.service.ts`, `src/backend/services/periodic-task/resources/periodic-task.accessor.ts`, `src/backend/services/workspace/resources/workspace.accessor.ts`
-- Trigger: A periodic-task workspace remains in a non-terminal state such as READY, WORKING, or WAITING and never creates a PR, while the execution row stays RUNNING.
+- Trigger: A periodic-task workspace remains in WORKING or WAITING and never creates a PR, while the execution row stays RUNNING. (READY workspaces with no active agent work are now auto-recovered after a 5-minute grace period.)
 - Workaround: Manually archive or fail the workspace, or update the execution record so the scheduler can dispatch the next run.
 
 **Periodic task dispatch advances schedule before workspace creation is durable:**
@@ -186,7 +186,7 @@
 - Files: `src/backend/trpc/trpc.ts`, `src/backend/server.ts`, `src/backend/middleware/cors.middleware.ts`, `src/backend/routers/websocket/`
 
 **Periodic task stale execution recovery and alerting:**
-- Problem: Periodic task executions have no stale RUNNING timeout, missed-run marker, retry budget, or failure notification channel.
+- Problem: Periodic task executions have no missed-run marker, retry budget, or failure notification channel. READY workspaces without active agent work are now recovered after a 5-minute grace period, but WORKING or WAITING workspaces that stall have no automatic recovery.
 - Blocks: Reliable unattended recurring work.
 - Files: `src/backend/services/periodic-task/service/periodic-task.service.ts`, `src/backend/services/periodic-task/resources/periodic-task.accessor.ts`, `docs/design/periodic-tasks.md`
 
