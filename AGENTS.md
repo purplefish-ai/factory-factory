@@ -67,6 +67,7 @@ Path aliases: `@/*` → `src/`, `@prisma-gen/*` → `prisma/generated/`.
 - Add or update tests and run `pnpm test` (use `pnpm test:watch` during development).
 - Add or update Storybook stories when UI changes are introduced (`pnpm storybook`).
 - Run `pnpm check`, `pnpm typecheck`, and `pnpm check:fix`.
+- Run `pnpm check:prisma-schema` when `prisma/schema.prisma` changes.
 - `pnpm check` enforces Codex schema drift in CI. Locally, that check is skipped unless the pinned Codex CLI is installed; use `CODEX_SCHEMA_CHECK=strict pnpm check:codex-schema` to enforce it.
 - Ensure schemas use Zod and avoid raw typecasts.
 - Update docs if behavior or commands change.

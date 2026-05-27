@@ -44,7 +44,7 @@ This is a workspace-based coding environment where users interact with Claude Co
 ### Common Pitfalls
 
 - Don't commit `.env` files or credentials
-- Prisma schema changes require `pnpm db:generate` followed by migration
+- Prisma schema changes require running `pnpm check:prisma-schema` (regenerates client, checks service registry, typechecks); commit the updated `prisma/generated/` output alongside the schema change
 - Electron builds have different database paths than web mode
 - Test both web and Electron modes when making backend changes
 
