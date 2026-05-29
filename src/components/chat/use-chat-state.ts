@@ -186,7 +186,11 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   // When a message is rejected, restore the text and attachments to the input for retry
   useEffect(() => {
     if (state.lastRejectedMessage) {
-      const { text, attachments } = state.lastRejectedMessage;
+      const { text, attachments, sessionId } = state.lastRejectedMessage;
+      if (sessionId && sessionId !== dbSessionIdRef.current) {
+        dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
+        return;
+      }
       // Restore the message text to the input so user can retry
       setInputDraft(text);
       // Restore attachments if present

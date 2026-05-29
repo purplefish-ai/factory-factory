@@ -15,9 +15,9 @@ export function reduceMessageQueueSlice(state: ChatState, action: ChatAction): C
       };
     }
     case 'MESSAGE_SENDING': {
-      const { id, text, attachments } = action.payload;
+      const { id, text, attachments, sessionId } = action.payload;
       const newPendingMessages = new Map(state.pendingMessages);
-      newPendingMessages.set(id, { text, attachments });
+      newPendingMessages.set(id, { text, attachments, sessionId });
       return {
         ...state,
         pendingMessages: newPendingMessages,

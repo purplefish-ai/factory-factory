@@ -147,7 +147,10 @@ export class SessionLifecycleService {
     await this.applyStartupModePreset(sessionId, handle, startupModePreset, session.workflow);
     await this.applyConfiguredPermissionPreset(sessionId, session, handle, resolvedPreset);
 
-    const initialPrompt = options?.initialPrompt ?? 'Continue with the task.';
+    const initialPrompt =
+      typeof options?.initialPrompt === 'string'
+        ? options.initialPrompt
+        : 'Continue with the task.';
     if (initialPrompt) {
       await sendSessionMessage(sessionId, initialPrompt);
     }
@@ -630,9 +633,13 @@ export class SessionLifecycleService {
     try {
       await this.retryService.run(
         () =>
-          this.repository.updateSession(sessionId, {
-            status: SessionStatus.IDLE,
-          }),
+          this.repository.updateSessionIfStatus(
+            sessionId,
+            {
+              status: SessionStatus.IDLE,
+            },
+            [SessionStatus.RUNNING]
+          ),
         {
           attempts: 2,
           operationName: 'updateStoppedSessionState',
