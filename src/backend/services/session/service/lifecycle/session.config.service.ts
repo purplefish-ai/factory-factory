@@ -303,8 +303,9 @@ export class SessionConfigService {
       return;
     }
 
+    const requestedReasoningEffort = reasoningEffort?.trim();
     const targetReasoningEffort =
-      reasoningEffort?.trim() ||
+      requestedReasoningEffort ||
       (await this.resolveConfiguredReasoningEffortFromSettings(
         sessionId,
         acpHandle.provider as SessionProvider
@@ -317,7 +318,7 @@ export class SessionConfigService {
       sessionId,
       handle: acpHandle,
       targetReasoningEffort,
-      source: reasoningEffort ? 'message' : 'settings',
+      source: requestedReasoningEffort ? 'message' : 'settings',
     });
   }
 
