@@ -2965,6 +2965,36 @@ describe('CodexAppServerAcpAdapter', () => {
       'turn_custom'
     ) as { toolCallId: string; title: string; kind: string };
 
+    const functionCallOutput = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'function_call_output',
+        id: 'item_function_output',
+        call_id: 'call_function',
+        output: 'done',
+      },
+      'turn_function_output'
+    );
+
+    const customToolCallOutput = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'custom_tool_call_output',
+        id: 'item_custom_output',
+        call_id: 'call_custom',
+        output: 'done',
+      },
+      'turn_custom_output'
+    );
+
     const unknown = (
       adapter as unknown as {
         buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
@@ -2988,6 +3018,8 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(customToolCall.toolCallId).toBe('call_custom');
     expect(customToolCall.title).toBe('apply_patch');
     expect(customToolCall.kind).toBe('execute');
+    expect(functionCallOutput).toBeNull();
+    expect(customToolCallOutput).toBeNull();
     expect(unknown).toBeNull();
   });
 });

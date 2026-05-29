@@ -737,10 +737,8 @@ export class CodexAppServerAcpAdapter implements Agent {
     const kindByType: Record<string, ToolCallState['kind']> = {
       commandExecution: 'execute',
       custom_tool_call: 'execute',
-      custom_tool_call_output: 'execute',
       fileChange: 'edit',
       function_call: 'execute',
-      function_call_output: 'execute',
       mcpToolCall: 'fetch',
       webSearch: 'search',
       plan: 'think',
