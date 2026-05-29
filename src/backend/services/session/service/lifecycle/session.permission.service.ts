@@ -21,6 +21,11 @@ export class SessionPermissionService {
   }
 
   createPermissionBridge(sessionId: string): AcpPermissionBridge {
+    const existing = this.acpPermissionBridges.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+
     const bridge = new AcpPermissionBridge();
     this.acpPermissionBridges.set(sessionId, bridge);
     return bridge;
