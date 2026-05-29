@@ -106,4 +106,62 @@ describe('stream-event-handler', () => {
       })
     );
   });
+
+  it('recovers completed tool-like items that arrive without started state', async () => {
+    const session = createSession();
+    const emitSessionUpdate = vi.fn(async () => undefined);
+    const reportShapeDrift = vi.fn();
+    const toolState: ToolCallState = {
+      toolCallId: 'call_recovered',
+      kind: 'execute',
+      title: 'exec_command',
+      locations: [],
+    };
+
+    const handler = new CodexStreamEventHandler({
+      codex: { request: vi.fn() },
+      sessionIdByThreadId: new Map([['thread_1', 'sess_thread_1']]),
+      sessions: new Map([['sess_thread_1', session]]),
+      requireSession: vi.fn(),
+      emitSessionUpdate,
+      reportShapeDrift,
+      buildToolCallState: vi.fn(() => toolState),
+      emitReasoningThoughtChunkFromItem: vi.fn(async () => undefined),
+      shouldHoldTurnForPlanApproval: vi.fn(() => false),
+      holdTurnUntilPlanApprovalResolves: vi.fn(),
+      maybeRequestPlanApproval: vi.fn(async () => undefined),
+      hasPendingPlanApprovals: vi.fn(() => false),
+      settleTurn: vi.fn(),
+      emitTurnFailureMessage: vi.fn(async () => undefined),
+    });
+
+    await handler.handleCodexNotification({
+      method: 'item/completed',
+      params: {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        item: {
+          type: 'function_call',
+          id: 'item_function',
+          status: 'completed',
+          name: 'exec_command',
+          call_id: 'call_recovered',
+        },
+      },
+    });
+
+    expect(emitSessionUpdate).toHaveBeenCalledWith(
+      'sess_thread_1',
+      expect.objectContaining({
+        sessionUpdate: 'tool_call',
+        toolCallId: 'call_recovered',
+        title: 'exec_command',
+        status: 'completed',
+      })
+    );
+    expect(reportShapeDrift).not.toHaveBeenCalledWith(
+      'item_completed_without_started_state',
+      expect.anything()
+    );
+  });
 });

@@ -604,11 +604,7 @@ export class CodexStreamEventHandler {
 
     const existing = session.toolCallsByItemId.get(item.id);
     if (!existing) {
-      this.deps.reportShapeDrift('item_completed_without_started_state', {
-        turnId,
-        itemType: item.type,
-        itemId: item.id,
-      });
+      await this.handleCompletedItemWithoutStartedState(session, item, turnId);
       return;
     }
 
@@ -635,5 +631,32 @@ export class CodexStreamEventHandler {
     session.syntheticallyCompletedToolItemIds.delete(item.id);
 
     await this.deps.maybeRequestPlanApproval(session, item, turnId, existing);
+  }
+
+  private async handleCompletedItemWithoutStartedState(
+    session: AdapterSession,
+    item: { type: string; id: string } & Record<string, unknown>,
+    turnId: string
+  ): Promise<void> {
+    const recovered = this.deps.buildToolCallState(session, item, turnId);
+    if (recovered) {
+      await this.deps.emitSessionUpdate(session.sessionId, {
+        sessionUpdate: 'tool_call',
+        toolCallId: recovered.toolCallId,
+        status: toToolStatus(item.status) ?? 'completed',
+        kind: recovered.kind,
+        title: recovered.title,
+        ...(recovered.locations.length > 0 ? { locations: recovered.locations } : {}),
+        rawInput: item,
+        rawOutput: item,
+      });
+      return;
+    }
+
+    this.deps.reportShapeDrift('item_completed_without_started_state', {
+      turnId,
+      itemType: item.type,
+      itemId: item.id,
+    });
   }
 }

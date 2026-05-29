@@ -237,7 +237,7 @@ function parseFunctionCallResponseItem(
       timestamp,
       toolName,
       toolId,
-      toolInput: normalizeCodexFunctionArgs(payload.arguments),
+      toolInput: normalizeCodexFunctionArgs(payload.arguments ?? payload.input),
     },
   ];
 }
@@ -270,11 +270,11 @@ function parseCodexResponseItemMessages(
   }
 
   const payloadType = entry.payload.type;
-  if (payloadType === 'function_call') {
+  if (payloadType === 'function_call' || payloadType === 'custom_tool_call') {
     return parseFunctionCallResponseItem(entry.payload, timestamp);
   }
 
-  if (payloadType === 'function_call_output') {
+  if (payloadType === 'function_call_output' || payloadType === 'custom_tool_call_output') {
     return parseFunctionCallOutputResponseItem(entry.payload, timestamp);
   }
 

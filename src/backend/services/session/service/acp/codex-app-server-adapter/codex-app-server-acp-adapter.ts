@@ -736,7 +736,9 @@ export class CodexAppServerAcpAdapter implements Agent {
   ): ToolCallState | null {
     const kindByType: Record<string, ToolCallState['kind']> = {
       commandExecution: 'execute',
+      custom_tool_call: 'execute',
       fileChange: 'edit',
+      function_call: 'execute',
       mcpToolCall: 'fetch',
       webSearch: 'search',
       plan: 'think',
@@ -747,37 +749,86 @@ export class CodexAppServerAcpAdapter implements Agent {
       return null;
     }
 
-    let title = item.type;
-    let kindToEmit = kind;
-    let locations: Array<{ path: string; line?: number | null }> = [];
-    if (item.type === 'commandExecution') {
-      const command = asString(item.command);
-      const cwd = asString(item.cwd) ?? session.cwd;
-      const parsed = resolveCommandDisplay({ command, cwd });
-      title = parsed.title;
-      kindToEmit = parsed.kind;
-      locations = parsed.locations;
-    } else if (item.type === 'fileChange') {
-      title = 'fileChange';
-      locations = extractLocations(item);
-    } else if (item.type === 'mcpToolCall') {
-      const server = asString(item.server) ?? 'mcp';
-      const tool = asString(item.tool) ?? 'tool';
-      title = `mcpToolCall:${server}/${tool}`;
-    } else if (item.type === 'webSearch') {
-      const query = asString(item.query);
-      title = query ? `webSearch:${query}` : 'webSearch';
-    }
+    const display = this.resolveToolCallDisplay(session, item, kind);
 
     return {
       toolCallId: resolveToolCallId({
         itemId: item.id,
         source: item,
       }),
-      kind: kindToEmit,
-      title,
-      locations,
+      kind: display.kind,
+      title: display.title,
+      locations: display.locations,
     };
+  }
+
+  private resolveToolCallDisplay(
+    session: AdapterSession,
+    item: { type: string; id: string } & Record<string, unknown>,
+    defaultKind: ToolCallState['kind']
+  ): Pick<ToolCallState, 'kind' | 'title' | 'locations'> {
+    if (item.type === 'commandExecution') {
+      return this.resolveCommandExecutionDisplay(session, item);
+    }
+    if (item.type === 'function_call' || item.type === 'custom_tool_call') {
+      return this.resolveCodexFunctionCallDisplay(session, item, defaultKind);
+    }
+    if (item.type === 'fileChange') {
+      return { title: 'fileChange', kind: defaultKind, locations: extractLocations(item) };
+    }
+    if (item.type === 'mcpToolCall') {
+      const server = asString(item.server) ?? 'mcp';
+      const tool = asString(item.tool) ?? 'tool';
+      return { title: `mcpToolCall:${server}/${tool}`, kind: defaultKind, locations: [] };
+    }
+    if (item.type === 'webSearch') {
+      const query = asString(item.query);
+      return {
+        title: query ? `webSearch:${query}` : 'webSearch',
+        kind: defaultKind,
+        locations: [],
+      };
+    }
+    return { title: item.type, kind: defaultKind, locations: [] };
+  }
+
+  private resolveCommandExecutionDisplay(
+    session: AdapterSession,
+    item: Record<string, unknown>
+  ): Pick<ToolCallState, 'kind' | 'title' | 'locations'> {
+    const command = asString(item.command);
+    const cwd = asString(item.cwd) ?? session.cwd;
+    return resolveCommandDisplay({ command, cwd });
+  }
+
+  private resolveCodexFunctionCallDisplay(
+    session: AdapterSession,
+    item: Record<string, unknown>,
+    defaultKind: ToolCallState['kind']
+  ): Pick<ToolCallState, 'kind' | 'title' | 'locations'> {
+    const title = asString(item.name) ?? asString(item.type) ?? 'function_call';
+    const rawArguments = item.arguments ?? item.input;
+    const parsedArguments =
+      typeof rawArguments === 'string' ? this.parseToolCallArguments(rawArguments) : null;
+    const command = asString(parsedArguments?.cmd);
+    if (!command) {
+      return { title, kind: defaultKind, locations: [] };
+    }
+
+    const cwd = asString(parsedArguments?.workdir) ?? session.cwd;
+    return resolveCommandDisplay({ command, cwd });
+  }
+
+  private parseToolCallArguments(rawArguments: string): Record<string, unknown> | null {
+    try {
+      const parsed = JSON.parse(rawArguments);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
 
   private async handleCodexServerRequest(request: {
