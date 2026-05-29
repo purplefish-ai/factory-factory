@@ -40,6 +40,53 @@ describe('SessionPermissionService', () => {
     });
   });
 
+  it('reuses the existing ACP permission bridge for repeated session setup', () => {
+    const service = createService();
+
+    const firstBridge = service.createPermissionBridge('session-1');
+    const secondBridge = service.createPermissionBridge('session-1');
+
+    expect(secondBridge).toBe(firstBridge);
+  });
+
+  it('keeps pending ACP permissions reachable when bridge creation is repeated', async () => {
+    const service = createService();
+    const bridge = service.createPermissionBridge('session-1');
+
+    const responsePromise = bridge.waitForUserResponse(
+      'req-1',
+      unsafeCoerce({
+        toolCall: {
+          toolCallId: 'tool-1',
+          title: 'Command',
+          rawInput: { command: 'pwd' },
+        },
+        options: [{ optionId: 'allow_once', name: 'Allow once', kind: 'allow_once' }],
+      })
+    );
+
+    service.createPermissionBridge('session-1');
+
+    expect(service.respondToPermission('session-1', 'req-1', 'allow_once')).toBe(true);
+    expect(bridge.hasPending('req-1')).toBe(false);
+    await expect(responsePromise).resolves.toMatchObject({
+      outcome: {
+        outcome: 'selected',
+        optionId: 'allow_once',
+      },
+    });
+  });
+
+  it('creates a fresh ACP permission bridge after session cancellation clears one', () => {
+    const service = createService();
+    const firstBridge = service.createPermissionBridge('session-1');
+
+    service.cancelPendingRequests('session-1');
+
+    const secondBridge = service.createPermissionBridge('session-1');
+    expect(secondBridge).not.toBe(firstBridge);
+  });
+
   it('cancels pending permissions and clears the bridge for the session', async () => {
     const service = createService();
     const bridge = service.createPermissionBridge('session-1');
