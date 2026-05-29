@@ -100,7 +100,7 @@ factory-factory/
 **`src/cli/`:**
 - Purpose: Published `ff` command-line interface.
 - Contains: command registration, serve/build/migrate/proxy handling, database path resolution, runtime utilities.
-- Key files: `src/cli/index.ts`, `src/cli/database-path.ts`, `src/cli/proxy.ts`
+- Key files: `src/cli/index.ts`, `src/cli/database-path.ts`, `src/cli/proxy.ts`, `src/cli/serve-env.ts`
 
 **`electron/`:**
 - Purpose: Desktop app wrapper around the same backend/frontend app.
