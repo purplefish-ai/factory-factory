@@ -5,6 +5,7 @@ const mockUpdate = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockUpdateWorkspaceOrder = vi.hoisted(() => vi.fn());
 const mockExecCommand = vi.hoisted(() => vi.fn());
+const mockFetchCodexModelCatalogFromAppServer = vi.hoisted(() => vi.fn());
 
 vi.mock('@/backend/services/workspace', () => ({
   projectAccessor: {},
@@ -19,6 +20,11 @@ vi.mock('@/backend/services/workspace', () => ({
 
 vi.mock('@/backend/lib/shell', () => ({
   execCommand: (...args: unknown[]) => mockExecCommand(...args),
+}));
+
+vi.mock('@/backend/services/session', () => ({
+  fetchCodexModelCatalogFromAppServer: (...args: unknown[]) =>
+    mockFetchCodexModelCatalogFromAppServer(...args),
 }));
 
 import { userSettingsRouter } from './user-settings.trpc';
@@ -125,6 +131,77 @@ describe('userSettingsRouter', () => {
       defaultCodexModel: 'gpt-5-codex',
       defaultClaudeReasoningEffort: 'medium',
       defaultCodexReasoningEffort: 'high',
+    });
+  });
+
+  it('returns provider options from the Codex model catalog', async () => {
+    mockFetchCodexModelCatalogFromAppServer.mockResolvedValue([
+      {
+        id: 'gpt-5-codex',
+        displayName: 'GPT-5 Codex',
+        description: 'Coding model',
+        supportedReasoningEfforts: [
+          { reasoningEffort: 'low', description: 'Fast' },
+          { reasoningEffort: 'extra_high', description: 'Deep' },
+        ],
+      },
+      {
+        id: 'gpt-5-codex-mini',
+        displayName: '',
+        description: null,
+        supportedReasoningEfforts: [
+          { reasoningEffort: 'low', description: 'Duplicate' },
+          { reasoningEffort: 'medium-plus', description: null },
+        ],
+      },
+    ]);
+
+    await expect(createCaller().getProviderOptions()).resolves.toEqual({
+      CLAUDE: {
+        source: 'fallback',
+        models: [
+          { value: 'sonnet', label: 'Sonnet' },
+          { value: 'opus', label: 'Opus' },
+          { value: 'haiku', label: 'Haiku' },
+        ],
+        efforts: [
+          { value: 'low', label: 'Low' },
+          { value: 'medium', label: 'Medium' },
+          { value: 'high', label: 'High' },
+        ],
+      },
+      CODEX: {
+        source: 'cli',
+        models: [
+          { value: 'gpt-5-codex', label: 'GPT-5 Codex', description: 'Coding model' },
+          { value: 'gpt-5-codex-mini', label: 'gpt-5-codex-mini', description: null },
+        ],
+        efforts: [
+          { value: 'low', label: 'Low', description: 'Fast' },
+          { value: 'extra_high', label: 'Extra High', description: 'Deep' },
+          { value: 'medium-plus', label: 'Medium Plus' },
+        ],
+      },
+    });
+  });
+
+  it('falls back to static Codex provider options when catalog loading fails', async () => {
+    mockFetchCodexModelCatalogFromAppServer.mockRejectedValue(new Error('codex unavailable'));
+
+    await expect(createCaller().getProviderOptions()).resolves.toMatchObject({
+      CODEX: {
+        source: 'fallback',
+        error: 'codex unavailable',
+        models: [
+          { value: 'default', label: 'Default' },
+          { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+        ],
+        efforts: [
+          { value: 'low', label: 'Low' },
+          { value: 'medium', label: 'Medium' },
+          { value: 'high', label: 'High' },
+        ],
+      },
     });
   });
 
