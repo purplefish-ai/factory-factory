@@ -1,0 +1,4 @@
+name: factory-factory-codeql
+
+paths-ignore:
+  - prisma/generated/**
