@@ -245,4 +245,29 @@ describe('ServerManager lifecycle locking', () => {
     expect(createServer).toHaveBeenCalledTimes(1);
     expect(runMigrations).toHaveBeenCalledTimes(1);
   });
+
+  it('clears cached server state when stop fails so the next start creates a new server', async () => {
+    const manager = new ServerManager();
+    const stopError = new Error('cleanup failed after server closed');
+    const firstServer = {
+      start: vi.fn().mockResolvedValue('http://localhost:8001'),
+      stop: vi.fn().mockRejectedValue(stopError),
+    };
+    const secondServer = {
+      start: vi.fn().mockResolvedValue('http://localhost:8002'),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+    const createServer = vi.fn().mockReturnValueOnce(firstServer).mockReturnValueOnce(secondServer);
+    mockServerManagerImports(manager, createServer);
+
+    const firstUrl = await manager.start();
+    await expect(manager.stop()).rejects.toThrow(stopError);
+    const secondUrl = await manager.start();
+
+    expect(firstUrl).toBe('http://localhost:8001');
+    expect(secondUrl).toBe('http://localhost:8002');
+    expect(createServer).toHaveBeenCalledTimes(2);
+    expect(firstServer.stop).toHaveBeenCalledTimes(1);
+    expect(secondServer.start).toHaveBeenCalledTimes(1);
+  });
 });
