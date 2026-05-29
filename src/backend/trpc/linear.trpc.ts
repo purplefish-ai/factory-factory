@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { linearClientService } from '@/backend/services/linear';
-import { projectManagementService } from '@/backend/services/workspace';
+import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
 import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
+import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
 
 /** Look up a project's Linear config and decrypt the API key. Returns null if not configured. */
@@ -41,8 +42,19 @@ export const linearRouter = router({
       }
 
       try {
-        const issues = await linearClientService.listMyIssues(config.apiKey, config.teamId);
-        return { issues, error: null };
+        const [issues, workspaces] = await Promise.all([
+          linearClientService.listMyIssues(config.apiKey, config.teamId),
+          workspaceDataService.findByProjectId(input.projectId),
+        ]);
+        return {
+          issues: filterIssuesLinkedToActiveWorkspaces(
+            issues,
+            workspaces,
+            (workspace) => workspace.linearIssueId,
+            (issue) => issue.id
+          ),
+          error: null,
+        };
       } catch (err) {
         return {
           issues: [],

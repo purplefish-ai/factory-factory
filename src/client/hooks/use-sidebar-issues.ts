@@ -45,7 +45,7 @@ export function useSidebarIssues(
       return undefined;
     }
     if (!serverWorkspaces) {
-      return normalizedIssues;
+      return undefined;
     }
 
     if (isLinear) {

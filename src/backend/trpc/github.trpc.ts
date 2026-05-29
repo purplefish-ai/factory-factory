@@ -7,6 +7,7 @@
 import { z } from 'zod';
 import { githubCLIService } from '@/backend/services/github';
 import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
+import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
 
 export const githubRouter = router({
@@ -108,10 +109,22 @@ export const githubRouter = router({
 
       try {
         // Only fetch issues assigned to the current user (@me)
-        const issues = await githubCLIService.listIssues(githubOwner, githubRepo, {
-          assignee: '@me',
-        });
-        return { issues, health, error: null };
+        const [issues, workspaces] = await Promise.all([
+          githubCLIService.listIssues(githubOwner, githubRepo, {
+            assignee: '@me',
+          }),
+          workspaceDataService.findByProjectId(input.projectId),
+        ]);
+        return {
+          issues: filterIssuesLinkedToActiveWorkspaces(
+            issues,
+            workspaces,
+            (workspace) => workspace.githubIssueNumber,
+            (issue) => issue.number
+          ),
+          health,
+          error: null,
+        };
       } catch (err) {
         return {
           issues: [],
