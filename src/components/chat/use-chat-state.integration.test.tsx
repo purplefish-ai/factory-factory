@@ -75,7 +75,8 @@ function createAttachment(): MessageAttachment {
 }
 
 function getSentMessageId(send: ReturnType<typeof vi.fn>): string {
-  const message = send.mock.calls[0]?.[0];
+  const lastCall = send.mock.calls.at(-1);
+  const message = lastCall?.[0];
   if (typeof message !== 'object' || message === null || !('id' in message)) {
     throw new Error('Expected queued message with an id');
   }
