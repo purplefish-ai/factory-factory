@@ -187,7 +187,7 @@ export function useChatState(options: UseChatStateOptions): UseChatStateReturn {
   useEffect(() => {
     if (state.lastRejectedMessage) {
       const { text, attachments, sessionId } = state.lastRejectedMessage;
-      if (sessionId && sessionId !== dbSessionIdRef.current) {
+      if (!sessionId || sessionId !== dbSessionIdRef.current) {
         dispatch({ type: 'CLEAR_REJECTED_MESSAGE' });
         return;
       }

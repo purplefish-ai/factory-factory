@@ -15,7 +15,7 @@ Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
 });
 
 interface ChatStateHarnessProps {
-  dbSessionId: string;
+  dbSessionId: string | null;
   send: (message: unknown) => boolean;
   chatRef: { current: UseChatStateReturn | null };
 }
@@ -25,13 +25,13 @@ function ChatStateHarness({ dbSessionId, send, chatRef }: ChatStateHarnessProps)
   return null;
 }
 
-function renderChatState(initialSessionId: string, send = vi.fn(() => true)) {
+function renderChatState(initialSessionId: string | null, send = vi.fn(() => true)) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root: Root = createRoot(container);
   const chatRef = { current: null as UseChatStateReturn | null };
 
-  const render = (dbSessionId: string) => {
+  const render = (dbSessionId: string | null) => {
     root.render(createElement(ChatStateHarness, { dbSessionId, send, chatRef }));
   };
 
@@ -42,7 +42,7 @@ function renderChatState(initialSessionId: string, send = vi.fn(() => true)) {
   return {
     chatRef,
     send,
-    rerenderSession: (dbSessionId: string) => {
+    rerenderSession: (dbSessionId: string | null) => {
       render(dbSessionId);
     },
     cleanup: () => {
@@ -168,6 +168,43 @@ describe('useChatState rejected message recovery', () => {
     expect(harness.chatRef.current?.inputAttachments).toEqual([]);
     expect(sessionStorage.getItem('chat-draft-session-B') ?? '').not.toContain('sensitive data');
     expect(sessionStorage.getItem('chat-attachments-session-B') ?? '').not.toContain('secret.txt');
+
+    harness.cleanup();
+  });
+
+  it('does not recover rejected message content without a captured source session', async () => {
+    const harness = renderChatState(null);
+    await flushEffects();
+
+    flushSync(() => {
+      harness.chatRef.current?.setInputAttachments([createAttachment()]);
+    });
+
+    await flushEffects();
+
+    flushSync(() => {
+      harness.chatRef.current?.sendMessage('sensitive data');
+    });
+
+    const messageId = getSentMessageId(harness.send);
+    flushSync(() => {
+      harness.chatRef.current?.dispatch({
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: messageId,
+          newState: MessageState.REJECTED,
+          errorMessage: 'Rejected',
+        },
+      });
+    });
+
+    await flushEffects();
+    await flushDraftDebounce();
+
+    expect(harness.chatRef.current?.inputDraft).toBe('');
+    expect(harness.chatRef.current?.inputAttachments).toEqual([]);
+    expect(sessionStorage.getItem('chat-draft-null')).toBeNull();
+    expect(sessionStorage.getItem('chat-attachments-null')).toBeNull();
 
     harness.cleanup();
   });
