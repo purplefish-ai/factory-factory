@@ -511,6 +511,10 @@ export class SessionLifecycleService {
         workspaceId: sessionContext.workspaceId,
         workingDir: sessionContext.workingDir,
       });
+      await this.sessionConfigService.applyConfiguredReasoningEffort(sessionId, handle, {
+        persistSnapshot: false,
+        emitUpdates: false,
+      });
     } catch (error) {
       this.acpEventProcessor.clearSessionState(sessionId);
       throw error;

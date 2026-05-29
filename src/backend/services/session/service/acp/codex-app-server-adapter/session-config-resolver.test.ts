@@ -246,4 +246,26 @@ describe('session-config-resolver helpers', () => {
       },
     });
   });
+
+  it('resolves default collaboration mode with session defaults', () => {
+    const session = createSession({
+      defaults: {
+        ...createSession().defaults,
+        collaborationMode: 'default',
+        model: 'gpt-5-mini',
+        reasoningEffort: 'high',
+      },
+    });
+
+    const mode = resolveTurnCollaborationMode(collaborationModes, session);
+
+    expect(mode).toEqual({
+      mode: 'default',
+      settings: {
+        model: 'gpt-5-mini',
+        reasoning_effort: 'high',
+        developer_instructions: null,
+      },
+    });
+  });
 });
