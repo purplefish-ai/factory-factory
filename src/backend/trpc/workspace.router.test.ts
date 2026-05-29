@@ -341,6 +341,27 @@ describe('workspaceRouter', () => {
     );
   });
 
+  it('passes provider through GitHub issue workspace creation', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+
+    await caller.create({
+      type: 'GITHUB_ISSUE',
+      projectId: 'p1',
+      issueNumber: 42,
+      issueUrl: 'https://github.com/org/repo/issues/42',
+      provider: 'CODEX',
+    });
+
+    expect(mockResolveProviderForWorkspaceCreation).toHaveBeenCalledWith('CODEX');
+    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'GITHUB_ISSUE',
+        provider: 'CODEX',
+      })
+    );
+  });
+
   it('passes startup mode preset through Linear issue workspace creation', async () => {
     const { caller } = createCaller();
     mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
@@ -358,6 +379,28 @@ describe('workspaceRouter', () => {
       expect.objectContaining({
         type: 'LINEAR_ISSUE',
         startupModePreset: 'plan',
+      })
+    );
+  });
+
+  it('passes provider through Linear issue workspace creation', async () => {
+    const { caller } = createCaller();
+    mockWorkspaceCreationCreate.mockResolvedValue({ id: 'w-created' });
+
+    await caller.create({
+      type: 'LINEAR_ISSUE',
+      projectId: 'p1',
+      issueId: 'linear-42',
+      issueIdentifier: 'ENG-42',
+      issueUrl: 'https://linear.app/org/issue/ENG-42',
+      provider: 'CODEX',
+    });
+
+    expect(mockResolveProviderForWorkspaceCreation).toHaveBeenCalledWith('CODEX');
+    expect(mockWorkspaceCreationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'LINEAR_ISSUE',
+        provider: 'CODEX',
       })
     );
   });
