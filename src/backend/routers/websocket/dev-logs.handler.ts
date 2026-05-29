@@ -50,14 +50,6 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    const workspaceId = url.searchParams.get('workspaceId');
-
-    if (!workspaceId) {
-      logger.warn('Dev logs WebSocket missing workspaceId');
-      sendBadRequest(socket);
-      return;
-    }
-
     if (
       !validateWebSocketOrigin({
         request,
@@ -67,6 +59,14 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
         connectionName: 'dev logs WebSocket',
       })
     ) {
+      return;
+    }
+
+    const workspaceId = url.searchParams.get('workspaceId');
+
+    if (!workspaceId) {
+      logger.warn('Dev logs WebSocket missing workspaceId');
+      sendBadRequest(socket);
       return;
     }
 

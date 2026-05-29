@@ -50,14 +50,6 @@ export function createPostRunLogsUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    const workspaceId = url.searchParams.get('workspaceId');
-
-    if (!workspaceId) {
-      logger.warn('Post-run logs WebSocket missing workspaceId');
-      sendBadRequest(socket);
-      return;
-    }
-
     if (
       !validateWebSocketOrigin({
         request,
@@ -67,6 +59,14 @@ export function createPostRunLogsUpgradeHandler(appContext: AppContext) {
         connectionName: 'post-run logs WebSocket',
       })
     ) {
+      return;
+    }
+
+    const workspaceId = url.searchParams.get('workspaceId');
+
+    if (!workspaceId) {
+      logger.warn('Post-run logs WebSocket missing workspaceId');
+      sendBadRequest(socket);
       return;
     }
 

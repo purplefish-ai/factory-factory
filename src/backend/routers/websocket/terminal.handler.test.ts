@@ -135,6 +135,38 @@ describe('createTerminalUpgradeHandler', () => {
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
+  it('rejects unauthorized origins before checking workspaceId', () => {
+    const { terminalService } = createTerminalService();
+    const logger = createLogger();
+    const appContext = {
+      services: {
+        terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
+        createLogger: vi.fn(() => logger),
+      },
+    } as unknown as AppContext;
+    const handler = createTerminalUpgradeHandler(appContext);
+
+    const request = { headers: { origin: 'https://attacker.example' } } as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/terminal'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
+    expect(logger.warn).not.toHaveBeenCalledWith('Terminal WebSocket missing workspaceId');
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
   it('keeps existing connections streaming when a new client connects', () => {
     const workspaceId = 'workspace-1';
     const terminalId = 'terminal-1';

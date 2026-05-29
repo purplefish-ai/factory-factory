@@ -167,16 +167,6 @@ export function createSnapshotsUpgradeHandler(
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    subscriptionState.ensure(connections, logger);
-
-    const projectId = url.searchParams.get('projectId');
-
-    if (!projectId) {
-      logger.warn('Snapshots WebSocket missing projectId');
-      sendBadRequest(socket);
-      return;
-    }
-
     if (
       !validateWebSocketOrigin({
         request,
@@ -186,6 +176,16 @@ export function createSnapshotsUpgradeHandler(
         connectionName: 'snapshots WebSocket',
       })
     ) {
+      return;
+    }
+
+    subscriptionState.ensure(connections, logger);
+
+    const projectId = url.searchParams.get('projectId');
+
+    if (!projectId) {
+      logger.warn('Snapshots WebSocket missing projectId');
+      sendBadRequest(socket);
       return;
     }
 

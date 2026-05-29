@@ -84,6 +84,41 @@ describe('createPostRunLogsUpgradeHandler', () => {
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
+  it('rejects unauthorized origins before checking workspaceId', () => {
+    const logger = createLogger();
+    const runScriptService = {
+      getPostRunOutputBuffer: vi.fn(() => ''),
+      subscribeToPostRunOutput: vi.fn(),
+    };
+    const appContext = {
+      services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
+        createLogger: vi.fn(() => logger),
+        runScriptService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createPostRunLogsUpgradeHandler(appContext);
+    const request = { headers: { origin: 'https://attacker.example' } } as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/post-run-logs'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
+    expect(logger.warn).not.toHaveBeenCalledWith('Post-run logs WebSocket missing workspaceId');
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
   it('streams buffered/live output and cleans up subscription on close', () => {
     const workspaceId = 'workspace-1';
     const logger = createLogger();

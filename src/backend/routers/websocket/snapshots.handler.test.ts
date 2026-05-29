@@ -14,6 +14,7 @@ import {
   resetSnapshotsHandlerStateForTests,
   snapshotConnections,
 } from './snapshots.handler';
+import { validateWebSocketOrigin } from './upgrade-utils';
 
 const allowedOrigin = 'http://localhost:3000';
 
@@ -147,6 +148,8 @@ describe('createSnapshotsUpgradeHandler', () => {
     // Clean up connection map between tests
     snapshotConnections.clear();
     resetSnapshotsHandlerStateForTests();
+    storeListeners.clear();
+    vi.mocked(validateWebSocketOrigin).mockReturnValue(true);
   });
 
   it('sends full snapshot on connect', () => {
@@ -183,6 +186,18 @@ describe('createSnapshotsUpgradeHandler', () => {
     const { socket } = callHandler(handler, ws);
 
     expect(mockSendBadRequest).toHaveBeenCalledWith(socket);
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthorized origins before subscription setup and projectId checks', () => {
+    vi.mocked(validateWebSocketOrigin).mockReturnValueOnce(false);
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+    const { wss } = callHandler(handler, ws);
+
+    expect(storeListeners.size).toBe(0);
+    expect(mockSendBadRequest).not.toHaveBeenCalled();
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(ws.send).not.toHaveBeenCalled();
   });
 

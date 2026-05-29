@@ -364,14 +364,6 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    const workspaceId = url.searchParams.get('workspaceId');
-
-    if (!workspaceId) {
-      logger.warn('Terminal WebSocket missing workspaceId');
-      sendBadRequest(socket);
-      return;
-    }
-
     if (
       !validateWebSocketOrigin({
         request,
@@ -381,6 +373,14 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
         connectionName: 'terminal WebSocket',
       })
     ) {
+      return;
+    }
+
+    const workspaceId = url.searchParams.get('workspaceId');
+
+    if (!workspaceId) {
+      logger.warn('Terminal WebSocket missing workspaceId');
+      sendBadRequest(socket);
       return;
     }
 
