@@ -55,6 +55,7 @@ function handleAcceptedState(
   userMessage: StateChangeUserMessage,
   queuePosition?: number
 ): ChatState {
+  const pendingContent = state.pendingMessages.get(id);
   const newPendingMessages = new Map(state.pendingMessages);
   newPendingMessages.delete(id);
 
@@ -65,6 +66,7 @@ function handleAcceptedState(
       text: userMessage.text,
       timestamp: userMessage.timestamp,
       attachments: userMessage.attachments,
+      sessionId: pendingContent?.sessionId,
       settings: userMessage.settings ?? {
         selectedModel: null,
         reasoningEffort: null,
@@ -98,6 +100,7 @@ function handleAcceptedState(
     text: userMessage.text,
     timestamp: userMessage.timestamp,
     attachments: userMessage.attachments,
+    sessionId: pendingContent?.sessionId,
     settings: userMessage.settings ?? {
       selectedModel: null,
       reasoningEffort: null,
@@ -260,6 +263,7 @@ function handleRejectedOrFailedState(
           text: queuedMessage?.text ?? pendingContent?.text ?? '',
           attachments: recoveryContent.attachments,
           error: errorMessage ?? 'Message failed',
+          sessionId: recoveryContent.sessionId,
         }
       : null,
   };
