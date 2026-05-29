@@ -1,6 +1,18 @@
-import type { CIStatus, KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import type {
+  CIStatus,
+  KanbanColumn,
+  PRState,
+  RatchetState,
+  RunScriptStatus,
+  WorkspaceStatus,
+} from '@/shared/core';
 import type { WorkspaceCiObservation, WorkspaceFlowPhase } from '@/shared/workspace-flow-state';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import {
+  deriveWorkspaceStatusReason,
+  type WorkspacePendingRequestType,
+  type WorkspaceStatusReason,
+} from '@/shared/workspace-status-reason';
 
 export interface WorkspaceDerivedFlowState {
   phase: WorkspaceFlowPhase;
@@ -18,6 +30,9 @@ export interface WorkspaceDerivedStateInput {
   ratchetState: RatchetState;
   hasHadSessions: boolean;
   sessionIsWorking: boolean;
+  pendingRequestType: WorkspacePendingRequestType | null;
+  hasSessionRuntimeError?: boolean;
+  runScriptStatus: RunScriptStatus | null;
   flowState: WorkspaceDerivedFlowState;
 }
 
@@ -27,7 +42,6 @@ export interface WorkspaceDerivedStateFns {
     isWorking: boolean;
     prState: PRState;
     ratchetState: RatchetState;
-    hasHadSessions: boolean;
   }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
@@ -45,6 +59,7 @@ export interface WorkspaceDerivedState {
   flowPhase: WorkspaceFlowPhase;
   ciObservation: WorkspaceCiObservation;
   ratchetButtonAnimated: boolean;
+  statusReason: WorkspaceStatusReason;
 }
 
 export const DEFAULT_WORKSPACE_DERIVED_FLOW_STATE: WorkspaceDerivedFlowState = {
@@ -75,10 +90,22 @@ export function assembleWorkspaceDerivedState(
       isWorking,
       prState: input.prState,
       ratchetState: input.ratchetState,
-      hasHadSessions: input.hasHadSessions,
     }),
     flowPhase: input.flowState.phase,
     ciObservation: input.flowState.ciObservation,
     ratchetButtonAnimated: input.flowState.shouldAnimateRatchetButton,
+    statusReason: deriveWorkspaceStatusReason({
+      lifecycle: input.lifecycle,
+      hasHadSessions: input.hasHadSessions,
+      isWorking,
+      pendingRequestType: input.pendingRequestType,
+      hasSessionRuntimeError: input.hasSessionRuntimeError,
+      flowPhase: input.flowState.phase,
+      ciObservation: input.flowState.ciObservation,
+      prState: input.prState,
+      prCiStatus: input.prCiStatus,
+      ratchetState: input.ratchetState,
+      runScriptStatus: input.runScriptStatus,
+    }),
   };
 }

@@ -35,6 +35,12 @@ function makeEntry(overrides: Partial<WorkspaceSnapshotEntry> = {}): WorkspaceSn
     kanbanColumn: 'WORKING',
     flowPhase: 'CI_WAIT',
     ciObservation: 'CHECKS_PASSED',
+    statusReason: {
+      code: 'NEEDS_PLAN_APPROVAL',
+      label: 'Needs plan approval',
+      tone: 'attention',
+      needsUser: true,
+    },
     ratchetButtonAnimated: false,
     fieldTimestamps: {
       workspace: 1000,
@@ -83,6 +89,8 @@ describe('mapSnapshotEntryToKanbanWorkspace', () => {
     expect(result.isWorking).toBe(true);
     expect(result.ratchetButtonAnimated).toBe(false);
     expect(result.flowPhase).toBe('CI_WAIT');
+    expect(result.ciObservation).toBe('CHECKS_PASSED');
+    expect(result.statusReason).toEqual(entry.statusReason);
     expect(result.pendingRequestType).toBe('plan_approval');
     expect(result.snapshotComputedAt).toBe(entry.computedAt);
     expect(result.sessionSummaries).toEqual([]);

@@ -1,5 +1,6 @@
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
+import { buildWorkspaceSessionSummaries } from '@/backend/lib/session-summaries';
 import {
   assembleWorkspaceDerivedState,
   DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
@@ -13,12 +14,13 @@ import { workspaceAccessor } from '@/backend/services/workspace/resources/worksp
 import type {
   WorkspaceGitHubBridge,
   WorkspacePRSnapshotBridge,
-  WorkspaceSessionBridge,
+  WorkspaceQuerySessionBridge,
 } from '@/backend/services/workspace/service/bridges';
 import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');
@@ -36,12 +38,12 @@ class WorkspaceQueryService {
   private reviewCountRefreshInFlight = false;
   private prStatusSyncInFlight = false;
 
-  private sessionBridge: WorkspaceSessionBridge | null = null;
+  private sessionBridge: WorkspaceQuerySessionBridge | null = null;
   private githubBridge: WorkspaceGitHubBridge | null = null;
   private prSnapshotBridge: WorkspacePRSnapshotBridge | null = null;
 
   configure(bridges: {
-    session: WorkspaceSessionBridge;
+    session: WorkspaceQuerySessionBridge;
     github: WorkspaceGitHubBridge;
     prSnapshot: WorkspacePRSnapshotBridge;
   }): void {
@@ -50,13 +52,23 @@ class WorkspaceQueryService {
     this.prSnapshotBridge = bridges.prSnapshot;
   }
 
-  private get session(): WorkspaceSessionBridge {
+  private get session(): WorkspaceQuerySessionBridge {
     if (!this.sessionBridge) {
       throw new Error(
         'WorkspaceQueryService not configured: session bridge missing. Call configure() first.'
       );
     }
     return this.sessionBridge;
+  }
+
+  private hasSessionRuntimeError(workspace: {
+    agentSessions?: Parameters<typeof buildWorkspaceSessionSummaries>[0] | null;
+  }): boolean {
+    const sessionSummaries = buildWorkspaceSessionSummaries(
+      workspace.agentSessions ?? [],
+      (sessionId) => this.session.getRuntimeSnapshot(sessionId)
+    );
+    return Boolean(findWorkspaceSessionRuntimeError(sessionSummaries));
   }
 
   private get github(): WorkspaceGitHubBridge {
@@ -170,6 +182,7 @@ class WorkspaceQueryService {
     return {
       workspaces: workspaces.map((w) => {
         const runtimeState = runtimeStateByWorkspace.get(w.id);
+        const pendingRequestType = pendingRequestByWorkspace.get(w.id) ?? null;
         const derivedState = assembleWorkspaceDerivedState(
           {
             lifecycle: w.status ?? WorkspaceStatus.READY,
@@ -179,6 +192,9 @@ class WorkspaceQueryService {
             ratchetState: w.ratchetState ?? RatchetState.IDLE,
             hasHadSessions: w.hasHadSessions ?? true,
             sessionIsWorking: runtimeState?.isSessionWorking ?? false,
+            pendingRequestType,
+            hasSessionRuntimeError: this.hasSessionRuntimeError(w),
+            runScriptStatus: w.runScriptStatus,
             flowState: runtimeState?.flowState ?? DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
           },
           {
@@ -219,11 +235,12 @@ class WorkspaceQueryService {
           ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
           flowPhase: derivedState.flowPhase,
           ciObservation: derivedState.ciObservation,
+          statusReason: derivedState.statusReason,
           runScriptStatus: w.runScriptStatus,
           cachedKanbanColumn: derivedState.kanbanColumn,
           // DB timestamp for last cached kanban-state recompute/change.
           stateComputedAt: w.stateComputedAt?.toISOString() ?? null,
-          pendingRequestType: pendingRequestByWorkspace.get(w.id) ?? null,
+          pendingRequestType,
         };
       }),
       reviewCount,
@@ -252,6 +269,10 @@ class WorkspaceQueryService {
         const runtimeState = deriveWorkspaceRuntimeState(workspace, (sessionIds) =>
           this.session.isAnySessionWorking(sessionIds)
         );
+        const pendingRequestType = computePendingRequestType(
+          runtimeState.sessionIds,
+          allPendingRequests
+        );
         const derivedState = assembleWorkspaceDerivedState(
           {
             lifecycle: workspace.status,
@@ -261,17 +282,15 @@ class WorkspaceQueryService {
             ratchetState: workspace.ratchetState,
             hasHadSessions: workspace.hasHadSessions,
             sessionIsWorking: runtimeState.isSessionWorking,
+            pendingRequestType,
+            hasSessionRuntimeError: this.hasSessionRuntimeError(workspace),
+            runScriptStatus: workspace.runScriptStatus,
             flowState: runtimeState.flowState,
           },
           {
             computeKanbanColumn,
             deriveSidebarStatus: deriveWorkspaceSidebarStatus,
           }
-        );
-
-        const pendingRequestType = computePendingRequestType(
-          runtimeState.sessionIds,
-          allPendingRequests
         );
 
         return {
@@ -281,12 +300,13 @@ class WorkspaceQueryService {
           ratchetButtonAnimated: derivedState.ratchetButtonAnimated,
           flowPhase: derivedState.flowPhase,
           ciObservation: derivedState.ciObservation,
+          statusReason: derivedState.statusReason,
           isArchived: false,
           pendingRequestType,
         };
       })
       .filter((workspace) => {
-        // Filter out workspaces with null kanbanColumn (hidden: READY + no sessions)
+        // Filter out workspaces with null kanbanColumn (archived/archiving)
         if (workspace.kanbanColumn === null) {
           return false;
         }

@@ -1,7 +1,7 @@
 import { CircleDot, Clock, GitBranch, GitPullRequest } from 'lucide-react';
-import { PendingRequestBadge } from '@/client/components/pending-request-badge';
 import type { ServerWorkspace } from '@/client/components/use-workspace-list-state';
 import { WorkspaceStatusIcon } from '@/client/components/workspace-status-icon';
+import { getVisibleWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 
 function PrLink({ prNumber, onOpenPr }: { prNumber: number; onOpenPr?: () => void }) {
   const content = (
@@ -54,6 +54,7 @@ export function WorkspaceItemContent({
       : workspace.linearIssueId;
   const hasIssue = Boolean(issueLabel);
   const isPeriodicTask = workspace.creationSource === 'PERIODIC_TASK';
+  const statusReason = getVisibleWorkspaceStatusReason(workspace.statusReason);
 
   return (
     <div className="flex flex-col gap-0.5 min-w-0 w-full">
@@ -90,9 +91,9 @@ export function WorkspaceItemContent({
           </span>
         </div>
       )}
-      {workspace.pendingRequestType && (
-        <div className="pl-[calc(0.5rem+8px)]">
-          <PendingRequestBadge type={workspace.pendingRequestType} size="xs" />
+      {statusReason && (
+        <div className="pl-[calc(0.5rem+8px)] text-[11px] text-muted-foreground truncate">
+          {statusReason.label}
         </div>
       )}
       {hasIssue && (

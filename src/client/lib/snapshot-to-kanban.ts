@@ -45,6 +45,8 @@ export function mapSnapshotEntryToKanbanWorkspace(
     sessionSummaries: entry.sessionSummaries,
     ratchetButtonAnimated: entry.ratchetButtonAnimated,
     flowPhase: entry.flowPhase,
+    ciObservation: entry.ciObservation,
+    statusReason: entry.statusReason,
     pendingRequestType: entry.pendingRequestType,
     isArchived: false,
     snapshotComputedAt: entry.computedAt,

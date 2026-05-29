@@ -41,7 +41,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'OPEN',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBeNull();
   });
@@ -53,7 +52,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'NONE',
         ratchetState: 'IDLE',
-        hasHadSessions: false,
       })
     ).toBe('WORKING');
     expect(
@@ -62,19 +60,17 @@ describe('computeKanbanColumn', () => {
         isWorking: true,
         prState: 'OPEN',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('WORKING');
   });
 
-  it('maps merged and closed PRs to DONE and hidden empty READY workspaces to null', () => {
+  it('maps merged and closed PRs to DONE and idle empty READY workspaces to WAITING', () => {
     expect(
       computeKanbanColumn({
         lifecycle: 'READY',
         isWorking: false,
         prState: 'MERGED',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('DONE');
     expect(
@@ -83,7 +79,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'CLOSED',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('DONE');
     expect(
@@ -92,9 +87,8 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'NONE',
         ratchetState: 'IDLE',
-        hasHadSessions: false,
       })
-    ).toBeNull();
+    ).toBe('WAITING');
   });
 
   it('maps ratchet MERGED to DONE even if prState has not caught up yet', () => {
@@ -104,7 +98,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'OPEN',
         ratchetState: 'MERGED',
-        hasHadSessions: true,
       })
     ).toBe('DONE');
   });
@@ -116,7 +109,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'DRAFT',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('WAITING');
     expect(
@@ -125,7 +117,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'APPROVED',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('WAITING');
   });

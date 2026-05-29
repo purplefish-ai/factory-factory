@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   WorkspaceGitHubBridge,
   WorkspacePRSnapshotBridge,
+  WorkspaceQuerySessionBridge,
   WorkspaceSessionBridge,
 } from '@/backend/services/workspace/service/bridges';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace/service/state/flow-state';
@@ -73,9 +74,11 @@ vi.mock('@/backend/services/logger.service', () => ({
 describe('WorkspaceQueryService', () => {
   const mockIsAnySessionWorking = vi.fn<WorkspaceSessionBridge['isAnySessionWorking']>();
   const mockGetAllPendingRequests = vi.fn<WorkspaceSessionBridge['getAllPendingRequests']>();
-  const mockSessionBridge: WorkspaceSessionBridge = {
+  const mockGetRuntimeSnapshot = vi.fn<WorkspaceQuerySessionBridge['getRuntimeSnapshot']>();
+  const mockSessionBridge: WorkspaceQuerySessionBridge = {
     isAnySessionWorking: mockIsAnySessionWorking,
     getAllPendingRequests: mockGetAllPendingRequests,
+    getRuntimeSnapshot: mockGetRuntimeSnapshot,
   };
 
   const mockGithubCheckHealth = vi.fn();
@@ -92,6 +95,12 @@ describe('WorkspaceQueryService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
 
     workspaceQueryService.configure({
       session: mockSessionBridge,
@@ -144,7 +153,7 @@ describe('WorkspaceQueryService', () => {
     });
   });
 
-  it('listWithKanbanState filters hidden columns and applies runtime-derived flags', async () => {
+  it('listWithKanbanState shows empty workspaces and applies runtime-derived reasons', async () => {
     mockFindByProjectIdWithSessions.mockResolvedValue([
       {
         id: 'w1',
@@ -153,8 +162,10 @@ describe('WorkspaceQueryService', () => {
         prState: 'NONE',
         prCiStatus: 'UNKNOWN',
         ratchetState: 'IDLE',
+        runScriptStatus: 'IDLE',
         hasHadSessions: false,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        agentSessions: [],
       },
       {
         id: 'w2',
@@ -163,8 +174,10 @@ describe('WorkspaceQueryService', () => {
         prState: 'OPEN',
         prCiStatus: 'PENDING',
         ratchetState: 'REVIEW_PENDING',
+        runScriptStatus: 'IDLE',
         hasHadSessions: true,
         createdAt: new Date('2026-01-02T00:00:00.000Z'),
+        agentSessions: [],
       },
     ]);
 
@@ -176,7 +189,7 @@ describe('WorkspaceQueryService', () => {
         hasActivePr: workspace.id === 'w2',
         isWorking: false,
         shouldAnimateRatchetButton: workspace.id === 'w2',
-        phase: 'HAS_PR',
+        phase: workspace.id === 'w2' ? 'CI_WAIT' : 'NO_PR',
         ciObservation: 'CHECKS_UNKNOWN',
       },
     }));
@@ -184,13 +197,25 @@ describe('WorkspaceQueryService', () => {
 
     const result = await workspaceQueryService.listWithKanbanState({ projectId: 'proj-1' });
 
-    expect(result).toHaveLength(1);
+    expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
       id: 'w2',
       kanbanColumn: 'WAITING',
       pendingRequestType: 'user_question',
       ratchetButtonAnimated: true,
-      flowPhase: 'HAS_PR',
+      flowPhase: 'CI_WAIT',
+      statusReason: {
+        code: 'NEEDS_ANSWER',
+        label: 'Needs your answer',
+      },
+    });
+    expect(result[1]).toMatchObject({
+      id: 'w1',
+      kanbanColumn: 'WAITING',
+      statusReason: {
+        code: 'NO_SESSION_STARTED',
+        label: 'No session started',
+      },
     });
   });
 
@@ -203,6 +228,7 @@ describe('WorkspaceQueryService', () => {
         prState: PRState.NONE,
         prCiStatus: CIStatus.UNKNOWN,
         ratchetState: RatchetState.IDLE,
+        runScriptStatus: RunScriptStatus.IDLE,
         hasHadSessions: true,
         cachedKanbanColumn: 'WAITING',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -218,7 +244,7 @@ describe('WorkspaceQueryService', () => {
         isWorking: true,
         shouldAnimateRatchetButton: false,
         phase: 'NO_PR',
-        ciObservation: 'NONE',
+        ciObservation: 'CHECKS_UNKNOWN',
       },
     });
     mockGetAllPendingRequests.mockReturnValue(new Map());
@@ -232,6 +258,73 @@ describe('WorkspaceQueryService', () => {
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       kanbanColumn: 'WAITING',
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+  });
+
+  it('surfaces session runtime errors in initial workspace query paths', async () => {
+    const erroredWorkspace = {
+      id: 'w1',
+      name: 'W1',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      worktreePath: null,
+      branchName: null,
+      prUrl: null,
+      prNumber: null,
+      prState: PRState.NONE,
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: false,
+      ratchetState: RatchetState.IDLE,
+      runScriptStatus: RunScriptStatus.IDLE,
+      hasHadSessions: true,
+      cachedKanbanColumn: 'WAITING',
+      stateComputedAt: null,
+      agentSessions: [
+        {
+          id: 's1',
+          name: null,
+          workflow: null,
+          model: null,
+          status: 'FAILED',
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+      terminalSessions: [],
+    };
+
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockFindByProjectIdWithSessions.mockResolvedValue([erroredWorkspace]);
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: ['s1'],
+      isSessionWorking: false,
+      isWorking: false,
+      flowState: {
+        hasActivePr: false,
+        isWorking: false,
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'CHECKS_UNKNOWN',
+      },
+    });
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'error',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      errorMessage: 'Session crashed',
+    });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+
+    const summary = await workspaceQueryService.getProjectSummaryState('p1');
+    const kanban = await workspaceQueryService.listWithKanbanState({ projectId: 'p1' });
+
+    expect(summary.workspaces[0]?.statusReason).toMatchObject({
+      code: 'SESSION_ERROR',
+      label: 'Session error',
+    });
+    expect(kanban[0]?.statusReason).toMatchObject({
+      code: 'SESSION_ERROR',
+      label: 'Session error',
     });
   });
 
@@ -251,6 +344,7 @@ describe('WorkspaceQueryService', () => {
         ratchetEnabled: false,
         ratchetState: 'IDLE',
         runScriptStatus: 'IDLE',
+        hasHadSessions: true,
         cachedKanbanColumn: 'WAITING',
         stateComputedAt: null,
         agentSessions: [{ updatedAt: new Date('2026-01-03T00:00:00.000Z') }],
@@ -284,7 +378,7 @@ describe('WorkspaceQueryService', () => {
         hasActivePr: workspace.id === 'w2',
         isWorking: workspace.id === 'w2',
         shouldAnimateRatchetButton: workspace.id === 'w2',
-        phase: workspace.id === 'w2' ? 'HAS_PR' : 'NO_PR',
+        phase: workspace.id === 'w2' ? 'CI_WAIT' : 'NO_PR',
         ciObservation: 'CHECKS_UNKNOWN',
       },
     }));
@@ -414,10 +508,12 @@ describe('WorkspaceQueryService', () => {
     expect(summaryWorkspace?.ciObservation).toBe(snapshotEntry?.ciObservation);
     expect(summaryWorkspace?.sidebarStatus).toEqual(snapshotEntry?.sidebarStatus);
     expect(summaryWorkspace?.cachedKanbanColumn).toBe(snapshotEntry?.kanbanColumn);
+    expect(summaryWorkspace?.statusReason).toEqual(snapshotEntry?.statusReason);
 
     expect(kanban[0]?.flowPhase).toBe(snapshotEntry?.flowPhase);
     expect(kanban[0]?.ciObservation).toBe(snapshotEntry?.ciObservation);
     expect(kanban[0]?.kanbanColumn).toBe(snapshotEntry?.kanbanColumn);
+    expect(kanban[0]?.statusReason).toEqual(snapshotEntry?.statusReason);
   });
 
   it('refreshFactoryConfigs updates script commands and reports per-workspace errors', async () => {

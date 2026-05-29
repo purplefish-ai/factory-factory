@@ -17,6 +17,7 @@ import {
   RunScriptStatus,
   SessionStatus,
 } from '@/shared/core';
+import type { WorkspaceStatusReasonCode } from '@/shared/workspace-status-reason';
 
 // =============================================================================
 // Snapshot message types (client-side mirror of server messages)
@@ -58,7 +59,46 @@ const WorkspaceGitStatsSchema = z.object({
 
 const WorkspaceSidebarStatusSchema = z.object({
   activityState: z.enum(['WORKING', 'IDLE']),
-  ciState: z.enum(['NONE', 'RUNNING', 'FAILING', 'PASSING', 'UNKNOWN', 'MERGED']),
+  ciState: z.enum([
+    'NONE',
+    'RUNNING',
+    'FAILING',
+    'PASSING',
+    'UNKNOWN',
+    'CLOSED',
+    'MERGED',
+    'CONFLICT',
+  ]),
+});
+
+const WORKSPACE_STATUS_REASON_CODES = [
+  'NEEDS_PERMISSION',
+  'NEEDS_PLAN_APPROVAL',
+  'NEEDS_ANSWER',
+  'SESSION_ERROR',
+  'SETTING_UP',
+  'SETUP_FAILED',
+  'ARCHIVING',
+  'ARCHIVED',
+  'AGENT_WORKING',
+  'DEV_SERVER_RUNNING',
+  'WAITING_FOR_CI',
+  'FIXING_CI_FAILURES',
+  'FIXING_REVIEW_COMMENTS',
+  'CHECKING_PR',
+  'MERGED',
+  'PR_CLOSED',
+  'READY_TO_MERGE',
+  'READY_FOR_REVIEW',
+  'NO_SESSION_STARTED',
+  'READY_FOR_NEXT_PROMPT',
+] as const satisfies readonly WorkspaceStatusReasonCode[];
+
+const WorkspaceStatusReasonSchema = z.object({
+  code: z.enum(WORKSPACE_STATUS_REASON_CODES),
+  label: z.string(),
+  tone: z.enum(['neutral', 'working', 'waiting', 'attention', 'success', 'danger']),
+  needsUser: z.boolean(),
 });
 
 export const WorkspaceSnapshotEntrySchema = z.object({
@@ -101,6 +141,7 @@ export const WorkspaceSnapshotEntrySchema = z.object({
       'CHECKS_UNKNOWN',
     ])
     .nullable(),
+  statusReason: WorkspaceStatusReasonSchema,
   ratchetButtonAnimated: z.boolean(),
   fieldTimestamps: z.record(z.string(), z.number()),
 });
@@ -188,6 +229,7 @@ export function mapSnapshotEntryToServerWorkspace(
     ratchetButtonAnimated: entry.ratchetButtonAnimated,
     flowPhase: entry.flowPhase,
     ciObservation: entry.ciObservation,
+    statusReason: entry.statusReason,
     runScriptStatus: entry.runScriptStatus,
     pendingRequestType: entry.pendingRequestType,
     cachedKanbanColumn: entry.kanbanColumn,

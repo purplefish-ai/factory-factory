@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CIStatus, PRState, RatchetState, RunScriptStatus } from '@/shared/core';
 import type { SessionSummary } from '@/shared/session-runtime';
 import type { WorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 
 // =============================================================================
 // Types
@@ -32,6 +33,7 @@ export interface ServerWorkspace {
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
   ciObservation?: string | null;
+  statusReason?: WorkspaceStatusReason | null;
   runScriptStatus?: RunScriptStatus | null;
   cachedKanbanColumn?: string | null;
   /**

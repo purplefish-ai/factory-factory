@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { PendingRequestBadge } from '@/client/components/pending-request-badge';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
+import { shouldShowWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { PrStateBadge } from '@/components/shared/pr-state-badge';
 import { SetupStatusChip } from '@/components/shared/setup-status-chip';
@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils';
 import type { KanbanColumn, WorkspaceSidebarCiState, WorkspaceStatus } from '@/shared/core';
 import { findWorkspaceSessionRuntimeError, type SessionSummary } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
+import type { WorkspaceStatusReason } from '@/shared/workspace-status-reason';
 
 export interface WorkspaceWithKanban extends Workspace {
   kanbanColumn: KanbanColumn | null;
@@ -35,6 +36,7 @@ export interface WorkspaceWithKanban extends Workspace {
   sessionSummaries?: SessionSummary[];
   ratchetButtonAnimated?: boolean;
   flowPhase?: string | null;
+  statusReason?: WorkspaceStatusReason | null;
   isArchived?: boolean;
   pendingRequestType?: 'plan_approval' | 'user_question' | 'permission_request' | null;
 }
@@ -299,13 +301,15 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
   const showCi = sidebarStatus.ciState !== 'NONE';
   const showBranch = Boolean(workspace.branchName);
-  const showPendingRequest = workspace.pendingRequestType;
+  const showStatusReason =
+    shouldShowWorkspaceStatusReason(workspace.statusReason) &&
+    !(workspace.statusReason.code === 'SESSION_ERROR' && sessionRuntimeError);
   const hasMetadata =
     showSetup ||
+    showStatusReason ||
     showCi ||
     showBranch ||
     showPR ||
-    showPendingRequest ||
     !!sessionRuntimeError ||
     workspace.mode === 'AUTO_ITERATION';
   return {
@@ -317,7 +321,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
     showSetup,
     showCi,
     showBranch,
-    showPendingRequest,
+    showStatusReason,
     hasMetadata,
   };
 }
@@ -369,7 +373,7 @@ export function KanbanCard({
     showSetup,
     showCi,
     showBranch,
-    showPendingRequest,
+    showStatusReason,
     hasMetadata,
   } = deriveCardState(workspace);
 
@@ -471,6 +475,11 @@ export function KanbanCard({
                 <SetupStatusChip status={workspace.status} />
               </div>
             )}
+            {showStatusReason && workspace.statusReason && (
+              <div className="flex items-center text-[11px] font-medium text-muted-foreground">
+                <span className="truncate">{workspace.statusReason.label}</span>
+              </div>
+            )}
             {showCi && (
               <div className="flex items-center">
                 <CiRow ciState={sidebarStatus.ciState} prState={workspace.prState} />
@@ -484,11 +493,6 @@ export function KanbanCard({
             {showPR && (
               <div className="flex items-center">
                 <PullRequestRow workspace={workspace} showPR={showPR} />
-              </div>
-            )}
-            {showPendingRequest && (
-              <div className="flex items-center gap-2">
-                <PendingRequestBadge type={showPendingRequest} />
               </div>
             )}
             {workspace.mode === 'AUTO_ITERATION' && <AutoIterationBadge workspace={workspace} />}

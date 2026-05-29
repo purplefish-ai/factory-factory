@@ -22,6 +22,8 @@ describe('assembleWorkspaceDerivedState', () => {
         ratchetState: RatchetState.IDLE,
         hasHadSessions: true,
         sessionIsWorking: false,
+        pendingRequestType: null,
+        runScriptStatus: 'IDLE',
         flowState: {
           ...DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
           isWorking: true,
@@ -58,6 +60,8 @@ describe('assembleWorkspaceDerivedState', () => {
         ratchetState: RatchetState.REVIEW_PENDING,
         hasHadSessions: true,
         sessionIsWorking: false,
+        pendingRequestType: null,
+        runScriptStatus: 'IDLE',
         flowState: {
           phase: 'CI_WAIT',
           ciObservation: 'CHECKS_PENDING',
@@ -79,6 +83,12 @@ describe('assembleWorkspaceDerivedState', () => {
       ratchetButtonAnimated: true,
       flowPhase: 'CI_WAIT',
       ciObservation: 'CHECKS_PENDING',
+      statusReason: {
+        code: 'WAITING_FOR_CI',
+        label: 'Waiting for CI',
+        tone: 'waiting',
+        needsUser: false,
+      },
     });
   });
 
@@ -98,6 +108,8 @@ describe('assembleWorkspaceDerivedState', () => {
         ratchetState: RatchetState.IDLE,
         hasHadSessions: true,
         sessionIsWorking: true,
+        pendingRequestType: null,
+        runScriptStatus: 'IDLE',
         flowState: DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
       },
       {

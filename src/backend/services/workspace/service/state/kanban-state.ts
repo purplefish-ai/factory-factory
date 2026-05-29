@@ -12,7 +12,6 @@ export interface KanbanStateInput {
   isWorking: boolean;
   prState: PRState;
   ratchetState: RatchetState;
-  hasHadSessions: boolean;
 }
 
 export interface WorkspaceWithKanbanState {
@@ -27,17 +26,14 @@ export interface WorkspaceWithKanbanState {
  *
  * Simplified 3-column model:
  * - WORKING: Initializing states (NEW/PROVISIONING/FAILED) or actively working
- * - WAITING: Idle workspaces with hasHadSessions=true (includes PR states)
+ * - WAITING: Idle ready workspaces, including empty workspaces that need a first session
  * - DONE: PR merged or closed
  *
- * Note: Workspaces with hasHadSessions=false AND status=READY are hidden from view.
  * Archived workspaces retain their pre-archive cachedKanbanColumn and are hidden
  * unless "Show Archived" toggle is enabled.
- *
- * Returns null for workspaces that should be hidden (READY + no sessions).
  */
 export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | null {
-  const { lifecycle, isWorking, prState, ratchetState, hasHadSessions } = input;
+  const { lifecycle, isWorking, prState, ratchetState } = input;
 
   // Archiving/archived workspaces: return null - they use cachedKanbanColumn from before archiving
   // The caller should handle archived workspaces separately
@@ -66,13 +62,7 @@ export function computeKanbanColumn(input: KanbanStateInput): KanbanColumn | nul
     return KanbanColumn.DONE;
   }
 
-  // Hide workspaces that never had sessions (old BACKLOG items)
-  // These are filtered out from the kanban view
-  if (!hasHadSessions) {
-    return null;
-  }
-
-  // WAITING: Everything else - idle workspaces with sessions
+  // WAITING: Everything else - idle ready workspaces
   // (includes PR states: NONE, DRAFT, OPEN, CHANGES_REQUESTED, APPROVED)
   return KanbanColumn.WAITING;
 }
@@ -111,7 +101,6 @@ class KanbanStateService {
       isWorking: runtimeState.isWorking,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
-      hasHadSessions: workspace.hasHadSessions,
     });
 
     return {
@@ -140,7 +129,6 @@ class KanbanStateService {
         isWorking: runtimeState.isWorking,
         prState: workspace.prState,
         ratchetState: workspace.ratchetState,
-        hasHadSessions: workspace.hasHadSessions,
       });
 
       return {
@@ -182,10 +170,9 @@ class KanbanStateService {
       isWorking: false,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
-      hasHadSessions: workspace.hasHadSessions,
     });
 
-    // If column is null (hidden workspace), default to WAITING for the cache
+    // If column is null (archived workspace), default to WAITING for the cache
     const newColumn = cachedColumn ?? KanbanColumn.WAITING;
 
     // Only update stateComputedAt if the column actually changed

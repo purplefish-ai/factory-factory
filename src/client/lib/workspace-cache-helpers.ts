@@ -22,6 +22,13 @@ export function createOptimisticWorkspaceCacheData(workspace: Workspace) {
     ratchetButtonAnimated: false,
     flowPhase: 'NO_PR' as const,
     ciObservation: 'NOT_FETCHED' as const,
+    statusReason: {
+      code: 'SETTING_UP' as const,
+      label: 'Setting up workspace',
+      tone: 'working' as const,
+      needsUser: false,
+    },
+    pendingRequestType: null,
   };
 }
 
