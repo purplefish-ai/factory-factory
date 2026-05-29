@@ -27,6 +27,7 @@ export type AggregateWorkspace = {
 }
 
 export type WorkspaceAvgAggregateOutputType = {
+  initScriptPid: number | null
   initRetryCount: number | null
   runScriptPid: number | null
   runScriptPort: number | null
@@ -35,6 +36,7 @@ export type WorkspaceAvgAggregateOutputType = {
 }
 
 export type WorkspaceSumAggregateOutputType = {
+  initScriptPid: number | null
   initRetryCount: number | null
   runScriptPid: number | null
   runScriptPort: number | null
@@ -56,6 +58,7 @@ export type WorkspaceMinAggregateOutputType = {
   initOutput: string | null
   initStartedAt: Date | null
   initCompletedAt: Date | null
+  initScriptPid: number | null
   initRetryCount: number | null
   runScriptCommand: string | null
   runScriptPostRunCommand: string | null
@@ -111,6 +114,7 @@ export type WorkspaceMaxAggregateOutputType = {
   initOutput: string | null
   initStartedAt: Date | null
   initCompletedAt: Date | null
+  initScriptPid: number | null
   initRetryCount: number | null
   runScriptCommand: string | null
   runScriptPostRunCommand: string | null
@@ -167,6 +171,7 @@ export type WorkspaceCountAggregateOutputType = {
   initOutput: number
   initStartedAt: number
   initCompletedAt: number
+  initScriptPid: number
   initRetryCount: number
   runScriptCommand: number
   runScriptPostRunCommand: number
@@ -213,6 +218,7 @@ export type WorkspaceCountAggregateOutputType = {
 
 
 export type WorkspaceAvgAggregateInputType = {
+  initScriptPid?: true
   initRetryCount?: true
   runScriptPid?: true
   runScriptPort?: true
@@ -221,6 +227,7 @@ export type WorkspaceAvgAggregateInputType = {
 }
 
 export type WorkspaceSumAggregateInputType = {
+  initScriptPid?: true
   initRetryCount?: true
   runScriptPid?: true
   runScriptPort?: true
@@ -242,6 +249,7 @@ export type WorkspaceMinAggregateInputType = {
   initOutput?: true
   initStartedAt?: true
   initCompletedAt?: true
+  initScriptPid?: true
   initRetryCount?: true
   runScriptCommand?: true
   runScriptPostRunCommand?: true
@@ -297,6 +305,7 @@ export type WorkspaceMaxAggregateInputType = {
   initOutput?: true
   initStartedAt?: true
   initCompletedAt?: true
+  initScriptPid?: true
   initRetryCount?: true
   runScriptCommand?: true
   runScriptPostRunCommand?: true
@@ -353,6 +362,7 @@ export type WorkspaceCountAggregateInputType = {
   initOutput?: true
   initStartedAt?: true
   initCompletedAt?: true
+  initScriptPid?: true
   initRetryCount?: true
   runScriptCommand?: true
   runScriptPostRunCommand?: true
@@ -498,6 +508,7 @@ export type WorkspaceGroupByOutputType = {
   initOutput: string | null
   initStartedAt: Date | null
   initCompletedAt: Date | null
+  initScriptPid: number | null
   initRetryCount: number
   runScriptCommand: string | null
   runScriptPostRunCommand: string | null
@@ -579,6 +590,7 @@ export type WorkspaceWhereInput = {
   initOutput?: Prisma.StringNullableFilter<"Workspace"> | string | null
   initStartedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   initCompletedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  initScriptPid?: Prisma.IntNullableFilter<"Workspace"> | number | null
   initRetryCount?: Prisma.IntFilter<"Workspace"> | number
   runScriptCommand?: Prisma.StringNullableFilter<"Workspace"> | string | null
   runScriptPostRunCommand?: Prisma.StringNullableFilter<"Workspace"> | string | null
@@ -643,6 +655,7 @@ export type WorkspaceOrderByWithRelationInput = {
   initOutput?: Prisma.SortOrderInput | Prisma.SortOrder
   initStartedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   initCompletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  initScriptPid?: Prisma.SortOrderInput | Prisma.SortOrder
   initRetryCount?: Prisma.SortOrder
   runScriptCommand?: Prisma.SortOrderInput | Prisma.SortOrder
   runScriptPostRunCommand?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -710,6 +723,7 @@ export type WorkspaceWhereUniqueInput = Prisma.AtLeast<{
   initOutput?: Prisma.StringNullableFilter<"Workspace"> | string | null
   initStartedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   initCompletedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  initScriptPid?: Prisma.IntNullableFilter<"Workspace"> | number | null
   initRetryCount?: Prisma.IntFilter<"Workspace"> | number
   runScriptCommand?: Prisma.StringNullableFilter<"Workspace"> | string | null
   runScriptPostRunCommand?: Prisma.StringNullableFilter<"Workspace"> | string | null
@@ -774,6 +788,7 @@ export type WorkspaceOrderByWithAggregationInput = {
   initOutput?: Prisma.SortOrderInput | Prisma.SortOrder
   initStartedAt?: Prisma.SortOrderInput | Prisma.SortOrder
   initCompletedAt?: Prisma.SortOrderInput | Prisma.SortOrder
+  initScriptPid?: Prisma.SortOrderInput | Prisma.SortOrder
   initRetryCount?: Prisma.SortOrder
   runScriptCommand?: Prisma.SortOrderInput | Prisma.SortOrder
   runScriptPostRunCommand?: Prisma.SortOrderInput | Prisma.SortOrder
@@ -840,6 +855,7 @@ export type WorkspaceScalarWhereWithAggregatesInput = {
   initOutput?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
   initStartedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
   initCompletedAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Workspace"> | Date | string | null
+  initScriptPid?: Prisma.IntNullableWithAggregatesFilter<"Workspace"> | number | null
   initRetryCount?: Prisma.IntWithAggregatesFilter<"Workspace"> | number
   runScriptCommand?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
   runScriptPostRunCommand?: Prisma.StringNullableWithAggregatesFilter<"Workspace"> | string | null
@@ -897,6 +913,7 @@ export type WorkspaceCreateInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -960,6 +977,7 @@ export type WorkspaceUncheckedCreateInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -1021,6 +1039,7 @@ export type WorkspaceUpdateInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1084,6 +1103,7 @@ export type WorkspaceUncheckedUpdateInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1146,6 +1166,7 @@ export type WorkspaceCreateManyInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -1203,6 +1224,7 @@ export type WorkspaceUpdateManyMutationInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1260,6 +1282,7 @@ export type WorkspaceUncheckedUpdateManyInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -1328,6 +1351,7 @@ export type WorkspaceCountOrderByAggregateInput = {
   initOutput?: Prisma.SortOrder
   initStartedAt?: Prisma.SortOrder
   initCompletedAt?: Prisma.SortOrder
+  initScriptPid?: Prisma.SortOrder
   initRetryCount?: Prisma.SortOrder
   runScriptCommand?: Prisma.SortOrder
   runScriptPostRunCommand?: Prisma.SortOrder
@@ -1372,6 +1396,7 @@ export type WorkspaceCountOrderByAggregateInput = {
 }
 
 export type WorkspaceAvgOrderByAggregateInput = {
+  initScriptPid?: Prisma.SortOrder
   initRetryCount?: Prisma.SortOrder
   runScriptPid?: Prisma.SortOrder
   runScriptPort?: Prisma.SortOrder
@@ -1393,6 +1418,7 @@ export type WorkspaceMaxOrderByAggregateInput = {
   initOutput?: Prisma.SortOrder
   initStartedAt?: Prisma.SortOrder
   initCompletedAt?: Prisma.SortOrder
+  initScriptPid?: Prisma.SortOrder
   initRetryCount?: Prisma.SortOrder
   runScriptCommand?: Prisma.SortOrder
   runScriptPostRunCommand?: Prisma.SortOrder
@@ -1448,6 +1474,7 @@ export type WorkspaceMinOrderByAggregateInput = {
   initOutput?: Prisma.SortOrder
   initStartedAt?: Prisma.SortOrder
   initCompletedAt?: Prisma.SortOrder
+  initScriptPid?: Prisma.SortOrder
   initRetryCount?: Prisma.SortOrder
   runScriptCommand?: Prisma.SortOrder
   runScriptPostRunCommand?: Prisma.SortOrder
@@ -1490,6 +1517,7 @@ export type WorkspaceMinOrderByAggregateInput = {
 }
 
 export type WorkspaceSumOrderByAggregateInput = {
+  initScriptPid?: Prisma.SortOrder
   initRetryCount?: Prisma.SortOrder
   runScriptPid?: Prisma.SortOrder
   runScriptPort?: Prisma.SortOrder
@@ -1715,6 +1743,7 @@ export type WorkspaceCreateWithoutProjectInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -1776,6 +1805,7 @@ export type WorkspaceUncheckedCreateWithoutProjectInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -1866,6 +1896,7 @@ export type WorkspaceScalarWhereInput = {
   initOutput?: Prisma.StringNullableFilter<"Workspace"> | string | null
   initStartedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
   initCompletedAt?: Prisma.DateTimeNullableFilter<"Workspace"> | Date | string | null
+  initScriptPid?: Prisma.IntNullableFilter<"Workspace"> | number | null
   initRetryCount?: Prisma.IntFilter<"Workspace"> | number
   runScriptCommand?: Prisma.StringNullableFilter<"Workspace"> | string | null
   runScriptPostRunCommand?: Prisma.StringNullableFilter<"Workspace"> | string | null
@@ -1923,6 +1954,7 @@ export type WorkspaceCreateWithoutAgentSessionsInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -1985,6 +2017,7 @@ export type WorkspaceUncheckedCreateWithoutAgentSessionsInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2061,6 +2094,7 @@ export type WorkspaceUpdateWithoutAgentSessionsInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -2123,6 +2157,7 @@ export type WorkspaceUncheckedUpdateWithoutAgentSessionsInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -2183,6 +2218,7 @@ export type WorkspaceCreateWithoutTerminalSessionsInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2245,6 +2281,7 @@ export type WorkspaceUncheckedCreateWithoutTerminalSessionsInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2321,6 +2358,7 @@ export type WorkspaceUpdateWithoutTerminalSessionsInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -2383,6 +2421,7 @@ export type WorkspaceUncheckedUpdateWithoutTerminalSessionsInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -2443,6 +2482,7 @@ export type WorkspaceCreateWithoutClosedSessionsInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2505,6 +2545,7 @@ export type WorkspaceUncheckedCreateWithoutClosedSessionsInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2581,6 +2622,7 @@ export type WorkspaceUpdateWithoutClosedSessionsInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -2643,6 +2685,7 @@ export type WorkspaceUncheckedUpdateWithoutClosedSessionsInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -2703,6 +2746,7 @@ export type WorkspaceCreateWithoutPeriodicTaskInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2765,6 +2809,7 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2850,6 +2895,7 @@ export type WorkspaceCreateWithoutPeriodicTaskExecutionInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2912,6 +2958,7 @@ export type WorkspaceUncheckedCreateWithoutPeriodicTaskExecutionInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -2988,6 +3035,7 @@ export type WorkspaceUpdateWithoutPeriodicTaskExecutionInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3050,6 +3098,7 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskExecutionInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3110,6 +3159,7 @@ export type WorkspaceCreateManyProjectInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -3167,6 +3217,7 @@ export type WorkspaceUpdateWithoutProjectInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3228,6 +3279,7 @@ export type WorkspaceUncheckedUpdateWithoutProjectInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3289,6 +3341,7 @@ export type WorkspaceUncheckedUpdateManyWithoutProjectInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3347,6 +3400,7 @@ export type WorkspaceCreateManyPeriodicTaskInput = {
   initOutput?: string | null
   initStartedAt?: Date | string | null
   initCompletedAt?: Date | string | null
+  initScriptPid?: number | null
   initRetryCount?: number
   runScriptCommand?: string | null
   runScriptPostRunCommand?: string | null
@@ -3403,6 +3457,7 @@ export type WorkspaceUpdateWithoutPeriodicTaskInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3465,6 +3520,7 @@ export type WorkspaceUncheckedUpdateWithoutPeriodicTaskInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3526,6 +3582,7 @@ export type WorkspaceUncheckedUpdateManyWithoutPeriodicTaskInput = {
   initOutput?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   initStartedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
   initCompletedAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  initScriptPid?: Prisma.NullableIntFieldUpdateOperationsInput | number | null
   initRetryCount?: Prisma.IntFieldUpdateOperationsInput | number
   runScriptCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   runScriptPostRunCommand?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
@@ -3632,6 +3689,7 @@ export type WorkspaceSelect<ExtArgs extends runtime.Types.Extensions.InternalArg
   initOutput?: boolean
   initStartedAt?: boolean
   initCompletedAt?: boolean
+  initScriptPid?: boolean
   initRetryCount?: boolean
   runScriptCommand?: boolean
   runScriptPostRunCommand?: boolean
@@ -3697,6 +3755,7 @@ export type WorkspaceSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Ext
   initOutput?: boolean
   initStartedAt?: boolean
   initCompletedAt?: boolean
+  initScriptPid?: boolean
   initRetryCount?: boolean
   runScriptCommand?: boolean
   runScriptPostRunCommand?: boolean
@@ -3757,6 +3816,7 @@ export type WorkspaceSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Ext
   initOutput?: boolean
   initStartedAt?: boolean
   initCompletedAt?: boolean
+  initScriptPid?: boolean
   initRetryCount?: boolean
   runScriptCommand?: boolean
   runScriptPostRunCommand?: boolean
@@ -3817,6 +3877,7 @@ export type WorkspaceSelectScalar = {
   initOutput?: boolean
   initStartedAt?: boolean
   initCompletedAt?: boolean
+  initScriptPid?: boolean
   initRetryCount?: boolean
   runScriptCommand?: boolean
   runScriptPostRunCommand?: boolean
@@ -3860,7 +3921,7 @@ export type WorkspaceSelectScalar = {
   stateComputedAt?: boolean
 }
 
-export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "ratchetEnabled" | "ratchetState" | "ratchetLastCheckedAt" | "ratchetActiveSessionId" | "ratchetLastCiRunId" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "hasHadSessions" | "cachedKanbanColumn" | "stateComputedAt", ExtArgs["result"]["workspace"]>
+export type WorkspaceOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "projectId" | "name" | "description" | "status" | "worktreePath" | "branchName" | "isAutoGeneratedBranch" | "creationSource" | "creationMetadata" | "initErrorMessage" | "initOutput" | "initStartedAt" | "initCompletedAt" | "initScriptPid" | "initRetryCount" | "runScriptCommand" | "runScriptPostRunCommand" | "runScriptCleanupCommand" | "runScriptPid" | "runScriptPort" | "runScriptStartedAt" | "runScriptStatus" | "prUrl" | "githubIssueNumber" | "githubIssueUrl" | "linearIssueId" | "linearIssueIdentifier" | "linearIssueUrl" | "defaultSessionProvider" | "ratchetSessionProvider" | "createdAt" | "updatedAt" | "prNumber" | "prState" | "prReviewState" | "prCiStatus" | "prUpdatedAt" | "prCiFailedAt" | "prCiLastNotifiedAt" | "prReviewLastCheckedAt" | "prReviewLastCommentId" | "ratchetEnabled" | "ratchetState" | "ratchetLastCheckedAt" | "ratchetActiveSessionId" | "ratchetLastCiRunId" | "mode" | "autoIterationStatus" | "autoIterationConfig" | "autoIterationProgress" | "autoIterationSessionId" | "periodicTaskId" | "hasHadSessions" | "cachedKanbanColumn" | "stateComputedAt", ExtArgs["result"]["workspace"]>
 export type WorkspaceInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   project?: boolean | Prisma.ProjectDefaultArgs<ExtArgs>
   agentSessions?: boolean | Prisma.Workspace$agentSessionsArgs<ExtArgs>
@@ -3904,6 +3965,7 @@ export type $WorkspacePayload<ExtArgs extends runtime.Types.Extensions.InternalA
     initOutput: string | null
     initStartedAt: Date | null
     initCompletedAt: Date | null
+    initScriptPid: number | null
     initRetryCount: number
     runScriptCommand: string | null
     runScriptPostRunCommand: string | null
@@ -4388,6 +4450,7 @@ export interface WorkspaceFieldRefs {
   readonly initOutput: Prisma.FieldRef<"Workspace", 'String'>
   readonly initStartedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
   readonly initCompletedAt: Prisma.FieldRef<"Workspace", 'DateTime'>
+  readonly initScriptPid: Prisma.FieldRef<"Workspace", 'Int'>
   readonly initRetryCount: Prisma.FieldRef<"Workspace", 'Int'>
   readonly runScriptCommand: Prisma.FieldRef<"Workspace", 'String'>
   readonly runScriptPostRunCommand: Prisma.FieldRef<"Workspace", 'String'>

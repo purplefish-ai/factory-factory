@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockSpawn = vi.hoisted(() => vi.fn());
 const mockClearInitOutput = vi.hoisted(() => vi.fn());
 const mockAppendInitOutput = vi.hoisted(() => vi.fn());
+const mockSetInitScriptPid = vi.hoisted(() => vi.fn());
+const mockClearInitScriptPid = vi.hoisted(() => vi.fn());
 
 vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => mockSpawn(...args),
@@ -17,6 +19,8 @@ vi.mock('@/backend/services/workspace', () => ({
   workspaceAccessor: {
     clearInitOutput: (...args: unknown[]) => mockClearInitOutput(...args),
     appendInitOutput: (...args: unknown[]) => mockAppendInitOutput(...args),
+    setInitScriptPid: (...args: unknown[]) => mockSetInitScriptPid(...args),
+    clearInitScriptPid: (...args: unknown[]) => mockClearInitScriptPid(...args),
   },
 }));
 
@@ -32,6 +36,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 import { startupScriptService } from './startup-script.service';
 
 class FakeProc extends EventEmitter {
+  pid = 12_345;
   stdout = new EventEmitter();
   stderr = new EventEmitter();
   kill = vi.fn();
@@ -52,6 +57,8 @@ describe('StartupScriptService', () => {
     });
     mockClearInitOutput.mockResolvedValue(undefined);
     mockAppendInitOutput.mockResolvedValue(undefined);
+    mockSetInitScriptPid.mockResolvedValue(undefined);
+    mockClearInitScriptPid.mockResolvedValue(undefined);
   });
 
   it('marks workspace ready immediately when no startup script is configured', async () => {
@@ -132,6 +139,8 @@ describe('StartupScriptService', () => {
     expect(result.stderr).toContain('warn');
     expect(markReady).toHaveBeenCalledWith('w1');
     expect(mockAppendInitOutput).toHaveBeenCalledWith('w1', expect.stringContaining('hello'));
+    expect(mockSetInitScriptPid).toHaveBeenCalledWith('w1', 12_345);
+    expect(mockClearInitScriptPid).toHaveBeenCalledWith('w1', 12_345);
   });
 
   it('marks workspace failed when spawn emits error', async () => {

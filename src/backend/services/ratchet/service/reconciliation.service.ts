@@ -131,6 +131,15 @@ class ReconciliationService {
 
     for (const workspace of workspacesNeedingWorktree) {
       if (workspace.status === 'PROVISIONING') {
+        if (workspace.initScriptPid && this.isProcessRunning(workspace.initScriptPid)) {
+          logger.info('Skipping stale provisioning workspace with running init script', {
+            workspaceId: workspace.id,
+            initStartedAt: workspace.initStartedAt,
+            initScriptPid: workspace.initScriptPid,
+          });
+          continue;
+        }
+
         // Stale provisioning - mark as failed so user can retry
         try {
           await this.workspace.markFailed(

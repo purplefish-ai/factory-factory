@@ -197,6 +197,7 @@ model Workspace {
   initOutput          String?           // Accumulated stdout/stderr from startup script
   initStartedAt       DateTime?
   initCompletedAt     DateTime?
+  initScriptPid       Int?              // Process ID of running startup/setup script
   initRetryCount      Int                 @default(0)
 
   // Run script tracking (from factory-factory.json)
