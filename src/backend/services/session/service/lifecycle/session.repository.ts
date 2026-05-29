@@ -5,23 +5,29 @@ import {
 } from '@/backend/services/session/resources/agent-session.accessor';
 import { projectAccessor, workspaceAccessor } from '@/backend/services/workspace';
 
+type SessionUpdateData = Partial<
+  Pick<
+    AgentSessionRecord,
+    | 'status'
+    | 'model'
+    | 'providerProcessPid'
+    | 'providerSessionId'
+    | 'providerProjectPath'
+    | 'providerMetadata'
+  >
+>;
+
+type ConditionalSessionUpdateData = Omit<SessionUpdateData, 'providerSessionId'>;
+
 type SessionAccessor = {
   findById(id: string): Promise<AgentSessionRecord | null>;
   findByWorkspaceId(workspaceId: string): Promise<AgentSessionRecord[]>;
-  update(
+  update(id: string, data: SessionUpdateData): Promise<AgentSessionRecord>;
+  updateIfStatus(
     id: string,
-    data: Partial<
-      Pick<
-        AgentSessionRecord,
-        | 'status'
-        | 'model'
-        | 'providerProcessPid'
-        | 'providerSessionId'
-        | 'providerProjectPath'
-        | 'providerMetadata'
-      >
-    >
-  ): Promise<AgentSessionRecord>;
+    data: ConditionalSessionUpdateData,
+    allowedStatuses: AgentSessionRecord['status'][]
+  ): Promise<number>;
   delete(id: string): Promise<AgentSessionRecord>;
   recoverStaleRunning(): Promise<number>;
 };
@@ -62,36 +68,21 @@ export class SessionRepository {
     return this.workspaces.markHasHadSessions(workspaceId);
   }
 
-  updateSession(
-    sessionId: string,
-    data: Partial<
-      Pick<
-        AgentSessionRecord,
-        | 'status'
-        | 'model'
-        | 'providerProcessPid'
-        | 'providerSessionId'
-        | 'providerProjectPath'
-        | 'providerMetadata'
-      >
-    >
-  ): Promise<AgentSessionRecord> {
+  updateSession(sessionId: string, data: SessionUpdateData): Promise<AgentSessionRecord> {
     return this.updateSessionWithGuards(sessionId, data);
+  }
+
+  updateSessionIfStatus(
+    sessionId: string,
+    data: ConditionalSessionUpdateData,
+    allowedStatuses: AgentSessionRecord['status'][]
+  ): Promise<number> {
+    return this.sessions.updateIfStatus(sessionId, data, allowedStatuses);
   }
 
   private async updateSessionWithGuards(
     sessionId: string,
-    data: Partial<
-      Pick<
-        AgentSessionRecord,
-        | 'status'
-        | 'model'
-        | 'providerProcessPid'
-        | 'providerSessionId'
-        | 'providerProjectPath'
-        | 'providerMetadata'
-      >
-    >
+    data: SessionUpdateData
   ): Promise<AgentSessionRecord> {
     if (Object.hasOwn(data, 'providerSessionId')) {
       const current = await this.sessions.findById(sessionId);
