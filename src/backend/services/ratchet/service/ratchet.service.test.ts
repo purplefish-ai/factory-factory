@@ -508,6 +508,63 @@ describe('ratchet service (state-change + idle dispatch)', () => {
     });
   });
 
+  it('dispatches for PR review summary feedback without changes requested', async () => {
+    const workspace = {
+      id: 'ws-review-summary',
+      prUrl: 'https://github.com/example/repo/pull/57',
+      prNumber: 57,
+      prState: 'OPEN',
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: true,
+      ratchetState: RatchetState.READY,
+      ratchetActiveSessionId: null,
+      ratchetLastCiRunId: 'ci:SUCCESS|no-changes-requested:old|merge:clean',
+      prReviewLastCheckedAt: new Date('2026-01-02T00:00:00Z'),
+    };
+
+    vi.spyOn(
+      unsafeCoerce<{
+        fetchPRState: (...args: unknown[]) => Promise<unknown>;
+      }>(ratchetService),
+      'fetchPRState'
+    ).mockResolvedValue({
+      ciStatus: CIStatus.SUCCESS,
+      snapshotKey: 'ci:SUCCESS|no-changes-requested:1767315600000|merge:clean',
+      hasChangesRequested: false,
+      hasMergeConflict: false,
+      latestReviewActivityAtMs: new Date('2026-01-02T01:00:00Z').getTime(),
+      statusCheckRollup: null,
+      prState: 'OPEN',
+      prNumber: 57,
+      reviewComments: [
+        {
+          author: 'cubic-dev-ai',
+          body: 'Please fix the hydration edge case.',
+          path: 'PR review',
+          line: null,
+          url: 'https://github.com/example/repo/pull/57#pullrequestreview-1',
+        },
+      ],
+    });
+    vi.mocked(workspaceAccessor.update).mockResolvedValue({} as never);
+    vi.mocked(agentSessionAccessor.findByWorkspaceId).mockResolvedValue([] as never);
+    vi.mocked(fixerSessionService.acquireAndDispatch).mockResolvedValue({
+      status: 'started',
+      sessionId: 'ratchet-session',
+      promptSent: true,
+    } as never);
+
+    const result = await unsafeCoerce<{
+      processWorkspace: (workspaceArg: typeof workspace) => Promise<unknown>;
+    }>(ratchetService).processWorkspace(workspace);
+
+    expect(result).toMatchObject({
+      action: { type: 'TRIGGERED_FIXER' },
+      newState: RatchetState.READY,
+    });
+    expect(fixerSessionService.acquireAndDispatch).toHaveBeenCalled();
+  });
+
   it('treats closed PR as IDLE and does not dispatch', () => {
     const state = unsafeCoerce<{
       determineRatchetState: (pr: unknown) => RatchetState;
