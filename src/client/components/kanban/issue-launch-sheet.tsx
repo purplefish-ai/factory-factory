@@ -1,5 +1,5 @@
 import { ExternalLink, Play } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { NormalizedIssue } from '@/client/lib/issue-normalization';
 import { trpc } from '@/client/lib/trpc';
@@ -63,16 +63,29 @@ export function IssueLaunchSheet({
   const [ratchetEnabled, setRatchetEnabled] = useState(false);
   const [startupModePreset, setStartupModePreset] = useState<LaunchMode>('non_interactive');
   const [provider, setProvider] = useState<AgentProvider>('CLAUDE');
+  const initializedProviderForOpenRef = useRef(false);
   const ratchetPreferenceKey = `kanban:issue-ratchet:${projectId}:${issue.id}`;
   const promptPreview = useMemo(() => buildPromptPreview(issue), [issue]);
   const issueProviderLabel = getIssueProviderLabel(issue);
 
   useEffect(() => {
-    if (!userSettings) {
+    if (!open) {
+      initializedProviderForOpenRef.current = false;
+      return;
+    }
+
+    if (!userSettings || initializedProviderForOpenRef.current) {
       return;
     }
 
     setProvider(userSettings.defaultSessionProvider ?? 'CLAUDE');
+    initializedProviderForOpenRef.current = true;
+  }, [open, userSettings]);
+
+  useEffect(() => {
+    if (!userSettings) {
+      return;
+    }
 
     try {
       const savedPreference = window.localStorage.getItem(ratchetPreferenceKey);

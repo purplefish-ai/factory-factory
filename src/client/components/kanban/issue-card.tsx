@@ -59,12 +59,14 @@ export function IssueCard({ issue, projectId, onClick }: IssueCardProps) {
           </div>
         </CardContent>
       </Card>
-      <IssueLaunchSheet
-        issue={issue}
-        projectId={projectId}
-        open={launchSheetOpen}
-        onOpenChange={setLaunchSheetOpen}
-      />
+      {launchSheetOpen ? (
+        <IssueLaunchSheet
+          issue={issue}
+          projectId={projectId}
+          open={launchSheetOpen}
+          onOpenChange={setLaunchSheetOpen}
+        />
+      ) : null}
     </>
   );
 }
