@@ -85,6 +85,7 @@ import { RunScriptService } from './run-script.service';
 class FakeChildProcess extends EventEmitter {
   pid: number | undefined;
   exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
   killed = false;
   stdout = new EventEmitter();
   stderr = new EventEmitter();
@@ -784,11 +785,13 @@ describe('RunScriptService.stopRunScript', () => {
     const mockProcess: {
       pid: number;
       exitCode: number | null;
+      signalCode: NodeJS.Signals | null;
       once: (event: string, handler: (code: number | null, signal: string | null) => void) => void;
       off: (event: string, handler: (code: number | null, signal: string | null) => void) => void;
     } = {
       pid: 12_345,
       exitCode: null,
+      signalCode: null,
       once: vi.fn(
         (event: string, handler: (code: number | null, signal: string | null) => void) => {
           if (event === 'exit') {
@@ -1749,6 +1752,22 @@ describe('RunScriptService.waitForProcessExit', () => {
     await expect(service.waitForProcessExit('ws-1', childProcess, 12_345)).resolves.toBeUndefined();
   });
 
+  it('returns when process already has signalCode', async () => {
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    childProcess.signalCode = 'SIGTERM';
+    const onceSpy = vi.spyOn(childProcess, 'once');
+
+    await expect(service.waitForProcessExit('ws-1', childProcess, 12_345)).resolves.toBeUndefined();
+    expect(onceSpy).not.toHaveBeenCalled();
+  });
+
   it('returns when child process does not expose once/off', async () => {
     const service = new RunScriptService() as unknown as {
       waitForProcessExit: (
@@ -1808,6 +1827,25 @@ describe('RunScriptService.waitForProcessExit', () => {
     onceSpy.mockImplementation(((event: string, listener: (...args: unknown[]) => void) => {
       EventEmitter.prototype.once.call(childProcess, event, listener);
       childProcess.exitCode = 0;
+      return childProcess;
+    }) as typeof childProcess.once);
+
+    await expect(service.waitForProcessExit('ws-1', childProcess, 12_345)).resolves.toBeUndefined();
+  });
+
+  it('resolves immediately when signalCode flips after listeners are attached', async () => {
+    const service = new RunScriptService() as unknown as {
+      waitForProcessExit: (
+        workspaceId: string,
+        childProcess: FakeChildProcess | undefined,
+        pid: number | null
+      ) => Promise<void>;
+    };
+    const childProcess = new FakeChildProcess(12_345);
+    const onceSpy = vi.spyOn(childProcess, 'once');
+    onceSpy.mockImplementation(((event: string, listener: (...args: unknown[]) => void) => {
+      EventEmitter.prototype.once.call(childProcess, event, listener);
+      childProcess.signalCode = 'SIGTERM';
       return childProcess;
     }) as typeof childProcess.once);
 
