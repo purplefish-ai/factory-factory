@@ -59,8 +59,8 @@
 **Local API surface has no application-level authentication:**
 - Risk: If the backend is bound to a reachable host or a permissive origin is configured, HTTP tRPC procedures and WebSocket handlers expose workspace, file, command, terminal, and agent-session capabilities to clients that can reach the server.
 - Files: `src/backend/trpc/trpc.ts`, `src/backend/server.ts`, `src/backend/middleware/cors.middleware.ts`, `src/backend/middleware/security.middleware.ts`, `src/backend/routers/websocket/chat.handler.ts`, `src/backend/routers/websocket/setup-terminal.handler.ts`, `src/backend/services/config.service.ts`
-- Current mitigation: Defaults target local development origins, CORS allowlisting is centralized in `src/backend/middleware/cors.middleware.ts`, `setup-terminal` checks the Origin header, and private proxy mode has separate token handling in `src/cli/proxy.ts`.
-- Recommendations: Add a required local session token or app-level auth layer for all tRPC and WebSocket routes, enforce Origin checks consistently across WebSocket handlers, and warn or block when binding beyond loopback without auth.
+- Current mitigation: Defaults target local development origins, CORS allowlisting is centralized in `src/backend/middleware/cors.middleware.ts`, all WebSocket handlers (`chat`, `dev-logs`, `post-run-logs`, `snapshots`, `terminal`, `setup-terminal`) validate the Origin header via `validateWebSocketOrigin()` in `src/backend/routers/websocket/upgrade-utils.ts`, and private proxy mode has separate token handling in `src/cli/proxy.ts`.
+- Recommendations: Add a required local session token or app-level auth layer for all tRPC and WebSocket routes, and warn or block when binding beyond loopback without auth.
 
 **Shell execution inherits broad environment state:**
 - Risk: User-configured commands and agent/test commands run through `bash -c` with inherited `process.env`, which can expose local credentials to scripts and agent-controlled processes.
