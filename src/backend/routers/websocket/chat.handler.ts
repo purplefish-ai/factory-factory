@@ -22,7 +22,7 @@ import { toError } from '@/backend/lib/error-utils';
 import { type ChatMessageInput, ChatMessageSchema } from '@/backend/schemas/websocket';
 import type { ConnectionInfo } from '@/backend/services/session';
 import { toMessageString } from './message-utils';
-import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
+import { markWebSocketAlive, sendBadRequest, validateWebSocketOrigin } from './upgrade-utils';
 
 // ============================================================================
 // Chat Upgrade Handler Factory
@@ -168,6 +168,19 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
     const dbSessionId = url.searchParams.get('sessionId') || null;
     const rawWorkingDir = url.searchParams.get('workingDir');
+
+    if (
+      !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'chat WebSocket',
+      })
+    ) {
+      return;
+    }
+
     const workingDir = rawWorkingDir ? validateWorkingDir(rawWorkingDir) : null;
     if (rawWorkingDir && !workingDir) {
       logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });

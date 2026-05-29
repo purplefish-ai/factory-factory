@@ -35,6 +35,7 @@ let tempRootDir: string;
 
 let createTerminalUpgradeHandler: typeof import('./terminal.handler').createTerminalUpgradeHandler;
 let createDevLogsUpgradeHandler: typeof import('./dev-logs.handler').createDevLogsUpgradeHandler;
+let createPostRunLogsUpgradeHandler: typeof import('./post-run-logs.handler').createPostRunLogsUpgradeHandler;
 let createSnapshotsUpgradeHandler: typeof import('./snapshots.handler').createSnapshotsUpgradeHandler;
 let createChatUpgradeHandler: typeof import('./chat.handler').createChatUpgradeHandler;
 
@@ -43,6 +44,7 @@ let snapshotConnections: typeof import('./snapshots.handler').snapshotConnection
 let workspaceSnapshotStore: typeof import('@/backend/services/workspace-snapshot-store.service').workspaceSnapshotStore;
 
 let counter = 0;
+const allowedOrigin = 'http://localhost:3000';
 const openServers = new Set<WebSocketTestServer>();
 const openSockets = new Set<WebSocket>();
 
@@ -55,6 +57,8 @@ beforeAll(async () => {
     await vi.importActual<typeof import('./terminal.handler')>('./terminal.handler'));
   ({ createDevLogsUpgradeHandler } =
     await vi.importActual<typeof import('./dev-logs.handler')>('./dev-logs.handler'));
+  ({ createPostRunLogsUpgradeHandler } =
+    await vi.importActual<typeof import('./post-run-logs.handler')>('./post-run-logs.handler'));
   ({ createSnapshotsUpgradeHandler, snapshotConnections } =
     await vi.importActual<typeof import('./snapshots.handler')>('./snapshots.handler'));
   ({ createChatUpgradeHandler } =
@@ -188,6 +192,12 @@ function createLogger() {
   };
 }
 
+function createConfigService() {
+  return {
+    getCorsConfig: () => ({ allowedOrigins: [allowedOrigin] }),
+  };
+}
+
 function createChatAppContext(worktreeBaseDir: string) {
   const connections = new Map<
     string,
@@ -219,6 +229,7 @@ function createChatAppContext(worktreeBaseDir: string) {
         tryDispatchNextMessage: vi.fn(),
       },
       configService: {
+        ...createConfigService(),
         getDebugConfig: () => ({ chatWebSocket: false }),
         getWorktreeBaseDir: () => worktreeBaseDir,
       },
@@ -252,7 +263,7 @@ async function connectAndCaptureMessages(url: string): Promise<{
   ws: WebSocket;
 }> {
   const messages: unknown[] = [];
-  const ws = new WebSocket(url);
+  const ws = new WebSocket(url, { headers: { Origin: allowedOrigin } });
   ws.on('message', (data) => {
     const payload = Buffer.isBuffer(data) ? data.toString() : String(data);
     messages.push(JSON.parse(payload));
@@ -267,6 +278,88 @@ async function connectAndCaptureMessages(url: string): Promise<{
 }
 
 describe('websocket integration', () => {
+  it.each([
+    {
+      name: 'terminal',
+      path: '/terminal',
+      url: '/terminal?workspaceId=workspace-1',
+      createHandler: () =>
+        createTerminalUpgradeHandler(
+          unsafeCoerce<AppContext>({
+            services: {
+              configService: createConfigService(),
+              createLogger: () => createLogger(),
+              terminalService: new FakeTerminalService(),
+            },
+          })
+        ),
+    },
+    {
+      name: 'chat',
+      path: '/chat',
+      url: '/chat',
+      createHandler: () => createChatUpgradeHandler(createChatAppContext(tempRootDir)),
+    },
+    {
+      name: 'dev logs',
+      path: '/dev-logs',
+      url: '/dev-logs?workspaceId=workspace-1',
+      createHandler: () =>
+        createDevLogsUpgradeHandler(
+          unsafeCoerce<AppContext>({
+            services: {
+              configService: createConfigService(),
+              createLogger: () => createLogger(),
+              runScriptService: new FakeRunScriptService(),
+            },
+          })
+        ),
+    },
+    {
+      name: 'post-run logs',
+      path: '/post-run-logs',
+      url: '/post-run-logs?workspaceId=workspace-1',
+      createHandler: () =>
+        createPostRunLogsUpgradeHandler(
+          unsafeCoerce<AppContext>({
+            services: {
+              configService: createConfigService(),
+              createLogger: () => createLogger(),
+              runScriptService: new FakeRunScriptService(),
+            },
+          })
+        ),
+    },
+    {
+      name: 'snapshots',
+      path: '/snapshots',
+      url: '/snapshots?projectId=project-1',
+      createHandler: () =>
+        createSnapshotsUpgradeHandler(
+          unsafeCoerce<AppContext>({
+            services: {
+              configService: createConfigService(),
+              createLogger: () => createLogger(),
+            },
+          })
+        ),
+    },
+  ])('rejects unauthorized Origin for $name websocket upgrades', async ({
+    createHandler,
+    path,
+    url,
+  }) => {
+    const server = await createWebSocketTestServer(createHandler(), path);
+    openServers.add(server);
+
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}${url}`, {
+      headers: { Origin: 'https://attacker.example' },
+    });
+    const error = await waitForSocketError(ws);
+
+    expect(error.message).toContain('Unexpected server response: 400');
+  });
+
   it('terminal handler supports create + output flow over a real websocket upgrade', async () => {
     const project = await createProjectFixture();
     const worktreePath = join(tempRootDir, nextId('worktree'));
@@ -277,6 +370,7 @@ describe('websocket integration', () => {
 
     const appContext = unsafeCoerce<AppContext>({
       services: {
+        configService: createConfigService(),
         createLogger: () => createLogger(),
         terminalService: fakeTerminalService,
       },
@@ -287,7 +381,8 @@ describe('websocket integration', () => {
     openServers.add(server);
 
     const ws = await connectWebSocket(
-      `ws://127.0.0.1:${server.port}/terminal?workspaceId=${workspace.id}`
+      `ws://127.0.0.1:${server.port}/terminal?workspaceId=${workspace.id}`,
+      { headers: { Origin: allowedOrigin } }
     );
     openSockets.add(ws);
 
@@ -326,6 +421,7 @@ describe('websocket integration', () => {
     const fakeTerminalService = new FakeTerminalService();
     const appContext = unsafeCoerce<AppContext>({
       services: {
+        configService: createConfigService(),
         createLogger: () => createLogger(),
         terminalService: fakeTerminalService,
       },
@@ -335,7 +431,9 @@ describe('websocket integration', () => {
     const server = await createWebSocketTestServer(handler, '/terminal');
     openServers.add(server);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/terminal`);
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/terminal`, {
+      headers: { Origin: allowedOrigin },
+    });
     const error = await waitForSocketError(ws);
 
     expect(error.message).toContain('Unexpected server response: 400');
@@ -349,6 +447,7 @@ describe('websocket integration', () => {
 
     const appContext = unsafeCoerce<AppContext>({
       services: {
+        configService: createConfigService(),
         createLogger: () => createLogger(),
         runScriptService,
       },
@@ -420,6 +519,7 @@ describe('websocket integration', () => {
 
     const appContext = unsafeCoerce<AppContext>({
       services: {
+        configService: createConfigService(),
         createLogger: () => createLogger(),
       },
     });
@@ -479,7 +579,9 @@ describe('websocket integration', () => {
     const server = await createWebSocketTestServer(handler, '/chat');
     openServers.add(server);
 
-    const ws = await connectWebSocket(`ws://127.0.0.1:${server.port}/chat`);
+    const ws = await connectWebSocket(`ws://127.0.0.1:${server.port}/chat`, {
+      headers: { Origin: allowedOrigin },
+    });
     openSockets.add(ws);
 
     ws.send('{invalid-json');
@@ -500,7 +602,9 @@ describe('websocket integration', () => {
     const server = await createWebSocketTestServer(handler, '/chat');
     openServers.add(server);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/chat?workingDir=../outside`);
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/chat?workingDir=../outside`, {
+      headers: { Origin: allowedOrigin },
+    });
     const error = await waitForSocketError(ws);
 
     expect(error.message).toContain('Unexpected server response: 400');
@@ -519,7 +623,8 @@ describe('websocket integration', () => {
     openServers.add(server);
 
     const ws = await connectWebSocket(
-      `ws://127.0.0.1:${server.port}/chat?workingDir=${encodeURIComponent(validWorkingDir)}`
+      `ws://127.0.0.1:${server.port}/chat?workingDir=${encodeURIComponent(validWorkingDir)}`,
+      { headers: { Origin: allowedOrigin } }
     );
     openSockets.add(ws);
 
@@ -544,6 +649,7 @@ describe('websocket integration', () => {
     const fakeTerminalService = new FakeTerminalService();
     const appContext = unsafeCoerce<AppContext>({
       services: {
+        configService: createConfigService(),
         createLogger: () => createLogger(),
         terminalService: fakeTerminalService,
       },
@@ -554,7 +660,8 @@ describe('websocket integration', () => {
     openServers.add(server);
 
     const ws = await connectWebSocket(
-      `ws://127.0.0.1:${server.port}/terminal?workspaceId=${workspace.id}`
+      `ws://127.0.0.1:${server.port}/terminal?workspaceId=${workspace.id}`,
+      { headers: { Origin: allowedOrigin } }
     );
     openSockets.add(ws);
 

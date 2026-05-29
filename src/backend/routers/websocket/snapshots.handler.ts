@@ -20,7 +20,12 @@ import {
   workspaceSnapshotStore,
 } from '@/backend/services/workspace-snapshot-store.service';
 import { WorkspaceStatus } from '@/shared/core';
-import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
+import {
+  getOrCreateConnectionSet,
+  markWebSocketAlive,
+  sendBadRequest,
+  validateWebSocketOrigin,
+} from './upgrade-utils';
 
 // ============================================================================
 // Types
@@ -150,6 +155,7 @@ export function createSnapshotsUpgradeHandler(
   } = {}
 ) {
   const logger = appContext.services.createLogger('snapshots-handler');
+  const { configService } = appContext.services;
   const connections = options.connections ?? snapshotConnections;
   const subscriptionState = options.subscriptionState ?? defaultSnapshotStoreSubscriptionState;
 
@@ -161,6 +167,18 @@ export function createSnapshotsUpgradeHandler(
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
+    if (
+      !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'snapshots WebSocket',
+      })
+    ) {
+      return;
+    }
+
     subscriptionState.ensure(connections, logger);
 
     const projectId = url.searchParams.get('projectId');

@@ -14,6 +14,7 @@ import { runCodexAppServerAcpAdapter } from '@/backend/services/session';
 import { resolveDatabasePath } from './database-path';
 import { runProxyCommand } from './proxy';
 import { ensureDataDir, findAvailablePort, treeKillAsync, waitForPort } from './runtime-utils';
+import { buildServeEnv } from './serve-env';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -318,21 +319,6 @@ function printReadyBanner(opts: {
   console.log(chalk.gray(`  Mode:      ${opts.isDev ? 'development' : 'production'}`));
   console.log(chalk.gray(`  Logs:      ${getLogFilePath()}`));
   console.log(chalk.gray('  ─────────────────────────────────────'));
-}
-
-function buildServeEnv(
-  options: ServeOptions,
-  databasePath: string,
-  frontendPort: number,
-  backendPort: number
-): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    DATABASE_PATH: databasePath,
-    FRONTEND_PORT: frontendPort.toString(),
-    BACKEND_PORT: backendPort.toString(),
-    NODE_ENV: options.dev ? 'development' : 'production',
-  };
 }
 
 program

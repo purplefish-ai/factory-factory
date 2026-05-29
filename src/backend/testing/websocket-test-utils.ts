@@ -1,4 +1,4 @@
-import type { IncomingMessage } from 'node:http';
+import type { ClientRequestArgs, IncomingMessage } from 'node:http';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
@@ -63,8 +63,11 @@ export async function createWebSocketTestServer(
   };
 }
 
-export async function connectWebSocket(url: string): Promise<WebSocket> {
-  const ws = new WebSocket(url);
+export async function connectWebSocket(
+  url: string,
+  options?: WebSocket.ClientOptions | ClientRequestArgs
+): Promise<WebSocket> {
+  const ws = new WebSocket(url, options);
 
   await new Promise<void>((resolve, reject) => {
     const onOpen = () => {
