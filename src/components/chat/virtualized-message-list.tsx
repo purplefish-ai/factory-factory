@@ -44,6 +44,8 @@ interface VirtualizedMessageListProps {
   getUuidForMessageId?: (messageId: string) => string | undefined;
   /** Callback when user initiates rewind to a message */
   onRewindToMessage?: (uuid: string) => void;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
   /** Init banner for showing workspace initialization status */
   initBanner?: WorkspaceInitBanner | null;
 }
@@ -119,6 +121,8 @@ interface VirtualRowProps {
   userMessageUuid?: string;
   /** Callback when user initiates rewind to this message */
   onRewindToMessage?: (uuid: string) => void;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
   /** Reads persisted expansion state for tool rows/groups */
   getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
   /** Persists expansion state for tool rows/groups */
@@ -135,6 +139,8 @@ const VirtualRow = memo(function VirtualRow({
   onRemove,
   userMessageUuid,
   onRewindToMessage,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
   getToolExpansionState,
   setToolExpansionState,
   toolExpansionToken,
@@ -147,6 +153,8 @@ const VirtualRow = memo(function VirtualRow({
         onRemove={onRemove}
         userMessageUuid={userMessageUuid}
         onRewindToMessage={onRewindToMessage}
+        resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+        onWorkspaceFileLink={onWorkspaceFileLink}
         getToolExpansionState={getToolExpansionState}
         setToolExpansionState={setToolExpansionState}
         toolExpansionToken={toolExpansionToken}
@@ -176,6 +184,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
   isCompacting = false,
   getUuidForMessageId,
   onRewindToMessage,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
   initBanner,
 }: VirtualizedMessageListProps) {
   const { getExpansionState, setExpansionState } = useWorkspaceToolExpansionState(workspaceId);
@@ -513,6 +523,8 @@ export const VirtualizedMessageList = memo(function VirtualizedMessageList({
                   }
                   userMessageUuid={userMessageUuid}
                   onRewindToMessage={onRewindToMessage}
+                  resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+                  onWorkspaceFileLink={onWorkspaceFileLink}
                   getToolExpansionState={getToolExpansionState}
                   setToolExpansionState={setToolExpansionState}
                   toolExpansionToken={toolExpansionToken}

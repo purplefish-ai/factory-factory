@@ -61,6 +61,8 @@ export interface MessageItemProps {
   userMessageUuid?: string;
   /** Callback to initiate rewind to before this message */
   onRewindToMessage?: (uuid: string) => void;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -69,6 +71,8 @@ export const MessageItem = memo(function MessageItem({
   onRemove,
   userMessageUuid,
   onRewindToMessage,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
 }: MessageItemProps) {
   // User messages
   if (message.source === 'user') {
@@ -176,11 +180,21 @@ export const MessageItem = memo(function MessageItem({
       <MessageWrapper>
         {assistantText !== null ? (
           <div className="group relative">
-            <AssistantMessageRenderer message={message.message} messageId={message.id} />
+            <AssistantMessageRenderer
+              message={message.message}
+              messageId={message.id}
+              resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+              onWorkspaceFileLink={onWorkspaceFileLink}
+            />
             <CopyMessageButton textContent={assistantText} />
           </div>
         ) : (
-          <AssistantMessageRenderer message={message.message} messageId={message.id} />
+          <AssistantMessageRenderer
+            message={message.message}
+            messageId={message.id}
+            resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+            onWorkspaceFileLink={onWorkspaceFileLink}
+          />
         )}
       </MessageWrapper>
     );
@@ -203,6 +217,8 @@ export interface GroupedMessageItemRendererProps {
   userMessageUuid?: string;
   /** Callback to initiate rewind to before this message */
   onRewindToMessage?: (uuid: string) => void;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
   /** Reads persisted expansion state by key */
   getToolExpansionState?: (key: string, defaultOpen: boolean) => boolean;
   /** Persists expansion state by key */
@@ -220,6 +236,8 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
   onRemove,
   userMessageUuid,
   onRewindToMessage,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
   getToolExpansionState,
   setToolExpansionState,
   toolExpansionToken: _toolExpansionToken,
@@ -260,6 +278,8 @@ export const GroupedMessageItemRenderer = memo(function GroupedMessageItemRender
       onRemove={onRemove}
       userMessageUuid={userMessageUuid}
       onRewindToMessage={onRewindToMessage}
+      resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+      onWorkspaceFileLink={onWorkspaceFileLink}
     />
   );
 });

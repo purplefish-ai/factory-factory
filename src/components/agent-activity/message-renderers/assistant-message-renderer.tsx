@@ -1,7 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/components/agent-activity/tool-renderers';
-import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,
@@ -15,6 +14,7 @@ import {
   ResultRenderer,
   StreamEventRenderer,
   SystemMessageRenderer,
+  TextRenderer,
   ThinkingRenderer,
 } from './stream-event-renderer';
 
@@ -27,6 +27,8 @@ interface AssistantMessageRendererProps {
   /** The ID of the ChatMessage containing this AgentMessage (for thinking completion tracking) */
   messageId?: string;
   className?: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 }
 
 /**
@@ -36,6 +38,8 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
   message,
   messageId,
   className,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
 }: AssistantMessageRendererProps) {
   // Handle tool use/result messages
   if (isToolUseMessage(message) || isToolResultMessage(message)) {
@@ -44,7 +48,14 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
 
   // Handle result messages with stats
   if (message.type === 'result') {
-    return <ResultRenderer message={message} className={className} />;
+    return (
+      <ResultRenderer
+        message={message}
+        className={className}
+        resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+        onWorkspaceFileLink={onWorkspaceFileLink}
+      />
+    );
   }
 
   // Handle error messages
@@ -55,7 +66,13 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
   // Handle stream events
   if (message.type === 'stream_event' && message.event) {
     return (
-      <StreamEventRenderer event={message.event} messageId={messageId} className={className} />
+      <StreamEventRenderer
+        event={message.event}
+        messageId={messageId}
+        className={className}
+        resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+        onWorkspaceFileLink={onWorkspaceFileLink}
+      />
     );
   }
 
@@ -68,6 +85,8 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
           text={firstContent.thinking}
           messageId={messageId}
           className={className}
+          resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+          onWorkspaceFileLink={onWorkspaceFileLink}
         />
       );
     }
@@ -80,7 +99,11 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
       <div
         className={cn('prose prose-sm dark:prose-invert max-w-none text-sm break-words', className)}
       >
-        <TextRenderer text={text} />
+        <TextRenderer
+          text={text}
+          resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+          onWorkspaceFileLink={onWorkspaceFileLink}
+        />
       </div>
     );
   }
@@ -114,21 +137,6 @@ export const ToolCallRenderer = memo(function ToolCallRenderer({
       <ToolInfoRenderer message={message} />
     </div>
   );
-});
-
-// =============================================================================
-// Text Renderer
-// =============================================================================
-
-interface TextRendererProps {
-  text: string;
-}
-
-/**
- * Renders text content with full markdown support.
- */
-const TextRenderer = memo(function TextRenderer({ text }: TextRendererProps) {
-  return <MarkdownRenderer content={text} />;
 });
 
 // =============================================================================

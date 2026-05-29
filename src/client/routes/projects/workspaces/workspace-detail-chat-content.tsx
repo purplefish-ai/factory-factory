@@ -17,6 +17,8 @@ import { useRetryWorkspaceInit } from './use-retry-workspace-init';
 
 export interface ChatContentProps {
   workspaceId: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
   messages: ReturnType<typeof useChatWebSocket>['messages'];
   sessionStatus: ReturnType<typeof useChatWebSocket>['sessionStatus'];
   sessionRuntime: SessionRuntimeState;
@@ -273,6 +275,8 @@ export const ChatContent = memo(function ChatContent(props: ChatContentProps) {
           isCompacting={props.isCompacting}
           getUuidForMessageId={props.getUuidForMessageId}
           onRewindToMessage={rewindEnabled ? props.startRewindPreview : undefined}
+          resolveWorkspaceFileLink={props.resolveWorkspaceFileLink}
+          onWorkspaceFileLink={props.onWorkspaceFileLink}
           initBanner={props.initBanner}
         />
       </div>
