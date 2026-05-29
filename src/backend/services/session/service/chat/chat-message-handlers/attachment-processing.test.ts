@@ -13,6 +13,7 @@ import {
   PermanentAttachmentError,
   processAttachmentsAndBuildContent,
   sanitizeAttachmentName,
+  UnsupportedImageTypeError,
   validateAttachment,
 } from './attachment-processing';
 
@@ -92,6 +93,12 @@ describe('validateAttachment', () => {
       data: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=',
     });
     expect(() => validateAttachment(attachment)).not.toThrow();
+  });
+
+  it('should throw a permanent error for unsupported image media types', () => {
+    const attachment = createImageAttachment({ type: 'image/bmp' });
+    expect(() => validateAttachment(attachment)).toThrow(UnsupportedImageTypeError);
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
   it('should not validate base64 for text attachments', () => {

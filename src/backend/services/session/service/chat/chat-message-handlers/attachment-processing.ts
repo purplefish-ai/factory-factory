@@ -20,19 +20,6 @@ function isSupportedImageMediaType(type: string): type is SupportedImageMediaTyp
 }
 
 /**
- * Thrown when an image attachment has an unsupported MIME type.
- * This is a permanent error — retrying will always fail.
- */
-export class UnsupportedImageTypeError extends Error {
-  constructor(type: string) {
-    super(
-      `Unsupported image format "${type || '(unknown)'}". Supported formats: JPEG, PNG, GIF, WebP.`
-    );
-    this.name = 'UnsupportedImageTypeError';
-  }
-}
-
-/**
  * Thrown when an attachment is structurally invalid and cannot be dispatched.
  * This is a permanent error — retrying will always fail.
  */
@@ -40,6 +27,19 @@ export class PermanentAttachmentError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'PermanentAttachmentError';
+  }
+}
+
+/**
+ * Thrown when an image attachment has an unsupported MIME type.
+ * This is a permanent error — retrying will always fail.
+ */
+export class UnsupportedImageTypeError extends PermanentAttachmentError {
+  constructor(type: string) {
+    super(
+      `Unsupported image format "${type || '(unknown)'}". Supported formats: JPEG, PNG, GIF, WebP.`
+    );
+    this.name = 'UnsupportedImageTypeError';
   }
 }
 
