@@ -16,6 +16,8 @@ class UserSettingsQueryService {
     defaultSessionProvider?: 'CLAUDE' | 'CODEX';
     defaultClaudeModel?: string;
     defaultCodexModel?: string;
+    defaultClaudeReasoningEffort?: string | null;
+    defaultCodexReasoningEffort?: string | null;
     defaultWorkspacePermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
     ratchetPermissions?: 'STRICT' | 'RELAXED' | 'YOLO';
   }): Promise<UserSettings> {

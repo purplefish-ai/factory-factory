@@ -150,6 +150,8 @@ const exportedUserSettingsSchema = z.object({
   defaultSessionProvider: SessionProvider,
   defaultClaudeModel: z.string().optional().default('sonnet'),
   defaultCodexModel: z.string().optional().default('default'),
+  defaultClaudeReasoningEffort: z.string().nullable().optional().default(null),
+  defaultCodexReasoningEffort: z.string().nullable().optional().default(null),
   defaultWorkspacePermissions: SessionPermissionPreset.optional().default('STRICT'),
   ratchetPermissions: SessionPermissionPreset.optional().default('YOLO'),
 });

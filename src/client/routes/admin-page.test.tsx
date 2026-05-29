@@ -85,6 +85,8 @@ vi.mock('@/client/lib/trpc', () => {
     defaultSessionProvider: 'CLAUDE',
     defaultClaudeModel: 'sonnet',
     defaultCodexModel: 'default',
+    defaultClaudeReasoningEffort: null,
+    defaultCodexReasoningEffort: null,
     defaultWorkspacePermissions: 'STRICT',
     ratchetEnabled: false,
     ratchetReplyToPrComments: true,
@@ -121,6 +123,22 @@ vi.mock('@/client/lib/trpc', () => {
       }),
       userSettings: {
         get: { useQuery: () => ({ data: userSettings, isLoading: false }) },
+        getProviderOptions: {
+          useQuery: () => ({
+            data: {
+              CLAUDE: {
+                source: 'fallback',
+                models: [{ value: 'sonnet', label: 'Sonnet' }],
+                efforts: [{ value: 'medium', label: 'Medium' }],
+              },
+              CODEX: {
+                source: 'fallback',
+                models: [{ value: 'default', label: 'Default' }],
+                efforts: [{ value: 'medium', label: 'Medium' }],
+              },
+            },
+          }),
+        },
         update: { useMutation: () => mutation },
         testCustomCommand: { useMutation: () => mutation },
       },

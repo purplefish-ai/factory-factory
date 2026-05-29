@@ -205,6 +205,8 @@ const mockUserSettings: UserSettings = {
   defaultSessionProvider: SessionProvider.CLAUDE,
   defaultClaudeModel: 'sonnet',
   defaultCodexModel: 'gpt-5-codex',
+  defaultClaudeReasoningEffort: null,
+  defaultCodexReasoningEffort: 'high',
   defaultWorkspacePermissions: 'STRICT',
   ratchetPermissions: 'YOLO',
   createdAt: new Date('2025-01-01T00:00:00.000Z'),

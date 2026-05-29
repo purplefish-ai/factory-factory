@@ -1272,6 +1272,8 @@ export const UserSettingsScalarFieldEnum = {
   defaultSessionProvider: 'defaultSessionProvider',
   defaultClaudeModel: 'defaultClaudeModel',
   defaultCodexModel: 'defaultCodexModel',
+  defaultClaudeReasoningEffort: 'defaultClaudeReasoningEffort',
+  defaultCodexReasoningEffort: 'defaultCodexReasoningEffort',
   defaultWorkspacePermissions: 'defaultWorkspacePermissions',
   ratchetPermissions: 'ratchetPermissions',
   createdAt: 'createdAt',

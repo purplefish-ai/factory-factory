@@ -12,7 +12,10 @@ export interface ChatMessageHandlerSessionService {
     answers?: Record<string, string[]>
   ) => boolean;
   setSessionModel: (sessionId: string, model?: string) => Promise<void>;
-  setSessionReasoningEffort: (sessionId: string, reasoningEffort: string | null) => void;
+  setSessionReasoningEffort: (
+    sessionId: string,
+    reasoningEffort: string | null
+  ) => Promise<void> | void;
   getChatBarCapabilities: (sessionId: string) => Promise<unknown>;
 }
 

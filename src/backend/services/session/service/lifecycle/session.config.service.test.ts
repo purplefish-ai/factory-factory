@@ -7,13 +7,15 @@ import { userSettingsAccessor } from '@/backend/services/settings';
 import { unsafeCoerce } from '@/test-utils/unsafe-coerce';
 import { SessionConfigService } from './session.config.service';
 
+const mockLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('@/backend/services/logger.service', () => ({
-  createLogger: () => ({
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  createLogger: () => mockLogger,
 }));
 
 vi.mock('@/backend/services/settings', () => ({
@@ -592,6 +594,41 @@ describe('SessionConfigService', () => {
 
     expect(runtimeManager.setSessionMode).toHaveBeenCalledWith('session-1', 'acceptEdits');
     expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
+  });
+
+  it('tracks whitespace-only reasoning effort fallback as settings sourced', async () => {
+    vi.mocked(userSettingsAccessor.get).mockResolvedValue(
+      unsafeCoerce({
+        defaultCodexReasoningEffort: 'high',
+      })
+    );
+    runtimeManager.getClient.mockReturnValue(
+      unsafeCoerce({
+        provider: 'CODEX',
+        providerSessionId: 'provider-codex-1',
+        configOptions: [
+          {
+            id: 'reasoning_effort',
+            name: 'Reasoning Effort',
+            type: 'select',
+            category: 'thought_level',
+            currentValue: 'low',
+            options: [{ value: 'low', name: 'Low' }],
+          },
+        ],
+      })
+    );
+
+    await service.setSessionReasoningEffort('session-1', '   ');
+
+    expect(runtimeManager.setConfigOption).not.toHaveBeenCalled();
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Skipping unsupported reasoning effort for ACP session',
+      expect.objectContaining({
+        reasoningEffort: 'high',
+        source: 'settings',
+      })
+    );
   });
 
   it('updates cached config snapshot when setting config on inactive session', async () => {

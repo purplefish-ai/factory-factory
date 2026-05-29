@@ -76,6 +76,8 @@ describe('sessionProviderResolverService', () => {
       defaultSessionProvider: 'CLAUDE',
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
+      defaultClaudeReasoningEffort: null,
+      defaultCodexReasoningEffort: null,
       defaultWorkspacePermissions: 'STRICT',
       ratchetPermissions: 'YOLO',
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
