@@ -62,6 +62,11 @@ export function createQueueMessageHandler(
     const text = message.text?.trim();
     const validationError = validateQueueMessageInput(message, text);
     if (validationError) {
+      if (message.id) {
+        emitRejectedMessageState(sessionId, message.id, validationError);
+        return;
+      }
+
       ws.send(JSON.stringify({ type: 'error', message: validationError }));
       return;
     }
