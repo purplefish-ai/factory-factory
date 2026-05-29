@@ -372,6 +372,7 @@ describe('SessionDomainService additional behavior', () => {
     expect(sessionDomainService.isHistoryHydrated('s1')).toBe(false);
     sessionDomainService.markHistoryHydrated('s1', 'jsonl');
     expect(sessionDomainService.isHistoryHydrated('s1')).toBe(true);
+    expect(sessionDomainService.getHistoryHydrationSource('s1')).toBe('jsonl');
 
     sessionDomainService.replaceTranscript(
       's1',
@@ -394,6 +395,7 @@ describe('SessionDomainService additional behavior', () => {
       { historySource: 'acp_fallback' }
     );
 
+    expect(sessionDomainService.getHistoryHydrationSource('s1')).toBe('acp_fallback');
     expect(sessionDomainService.getTranscriptSnapshot('s1').map((m) => m.id)).toEqual(['m1', 'm2']);
 
     const order = sessionDomainService.allocateOrder('s1');

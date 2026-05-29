@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   emitDelta: vi.fn(),
   getTranscriptSnapshot: vi.fn(),
   isHistoryHydrated: vi.fn(),
+  getHistoryHydrationSource: vi.fn(),
   canAttemptHistoryHydration: vi.fn(),
   setHistoryRetryAt: vi.fn(),
   clearHistoryRetryCooldown: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('@/backend/services/session/service/session-domain.service', () => ({
     emitDelta: mocks.emitDelta,
     getTranscriptSnapshot: mocks.getTranscriptSnapshot,
     isHistoryHydrated: mocks.isHistoryHydrated,
+    getHistoryHydrationSource: mocks.getHistoryHydrationSource,
     canAttemptHistoryHydration: mocks.canAttemptHistoryHydration,
     setHistoryRetryAt: mocks.setHistoryRetryAt,
     clearHistoryRetryCooldown: mocks.clearHistoryRetryCooldown,
@@ -152,6 +154,7 @@ describe('createLoadSessionHandler', () => {
     mocks.getSessionConfigOptionsWithFallback.mockResolvedValue([]);
     mocks.getTranscriptSnapshot.mockReturnValue([]);
     mocks.isHistoryHydrated.mockReturnValue(true);
+    mocks.getHistoryHydrationSource.mockReturnValue(undefined);
     mocks.consumeInitialMessage.mockReturnValue(null);
     mocks.enqueue.mockReturnValue({ position: 0 });
     mocks.loadClaudeSessionHistory.mockResolvedValue({ status: 'not_found' });
@@ -784,6 +787,57 @@ describe('createLoadSessionHandler', () => {
 
     expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
     expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+    expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-codex-no-dup', 'none');
+  });
+
+  it('skips CODEX tool backfill after JSONL was already checked', async () => {
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'RUNNING',
+      model: 'gpt-5.3-codex',
+      providerSessionId: 'codex-provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(true);
+    mocks.getHistoryHydrationSource.mockReturnValue('none');
+    mocks.getTranscriptSnapshot.mockReturnValue([
+      {
+        id: 'existing-tool',
+        source: 'agent',
+        message: {
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: {
+              type: 'tool_use',
+              id: 'call-present',
+              name: 'exec_command',
+              input: { cmd: 'pwd' },
+            },
+          },
+        },
+        timestamp: '2026-02-14T00:00:02.000Z',
+        order: 0,
+      },
+    ]);
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-codex-already-checked',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).not.toHaveBeenCalled();
+    expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
   });
 
   it('emits config options using fallback-aware session service method', async () => {

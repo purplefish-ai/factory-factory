@@ -83,12 +83,18 @@ async function hydrateProviderHistoryIfNeeded(
   }
 
   const existingTranscript = sessionDomainService.getTranscriptSnapshot(sessionId);
+  const isHistoryHydrated = sessionDomainService.isHistoryHydrated(sessionId);
+  const historyHydrationSource = isHistoryHydrated
+    ? sessionDomainService.getHistoryHydrationSource(sessionId)
+    : undefined;
   const shouldAttemptCodexToolBackfill =
     dbSession.provider === 'CODEX' &&
     existingTranscript.length > 0 &&
-    Boolean(dbSession.providerSessionId);
+    Boolean(dbSession.providerSessionId) &&
+    historyHydrationSource !== 'jsonl' &&
+    historyHydrationSource !== 'none';
 
-  if (sessionDomainService.isHistoryHydrated(sessionId) && !shouldAttemptCodexToolBackfill) {
+  if (isHistoryHydrated && !shouldAttemptCodexToolBackfill) {
     return;
   }
 
@@ -247,6 +253,7 @@ function backfillCodexToolTranscript({
 }): void {
   const backfilledTranscript = backfillMissingCodexToolTranscript(latestTranscript, transcript);
   if (!backfilledTranscript) {
+    sessionDomainService.markHistoryHydrated(sessionId, 'none');
     return;
   }
 
