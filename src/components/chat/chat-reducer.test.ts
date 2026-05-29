@@ -31,12 +31,15 @@ import {
 // Test Helpers
 // =============================================================================
 
+type TestQueuedMessage =
+  ChatState['queuedMessages'] extends Map<string, infer Message> ? Message : never;
+
 /**
  * Helper to convert array of QueuedMessages to Map.
  * Used for setting up test state since queuedMessages is now a Map.
  */
-function toQueuedMessagesMap(messages: QueuedMessage[]): Map<string, QueuedMessage> {
-  const map = new Map<string, QueuedMessage>();
+function toQueuedMessagesMap(messages: TestQueuedMessage[]): ChatState['queuedMessages'] {
+  const map = new Map<string, TestQueuedMessage>();
   for (const msg of messages) {
     map.set(msg.id, msg);
   }
@@ -1600,6 +1603,26 @@ describe('chatReducer', () => {
     });
   });
 
+  describe('MESSAGE_SENDING action', () => {
+    it('stores the source session for later rejection recovery', () => {
+      const action: ChatAction = {
+        type: 'MESSAGE_SENDING',
+        payload: {
+          id: 'msg-1',
+          text: 'Recover me',
+          sessionId: 'session-A',
+        },
+      };
+      const newState = chatReducer(initialState, action);
+
+      expect(newState.pendingMessages.get('msg-1')).toEqual({
+        text: 'Recover me',
+        attachments: undefined,
+        sessionId: 'session-A',
+      });
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Settings Actions
   // -------------------------------------------------------------------------
@@ -2071,6 +2094,134 @@ describe('chatReducer', () => {
         source: 'user',
         text: 'Queued',
         order: 3,
+      });
+    });
+
+    it('should keep pending message session on rejected recovery content', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([
+          [
+            'msg-1',
+            {
+              text: 'Sensitive text',
+              sessionId: 'session-A',
+            },
+          ],
+        ]),
+      };
+
+      const newState = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.REJECTED,
+          errorMessage: 'Rejected',
+        },
+      });
+
+      expect(newState.lastRejectedMessage).toMatchObject({
+        text: 'Sensitive text',
+        error: 'Rejected',
+        sessionId: 'session-A',
+      });
+    });
+
+    it('should preserve source session when an accepted queued message is later rejected', () => {
+      const state: ChatState = {
+        ...initialState,
+        pendingMessages: new Map([
+          [
+            'msg-1',
+            {
+              text: 'Queued text',
+              sessionId: 'session-A',
+            },
+          ],
+        ]),
+      };
+
+      const acceptedState = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Queued text',
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+      });
+
+      const rejectedState = chatReducer(acceptedState, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.REJECTED,
+          errorMessage: 'Rejected',
+        },
+      });
+
+      expect(rejectedState.lastRejectedMessage).toMatchObject({
+        text: 'Queued text',
+        error: 'Rejected',
+        sessionId: 'session-A',
+      });
+    });
+
+    it('should preserve source session across repeated accepted transitions', () => {
+      const state: ChatState = {
+        ...initialState,
+        messages: [
+          {
+            id: 'msg-1',
+            source: 'user',
+            text: 'Queued text',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            order: 1_000_000_000,
+          },
+        ],
+        queuedMessages: toQueuedMessagesMap([
+          {
+            id: 'msg-1',
+            text: 'Queued text',
+            timestamp: '2024-01-01T00:00:00.000Z',
+            sessionId: 'session-A',
+            settings: {
+              selectedModel: null,
+              reasoningEffort: null,
+              thinkingEnabled: false,
+              planModeEnabled: false,
+            },
+          },
+        ]),
+      };
+
+      const acceptedState = chatReducer(state, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.ACCEPTED,
+          userMessage: {
+            text: 'Queued text',
+            timestamp: '2024-01-01T00:00:00.000Z',
+          },
+        },
+      });
+
+      const rejectedState = chatReducer(acceptedState, {
+        type: 'MESSAGE_STATE_CHANGED',
+        payload: {
+          id: 'msg-1',
+          newState: MessageState.REJECTED,
+          errorMessage: 'Rejected',
+        },
+      });
+
+      expect(rejectedState.lastRejectedMessage).toMatchObject({
+        text: 'Queued text',
+        error: 'Rejected',
+        sessionId: 'session-A',
       });
     });
 

@@ -27,12 +27,19 @@ export interface RejectedMessageInfo {
   text: string;
   attachments?: MessageAttachment[];
   error: string;
+  sessionId?: string | null;
 }
 
 /** Content stored for a pending message (for recovery on rejection) */
 export interface PendingMessageContent {
   text: string;
   attachments?: MessageAttachment[];
+  sessionId?: string | null;
+}
+
+/** Queued message metadata tracked locally for rejection recovery. */
+export interface RecoverableQueuedMessage extends QueuedMessage {
+  sessionId?: string | null;
 }
 
 /**
@@ -175,7 +182,7 @@ export interface ChatState {
    * Map from message ID to QueuedMessage - enforces uniqueness by design.
    * Maps automatically de-dupe: adding the same ID twice simply overwrites.
    */
-  queuedMessages: Map<string, QueuedMessage>;
+  queuedMessages: Map<string, RecoverableQueuedMessage>;
   /** Tool use ID to message index map for O(1) updates */
   toolUseIdToIndex: Map<string, number>;
   /** Latest accumulated thinking content from extended thinking mode */
@@ -268,7 +275,12 @@ export type ChatAction =
   | { type: 'ADD_TO_QUEUE'; payload: QueuedMessage }
   | {
       type: 'MESSAGE_SENDING';
-      payload: { id: string; text: string; attachments?: MessageAttachment[] };
+      payload: {
+        id: string;
+        text: string;
+        attachments?: MessageAttachment[];
+        sessionId?: string | null;
+      };
     }
   | { type: 'CLEAR_REJECTED_MESSAGE' }
   // Message used as interactive response (clears pending request and adds message)
