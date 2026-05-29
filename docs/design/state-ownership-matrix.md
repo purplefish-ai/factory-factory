@@ -7,7 +7,8 @@ Each field group should have one canonical writer service/module.
 
 | Field group | Canonical writer |
 | --- | --- |
-| `status`, `init*` | `workspaceStateMachine` / workspace lifecycle services |
+| `status`, `init*` (except `initScriptPid`) | `workspaceStateMachine` / workspace lifecycle services |
+| `initScriptPid` | `workspaceStateMachine` / workspace lifecycle services (clears on transitions); startup script service (`src/backend/services/run-script/service/startup-script.service.ts`) sets and clears during script execution |
 | `prUrl`, `prNumber`, `prState`, `prReviewState`, `prCiStatus`, `prUpdatedAt`, `prCiFailedAt`, `prCiLastNotifiedAt`, `prReviewLastCheckedAt`, `prReviewLastCommentId` | `PRSnapshotService` (`src/backend/domains/github/pr-snapshot.service.ts`) |
 | `ratchetEnabled`, `ratchetState`, `ratchetLastCheckedAt`, `ratchetActiveSessionId`, `ratchetLastCiRunId` | ratchet domain services (`src/backend/domains/ratchet/`) |
 | `runScriptStatus`, `runScriptPid`, `runScriptPort`, `runScriptStartedAt` | run-script state machine (`src/backend/domains/run-script/run-script-state-machine.service.ts`) |

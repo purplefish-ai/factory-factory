@@ -47,7 +47,7 @@ These are consumed by:
 
 ## Lifecycle State Machine
 
-Workspace provisioning transitions (`src/backend/services/workspace-state-machine.service.ts`):
+Workspace provisioning transitions (`src/backend/services/workspace/service/lifecycle/state-machine.service.ts`):
 
 - `NEW -> PROVISIONING`
 - `PROVISIONING -> READY | FAILED`
