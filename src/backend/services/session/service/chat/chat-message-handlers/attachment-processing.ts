@@ -32,24 +32,35 @@ export class UnsupportedImageTypeError extends Error {
   }
 }
 
+/**
+ * Thrown when an attachment is structurally invalid and cannot be dispatched.
+ * This is a permanent error — retrying will always fail.
+ */
+export class PermanentAttachmentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermanentAttachmentError';
+  }
+}
+
 // ============================================================================
 // Validation Helpers
 // ============================================================================
 
 /**
  * Validate that an attachment has required data.
- * @throws Error if attachment is missing data
+ * @throws PermanentAttachmentError if attachment is missing data
  */
 function validateAttachmentHasData(attachment: MessageAttachment): void {
   if (!attachment.data) {
     logger.error('[Chat WS] Attachment missing data', { attachmentId: attachment.id });
-    throw new Error(`Attachment "${attachment.name}" is missing data`);
+    throw new PermanentAttachmentError(`Attachment "${attachment.name}" is missing data`);
   }
 }
 
 /**
  * Validate base64 encoding for image attachments.
- * @throws Error if attachment has invalid base64 data
+ * @throws PermanentAttachmentError if attachment has invalid base64 data
  */
 function validateImageBase64(attachment: MessageAttachment): void {
   // Basic base64 check - alphanumeric, +, /, =
@@ -57,7 +68,7 @@ function validateImageBase64(attachment: MessageAttachment): void {
     logger.error('[Chat WS] Invalid base64 data in attachment', {
       attachmentId: attachment.id,
     });
-    throw new Error(`Attachment "${attachment.name}" has invalid image data`);
+    throw new PermanentAttachmentError(`Attachment "${attachment.name}" has invalid image data`);
   }
 }
 
@@ -78,7 +89,8 @@ function validateImageMediaType(attachment: MessageAttachment): void {
 /**
  * Validate an attachment before processing.
  * Checks for required data and validates base64 encoding for images.
- * @throws Error if attachment is invalid
+ * @throws PermanentAttachmentError if attachment is structurally invalid
+ * @throws UnsupportedImageTypeError if the MIME type is not accepted
  */
 export function validateAttachment(attachment: MessageAttachment): void {
   validateAttachmentHasData(attachment);

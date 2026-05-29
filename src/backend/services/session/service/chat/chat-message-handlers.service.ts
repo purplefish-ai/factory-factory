@@ -24,6 +24,7 @@ import {
 } from '@/shared/acp-protocol';
 import type { ChatMessageInput } from '@/shared/websocket';
 import {
+  PermanentAttachmentError,
   processAttachmentsAndBuildContent,
   UnsupportedImageTypeError,
 } from './chat-message-handlers/attachment-processing';
@@ -275,7 +276,7 @@ class ChatMessageHandlerService {
    * rejected so the user sees a clear message. Transient errors are re-queued.
    */
   private handleDispatchError(dbSessionId: string, msg: QueuedMessage, error: unknown): void {
-    if (error instanceof UnsupportedImageTypeError) {
+    if (error instanceof UnsupportedImageTypeError || error instanceof PermanentAttachmentError) {
       logger.error('[Chat WS] Permanent dispatch error, rejecting message', {
         dbSessionId,
         messageId: msg.id,

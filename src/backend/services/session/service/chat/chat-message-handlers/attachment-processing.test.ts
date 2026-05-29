@@ -10,6 +10,7 @@ import {
   buildCombinedTextContent,
   buildContentArray,
   categorizeAttachments,
+  PermanentAttachmentError,
   processAttachmentsAndBuildContent,
   sanitizeAttachmentName,
   validateAttachment,
@@ -63,6 +64,7 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(
       'Attachment "Pasted text" is missing data'
     );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
   it('should throw error if image attachment has invalid base64 data', () => {
@@ -72,6 +74,7 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(
       'Attachment "screenshot.png" has invalid image data'
     );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
   it('should throw error if image attachment has special characters', () => {
@@ -81,6 +84,7 @@ describe('validateAttachment', () => {
     expect(() => validateAttachment(attachment)).toThrow(
       'Attachment "screenshot.png" has invalid image data'
     );
+    expect(() => validateAttachment(attachment)).toThrow(PermanentAttachmentError);
   });
 
   it('should accept image attachment with valid base64 characters', () => {
