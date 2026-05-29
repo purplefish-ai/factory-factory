@@ -8,7 +8,7 @@
 import { createLogger } from '@/backend/services/logger.service';
 import type { AgentContentItem } from '@/shared/acp-protocol';
 import type { MessageAttachment } from '@/shared/acp-protocol/protocol';
-import { resolveAttachmentContentType } from './attachment-utils';
+import { resolveAttachmentContentType, stripBase64LineEndings } from './attachment-utils';
 
 const logger = createLogger('attachment-processing');
 
@@ -63,8 +63,10 @@ function validateAttachmentHasData(attachment: MessageAttachment): void {
  * @throws PermanentAttachmentError if attachment has invalid base64 data
  */
 function validateImageBase64(attachment: MessageAttachment): void {
+  const normalizedData = stripBase64LineEndings(attachment.data);
+
   // Basic base64 check - alphanumeric, +, /, =
-  if (!/^[A-Za-z0-9+/=]+$/.test(attachment.data)) {
+  if (!(normalizedData && /^[A-Za-z0-9+/=]+$/.test(normalizedData))) {
     logger.error('[Chat WS] Invalid base64 data in attachment', {
       attachmentId: attachment.id,
     });
@@ -193,7 +195,7 @@ export function buildContentArray(
       source: {
         type: 'base64',
         media_type: attachment.type as SupportedImageMediaType,
-        data: attachment.data,
+        data: stripBase64LineEndings(attachment.data),
       },
     };
     content.push(imageContent);

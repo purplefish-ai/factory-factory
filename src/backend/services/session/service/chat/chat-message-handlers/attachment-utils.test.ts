@@ -53,4 +53,12 @@ describe('resolveAttachmentContentType', () => {
       resolveAttachmentContentType(createAttachment({ type: '', name: 'blob', data: 'SGVsbG8=' }))
     ).toBe('image');
   });
+
+  it('defaults to image for line-wrapped base64-like data when type is unknown', () => {
+    expect(
+      resolveAttachmentContentType(
+        createAttachment({ type: '', name: 'blob', data: 'SGVs\r\nbG8=\n' })
+      )
+    ).toBe('image');
+  });
 });
