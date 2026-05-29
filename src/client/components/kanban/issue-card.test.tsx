@@ -18,8 +18,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('lucide-react', () => ({
   CircleDot: () => null,
+  ExternalLink: () => null,
   Play: () => null,
   User: () => null,
+  X: () => null,
 }));
 
 vi.mock('@/client/lib/workspace-cache-helpers', () => ({
