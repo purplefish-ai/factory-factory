@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix ACP prompt timeout cleanup (#1657)
 - Validate websocket origins (#1658)
 - Fix duplicate linked issues in Todo (#1659)
+- Fix Codex tool call transcript rendering (#1664)
 
 ### Security
 
@@ -47,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update Prisma workflow guidance for generated-output guardrail (#1621)
 - Add runScriptPostRunCommand to state-ownership-matrix (#1620)
 - Correct stale periodic task recovery notes (#1619)
+- Fix stale docs after initScriptPid addition (#1663)
+- Correct WebSocket origin validation coverage in CONCERNS.md (#1661)
+- Update WebSocket origin check and CLI structure docs (#1662)
 
 ## [0.3.19] - 2026-05-20
 
