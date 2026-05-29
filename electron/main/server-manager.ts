@@ -135,9 +135,12 @@ export class ServerManager {
 
       const serverInstance = this.serverInstance;
       console.log('[electron] Stopping backend server...');
-      await serverInstance.stop();
-      this.serverInstance = null;
-      this.serverUrl = null;
+      try {
+        await serverInstance.stop();
+      } finally {
+        this.serverInstance = null;
+        this.serverUrl = null;
+      }
       console.log('[electron] Backend server stopped');
     });
   }
