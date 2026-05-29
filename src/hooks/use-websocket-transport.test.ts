@@ -162,6 +162,24 @@ function getLastWs(ws: MockWebSocketInstance | null): MockWebSocketInstance {
   return ws;
 }
 
+function closeIfPresent(ws: MockWebSocketInstance | null): MockWebSocketInstance | null {
+  if (ws) {
+    ws.close();
+  }
+  return null;
+}
+
+function connectIfUrl(url: string | null): MockWebSocketInstance | null {
+  if (!url) {
+    return null;
+  }
+
+  new WebSocket(url);
+  return getLastWs(lastCreatedTestWebSocket);
+}
+
+let lastCreatedTestWebSocket: MockWebSocketInstance | null = null;
+
 // =============================================================================
 // Hook Logic Pattern Tests
 // =============================================================================
@@ -173,11 +191,13 @@ describe('WebSocket transport patterns', () => {
   beforeEach(() => {
     createdWebSockets = [];
     lastCreatedWs = null;
+    lastCreatedTestWebSocket = null;
 
     // Create mock WebSocket constructor as a function that mimics constructor behavior
     const MockWebSocketConstructor = function (this: MockWebSocketInstance, url: string) {
       const ws = createMockWebSocket(url);
       lastCreatedWs = ws;
+      lastCreatedTestWebSocket = ws;
       createdWebSockets.push(ws);
       // Copy properties to this
       Object.assign(this, ws);
@@ -196,6 +216,7 @@ describe('WebSocket transport patterns', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     lastCreatedWs = null;
+    lastCreatedTestWebSocket = null;
     createdWebSockets = [];
   });
 
@@ -598,21 +619,10 @@ describe('WebSocket transport patterns', () => {
     });
 
     it('should handle cleanup when WebSocket is null', () => {
-      // Use let so TypeScript doesn't narrow to 'never'
-      let ws: MockWebSocketInstance | null = null;
-
-      // Cleanup pattern should handle null safely
-      const cleanup = () => {
-        if (ws !== null) {
-          ws.close();
-        }
-      };
+      const cleanup = () => closeIfPresent(null);
 
       // Should not throw
       expect(() => cleanup()).not.toThrow();
-
-      // Prevent unused variable warning
-      ws = null;
     });
   });
 
@@ -695,11 +705,13 @@ describe('URL change handling', () => {
   beforeEach(() => {
     createdWebSockets = [];
     lastCreatedWs = null;
+    lastCreatedTestWebSocket = null;
 
     // Create mock WebSocket constructor as a function that mimics constructor behavior
     const MockWebSocketConstructor = function (this: MockWebSocketInstance, url: string) {
       const ws = createMockWebSocket(url);
       lastCreatedWs = ws;
+      lastCreatedTestWebSocket = ws;
       createdWebSockets.push(ws);
       // Copy properties to this
       Object.assign(this, ws);
@@ -717,6 +729,7 @@ describe('URL change handling', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    lastCreatedTestWebSocket = null;
   });
 
   it('should disconnect when URL becomes null', () => {
@@ -725,23 +738,20 @@ describe('URL change handling', () => {
     let connected = false;
 
     // Initial connect
-    if (url) {
-      new WebSocket(url);
-      ws = lastCreatedWs;
-      if (ws) {
-        ws.simulateOpen();
+    ws = connectIfUrl(url);
+    if (ws) {
+      ws.onopen = () => {
         connected = true;
-      }
+      };
+      ws.simulateOpen();
     }
+    expect(connected).toBe(true);
 
     // Simulate URL becoming null (like sessionId being cleared)
     url = null;
 
-    if (!url && ws) {
-      ws.close();
-      ws = null;
-      connected = false;
-    }
+    ws = closeIfPresent(ws);
+    connected = false;
 
     expect(ws).toBeNull();
     expect(connected).toBe(false);
