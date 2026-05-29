@@ -431,7 +431,9 @@ describe('websocket integration', () => {
     const server = await createWebSocketTestServer(handler, '/terminal');
     openServers.add(server);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/terminal`);
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/terminal`, {
+      headers: { Origin: allowedOrigin },
+    });
     const error = await waitForSocketError(ws);
 
     expect(error.message).toContain('Unexpected server response: 400');
@@ -600,7 +602,9 @@ describe('websocket integration', () => {
     const server = await createWebSocketTestServer(handler, '/chat');
     openServers.add(server);
 
-    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/chat?workingDir=../outside`);
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}/chat?workingDir=../outside`, {
+      headers: { Origin: allowedOrigin },
+    });
     const error = await waitForSocketError(ws);
 
     expect(error.message).toContain('Unexpected server response: 400');
