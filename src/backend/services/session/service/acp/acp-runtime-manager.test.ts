@@ -73,7 +73,7 @@ vi.mock('@/backend/services/logger.service', () => ({
 import type { AcpEventCallback } from './acp-client-handler';
 import { AcpClientHandler } from './acp-client-handler';
 import type { AcpRuntimeEventHandlers } from './acp-runtime-manager';
-import { AcpRuntimeManager } from './acp-runtime-manager';
+import { AcpRuntimeManager, PromptTimeoutError } from './acp-runtime-manager';
 import type { AcpClientOptions } from './types';
 
 // ---- Helpers ----
@@ -1183,6 +1183,84 @@ describe('AcpRuntimeManager', () => {
         manager.sendPrompt('session-1', [{ type: 'text', text: 'Hello' }])
       ).rejects.toThrow('prompt failed');
       expect(handle.isPromptInFlight).toBe(false);
+    });
+
+    it('keeps prompt marked in flight while cancelling after prompt timeout', async () => {
+      setupSuccessfulSpawn();
+      mockPrompt.mockReturnValue(new Promise(() => undefined));
+      mockCancel.mockResolvedValue(undefined);
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+
+      vi.useFakeTimers();
+
+      try {
+        const promptPromise = manager.sendPrompt(
+          'session-1',
+          [{ type: 'text', text: 'Hello' }],
+          100
+        );
+        const promptRejection = promptPromise.catch((error: unknown) => error);
+
+        await vi.advanceTimersByTimeAsync(100);
+
+        await expect(promptRejection).resolves.toBeInstanceOf(PromptTimeoutError);
+        expect(mockCancel).toHaveBeenCalledWith({
+          sessionId: 'provider-session-123',
+        });
+        expect(handle.isPromptInFlight).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops the client when prompt timeout cancellation hangs', async () => {
+      const child = setupSuccessfulSpawn();
+      mockPrompt.mockReturnValue(new Promise(() => undefined));
+      mockCancel.mockReturnValue(new Promise(() => undefined));
+
+      const handle = await manager.getOrCreateClient(
+        'session-1',
+        defaultOptions(),
+        defaultHandlers(),
+        defaultContext()
+      );
+      child.kill = vi.fn((signal?: string) => {
+        if (signal === 'SIGTERM') {
+          child.killed = true;
+          child.exitCode = 0;
+          child.emit('exit', 0, null);
+        }
+        return true;
+      });
+
+      vi.useFakeTimers();
+
+      try {
+        const promptPromise = manager.sendPrompt(
+          'session-1',
+          [{ type: 'text', text: 'Hello' }],
+          100
+        );
+        const promptRejection = promptPromise.catch((error: unknown) => error);
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(mockCancel).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(5000);
+
+        await expect(promptRejection).resolves.toBeInstanceOf(PromptTimeoutError);
+        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(manager.getClient('session-1')).toBeUndefined();
+        expect(handle.isPromptInFlight).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('throws if no session found', async () => {
