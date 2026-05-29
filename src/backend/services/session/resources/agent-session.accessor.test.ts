@@ -88,6 +88,51 @@ describe('agentSessionAccessor', () => {
     });
   });
 
+  it('createWithinWorkspaceLimit creates when active sessions are below the limit', async () => {
+    mockCount.mockResolvedValue(1);
+    mockCreate.mockResolvedValue({ id: 'session-3' });
+
+    await expect(
+      agentSessionAccessor.createWithinWorkspaceLimit({
+        workspaceId: 'workspace-1',
+        workflow: 'user',
+        provider: 'CODEX',
+        maxSessions: 2,
+      })
+    ).resolves.toEqual({ outcome: 'created', session: { id: 'session-3' } });
+
+    expect(mockCount).toHaveBeenCalledWith({
+      where: {
+        workspaceId: 'workspace-1',
+        status: { in: [SessionStatus.RUNNING, SessionStatus.IDLE] },
+      },
+    });
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: {
+        workspaceId: 'workspace-1',
+        name: undefined,
+        workflow: 'user',
+        model: resolveSessionModelForProvider(undefined, 'CODEX', 'gpt-5-codex'),
+        provider: 'CODEX',
+        providerProjectPath: null,
+      },
+    });
+  });
+
+  it('createWithinWorkspaceLimit rejects creation when active sessions meet the limit', async () => {
+    mockCount.mockResolvedValue(2);
+
+    await expect(
+      agentSessionAccessor.createWithinWorkspaceLimit({
+        workspaceId: 'workspace-1',
+        workflow: 'user',
+        maxSessions: 2,
+      })
+    ).resolves.toEqual({ outcome: 'limit_reached' });
+
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
   it('findById includes workspace relation', async () => {
     mockFindUnique.mockResolvedValue({ id: 'session-1' });
 
