@@ -5,7 +5,61 @@ import { getProviderUnavailableMessage } from '@/backend/lib/provider-cli-availa
 import { getQuickAction, listQuickActions } from '@/backend/prompts/quick-actions';
 import { sessionDataService, sessionProviderResolverService } from '@/backend/services/session';
 import { SessionStatus } from '@/shared/core';
-import { publicProcedure, router } from './trpc';
+import { type Context, publicProcedure, router } from './trpc';
+
+const createSessionInputSchema = z.object({
+  workspaceId: z.string(),
+  name: z.string().optional(),
+  workflow: z.string(),
+  model: z.string().optional(),
+  provider: z.nativeEnum(SessionProvider).optional(),
+  initialMessage: z.string().optional(),
+});
+
+async function createAgentSessionFromInput(
+  ctx: Context,
+  input: z.infer<typeof createSessionInputSchema>
+) {
+  const { configService, sessionDomainService } = ctx.appContext.services;
+  // Check per-workspace session limit
+  const maxSessions = configService.getMaxSessionsPerWorkspace();
+  const activeSessionCount = await sessionDataService.countActiveAgentSessionsByWorkspaceId(
+    input.workspaceId
+  );
+
+  if (activeSessionCount >= maxSessions) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: `Maximum sessions per workspace (${maxSessions}) reached`,
+    });
+  }
+
+  const provider = await sessionProviderResolverService.resolveSessionProvider({
+    workspaceId: input.workspaceId,
+    explicitProvider: input.provider,
+  });
+
+  const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
+  const providerUnavailableMessage = getProviderUnavailableMessage(provider, cliHealth);
+  if (providerUnavailableMessage) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: providerUnavailableMessage,
+    });
+  }
+
+  const session = await sessionDataService.createAgentSession({
+    workspaceId: input.workspaceId,
+    name: input.name,
+    workflow: input.workflow,
+    model: input.model,
+    provider,
+  });
+  if (input.initialMessage) {
+    sessionDomainService.storeInitialMessage(session.id, input.initialMessage);
+  }
+  return session;
+}
 
 export const sessionRouter = router({
   // Session limits
@@ -60,57 +114,45 @@ export const sessionRouter = router({
   }),
 
   // Create a new session
-  createSession: publicProcedure
+  createSession: publicProcedure.input(createSessionInputSchema).mutation(({ ctx, input }) => {
+    return createAgentSessionFromInput(ctx, input);
+  }),
+
+  // Create and start a session as one atomic user action.
+  createAndStartSession: publicProcedure
     .input(
-      z.object({
-        workspaceId: z.string(),
-        name: z.string().optional(),
-        workflow: z.string(),
-        model: z.string().optional(),
-        provider: z.nativeEnum(SessionProvider).optional(),
-        initialMessage: z.string().optional(),
+      createSessionInputSchema.extend({
+        initialPrompt: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { configService, sessionDomainService } = ctx.appContext.services;
-      // Check per-workspace session limit
-      const maxSessions = configService.getMaxSessionsPerWorkspace();
-      const activeSessionCount = await sessionDataService.countActiveAgentSessionsByWorkspaceId(
-        input.workspaceId
-      );
+      const { sessionService, sessionDomainService } = ctx.appContext.services;
+      const session = await createAgentSessionFromInput(ctx, input);
 
-      if (activeSessionCount >= maxSessions) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: `Maximum sessions per workspace (${maxSessions}) reached`,
+      try {
+        await sessionService.startSession(session.id, {
+          initialPrompt: input.initialPrompt,
         });
+      } catch (error) {
+        try {
+          await sessionService.stopSession(session.id, {
+            cleanupTransientRatchetSession: false,
+          });
+        } catch {
+          // Best-effort runtime cleanup; preserve the startup error.
+        }
+
+        try {
+          sessionDomainService.clearSession(session.id);
+          await sessionDataService.deleteAgentSession(session.id);
+        } catch {
+          // Best-effort DB cleanup; preserve the startup error.
+        }
+
+        throw error;
       }
 
-      const provider = await sessionProviderResolverService.resolveSessionProvider({
-        workspaceId: input.workspaceId,
-        explicitProvider: input.provider,
-      });
-
-      const cliHealth = await ctx.appContext.services.cliHealthService.checkHealth();
-      const providerUnavailableMessage = getProviderUnavailableMessage(provider, cliHealth);
-      if (providerUnavailableMessage) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: providerUnavailableMessage,
-        });
-      }
-
-      const session = await sessionDataService.createAgentSession({
-        workspaceId: input.workspaceId,
-        name: input.name,
-        workflow: input.workflow,
-        model: input.model,
-        provider,
-      });
-      if (input.initialMessage) {
-        sessionDomainService.storeInitialMessage(session.id, input.initialMessage);
-      }
-      return session;
+      return (await sessionDataService.findAgentSessionById(session.id)) ?? session;
     }),
 
   // Update a session (metadata only - use start/stop for status changes)
