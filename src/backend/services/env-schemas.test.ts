@@ -13,6 +13,7 @@ describe('ConfigEnvSchema', () => {
       WS_LOGS_PATH: '   ',
       FRONTEND_STATIC_PATH: '   ',
       DATABASE_PATH: '   ',
+      npm_package_version: '   ',
     });
 
     expect(parsed).toEqual(
@@ -26,6 +27,7 @@ describe('ConfigEnvSchema', () => {
         WS_LOGS_PATH: undefined,
         FRONTEND_STATIC_PATH: undefined,
         DATABASE_PATH: undefined,
+        npm_package_version: undefined,
       })
     );
   });

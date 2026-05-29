@@ -105,7 +105,7 @@ export const ConfigEnvSchema = z.object({
   DEBUG_CHAT_WS: z.preprocess(parseBoolean, z.boolean()).catch(false),
   EVENT_COMPRESSION_ENABLED: z.preprocess(parseBoolean, z.boolean()).catch(true),
   BRANCH_RENAME_MESSAGE_THRESHOLD: PositiveIntEnvSchema.catch(2),
-  npm_package_version: z.preprocess(toTrimmedString, z.string()).optional(),
+  npm_package_version: z.preprocess(toTrimmedString, z.string()).optional().catch(undefined),
 });
 
 export type LogLevel = z.infer<typeof LogLevelSchema>;
