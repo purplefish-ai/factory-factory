@@ -97,6 +97,7 @@ function applyTransitionData(
     case 'PROVISIONING':
       updateData.initStartedAt = now;
       updateData.initErrorMessage = null;
+      updateData.initScriptPid = null;
       break;
 
     case 'READY':
@@ -104,6 +105,7 @@ function applyTransitionData(
       // not for ARCHIVING rollback transitions.
       if (currentStatus === 'PROVISIONING') {
         updateData.initCompletedAt = now;
+        updateData.initScriptPid = null;
       }
       if (options?.worktreePath !== undefined) {
         updateData.worktreePath = options.worktreePath;
@@ -121,6 +123,7 @@ function applyTransitionData(
       // not for ARCHIVING rollback transitions.
       if (currentStatus === 'PROVISIONING') {
         updateData.initCompletedAt = now;
+        updateData.initScriptPid = null;
       }
       if (options?.errorMessage !== undefined) {
         updateData.initErrorMessage = options.errorMessage;

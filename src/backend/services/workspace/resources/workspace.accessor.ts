@@ -383,6 +383,7 @@ class WorkspaceAccessor {
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
+        initScriptPid: null,
       },
     });
   }
@@ -404,6 +405,7 @@ class WorkspaceAccessor {
         initRetryCount: { increment: 1 },
         initStartedAt: new Date(),
         initErrorMessage: null,
+        initScriptPid: null,
       },
     });
   }
@@ -425,6 +427,7 @@ class WorkspaceAccessor {
         initStartedAt: null,
         initCompletedAt: null,
         initErrorMessage: null,
+        initScriptPid: null,
       },
     });
   }
@@ -591,6 +594,26 @@ class WorkspaceAccessor {
         throw new Error(`Workspace not found: ${id}`);
       }
     }
+  }
+
+  /**
+   * Track the currently running startup/setup script process for provisioning recovery.
+   */
+  async setInitScriptPid(id: string, pid: number): Promise<void> {
+    await prisma.workspace.updateMany({
+      where: { id, status: 'PROVISIONING' },
+      data: { initScriptPid: pid },
+    });
+  }
+
+  /**
+   * Clear startup/setup script process tracking if it still points to the given process.
+   */
+  async clearInitScriptPid(id: string, pid: number): Promise<void> {
+    await prisma.workspace.updateMany({
+      where: { id, initScriptPid: pid },
+      data: { initScriptPid: null },
+    });
   }
 
   /**

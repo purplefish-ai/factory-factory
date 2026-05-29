@@ -103,6 +103,7 @@ function createOptimisticWorkingWorkspace(params: {
     initOutput: null,
     initStartedAt: null,
     initCompletedAt: null,
+    initScriptPid: null,
     initRetryCount: 0,
     runScriptCommand: null,
     runScriptPostRunCommand: null,
