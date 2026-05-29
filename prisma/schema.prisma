@@ -361,6 +361,8 @@ model UserSettings {
   defaultSessionProvider    SessionProvider @default(CLAUDE)
   defaultClaudeModel        String @default("sonnet")
   defaultCodexModel         String @default("default")
+  defaultClaudeReasoningEffort String?
+  defaultCodexReasoningEffort  String?
   defaultWorkspacePermissions SessionPermissionPreset @default(STRICT) // Default execution-mode preset for non-ratchet sessions
   ratchetPermissions        SessionPermissionPreset @default(YOLO) // Default execution-mode preset for ratchet sessions
 

@@ -217,10 +217,8 @@ export class SessionService {
     await this.sessionConfigService.setSessionModel(sessionId, model);
   }
 
-  setSessionReasoningEffort(sessionId: string, _effort: string | null): void {
-    // ACP sessions do not support reasoning effort as a separate control.
-    // Reasoning is managed via config options when available.
-    logger.debug('setSessionReasoningEffort is a no-op for ACP sessions', { sessionId });
+  async setSessionReasoningEffort(sessionId: string, effort: string | null): Promise<void> {
+    await this.sessionConfigService.setSessionReasoningEffort(sessionId, effort);
   }
 
   async setSessionThinkingBudget(sessionId: string, maxTokens: number | null): Promise<void> {

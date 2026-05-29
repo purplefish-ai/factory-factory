@@ -469,6 +469,9 @@ function IdeSettingsSection() {
 
 function ChatProviderDefaultsSection() {
   const { data: settings, isLoading } = trpc.userSettings.get.useQuery();
+  const { data: providerOptions } = trpc.userSettings.getProviderOptions.useQuery(undefined, {
+    staleTime: 30_000,
+  });
   const utils = trpc.useUtils();
   const [localClaudeModel, setLocalClaudeModel] = useState('sonnet');
   const [localCodexModel, setLocalCodexModel] = useState('default');
@@ -504,7 +507,24 @@ function ChatProviderDefaultsSection() {
   const currentProvider = settings?.defaultSessionProvider ?? 'CLAUDE';
   const currentClaudeModel = settings?.defaultClaudeModel ?? 'sonnet';
   const currentCodexModel = settings?.defaultCodexModel ?? 'default';
+  const currentClaudeReasoningEffort = settings?.defaultClaudeReasoningEffort ?? null;
+  const currentCodexReasoningEffort = settings?.defaultCodexReasoningEffort ?? null;
   const currentWorkspacePermissions = settings?.defaultWorkspacePermissions ?? 'STRICT';
+  const providerDefaultValue = '__provider_default__';
+  const getModelOptions = (provider: 'CLAUDE' | 'CODEX', currentValue: string) => {
+    const options = providerOptions?.[provider]?.models ?? [];
+    if (options.some((option) => option.value === currentValue)) {
+      return options;
+    }
+    return [{ value: currentValue, label: currentValue }, ...options];
+  };
+  const getEffortOptions = (provider: 'CLAUDE' | 'CODEX', currentValue: string | null) => {
+    const options = providerOptions?.[provider]?.efforts ?? [];
+    if (!currentValue || options.some((option) => option.value === currentValue)) {
+      return options;
+    }
+    return [{ value: currentValue, label: currentValue }, ...options];
+  };
   const modelSettingsByProvider = {
     CLAUDE: {
       fallbackValue: 'sonnet',
@@ -512,6 +532,7 @@ function ChatProviderDefaultsSection() {
       localValue: localClaudeModel,
       setLocalValue: setLocalClaudeModel,
       buildPayload: (model: string) => ({ defaultClaudeModel: model }),
+      buildEffortPayload: (effort: string | null) => ({ defaultClaudeReasoningEffort: effort }),
     },
     CODEX: {
       fallbackValue: 'default',
@@ -519,6 +540,7 @@ function ChatProviderDefaultsSection() {
       localValue: localCodexModel,
       setLocalValue: setLocalCodexModel,
       buildPayload: (model: string) => ({ defaultCodexModel: model }),
+      buildEffortPayload: (effort: string | null) => ({ defaultCodexReasoningEffort: effort }),
     },
   } as const;
 
@@ -534,6 +556,11 @@ function ChatProviderDefaultsSection() {
     }
 
     updateSettings.mutate(providerSettings.buildPayload(normalizedValue));
+  };
+
+  const saveDefaultEffort = (provider: 'CLAUDE' | 'CODEX', value: string) => {
+    const effort = value === providerDefaultValue ? null : value;
+    updateSettings.mutate(modelSettingsByProvider[provider].buildEffortPayload(effort));
   };
 
   return (
@@ -567,20 +594,25 @@ function ChatProviderDefaultsSection() {
         <div className="grid gap-3 pt-1 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="default-claude-model">Default Claude model</Label>
-            <Input
-              id="default-claude-model"
+            <Select
               value={localClaudeModel}
-              onChange={(event) => setLocalClaudeModel(event.target.value)}
-              onBlur={() => saveDefaultModel('CLAUDE', localClaudeModel)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  saveDefaultModel('CLAUDE', localClaudeModel);
-                }
+              onValueChange={(value) => {
+                setLocalClaudeModel(value);
+                saveDefaultModel('CLAUDE', value);
               }}
-              placeholder="sonnet"
               disabled={updateSettings.isPending}
-            />
+            >
+              <SelectTrigger id="default-claude-model">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {getModelOptions('CLAUDE', currentClaudeModel).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
               Claude aliases like <code className="rounded bg-muted px-1">sonnet</code> and{' '}
               <code className="rounded bg-muted px-1">opus</code> are supported.
@@ -588,24 +620,70 @@ function ChatProviderDefaultsSection() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="default-codex-model">Default Codex model</Label>
-            <Input
-              id="default-codex-model"
+            <Select
               value={localCodexModel}
-              onChange={(event) => setLocalCodexModel(event.target.value)}
-              onBlur={() => saveDefaultModel('CODEX', localCodexModel)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  saveDefaultModel('CODEX', localCodexModel);
-                }
+              onValueChange={(value) => {
+                setLocalCodexModel(value);
+                saveDefaultModel('CODEX', value);
               }}
-              placeholder="default"
               disabled={updateSettings.isPending}
-            />
+            >
+              <SelectTrigger id="default-codex-model">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {getModelOptions('CODEX', currentCodexModel).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-xs text-muted-foreground">
-              Use any Codex model id, for example{' '}
-              <code className="rounded bg-muted px-1">gpt-5-codex</code>.
+              Codex options are loaded from the CLI when available.
             </p>
+          </div>
+        </div>
+        <div className="grid gap-3 pt-1 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="default-claude-effort">Default Claude effort</Label>
+            <Select
+              value={currentClaudeReasoningEffort ?? providerDefaultValue}
+              onValueChange={(value) => saveDefaultEffort('CLAUDE', value)}
+              disabled={updateSettings.isPending}
+            >
+              <SelectTrigger id="default-claude-effort">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={providerDefaultValue}>Provider default</SelectItem>
+                {getEffortOptions('CLAUDE', currentClaudeReasoningEffort).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="default-codex-effort">Default Codex effort</Label>
+            <Select
+              value={currentCodexReasoningEffort ?? providerDefaultValue}
+              onValueChange={(value) => saveDefaultEffort('CODEX', value)}
+              disabled={updateSettings.isPending}
+            >
+              <SelectTrigger id="default-codex-effort">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={providerDefaultValue}>Provider default</SelectItem>
+                {getEffortOptions('CODEX', currentCodexReasoningEffort).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="space-y-2 pt-1">

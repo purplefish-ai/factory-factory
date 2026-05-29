@@ -323,6 +323,8 @@ async function importUserSettings(
       defaultSessionProvider: settings.defaultSessionProvider,
       defaultClaudeModel: settings.defaultClaudeModel,
       defaultCodexModel: settings.defaultCodexModel,
+      defaultClaudeReasoningEffort: settings.defaultClaudeReasoningEffort,
+      defaultCodexReasoningEffort: settings.defaultCodexReasoningEffort,
       defaultWorkspacePermissions: settings.defaultWorkspacePermissions,
       ratchetPermissions: settings.ratchetPermissions,
       // Note: workspaceOrder and cachedSlashCommands are intentionally not imported
@@ -466,6 +468,8 @@ class DataBackupService {
               defaultSessionProvider: userSettings.defaultSessionProvider,
               defaultClaudeModel: userSettings.defaultClaudeModel,
               defaultCodexModel: userSettings.defaultCodexModel,
+              defaultClaudeReasoningEffort: userSettings.defaultClaudeReasoningEffort,
+              defaultCodexReasoningEffort: userSettings.defaultCodexReasoningEffort,
               defaultWorkspacePermissions: userSettings.defaultWorkspacePermissions,
               ratchetPermissions: userSettings.ratchetPermissions,
               // Note: workspaceOrder and cachedSlashCommands are intentionally excluded

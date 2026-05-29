@@ -37,6 +37,8 @@ describe('userSettingsRouter', () => {
       ratchetReplyToPrComments: true,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
+      defaultClaudeReasoningEffort: null,
+      defaultCodexReasoningEffort: null,
     });
     mockUpdate.mockResolvedValue({
       preferredIde: 'vscode',
@@ -44,6 +46,8 @@ describe('userSettingsRouter', () => {
       ratchetReplyToPrComments: false,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
+      defaultClaudeReasoningEffort: null,
+      defaultCodexReasoningEffort: null,
     });
 
     const caller = createCaller();
@@ -53,6 +57,8 @@ describe('userSettingsRouter', () => {
       ratchetReplyToPrComments: true,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
+      defaultClaudeReasoningEffort: null,
+      defaultCodexReasoningEffort: null,
     });
     await expect(
       caller.update({
@@ -66,6 +72,8 @@ describe('userSettingsRouter', () => {
       ratchetReplyToPrComments: false,
       defaultClaudeModel: 'sonnet',
       defaultCodexModel: 'default',
+      defaultClaudeReasoningEffort: null,
+      defaultCodexReasoningEffort: null,
     });
 
     expect(mockUpdate).toHaveBeenCalledWith({
@@ -88,6 +96,8 @@ describe('userSettingsRouter', () => {
       customIdeCommand: null,
       defaultClaudeModel: 'Opus',
       defaultCodexModel: 'gpt-5-codex',
+      defaultClaudeReasoningEffort: 'medium',
+      defaultCodexReasoningEffort: 'high',
     });
 
     const caller = createCaller();
@@ -96,17 +106,23 @@ describe('userSettingsRouter', () => {
       caller.update({
         defaultClaudeModel: 'Opus',
         defaultCodexModel: 'gpt-5-codex',
+        defaultClaudeReasoningEffort: 'medium',
+        defaultCodexReasoningEffort: 'high',
       })
     ).resolves.toEqual({
       preferredIde: 'cursor',
       customIdeCommand: null,
       defaultClaudeModel: 'Opus',
       defaultCodexModel: 'gpt-5-codex',
+      defaultClaudeReasoningEffort: 'medium',
+      defaultCodexReasoningEffort: 'high',
     });
 
     expect(mockUpdate).toHaveBeenCalledWith({
       defaultClaudeModel: 'Opus',
       defaultCodexModel: 'gpt-5-codex',
+      defaultClaudeReasoningEffort: 'medium',
+      defaultCodexReasoningEffort: 'high',
     });
   });
 

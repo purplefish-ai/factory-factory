@@ -293,6 +293,34 @@ export class SessionConfigService {
     logger.debug('No ACP handle for setSessionThinkingBudget', { sessionId, maxTokens });
   }
 
+  async setSessionReasoningEffort(
+    sessionId: string,
+    reasoningEffort: string | null
+  ): Promise<void> {
+    const acpHandle = this.runtimeManager.getClient(sessionId);
+    if (!acpHandle) {
+      logger.debug('No ACP handle for setSessionReasoningEffort', { sessionId, reasoningEffort });
+      return;
+    }
+
+    const targetReasoningEffort =
+      reasoningEffort?.trim() ||
+      (await this.resolveConfiguredReasoningEffortFromSettings(
+        sessionId,
+        acpHandle.provider as SessionProvider
+      ));
+    if (!targetReasoningEffort) {
+      return;
+    }
+
+    await this.applyReasoningEffortTarget({
+      sessionId,
+      handle: acpHandle,
+      targetReasoningEffort,
+      source: reasoningEffort ? 'message' : 'settings',
+    });
+  }
+
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
@@ -597,6 +625,89 @@ export class SessionConfigService {
       });
       return fallback;
     }
+  }
+
+  private async resolveConfiguredReasoningEffortFromSettings(
+    sessionId: string,
+    provider: SessionProvider
+  ): Promise<string | null> {
+    try {
+      const settings = await userSettingsAccessor.get();
+      const value =
+        provider === 'CLAUDE'
+          ? settings.defaultClaudeReasoningEffort
+          : settings.defaultCodexReasoningEffort;
+      return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+    } catch (error) {
+      logger.warn('Failed loading user reasoning-effort defaults; using provider default', {
+        sessionId,
+        provider,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+  }
+
+  private async applyReasoningEffortTarget(params: {
+    sessionId: string;
+    handle: AcpProcessHandle;
+    targetReasoningEffort: string;
+    source: 'message' | 'settings';
+  }): Promise<void> {
+    const reasoningOption = params.handle.configOptions.find(
+      (option) =>
+        option.id === 'reasoning_effort' ||
+        option.id === 'thought_level' ||
+        option.category === 'thought_level' ||
+        option.category === 'reasoning'
+    );
+    if (!reasoningOption) {
+      logger.debug('Skipping reasoning-effort default because provider has no effort option', {
+        sessionId: params.sessionId,
+        provider: params.handle.provider,
+        source: params.source,
+      });
+      return;
+    }
+
+    const availableValues = getConfigOptionValues(reasoningOption);
+    if (availableValues.length > 0 && !availableValues.includes(params.targetReasoningEffort)) {
+      logger.debug('Skipping unsupported reasoning effort for ACP session', {
+        sessionId: params.sessionId,
+        provider: params.handle.provider,
+        reasoningEffort: params.targetReasoningEffort,
+        availableValues,
+        source: params.source,
+      });
+      return;
+    }
+
+    const currentReasoningEffort = reasoningOption.currentValue
+      ? String(reasoningOption.currentValue)
+      : null;
+    if (currentReasoningEffort === params.targetReasoningEffort) {
+      return;
+    }
+
+    const configOptions = await this.runtimeManager.setConfigOption(
+      params.sessionId,
+      reasoningOption.id,
+      params.targetReasoningEffort
+    );
+    params.handle.configOptions = configOptions;
+    await this.persistAcpConfigSnapshot(params.sessionId, {
+      provider: params.handle.provider as SessionProvider,
+      providerSessionId: params.handle.providerSessionId,
+      configOptions,
+    });
+    this.sessionDomainService.emitDelta(params.sessionId, {
+      type: 'config_options_update',
+      configOptions,
+    } as SessionDeltaEvent);
+    this.sessionDomainService.emitDelta(params.sessionId, {
+      type: 'chat_capabilities',
+      capabilities: this.buildAcpChatBarCapabilities(params.handle),
+    });
   }
 
   private resolveConfiguredExecutionModeTarget(
