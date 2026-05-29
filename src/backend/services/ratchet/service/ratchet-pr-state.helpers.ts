@@ -152,6 +152,39 @@ export function computeLatestReviewActivityAtMs(
   return timestamps.length > 0 ? Math.max(...timestamps) : null;
 }
 
+const ACTIONABLE_REVIEW_STATES = new Set(['COMMENTED', 'CHANGES_REQUESTED']);
+
+export function buildReviewSummariesForPrompt(
+  prDetails: {
+    url: string;
+    reviews: Array<{
+      author: { login: string };
+      state?: string;
+      body?: string;
+      url?: string;
+    }>;
+  },
+  authenticatedUsername: string | null
+): PRStateInfo['reviewComments'] {
+  return prDetails.reviews
+    .filter((review) => {
+      if (isIgnoredReviewAuthor(review.author.login, authenticatedUsername)) {
+        return false;
+      }
+      if (!ACTIONABLE_REVIEW_STATES.has(review.state?.toUpperCase() ?? '')) {
+        return false;
+      }
+      return (review.body?.trim().length ?? 0) > 0;
+    })
+    .map((review) => ({
+      author: review.author.login,
+      body: review.body?.trim() ?? '',
+      path: 'PR review',
+      line: null,
+      url: review.url ?? prDetails.url,
+    }));
+}
+
 export function hasNewReviewActivitySinceLastDispatch(
   workspace: WorkspaceWithPR,
   prStateInfo: PRStateInfo,
@@ -390,6 +423,7 @@ export async function fetchPRState(params: {
         line: c.line,
         url: c.url,
       }));
+    const reviewSummaries = buildReviewSummariesForPrompt(prDetails, authenticatedUsername);
 
     return {
       ciStatus,
@@ -400,7 +434,7 @@ export async function fetchPRState(params: {
       statusCheckRollup: reducedStatusCheckRollup,
       prState: prDetails.state,
       prNumber: prDetails.number,
-      reviewComments: filteredReviewComments,
+      reviewComments: [...filteredReviewComments, ...reviewSummaries],
     };
   } catch (error) {
     backoff.handleError(
