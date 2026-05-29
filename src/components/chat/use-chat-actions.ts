@@ -506,10 +506,9 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
   );
 
   // Rewind files actions
-  const rewindEnabled = stateRef.current.chatCapabilities.rewind.enabled;
   const startRewindPreview = useCallback(
     (userMessageUuid: string) => {
-      if (!rewindEnabled) {
+      if (!stateRef.current.chatCapabilities.rewind.enabled) {
         return;
       }
 
@@ -533,11 +532,11 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         payload: { error: 'Rewind is not supported in ACP runtime.', requestNonce },
       });
     },
-    [dispatch, rewindEnabled, rewindTimeoutRef]
+    [dispatch, stateRef, rewindTimeoutRef]
   );
 
   const confirmRewind = useCallback(() => {
-    if (!rewindEnabled) {
+    if (!stateRef.current.chatCapabilities.rewind.enabled) {
       return;
     }
 
@@ -562,7 +561,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         requestNonce: rewindPreview.requestNonce,
       },
     });
-  }, [dispatch, rewindEnabled, stateRef, rewindTimeoutRef]);
+  }, [dispatch, stateRef, rewindTimeoutRef]);
 
   const cancelRewind = useCallback(() => {
     // Clear the timeout when canceling
