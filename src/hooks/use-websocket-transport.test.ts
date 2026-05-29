@@ -747,10 +747,8 @@ describe('URL change handling', () => {
     // Simulate URL becoming null (like sessionId being cleared)
     url = null;
 
-    if (!url) {
-      ws = closeIfPresent(ws);
-      connected = false;
-    }
+    ws = closeIfPresent(ws);
+    connected = false;
 
     expect(ws).toBeNull();
     expect(connected).toBe(false);
