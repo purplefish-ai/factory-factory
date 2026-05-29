@@ -10,6 +10,7 @@ const mockGetInitMode = vi.hoisted(() => vi.fn());
 const mockSetInitMode = vi.hoisted(() => vi.fn());
 const mockGetWorkspaceInitPolicy = vi.hoisted(() => vi.fn());
 const mockInitializeWorkspaceWorktree = vi.hoisted(() => vi.fn());
+const mockRetryQueuedDispatchAfterWorkspaceReady = vi.hoisted(() => vi.fn());
 const mockExecuteStartupScriptPipeline = vi.hoisted(() => vi.fn());
 const mockReadConfig = vi.hoisted(() => vi.fn());
 
@@ -38,6 +39,8 @@ vi.mock('@/backend/services/workspace', () => ({
 
 vi.mock('@/backend/orchestration/workspace-init.orchestrator', () => ({
   initializeWorkspaceWorktree: (...args: unknown[]) => mockInitializeWorkspaceWorktree(...args),
+  retryQueuedDispatchAfterWorkspaceReady: (...args: unknown[]) =>
+    mockRetryQueuedDispatchAfterWorkspaceReady(...args),
 }));
 
 vi.mock('@/backend/orchestration/workspace-init-script-pipeline', () => ({
@@ -69,6 +72,7 @@ describe('workspaceInitRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInitializeWorkspaceWorktree.mockResolvedValue(undefined);
+    mockRetryQueuedDispatchAfterWorkspaceReady.mockResolvedValue(undefined);
     mockRunStartupScript.mockResolvedValue({ success: true });
   });
 
@@ -235,6 +239,14 @@ describe('workspaceInitRouter', () => {
         worktreePath: '/tmp/w3',
       })
     );
+    expect(mockRetryQueuedDispatchAfterWorkspaceReady).toHaveBeenCalledWith('w3', null);
+    const pipelineCallOrder = mockExecuteStartupScriptPipeline.mock.invocationCallOrder[0];
+    const retryDispatchCallOrder =
+      mockRetryQueuedDispatchAfterWorkspaceReady.mock.invocationCallOrder[0];
+    if (pipelineCallOrder === undefined || retryDispatchCallOrder === undefined) {
+      throw new Error('Expected startup pipeline and queued dispatch to be called');
+    }
+    expect(pipelineCallOrder).toBeLessThan(retryDispatchCallOrder);
   });
 
   it('throws TOO_MANY_REQUESTS when READY+warning retry exceeds max retries', async () => {
