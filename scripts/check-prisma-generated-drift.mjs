@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process';
 
 const generatedPath = 'prisma/generated';
+const generatedPathPrefix = `${generatedPath}/`;
 
 function runGit(args) {
   const result = spawnSync('git', args, {
@@ -27,7 +28,9 @@ function runGit(args) {
 
 const unstagedFiles = runGit(['diff', '--name-only', '--', generatedPath]);
 const stagedFiles = runGit(['diff', '--cached', '--name-only', '--', generatedPath]);
-const untrackedFiles = runGit(['ls-files', '--others', '--', generatedPath]);
+const untrackedFiles = runGit(['ls-files', '--others', '--', generatedPath]).filter(
+  (file) => file === generatedPath || file.startsWith(generatedPathPrefix)
+);
 const driftedFiles = Array.from(new Set([...unstagedFiles, ...stagedFiles, ...untrackedFiles]));
 
 if (driftedFiles.length > 0) {

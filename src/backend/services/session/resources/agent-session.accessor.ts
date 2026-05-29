@@ -72,8 +72,19 @@ export type FixerAgentSessionAcquisition =
   | { outcome: 'limit_reached' }
   | { outcome: 'created'; sessionId: string };
 
+export interface CreateLimitedAgentSessionInput extends CreateAgentSessionInput {
+  maxSessions: number;
+}
+
+export type LimitedAgentSessionCreation =
+  | { outcome: 'limit_reached' }
+  | { outcome: 'created'; session: AgentSessionRecord };
+
 export interface AgentSessionAccessor {
   create(data: CreateAgentSessionInput): Promise<AgentSessionRecord>;
+  createWithinWorkspaceLimit(
+    data: CreateLimitedAgentSessionInput
+  ): Promise<LimitedAgentSessionCreation>;
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null>;
   findByIds(ids: string[]): Promise<AgentSessionRecord[]>;
   findByWorkspaceId(
@@ -94,7 +105,7 @@ export interface AgentSessionAccessor {
 }
 
 class PrismaAgentSessionAccessor implements AgentSessionAccessor {
-  /** Serialises acquireFixerSession per workspace to prevent count-then-create races. */
+  /** Serialises per-workspace acquisition to prevent count-then-create races. */
   private readonly workspaceAcquisitionQueue = new Map<string, Promise<unknown>>();
 
   private async getConfiguredDefaultModel(provider: SessionProvider): Promise<string> {
@@ -120,6 +131,14 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
         providerProjectPath: data.providerProjectPath ?? null,
       },
     });
+  }
+
+  createWithinWorkspaceLimit(
+    data: CreateLimitedAgentSessionInput
+  ): Promise<LimitedAgentSessionCreation> {
+    return this.enqueueWorkspaceAcquisition(data.workspaceId, () =>
+      this.doCreateWithinWorkspaceLimit(data)
+    );
   }
 
   findById(id: string): Promise<AgentSessionRecordWithWorkspace | null> {
@@ -225,25 +244,48 @@ class PrismaAgentSessionAccessor implements AgentSessionAccessor {
     return result.count;
   }
 
-  async acquireFixerSession(
-    input: AcquireFixerAgentSessionInput
-  ): Promise<FixerAgentSessionAcquisition> {
-    // Chain per-workspace to serialise the count-then-create sequence and
-    // prevent concurrent workflows from exceeding maxSessions.
-    const prev = this.workspaceAcquisitionQueue.get(input.workspaceId) ?? Promise.resolve();
+  acquireFixerSession(input: AcquireFixerAgentSessionInput): Promise<FixerAgentSessionAcquisition> {
+    return this.enqueueWorkspaceAcquisition(input.workspaceId, () =>
+      this.doAcquireFixerSession(input)
+    );
+  }
+
+  private async enqueueWorkspaceAcquisition<T>(
+    workspaceId: string,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    const prev = this.workspaceAcquisitionQueue.get(workspaceId) ?? Promise.resolve();
     const current = prev
       .catch(() => {
         /* swallow so previous failure doesn't block queue */
       })
-      .then(() => this.doAcquireFixerSession(input));
-    this.workspaceAcquisitionQueue.set(input.workspaceId, current);
+      .then(operation);
+    this.workspaceAcquisitionQueue.set(workspaceId, current);
     try {
       return await current;
     } finally {
-      if (this.workspaceAcquisitionQueue.get(input.workspaceId) === current) {
-        this.workspaceAcquisitionQueue.delete(input.workspaceId);
+      if (this.workspaceAcquisitionQueue.get(workspaceId) === current) {
+        this.workspaceAcquisitionQueue.delete(workspaceId);
       }
     }
+  }
+
+  private async doCreateWithinWorkspaceLimit(
+    data: CreateLimitedAgentSessionInput
+  ): Promise<LimitedAgentSessionCreation> {
+    const activeSessionCount = await prisma.agentSession.count({
+      where: {
+        workspaceId: data.workspaceId,
+        status: { in: ACTIVE_AGENT_SESSION_STATUSES },
+      },
+    });
+
+    if (activeSessionCount >= data.maxSessions) {
+      return { outcome: 'limit_reached' };
+    }
+
+    const session = await this.create(data);
+    return { outcome: 'created', session };
   }
 
   private async doAcquireFixerSession(

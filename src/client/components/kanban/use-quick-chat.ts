@@ -39,17 +39,16 @@ export function useQuickChat(workspaceId: string | null) {
   });
 
   // Session creation mutations
-  const createSession = trpc.session.createSession.useMutation({
+  const createSession = trpc.session.createAndStartSession.useMutation({
     onSuccess: () => {
       if (workspaceId) {
         utils.session.listSessions.invalidate({ workspaceId });
       }
     },
     onError: (error) => {
-      toast.error(error.message || 'Failed to create session');
+      toast.error(error.message || 'Failed to create or start session');
     },
   });
-  const startSession = trpc.session.startSession.useMutation();
   const deleteSession = trpc.session.deleteSession.useMutation({
     onMutate: async ({ id }) => {
       await utils.session.listSessions.cancel({ workspaceId: workspaceId ?? '' });
@@ -115,54 +114,37 @@ export function useQuickChat(workspaceId: string | null) {
     }
     const name = getNextChatName();
     createSession.mutate(
-      { workspaceId, workflow: 'followup', model: '', name },
+      { workspaceId, workflow: 'followup', model: '', name, initialPrompt: '' },
       {
         onSuccess: (session) => {
-          const previousSessionId = selectedSessionId;
-          startSession.mutate(
-            { id: session.id, initialPrompt: '' },
-            {
-              onSuccess: () => {
-                setSelectedSessionId(session.id);
-              },
-              onError: (error) => {
-                toast.error(error.message || 'Failed to start session');
-                setSelectedSessionId(previousSessionId);
-              },
-            }
-          );
+          setSelectedSessionId(session.id);
         },
       }
     );
-  }, [workspaceId, getNextChatName, createSession, startSession, selectedSessionId]);
+  }, [workspaceId, getNextChatName, createSession]);
 
   const handleQuickAction = useCallback(
     (name: string, prompt: string) => {
       if (!workspaceId) {
         return;
       }
-      const previousSessionId = selectedSessionId;
       createSession.mutate(
-        { workspaceId, workflow: 'followup', model: '', name, initialMessage: prompt },
+        {
+          workspaceId,
+          workflow: 'followup',
+          model: '',
+          name,
+          initialMessage: prompt,
+          initialPrompt: '',
+        },
         {
           onSuccess: (session) => {
-            startSession.mutate(
-              { id: session.id, initialPrompt: '' },
-              {
-                onSuccess: () => {
-                  setSelectedSessionId(session.id);
-                },
-                onError: (error) => {
-                  toast.error(error.message || 'Failed to start session');
-                  setSelectedSessionId(previousSessionId);
-                },
-              }
-            );
+            setSelectedSessionId(session.id);
           },
         }
       );
     },
-    [workspaceId, createSession, startSession, selectedSessionId]
+    [workspaceId, createSession]
   );
 
   return {

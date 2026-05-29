@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { createLogger } from '@/backend/services/logger.service';
 
 const logger = createLogger('file-lock-mutex');
@@ -11,6 +13,14 @@ const DEFAULT_LOCK_STALE_THRESHOLD_MS = 60 * 60 * 1000;
 const MIN_LOCK_STALE_THRESHOLD_MS = 1000;
 const DEFAULT_LOCK_HEARTBEAT_INTERVAL_MS = 10_000;
 const MIN_LOCK_HEARTBEAT_INTERVAL_MS = 100;
+const LOCK_FILE_FORMAT_VERSION = 1;
+
+interface LockFileMetadata {
+  version: number;
+  lockId: string;
+  pid: number;
+  createdAt: string;
+}
 
 export interface FileLockMutexOptions {
   acquireTimeoutMs: number;
@@ -69,6 +79,7 @@ export class FileLockMutex {
     while (true) {
       try {
         const fileHandle = await fs.open(lockPath, 'wx');
+        await this.writeLockMetadata(fileHandle, lockPath);
         const stopHeartbeat = this.startLockHeartbeat(fileHandle, lockPath);
         return this.createLockCleanup(fileHandle, lockPath, stopHeartbeat);
       } catch (error) {
@@ -87,6 +98,30 @@ export class FileLockMutex {
         await this.sleep(retryDelay);
         retryDelay = Math.min(retryDelay * 2, this.options.maxRetryDelayMs);
       }
+    }
+  }
+
+  private async writeLockMetadata(fileHandle: fs.FileHandle, lockPath: string): Promise<void> {
+    const metadata: LockFileMetadata = {
+      version: LOCK_FILE_FORMAT_VERSION,
+      lockId: randomUUID(),
+      pid: process.pid,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      await fileHandle.writeFile(`${JSON.stringify(metadata)}\n`, 'utf-8');
+    } catch (error) {
+      await fileHandle.close().catch((closeError) => {
+        logger.warn('Failed to close lock file after metadata write failure', {
+          lockPath,
+          error: closeError instanceof Error ? closeError.message : String(closeError),
+        });
+      });
+      await fs.unlink(lockPath).catch(() => {
+        // Best-effort cleanup; another process may have already removed it.
+      });
+      throw error;
     }
   }
 
@@ -273,6 +308,7 @@ export class FileLockMutex {
     try {
       const stats = await fs.stat(lockPath);
       const lockAge = Date.now() - stats.mtimeMs;
+      const expectedLockId = await this.readLockId(lockPath);
 
       if (lockAge < this.options.staleThresholdMs) {
         return false;
@@ -281,10 +317,10 @@ export class FileLockMutex {
       logger.warn('Attempting to remove stale lock file', {
         lockPath,
         lockAgeMs: lockAge,
-        inode: stats.ino,
+        lockId: expectedLockId,
       });
 
-      return await this.verifyAndUnlinkStaleLock(lockPath, stats.ino);
+      return await this.claimAndRemoveStaleLock(lockPath, expectedLockId);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
       if (code === 'ENOENT') {
@@ -299,30 +335,131 @@ export class FileLockMutex {
     }
   }
 
-  private async verifyAndUnlinkStaleLock(lockPath: string, expectedIno: number): Promise<boolean> {
+  private async readLockId(lockPath: string): Promise<string | undefined> {
     try {
-      const verifyStats = await fs.stat(lockPath);
-      if (verifyStats.ino !== expectedIno) {
-        logger.debug('Lock file inode changed, not removing (new lock created)', {
-          lockPath,
-          originalIno: expectedIno,
-          currentIno: verifyStats.ino,
-        });
-        return false;
+      const contents = await fs.readFile(lockPath, 'utf-8');
+      const metadata: unknown = JSON.parse(contents);
+      if (typeof metadata !== 'object' || metadata === null || !('lockId' in metadata)) {
+        return undefined;
       }
+      return typeof metadata.lockId === 'string' ? metadata.lockId : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
-      return await this.unlinkStaleLock(lockPath);
+  private async claimAndRemoveStaleLock(
+    lockPath: string,
+    expectedLockId: string | undefined
+  ): Promise<boolean> {
+    const claimedPath = this.createStaleClaimPath(lockPath);
+
+    try {
+      await fs.rename(lockPath, claimedPath);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException | undefined)?.code;
       if (code === 'ENOENT') {
         return true;
       }
 
-      logger.warn('Failed to verify lock file before removal', {
+      logger.warn('Failed to claim stale lock file', {
         lockPath,
+        claimedPath,
         error: error instanceof Error ? error.message : String(error),
+        code,
       });
       return false;
+    }
+
+    try {
+      const claimedStats = await fs.stat(claimedPath);
+      const claimedLockId = await this.readLockId(claimedPath);
+
+      const lockIdentityChanged =
+        expectedLockId !== claimedLockId &&
+        (expectedLockId !== undefined || claimedLockId !== undefined);
+
+      if (lockIdentityChanged) {
+        logger.debug('Claimed lock identity changed, restoring lock file', {
+          lockPath,
+          expectedLockId,
+          claimedLockId,
+        });
+        await this.restoreClaimedLock(lockPath, claimedPath);
+        return false;
+      }
+
+      const claimedLockAge = Date.now() - claimedStats.mtimeMs;
+      if (claimedLockAge < this.options.staleThresholdMs) {
+        logger.debug('Claimed lock is no longer stale, restoring lock file', {
+          lockPath,
+          claimedPath,
+          lockAgeMs: claimedLockAge,
+        });
+        await this.restoreClaimedLock(lockPath, claimedPath);
+        return false;
+      }
+
+      return await this.unlinkStaleLock(claimedPath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if (code === 'ENOENT') {
+        return true;
+      }
+
+      logger.warn('Failed to verify claimed stale lock before removal', {
+        lockPath,
+        claimedPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await this.restoreClaimedLock(lockPath, claimedPath);
+      return false;
+    }
+  }
+
+  private createStaleClaimPath(lockPath: string): string {
+    const directory = path.dirname(lockPath);
+    const basename = path.basename(lockPath);
+    return path.join(directory, `.${basename}.stale-${process.pid}-${Date.now()}-${randomUUID()}`);
+  }
+
+  private async restoreClaimedLock(lockPath: string, claimedPath: string): Promise<void> {
+    try {
+      await fs.link(claimedPath, lockPath);
+      await fs.unlink(claimedPath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if (code === 'ENOENT') {
+        return;
+      }
+
+      if (code === 'EEXIST') {
+        logger.debug('Lock path already exists while restoring claimed lock', {
+          lockPath,
+          claimedPath,
+        });
+        await fs.unlink(claimedPath).catch((unlinkError) => {
+          const unlinkCode = (unlinkError as NodeJS.ErrnoException | undefined)?.code;
+          if (unlinkCode === 'ENOENT') {
+            return;
+          }
+
+          logger.warn('Failed to clean up claimed lock after restore conflict', {
+            lockPath,
+            claimedPath,
+            error: unlinkError instanceof Error ? unlinkError.message : String(unlinkError),
+            code: unlinkCode,
+          });
+        });
+        return;
+      }
+
+      logger.warn('Failed to restore claimed lock file', {
+        lockPath,
+        claimedPath,
+        error: error instanceof Error ? error.message : String(error),
+        code,
+      });
     }
   }
 

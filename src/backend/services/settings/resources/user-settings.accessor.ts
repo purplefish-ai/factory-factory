@@ -20,6 +20,8 @@ interface UpdateUserSettingsInput {
   defaultSessionProvider?: SessionProvider;
   defaultClaudeModel?: string;
   defaultCodexModel?: string;
+  defaultClaudeReasoningEffort?: string | null;
+  defaultCodexReasoningEffort?: string | null;
   defaultWorkspacePermissions?: SessionPermissionPreset;
   ratchetPermissions?: SessionPermissionPreset;
 }
@@ -55,6 +57,17 @@ function normalizeDefaultSessionModels(data: UpdateUserSettingsInput): {
   return { normalizedClaudeModel, normalizedCodexModel };
 }
 
+function normalizeOptionalEffort(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 class UserSettingsAccessor {
   /**
    * Get user settings for the default user.
@@ -78,6 +91,8 @@ class UserSettingsAccessor {
           defaultSessionProvider: 'CLAUDE',
           defaultClaudeModel: 'sonnet',
           defaultCodexModel: 'default',
+          defaultClaudeReasoningEffort: null,
+          defaultCodexReasoningEffort: null,
           defaultWorkspacePermissions: 'STRICT',
           ratchetReplyToPrComments: true,
           ratchetPermissions: 'YOLO',
@@ -100,6 +115,8 @@ class UserSettingsAccessor {
   async update(data: UpdateUserSettingsInput): Promise<UserSettings> {
     const userId = 'default';
     const { normalizedClaudeModel, normalizedCodexModel } = normalizeDefaultSessionModels(data);
+    const normalizedClaudeEffort = normalizeOptionalEffort(data.defaultClaudeReasoningEffort);
+    const normalizedCodexEffort = normalizeOptionalEffort(data.defaultCodexReasoningEffort);
 
     return await prisma.userSettings.upsert({
       where: { userId },
@@ -107,6 +124,8 @@ class UserSettingsAccessor {
         ...data,
         defaultClaudeModel: normalizedClaudeModel,
         defaultCodexModel: normalizedCodexModel,
+        defaultClaudeReasoningEffort: normalizedClaudeEffort,
+        defaultCodexReasoningEffort: normalizedCodexEffort,
       },
       create: {
         userId,
@@ -117,6 +136,8 @@ class UserSettingsAccessor {
         defaultSessionProvider: data.defaultSessionProvider ?? 'CLAUDE',
         defaultClaudeModel: normalizedClaudeModel ?? 'sonnet',
         defaultCodexModel: normalizedCodexModel ?? 'default',
+        defaultClaudeReasoningEffort: normalizedClaudeEffort ?? null,
+        defaultCodexReasoningEffort: normalizedCodexEffort ?? null,
         defaultWorkspacePermissions: data.defaultWorkspacePermissions ?? 'STRICT',
         ratchetReplyToPrComments: data.ratchetReplyToPrComments ?? true,
         ratchetPermissions: data.ratchetPermissions ?? 'YOLO',

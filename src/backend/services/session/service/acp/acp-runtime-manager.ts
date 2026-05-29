@@ -671,10 +671,10 @@ export class AcpRuntimeManager {
       handle.isPromptInFlight = false;
       return { stopReason: result.stopReason };
     } catch (error) {
-      handle.isPromptInFlight = false;
       if (error instanceof PromptTimeoutError) {
         await this.escalatePromptTimeout(sessionId, timeoutMs);
       }
+      handle.isPromptInFlight = false;
       throw error;
     }
   }
@@ -692,6 +692,7 @@ export class AcpRuntimeManager {
       ]);
       if (!cancelled) {
         logger.warn('Cancel timed out after prompt timeout, stopping client', { sessionId });
+        this.clearPromptInFlight(sessionId);
         await this.stopClient(sessionId).catch(() => {
           // Best-effort cleanup
         });
@@ -699,9 +700,17 @@ export class AcpRuntimeManager {
     } catch {
       // Cancel failed — stop the client forcibly
       logger.warn('Cancel failed after timeout, stopping client', { sessionId });
+      this.clearPromptInFlight(sessionId);
       await this.stopClient(sessionId).catch(() => {
         // Best-effort cleanup
       });
+    }
+  }
+
+  private clearPromptInFlight(sessionId: string): void {
+    const handle = this.sessions.get(sessionId);
+    if (handle) {
+      handle.isPromptInFlight = false;
     }
   }
 

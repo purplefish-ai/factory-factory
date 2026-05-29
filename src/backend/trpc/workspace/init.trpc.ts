@@ -2,7 +2,10 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { toError } from '@/backend/lib/error-utils';
 import type { WorkspaceWithProject } from '@/backend/orchestration/types';
-import { initializeWorkspaceWorktree } from '@/backend/orchestration/workspace-init.orchestrator';
+import {
+  initializeWorkspaceWorktree,
+  retryQueuedDispatchAfterWorkspaceReady,
+} from '@/backend/orchestration/workspace-init.orchestrator';
 import { executeStartupScriptPipeline } from '@/backend/orchestration/workspace-init-script-pipeline';
 import { FactoryConfigService } from '@/backend/services/factory-config.service';
 import { createLogger } from '@/backend/services/logger.service';
@@ -158,6 +161,8 @@ export const workspaceInitRouter = router({
           worktreePath,
           factoryConfig,
         });
+
+        await retryQueuedDispatchAfterWorkspaceReady(workspace.id, null);
 
         return workspaceDataService.findById(input.id);
       }

@@ -10,6 +10,7 @@ export {
   AcpRuntimeManager,
   acpRuntimeManager,
   CodexAppServerAcpAdapter,
+  fetchCodexModelCatalogFromAppServer,
   runCodexAppServerAcpAdapter,
 } from './acp';
 // Bridge interfaces for orchestration layer wiring

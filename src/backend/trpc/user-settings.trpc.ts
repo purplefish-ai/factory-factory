@@ -7,8 +7,92 @@
 import { SessionPermissionPreset, SessionProvider } from '@prisma-gen/client';
 import { z } from 'zod';
 import { execCommand } from '@/backend/lib/shell';
+import { fetchCodexModelCatalogFromAppServer } from '@/backend/services/session';
 import { userSettingsQueryService } from '@/backend/services/workspace';
 import { publicProcedure, router } from './trpc';
+
+const providerModelOptionSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+  description: z.string().nullable().optional(),
+});
+
+const providerEffortOptionSchema = z.object({
+  value: z.string(),
+  label: z.string(),
+  description: z.string().nullable().optional(),
+});
+
+type ProviderOptions = {
+  models: z.infer<typeof providerModelOptionSchema>[];
+  efforts: z.infer<typeof providerEffortOptionSchema>[];
+  source: 'cli' | 'fallback';
+  error?: string;
+};
+
+const CLAUDE_FALLBACK_OPTIONS: ProviderOptions = {
+  source: 'fallback',
+  models: [
+    { value: 'sonnet', label: 'Sonnet' },
+    { value: 'opus', label: 'Opus' },
+    { value: 'haiku', label: 'Haiku' },
+  ],
+  efforts: [
+    { value: 'low', label: 'Low' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'high', label: 'High' },
+  ],
+};
+
+function formatEffortLabel(value: string): string {
+  return value
+    .split(/[-_]/)
+    .filter((part) => part.length > 0)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+async function getCodexProviderOptions(): Promise<ProviderOptions> {
+  try {
+    const catalog = await fetchCodexModelCatalogFromAppServer();
+    const effortsByValue = new Map<string, string | null>();
+    for (const model of catalog) {
+      for (const effort of model.supportedReasoningEfforts ?? []) {
+        if (!effortsByValue.has(effort.reasoningEffort)) {
+          effortsByValue.set(effort.reasoningEffort, effort.description ?? null);
+        }
+      }
+    }
+
+    return {
+      source: 'cli',
+      models: catalog.map((model) => ({
+        value: model.id,
+        label: model.displayName || model.id,
+        description: model.description ?? null,
+      })),
+      efforts: Array.from(effortsByValue.entries()).map(([value, description]) => ({
+        value,
+        label: formatEffortLabel(value),
+        ...(description ? { description } : {}),
+      })),
+    };
+  } catch (error) {
+    return {
+      source: 'fallback',
+      error: error instanceof Error ? error.message : String(error),
+      models: [
+        { value: 'default', label: 'Default' },
+        { value: 'gpt-5-codex', label: 'GPT-5 Codex' },
+      ],
+      efforts: [
+        { value: 'low', label: 'Low' },
+        { value: 'medium', label: 'Medium' },
+        { value: 'high', label: 'High' },
+      ],
+    };
+  }
+}
 
 export const userSettingsRouter = router({
   /**
@@ -16,6 +100,14 @@ export const userSettingsRouter = router({
    */
   get: publicProcedure.query(async () => {
     return await userSettingsQueryService.get();
+  }),
+
+  getProviderOptions: publicProcedure.query(async () => {
+    const codex = await getCodexProviderOptions();
+    return {
+      CLAUDE: CLAUDE_FALLBACK_OPTIONS,
+      CODEX: codex,
+    };
   }),
 
   /**
@@ -47,6 +139,8 @@ export const userSettingsRouter = router({
         defaultSessionProvider: z.nativeEnum(SessionProvider).optional(),
         defaultClaudeModel: z.string().trim().min(1, 'Claude model cannot be empty').optional(),
         defaultCodexModel: z.string().trim().min(1, 'Codex model cannot be empty').optional(),
+        defaultClaudeReasoningEffort: z.string().trim().min(1).nullable().optional(),
+        defaultCodexReasoningEffort: z.string().trim().min(1).nullable().optional(),
         // Permission preset defaults
         defaultWorkspacePermissions: z.nativeEnum(SessionPermissionPreset).optional(),
         ratchetPermissions: z.nativeEnum(SessionPermissionPreset).optional(),

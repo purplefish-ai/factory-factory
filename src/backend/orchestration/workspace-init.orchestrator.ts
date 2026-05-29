@@ -383,7 +383,7 @@ async function startDefaultAgentSession(workspaceId: string): Promise<string | n
   }
 }
 
-async function retryQueuedDispatchAfterWorkspaceReady(
+export async function retryQueuedDispatchAfterWorkspaceReady(
   workspaceId: string,
   startedSessionId: string | null
 ): Promise<void> {
