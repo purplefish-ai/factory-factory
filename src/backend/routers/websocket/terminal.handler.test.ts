@@ -9,6 +9,7 @@ import { sessionDataService } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { createTerminalUpgradeHandler, terminalConnections } from './terminal.handler';
 
+const allowedOrigin = 'http://localhost:3000';
 const mockClearTerminalPid = vi.fn();
 
 vi.mock('@/backend/services/session', async (importOriginal) => {
@@ -108,12 +109,15 @@ describe('createTerminalUpgradeHandler', () => {
     const appContext = {
       services: {
         terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
       },
     } as unknown as AppContext;
     const handler = createTerminalUpgradeHandler(appContext);
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
 
@@ -175,6 +179,9 @@ describe('createTerminalUpgradeHandler', () => {
     const appContext = {
       services: {
         terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
       },
     } as unknown as AppContext;
@@ -202,7 +209,7 @@ describe('createTerminalUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL(`http://localhost/terminal?workspaceId=${workspaceId}`);
@@ -239,6 +246,9 @@ describe('createTerminalUpgradeHandler', () => {
     const appContext = {
       services: {
         terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
       },
     } as unknown as AppContext;
@@ -246,7 +256,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
 
@@ -352,6 +362,9 @@ describe('createTerminalUpgradeHandler', () => {
     const appContext = {
       services: {
         terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
       },
     } as unknown as AppContext;
@@ -359,7 +372,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
     handler(
@@ -434,6 +447,9 @@ describe('createTerminalUpgradeHandler', () => {
     const appContext = {
       services: {
         terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
       },
     } as unknown as AppContext;
@@ -441,7 +457,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
     handler(
@@ -485,6 +501,9 @@ describe('createTerminalUpgradeHandler', () => {
     const appContext = {
       services: {
         terminalService,
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
       },
     } as unknown as AppContext;
@@ -492,7 +511,7 @@ describe('createTerminalUpgradeHandler', () => {
     const handler = createTerminalUpgradeHandler(appContext);
     const ws = new MockWebSocket();
     const wss = createWss(ws);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
 
     handler(

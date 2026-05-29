@@ -7,6 +7,8 @@ import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { createPostRunLogsUpgradeHandler, postRunLogsConnections } from './post-run-logs.handler';
 
+const allowedOrigin = 'http://localhost:3000';
+
 class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
   send = vi.fn();
@@ -54,13 +56,16 @@ describe('createPostRunLogsUpgradeHandler', () => {
     };
     const appContext = {
       services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
         runScriptService,
       },
     } as unknown as AppContext;
 
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
 
@@ -93,6 +98,9 @@ describe('createPostRunLogsUpgradeHandler', () => {
     };
     const appContext = {
       services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
         runScriptService,
       },
@@ -100,7 +108,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
 
     const ws = new MockWebSocket();
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = createWssFromQueue([ws]);
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
@@ -162,6 +170,9 @@ describe('createPostRunLogsUpgradeHandler', () => {
     };
     const appContext = {
       services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
         runScriptService,
       },
@@ -170,7 +181,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
     const ws1 = new MockWebSocket();
     const ws2 = new MockWebSocket();
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = createWssFromQueue([ws1, ws2]);
     const wsAliveMap = new WeakMap<WebSocket, boolean>();

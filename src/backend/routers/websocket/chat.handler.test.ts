@@ -10,6 +10,8 @@ import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { createChatUpgradeHandler } from './chat.handler';
 
+const allowedOrigin = 'http://localhost:3000';
+
 class MockWebSocket extends EventEmitter {
   readyState = WS_READY_STATE.OPEN;
   send = vi.fn();
@@ -73,6 +75,7 @@ function createTestContext(worktreeBaseDir: string) {
         handleMessage: vi.fn(async () => undefined),
       },
       configService: {
+        getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
         getDebugConfig: vi.fn(() => ({ chatWebSocket: false })),
         getWorktreeBaseDir: vi.fn(() => worktreeBaseDir),
       },
@@ -122,7 +125,7 @@ describe('createChatUpgradeHandler', () => {
     const { appContext, chatMessageHandlerService } = createTestContext(tempRootDir);
     const handler = createChatUpgradeHandler(appContext);
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
@@ -161,7 +164,7 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL(
@@ -213,7 +216,7 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -246,7 +249,7 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -283,7 +286,7 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -332,7 +335,7 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');
@@ -371,7 +374,7 @@ describe('createChatUpgradeHandler', () => {
       ),
     } as unknown as WebSocketServer;
 
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
     const url = new URL('http://localhost/chat?connectionId=conn-1&sessionId=session-1');

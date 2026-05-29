@@ -9,7 +9,12 @@ import type { Duplex } from 'node:stream';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
-import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
+import {
+  getOrCreateConnectionSet,
+  markWebSocketAlive,
+  sendBadRequest,
+  validateWebSocketOrigin,
+} from './upgrade-utils';
 
 // ============================================================================
 // Types
@@ -35,6 +40,7 @@ const devLogsListenerCleanup = new WeakMap<WebSocket, () => void>();
 export function createDevLogsUpgradeHandler(appContext: AppContext) {
   const logger = appContext.services.createLogger('dev-logs-handler');
   const runScriptService = appContext.services.runScriptService;
+  const { configService } = appContext.services;
 
   return function handleDevLogsUpgrade(
     request: IncomingMessage,
@@ -49,6 +55,18 @@ export function createDevLogsUpgradeHandler(appContext: AppContext) {
     if (!workspaceId) {
       logger.warn('Dev logs WebSocket missing workspaceId');
       sendBadRequest(socket);
+      return;
+    }
+
+    if (
+      !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'dev logs WebSocket',
+      })
+    ) {
       return;
     }
 

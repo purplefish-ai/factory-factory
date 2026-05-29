@@ -15,6 +15,8 @@ import {
   snapshotConnections,
 } from './snapshots.handler';
 
+const allowedOrigin = 'http://localhost:3000';
+
 // ============================================================================
 // Mocks
 // ============================================================================
@@ -66,6 +68,7 @@ vi.mock('./upgrade-utils', () => ({
   ),
   markWebSocketAlive: vi.fn(),
   sendBadRequest: mockSendBadRequest,
+  validateWebSocketOrigin: vi.fn(() => true),
 }));
 
 vi.mock('@/backend/app-context', () => ({
@@ -77,6 +80,9 @@ vi.mock('@/backend/app-context', () => ({
         warn: vi.fn(),
         error: vi.fn(),
       })),
+      configService: {
+        getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+      },
     },
   })),
 }));
@@ -94,6 +100,9 @@ function createAppContextMock(): AppContext {
         warn: vi.fn(),
         error: vi.fn(),
       })),
+      configService: {
+        getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+      },
     },
   } as unknown as AppContext;
 }
@@ -117,7 +126,7 @@ function callHandler(
   projectId?: string
 ) {
   const wss = createWssMock(ws);
-  const request = {} as IncomingMessage;
+  const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
   const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
   const wsAliveMap = new WeakMap<WebSocket, boolean>();
   const urlStr = projectId

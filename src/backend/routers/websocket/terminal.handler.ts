@@ -15,7 +15,12 @@ import { type TerminalMessageInput, TerminalMessageSchema } from '@/backend/sche
 import { sessionDataService } from '@/backend/services/session';
 import { workspaceDataService } from '@/backend/services/workspace';
 import { toMessageString } from './message-utils';
-import { getOrCreateConnectionSet, markWebSocketAlive, sendBadRequest } from './upgrade-utils';
+import {
+  getOrCreateConnectionSet,
+  markWebSocketAlive,
+  sendBadRequest,
+  validateWebSocketOrigin,
+} from './upgrade-utils';
 
 // ============================================================================
 // Types
@@ -348,6 +353,7 @@ async function handleTerminalMessage(
 
 export function createTerminalUpgradeHandler(appContext: AppContext) {
   const terminalService = appContext.services.terminalService;
+  const { configService } = appContext.services;
   const logger = appContext.services.createLogger('terminal-handler');
 
   return function handleTerminalUpgrade(
@@ -363,6 +369,18 @@ export function createTerminalUpgradeHandler(appContext: AppContext) {
     if (!workspaceId) {
       logger.warn('Terminal WebSocket missing workspaceId');
       sendBadRequest(socket);
+      return;
+    }
+
+    if (
+      !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'terminal WebSocket',
+      })
+    ) {
       return;
     }
 
