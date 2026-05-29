@@ -168,12 +168,6 @@ export function createChatUpgradeHandler(appContext: AppContext) {
     const connectionId = url.searchParams.get('connectionId') || `conn-${randomUUID()}`;
     const dbSessionId = url.searchParams.get('sessionId') || null;
     const rawWorkingDir = url.searchParams.get('workingDir');
-    const workingDir = rawWorkingDir ? validateWorkingDir(rawWorkingDir) : null;
-    if (rawWorkingDir && !workingDir) {
-      logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
-      sendBadRequest(socket, 'Invalid workingDir');
-      return;
-    }
 
     if (
       !validateWebSocketOrigin({
@@ -184,6 +178,13 @@ export function createChatUpgradeHandler(appContext: AppContext) {
         connectionName: 'chat WebSocket',
       })
     ) {
+      return;
+    }
+
+    const workingDir = rawWorkingDir ? validateWorkingDir(rawWorkingDir) : null;
+    if (rawWorkingDir && !workingDir) {
+      logger.warn('Invalid workingDir rejected', { rawWorkingDir, dbSessionId, connectionId });
+      sendBadRequest(socket, 'Invalid workingDir');
       return;
     }
 

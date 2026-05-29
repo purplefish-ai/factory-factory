@@ -139,6 +139,27 @@ describe('createChatUpgradeHandler', () => {
     expect(chatMessageHandlerService.setClientCreator).toHaveBeenCalledTimes(1);
   });
 
+  it('rejects unauthorized origins before validating workingDir', () => {
+    const workingDir = join(tempRootDir, 'workspace-1');
+    mkdirSync(workingDir, { recursive: true });
+
+    const { appContext } = createTestContext(tempRootDir);
+    const handler = createChatUpgradeHandler(appContext);
+
+    const request = { headers: { origin: 'https://evil.example' } } as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+    const wsAliveMap = new WeakMap<WebSocket, boolean>();
+    const url = new URL(`http://localhost/chat?workingDir=${encodeURIComponent(workingDir)}`);
+
+    handler(request, socket, Buffer.alloc(0), url, wss, wsAliveMap);
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
+    expect(appContext.services.configService.getWorktreeBaseDir).not.toHaveBeenCalled();
+    expect(socket.destroy).toHaveBeenCalledTimes(1);
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
   it('registers a connection, dispatches valid messages, and cleans up on close', async () => {
     const workingDir = join(tempRootDir, 'workspace-1');
     mkdirSync(workingDir, { recursive: true });
