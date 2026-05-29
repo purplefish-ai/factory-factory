@@ -47,6 +47,7 @@ vi.mock('@/backend/services/session', () => ({
     isSessionRunning: vi.fn(),
     isSessionWorking: vi.fn(),
     isAnySessionWorking: vi.fn(),
+    getRuntimeSnapshot: vi.fn(),
     stopSession: vi.fn(),
     startSession: vi.fn(),
     sendSessionMessage: vi.fn(),
@@ -283,6 +284,14 @@ describe('configureDomainBridges', () => {
 
       bridge.github.checkHealth();
       expect(githubCLIService.checkHealth).toHaveBeenCalled();
+    });
+
+    it('workspaceQueryService gets session bridge with runtime snapshots', () => {
+      configureDomainBridges();
+      const bridge = getBridge(workspaceQueryService.configure);
+
+      bridge.session.getRuntimeSnapshot('s1');
+      expect(sessionService.getRuntimeSnapshot).toHaveBeenCalledWith('s1');
     });
 
     it('workspaceQueryService gets prSnapshot bridge with refreshWorkspace', () => {

@@ -1,3 +1,5 @@
+import type { SessionRuntimeState } from '@/shared/session-runtime';
+
 /**
  * Bridge interfaces for workspace domain cross-domain dependencies.
  * These are injected by the orchestration layer at startup.
@@ -8,6 +10,11 @@
 export interface WorkspaceSessionBridge {
   isAnySessionWorking(sessionIds: string[]): boolean;
   getAllPendingRequests(): Map<string, { toolName: string; input?: Record<string, unknown> }>;
+}
+
+/** Session capabilities needed by workspace query paths */
+export interface WorkspaceQuerySessionBridge extends WorkspaceSessionBridge {
+  getRuntimeSnapshot(sessionId: string): SessionRuntimeState;
 }
 
 /** GitHub capabilities needed by workspace domain */

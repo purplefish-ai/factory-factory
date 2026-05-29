@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   WorkspaceGitHubBridge,
   WorkspacePRSnapshotBridge,
+  WorkspaceQuerySessionBridge,
   WorkspaceSessionBridge,
 } from '@/backend/services/workspace/service/bridges';
 import { deriveWorkspaceFlowState } from '@/backend/services/workspace/service/state/flow-state';
@@ -73,9 +74,11 @@ vi.mock('@/backend/services/logger.service', () => ({
 describe('WorkspaceQueryService', () => {
   const mockIsAnySessionWorking = vi.fn<WorkspaceSessionBridge['isAnySessionWorking']>();
   const mockGetAllPendingRequests = vi.fn<WorkspaceSessionBridge['getAllPendingRequests']>();
-  const mockSessionBridge: WorkspaceSessionBridge = {
+  const mockGetRuntimeSnapshot = vi.fn<WorkspaceQuerySessionBridge['getRuntimeSnapshot']>();
+  const mockSessionBridge: WorkspaceQuerySessionBridge = {
     isAnySessionWorking: mockIsAnySessionWorking,
     getAllPendingRequests: mockGetAllPendingRequests,
+    getRuntimeSnapshot: mockGetRuntimeSnapshot,
   };
 
   const mockGithubCheckHealth = vi.fn();
@@ -92,6 +95,12 @@ describe('WorkspaceQueryService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'idle',
+      processState: 'alive',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
 
     workspaceQueryService.configure({
       session: mockSessionBridge,
@@ -249,6 +258,73 @@ describe('WorkspaceQueryService', () => {
     expect(mockFindByProjectIdWithSessions).toHaveBeenCalledWith('proj-1', {
       kanbanColumn: 'WAITING',
       excludeStatuses: [WorkspaceStatus.ARCHIVING, WorkspaceStatus.ARCHIVED],
+    });
+  });
+
+  it('surfaces session runtime errors in initial workspace query paths', async () => {
+    const erroredWorkspace = {
+      id: 'w1',
+      name: 'W1',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      worktreePath: null,
+      branchName: null,
+      prUrl: null,
+      prNumber: null,
+      prState: PRState.NONE,
+      prCiStatus: CIStatus.UNKNOWN,
+      ratchetEnabled: false,
+      ratchetState: RatchetState.IDLE,
+      runScriptStatus: RunScriptStatus.IDLE,
+      hasHadSessions: true,
+      cachedKanbanColumn: 'WAITING',
+      stateComputedAt: null,
+      agentSessions: [
+        {
+          id: 's1',
+          name: null,
+          workflow: null,
+          model: null,
+          status: 'FAILED',
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+      terminalSessions: [],
+    };
+
+    mockProjectFindById.mockResolvedValue({ id: 'p1', defaultBranch: 'main' });
+    mockFindByProjectIdWithSessions.mockResolvedValue([erroredWorkspace]);
+    mockDeriveWorkspaceRuntimeState.mockReturnValue({
+      sessionIds: ['s1'],
+      isSessionWorking: false,
+      isWorking: false,
+      flowState: {
+        hasActivePr: false,
+        isWorking: false,
+        shouldAnimateRatchetButton: false,
+        phase: 'NO_PR',
+        ciObservation: 'CHECKS_UNKNOWN',
+      },
+    });
+    mockGetRuntimeSnapshot.mockReturnValue({
+      phase: 'error',
+      processState: 'stopped',
+      activity: 'IDLE',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      errorMessage: 'Session crashed',
+    });
+    mockGetAllPendingRequests.mockReturnValue(new Map());
+    mockGithubCheckHealth.mockResolvedValue({ isInstalled: false, isAuthenticated: false });
+
+    const summary = await workspaceQueryService.getProjectSummaryState('p1');
+    const kanban = await workspaceQueryService.listWithKanbanState({ projectId: 'p1' });
+
+    expect(summary.workspaces[0]?.statusReason).toMatchObject({
+      code: 'SESSION_ERROR',
+      label: 'Session error',
+    });
+    expect(kanban[0]?.statusReason).toMatchObject({
+      code: 'SESSION_ERROR',
+      label: 'Session error',
     });
   });
 

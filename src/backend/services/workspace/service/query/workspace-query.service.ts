@@ -1,5 +1,6 @@
 import pLimit from 'p-limit';
 import { toError } from '@/backend/lib/error-utils';
+import { buildWorkspaceSessionSummaries } from '@/backend/lib/session-summaries';
 import {
   assembleWorkspaceDerivedState,
   DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
@@ -13,12 +14,13 @@ import { workspaceAccessor } from '@/backend/services/workspace/resources/worksp
 import type {
   WorkspaceGitHubBridge,
   WorkspacePRSnapshotBridge,
-  WorkspaceSessionBridge,
+  WorkspaceQuerySessionBridge,
 } from '@/backend/services/workspace/service/bridges';
 import { computeKanbanColumn } from '@/backend/services/workspace/service/state/kanban-state';
 import { computePendingRequestType } from '@/backend/services/workspace/service/state/pending-request-type';
 import { deriveWorkspaceRuntimeState } from '@/backend/services/workspace/service/state/workspace-runtime-state';
 import { CIStatus, type KanbanColumn, PRState, RatchetState, WorkspaceStatus } from '@/shared/core';
+import { findWorkspaceSessionRuntimeError } from '@/shared/session-runtime';
 import { deriveWorkspaceSidebarStatus } from '@/shared/workspace-sidebar-status';
 
 const logger = createLogger('workspace-query');
@@ -36,12 +38,12 @@ class WorkspaceQueryService {
   private reviewCountRefreshInFlight = false;
   private prStatusSyncInFlight = false;
 
-  private sessionBridge: WorkspaceSessionBridge | null = null;
+  private sessionBridge: WorkspaceQuerySessionBridge | null = null;
   private githubBridge: WorkspaceGitHubBridge | null = null;
   private prSnapshotBridge: WorkspacePRSnapshotBridge | null = null;
 
   configure(bridges: {
-    session: WorkspaceSessionBridge;
+    session: WorkspaceQuerySessionBridge;
     github: WorkspaceGitHubBridge;
     prSnapshot: WorkspacePRSnapshotBridge;
   }): void {
@@ -50,13 +52,23 @@ class WorkspaceQueryService {
     this.prSnapshotBridge = bridges.prSnapshot;
   }
 
-  private get session(): WorkspaceSessionBridge {
+  private get session(): WorkspaceQuerySessionBridge {
     if (!this.sessionBridge) {
       throw new Error(
         'WorkspaceQueryService not configured: session bridge missing. Call configure() first.'
       );
     }
     return this.sessionBridge;
+  }
+
+  private hasSessionRuntimeError(workspace: {
+    agentSessions?: Parameters<typeof buildWorkspaceSessionSummaries>[0] | null;
+  }): boolean {
+    const sessionSummaries = buildWorkspaceSessionSummaries(
+      workspace.agentSessions ?? [],
+      (sessionId) => this.session.getRuntimeSnapshot(sessionId)
+    );
+    return Boolean(findWorkspaceSessionRuntimeError(sessionSummaries));
   }
 
   private get github(): WorkspaceGitHubBridge {
@@ -181,6 +193,7 @@ class WorkspaceQueryService {
             hasHadSessions: w.hasHadSessions ?? true,
             sessionIsWorking: runtimeState?.isSessionWorking ?? false,
             pendingRequestType,
+            hasSessionRuntimeError: this.hasSessionRuntimeError(w),
             runScriptStatus: w.runScriptStatus,
             flowState: runtimeState?.flowState ?? DEFAULT_WORKSPACE_DERIVED_FLOW_STATE,
           },
@@ -270,6 +283,7 @@ class WorkspaceQueryService {
             hasHadSessions: workspace.hasHadSessions,
             sessionIsWorking: runtimeState.isSessionWorking,
             pendingRequestType,
+            hasSessionRuntimeError: this.hasSessionRuntimeError(workspace),
             runScriptStatus: workspace.runScriptStatus,
             flowState: runtimeState.flowState,
           },
