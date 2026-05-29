@@ -565,6 +565,227 @@ describe('createLoadSessionHandler', () => {
     );
   });
 
+  it('backfills missing CODEX tool calls from JSONL when a live transcript already exists', async () => {
+    const existingTranscript = [
+      {
+        id: 'existing-user',
+        source: 'user',
+        text: 'start',
+        timestamp: '2026-02-14T00:00:00.000Z',
+        order: 0,
+      },
+      {
+        id: 'existing-assistant-1',
+        source: 'agent',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'before tool' }] },
+        },
+        timestamp: '2026-02-14T00:00:01.000Z',
+        order: 1,
+      },
+      {
+        id: 'existing-assistant-2',
+        source: 'agent',
+        message: {
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'after tool' }] },
+        },
+        timestamp: '2026-02-14T00:00:04.000Z',
+        order: 2,
+      },
+    ];
+
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'RUNNING',
+      model: 'gpt-5.3-codex',
+      providerSessionId: 'codex-provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(true);
+    mocks.getTranscriptSnapshot.mockReturnValue(existingTranscript);
+    mocks.loadCodexSessionHistory.mockResolvedValue({
+      status: 'loaded',
+      filePath:
+        '/tmp/.codex/sessions/2026/02/14/rollout-2026-02-14T00-00-00-codex-provider-session-1.jsonl',
+      history: [
+        {
+          type: 'assistant',
+          content: 'before tool',
+          timestamp: '2026-02-14T00:00:01.000Z',
+        },
+        {
+          type: 'tool_use',
+          content: '',
+          timestamp: '2026-02-14T00:00:02.000Z',
+          toolName: 'exec_command',
+          toolId: 'call-missing',
+          toolInput: { cmd: 'pwd', workdir: '/missing' },
+        },
+        {
+          type: 'tool_result',
+          content: 'failed before process start',
+          timestamp: '2026-02-14T00:00:03.000Z',
+          toolId: 'call-missing',
+          isError: true,
+        },
+        {
+          type: 'assistant',
+          content: 'after tool',
+          timestamp: '2026-02-14T00:00:04.000Z',
+        },
+      ],
+    });
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-codex-backfill',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledWith({
+      providerSessionId: 'codex-provider-session-1',
+      workingDir: '/tmp/worktree',
+    });
+    expect(mocks.replaceTranscript).toHaveBeenCalledTimes(1);
+    const backfilledTranscript = mocks.replaceTranscript.mock.calls[0]?.[1] ?? [];
+    expect(backfilledTranscript).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'agent',
+          message: expect.objectContaining({
+            type: 'stream_event',
+            event: expect.objectContaining({
+              content_block: expect.objectContaining({
+                type: 'tool_use',
+                id: 'call-missing',
+                name: 'exec_command',
+              }),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          source: 'agent',
+          message: expect.objectContaining({
+            type: 'user',
+            message: expect.objectContaining({
+              content: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'tool_result',
+                  tool_use_id: 'call-missing',
+                  content: 'failed before process start',
+                  is_error: true,
+                }),
+              ]),
+            }),
+          }),
+        }),
+      ])
+    );
+    expect(backfilledTranscript.map((message: { order: number }) => message.order)).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+    expect(mocks.replaceTranscript).toHaveBeenCalledWith(
+      'session-codex-backfill',
+      expect.any(Array),
+      {
+        historySource: 'jsonl',
+      }
+    );
+  });
+
+  it('does not duplicate CODEX tool calls already captured by the live transcript', async () => {
+    const existingTranscript = [
+      {
+        id: 'existing-tool',
+        source: 'agent',
+        message: {
+          type: 'stream_event',
+          event: {
+            type: 'content_block_start',
+            index: 0,
+            content_block: {
+              type: 'tool_use',
+              id: 'call-present',
+              name: 'exec_command',
+              input: { cmd: 'pwd' },
+            },
+          },
+        },
+        timestamp: '2026-02-14T00:00:02.000Z',
+        order: 0,
+      },
+      {
+        id: 'existing-result',
+        source: 'agent',
+        message: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'call-present', content: 'ok' }],
+          },
+        },
+        timestamp: '2026-02-14T00:00:03.000Z',
+        order: 1,
+      },
+    ];
+
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'RUNNING',
+      model: 'gpt-5.3-codex',
+      providerSessionId: 'codex-provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(true);
+    mocks.getTranscriptSnapshot.mockReturnValue(existingTranscript);
+    mocks.loadCodexSessionHistory.mockResolvedValue({
+      status: 'loaded',
+      filePath:
+        '/tmp/.codex/sessions/2026/02/14/rollout-2026-02-14T00-00-00-codex-provider-session-1.jsonl',
+      history: [
+        {
+          type: 'tool_use',
+          content: '',
+          timestamp: '2026-02-14T00:00:02.000Z',
+          toolName: 'exec_command',
+          toolId: 'call-present',
+          toolInput: { cmd: 'pwd' },
+        },
+        {
+          type: 'tool_result',
+          content: 'ok',
+          timestamp: '2026-02-14T00:00:03.000Z',
+          toolId: 'call-present',
+        },
+      ],
+    });
+
+    const handler = createLoadSessionHandler({
+      getClientCreator: () => null,
+      tryDispatchNextMessage: mocks.tryDispatchNextMessage,
+      setManualDispatchResume: vi.fn(),
+    });
+    const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-codex-no-dup',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
+    expect(mocks.replaceTranscript).not.toHaveBeenCalled();
+  });
+
   it('emits config options using fallback-aware session service method', async () => {
     mocks.findById.mockResolvedValue({
       provider: 'CLAUDE',
