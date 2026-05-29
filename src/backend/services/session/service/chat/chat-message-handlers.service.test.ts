@@ -139,6 +139,69 @@ describe('chatMessageHandlerService.tryDispatchNextMessage', () => {
     expect(mockSessionDomainService.requeueFront).toHaveBeenCalledWith('s1', queuedMessage);
   });
 
+  it.each([
+    {
+      name: 'missing attachment data',
+      attachments: [
+        {
+          id: 'text-1',
+          name: 'notes.txt',
+          type: 'text/plain',
+          size: 10,
+          data: '',
+          contentType: 'text' as const,
+        },
+      ],
+      errorMessage: 'Attachment "notes.txt" is missing data',
+    },
+    {
+      name: 'invalid image base64 data',
+      attachments: [
+        {
+          id: 'image-1',
+          name: 'screenshot.png',
+          type: 'image/png',
+          size: 10,
+          data: 'invalid base64 with spaces!',
+          contentType: 'image' as const,
+        },
+      ],
+      errorMessage: 'Attachment "screenshot.png" has invalid image data',
+    },
+  ])('rejects queued messages with $name instead of requeueing', async ({
+    attachments,
+    errorMessage,
+  }) => {
+    const malformedAttachmentMessage: QueuedMessage = {
+      ...queuedMessage,
+      attachments,
+    };
+    const client = {
+      isCompactingActive: vi.fn().mockReturnValue(false),
+      startCompaction: vi.fn(),
+      endCompaction: vi.fn(),
+      setMaxThinkingTokens: vi.fn().mockResolvedValue(undefined),
+    };
+    mockSessionService.getSessionClient.mockReturnValue(client);
+    mockSessionDomainService.peekNextMessage.mockReturnValue(malformedAttachmentMessage);
+    mockSessionDomainService.dequeueNext.mockReturnValue(malformedAttachmentMessage);
+
+    await chatMessageHandlerService.tryDispatchNextMessage('s1');
+
+    expect(mockSessionService.sendSessionMessage).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.removeTranscriptMessageById).toHaveBeenCalledWith('s1', 'm1', {
+      emitSnapshot: false,
+    });
+    expect(mockSessionDomainService.markIdle).toHaveBeenCalledWith('s1', 'alive');
+    expect(mockSessionDomainService.requeueFront).not.toHaveBeenCalled();
+    expect(mockSessionDomainService.emitDelta).toHaveBeenCalledWith('s1', {
+      type: 'message_state_changed',
+      id: 'm1',
+      newState: 'REJECTED',
+      errorMessage,
+    });
+  });
+
   it('backs off instead of immediately retrying when ACP reports an active turn', async () => {
     vi.useFakeTimers();
     try {
