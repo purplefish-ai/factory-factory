@@ -287,12 +287,17 @@ export function resolveTurnCollaborationMode(
   const modeEntry = collaborationModes.find(
     (entry) => entry.mode === session.defaults.collaborationMode
   );
+  const shouldUseSessionDefaults = session.defaults.collaborationMode.toLowerCase() === 'default';
 
   return {
     mode: modeEntry?.mode ?? session.defaults.collaborationMode,
     settings: {
-      model: modeEntry?.model ?? session.defaults.model,
-      reasoning_effort: modeEntry?.reasoningEffort ?? session.defaults.reasoningEffort,
+      model: shouldUseSessionDefaults
+        ? session.defaults.model
+        : (modeEntry?.model ?? session.defaults.model),
+      reasoning_effort: shouldUseSessionDefaults
+        ? session.defaults.reasoningEffort
+        : (modeEntry?.reasoningEffort ?? session.defaults.reasoningEffort),
       developer_instructions: modeEntry?.developerInstructions ?? null,
     },
   };

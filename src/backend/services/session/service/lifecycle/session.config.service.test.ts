@@ -631,6 +631,51 @@ describe('SessionConfigService', () => {
     );
   });
 
+  it('applies configured reasoning effort to a new ACP handle without immediate emit when requested', async () => {
+    vi.mocked(userSettingsAccessor.get).mockResolvedValue(
+      unsafeCoerce({
+        defaultCodexReasoningEffort: 'high',
+      })
+    );
+    const handle = unsafeCoerce<AcpProcessHandle>({
+      provider: 'CODEX',
+      providerSessionId: 'provider-codex-1',
+      configOptions: [
+        {
+          id: 'reasoning_effort',
+          name: 'Reasoning Effort',
+          type: 'select',
+          category: 'thought_level',
+          currentValue: 'medium',
+          options: [
+            { value: 'medium', name: 'Medium' },
+            { value: 'high', name: 'High' },
+          ],
+        },
+      ],
+    });
+    runtimeManager.setConfigOption.mockResolvedValue([
+      {
+        ...handle.configOptions[0],
+        currentValue: 'high',
+      },
+    ]);
+
+    await service.applyConfiguredReasoningEffort('session-1', handle, {
+      persistSnapshot: false,
+      emitUpdates: false,
+    });
+
+    expect(runtimeManager.setConfigOption).toHaveBeenCalledWith(
+      'session-1',
+      'reasoning_effort',
+      'high'
+    );
+    expect(handle.configOptions[0]?.currentValue).toBe('high');
+    expect(repository.updateSession).not.toHaveBeenCalled();
+    expect(sessionDomain.emitDelta).not.toHaveBeenCalled();
+  });
+
   it('updates cached config snapshot when setting config on inactive session', async () => {
     runtimeManager.getClient.mockReturnValue(undefined);
     repository.getSessionById.mockResolvedValue(

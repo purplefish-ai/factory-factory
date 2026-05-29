@@ -322,6 +322,32 @@ export class SessionConfigService {
     });
   }
 
+  async applyConfiguredReasoningEffort(
+    sessionId: string,
+    handle: AcpProcessHandle,
+    options?: {
+      persistSnapshot?: boolean;
+      emitUpdates?: boolean;
+    }
+  ): Promise<void> {
+    const targetReasoningEffort = await this.resolveConfiguredReasoningEffortFromSettings(
+      sessionId,
+      handle.provider as SessionProvider
+    );
+    if (!targetReasoningEffort) {
+      return;
+    }
+
+    await this.applyReasoningEffortTarget({
+      sessionId,
+      handle,
+      targetReasoningEffort,
+      source: 'settings',
+      persistSnapshot: options?.persistSnapshot,
+      emitUpdates: options?.emitUpdates,
+    });
+  }
+
   async setSessionConfigOption(sessionId: string, configId: string, value: string): Promise<void> {
     const acpHandle = this.runtimeManager.getClient(sessionId);
     if (!acpHandle) {
@@ -654,6 +680,8 @@ export class SessionConfigService {
     handle: AcpProcessHandle;
     targetReasoningEffort: string;
     source: 'message' | 'settings';
+    persistSnapshot?: boolean;
+    emitUpdates?: boolean;
   }): Promise<void> {
     const reasoningOption = params.handle.configOptions.find(
       (option) =>
@@ -696,19 +724,23 @@ export class SessionConfigService {
       params.targetReasoningEffort
     );
     params.handle.configOptions = configOptions;
-    await this.persistAcpConfigSnapshot(params.sessionId, {
-      provider: params.handle.provider as SessionProvider,
-      providerSessionId: params.handle.providerSessionId,
-      configOptions,
-    });
-    this.sessionDomainService.emitDelta(params.sessionId, {
-      type: 'config_options_update',
-      configOptions,
-    } as SessionDeltaEvent);
-    this.sessionDomainService.emitDelta(params.sessionId, {
-      type: 'chat_capabilities',
-      capabilities: this.buildAcpChatBarCapabilities(params.handle),
-    });
+    if (params.persistSnapshot !== false) {
+      await this.persistAcpConfigSnapshot(params.sessionId, {
+        provider: params.handle.provider as SessionProvider,
+        providerSessionId: params.handle.providerSessionId,
+        configOptions,
+      });
+    }
+    if (params.emitUpdates !== false) {
+      this.sessionDomainService.emitDelta(params.sessionId, {
+        type: 'config_options_update',
+        configOptions,
+      } as SessionDeltaEvent);
+      this.sessionDomainService.emitDelta(params.sessionId, {
+        type: 'chat_capabilities',
+        capabilities: this.buildAcpChatBarCapabilities(params.handle),
+      });
+    }
   }
 
   private resolveConfiguredExecutionModeTarget(
