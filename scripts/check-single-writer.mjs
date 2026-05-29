@@ -34,6 +34,10 @@ const workspaceFieldOwners = {
   initCompletedAt: new Set([
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
   ]),
+  initScriptPid: new Set([
+    'src/backend/services/run-script/service/startup-script.service.ts',
+    'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
+  ]),
   initRetryCount: new Set([
     'src/backend/services/workspace/service/lifecycle/state-machine.service.ts',
   ]),
@@ -152,6 +156,7 @@ const workspaceMutationRules = {
       'initStartedAt',
       'initErrorMessage',
       'initCompletedAt',
+      'initScriptPid',
       'worktreePath',
       'branchName',
     ],
@@ -164,20 +169,29 @@ const workspaceMutationRules = {
   },
   startProvisioningRetryIfAllowed: {
     type: 'static',
-    fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage'],
+    fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage', 'initScriptPid'],
   },
   startProvisioningFromReadyIfAllowed: {
     type: 'static',
-    fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage'],
+    fields: ['status', 'initRetryCount', 'initStartedAt', 'initErrorMessage', 'initScriptPid'],
   },
   resetToNewIfAllowed: {
     type: 'static',
-    fields: ['status', 'initRetryCount', 'initStartedAt', 'initCompletedAt', 'initErrorMessage'],
+    fields: [
+      'status',
+      'initRetryCount',
+      'initStartedAt',
+      'initCompletedAt',
+      'initErrorMessage',
+      'initScriptPid',
+    ],
   },
   markHasHadSessions: { type: 'static', fields: ['hasHadSessions'] },
   clearRatchetActiveSession: { type: 'static', fields: ['ratchetActiveSessionId'] },
   appendInitOutput: { type: 'static', fields: ['initOutput'] },
   clearInitOutput: { type: 'static', fields: ['initOutput'] },
+  setInitScriptPid: { type: 'static', fields: ['initScriptPid'] },
+  clearInitScriptPid: { type: 'static', fields: ['initScriptPid'] },
   resetStaleRunScriptStatuses: {
     type: 'static',
     fields: ['runScriptStatus', 'runScriptPid', 'runScriptPort', 'runScriptStartedAt'],

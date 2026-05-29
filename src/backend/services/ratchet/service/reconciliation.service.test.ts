@@ -86,6 +86,7 @@ describe('ReconciliationService', () => {
         status: 'PROVISIONING',
         branchName: 'feature/stale',
         initStartedAt: new Date('2024-01-15T11:40:00Z'), // 20 minutes ago
+        initScriptPid: null,
         project: { id: 'proj-1' },
       };
 
@@ -108,6 +109,55 @@ describe('ReconciliationService', () => {
       });
     });
 
+    it('should not fail stale PROVISIONING workspaces while init script PID is running', async () => {
+      const staleWorkspace = {
+        id: 'ws-running',
+        status: 'PROVISIONING',
+        branchName: 'feature/slow-startup',
+        initStartedAt: new Date('2024-01-15T11:40:00Z'),
+        initScriptPid: 12_345,
+        project: { id: 'proj-1' },
+      };
+
+      mockFindMany.mockResolvedValue([staleWorkspace]);
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+
+      await reconciliationService.reconcile();
+
+      expect(killSpy).toHaveBeenCalledWith(12_345, 0);
+      expect(mockInitializeWorktree).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('should fail stale PROVISIONING workspaces when init script PID is not running', async () => {
+      const staleWorkspace = {
+        id: 'ws-dead',
+        status: 'PROVISIONING',
+        branchName: 'feature/dead-startup',
+        initStartedAt: new Date('2024-01-15T11:40:00Z'),
+        initScriptPid: 12_345,
+        project: { id: 'proj-1' },
+      };
+
+      mockFindMany.mockResolvedValue([staleWorkspace]);
+      mockFindUnique.mockResolvedValue(staleWorkspace);
+      mockUpdate.mockResolvedValue({ ...staleWorkspace, status: 'FAILED' });
+      vi.spyOn(process, 'kill').mockImplementation(() => {
+        const error = new Error('No such process') as NodeJS.ErrnoException;
+        error.code = 'ESRCH';
+        throw error;
+      });
+
+      await reconciliationService.reconcile();
+
+      expect(mockUpdate).toHaveBeenCalledWith({
+        where: { id: 'ws-dead' },
+        data: expect.objectContaining({
+          status: 'FAILED',
+        }),
+      });
+    });
+
     it('should handle mixed NEW and stale PROVISIONING workspaces', async () => {
       const now = new Date('2024-01-15T12:00:00Z');
       vi.setSystemTime(now);
@@ -124,6 +174,7 @@ describe('ReconciliationService', () => {
         status: 'PROVISIONING',
         branchName: 'feature/stale',
         initStartedAt: new Date('2024-01-15T11:40:00Z'),
+        initScriptPid: null,
         project: { id: 'proj-1' },
       };
 
@@ -172,6 +223,7 @@ describe('ReconciliationService', () => {
         status: 'PROVISIONING',
         branchName: 'feature/stale',
         initStartedAt: new Date('2024-01-15T11:40:00Z'),
+        initScriptPid: null,
         project: { id: 'proj-1' },
       };
 
