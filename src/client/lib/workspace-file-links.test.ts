@@ -27,6 +27,12 @@ describe('resolveWorkspaceFileLink', () => {
     ).toBeNull();
   });
 
+  it('rejects decoded path traversal outside the workspace', () => {
+    expect(
+      resolveWorkspaceFileLink(`${ORIGIN}${WORKTREE}/src/%2e%2e/%2e%2e/README.md`, WORKTREE, ORIGIN)
+    ).toBeNull();
+  });
+
   it('rejects normal external URLs', () => {
     expect(
       resolveWorkspaceFileLink('https://github.com/example/repo', WORKTREE, ORIGIN)

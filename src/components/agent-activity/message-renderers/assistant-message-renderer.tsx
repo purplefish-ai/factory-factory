@@ -1,7 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { memo } from 'react';
 import { ToolInfoRenderer } from '@/components/agent-activity/tool-renderers';
-import { MarkdownRenderer } from '@/components/ui/markdown';
 import type { AgentMessage } from '@/lib/chat-protocol';
 import {
   extractTextFromMessage,
@@ -15,6 +14,7 @@ import {
   ResultRenderer,
   StreamEventRenderer,
   SystemMessageRenderer,
+  TextRenderer,
   ThinkingRenderer,
 } from './stream-event-renderer';
 
@@ -48,7 +48,14 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
 
   // Handle result messages with stats
   if (message.type === 'result') {
-    return <ResultRenderer message={message} className={className} />;
+    return (
+      <ResultRenderer
+        message={message}
+        className={className}
+        resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+        onWorkspaceFileLink={onWorkspaceFileLink}
+      />
+    );
   }
 
   // Handle error messages
@@ -78,6 +85,8 @@ export const AssistantMessageRenderer = memo(function AssistantMessageRenderer({
           text={firstContent.thinking}
           messageId={messageId}
           className={className}
+          resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+          onWorkspaceFileLink={onWorkspaceFileLink}
         />
       );
     }
@@ -127,33 +136,6 @@ export const ToolCallRenderer = memo(function ToolCallRenderer({
     <div className={cn('my-1', className)}>
       <ToolInfoRenderer message={message} />
     </div>
-  );
-});
-
-// =============================================================================
-// Text Renderer
-// =============================================================================
-
-interface TextRendererProps {
-  text: string;
-  resolveWorkspaceFileLink?: (href: string) => string | null;
-  onWorkspaceFileLink?: (path: string) => void;
-}
-
-/**
- * Renders text content with full markdown support.
- */
-const TextRenderer = memo(function TextRenderer({
-  text,
-  resolveWorkspaceFileLink,
-  onWorkspaceFileLink,
-}: TextRendererProps) {
-  return (
-    <MarkdownRenderer
-      content={text}
-      resolveWorkspaceFileLink={resolveWorkspaceFileLink}
-      onWorkspaceFileLink={onWorkspaceFileLink}
-    />
   );
 });
 

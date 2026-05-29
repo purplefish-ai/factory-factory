@@ -46,7 +46,13 @@ export const StreamEventRenderer = memo(function StreamEventRenderer({
       }
       if (isThinkingContent(block)) {
         return (
-          <ThinkingRenderer text={block.thinking} messageId={messageId} className={className} />
+          <ThinkingRenderer
+            text={block.thinking}
+            messageId={messageId}
+            className={className}
+            resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+            onWorkspaceFileLink={onWorkspaceFileLink}
+          />
         );
       }
       // Tool use blocks are handled by ToolInfoRenderer
@@ -99,7 +105,7 @@ export const StreamDeltaRenderer = memo(function StreamDeltaRenderer({
 // Text Renderer
 // =============================================================================
 
-interface TextRendererProps {
+export interface TextRendererProps {
   text: string;
   resolveWorkspaceFileLink?: (href: string) => string | null;
   onWorkspaceFileLink?: (path: string) => void;
@@ -108,7 +114,7 @@ interface TextRendererProps {
 /**
  * Renders text content with full markdown support.
  */
-const TextRenderer = memo(function TextRenderer({
+export const TextRenderer = memo(function TextRenderer({
   text,
   resolveWorkspaceFileLink,
   onWorkspaceFileLink,
@@ -131,6 +137,8 @@ interface ThinkingRendererProps {
   /** The ID of the ChatMessage containing this thinking block (for completion tracking) */
   messageId?: string;
   className?: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 }
 
 /**
@@ -144,6 +152,8 @@ export const ThinkingRenderer = memo(function ThinkingRenderer({
   text,
   messageId,
   className,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
 }: ThinkingRendererProps) {
   const isInProgress = useIsThinkingInProgress(messageId);
 
@@ -158,7 +168,12 @@ export const ThinkingRenderer = memo(function ThinkingRenderer({
         <Loader2 className={cn('h-3 w-3', isInProgress && 'animate-spin')} />
         <span>Thinking</span>
       </div>
-      <MarkdownRenderer content={text} className="text-muted-foreground" />
+      <MarkdownRenderer
+        content={text}
+        className="text-muted-foreground"
+        resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+        onWorkspaceFileLink={onWorkspaceFileLink}
+      />
     </div>
   );
 });
@@ -250,6 +265,8 @@ export const SystemMessageRenderer = memo(function SystemMessageRenderer({
 interface ResultRendererProps {
   message: AgentMessage;
   className?: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 }
 
 /**
@@ -259,13 +276,19 @@ interface ResultRendererProps {
 export const ResultRenderer = memo(function ResultRenderer({
   message,
   className,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
 }: ResultRendererProps) {
   // Result messages often just indicate completion; we may not need to render them visibly
   // But if there's result content, show it with proper markdown formatting
   if (message.result && typeof message.result === 'string') {
     return (
       <div className={cn('prose prose-sm dark:prose-invert max-w-none text-sm', className)}>
-        <MarkdownRenderer content={message.result} />
+        <MarkdownRenderer
+          content={message.result}
+          resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+          onWorkspaceFileLink={onWorkspaceFileLink}
+        />
       </div>
     );
   }

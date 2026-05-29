@@ -2,8 +2,42 @@ function stripLineSuffix(pathname: string): string {
   return pathname.replace(/(?::\d+){1,2}$/, '');
 }
 
+function appendNormalizedSegment(
+  segments: string[],
+  segment: string,
+  hasLeadingSlash: boolean
+): void {
+  if (!segment || segment === '.') {
+    return;
+  }
+
+  if (segment === '..') {
+    const previousSegment = segments[segments.length - 1];
+    if (segments.length > 0 && previousSegment !== '..') {
+      segments.pop();
+    } else if (!hasLeadingSlash) {
+      segments.push(segment);
+    }
+    return;
+  }
+
+  segments.push(segment);
+}
+
 function normalizePathForComparison(pathname: string): string {
-  return pathname.replace(/\/+$/, '');
+  const hasLeadingSlash = pathname.startsWith('/');
+  const segments: string[] = [];
+
+  for (const segment of pathname.split('/')) {
+    appendNormalizedSegment(segments, segment, hasLeadingSlash);
+  }
+
+  const normalized = `${hasLeadingSlash ? '/' : ''}${segments.join('/')}`.replace(/\/+$/, '');
+  if (normalized) {
+    return normalized;
+  }
+
+  return hasLeadingSlash ? '/' : '.';
 }
 
 function getPathnameFromHref(href: string, origin?: string): string | null {
