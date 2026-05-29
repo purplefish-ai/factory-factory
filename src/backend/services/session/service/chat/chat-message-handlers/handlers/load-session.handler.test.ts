@@ -790,17 +790,10 @@ describe('createLoadSessionHandler', () => {
     expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-codex-no-dup', 'none');
   });
 
-  it('skips CODEX tool backfill after JSONL was already checked', async () => {
-    mocks.findById.mockResolvedValue({
-      provider: 'CODEX',
-      status: 'RUNNING',
-      model: 'gpt-5.3-codex',
-      providerSessionId: 'codex-provider-session-1',
-      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
-    });
-    mocks.isHistoryHydrated.mockReturnValue(true);
-    mocks.getHistoryHydrationSource.mockReturnValue('none');
-    mocks.getTranscriptSnapshot.mockReturnValue([
+  it('rechecks CODEX tool backfill after a no-op cooldown', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-14T00:00:10.000Z'));
+    const existingTranscript = [
       {
         id: 'existing-tool',
         source: 'agent',
@@ -820,7 +813,88 @@ describe('createLoadSessionHandler', () => {
         timestamp: '2026-02-14T00:00:02.000Z',
         order: 0,
       },
-    ]);
+      {
+        id: 'existing-result',
+        source: 'agent',
+        message: {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'call-present', content: 'ok' }],
+          },
+        },
+        timestamp: '2026-02-14T00:00:03.000Z',
+        order: 1,
+      },
+    ];
+
+    mocks.findById.mockResolvedValue({
+      provider: 'CODEX',
+      status: 'RUNNING',
+      model: 'gpt-5.3-codex',
+      providerSessionId: 'codex-provider-session-1',
+      workspace: { status: 'READY', worktreePath: '/tmp/worktree' },
+    });
+    mocks.isHistoryHydrated.mockReturnValue(true);
+    mocks.getHistoryHydrationSource.mockReturnValueOnce(undefined).mockReturnValue('none');
+    mocks.getTranscriptSnapshot.mockReturnValue(existingTranscript);
+    mocks.loadCodexSessionHistory
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        filePath:
+          '/tmp/.codex/sessions/2026/02/14/rollout-2026-02-14T00-00-00-codex-provider-session-1.jsonl',
+        history: [
+          {
+            type: 'tool_use',
+            content: '',
+            timestamp: '2026-02-14T00:00:02.000Z',
+            toolName: 'exec_command',
+            toolId: 'call-present',
+            toolInput: { cmd: 'pwd' },
+          },
+          {
+            type: 'tool_result',
+            content: 'ok',
+            timestamp: '2026-02-14T00:00:03.000Z',
+            toolId: 'call-present',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        filePath:
+          '/tmp/.codex/sessions/2026/02/14/rollout-2026-02-14T00-00-00-codex-provider-session-1.jsonl',
+        history: [
+          {
+            type: 'tool_use',
+            content: '',
+            timestamp: '2026-02-14T00:00:02.000Z',
+            toolName: 'exec_command',
+            toolId: 'call-present',
+            toolInput: { cmd: 'pwd' },
+          },
+          {
+            type: 'tool_result',
+            content: 'ok',
+            timestamp: '2026-02-14T00:00:03.000Z',
+            toolId: 'call-present',
+          },
+          {
+            type: 'tool_use',
+            content: '',
+            timestamp: '2026-02-14T00:00:04.000Z',
+            toolName: 'exec_command',
+            toolId: 'call-missing',
+            toolInput: { cmd: 'whoami' },
+          },
+          {
+            type: 'tool_result',
+            content: 'martin',
+            timestamp: '2026-02-14T00:00:05.000Z',
+            toolId: 'call-missing',
+          },
+        ],
+      });
 
     const handler = createLoadSessionHandler({
       getClientCreator: () => null,
@@ -830,14 +904,67 @@ describe('createLoadSessionHandler', () => {
     const ws = { send: vi.fn() } as unknown as { send: (payload: string) => void };
     await handler({
       ws: ws as never,
-      sessionId: 'session-codex-already-checked',
+      sessionId: 'session-codex-recheck',
       workingDir: '/tmp/worktree',
       message: { type: 'load_session' } as never,
     });
 
-    expect(mocks.loadCodexSessionHistory).not.toHaveBeenCalled();
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
     expect(mocks.replaceTranscript).not.toHaveBeenCalled();
-    expect(mocks.markHistoryHydrated).not.toHaveBeenCalled();
+    expect(mocks.markHistoryHydrated).toHaveBeenCalledWith('session-codex-recheck', 'none');
+
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-codex-recheck',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    await handler({
+      ws: ws as never,
+      sessionId: 'session-codex-recheck',
+      workingDir: '/tmp/worktree',
+      message: { type: 'load_session' } as never,
+    });
+
+    expect(mocks.loadCodexSessionHistory).toHaveBeenCalledTimes(2);
+    expect(mocks.replaceTranscript).toHaveBeenCalledWith(
+      'session-codex-recheck',
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'agent',
+          message: expect.objectContaining({
+            type: 'stream_event',
+            event: expect.objectContaining({
+              content_block: expect.objectContaining({
+                type: 'tool_use',
+                id: 'call-missing',
+                name: 'exec_command',
+              }),
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          source: 'agent',
+          message: expect.objectContaining({
+            type: 'user',
+            message: expect.objectContaining({
+              content: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'tool_result',
+                  tool_use_id: 'call-missing',
+                  content: 'martin',
+                }),
+              ]),
+            }),
+          }),
+        }),
+      ]),
+      { historySource: 'jsonl' }
+    );
   });
 
   it('emits config options using fallback-aware session service method', async () => {

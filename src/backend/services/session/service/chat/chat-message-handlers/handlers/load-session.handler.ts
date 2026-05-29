@@ -19,6 +19,7 @@ import type { LoadSessionMessage } from '@/shared/websocket';
 
 const logger = createLogger('load-session-handler');
 const HISTORY_READ_RETRY_COOLDOWN_MS = 30_000;
+const CODEX_TOOL_BACKFILL_RECHECK_COOLDOWN_MS = 5000;
 type ProviderSessionRecord = NonNullable<Awaited<ReturnType<typeof agentSessionAccessor.findById>>>;
 type ProviderHistoryLoadResult =
   | Awaited<ReturnType<typeof claudeSessionHistoryLoaderService.loadSessionHistory>>
@@ -91,8 +92,7 @@ async function hydrateProviderHistoryIfNeeded(
     dbSession.provider === 'CODEX' &&
     existingTranscript.length > 0 &&
     Boolean(dbSession.providerSessionId) &&
-    historyHydrationSource !== 'jsonl' &&
-    historyHydrationSource !== 'none';
+    historyHydrationSource !== 'jsonl';
 
   if (isHistoryHydrated && !shouldAttemptCodexToolBackfill) {
     return;
@@ -128,15 +128,16 @@ async function hydrateProviderHistoryIfNeeded(
     return;
   }
 
-  handleUnavailableProviderHistory(sessionId, dbSession, loadResult);
+  handleUnavailableProviderHistory(sessionId, dbSession, loadResult, {
+    shouldRecheckCodexToolBackfill: shouldAttemptCodexToolBackfill,
+  });
 }
 
 function logHistoryRetryCooldownSkip(sessionId: string, dbSession: ProviderSessionRecord): void {
-  logger.debug('Skipping provider JSONL history hydration during retry cooldown', {
+  logger.debug('Skipping provider JSONL history hydration during cooldown', {
     sessionId,
     provider: dbSession.provider,
     providerSessionId: dbSession.providerSessionId,
-    retryAfterMs: HISTORY_READ_RETRY_COOLDOWN_MS,
   });
 }
 
@@ -254,6 +255,7 @@ function backfillCodexToolTranscript({
   const backfilledTranscript = backfillMissingCodexToolTranscript(latestTranscript, transcript);
   if (!backfilledTranscript) {
     sessionDomainService.markHistoryHydrated(sessionId, 'none');
+    scheduleCodexToolBackfillRecheck(sessionId);
     return;
   }
 
@@ -273,7 +275,8 @@ function backfillCodexToolTranscript({
 function handleUnavailableProviderHistory(
   sessionId: string,
   dbSession: ProviderSessionRecord,
-  loadResult: Exclude<ProviderHistoryLoadResult, { status: 'loaded' }>
+  loadResult: Exclude<ProviderHistoryLoadResult, { status: 'loaded' }>,
+  options?: { shouldRecheckCodexToolBackfill?: boolean }
 ): void {
   if (loadResult.status === 'error') {
     sessionDomainService.setHistoryRetryAt(sessionId, Date.now() + HISTORY_READ_RETRY_COOLDOWN_MS);
@@ -288,12 +291,22 @@ function handleUnavailableProviderHistory(
 
   sessionDomainService.clearHistoryRetryCooldown(sessionId);
   sessionDomainService.markHistoryHydrated(sessionId, 'none');
+  if (options?.shouldRecheckCodexToolBackfill) {
+    scheduleCodexToolBackfillRecheck(sessionId);
+  }
   logger.debug('Provider JSONL history not available; skipping runtime fallback hydration', {
     sessionId,
     provider: dbSession.provider,
     providerSessionId: dbSession.providerSessionId,
     loadStatus: loadResult.status,
   });
+}
+
+function scheduleCodexToolBackfillRecheck(sessionId: string): void {
+  sessionDomainService.setHistoryRetryAt(
+    sessionId,
+    Date.now() + CODEX_TOOL_BACKFILL_RECHECK_COOLDOWN_MS
+  );
 }
 
 function getToolUseId(message: ChatMessage): string | null {
