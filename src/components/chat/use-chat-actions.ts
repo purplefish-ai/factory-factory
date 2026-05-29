@@ -292,6 +292,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
           id,
           text: trimmedText,
           attachments: attachments.length > 0 ? attachments : undefined,
+          sessionId: dbSessionIdRef.current,
         },
       });
 
@@ -312,7 +313,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       };
       send(msg);
     },
-    [send, dispatch, inputAttachmentsRef, stateRef, onClearInput]
+    [send, dispatch, dbSessionIdRef, inputAttachmentsRef, stateRef, onClearInput]
   );
 
   const queueAutomaticMessage = useCallback(
@@ -328,6 +329,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
         payload: {
           id,
           text: trimmedText,
+          sessionId: dbSessionIdRef.current,
         },
       });
 
@@ -342,7 +344,7 @@ export function useChatActions(options: UseChatActionsOptions): UseChatActionsRe
       };
       send(msg);
     },
-    [send, dispatch, stateRef]
+    [send, dispatch, dbSessionIdRef, stateRef]
   );
 
   const completeCodexPlanApproval = useCallback(

@@ -54,13 +54,14 @@ export function useChatPersistence(options: UseChatPersistenceOptions): UseChatP
    */
   const setInputDraft = useCallback((draft: string) => {
     setInputDraftState(draft);
+    const sessionId = dbSessionIdRef.current;
 
     // Debounce sessionStorage write to avoid blocking main thread on every keystroke
     if (persistDraftDebounced.current) {
       clearTimeout(persistDraftDebounced.current);
     }
     persistDraftDebounced.current = setTimeout(() => {
-      persistDraft(dbSessionIdRef.current, draft);
+      persistDraft(sessionId, draft);
     }, 300);
   }, []);
 
@@ -69,6 +70,10 @@ export function useChatPersistence(options: UseChatPersistenceOptions): UseChatP
    */
   const clearInputDraft = useCallback(() => {
     setInputDraftState('');
+    if (persistDraftDebounced.current) {
+      clearTimeout(persistDraftDebounced.current);
+      persistDraftDebounced.current = undefined;
+    }
     clearDraft(dbSessionIdRef.current);
   }, []);
 
