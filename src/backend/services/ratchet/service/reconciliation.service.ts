@@ -124,7 +124,9 @@ class ReconciliationService {
    * and startup script handling.
    *
    * For stale PROVISIONING workspaces (stuck due to server crash), marks
-   * them as FAILED so users can manually retry via the UI.
+   * them as FAILED so users can manually retry via the UI — unless
+   * `initScriptPid` is set and the referenced process is still running,
+   * in which case the workspace is skipped (init is genuinely in progress).
    */
   private async reconcileWorkspaces(): Promise<void> {
     const workspacesNeedingWorktree = await workspaceAccessor.findNeedingWorktree();
