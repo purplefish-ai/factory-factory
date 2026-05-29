@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { linearClientService } from '@/backend/services/linear';
-import { projectManagementService } from '@/backend/services/workspace';
+import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
+import { WorkspaceStatus } from '@/shared/core';
 import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
 import { publicProcedure, router } from './trpc';
 
@@ -16,6 +17,31 @@ function getLinearConfig(project: { issueTrackerConfig: unknown }) {
     apiKey: cryptoService.decrypt(linear.apiKey),
     teamId: linear.teamId,
   };
+}
+
+function filterIssuesLinkedToActiveWorkspaces<TIssue extends { id: string }>(
+  issues: TIssue[],
+  workspaces: Array<{
+    linearIssueId: string | null;
+    status: WorkspaceStatus;
+  }>
+): TIssue[] {
+  const linkedIssueIds = new Set(
+    workspaces
+      .filter(
+        (workspace) =>
+          workspace.status !== WorkspaceStatus.ARCHIVING &&
+          workspace.status !== WorkspaceStatus.ARCHIVED
+      )
+      .map((workspace) => workspace.linearIssueId)
+      .filter((issueId): issueId is string => issueId !== null)
+  );
+
+  if (linkedIssueIds.size === 0) {
+    return issues;
+  }
+
+  return issues.filter((issue) => !linkedIssueIds.has(issue.id));
 }
 
 export const linearRouter = router({
@@ -41,8 +67,11 @@ export const linearRouter = router({
       }
 
       try {
-        const issues = await linearClientService.listMyIssues(config.apiKey, config.teamId);
-        return { issues, error: null };
+        const [issues, workspaces] = await Promise.all([
+          linearClientService.listMyIssues(config.apiKey, config.teamId),
+          workspaceDataService.findByProjectId(input.projectId),
+        ]);
+        return { issues: filterIssuesLinkedToActiveWorkspaces(issues, workspaces), error: null };
       } catch (err) {
         return {
           issues: [],

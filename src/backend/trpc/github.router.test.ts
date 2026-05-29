@@ -9,6 +9,7 @@ const mockGithubCLIService = vi.hoisted(() => ({
 
 const mockWorkspaceDataService = vi.hoisted(() => ({
   findByIdWithProject: vi.fn(),
+  findByProjectId: vi.fn(),
 }));
 
 const mockProjectManagementService = vi.hoisted(() => ({
@@ -33,6 +34,7 @@ function createCaller() {
 describe('githubRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWorkspaceDataService.findByProjectId.mockResolvedValue([]);
   });
 
   it('checks health and project/repo availability', async () => {
@@ -102,6 +104,37 @@ describe('githubRouter', () => {
     await expect(caller.getIssue({ projectId: 'p1', issueNumber: 99 })).resolves.toEqual({
       issue: null,
       error: 'boom',
+    });
+  });
+
+  it('filters project issues that already have active workspaces', async () => {
+    const caller = createCaller();
+    mockGithubCLIService.checkHealth.mockResolvedValue({
+      isInstalled: true,
+      isAuthenticated: true,
+    });
+    mockProjectManagementService.findById.mockResolvedValue({
+      id: 'p1',
+      githubOwner: 'purplefish-ai',
+      githubRepo: 'factory-factory',
+    });
+    mockGithubCLIService.listIssues.mockResolvedValue([
+      { number: 55, title: 'Has workspace' },
+      { number: 56, title: 'No workspace' },
+      { number: 57, title: 'Archived workspace' },
+    ]);
+    mockWorkspaceDataService.findByProjectId.mockResolvedValue([
+      { githubIssueNumber: 55, status: 'READY' },
+      { githubIssueNumber: 57, status: 'ARCHIVED' },
+    ]);
+
+    await expect(caller.listIssuesForProject({ projectId: 'p1' })).resolves.toEqual({
+      issues: [
+        { number: 56, title: 'No workspace' },
+        { number: 57, title: 'Archived workspace' },
+      ],
+      health: { isInstalled: true, isAuthenticated: true },
+      error: null,
     });
   });
 });

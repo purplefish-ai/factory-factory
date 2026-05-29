@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFindProjectById = vi.hoisted(() => vi.fn());
+const mockFindWorkspacesByProjectId = vi.hoisted(() => vi.fn());
 const mockValidateKeyAndListTeams = vi.hoisted(() => vi.fn());
 const mockListMyIssues = vi.hoisted(() => vi.fn());
 const mockGetIssue = vi.hoisted(() => vi.fn());
@@ -9,6 +10,9 @@ const mockDecrypt = vi.hoisted(() => vi.fn());
 vi.mock('@/backend/services/workspace', () => ({
   projectManagementService: {
     findById: (...args: unknown[]) => mockFindProjectById(...args),
+  },
+  workspaceDataService: {
+    findByProjectId: (...args: unknown[]) => mockFindWorkspacesByProjectId(...args),
   },
 }));
 
@@ -35,6 +39,7 @@ function createCaller() {
 describe('linearRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFindWorkspacesByProjectId.mockResolvedValue([]);
   });
 
   it('validates API key and lists teams', async () => {
@@ -87,6 +92,38 @@ describe('linearRouter', () => {
     await expect(caller.listIssuesForProject({ projectId: 'p1' })).resolves.toEqual({
       issues: [],
       error: 'linear down',
+    });
+  });
+
+  it('filters issues that already have active workspaces', async () => {
+    mockFindProjectById.mockResolvedValue({
+      issueTrackerConfig: {
+        linear: {
+          apiKey: 'encrypted-key',
+          teamId: 'team-1',
+          teamName: 'Core',
+          viewerName: 'Alice',
+        },
+      },
+    });
+    mockDecrypt.mockReturnValue('lin_api_decrypted');
+    mockListMyIssues.mockResolvedValueOnce([
+      { id: 'issue-1', identifier: 'FF-1' },
+      { id: 'issue-2', identifier: 'FF-2' },
+      { id: 'issue-3', identifier: 'FF-3' },
+    ]);
+    mockFindWorkspacesByProjectId.mockResolvedValue([
+      { linearIssueId: 'issue-1', status: 'READY' },
+      { linearIssueId: 'issue-3', status: 'ARCHIVED' },
+    ]);
+
+    const caller = createCaller();
+    await expect(caller.listIssuesForProject({ projectId: 'p1' })).resolves.toEqual({
+      issues: [
+        { id: 'issue-2', identifier: 'FF-2' },
+        { id: 'issue-3', identifier: 'FF-3' },
+      ],
+      error: null,
     });
   });
 
