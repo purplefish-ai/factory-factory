@@ -473,6 +473,24 @@ describe('WorkspaceCreationService', () => {
           })
         );
       });
+
+      it('persists selected provider for GitHub issue workspaces', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'GITHUB_ISSUE',
+          projectId: 'proj-1',
+          issueNumber: 42,
+          issueUrl: 'https://github.com/org/repo/issues/42',
+          provider: 'CODEX',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultSessionProvider: 'CODEX',
+          })
+        );
+      });
     });
 
     describe('LINEAR_ISSUE source', () => {
@@ -543,6 +561,25 @@ describe('WorkspaceCreationService', () => {
               issueUrl: 'https://linear.app/team/issue/ENG-42',
               startupModePreset: 'plan',
             },
+          })
+        );
+      });
+
+      it('persists selected provider for Linear issue workspaces', async () => {
+        const source: WorkspaceCreationSource = {
+          type: 'LINEAR_ISSUE',
+          projectId: 'proj-1',
+          issueId: 'linear-uuid-123',
+          issueIdentifier: 'ENG-42',
+          issueUrl: 'https://linear.app/team/issue/ENG-42',
+          provider: 'CODEX',
+        };
+
+        await service.create(source);
+
+        expect(workspaceAccessorModule.workspaceAccessor.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            defaultSessionProvider: 'CODEX',
           })
         );
       });

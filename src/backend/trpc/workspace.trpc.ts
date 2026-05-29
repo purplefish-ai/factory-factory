@@ -92,6 +92,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     description: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
     startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
+    provider: z.nativeEnum(SessionProvider).optional(),
   }),
   z.object({
     type: z.literal('LINEAR_ISSUE'),
@@ -103,6 +104,7 @@ const workspaceCreationSourceSchema = z.discriminatedUnion('type', [
     description: z.string().optional(),
     ratchetEnabled: z.boolean().optional(),
     startupModePreset: z.enum(['non_interactive', 'plan']).optional(),
+    provider: z.nativeEnum(SessionProvider).optional(),
   }),
 ]);
 
@@ -207,7 +209,10 @@ export const workspaceRouter = router({
     const logger = getLogger(ctx);
     const { configService } = ctx.appContext.services;
     const maxSessionsPerWorkspace = configService.getMaxSessionsPerWorkspace();
-    const explicitProvider = input.type === 'MANUAL' ? input.provider : undefined;
+    const explicitProvider =
+      input.type === 'MANUAL' || input.type === 'GITHUB_ISSUE' || input.type === 'LINEAR_ISSUE'
+        ? input.provider
+        : undefined;
     let defaultSessionProvider: SessionProvider | undefined;
 
     // Workspace creation provisions a default session when session capacity is enabled.

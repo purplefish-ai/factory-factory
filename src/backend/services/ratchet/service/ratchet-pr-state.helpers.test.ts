@@ -3,6 +3,7 @@ import { CIStatus, RatchetState } from '@/shared/core';
 import type { PRStateInfo } from './ratchet.types';
 import {
   buildFailedCheckDiagnostics,
+  buildReviewSummariesForPrompt,
   computeCiSnapshotKey,
   computeDispatchSnapshotKey,
   determineRatchetState,
@@ -204,6 +205,63 @@ describe('computeCiSnapshotKey', () => {
     ]);
 
     expect(key).toBe('ci:FAILURE:ci:STARTUP_FAILURE:100');
+  });
+});
+
+describe('buildReviewSummariesForPrompt', () => {
+  it('includes actionable commented review bodies as prompt feedback', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'cubic-dev-ai' },
+            state: 'COMMENTED',
+            body: 'Please fix the hydration edge case.',
+            url: 'https://github.com/example/repo/pull/1#pullrequestreview-1',
+          },
+        ],
+      },
+      null
+    );
+
+    expect(summaries).toEqual([
+      {
+        author: 'cubic-dev-ai',
+        body: 'Please fix the hydration edge case.',
+        path: 'PR review',
+        line: null,
+        url: 'https://github.com/example/repo/pull/1#pullrequestreview-1',
+      },
+    ]);
+  });
+
+  it('ignores approvals, empty bodies, and the authenticated user', () => {
+    const summaries = buildReviewSummariesForPrompt(
+      {
+        url: 'https://github.com/example/repo/pull/1',
+        reviews: [
+          {
+            author: { login: 'reviewer' },
+            state: 'APPROVED',
+            body: 'Looks good.',
+          },
+          {
+            author: { login: 'reviewer' },
+            state: 'COMMENTED',
+            body: '   ',
+          },
+          {
+            author: { login: 'me' },
+            state: 'CHANGES_REQUESTED',
+            body: 'My own note.',
+          },
+        ],
+      },
+      'me'
+    );
+
+    expect(summaries).toEqual([]);
   });
 });
 
