@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileCode } from 'lucide-react';
 import mermaid from 'mermaid';
 import {
   type ComponentPropsWithoutRef,
@@ -25,6 +25,8 @@ if (typeof window !== 'undefined') {
 interface MarkdownRendererProps {
   content: string;
   className?: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 }
 
 // Component to render Mermaid diagrams
@@ -67,6 +69,8 @@ function MermaidDiagram({ chart }: { chart: string }) {
 export const MarkdownRenderer = memo(function MarkdownRenderer({
   content,
   className,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
 }: MarkdownRendererProps) {
   // Memoize the markdown components to prevent recreating on every render
   const components = useMemo(
@@ -116,23 +120,42 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         );
       },
       // Override link rendering
-      a: ({ href, children }: ComponentPropsWithoutRef<'a'>) => (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
-        >
-          {children}
-          <ExternalLink className="h-3 w-3 shrink-0" />
-        </a>
-      ),
+      a: ({ href, children }: ComponentPropsWithoutRef<'a'>) => {
+        const workspacePath = href ? resolveWorkspaceFileLink?.(href) : null;
+        if (workspacePath && onWorkspaceFileLink) {
+          return (
+            <a
+              href={href}
+              onClick={(event) => {
+                event.preventDefault();
+                onWorkspaceFileLink(workspacePath);
+              }}
+              className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
+            >
+              {children}
+              <FileCode className="h-3 w-3 shrink-0" />
+            </a>
+          );
+        }
+
+        return (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline hover:no-underline inline-flex items-center gap-0.5"
+          >
+            {children}
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </a>
+        );
+      },
       // Override paragraph with comfortable spacing
       p: ({ children }: ComponentPropsWithoutRef<'p'>) => (
         <p className="mb-4 last:mb-0">{children}</p>
       ),
     }),
-    []
+    [onWorkspaceFileLink, resolveWorkspaceFileLink]
   );
 
   return (

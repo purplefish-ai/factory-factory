@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { trpc } from '@/client/lib/trpc';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
+import { resolveWorkspaceFileLink } from '@/client/lib/workspace-file-links';
 import { WorkspaceDetailHeaderSlot } from '@/client/routes/projects/workspaces/workspace-detail-header';
 import { useChatWebSocket } from '@/components/chat';
 import { usePersistentScroll, useWorkspacePanel } from '@/components/workspace';
@@ -133,7 +134,7 @@ export function WorkspaceDetailContainer() {
     void navigate('/projects', { replace: true });
   }, [workspace?.status, slug, navigate]);
 
-  const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState } =
+  const { rightPanelVisible, setRightPanelVisible, activeTabId, clearScrollState, openTab } =
     useWorkspacePanel();
   const { data: userSettings } = trpc.userSettings.get.useQuery();
 
@@ -365,6 +366,18 @@ export function WorkspaceDetailContainer() {
     persistChatScroll();
   }, [onScroll, persistChatScroll]);
 
+  const resolveWorkspaceChatFileLink = useCallback(
+    (href: string) => resolveWorkspaceFileLink(href, workspace?.worktreePath),
+    [workspace?.worktreePath]
+  );
+
+  const handleWorkspaceFileLink = useCallback(
+    (path: string) => {
+      openTab('file', path, path.split('/').pop() ?? path);
+    },
+    [openTab]
+  );
+
   useAutoFocusChatInput({
     workspaceLoading,
     workspace,
@@ -376,6 +389,8 @@ export function WorkspaceDetailContainer() {
 
   const chatViewModel: ChatContentProps = {
     workspaceId,
+    resolveWorkspaceFileLink: resolveWorkspaceChatFileLink,
+    onWorkspaceFileLink: handleWorkspaceFileLink,
     messages,
     sessionStatus,
     sessionRuntime,

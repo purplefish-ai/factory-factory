@@ -16,6 +16,8 @@ interface StreamEventRendererProps {
   /** The ID of the ChatMessage containing this event (for thinking completion tracking) */
   messageId?: string;
   className?: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 }
 
 /**
@@ -25,6 +27,8 @@ export const StreamEventRenderer = memo(function StreamEventRenderer({
   event,
   messageId,
   className,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
 }: StreamEventRendererProps) {
   switch (event.type) {
     case 'content_block_start': {
@@ -32,7 +36,11 @@ export const StreamEventRenderer = memo(function StreamEventRenderer({
       if (isTextContent(block)) {
         return (
           <div className={cn('prose prose-sm dark:prose-invert max-w-none text-sm', className)}>
-            <TextRenderer text={block.text} />
+            <TextRenderer
+              text={block.text}
+              resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+              onWorkspaceFileLink={onWorkspaceFileLink}
+            />
           </div>
         );
       }
@@ -93,13 +101,25 @@ export const StreamDeltaRenderer = memo(function StreamDeltaRenderer({
 
 interface TextRendererProps {
   text: string;
+  resolveWorkspaceFileLink?: (href: string) => string | null;
+  onWorkspaceFileLink?: (path: string) => void;
 }
 
 /**
  * Renders text content with full markdown support.
  */
-const TextRenderer = memo(function TextRenderer({ text }: TextRendererProps) {
-  return <MarkdownRenderer content={text} />;
+const TextRenderer = memo(function TextRenderer({
+  text,
+  resolveWorkspaceFileLink,
+  onWorkspaceFileLink,
+}: TextRendererProps) {
+  return (
+    <MarkdownRenderer
+      content={text}
+      resolveWorkspaceFileLink={resolveWorkspaceFileLink}
+      onWorkspaceFileLink={onWorkspaceFileLink}
+    />
+  );
 });
 
 // =============================================================================
