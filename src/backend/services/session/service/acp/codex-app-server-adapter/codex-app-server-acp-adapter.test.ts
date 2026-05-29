@@ -2883,7 +2883,7 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(mcpByThread.get('thread_restore')).toEqual(previousConfig);
   });
 
-  it('builds tool call state for file, MCP, web search, and unknown types', () => {
+  it('builds tool call state for file, MCP, web search, Codex function calls, and unknown types', () => {
     const { connection } = createMockConnection();
     const { client: codexClient } = createMockCodexClient();
     const adapter = new CodexAppServerAcpAdapter(connection as AgentSideConnection, codexClient);
@@ -2933,6 +2933,38 @@ describe('CodexAppServerAcpAdapter', () => {
       'turn_web'
     ) as { title: string };
 
+    const functionCall = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'function_call',
+        id: 'item_function',
+        name: 'exec_command',
+        call_id: 'call_function',
+        arguments: '{"cmd":"cat package.json","workdir":"/tmp/workspace"}',
+      },
+      'turn_function'
+    ) as { toolCallId: string; title: string; kind: string };
+
+    const customToolCall = (
+      adapter as unknown as {
+        buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
+      }
+    ).buildToolCallState(
+      session,
+      {
+        type: 'custom_tool_call',
+        id: 'item_custom',
+        name: 'apply_patch',
+        call_id: 'call_custom',
+        input: '*** Begin Patch\n*** End Patch\n',
+      },
+      'turn_custom'
+    ) as { toolCallId: string; title: string; kind: string };
+
     const unknown = (
       adapter as unknown as {
         buildToolCallState: (session: unknown, item: unknown, turnId: string) => unknown;
@@ -2950,6 +2982,12 @@ describe('CodexAppServerAcpAdapter', () => {
     expect(fileCall.locations).toEqual([{ path: 'src/app.ts' }]);
     expect(mcpCall.title).toBe('mcpToolCall:docs/search');
     expect(webCall.title).toBe('webSearch');
+    expect(functionCall.toolCallId).toBe('call_function');
+    expect(functionCall.title).toBe('Read package.json');
+    expect(functionCall.kind).toBe('read');
+    expect(customToolCall.toolCallId).toBe('call_custom');
+    expect(customToolCall.title).toBe('apply_patch');
+    expect(customToolCall.kind).toBe('execute');
     expect(unknown).toBeNull();
   });
 });

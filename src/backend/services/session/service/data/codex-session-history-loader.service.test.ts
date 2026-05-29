@@ -125,6 +125,25 @@ describe('codexSessionHistoryLoaderService', () => {
             output: 'M package.json',
           },
         },
+        {
+          timestamp: '2026-02-14T00:00:06.000Z',
+          type: 'response_item',
+          payload: {
+            type: 'custom_tool_call',
+            name: 'apply_patch',
+            call_id: 'call-2',
+            input: '*** Begin Patch\n*** Update File: package.json\n*** End Patch\n',
+          },
+        },
+        {
+          timestamp: '2026-02-14T00:00:07.000Z',
+          type: 'response_item',
+          payload: {
+            type: 'custom_tool_call_output',
+            call_id: 'call-2',
+            output: 'Success. Updated files',
+          },
+        },
       ],
     });
 
@@ -162,6 +181,22 @@ describe('codexSessionHistoryLoaderService', () => {
         content: 'M package.json',
         timestamp: '2026-02-14T00:00:05.000Z',
         toolId: 'call-1',
+      },
+      {
+        type: 'tool_use',
+        content: '',
+        timestamp: '2026-02-14T00:00:06.000Z',
+        toolName: 'apply_patch',
+        toolId: 'call-2',
+        toolInput: {
+          rawArguments: '*** Begin Patch\n*** Update File: package.json\n*** End Patch\n',
+        },
+      },
+      {
+        type: 'tool_result',
+        content: 'Success. Updated files',
+        timestamp: '2026-02-14T00:00:07.000Z',
+        toolId: 'call-2',
       },
     ]);
   });
