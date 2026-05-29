@@ -44,6 +44,18 @@ class SessionDataService {
     return agentSessionAccessor.create(data);
   }
 
+  createAgentSessionWithinWorkspaceLimit(data: {
+    workspaceId: string;
+    name?: string;
+    workflow: string;
+    model?: string;
+    provider?: SessionProvider;
+    providerProjectPath?: string | null;
+    maxSessions: number;
+  }) {
+    return agentSessionAccessor.createWithinWorkspaceLimit(data);
+  }
+
   updateAgentSession(
     id: string,
     data: {

@@ -7,6 +7,7 @@ const mockSessionDataService = vi.hoisted(() => ({
   countActiveAgentSessionsByWorkspaceId: vi.fn(),
   findAgentSessionById: vi.fn(),
   createAgentSession: vi.fn(),
+  createAgentSessionWithinWorkspaceLimit: vi.fn(),
   updateAgentSession: vi.fn(),
   deleteAgentSession: vi.fn(),
   findTerminalSessionsByWorkspaceId: vi.fn(),
@@ -83,7 +84,10 @@ function createCaller() {
 describe('sessionRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValue(0);
+    mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValue({
+      outcome: 'created',
+      session: { id: 's-new', workspaceId: 'w1' },
+    });
   });
 
   it('returns quick actions and augments sessions with runtime working state', async () => {
@@ -110,7 +114,12 @@ describe('sessionRouter', () => {
   it('enforces workspace session limits and creates a session with provider resolution', async () => {
     const { caller, cliHealthService } = createCaller();
 
-    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValueOnce(2);
+    mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
+      SessionProvider.CODEX
+    );
+    mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValueOnce({
+      outcome: 'limit_reached',
+    });
     await expect(
       caller.createSession({
         workspaceId: 'w1',
@@ -118,11 +127,10 @@ describe('sessionRouter', () => {
       })
     ).rejects.toThrow('Maximum sessions per workspace (2) reached');
 
-    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValueOnce(1);
-    mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
-      SessionProvider.CODEX
-    );
-    mockSessionDataService.createAgentSession.mockResolvedValue({ id: 's3', workspaceId: 'w1' });
+    mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValueOnce({
+      outcome: 'created',
+      session: { id: 's3', workspaceId: 'w1' },
+    });
 
     await expect(
       caller.createSession({
@@ -132,7 +140,14 @@ describe('sessionRouter', () => {
       })
     ).resolves.toEqual({ id: 's3', workspaceId: 'w1' });
 
-    expect(mockSessionDataService.countActiveAgentSessionsByWorkspaceId).toHaveBeenCalledWith('w1');
+    expect(mockSessionDataService.createAgentSessionWithinWorkspaceLimit).toHaveBeenLastCalledWith({
+      workspaceId: 'w1',
+      name: undefined,
+      workflow: 'user',
+      model: undefined,
+      provider: SessionProvider.CODEX,
+      maxSessions: 2,
+    });
     expect(mockSessionProviderResolverService.resolveSessionProvider).toHaveBeenCalledWith({
       workspaceId: 'w1',
       explicitProvider: undefined,
@@ -143,7 +158,6 @@ describe('sessionRouter', () => {
 
   it('blocks creating a session when the selected provider is unavailable', async () => {
     const { caller, cliHealthService } = createCaller();
-    mockSessionDataService.countActiveAgentSessionsByWorkspaceId.mockResolvedValue(1);
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CODEX
     );
@@ -160,7 +174,7 @@ describe('sessionRouter', () => {
         workflow: 'user',
       })
     ).rejects.toThrow('Codex provider is unavailable');
-    expect(mockSessionDataService.createAgentSession).not.toHaveBeenCalled();
+    expect(mockSessionDataService.createAgentSessionWithinWorkspaceLimit).not.toHaveBeenCalled();
   });
 
   it('creates and starts a session in one mutation', async () => {
@@ -168,9 +182,12 @@ describe('sessionRouter', () => {
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CLAUDE
     );
-    mockSessionDataService.createAgentSession.mockResolvedValue({
-      id: 's-started',
-      workspaceId: 'w1',
+    mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValue({
+      outcome: 'created',
+      session: {
+        id: 's-started',
+        workspaceId: 'w1',
+      },
     });
     mockSessionDataService.findAgentSessionById.mockResolvedValue({
       id: 's-started',
@@ -204,9 +221,12 @@ describe('sessionRouter', () => {
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CLAUDE
     );
-    mockSessionDataService.createAgentSession.mockResolvedValue({
-      id: 's-orphan',
-      workspaceId: 'w1',
+    mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValue({
+      outcome: 'created',
+      session: {
+        id: 's-orphan',
+        workspaceId: 'w1',
+      },
     });
     sessionService.startSession.mockRejectedValue(startupError);
 
@@ -232,9 +252,12 @@ describe('sessionRouter', () => {
     mockSessionProviderResolverService.resolveSessionProvider.mockResolvedValue(
       SessionProvider.CLAUDE
     );
-    mockSessionDataService.createAgentSession.mockResolvedValue({
-      id: 's-cleanup-fails',
-      workspaceId: 'w1',
+    mockSessionDataService.createAgentSessionWithinWorkspaceLimit.mockResolvedValue({
+      outcome: 'created',
+      session: {
+        id: 's-cleanup-fails',
+        workspaceId: 'w1',
+      },
     });
     sessionService.startSession.mockRejectedValue(startupError);
     sessionService.stopSession.mockRejectedValue(new Error('Stop failed'));

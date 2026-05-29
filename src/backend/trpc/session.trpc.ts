@@ -21,18 +21,7 @@ async function createAgentSessionFromInput(
   input: z.infer<typeof createSessionInputSchema>
 ) {
   const { configService, sessionDomainService } = ctx.appContext.services;
-  // Check per-workspace session limit
   const maxSessions = configService.getMaxSessionsPerWorkspace();
-  const activeSessionCount = await sessionDataService.countActiveAgentSessionsByWorkspaceId(
-    input.workspaceId
-  );
-
-  if (activeSessionCount >= maxSessions) {
-    throw new TRPCError({
-      code: 'PRECONDITION_FAILED',
-      message: `Maximum sessions per workspace (${maxSessions}) reached`,
-    });
-  }
 
   const provider = await sessionProviderResolverService.resolveSessionProvider({
     workspaceId: input.workspaceId,
@@ -48,13 +37,22 @@ async function createAgentSessionFromInput(
     });
   }
 
-  const session = await sessionDataService.createAgentSession({
+  const creation = await sessionDataService.createAgentSessionWithinWorkspaceLimit({
     workspaceId: input.workspaceId,
     name: input.name,
     workflow: input.workflow,
     model: input.model,
     provider,
+    maxSessions,
   });
+  if (creation.outcome === 'limit_reached') {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: `Maximum sessions per workspace (${maxSessions}) reached`,
+    });
+  }
+
+  const session = creation.session;
   if (input.initialMessage) {
     sessionDomainService.storeInitialMessage(session.id, input.initialMessage);
   }
