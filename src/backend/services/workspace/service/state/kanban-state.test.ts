@@ -41,7 +41,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'OPEN',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBeNull();
   });
@@ -53,7 +52,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'NONE',
         ratchetState: 'IDLE',
-        hasHadSessions: false,
       })
     ).toBe('WORKING');
     expect(
@@ -62,7 +60,6 @@ describe('computeKanbanColumn', () => {
         isWorking: true,
         prState: 'OPEN',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('WORKING');
   });
@@ -74,7 +71,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'MERGED',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('DONE');
     expect(
@@ -83,7 +79,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'CLOSED',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('DONE');
     expect(
@@ -92,7 +87,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'NONE',
         ratchetState: 'IDLE',
-        hasHadSessions: false,
       })
     ).toBe('WAITING');
   });
@@ -104,7 +98,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'OPEN',
         ratchetState: 'MERGED',
-        hasHadSessions: true,
       })
     ).toBe('DONE');
   });
@@ -116,7 +109,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'DRAFT',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('WAITING');
     expect(
@@ -125,7 +117,6 @@ describe('computeKanbanColumn', () => {
         isWorking: false,
         prState: 'APPROVED',
         ratchetState: 'IDLE',
-        hasHadSessions: true,
       })
     ).toBe('WAITING');
   });

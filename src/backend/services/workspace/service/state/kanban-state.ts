@@ -12,7 +12,6 @@ export interface KanbanStateInput {
   isWorking: boolean;
   prState: PRState;
   ratchetState: RatchetState;
-  hasHadSessions: boolean;
 }
 
 export interface WorkspaceWithKanbanState {
@@ -102,7 +101,6 @@ class KanbanStateService {
       isWorking: runtimeState.isWorking,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
-      hasHadSessions: workspace.hasHadSessions,
     });
 
     return {
@@ -131,7 +129,6 @@ class KanbanStateService {
         isWorking: runtimeState.isWorking,
         prState: workspace.prState,
         ratchetState: workspace.ratchetState,
-        hasHadSessions: workspace.hasHadSessions,
       });
 
       return {
@@ -173,7 +170,6 @@ class KanbanStateService {
       isWorking: false,
       prState: workspace.prState,
       ratchetState: workspace.ratchetState,
-      hasHadSessions: workspace.hasHadSessions,
     });
 
     // If column is null (archived workspace), default to WAITING for the cache

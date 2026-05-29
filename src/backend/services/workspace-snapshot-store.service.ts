@@ -177,7 +177,6 @@ export interface SnapshotDerivationFns {
     isWorking: boolean;
     prState: PRState;
     ratchetState: RatchetState;
-    hasHadSessions: boolean;
   }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
@@ -336,10 +335,10 @@ export class WorkspaceSnapshotStore extends EventEmitter {
       ciObservation: 'NOT_FETCHED',
       ratchetButtonAnimated: false,
       statusReason: {
-        code: 'NO_SESSION_STARTED',
-        label: 'No session started',
-        tone: 'neutral',
-        needsUser: true,
+        code: 'SETTING_UP',
+        label: 'Setting up workspace',
+        tone: 'working',
+        needsUser: false,
       },
       fieldTimestamps: createDefaultFieldTimestamps(),
     };

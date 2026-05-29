@@ -42,7 +42,6 @@ export interface WorkspaceDerivedStateFns {
     isWorking: boolean;
     prState: PRState;
     ratchetState: RatchetState;
-    hasHadSessions: boolean;
   }) => KanbanColumn | null;
   deriveSidebarStatus: (input: {
     isWorking: boolean;
@@ -91,7 +90,6 @@ export function assembleWorkspaceDerivedState(
       isWorking,
       prState: input.prState,
       ratchetState: input.ratchetState,
-      hasHadSessions: input.hasHadSessions,
     }),
     flowPhase: input.flowState.phase,
     ciObservation: input.flowState.ciObservation,
