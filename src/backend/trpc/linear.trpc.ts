@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { cryptoService } from '@/backend/services/crypto.service';
 import { linearClientService } from '@/backend/services/linear';
 import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
-import { WorkspaceStatus } from '@/shared/core';
 import { IssueTrackerConfigSchema } from '@/shared/schemas/issue-tracker-config.schema';
+import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
 
 /** Look up a project's Linear config and decrypt the API key. Returns null if not configured. */
@@ -17,31 +17,6 @@ function getLinearConfig(project: { issueTrackerConfig: unknown }) {
     apiKey: cryptoService.decrypt(linear.apiKey),
     teamId: linear.teamId,
   };
-}
-
-function filterIssuesLinkedToActiveWorkspaces<TIssue extends { id: string }>(
-  issues: TIssue[],
-  workspaces: Array<{
-    linearIssueId: string | null;
-    status: WorkspaceStatus;
-  }>
-): TIssue[] {
-  const linkedIssueIds = new Set(
-    workspaces
-      .filter(
-        (workspace) =>
-          workspace.status !== WorkspaceStatus.ARCHIVING &&
-          workspace.status !== WorkspaceStatus.ARCHIVED
-      )
-      .map((workspace) => workspace.linearIssueId)
-      .filter((issueId): issueId is string => issueId !== null)
-  );
-
-  if (linkedIssueIds.size === 0) {
-    return issues;
-  }
-
-  return issues.filter((issue) => !linkedIssueIds.has(issue.id));
 }
 
 export const linearRouter = router({
@@ -71,7 +46,15 @@ export const linearRouter = router({
           linearClientService.listMyIssues(config.apiKey, config.teamId),
           workspaceDataService.findByProjectId(input.projectId),
         ]);
-        return { issues: filterIssuesLinkedToActiveWorkspaces(issues, workspaces), error: null };
+        return {
+          issues: filterIssuesLinkedToActiveWorkspaces(
+            issues,
+            workspaces,
+            (workspace) => workspace.linearIssueId,
+            (issue) => issue.id
+          ),
+          error: null,
+        };
       } catch (err) {
         return {
           issues: [],

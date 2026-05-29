@@ -7,33 +7,8 @@
 import { z } from 'zod';
 import { githubCLIService } from '@/backend/services/github';
 import { projectManagementService, workspaceDataService } from '@/backend/services/workspace';
-import { WorkspaceStatus } from '@/shared/core';
+import { filterIssuesLinkedToActiveWorkspaces } from './issue-filter';
 import { publicProcedure, router } from './trpc';
-
-function filterIssuesLinkedToActiveWorkspaces<TIssue extends { number: number }>(
-  issues: TIssue[],
-  workspaces: Array<{
-    githubIssueNumber: number | null;
-    status: WorkspaceStatus;
-  }>
-): TIssue[] {
-  const linkedIssueNumbers = new Set(
-    workspaces
-      .filter(
-        (workspace) =>
-          workspace.status !== WorkspaceStatus.ARCHIVING &&
-          workspace.status !== WorkspaceStatus.ARCHIVED
-      )
-      .map((workspace) => workspace.githubIssueNumber)
-      .filter((issueNumber): issueNumber is number => issueNumber !== null)
-  );
-
-  if (linkedIssueNumbers.size === 0) {
-    return issues;
-  }
-
-  return issues.filter((issue) => !linkedIssueNumbers.has(issue.number));
-}
 
 export const githubRouter = router({
   /**
@@ -141,7 +116,12 @@ export const githubRouter = router({
           workspaceDataService.findByProjectId(input.projectId),
         ]);
         return {
-          issues: filterIssuesLinkedToActiveWorkspaces(issues, workspaces),
+          issues: filterIssuesLinkedToActiveWorkspaces(
+            issues,
+            workspaces,
+            (workspace) => workspace.githubIssueNumber,
+            (issue) => issue.number
+          ),
           health,
           error: null,
         };
