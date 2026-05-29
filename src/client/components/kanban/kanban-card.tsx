@@ -12,6 +12,7 @@ import {
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { isWorkspaceDoneOrMerged } from '@/client/lib/workspace-archive';
+import { shouldShowWorkspaceStatusReason } from '@/client/lib/workspace-status-reason-display';
 import { CiStatusChip } from '@/components/shared/ci-status-chip';
 import { PrStateBadge } from '@/components/shared/pr-state-badge';
 import { SetupStatusChip } from '@/components/shared/setup-status-chip';
@@ -48,16 +49,6 @@ interface KanbanCardProps {
   onArchive?: (workspaceId: string, commitUncommitted: boolean) => void;
   onOpenQuickChat?: (workspaceId: string) => void;
   onRename?: (workspaceId: string, name: string) => Promise<void>;
-}
-
-const HIDDEN_CARD_STATUS_REASON_CODES = new Set<WorkspaceStatusReason['code']>([
-  'SETTING_UP',
-  'NO_SESSION_STARTED',
-  'READY_FOR_NEXT_PROMPT',
-]);
-
-function shouldShowCardStatusReason(statusReason: WorkspaceStatusReason | null | undefined) {
-  return Boolean(statusReason && !HIDDEN_CARD_STATUS_REASON_CODES.has(statusReason.code));
 }
 
 function CardStatusIndicator({
@@ -310,7 +301,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
   const showCi = sidebarStatus.ciState !== 'NONE';
   const showBranch = Boolean(workspace.branchName);
-  const showStatusReason = shouldShowCardStatusReason(workspace.statusReason);
+  const showStatusReason = shouldShowWorkspaceStatusReason(workspace.statusReason);
   const hasMetadata =
     showSetup ||
     showStatusReason ||
