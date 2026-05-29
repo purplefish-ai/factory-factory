@@ -14,6 +14,9 @@ import {
   resetSnapshotsHandlerStateForTests,
   snapshotConnections,
 } from './snapshots.handler';
+import { validateWebSocketOrigin } from './upgrade-utils';
+
+const allowedOrigin = 'http://localhost:3000';
 
 // ============================================================================
 // Mocks
@@ -66,6 +69,7 @@ vi.mock('./upgrade-utils', () => ({
   ),
   markWebSocketAlive: vi.fn(),
   sendBadRequest: mockSendBadRequest,
+  validateWebSocketOrigin: vi.fn(() => true),
 }));
 
 vi.mock('@/backend/app-context', () => ({
@@ -77,6 +81,9 @@ vi.mock('@/backend/app-context', () => ({
         warn: vi.fn(),
         error: vi.fn(),
       })),
+      configService: {
+        getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+      },
     },
   })),
 }));
@@ -94,6 +101,9 @@ function createAppContextMock(): AppContext {
         warn: vi.fn(),
         error: vi.fn(),
       })),
+      configService: {
+        getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+      },
     },
   } as unknown as AppContext;
 }
@@ -117,7 +127,7 @@ function callHandler(
   projectId?: string
 ) {
   const wss = createWssMock(ws);
-  const request = {} as IncomingMessage;
+  const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
   const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
   const wsAliveMap = new WeakMap<WebSocket, boolean>();
   const urlStr = projectId
@@ -138,6 +148,8 @@ describe('createSnapshotsUpgradeHandler', () => {
     // Clean up connection map between tests
     snapshotConnections.clear();
     resetSnapshotsHandlerStateForTests();
+    storeListeners.clear();
+    vi.mocked(validateWebSocketOrigin).mockReturnValue(true);
   });
 
   it('sends full snapshot on connect', () => {
@@ -174,6 +186,18 @@ describe('createSnapshotsUpgradeHandler', () => {
     const { socket } = callHandler(handler, ws);
 
     expect(mockSendBadRequest).toHaveBeenCalledWith(socket);
+    expect(ws.send).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthorized origins before subscription setup and projectId checks', () => {
+    vi.mocked(validateWebSocketOrigin).mockReturnValueOnce(false);
+    const handler = createSnapshotsUpgradeHandler(createAppContextMock());
+    const ws = new MockWebSocket();
+    const { wss } = callHandler(handler, ws);
+
+    expect(storeListeners.size).toBe(0);
+    expect(mockSendBadRequest).not.toHaveBeenCalled();
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
     expect(ws.send).not.toHaveBeenCalled();
   });
 

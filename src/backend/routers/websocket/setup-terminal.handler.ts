@@ -20,7 +20,7 @@ import {
   SetupTerminalMessageSchema,
 } from '@/backend/schemas/websocket';
 import { toMessageString } from './message-utils';
-import { markWebSocketAlive, sendBadRequest } from './upgrade-utils';
+import { markWebSocketAlive, validateWebSocketOrigin } from './upgrade-utils';
 
 const require = createRequire(import.meta.url);
 
@@ -143,17 +143,15 @@ export function createSetupTerminalUpgradeHandler(appContext: AppContext) {
     wss: WebSocketServer,
     wsAliveMap: WeakMap<WebSocket, boolean>
   ): void {
-    const origin = request.headers?.origin;
-    if (!origin) {
-      logger.warn('Rejected setup terminal connection without Origin header');
-      sendBadRequest(socket, 'Missing Origin header');
-      return;
-    }
-
-    const allowedOrigins = configService.getCorsConfig().allowedOrigins;
-    if (!allowedOrigins.includes(origin)) {
-      logger.warn('Rejected setup terminal connection from unauthorized origin', { origin });
-      sendBadRequest(socket, 'Unauthorized origin');
+    if (
+      !validateWebSocketOrigin({
+        request,
+        socket,
+        configService,
+        logger,
+        connectionName: 'setup terminal',
+      })
+    ) {
       return;
     }
 

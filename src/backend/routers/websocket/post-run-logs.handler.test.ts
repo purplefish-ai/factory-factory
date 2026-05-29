@@ -7,6 +7,8 @@ import type { AppContext } from '@/backend/app-context';
 import { WS_READY_STATE } from '@/backend/constants/websocket';
 import { createPostRunLogsUpgradeHandler, postRunLogsConnections } from './post-run-logs.handler';
 
+const allowedOrigin = 'http://localhost:3000';
+
 class MockWebSocket extends EventEmitter {
   readyState: number = WS_READY_STATE.OPEN;
   send = vi.fn();
@@ -54,13 +56,16 @@ describe('createPostRunLogsUpgradeHandler', () => {
     };
     const appContext = {
       services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
         runScriptService,
       },
     } as unknown as AppContext;
 
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
 
@@ -79,6 +84,41 @@ describe('createPostRunLogsUpgradeHandler', () => {
     expect(wss.handleUpgrade).not.toHaveBeenCalled();
   });
 
+  it('rejects unauthorized origins before checking workspaceId', () => {
+    const logger = createLogger();
+    const runScriptService = {
+      getPostRunOutputBuffer: vi.fn(() => ''),
+      subscribeToPostRunOutput: vi.fn(),
+    };
+    const appContext = {
+      services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
+        createLogger: vi.fn(() => logger),
+        runScriptService,
+      },
+    } as unknown as AppContext;
+
+    const handler = createPostRunLogsUpgradeHandler(appContext);
+    const request = { headers: { origin: 'https://attacker.example' } } as IncomingMessage;
+    const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
+    const wss = { handleUpgrade: vi.fn() } as unknown as WebSocketServer;
+
+    handler(
+      request,
+      socket,
+      Buffer.alloc(0),
+      new URL('http://localhost/post-run-logs'),
+      wss,
+      new WeakMap<WebSocket, boolean>()
+    );
+
+    expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('Unauthorized origin'));
+    expect(logger.warn).not.toHaveBeenCalledWith('Post-run logs WebSocket missing workspaceId');
+    expect(wss.handleUpgrade).not.toHaveBeenCalled();
+  });
+
   it('streams buffered/live output and cleans up subscription on close', () => {
     const workspaceId = 'workspace-1';
     const logger = createLogger();
@@ -93,6 +133,9 @@ describe('createPostRunLogsUpgradeHandler', () => {
     };
     const appContext = {
       services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
         runScriptService,
       },
@@ -100,7 +143,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
 
     const ws = new MockWebSocket();
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = createWssFromQueue([ws]);
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
@@ -162,6 +205,9 @@ describe('createPostRunLogsUpgradeHandler', () => {
     };
     const appContext = {
       services: {
+        configService: {
+          getCorsConfig: vi.fn(() => ({ allowedOrigins: [allowedOrigin] })),
+        },
         createLogger: vi.fn(() => logger),
         runScriptService,
       },
@@ -170,7 +216,7 @@ describe('createPostRunLogsUpgradeHandler', () => {
     const ws1 = new MockWebSocket();
     const ws2 = new MockWebSocket();
     const handler = createPostRunLogsUpgradeHandler(appContext);
-    const request = {} as IncomingMessage;
+    const request = { headers: { origin: allowedOrigin } } as IncomingMessage;
     const socket = { write: vi.fn(), destroy: vi.fn() } as unknown as Duplex;
     const wss = createWssFromQueue([ws1, ws2]);
     const wsAliveMap = new WeakMap<WebSocket, boolean>();
