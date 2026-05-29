@@ -301,7 +301,9 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
   const showCi = sidebarStatus.ciState !== 'NONE';
   const showBranch = Boolean(workspace.branchName);
-  const showStatusReason = shouldShowWorkspaceStatusReason(workspace.statusReason);
+  const showStatusReason =
+    shouldShowWorkspaceStatusReason(workspace.statusReason) &&
+    !(workspace.statusReason.code === 'SESSION_ERROR' && sessionRuntimeError);
   const hasMetadata =
     showSetup ||
     showStatusReason ||

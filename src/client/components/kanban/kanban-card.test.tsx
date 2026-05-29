@@ -150,6 +150,39 @@ describe('KanbanCard', () => {
     container.remove();
   });
 
+  it('does not duplicate session status reason with the session error message', () => {
+    const { container, root } = renderCard({
+      ...baseWorkspace,
+      statusReason: {
+        code: 'SESSION_ERROR',
+        label: 'Session error',
+        tone: 'danger',
+        needsUser: true,
+      },
+      sessionSummaries: [
+        {
+          sessionId: 'session-1',
+          name: null,
+          workflow: null,
+          model: null,
+          persistedStatus: 'FAILED',
+          runtimePhase: 'error',
+          processState: 'stopped',
+          activity: 'IDLE',
+          updatedAt: '2026-05-29T00:00:00.000Z',
+          lastExit: null,
+          errorMessage: 'Session crashed',
+        },
+      ],
+    });
+
+    expect(container.textContent).toContain('Session crashed');
+    expect(container.textContent).not.toContain('Session error');
+
+    root.unmount();
+    container.remove();
+  });
+
   it('renders actionable status reasons', () => {
     const { container, root } = renderCard({
       ...baseWorkspace,
