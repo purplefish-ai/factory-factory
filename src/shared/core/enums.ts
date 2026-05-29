@@ -17,6 +17,28 @@ export const SessionStatus = {
 } as const;
 export type SessionStatus = (typeof SessionStatus)[keyof typeof SessionStatus];
 
+export const SessionProvider = {
+  CLAUDE: 'CLAUDE',
+  CODEX: 'CODEX',
+} as const;
+export type SessionProvider = (typeof SessionProvider)[keyof typeof SessionProvider];
+
+export const SessionPermissionPreset = {
+  STRICT: 'STRICT',
+  RELAXED: 'RELAXED',
+  YOLO: 'YOLO',
+} as const;
+export type SessionPermissionPreset =
+  (typeof SessionPermissionPreset)[keyof typeof SessionPermissionPreset];
+
+export const WorkspaceProviderSelection = {
+  WORKSPACE_DEFAULT: 'WORKSPACE_DEFAULT',
+  CLAUDE: 'CLAUDE',
+  CODEX: 'CODEX',
+} as const;
+export type WorkspaceProviderSelection =
+  (typeof WorkspaceProviderSelection)[keyof typeof WorkspaceProviderSelection];
+
 export const PRState = {
   NONE: 'NONE',
   DRAFT: 'DRAFT',
