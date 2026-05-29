@@ -741,7 +741,6 @@ describe('URL change handling', () => {
     ws = connectIfUrl(url);
     if (ws) {
       ws.simulateOpen();
-      connected = true;
     }
 
     // Simulate URL becoming null (like sessionId being cleared)
