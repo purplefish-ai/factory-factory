@@ -438,6 +438,19 @@ export class FileLockMutex {
           lockPath,
           claimedPath,
         });
+        await fs.unlink(claimedPath).catch((unlinkError) => {
+          const unlinkCode = (unlinkError as NodeJS.ErrnoException | undefined)?.code;
+          if (unlinkCode === 'ENOENT') {
+            return;
+          }
+
+          logger.warn('Failed to clean up claimed lock after restore conflict', {
+            lockPath,
+            claimedPath,
+            error: unlinkError instanceof Error ? unlinkError.message : String(unlinkError),
+            code: unlinkCode,
+          });
+        });
         return;
       }
 

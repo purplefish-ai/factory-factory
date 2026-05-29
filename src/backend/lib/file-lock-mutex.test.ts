@@ -177,6 +177,30 @@ describe('FileLockMutex', () => {
     }
   });
 
+  it('removes claimed stale lock when restore races with a new lock', async () => {
+    const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
+    const lockPath = path.join(baseDir, 'restore-race.lock');
+    const claimedPath = path.join(baseDir, '.restore-race.lock.stale-test');
+    const freshLockContent = lockMetadata('fresh-lock-id');
+    await fs.writeFile(lockPath, freshLockContent, 'utf-8');
+    await fs.writeFile(claimedPath, lockMetadata('claimed-lock-id'), 'utf-8');
+
+    const mutex = new FileLockMutex();
+
+    try {
+      await (
+        mutex as unknown as {
+          restoreClaimedLock: (lockPath: string, claimedPath: string) => Promise<void>;
+        }
+      ).restoreClaimedLock(lockPath, claimedPath);
+
+      expect(await fs.readFile(lockPath, 'utf-8')).toBe(freshLockContent);
+      expect(await exists(claimedPath)).toBe(false);
+    } finally {
+      await fs.rm(baseDir, { recursive: true, force: true });
+    }
+  });
+
   it('does not treat an active lock as stale while heartbeat is updating mtime', async () => {
     const baseDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ff-lock-mutex-'));
     const lockPath = path.join(baseDir, 'heartbeat.lock');
