@@ -66,7 +66,7 @@ function handleAcceptedState(
       text: userMessage.text,
       timestamp: userMessage.timestamp,
       attachments: userMessage.attachments,
-      sessionId: pendingContent?.sessionId,
+      sessionId: pendingContent?.sessionId ?? state.queuedMessages.get(id)?.sessionId,
       settings: userMessage.settings ?? {
         selectedModel: null,
         reasoningEffort: null,
