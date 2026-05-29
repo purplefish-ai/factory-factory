@@ -50,6 +50,16 @@ interface KanbanCardProps {
   onRename?: (workspaceId: string, name: string) => Promise<void>;
 }
 
+const HIDDEN_CARD_STATUS_REASON_CODES = new Set<WorkspaceStatusReason['code']>([
+  'SETTING_UP',
+  'NO_SESSION_STARTED',
+  'READY_FOR_NEXT_PROMPT',
+]);
+
+function shouldShowCardStatusReason(statusReason: WorkspaceStatusReason | null | undefined) {
+  return Boolean(statusReason && !HIDDEN_CARD_STATUS_REASON_CODES.has(statusReason.code));
+}
+
 function CardStatusIndicator({
   status,
   errorMessage,
@@ -300,7 +310,7 @@ function deriveCardState(workspace: WorkspaceWithKanban) {
   const showSetup = workspace.status === 'NEW' || workspace.status === 'PROVISIONING';
   const showCi = sidebarStatus.ciState !== 'NONE';
   const showBranch = Boolean(workspace.branchName);
-  const showStatusReason = Boolean(workspace.statusReason);
+  const showStatusReason = shouldShowCardStatusReason(workspace.statusReason);
   const hasMetadata =
     showSetup ||
     showStatusReason ||
